@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-22
+last_updated: 2026-08-23
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -69,7 +69,38 @@ reproduces (verified with the registration absent — the gate removal,
 not the registration, unblocked the lane). The tensor
 SubsetOpInterface external models are now registered at engine setup
 regardless (their absence is MLIR's abort-not-failure path when
-bufferization queries an insert_slice). **(2) With the env var set,
+bufferization queries an insert_slice).
+
+> **Corrected 2026-08-23 (M1 Max, apple plan `APPLE-VECTORIZE-1`).** The
+> abort *does* still reproduce, and the tensor-only registration was
+> incomplete. The lane emits `vector.transfer_write` into a tensor, and
+> the `vector` dialect promises `SubsetInsertionOpInterface` for it;
+> `linalg` carries the same promise. On Darwin the first vectorized
+> compile died with `LLVM ERROR: ... promised by dialect 'vector' but
+> never implemented`. **This host could not have falsified the claim:**
+> the promise check is `#ifndef NDEBUG` (`mlir/IR/OpDefinition.h`,
+> `getInterfaceFor`) and the apt.llvm.org LLVM 23 used here is an NDEBUG
+> build, so it silently loses the interface (conservative extra copies,
+> still correct) instead of aborting. The Mac's LLVM 23.1.0-rc1 has
+> assertions on and is currently the only box in the fleet that can
+> falsify an MLIR contract claim of this kind — treat any "this MLIR
+> abort no longer reproduces" conclusion reached here as provisional
+> until it is re-run there. All three registrations (`tensor`, `linalg`,
+> `vector`) are now in `tools/tessera-jit`.
+>
+> **Re-taken on this host the same day, so this is not a Mac-only claim.**
+> `llvm-config --assertion-mode` here reports **OFF**, confirming the
+> mechanism rather than assuming it; and the *control* — same commit, clean
+> tree, unmodified tensor-only registration — passes
+> `test_native_cpu_jit.py` **27/27**, i.e. the defect really is invisible
+> here. With the patch applied, `tessera_jit` rebuilds clean and the
+> native-CPU-JIT / signature-guard / totality / boundary-discovery /
+> native-required packet is **73/73**. An alternating A/B of the two
+> shared libraries at n=512, three reps each, is **indistinguishable**
+> (60.0 / 67.6 / 74.2 pre-fix vs 75.7 / 86.9 / 55.3 GFLOP/s post-fix):
+> run-to-run variance on this box swamps the effect, so **no performance
+> change is claimed in either direction** — an earlier single-shot pair
+> looked like a 24% regression and did not survive repetition. **(2) With the env var set,
 every non-matmul module failed to compile** (the transform's empty
 matmul match hard-failed stage 1b — measured 114 packet failures). The
 lane now engages only for matmul-bearing modules, transforms a CLONE,
@@ -148,6 +179,20 @@ contract (num-variant tie signs unasserted, as the contract specifies
 neither); NaN propagation and finite-value checks keep the numpy oracle,
 which is host-stable for those.
 
+
+Cross-backend sync `APPLE-MINMAX-1-2026-08-23` — **Apple closed the
+contract on its own hardware; x86 outcome: no change required, one open
+question inherited.** The M1 Max audit found MPSGraph's max/min
+non-conforming on both NaN and the ±0 tie and fixed it with the *same*
+bitwise AND/OR tie blend this backend's AVX-512 vector body uses, so the
+two agree by construction rather than coincidence. Apple has no
+Adafactor device kernel and no `max(stat, eps)` floor anywhere, so the
+NaN-laundering half of `JIT-MATH-AUDIT-2026-08-23` had no Apple sibling.
+Metal evidence transfers nothing here. **Inherited open item:** the Apple
+audit measured `relu(NaN) = 0` on device against a `np.maximum(0.0, x)`
+reference that returns NaN, and deliberately did not fix it — the x86
+relu lane is equally unaudited for this. Decide the `relu` NaN contract
+fleet-wide before fixing any single backend.
 
 Cross-backend sync `IEEE-MINMAX-CONTRACT-2026-08-23` — **x86 outcome:
 VALIDATED (AVX-512 host).** The fleet-wide IEEE-754-2019 ±0-tie

@@ -299,6 +299,26 @@ Per-phase deliverables and the open-work priority queue live in
     correctly, for that host — and CI reopened it. Decision #19's "lit-testable
     on any host" is only evidenced by a host *without* AVX-512.
 
+    **The same trap, second instance (recorded 2026-08-23): a host without
+    LLVM assertions cannot falsify an MLIR contract claim.** The
+    `TESSERA_JIT_VECTORIZE` lane's bufferization abort was recorded on the
+    Ubuntu box as "no longer reproduces"; it reproduced on the first
+    vectorized compile on the Mac. The lane emits `vector.transfer_write`
+    into a tensor and only the `tensor` subset-interface external model was
+    registered, so the `vector` dialect's promise was unresolved — and MLIR's
+    promise check is `#ifndef NDEBUG` (`mlir/IR/OpDefinition.h`,
+    `getInterfaceFor`). The apt.llvm.org LLVM 23 is NDEBUG and silently lost
+    the interface; the Mac's LLVM 23.1.0-rc1 has assertions on and called
+    `report_fatal_error`. **The Mac is currently the only assertions-enabled
+    LLVM in the fleet, which makes it the only box that can falsify this class
+    of claim** — the mirror image of the AVX-512 case above, and the reason
+    the open `TileToX86Pass` item below is invisible to CI. Measured
+    2026-08-23 with `llvm-config --assertion-mode` on all three boxes: Mac
+    **ON**, Strix Halo OFF, The-Super-Bear OFF; the Strix Halo control run
+    passes the same test 27/27 with the defect present. Check that flag before
+    trusting a "does not reproduce" result. Detail:
+    `docs/audit/backend/apple/todo.md` `APPLE-VECTORIZE-1`.
+
     **Separately, still open: `TileToX86Pass` loads `tessera_x86` from inside
     `runOnOperation()`** (`src/transforms/lib/TileToX86Pass.cpp:1045`, a by-name
     `getOrLoadDialect` used to avoid linking the optional backend). MLIR forbids

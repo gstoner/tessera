@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-22
+last_updated: 2026-08-23
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -28,9 +28,27 @@ Philox4x32-10 key/counter identity. ROCm retains its independent
 packages, and exact-device evidence; none of those artifacts or schedules
 transfer to sm_120.
 
+Cross-backend sync `APPLE-MINMAX-1-2026-08-23` — **Apple now conforms on
+its own hardware; ROCm outcome: no change required, one open question
+inherited.** The M1 Max audit measured MPSGraph's `maximum`/`minimum` as
+maxNum/minNum — NaN suppressed, ±0 tie to the second operand, 7 of 12
+special-value rows wrong — and wrapped it to IEEE. Two further
+NaN-suppressing-`max` sites were found and fixed there (the `scatter_f32`
+min/max reduce, and a `sqrt(max(0, s))` clamp in the Cl(3,0) norm); the
+scatter fix follows *this* plan's rule that a reduce whose result is the
+output must propagate NaN. Apple has no `max(stat, eps)` floor and no
+Adafactor device kernel, so the eps-floor half of
+`JIT-MATH-AUDIT-2026-08-23` had no Apple sibling. Metal evidence transfers
+no gfx1151 claim. **Inherited open item:** Apple measured `relu(NaN) = 0`
+on device against a NaN-returning reference and deliberately left it — the
+ROCm relu lane is equally unaudited. Decide the `relu` NaN contract
+fleet-wide before fixing any one backend.
+
 Cross-backend sync `IEEE-MINMAX-CONTRACT-2026-08-23` — **the ±0 tie
 contract decision is CLOSED: IEEE-754-2019 fleet-wide (owner decision
-2026-08-23), exact-device validated on gfx1151 + AVX-512 host.**
+2026-08-23), exact-device validated on gfx1151 + AVX-512 host — and, since
+2026-08-23, on Apple GPU (M1 Max) too; see `APPLE-MINMAX-1` in the apple
+plan.**
 `tessera.maximum`/`minimum` now order signed zeros everywhere (max tie
 → +0.0, min tie → −0.0), NaN propagating — the semantics
 `arith.maximumf`/`minimumf` already carry. gfx1151: the numpy-emulating

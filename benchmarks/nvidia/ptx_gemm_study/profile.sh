@@ -19,6 +19,11 @@ BENCH=${1:-./bench}
 SIZES=${2:-512,1024,2048,4096,8192}
 OUT=${3:-counters.jsonl}
 ENABLE=${4:-ALL}
+BATCH=${BATCH:-10}
+# Keep ad-hoc protocol runs from overwriting the canonical packet's raw CSVs.
+# The default retains the study's checked-in working-directory behavior.
+RAW_DIR=${RAW_DIR:-.}
+mkdir -p "$RAW_DIR"
 
 METRICS=$(cat <<'EOF'
 gpu__time_duration.sum
@@ -47,10 +52,10 @@ FAIL=0
 # One ncu invocation PER SIZE so the same-named kernel launched at each N is not
 # collapsed — N comes from the loop, not from a fragile demangled-name parse.
 for n in $(echo "$SIZES" | tr ',' ' '); do
-  RAW="ncu_raw_${n}.csv"
+  RAW="$RAW_DIR/ncu_raw_${n}.csv"
   rm -f "$RAW"                       # never parse a previous run's file
   if ! ncu --metrics "$METRIC_CSV" --csv --target-processes all --log-file "$RAW" \
-       "$BENCH" --sizes "$n" --iters 1 --warmup 0 --enable "$ENABLE" >/dev/null 2>&1; then
+       "$BENCH" --sizes "$n" --iters 1 --warmup 0 --batch "$BATCH" --enable "$ENABLE" >/dev/null 2>&1; then
     echo "ERROR: ncu failed for N=$n (version-dependent metric? profiling denied?)" >&2
     FAIL=1; continue
   fi

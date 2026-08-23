@@ -32,9 +32,11 @@ Outputs: `capability_matrix.json`, `results.jsonl`, `counters.jsonl`, `REPORT.md
 | `probe.cu` | **Phase 0** capability + numeric probe. Decides native `s4` on sm_120. |
 | `bench.cu` | **Phase 1+2** correctness-then-timing. CUDA events only. → `results.jsonl` |
 | `profile.sh` | **Phase 3** targeted `ncu`, one pass per N (separate from timing). → `counters.jsonl` |
+| `profile_library_floor.sh` | Dedicated cuBLASLt protocol: public-call CUDA-event and selected-internal-kernel NCU timings, explicitly separate scopes. |
 | `parse_ncu.py` | maps each ncu CSV → JSONL keyed by (kernel, dtype, N), matching `results.jsonl` |
 | `check_consistency.py` | **Phase 4** gate — the anti-Table-V guard. `--selftest` runs offline. |
 | `analyze.py` | **Phase 4** report generator (all numbers derived). → `REPORT.md` |
+| `record_selector_decision.py` | Records a study-local native INT4 observation; it never edits production selector policy. |
 | `run.sh` | end-to-end, INT4-first ordering, gate blocks the report |
 | `Makefile` | `-arch=sm_120a`; `make NO_INT4=1` if the s4 MMA is compile-rejected |
 
@@ -55,11 +57,13 @@ Outputs: `capability_matrix.json`, `results.jsonl`, `counters.jsonl`, `REPORT.md
   report a number for an unvalidated kernel.
 - No sm_120 result is asserted for a variant that failed Phase 0.
 - A red consistency gate blocks `REPORT.md`.
+- CUDA-event durations for a hand-written kernel and NCU's same-kernel duration
+  are compared strictly.  A cuBLASLt CUDA event instead surrounds its public
+  library call while NCU observes one selected internal kernel, so those rows
+  carry `timing_scope: library_call` and are retained as separate evidence.
+  Reproduce either floor with `bash profile_library_floor.sh fp16` or `int8`.
 
 ## Feeding Tessera (Phase 5, after a clean run)
-Register measured `dram_bw_gbps`/`llc_bytes`/peak-TOPS into `target_perf.py` with
-`Provenance.MEASURED`; add the empirical per-dtype L2-ridge N as the arbiter's
-regime feature; record best (K-tile, pipeline depth) per regime into
-`mma_selector.py`; turn the DRAM-cycle≈wall-time and coalescing invariants into
-Evaluator oracles; and promote each Phase-0-proven precision in `capabilities.py`
-from `artifact_only` toward proven-execution with this run as the evidence row.
+`phase5_ingest.py` produces a proposal only after a complete green packet.  WSL2
+packets remain `selector_eligible:false`; reproduce the same protocol bare metal
+before changing `target_perf.py`, `mma_selector.py`, or `capabilities.py`.

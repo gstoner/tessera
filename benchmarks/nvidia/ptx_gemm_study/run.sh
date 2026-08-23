@@ -7,6 +7,7 @@ cd "$(dirname "$0")"
 SIZES=${SIZES:-512,1024,2048,4096,8192}
 ITERS=${ITERS:-200}
 WARMUP=${WARMUP:-20}
+BATCH=${BATCH:-10}
 
 echo "== archcheck =="
 make archcheck
@@ -28,10 +29,14 @@ sys.stderr.write(f"device={m['device']} cc={m['cc']} l2={m['l2_bytes']}\n")
 status = {v["variant"]: v["status"] for v in m["variants"]}
 for v in m["variants"]:
     sys.stderr.write(f"  {v['variant']:20s} {v['status']:16s} err={v['max_abs_err']}\n")
-# families independent of the mma.sync probe (reliable WMMA / library paths)
-enabled = ["fp16_wmma"]
+# Families independent of the mma.sync probe.  The pre-expanded INT4 baseline
+# uses FP16 WMMA only, so it remains available even if native s4 is unavailable.
+enabled = ["fp16_wmma", "cublaslt_fp16", "cublaslt_int8", "int4_wmma_preexpanded_fp16"]
 # probe-gated mma.sync families: variant -> study kernel name
-GATED = {"int4_m16n8k64": "int4_ptx_mma_k64"}
+GATED = {
+    "int8_m16n8k32": "int8_ptx_mma_k32",
+    "int4_m16n8k64": "int4_ptx_mma_k64,int4_ptx_3stage",
+}
 for var, fam in GATED.items():
     if status.get(var) == "native_ok":
         enabled.append(fam)
@@ -59,15 +64,20 @@ else
 fi
 
 echo "== Phase 1+2: correctness + clean timing =="
-./bench --sizes "$SIZES" --iters "$ITERS" --warmup "$WARMUP" --enable "$ENABLE" $LOCKED > results.jsonl
+./bench --sizes "$SIZES" --iters "$ITERS" --warmup "$WARMUP" --batch "$BATCH" --enable "$ENABLE" $LOCKED > results.jsonl
 grep -c '"status":"OK"' results.jsonl && echo "OK rows above"
 
 echo "== Phase 3: profiling (separate pass) =="
-bash profile.sh ./bench "$SIZES" counters.jsonl "$ENABLE" || echo "profiling skipped/failed (see stderr)"
+BATCH="$BATCH" bash profile.sh ./bench "$SIZES" counters.jsonl "$ENABLE" || echo "profiling skipped/failed (see stderr)"
 
 echo "== Phase 4: consistency gate (blocks report if red) =="
 python3 check_consistency.py results.jsonl counters.jsonl
 
 echo "== Phase 4: report =="
 python3 analyze.py results.jsonl counters.jsonl -o REPORT.md
-echo "done -> REPORT.md, results.jsonl, counters.jsonl, capability_matrix.json"
+echo "== Phase 4: freeze local native selector observation =="
+python3 record_selector_decision.py results.jsonl selector_observation.json
+echo "== Phase 5: guarded Tessera proposal =="
+python3 phase5_ingest.py results.jsonl counters.jsonl capability_matrix.json \
+  --output phase5_proposal.json
+echo "done -> REPORT.md, results.jsonl, counters.jsonl, capability_matrix.json, selector_observation.json, phase5_proposal.json"

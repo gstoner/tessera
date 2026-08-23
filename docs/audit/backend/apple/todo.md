@@ -8,6 +8,16 @@ last_updated: 2026-08-23
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
+CI serialization lane; Apple outcome: not applicable.**
+Apple's device-code path cannot be exercised this way on a Linux runner: MSL →
+AIR → `.metallib` packaging shells out to `xcrun metal` / `xcrun metallib`
+(Decision #26a), which requires macOS and the Metal toolchain, so there is no
+GPU-less hosted-runner equivalent of the `ld.lld` serialization proof. Apple
+lit fixtures already gate on the `tessera-apple-backend` feature. No `.metallib`,
+MSL, or M-series evidence transfers.
+
+
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 fatbin/cubin runtime admission; Apple outcome: not applicable.** Embedded CUDA
 image metadata, CUDA-driver compatibility checks, NVRTC fallback, and NVIDIA

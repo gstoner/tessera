@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
+CI serialization lane; x86 outcome: not applicable.**
+x86 emits host code through the LLVM/JIT path rather than a separate GPU code
+object, so there is no hsaco-equivalent artifact to serialize and no analogous
+blind spot: the x86 Target IR is already exercised in CI by the lit lane
+(`TESSERA_BUILD_X86_BACKEND=ON`). No AMX/AVX-512 evidence is involved.
+
+
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 fatbin/cubin runtime admission; x86 outcome: not applicable.** CUDA image
 metadata, driver admission, and NVRTC fallback transfer no x86 shared object,

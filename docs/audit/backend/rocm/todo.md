@@ -7,6 +7,58 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+`ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **host-free ROCm serialization lane in
+CI. Landed.**
+PR #619 fixed a total outage of the compiled ROCm lanes (every one died at
+hsaco serialization with `lld invocation failed`) that nothing caught, because
+the only automated ROCm coverage is `check-tessera-rocm`, which CI does not run.
+The natural conclusion — "GitHub has no AMD GPU, so this is uncatchable" — is
+wrong. Emitting an hsaco is **compile-time** work: MLIR's ROCDL
+`gpu-module-to-binary` shells out to `ld.lld` on the host and never touches a
+device.
+
+Measured 2026-08-23 on a HIP-less `tessera-rocm-opt` under `env -i` with no AMD
+toolkit installed: with `ROCM_PATH` pointing at a shim holding only a symlink to
+stock `lld-23`, the pipeline returns rc=0 and a real
+`ELF 64-bit LSB shared object, AMD GPU architecture version 1`
+(`e_machine 0xE0` = `EM_AMDGPU`); with `ROCM_PATH` unset it fails exactly as
+#619 saw it. The negative control ships as a test, so the lane is known to be
+able to observe the regression rather than passing vacuously. Also measured:
+MLIR does **not** fall back to `PATH` for `ld.lld`, which is why a
+non-interactive shell broke every compiled lane.
+
+Buildable on a hosted runner because `tessera-rocm-opt` is a **separate
+executable** — it sidesteps the lean artifact driver that
+`TESSERA_BUILD_ROCM_BACKEND=ON` forces onto `tessera-opt`
+(`tools/tessera-opt/CMakeLists.txt:95`) — and the ROCm backend's CMake has no
+HIP dependency. It configured and built clean with ENABLE_HIP/ENABLE_CUDA off
+(212 targets). `lld-23` is required and was not in the lit lane's apt set.
+
+Lane: `rocm-serialize` in `.github/workflows/validate.yml`, gated like `lit`
+(label / dispatch / push to main), registered in `OPTIONAL_LANES`
+(`tests/unit/test_ci_workflow.py`) and `.github/BRANCH_PROTECTION.md`.
+**Verified green on a real GitHub hosted runner** (workflow_dispatch run
+32660815243).
+
+**Coverage boundary — this closes a serialization blind spot, nothing more.**
+It proves the lane still PRODUCES a code object; it does not prove the object
+runs or computes the right answer. Execution evidence needs the real gfx1151
+device and stays on that box (Decision #26). Kernels calling AMD's OCML need
+`<ROCM_PATH>/amdgcn/bitcode`, absent on a stock runner: measured per kind,
+`relu`/`silu` serialize against bare lld while `gelu` (→ `__ocml_tanh_f32`)
+does not, so the always-on proof runs the bitcode-free path and the OCML case
+is an explicitly skipped test — a stated gap, not a silent pass.
+
+**Relationship to `CI-LIT-BACKEND-DIALECTS-2026-08-12` — that item stays OPEN.**
+A review suggested this completes it; it does not. That item covers the 12
+ROCm-driven fixtures under `tests/tessera-ir/`, which run through **`tessera-opt`**
+and, as its own text records, are "not covered by the existing
+`check-tessera-rocm` / `tessera-rocm-opt` lane" — the very driver this lane
+uses. Its blocker (the lean-driver conflict in `tessera-opt` on a HIP-less host)
+is untouched here. What this item does change is the premise that ROCm CI
+coverage requires a HIP host: it does not, for the compile-time half.
+
+
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 fatbin/cubin runtime admission; ROCm outcome: not applicable.** The embedded
 CUDA artifact/ABI/source identity and NVRTC fallback transfer no HSACO, HIP

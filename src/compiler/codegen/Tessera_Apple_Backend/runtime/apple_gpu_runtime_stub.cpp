@@ -2186,6 +2186,22 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
     }
   }
 }
+// Parity twin of the real runtime's tessera_apple_gpu_mpsgraph_binary_f32_host
+// (test_apple_runtime_stub_parity requires every .mm C-ABI symbol to have a
+// stub counterpart). On the stub there is no Metal, so the "host recovery"
+// path and the normal path are the same computation — delegate to the already
+// defined binary_f32 rather than duplicate the opcode switch (whose singular
+// location the structural opcode tests slice by name). A direct caller
+// therefore gets the same IEEE-754-2019 min/max (stub_ieee_binop_f32) as every
+// other route. Placed AFTER binary_f32 so neither source slicer in
+// test_apple_gpu_binary_opcodes sees an earlier binary_f32( match.
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f32_host(int32_t op,
+                                                           const float* a,
+                                                           const float* b,
+                                                           float* out,
+                                                           int64_t n) {
+  tessera_apple_gpu_mpsgraph_binary_f32(op, a, b, out, n);
+}
 extern "C" int32_t tessera_apple_gpu_mpsgraph_binary_f32_status(
     int32_t, const float*, const float*, float*, int64_t) { return 0; }
 // Phase-G Rung 0 — control-flow scan, non-Apple reference. Same recurrence the

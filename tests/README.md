@@ -7,8 +7,9 @@ contributors should start here.
 
 | Goal | Command |
 |---|---|
+| Fast unit collection (~18,674 tests on 2026-08-24) | `pytest tests/unit -m "not slow" --collect-only -q` |
 | Hermetic CPU PR lane (14,217 selected on 2026-07-15; 6m18s on a 24-worker WSL host) | `python scripts/run_unit_tests.py -q` |
-| Full Python collection, including device/performance states (~15,326 tests) | `pytest tests/unit/ tests/device/ tests/performance/ tests/integration/ --collect-only -q` |
+| Full unit collection, including slow/device-marked states (~19,536 tests on 2026-08-24) | `pytest tests/unit --collect-only -q` |
 | NVIDIA exact-device correctness (RTX 5070 Ti box) | `pytest tests/unit/ tests/device/nvidia/ tests/integration/ -m "hardware_nvidia and not performance" -q` |
 | NVIDIA measured performance, serial (RTX 5070 Ti box) | `pytest tests/unit/ tests/device/nvidia/ tests/performance/nvidia/ tests/integration/ -m "hardware_nvidia and performance" -q -n 0` |
 | Intel AMX exact-device correctness (named AMX host required) | `scripts/run_x86_amx_release_gate.sh` |

@@ -49,6 +49,19 @@ CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 TYPED_FRAGMENT_FIXTURE = (
     REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm" / "gfx1151_tile_fragment_store.mlir"
 )
+COMPOSED_LAYOUT_FRAGMENT_FIXTURE = (
+    REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm"
+    / "gfx1151_composed_layout_fragment_store.mlir"
+)
+
+
+def _rocm_opt() -> Path:
+    path = Path(os.environ.get(
+        "TESSERA_ROCM_OPT",
+        REPO / "build/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt"))
+    if not path.is_file():
+        pytest.skip("tessera-rocm-opt not built")
+    return path
 
 _DIRECTIVE = """
 module {
@@ -434,6 +447,52 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
     else:
         tolerance = 2e-3 if dtype == "f16" else 2e-2
         np.testing.assert_allclose(out, a.astype(np.float32) @ b.astype(np.float32), rtol=tolerance, atol=tolerance)
+
+
+def test_composed_layout_fragment_fixture_executes_and_matches_numpy():
+    """A per-lane shared-layout base must select the nonzero A/B panels."""
+    mlir_opt = _need_tools()
+    hip = _hip()
+    if hip is None:
+        pytest.skip("libamdhip64.so not loadable — no ROCm host")
+    lowered = subprocess.run(
+        [str(_rocm_opt()), "-", "--allow-unregistered-dialect",
+         "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1151},lower-tessera-target-to-rocdl)"],
+        input=COMPOSED_LAYOUT_FRAGMENT_FIXTURE.read_text(), capture_output=True, text=True)
+    assert lowered.returncode == 0, lowered.stderr
+    assert "rocdl.wmma.f32.16x16x16.f16" in lowered.stdout
+    serialized = subprocess.run(
+        [mlir_opt, "--pass-pipeline=builtin.module(gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,reconcile-unrealized-casts),rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)"],
+        input=lowered.stdout, capture_output=True, text=True)
+    assert serialized.returncode == 0, serialized.stderr
+    hsaco = _extract_hsaco(serialized.stdout)
+    rng = np.random.default_rng(20260823)
+    a = np.ascontiguousarray(rng.uniform(-1, 1, (32, 16)), dtype=np.float16)
+    b = np.asfortranarray(rng.uniform(-1, 1, (16, 32)), dtype=np.float16)
+    expected = a[7:23].astype(np.float32) @ b[:, 5:21].astype(np.float32)
+    assert hip.hipInit(0) == 0
+    module, function = ctypes.c_void_p(), ctypes.c_void_p()
+    assert hip.hipModuleLoadData(ctypes.byref(module), hsaco) == 0
+    assert hip.hipModuleGetFunction(ctypes.byref(function), module, b"composed_layout_fragment_store") == 0
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for ptr, nbytes in ((da, a.nbytes), (db, b.nbytes), (dd, 16 * 16 * 4)):
+        assert hip.hipMalloc(ctypes.byref(ptr), nbytes) == 0
+    hip.hipMemcpy(da, a.ctypes.data_as(ctypes.c_void_p), a.nbytes, 1)
+    hip.hipMemcpy(db, b.ctypes.data_as(ctypes.c_void_p), b.nbytes, 1)
+    def descriptor(ptr, size):
+        return [ctypes.c_void_p(ptr.value), ctypes.c_void_p(ptr.value), ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+    args = descriptor(da, 512) + descriptor(db, 512) + descriptor(dd, 256)
+    argv = (ctypes.c_void_p * len(args))()
+    for i, arg in enumerate(args):
+        argv[i] = ctypes.cast(ctypes.byref(arg), ctypes.c_void_p)
+    launch = hip.hipModuleLaunchKernel
+    launch.argtypes = [ctypes.c_void_p] + [ctypes.c_uint] * 6 + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    assert launch(function, 1, 1, 1, 32, 1, 1, 0, None, argv, None) == 0
+    assert hip.hipDeviceSynchronize() == 0
+    out = np.empty((16, 16), dtype=np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), dd, out.nbytes, 2)
+    for ptr in (da, db, dd): hip.hipFree(ptr)
+    np.testing.assert_allclose(out, expected, rtol=2e-3, atol=2e-3)
 
 
 @pytest.mark.parametrize(

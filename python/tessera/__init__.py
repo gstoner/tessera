@@ -236,19 +236,48 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     """Build the tessera.ops namespace with Phase 1 numpy-backed stubs."""
     import numpy as np
 
-    def gemm(A, B, epilogue=None):
+    def gemm(
+        A, B, epilogue=None, *, bias=None, residual=None, activation="none"
+    ):
         """Matrix multiply A @ B."""
         if hasattr(A, "_data"):
             A = A._data
         if hasattr(B, "_data"):
             B = B._data
         out = np.matmul(A, B)
+        if bias is not None or residual is not None or activation != "none":
+            if epilogue is not None:
+                raise ValueError(
+                    "gemm accepts either epilogue= or explicit "
+                    "bias/residual/activation arguments, not both"
+                )
+            if bias is not None:
+                out = out + (bias._data if hasattr(bias, "_data") else bias)
+            if activation == "relu":
+                out = relu(out)
+            elif activation == "gelu":
+                out = gelu(out)
+            elif activation == "silu":
+                out = silu(out)
+            elif activation != "none":
+                raise ValueError(
+                    "gemm activation must be one of none, relu, gelu, silu"
+                )
+            if residual is not None:
+                out = out + (
+                    residual._data if hasattr(residual, "_data") else residual
+                )
         if epilogue:
             out = fused_epilogue(out, **epilogue)
         return out
 
-    def matmul(A, B, epilogue=None):
-        return gemm(A, B, epilogue=epilogue)
+    def matmul(
+        A, B, epilogue=None, *, bias=None, residual=None, activation="none"
+    ):
+        return gemm(
+            A, B, epilogue=epilogue, bias=bias, residual=residual,
+            activation=activation,
+        )
 
     def batched_gemm(A, B, epilogue=None):
         return gemm(A, B, epilogue=epilogue)

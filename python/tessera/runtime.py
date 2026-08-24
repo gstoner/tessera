@@ -2593,7 +2593,10 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_LSE_F32_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
+        SM120_REDUCED_OUTPUT_ABIS,
         SM120_F16_ABI,
+        SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_BF16_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
         SM120_FP64_ABI,
@@ -2659,6 +2662,8 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_LSE_F32_ABI,
         SM120_BF16_ABI,
         SM120_F16_ABI,
+        SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_BF16_ABI,
         SM120_NVFP4_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
@@ -2685,7 +2690,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
-    } | set(SM120_EPILOGUE_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | {
+    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | {
         SM120_DYNAMIC_SMEM_ABI,
         SM120_DYNAMIC_EXPR_SMEM_ABI,
     }:
@@ -3086,10 +3091,27 @@ def _submit_nvidia_sm120_native(
             if x.size != outer * axis_extent * inner or tuple(output.shape) != expected_output:
                 raise RuntimeError("SM120 reduction shapes disagree with Outer/AxisExtent/Inner scalars")
             dimensions = (outer, axis_extent, inner)
+    elif descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI}:
+        dimensions = tuple(
+            int(cast(int, scalars[name]))
+            for name in ("M", "N", "K", "LDA", "LDB", "LDD")
+        )
+        m, n, k, lda, ldb, ldd = dimensions
     else:
         m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
         dimensions = (m, n, k)
-    if descriptor.abi_id in {
+    if descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI}:
+        a, b, d = raw
+        if tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or tuple(d.shape) != (m, n):
+            raise RuntimeError("SM120 strided A/B/D shapes disagree with M/N/K scalars")
+        a_strides = tuple(int(value // a.itemsize) for value in a.strides)
+        b_strides = tuple(int(value // b.itemsize) for value in b.strides)
+        d_strides = tuple(int(value // d.itemsize) for value in d.strides)
+        if a_strides != (lda, 1) or b_strides != (1, ldb) or d_strides != (ldd, 1):
+            raise RuntimeError(
+                "SM120 strided A/B/D storage disagrees with LDA/LDB/LDD scalars"
+            )
+    elif descriptor.abi_id in {
         SM120_F16_ABI,
         SM120_BF16_ABI,
         SM120_TF32_ABI,
@@ -3110,7 +3132,7 @@ def _submit_nvidia_sm120_native(
         pass  # Rank-one A/B/C/O validation is performed above.
     elif descriptor.abi_id == SM120_PACKED_DECODE_ABI:
         pass  # Physical-view validation and output selection are performed above.
-    elif descriptor.abi_id in SM120_EPILOGUE_ABIS:
+    elif descriptor.abi_id in set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS):
         a, b, *optional, d = raw
         epilogue_value = descriptor.provenance.get("epilogue", {})
         epilogue = cast(Mapping[str, object], epilogue_value) if isinstance(epilogue_value, Mapping) else {}
@@ -3916,6 +3938,13 @@ _x86_native_image_fds: dict[str, int] = {}
 
 
 def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
+    from tessera.compiler.x86_native import host_supports_architecture
+
+    if not host_supports_architecture(image.architecture):
+        raise RuntimeError(
+            f"x86 native image architecture {image.architecture!r} is not "
+            "executable on this host"
+        )
     cached = _x86_native_image_libraries.get(image.image_digest)
     if cached is not None:
         return cached
@@ -4837,7 +4866,10 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BWD_LSE_F32_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
+        SM120_REDUCED_OUTPUT_ABIS,
         SM120_F16_ABI,
+        SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_BF16_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
         SM120_FP64_ABI,
@@ -4893,6 +4925,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BWD_LSE_F32_ABI,
                 SM120_BF16_ABI,
                 SM120_F16_ABI,
+                SM120_STRIDED_F16_ABI,
+                SM120_STRIDED_BF16_ABI,
                 SM120_NVFP4_ABI,
                 SM120_FP8_E4M3_ABI,
                 SM120_FP8_E5M2_ABI,
@@ -4921,6 +4955,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_GROUPED_GEMM_F32_ABI,
             }
             | set(SM120_EPILOGUE_ABIS)
+            | set(SM120_REDUCED_OUTPUT_ABIS)
             | set(SM120_MOE_ABIS)
             | set(SM120_TRAINING_ABIS)
             | {SM120_DYNAMIC_SMEM_ABI, SM120_DYNAMIC_EXPR_SMEM_ABI}

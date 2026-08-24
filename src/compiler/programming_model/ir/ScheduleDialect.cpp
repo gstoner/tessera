@@ -118,6 +118,11 @@ LogicalResult MatmulOp::verify() {
     return emitOpError("pipeline_depth must be positive");
   if (getStorage().empty() || getAccum().empty())
     return emitOpError("requires explicit storage and accumulation types");
+  if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
+                          getActivation()))
+    return emitOpError("requires a supported pointwise activation");
+  if (getOutput() != "f32" && getOutput() != "f16")
+    return emitOpError("requires f32 or f16 output storage");
   if (getALayout() != "row_major" || getBLayout() != "col_major")
     return emitOpError("initial matmul contract requires row/col layouts");
   if (getRasterOrder() != "row_major")

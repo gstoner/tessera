@@ -53,6 +53,10 @@ constexpr const char* kTileDirectF16 = "tessera_tile_matmul_direct_f16";
 constexpr const char* kTileDirectBf16 = "tessera_tile_matmul_direct_bf16";
 constexpr const char* kTileSharedF16 = "tessera_tile_matmul_shared_f16";
 constexpr const char* kTileSharedBf16 = "tessera_tile_matmul_shared_bf16";
+// Canonical Schedule->Tile SM120 kernels retain their content-addressed
+// compiler-owned symbol, but use the established f16 A/B/D/M/N/K launch ABI.
+constexpr const char* kScheduledSm120MatmulPrefix =
+    "nvidia_sm120_scheduled_matmul_";
 constexpr const char* kTileDirectTf32 = "tessera_tile_matmul_direct_tf32";
 constexpr const char* kTileDirectE4m3 = "tessera_tile_matmul_direct_e4m3";
 constexpr const char* kTileDirectE5m2 = "tessera_tile_matmul_direct_e5m2";
@@ -170,9 +174,13 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
                     int tileN = 8, int threads = 32, bool ragged = false,
                     bool columnMajorGrid = false, bool dimensions64 = false,
                     size_t elementBytes = 2, size_t outputBytes = 4) {
-    if (nbuf != 3 || ndim != 3) return 5;
+    if (nbuf != 3 || (ndim != 3 && ndim != 6)) return 5;
     const long long M64 = dims[0], N64 = dims[1], K64 = dims[2];
+    const long long LDA64 = ndim == 6 ? dims[3] : K64;
+    const long long LDB64 = ndim == 6 ? dims[4] : K64;
+    const long long LDD64 = ndim == 6 ? dims[5] : N64;
     if (M64 <= 0 || N64 <= 0 || K64 <= 0) return 5;
+    if (LDA64 < K64 || LDB64 < K64 || LDD64 < N64) return 5;
     if (!ragged && (M64 % 16 || N64 % 8 || K64 % 16)) return 5;
     // The emitted PTX addresses elements with 32-bit signed indices, so an
     // operand's LARGEST index (element count - 1) must fit INT32_MAX. Reject only
@@ -184,14 +192,20 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
     // Each dim < 2^31 keeps the int (int32) cast below well-defined and the int64
     // products overflow-free (no valid shape reaches a dim of 2^31 anyway).
     if (M64 >= kMaxElems || N64 >= kMaxElems || K64 >= kMaxElems) return 5;
-    if (M64 * K64 > kMaxElems || K64 * N64 > kMaxElems || M64 * N64 > kMaxElems) return 5;
+    const __int128 aSpan = (__int128)(M64 - 1) * LDA64 + K64;
+    const __int128 bSpan = (__int128)(N64 - 1) * LDB64 + K64;
+    const __int128 dSpan = (__int128)(M64 - 1) * LDD64 + N64;
+    if (aSpan > kMaxElems || bSpan > kMaxElems || dSpan > kMaxElems) return 5;
+    const long long aElems = (long long)aSpan;
+    const long long bElems = (long long)bSpan;
+    const long long dElems = (long long)dSpan;
     int M = (int)M64, N = (int)N64, K = (int)K64;
     const void* A = buffers[0];
     const void* B = buffers[1];
     void* D = buffers[2];
-    const size_t sA = (size_t)M * K * elementBytes;
-    const size_t sB = (size_t)K * N * elementBytes;  // B is col-major
-    const size_t sD = (size_t)M * N * outputBytes;
+    const size_t sA = (size_t)aElems * elementBytes;
+    const size_t sB = (size_t)bElems * elementBytes;  // B is col-major
+    const size_t sD = (size_t)dElems * outputBytes;
     CUdeviceptr dA = 0, dB = 0, dD = 0;
     if (cuMemAlloc(&dA, sA) != CUDA_SUCCESS) return 3;
     if (cuMemAlloc(&dB, sB) != CUDA_SUCCESS) { cuMemFree(dA); return 3; }
@@ -201,9 +215,13 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
         if (cuMemcpyHtoD(dA, A, sA) != CUDA_SUCCESS) { rc = 3; break; }
         if (cuMemcpyHtoD(dB, B, sB) != CUDA_SUCCESS) { rc = 3; break; }
         long long MArg = M64, NArg = N64, KArg = K64;
+        long long LDAArg = LDA64, LDBArg = LDB64, LDDArg = LDD64;
         void* args32[] = {&dA, &dB, &dD, &M, &N, &K};
         void* args64[] = {&dA, &dB, &dD, &MArg, &NArg, &KArg};
-        void** args = dimensions64 ? args64 : args32;
+        void* argsStrided64[] = {&dA, &dB, &dD, &MArg, &NArg, &KArg,
+                                 &LDAArg, &LDBArg, &LDDArg};
+        void** args = ndim == 6 ? argsStrided64
+                                : (dimensions64 ? args64 : args32);
         unsigned gx = columnMajorGrid
             ? (unsigned)((N + tileN - 1) / tileN)
             : (unsigned)((M + tileM - 1) / tileM);
@@ -532,15 +550,15 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
                         std::strstr(name, "_e5m2_") != nullptr;
     const size_t inputBytes = std::strstr(name, "_tf32_") ? 4 :
                               (direct ? 1 : 2);
-    const size_t sizes[] = {
-        (size_t)M * (size_t)K * inputBytes,
-        (size_t)K * (size_t)N * inputBytes,
-        hasBias ? (size_t)N * 4 : (hasResidual ? (size_t)M * (size_t)N * 4
-                                               : (size_t)M * (size_t)N * 4),
-        hasBias && hasResidual ? (size_t)M * (size_t)N * 4
-                               : (size_t)M * (size_t)N * 4,
-        (size_t)M * (size_t)N * 4,
-    };
+    const size_t outputBytes = std::strstr(name, "_outf16") ? 2 : 4;
+    size_t sizes[5] = {};
+    size_t sizeIndex = 0;
+    sizes[sizeIndex++] = (size_t)M * (size_t)K * inputBytes;
+    sizes[sizeIndex++] = (size_t)K * (size_t)N * inputBytes;
+    if (hasBias) sizes[sizeIndex++] = (size_t)N * 4;
+    if (hasResidual) sizes[sizeIndex++] = (size_t)M * (size_t)N * 4;
+    sizes[sizeIndex++] = (size_t)M * (size_t)N * outputBytes;
+    if (sizeIndex != nbuf) return 5;
     CUdeviceptr device[5] = {};
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i) {
@@ -901,6 +919,14 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
 }
 
 bool tileLaunchConfig(const char* name, int& tileM, int& tileN, int& threads) {
+    if (std::strncmp(name, kScheduledSm120MatmulPrefix,
+                     std::strlen(kScheduledSm120MatmulPrefix)) == 0) {
+        const bool macro = std::strstr(name, "_macro_kernel") != nullptr;
+        tileM = macro ? 32 : 16;
+        tileN = macro ? 32 : 8;
+        threads = macro ? 128 : 32;
+        return true;
+    }
     if (std::strcmp(name, kTileDirectF16) == 0 ||
         std::strcmp(name, kTileDirectBf16) == 0 ||
         std::strcmp(name, kTileDirectTf32) == 0 ||
@@ -912,8 +938,8 @@ bool tileLaunchConfig(const char* name, int& tileM, int& tileN, int& threads) {
         tileN = 8; threads = 32;
         return true;
     }
-    if (std::strcmp(name, kTileSharedF16) == 0 ||
-        std::strcmp(name, kTileSharedBf16) == 0) {
+    if (std::strncmp(name, kTileSharedF16, std::strlen(kTileSharedF16)) == 0 ||
+        std::strncmp(name, kTileSharedBf16, std::strlen(kTileSharedBf16)) == 0) {
         tileM = 32; tileN = 32; threads = 128;
         return true;
     }
@@ -1851,10 +1877,29 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         std::strcmp(kernel_name, kTileDirectS8) == 0)
         return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
                                16, 8, 32, true, true, true, 1);
+    if ((std::strncmp(kernel_name, kTileSharedF16,
+                      std::strlen(kTileSharedF16)) == 0 ||
+         std::strncmp(kernel_name, kTileSharedBf16,
+                      std::strlen(kTileSharedBf16)) == 0) &&
+        std::strstr(kernel_name, "_outf16") != nullptr)
+        return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
+                               32, 32, 128, true, true, true, 2, 2);
     if (std::strcmp(kernel_name, kTileSharedF16) == 0 ||
         std::strcmp(kernel_name, kTileSharedBf16) == 0)
         return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
                                32, 32, 128, true, true, true);
+    if (std::strncmp(kernel_name, kScheduledSm120MatmulPrefix,
+                     std::strlen(kScheduledSm120MatmulPrefix)) == 0) {
+        if (std::strstr(kernel_name, "_fused_") != nullptr)
+            return invokeFusedMatmul16(fn, kernel_name, buffers, nbuf, dims, ndim);
+        const size_t outputBytes =
+            std::strstr(kernel_name, "_outf16") != nullptr ? 2 : 4;
+        return std::strstr(kernel_name, "_macro_kernel") != nullptr
+            ? invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
+                              32, 32, 128, true, true, true, 2, outputBytes)
+            : invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
+                              16, 8, 32, true, true, true, 2, outputBytes);
+    }
     if (std::strncmp(kernel_name, "tessera_tile_matmul_fused_", 26) == 0)
         return invokeFusedMatmul16(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTileNvfp4) == 0)

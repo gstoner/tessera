@@ -56,6 +56,10 @@ X86_ROPE_F32_ABI = "tessera.x86.rope.x_theta_o_rows_cols.f32.v1"
 X86_ALIBI_F32_ABI = "tessera.x86.alibi.slopes_o_h_s.f32.v1"
 X86_BASE_ARCHITECTURE = "x86_64_base"
 X86_AVX512_ARCHITECTURE = "x86_64_avx512"
+_AVX512_IMAGE_FEATURES = frozenset({
+    "avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl",
+    "avx512_vnni", "avx512_bf16", "avx512_vpopcntdq",
+})
 
 X86_ARGREDUCE_KINDS = {"tessera.argmax": "argmax", "tessera.argmin": "argmin"}
 X86_SCAN_KINDS = {
@@ -188,8 +192,32 @@ def _library_path(architecture: str = X86_AVX512_ARCHITECTURE) -> Path | None:
     return None
 
 
+def host_supports_architecture(architecture: str) -> bool:
+    """Whether loading an image for *architecture* is safe on this host."""
+
+    if architecture == X86_BASE_ARCHITECTURE:
+        return True
+    if architecture != X86_AVX512_ARCHITECTURE:
+        return False
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as cpuinfo:
+            features = {
+                feature
+                for line in cpuinfo
+                if line.startswith(("flags", "Features"))
+                for feature in line.partition(":")[2].split()
+            }
+    except OSError:
+        return False
+    return _AVX512_IMAGE_FEATURES <= features
+
+
 def tools_available_for_architecture(architecture: str) -> bool:
-    return _tessera_opt() is not None and _library_path(architecture) is not None
+    return (
+        _tessera_opt() is not None
+        and _library_path(architecture) is not None
+        and host_supports_architecture(architecture)
+    )
 
 
 def tools_available() -> bool:
@@ -1812,5 +1840,6 @@ __all__ = [
     "requests_matmul", "requests_reduction", "requests_softmax",
     "supports_attention", "supports_cohort2", "supports_elementwise", "supports_promoted_elementwise",
     "supports_matmul", "supports_promoted_matmul", "supports_reduction",
-    "supports_native_package", "supports_softmax", "tools_available",
+    "host_supports_architecture", "supports_native_package", "supports_softmax",
+    "tools_available", "tools_available_for_architecture",
 ]

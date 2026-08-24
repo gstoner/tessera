@@ -8,6 +8,7 @@ from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IRO
 from tessera.compiler.capabilities import supports_op
 from tessera.compiler.canonical_compile import canonical_compile
 from tessera.compiler.nvidia_native import (
+    _TILE_TO_PTX_MLIR_PASSES,
     _link_cuda_device_library_if_needed,
     emit_f16_matmul_tile_ir,
     emit_attention_backward_tile_ir,
@@ -55,6 +56,13 @@ from tessera.compiler.emit.nvidia_cuda import (
     _synthesize_mma_gated_cuda,
 )
 from tessera.compiler.primitive_coverage import NumericPolicy
+
+
+def test_tile_to_ptx_hoists_invariants_before_destroying_scf_loop() -> None:
+    assert _TILE_TO_PTX_MLIR_PASSES == (
+        "--loop-invariant-code-motion",
+        "--convert-scf-to-cf",
+    )
 
 
 def test_cuda_device_library_linking_is_demand_driven_and_fail_closed() -> None:

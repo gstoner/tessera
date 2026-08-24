@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-23
+last_updated: 2026-08-24
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,75 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **x86 composed-layout
+consumer and exact CPU proof closed for the shared materializable set.**
+`tessera-tile-to-x86` now re-runs the native C++ layout proof, expands tuple
+codomains only as products of independently proven scalar maps, and emits exact
+i64 mixed-radix `div/rem` arithmetic for static, bounded-dynamic, nested, and
+static tuple-product layouts. CPU-owned guards reject negative or out-of-range
+coordinates, nonpositive dynamic extents, and negative dynamic strides before address arithmetic. The generated
+LLVM returns the independent expected values on both the local AVX2
+Threadripper and the AVX-512 Ryzen AI Max+ 395 host; four malformed-runtime
+controls fail closed on each. Non-affine and non-separable tuple codomains stay
+outside the shared admissible set rather than being flattened.
+
+Cross-backend sync `LAYOUT-ALG-L4-X86-2026-08-24` — **core AVX-512 GEMM index
+authority and exact-host proof closed.** The f32, f64, bf16, and u8s8/VNNI
+microkernels now derive every A/B/C rank-2 offset through the same header-only
+C++ authority used by Tile materialization; their architecture-owned loop
+nests and intrinsics are unchanged. Odd dimensions and vector tails pass an
+independent scalar oracle on the AVX-512 Ryzen AI Max+ 395 host. The local
+Threadripper AVX2 host now rejects AVX-512 images before `dlopen` instead of
+risking `SIGILL`; deterministic admission tests cover both outcomes. This
+closes the x86 core-matmul part of L4, not a composed-layout Target consumer or
+an AMX claim.
+
+Cross-backend sync `LAYOUT-ALG-L3-L5-DYNAMIC-2026-08-24` — **shared proof,
+carrier parity, and x86 physical materialization are closed for the shared
+admissible set.**
+Factorization/residency and Schedule Object v2 proof fields are portable. The
+new tuple-product Tile carrier is registered and the x86 target pass now
+materializes it through exact scalar CPU arithmetic. CUDA/ROCm device results
+and GPU schedules do not transfer. The core AVX-512 GEMM templates consume the
+shared rank-2 authority independently.
+
+Cross-backend sync `DYNAMIC-COMPOSED-SM120-2026-08-24` — **shared carrier
+parity and x86 scalar-affine materialization are closed.** Nested outer
+shape/stride trees with dynamic scalar-affine leaves now verify in Tile IR and
+the x86 target pass consumes that canonical operand order with runtime guards.
+The CUDA strided ABI and RTX proof still transfer no AVX-512 schedule or host
+evidence. Non-affine carriers remain fail closed.
+
+Cross-backend sync `SCHEDULED-MATMUL-TAIL-EPILOGUE-LDS-2026-08-24` — **shared
+Graph lineage assessed; GPU physical work not applicable.** Optional matmul
+bias and residual are now ordered Graph SSA operands, but the scheduled x86
+consumer rejects the fused form until an AVX-512-owned descriptor/epilogue is
+implemented. CUDA K-tail staging, reduced f16 stores, ROCm LDS ownership, and
+RTX/Radeon evidence change no CPU loop nest or selector. Dynamic/nested
+composed-layout materialization remains carrier-only for x86 too.
+
+Cross-backend sync `SM120-MACRO-CTA-2026-08-24` — **not applicable to x86
+physical lowering.** CUDA CTA/warp ownership, f16/bf16 two-stage `cp.async`
+shared A/B staging, M/N zero-fill tails, barriers, launch geometry, and RTX
+5070 profiling change no CPU loop nest, cache blocking, AVX-512/AMX ABI, or
+exact-host evidence. The shared composed-layout carrier itself is unchanged.
+
+Cross-backend sync `SM120-SCHEDULED-LICM-2026-08-24` — **not applicable to x86
+codegen.** This is a private NVIDIA MLIR-to-PTX pipeline optimization with RTX
+5070 evidence. x86 retains its CPU tiling/vectorization authority; CUDA warp,
+CTA, shared-staging, and selector conclusions do not transfer.
+
+Cross-backend sync `SM120-BLOCK-COORDINATE-2026-08-24` — **not applicable.**
+The target-owned CUDA CTA coordinate operation changes no x86 loop nest,
+AVX-512/AMX address calculation, runtime ABI, or exact-host evidence.
+
+
+Cross-backend sync `CUTE-LAYOUT-MATERIALIZE-1-2026-08-23` — **shared static
+affine coordinate ABI; x86 outcome: not applicable to physical lowering.**
+The linear-base producer changes no AVX-512 address form, host ABI, or Zen 5
+evidence. NVIDIA's SM120 view mapping and RTX 5070 proof are not an x86 layout
+consumer or host proof.
 
 Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
 CI serialization lane; x86 outcome: not applicable.**

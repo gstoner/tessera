@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-08-24
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -70,7 +70,7 @@ This section owns what to do with those counts.
 | 1 | **E2E-REAL-6F — remaining optimizer VJP authority complete; family migration continues** | SGD and Momentum/Nesterov on x86/gfx1151 plus Adam/AdamW on gfx1151 use explicit non-reexecuting plugins and one typed `schedule.optimizer_vjp` → `tile.training_kernel` artifact. The package binds tracer proof, state/cotangent lineage, numeric identity, target ownership, and exact Tile digest. Unsupported target pairs fail before construction. The three former `JitFn` compatibility helpers are deleted. | One-execution/plugin tests for the three ABI shapes; Schedule/Tile verifier negatives; existing AVX-512 and gfx1151 physical regressions; runtime receives no source Graph or operation dictionary. | E2E-REAL-6E state-lineage package. |
 | 2 | **W4-PRODUCT-1 — executable multi-block regions** | The bounded arbitrary-CFG compiler boundary, per-slot dynamic saved-value envelopes, companion logical-shape tapes, mixed-state SAVE/HYBRID tapes, and nested canonical bodies are landed. Exact polynomial specialization guards remain outside Presburger proofs and require complete witnesses. Compiler-generated replay-safe assertions are admitted; mutation, unkeyed RNG, I/O, alias-sensitive work, and ordered collectives remain fail closed pending operation-owned recorded-product ABIs. The gfx1151 irreducible-state-machine row landed 2026-08-21: `--generate-rocm-state-machine-kernel` lowers a paired `bounded_state_machine_v1` function (forward AND generated backward) to one per-thread device kernel — per-element program counter, structured-CFG digest stamped on the gpu.func, `cf.assert` bound check host-enforced through a STATUS buffer — with both entry paths of a two-entry SCC executing on gfx1151 against the analytic oracle (`test_rocm_state_machine_exec.py`). The sibling x86 row landed 2026-08-21 as well: the same paired functions compile through `tessera_jit` (tessera-to-linalg → elementwise-to-linalg → one-shot-bufferize → loops → LLVM → ORC JIT) and execute natively on the AVX-512 host — both entry paths, forward + backward, digest/residual-policy bound, native `cf.assert` bound trap, proof-of-execution counter (`test_x86_state_machine_exec.py`). Next: one physical packet family with admissible effects. | Existing region verifier/paired VJP fixtures stay green; padded tape bounds must never replace logical extents; native x86/gfx1151 numerical rows must bind the exact CFG and residual digests before physical execution is claimed. | W2.1 dataflow, W2.2 effects, current bounded W4 carrier. |
 | 3 | **SO-3 + W5.2e-PRODUCER-1 — one schedule authority** | Stamp the Schedule Object digest through lowering, delete scalar pipeline reconstruction, and make two representative physical producers—spectral and collective/MoE—consume inferred dependence edges. | Generated DAG covers hand-authored oracle edges; unknown facts conservatively serialize; emitted artifact preserves digest/roles/resources; numerical output is unchanged on x86 and gfx1151. | SO-1/SO-2 and W5.2e inference. |
-| 4 | **LAYOUT-ALG-1 L3/L4 + SO-4 — physical layout decisions** | Add the locality/residency decision procedure, consolidate duplicated x86/ROCm index calculations behind the shared algebra, and attach proved residency to the Schedule Object. | Existing raster/index outputs bit-identical; dynamic/unknown layouts fail closed; materialization proof covers alias, capacity, and lifetime; no architecture's schedule is promoted by another architecture's evidence. | Order 3, W2.1 alias/liveness, current L1/L2 algebra. |
+| 4 | **LAYOUT-ALG-1 L4 tail — physical layout decisions** | L3 factorization/residency and SO-4 proof attachment are implemented. Mixed-radix/static tuple products, SM120 dynamic strided typed+macro routes, gfx1151 bounded-dynamic execution, and the four x86 core GEMM index families are proven. Finish migrating Apple text-emitter index templates onto the shared rank-2/raster authority; keep dynamic non-separable tuple codomains fail closed. | Existing raster/index outputs bit-identical; unresolved layouts fail closed; materialization proof covers alias, capacity, and lifetime; no architecture's schedule is promoted by another architecture's evidence. | Current L1/L3/L5 authority and architecture-owned device proofs. |
 | 5 | **W5.4-RESHARD-1 — executable placement** | Consume the remaining domain/axis-changing sharding contracts, derive typed local-shard shapes, insert explicit reshard SSA through nested regions, and execute on a deterministic mock mesh. | Fixed-point convergence and join tests; exact local result types; subgroup/region negatives; all four collective forms and `collective_permute` execute without hidden host composition. | Orders 2–4. Native transports are a later evidence gate. |
 | 6 | **DIST-NATIVE-1 — real multi-rank execution** | Bind explicit reshard/collective SSA to NCCL/RCCL and MPI/OFI/SHMEM launchers, including subgroup communicators and process-rank ownership. Keep ROCm LSA, GIN/RMA, Copy Engine, and gfx1250 DDA as independent advanced gates. | Two-rank then multi-rank numerical packets; deterministic ordering; communicator/topology digest match; fail-closed missing transport; no mock result may satisfy the native gate. | Order 5. |
 | 7 | **AD-TSOL-STFT-BWD-1 — native spectral products** | Add native STFT/ISTFT backward packages on AVX-512 and gfx1151, including signal/window tangents, overlap-add identity, packed-real lineage, and normalization. | Directional and duality properties; aligned/ragged and fp32/fp16/bf16 storage; content-addressed Schedule→Tile→Target lineage; exact-host/device correctness. | Order 1 plugin boundary and existing spectral VJP carriers. |
@@ -958,22 +958,48 @@ broad parity evidence and the narrower plan-named SO-2 cohort passed 8/8 on the
 role-carrying path. NVIDIA barrier-at-birth remains the missing physical role
 producer; it does not reopen AMD numerics. L3/L4 and all raster promotion
 decisions remain unchanged and evidence-gated.
-3. **L3 — the `⊑` decision procedure.** FORGE W1/W2's legality query and
+
+**2026-08-24 L1/L3/L4/L5 checkpoint:** the C++ authority transports nested
+layout trees, implements scalar composition, complement/inverses, coalescing,
+product/divide variants, slice-with-offset, bounded dynamic residues, exact
+layout factorization, and `cosize`-based residency. Schedule Object v2 binds
+the resulting layout digest, factorization, capacity, residency, alias set,
+and lifetime proof. Tile IR materializes mixed-radix basis maps and represents
+a static tuple codomain as a product of independently proven scalar composed
+layouts; dynamic/non-separable tuple codomains remain fail closed. NVIDIA,
+ROCm, and x86 re-run the proof before target address emission. The x86 consumer
+handles static, bounded-dynamic, nested mixed-radix, and static tuple-product
+scalar maps with runtime guards and exact LLVM execution on AVX2 and AVX-512.
+SM120 has both the narrow
+typed and alignment-safe dynamic macro-CTA strided routes exact-device proven;
+gfx1151 has a bounded-dynamic compact package proven on Radeon 8060S. The
+shared rank-2 authority now serves CUDA, ROCm, and the x86
+f32/f64/bf16/u8s8 core GEMMs, while the existing shared raster generator retains
+its exhaustive equivalence gates. x86 odd-shape and vector-tail cases pass on
+the AVX-512 Ryzen AI Max+ 395 host, and incompatible AVX2 hosts reject the image
+before loading. Apple still has no physical composed-layout consumer and its
+remaining text-emitter templates keep L4 and therefore LAYOUT-ALG-1 `landing`.
+3. **L3 — the `⊑` decision procedure — implemented.** FORGE W1/W2's legality query and
    residency check implemented as layout factorization and `cosize`. The lattice
    stays the declared interface; the algebra makes `block` precise instead of a
    promise. Closes the S9 implementation gap.
-4. **L4 — emitter index math.** Consolidates the four hand-written block-index
+4. **L4 — emitter index math — CUDA/ROCm/x86 core landed, Apple pending.** Consolidates the four hand-written block-index
    emitters and the hardcoded `A[row*K+k]`/`B[k*N+n]` templates onto the shared
    algebra. Acceptance is **bit-identical output** for every currently reachable
    `(raster_order, raster_group)` — a pure-refactor proof. Choosing a measured
    non-default raster is explicitly **not** in this item: per ROCM-CALIB-1 that
    is architecture-owned and blocked on a correlation/retain verdict, and it
    does not transfer between targets.
-5. **L5 — MLIR carrier.** `#tile.layout` gains nesting and dynamic leaves;
-   `MaybeStaticTypeInterface` plus a fold-static pass, delegating to L1 rather
-   than reimplementing. **Sequenced after W1.1 step 4**, never before — the same
-   Decision #31 ordering caveat [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md)
-   applies to `#tile.mma_desc`.
+5. **L5 — MLIR carrier.** The bounded seed is implemented as
+   `#tile.composed_layout` plus `tile.materialize_composed_layout`, preserving
+   nested static/dynamic scalar-affine residue while delegating proof to L1.
+   Mixed-radix basis maps and static separable tuple codomains are physical on
+   SM120/gfx1151; dynamic/non-separable tuple codomains remain carrier-only. Folding the proven
+   static subset and any future integration into `#tile.layout` must still use
+   a `MaybeStaticTypeInterface`/fold-static boundary rather than duplicate the
+   algebra. The Decision #31 ordering caveat in
+   [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) continues to apply to
+   `#tile.mma_desc`.
 
 Independent of the above and not blocking it: a negative-scoped
 `tessera-target-opt` driver that registers the Target IR dialects without

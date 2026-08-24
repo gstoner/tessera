@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+
 import numpy as np
 import pytest
 
@@ -11,6 +13,7 @@ from tessera.compiler.canonical_compile import canonical_compile
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.x86_native import (
     X86_BASE_ARCHITECTURE,
+    X86_AVX512_ARCHITECTURE,
     X86_ATTENTION_EXT_F32_ABI,
     X86_ATTENTION_F32_ABI,
     X86_MATMUL_F32_ABI,
@@ -20,6 +23,7 @@ from tessera.compiler.x86_native import (
     emit_matmul_tile_ir,
     emit_reduce_tile_ir,
     emit_softmax_tile_ir,
+    host_supports_architecture,
     package_attention,
     package_attention_backward_semantics,
     package_matmul,
@@ -33,6 +37,31 @@ from tessera.compiler.x86_native import (
     tools_available,
     tools_available_for_architecture,
 )
+
+
+def test_x86_host_architecture_admission_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert host_supports_architecture(X86_BASE_ARCHITECTURE)
+    assert not host_supports_architecture("x86_64_unknown")
+
+    monkeypatch.setattr(
+        "builtins.open", lambda *args, **kwargs: io.StringIO("flags : avx2\n")
+    )
+    assert not host_supports_architecture(X86_AVX512_ARCHITECTURE)
+
+
+def test_x86_avx512_host_architecture_admits_complete_feature_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    features = (
+        "avx512f avx512bw avx512cd avx512dq avx512vl avx512_vnni "
+        "avx512_bf16 avx512_vpopcntdq"
+    )
+    monkeypatch.setattr(
+        "builtins.open", lambda *args, **kwargs: io.StringIO(f"flags : {features}\n")
+    )
+    assert host_supports_architecture(X86_AVX512_ARCHITECTURE)
 
 
 def _softmax_module(shape: tuple[int, ...] = (3, 17)) -> GraphIRModule:

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-08-24
 audit_role: plan
 plan_state: open
 ---
@@ -339,6 +339,280 @@ This is **not the whole L1 surface yet**: general nested
 and general slice remain open and L1 therefore remains landing. L3 and L4 must
 not treat this first consumer as the completed factorization algebra.
 
+**Structured-L1 checkpoint (2026-08-23).** The C ABI now transports a nested
+layout as paired preorder node trees (`value`, `child_count`), rather than a
+layout string or a Python shadow implementation.  Native `coalesce` handles
+the documented `(2,(1,6)):(1,(6,2)) → 12:1` and by-mode
+`(3,(4,5)):(8,(1,4)) → (3,20):(8,1)` forms; bounded static `composition`
+materializes the documented boundary-crossing result
+`((2,2),3):((24,2),8)` and exhaustively rechecks its function before returning
+it.  Python is ctypes transport only.  `coalesce` now carries an explicit
+dynamic `-1` residue without merging through it; the compact bijective subset
+has native `right_inverse`/`left_inverse`, and static affine layouts have the
+documented cotarget and cosize-derived `complement` forms.  Dynamic
+residues now materialize their statically knowable radix prefix and retain one
+explicit dynamic tail.  General scalar composition is no longer capped by an
+enumeration table and uses affine outer evaluation beyond its declared domain.
+`slice` returns a residual layout plus an explicit offset carrier, and logical
+divide accepts non-compact tilers through
+`composition(source, (tiler, complement(tiler, size(source))))`.  The static
+rectangular product family has all six structural variants and its divide
+counterpart has logical/zipped/tiled/flat variants; each is constructed by the
+C++ authority and preserves the exact documented nesting.  Tile IR now carries
+the remaining non-affine boundary as `#tile.composed_layout`: recursive
+`ArrayAttr` outer shape/stride trees, a tuple of paired recursive basis
+shape/stride trees, and one explicit offset per outer coordinate. `-1` remains
+a dynamic residue, while the verifier rejects invalid leaves, malformed trees,
+profile mismatches, and basis/offset rank disagreement. The shared
+`tile.materialize_composed_layout` proof boundary now serializes every outer
+and tuple-basis shape/stride tree into the L1 C++ ABI and requires
+`tessera_layout_coalesce_v1` to accept each canonical component. The first
+addressable subset binds one explicit i64 coordinate per flattened outer mode,
+followed by dynamic leaves in canonical outer-shape, outer-stride, basis-shape,
+basis-stride order, and returns the scalar-affine offset
+`Σ outer_stride[i]·(offset[i] + basis_stride[i]·coord[i])`. Nested outer trees
+and dynamic shape/stride leaves are therefore materializable after runtime
+substitution. NVIDIA SM120 and the ROCm Tile lowering re-run the C++ proof,
+lower that offset to arithmetic, and feed the existing
+`tile.view{tile.linear_base}` address contract. Neither chooses a new
+fragment/register/shared-memory layout. Mixed-radix tuple basis maps now lower
+as exact `remui`/`divui` digit extraction. A tuple-valued codomain is represented
+by `tile.materialize_composed_layout_tuple` as a product of independently
+proof-bearing scalar components over one coordinate domain; NVIDIA and ROCm
+expand only that product seam and reuse the scalar materializer. Dynamic tuple
+codomains and genuinely non-separable regroupings remain carrier-only and fail
+closed; Apple and x86 cannot mistake the carrier for `#tile.layout` or silently
+lower it.
+The static f16 m16n8k16 row-major-A/column-major-B subset has exact-device
+evidence on RTX 5070: nonzero A-row and B-column origins flowed through
+`tile.view → fragment_pack → mma.sync` and matched the selected NumPy panels.
+The corresponding ROCm f16 m16n16k16 static subset has exact gfx1151 evidence:
+the shared operation produced nonzero per-lane A-row/B-column bases, which
+flowed through `tile.view → fragment_pack → rocdl.wmma` and matched NumPy after
+HSACO serialization and HIP launch. The follow-on bounded-dynamic gfx1151
+package and device proof are recorded below; neither backend inherits the
+other's physical schedule.
+The canonical gfx1151 scheduled-matmul consumer now reaches that same proof
+boundary without a hand-authored fixture: only when its Schedule-owned
+`M/N/K` operands remain positive `arith.constant` values does the typed WMMA
+generator emit row-major A `[M,K]:[K,1]` and B `[K,N]:[N,1]`
+`tile.materialize_composed_layout` bases before `tile.view → fragment_pack →
+tile.mma`. Dynamic dimensions use runtime `tensor.dim` extents and retain the
+same target-owned WMMA materializer. Dynamic outer materialization and
+separable tuple-valued materialization are closed for the target-proven subset
+below. Non-compact regroupings beyond logical divide and dynamic/non-separable
+tuple codomains remain open.
+The parallel NVIDIA
+`tessera-target-opt` registers target/upstream dialects but not Tile IR, so a
+leak is now a parser error rather than an assertion about an all-dialects host.
+
+**SM120 block-coordinate closure (2026-08-24).** Canonical scheduled f16
+matmul now emits the registered, pure, two-i64-result
+`tessera_nvidia.block_coordinate` boundary instead of reading NVVM CTA state in
+the shared producer. Its verifier admits exactly `sm_120`, physical tile
+`16×8`, and `column_major_xy`; NVIDIA lowering alone maps the results to
+`ctaid.y*16` and `ctaid.x*8`. Those SSA bases feed both composed-layout
+materializations, fragment packing, accumulator-carrying K loop, and final
+store. RTX 5070 numerical proof passed for `16×32 @ 32×8`, `32×32 @ 32×16`,
+and `48×64 @ 64×24` (maximum absolute error at most `5.97e-7`). A seven-sample,
+500-repetition CUDA-event comparison found the scheduled/direct ratios
+`1.003`, `1.025`, and `1.005`, respectively—within launch-scale noise, so the
+macro selector remains disabled. One separate Nsight capture at `48×64×24`
+reported scheduled/direct resources of 44/36 registers per thread, 1024/1024
+allocated shared-memory bytes, and equal 2.08% active-warp occupancy. The
+profiled durations (2.528/4.640 us) are resource-run observations, not selector
+timings; selector authority remains the clean CUDA-event matrix.
+
+**SM120 loop-invariant and reuse analysis (2026-08-24).** The native Tile-to-PTX
+pipeline now runs loop-invariant-code motion while the scheduled reduction is
+still structured SCF. This moves lane decomposition, block bases, and static
+composed-layout address terms out of the K loop without changing its typed
+accumulator recurrence; the pipeline ordering is unit-tested and versioned in
+the native cache contract. All five RTX 5070 scheduled numerical cases remain
+green. Larger clean CUDA-event cases separate useful work from launch
+quantization: scheduled/direct ratios were `1.002` for `128x128 @ 128x128`,
+`0.929` for `128x256 @ 256x64`, and `0.901` for `256x256 @ 256x256`. The first
+case is tied and the rectangular scheduled sample contains an outlier, so this
+single-session sweep is not enough to define a selector boundary; the selector
+remains fail-closed. A separate Nsight Compute capture for `256x256 @ 256x256`
+reported scheduled/direct duration `9.088/10.528 us`, DRAM bytes
+`303104/634368`, executed instructions `187392/510976`, and registers per
+thread `40/35`, with equal 1024-byte allocated shared memory and 21.63% active
+warps. These profiler values diagnose the route; they are not selector timing.
+A repeated largest-case CUDA-event run produced ratio `0.914`, but its
+scheduled sample coefficient of variation was 3.89% versus 1.76% for direct,
+which independently fails the low-variance promotion requirement.
+
+The mathematical limit in that packet was one independent warp per `16x8`
+output tile: at `M=N=K=256`, it logically reloaded 6,291,456 input bytes versus
+262,144 unique input bytes, a 24x reuse gap before cache effects.
+
+**SM120 macro-CTA async shared-panel closure (2026-08-24).** The follow-on
+implements that physical boundary as the registered
+`tessera_nvidia.macro_cta_matmul` Target IR operation; it does not reinterpret
+the existing `16x8/column_major_xy` block-coordinate operation. Its verifier
+admits exactly `sm_120`, a `32x32` CTA tile, four warps,
+`quadrant_2x2_two_n_tiles` ownership, f16 or bf16 input storage, f32
+accumulation, `m16n8k16` MMA, two async shared stages, and M/N/K zero-fill tails.
+NVIDIA lowering maps the warps onto eight `16x8` results. The 128 threads each
+issue one aligned 16-byte A or B `cp.async`; commit/wait plus CTA barriers
+establish visibility and prevent slot reuse while a consumer is live. An
+out-of-range M/N vector uses source-size zero and a safe source pointer, so the
+hardware zero-fills its shared destination. A partial final K panel preserves
+the fixed `k16` instruction contract: row-aligned packed inputs use the
+`cp.async` source-size operand, while an arbitrary row stride that cannot prove
+16-byte alignment uses the masked scalar shared-panel materializer.
+
+Aligned and ragged FP16 cases plus ragged BF16
+`257x512 @ 512x257` pass the independent FP32 oracle on RTX 5070. The retained
+nine-sample, 1000-repetition WSL event packet uses a conservative 67,108,864
+FLOP threshold: its three eligible scheduled/direct ratios are `0.721`,
+`0.453`, and `0.429`, with every eligible sample CoV below 3%. Repeated lower
+bands exposed launch-scale variance, so they retain the typed fallback even
+when their median favored the macro route. This is a route-local pruning
+decision only; WSL is not `target_perf` selector authority.
+
+After numerical proof, Nsight Compute at `256^3` records scheduled/direct
+duration `8.22/9.57 us`, registers `48/35`, static shared memory `4096/0`
+bytes, no spills, achieved occupancy `11.1%/21.6%`, and L1/TEX throughput
+pressure about `29%/80%`. The result is mathematically consistent with panel
+reuse: the macro route trades occupancy and synchronization for fewer repeated
+global/L1 requests. Profiler duration is diagnostic evidence; the clean event
+matrix owns the pruning decision.
+
+The static Graph package supplies runtime M/N/K scalars and now proves both an
+aligned partial K panel (`K=520`) and an arbitrary-alignment masked panel
+(`K=513`) on RTX 5070. It still assumes the canonical contiguous A row-major /
+B column-major physical ABI. Those runtime-bound proof operands are closed by
+the bounded-dynamic checkpoint below. This paragraph records the earlier static
+checkpoint; the alignment-safe dynamic macro-CTA specialization is closed in
+that subsequent checkpoint.
+
+**SM120 bounded-dynamic scalar-affine closure (2026-08-24).** Rank-2 dynamic
+f16/bf16 Graph matmul is admitted only with a positive
+`shape_bounds=[M,N,K]` envelope. The canonical scheduled producer keeps runtime
+`M/N/K`, emits bounded dynamic-leading-dimension views, and supplies
+`M/N/K/LDA/LDB` as dynamic leaves of nested scalar-affine A/B composed layouts.
+The versioned CUDA package exports `M/N/K/LDA/LDB/LDD`, validates element
+strides A `(LDA,1)`, B `(1,LDB)`, D `(LDD,1)`, and copies overflow-checked
+physical spans rather than assuming compact arrays. NVIDIA lowering re-runs
+the shared C++ proof before substituting those runtime strides.
+
+On RTX 5070, the canonical package executed `17x19 @ 19x13` with `LDA=29`,
+`LDB=31`, and `LDD=23` and matched an independent FP32 NumPy oracle, including
+M/N edge masks and the final K tail. An identity probe exposed a real target
+bug during closure: bounded column-major B packing advanced its second vector
+lane by `LDB` rather than contiguous K. The corrected packer constructs
+role-specific relative row/column lane coordinates before applying the proven
+affine stride. A second bug was exposed when mixed-radix materialization became
+the authority: the dynamic identity basis had been encoded with extent one,
+which correctly evaluates to `coord % 1 = 0` and repeated every eight-column
+tile. The producer now supplies the runtime logical extent to both the outer
+and basis leaves. This proof covers nested outer trees and dynamic
+scalar-affine leaves.
+
+The target-owned macro-CTA route now also accepts the bounded dynamic ABI when
+its bound satisfies the retained work threshold. Because arbitrary runtime row
+strides do not prove 16-byte alignment, this specialization uses one-stage
+masked scalar shared A/B panels plus CTA barriers rather than `cp.async`.
+`257x127 @ 127x259` with odd `LDA/LDB/LDD=139/137/269` passes the FP32 oracle
+on RTX 5070. A single post-correctness NCU launch recorded 17.536 us, 40
+registers/thread, 82.85% L2 sector hit rate, and 13.89% active-warps; this is
+diagnostic evidence, not selector authority.
+
+gfx1151 now admits the same bounded Graph envelope while retaining its own
+compact row-major launch ABI and multi-wave WMMA schedule. The canonical
+`37x35 @ 35x29` package, bounded by `[64,64,48]`, compiled through
+Graph→Schedule→Tile→ROCDL→HSACO and matched the independent FP32 oracle on the
+Radeon 8060S. No CUDA stride, warp, or staging decision transfers to that path.
+
+**L3/SO-4 closure (2026-08-24).** The versioned C ABI now decides layout
+factorization and residency directly. Compact bijective partitions are proven
+symbolically, including FORGE-scale images; bounded non-compact layouts use an
+exact finite-image proof and larger unresolved cases fail closed. Residency is
+`cosize(layout) * element_bytes <= capacity_bytes`, so padding and holes cannot
+be undercounted as logical `size`. `ScheduleObject` schema v2 attaches immutable
+materialization proofs containing layout digest, factorization decision,
+materialized elements/bytes, capacity, residency tier, alias set, and lifetime.
+Positive and negative factorization/capacity fixtures pass without a device.
+
+**L4 consolidation checkpoint (2026-08-24).** Raster emission was already one
+shared `tile_rasterization.py` authority with exhaustive bijection and compiled
+C-equivalence tests. Rank-2 physical `crd2idx` is now one C++
+`materializeLinearIndex` authority consumed by the CUDA fragment/load/store
+path and the gfx1151 generated WMMA A/B/output path; rebuilding both backends
+preserves their established arithmetic and both exact-device dynamic rows stay
+green. The x86 f32/f64/bf16/u8s8 core GEMMs now consume the same header-only
+rank-2 authority, with odd-shape/vector-tail numerical proof on an AVX-512
+Ryzen AI Max+ 395 host. AVX2 hosts fail closed before loading that image. L4
+remains landing only for the Apple text-emitter migration and device proof.
+
+**L5 x86-consumer checkpoint (2026-08-24).** The x86 Target pass now re-runs
+the shared native proof and materializes the complete scalar-output set admitted
+by the carrier: static and bounded-dynamic outer maps, nested mixed-radix basis
+maps, and static tuple codomains expressed as products of scalar maps. Its exact i64
+arithmetic executes through LLVM on both AVX2 and AVX-512 hosts. Runtime guards
+reject negative or out-of-range coordinates, nonpositive dynamic extents, and negative dynamic
+strides. Non-affine and non-separable tuple maps remain deliberately
+unmaterializable rather than acquiring weaker CPU semantics.
+
+The scheduled contract also carries real Graph value edges for optional fp32
+`bias[N]` and fp32 `residual[M,N]`, the ordered
+matmul→bias→activation→residual epilogue, and f16 reduced output. The CUDA
+descriptor expands from A/B/D to A/B/bias/residual/D only when those operands
+are present, and the exact RTX test proves bias+ReLU+residual with f32
+accumulation followed by an f16 store. ReLU, GELU, and SiLU are verifier-owned
+activation values; the exact test uses ReLU so its independent oracle does not
+depend on matching two different transcendental approximations.
+
+A post-correctness Nsight Compute capture for the aligned `257x520x257` tail
+records scheduled/direct duration about `15.3/23.2 us`, registers `56/35`,
+static shared memory `4.10 KiB/0`, and achieved occupancy `14.0%/23.3%`.
+Logical input redundancy drops from `26.19x` to `10.09x`. The reports are
+`/tmp/tessera-sm120-k520-{scheduled,direct}.ncu-rep`; profiler duration remains
+diagnostic and does not satisfy the missing bare-metal event-packet gate.
+
+**Seven-action closure ledger (2026-08-24).** This keeps implementation proof,
+performance policy, and future ABI work separate:
+
+1. **Selector boundary — route-local closed, global open.** The scheduled
+   package uses the conservative 67,108,864-FLOP pruning boundary above. WSL
+   packets cannot update global `target_perf`; repeat the same packet bare
+   metal before a global selector row changes.
+2. **Async shared staging — closed for the exact contract.** Two slots,
+   `cp.async` commit/wait, CTA lifetime barriers, and independent NCU evidence
+   are implemented for f16/bf16 m16n8k16.
+3. **Shape/stride breadth — bounded dynamic closed.** Arbitrary M/N/K tails are
+   zero-filled or masked and exact-device proven. Bounded dynamic Graph extents
+   and arbitrary `lda`/`ldb`/`ldd` are now proven through the narrow typed
+   route. The alignment-safe dynamic macro-CTA specialization is exact-device
+   proven; explicit pointer-offset alignment metadata remains open.
+4. **Dtype/epilogue breadth — bounded closure.** BF16 travels through the same
+   Graph→Schedule→Target package and is device-proven. Scheduled fp32 bias,
+   ReLU/GELU/SiLU activation, fp32 residual, and f16 reduced output now have a
+   widened Graph/Schedule/Tile/CUDA descriptor ABI; the combined ReLU case is
+   exact-device proven. Other output dtypes and epilogue families remain open.
+5. **Composed-layout breadth — separable target subset closed.** Nested
+   outer trees and static/dynamic scalar-affine leaves lower only through the
+   shared proof plus a target consumer. Mixed-radix basis maps and static tuple
+   codomains materialize as exact component products. Dynamic tuple codomains
+   and non-separable regroupings remain representable and fail closed.
+6. **ROCm counterpart — static and bounded-dynamic numerical proof closed;
+   selector open.** The canonical gfx1151 scheduled package selects the existing
+   target-owned multi-wave LDS pipeline and records
+   `gfx1151_multiwave_lds_wmma_2x4`. Radeon 8060S exact-device cases
+   `32x32x32`, ragged `17x19x23`, and bounded-dynamic `37x35x29` match the FP32
+   oracle. Its WSL host-wall
+   timing remains selector-ineligible, so no global ROCm threshold changes.
+7. **Release/document closure — landing.** The Target IR spec, all four backend
+   plans, retained benchmark packet, tests, and top-level README describe the
+   same boundary. This item closes only after focused drift gates, the broader
+   unit lane, claim lint, and graph refresh pass.
+
+Dynamic/non-separable tuple codomains remain carrier-only until a target
+materializer proves them. Dynamic scalar-affine outer/stride leaves and static
+separable tuple codomains are no longer part of that open set on SM120/gfx1151.
+
 ### L0 — the home: C++ first, Python binds to the dylib (decided 2026-08-16)
 
 **Decided by the repo owner.** The algebra is **one C++ implementation** in the
@@ -384,9 +658,12 @@ Eleven operations: `composition`, `complement`, `coalesce`, `right_inverse`,
 with **static-or-dynamic leaves from day one** — partial staticness is what
 makes fold-static free later, and retrofitting it is a type change.
 
-Four types (`Shape`, `Stride`, `Layout`, `Coord`), not CuTe's eight — skip
-`IntTuple` / `Tile` / `ComposedLayout`, and keep the existing `#tile.swizzle`
-split rather than adopting `composed_layout` yet.
+Four base types (`Shape`, `Stride`, `Layout`, `Coord`) plus a narrow C ABI
+carrier for residual layout + offset and Tile IR's structured tuple-valued
+`#tile.composed_layout` attribute. It is sufficient to preserve scalar and
+tuple composition without pretending every basis map is affine. `IntTuple`,
+`Tile`, and a value-producing full `ComposedLayout` type remain deferred; the
+existing `#tile.swizzle` split remains intact.
 
 Per L0 this is C++ (`src/` support library, no MLIR dependency — the MLIR
 *carrier* is L5, and the algebra must be usable without loading a dialect), plus
@@ -464,6 +741,10 @@ attribute delegating to L1's algebra rather than reimplementing it.
 only — types, interface, and the fold pass — and there is no second
 implementation to differential-test, which was the bulk of the original
 estimate. This is the concrete dividend of the C++-first decision.
+
+CUDA, ROCm, and x86 now consume the shared materializable set through
+architecture-owned lowering, including static tuple products. Apple remains the physical-consumer tail; no
+other backend's exact-device or host evidence transfers to Metal.
 
 *Sequencing:* this follows W1.1 step 4, it does not precede it — the same
 Decision #31 ordering argument [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md)

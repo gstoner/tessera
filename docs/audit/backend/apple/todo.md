@@ -3,10 +3,75 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-23
+last_updated: 2026-08-24
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **shared contract assessed;
+Metal consumer remains open.** The x86 target pass now consumes static,
+bounded-dynamic, nested, and tuple-product layouts through the shared proof,
+but its scalar CPU `div/rem`, runtime assertions, and AVX2/AVX-512 evidence do
+not define MSL address arithmetic or prove an Apple device. Non-affine and
+non-separable tuple codomains remain fail closed fleet-wide.
+
+Cross-backend sync `LAYOUT-ALG-L4-X86-2026-08-24` — **shared authority parity
+assessed; Metal migration remains open.** The header-only rank-2 mapping is
+portable, but AVX-512 loop nests, intrinsics, host admission, and Ryzen evidence
+do not transfer to MSL. Apple must still migrate its reachable text-emitter
+indices and prove byte-identical mapping on an Apple host.
+
+Cross-backend sync `LAYOUT-ALG-L3-L5-DYNAMIC-2026-08-24` — **shared proof and
+carrier parity assessed; Metal physical adoption remains follow-up required.**
+Factorization/residency and Schedule Object v2 proof fields are portable. The
+new tuple-product Tile carrier is registered and static components retain the
+same native algebra proof, but Apple has no materializer for it. CUDA/ROCm
+device results, shared-panel/LDS schedules, and index-template changes do not
+transfer. Apple must route its remaining MSL text-emitter indices through the
+shared authority and supply Apple-device proof before claiming L4 parity.
+
+Cross-backend sync `DYNAMIC-COMPOSED-SM120-2026-08-24` — **shared carrier
+parity assessed; Metal materialization remains follow-up required.** Nested
+outer shape/stride trees with dynamic scalar-affine leaves now verify through
+the common Tile contract, but Apple has no target-owned consumer for the
+materialization operation. CUDA's six-scalar strided ABI, CTA mapping, and RTX
+5070 numerical proof transfer no MSL address rule or Apple-device evidence.
+Tuple-valued/non-affine carriers continue to fail closed.
+
+Cross-backend sync `SCHEDULED-MATMUL-TAIL-EPILOGUE-LDS-2026-08-24` — **shared
+Graph lineage assessed; CUDA/ROCm physical work not applicable.** Optional
+matmul bias and residual are now real ordered Graph SSA operands rather than
+attribute-only names. Apple's scheduled consumer rejects that fused form until
+a Metal-owned descriptor and epilogue materializer exist. SM120 K-tail
+`cp.async`, the CUDA reduced-output ABI, gfx1151 multi-wave LDS staging, and
+both devices' evidence transfer no MSL schedule or Apple proof. Dynamic/nested
+composed-layout materialization remains an Apple follow-up if a Metal consumer
+is introduced.
+
+Cross-backend sync `SM120-MACRO-CTA-2026-08-24` — **not applicable to Apple
+physical lowering.** The macro operation is registered in NVIDIA Target IR and
+now owns f16/bf16 storage, CUDA warp assignment, two-stage `cp.async` shared
+panels, M/N zero-fill tails, barriers, launch geometry, and RTX 5070 evidence.
+Apple retains its target-owned SIMD/threadgroup mapping; no MSL ABI, Metal
+schedule, dtype promotion, or device result transfers. The shared composed-
+layout carrier itself is unchanged.
+
+Cross-backend sync `SM120-SCHEDULED-LICM-2026-08-24` — **not applicable to
+Apple codegen.** The pass ordering and all numerical/performance evidence are
+owned by NVIDIA's private Tile-to-PTX package. Apple retains its target-owned
+SIMD/threadgroup layout and Metal pipeline; neither the CUDA `16x8` coordinate
+ABI nor a future CUDA macro-CTA staging schedule transfers.
+
+Cross-backend sync `SM120-BLOCK-COORDINATE-2026-08-24` — **not applicable.**
+The new operation belongs to NVIDIA Target IR and encodes CUDA CTA axes; it
+changes no Metal threadgroup mapping, MSL ABI, or Apple exact-device evidence.
+
+
+Cross-backend sync `CUTE-LAYOUT-MATERIALIZE-1-2026-08-23` — **shared static
+affine coordinate ABI; Apple outcome: follow-up required.** The new canonical
+i64 linear-base producer has no Metal physical consumer. NVIDIA's SM120 view
+mapping and RTX 5070 proof transfer neither an MSL address mapping nor Mac
+evidence.
 
 Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
 CI serialization lane; Apple outcome: not applicable.**

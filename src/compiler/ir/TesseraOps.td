@@ -210,6 +210,7 @@ def Tessera_MatmulOp : Op<
 > {
   let summary = "Matrix multiply (A @ B)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs,
+                        Variadic<TensorType>:$epilogue_inputs,
                         OptionalAttr<I64Attr>:$tile_k,
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
                         DefaultValuedAttr<BoolAttr, "false">:$transposeA,

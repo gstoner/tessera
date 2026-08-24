@@ -56,6 +56,79 @@ func.func @amd_lds_layout() {
   return
 }
 
+// Tuple-valued composition stays structured: the outer coordinate has two
+// modes; each basis component is a `[shape_tree, stride_tree]` pair.  The
+// second outer shape mode is dynamic and therefore must remain `-1` here.
+// CHECK-LABEL: func.func @composed_layout_dynamic_tuple_basis
+func.func @composed_layout_dynamic_tuple_basis() {
+  // CHECK: #tile.composed_layout<{{\[\[6, -1\], 2\], \[\[8, 2\], 1\], \[\[\[3, 4\], \[1, 3\]\], \[\[4\], \[12\]\], \[\[2\], \[1\]\]\], \[2, 0, 1\]}}>
+  "test.buf"() {l = #tile.composed_layout<[[6, -1], 2], [[8, 2], 1], [[[3, 4], [1, 3]], [[4], [12]], [[2], [1]]], [2, 0, 1]>} : () -> ()
+  return
+}
+
+// CHECK-LABEL: func.func @materialize_composed_layout
+func.func @materialize_composed_layout(%r: i64, %c: i64) {
+  %0 = "tile.materialize_composed_layout"(%r, %c) {layout = #tile.composed_layout<[16, 16], [16, 1], [[[16], [1]], [[16], [1]]], [0, 0]>} : (i64, i64) -> i64
+  return
+}
+
+// CHECK-LABEL: func.func @materialize_composed_layout_tuple_basis
+func.func @materialize_composed_layout_tuple_basis(%c: i64) {
+  %0 = "tile.materialize_composed_layout"(%c) {layout = #tile.composed_layout<[8], [1], [[[2, 4], [1, 2]]], [0]>} : (i64) -> i64
+  return
+}
+
+// CHECK-LABEL: func.func @materialize_composed_layout_tuple_codomain
+func.func @materialize_composed_layout_tuple_codomain(%c: i64) -> (i64, i64) {
+  %pair:2 = "tile.materialize_composed_layout_tuple"(%c) {layouts = [#tile.composed_layout<[8], [1], [[[2, 4], [1, 2]]], [0]>, #tile.composed_layout<[8], [2], [[[4, 2], [1, 4]]], [3]>]} : (i64) -> (i64, i64)
+  return %pair#0, %pair#1 : i64, i64
+}
+
+// -----
+
+// Runtime leaves follow coordinates in canonical preorder: outer shape, then
+// outer stride, then basis shape/stride.  Nested outer tuples preserve their
+// tree in the carrier while the scalar affine map remains materializable.
+func.func @materialize_composed_layout_dynamic_nested(%r: i64, %c: i64,
+                                                       %m: i64, %lda: i64) {
+  %0 = "tile.materialize_composed_layout"(%r, %c, %m, %lda) {layout = #tile.composed_layout<[[-1], [16]], [[-1], [1]], [[[16], [1]], [[16], [1]]], [0, 0]>} : (i64, i64, i64, i64) -> i64
+  return
+}
+
+// -----
+
+func.func @materialize_composed_layout_dynamic_missing_leaf(%r: i64, %c: i64,
+                                                             %m: i64) {
+  // expected-error @+1 {{TILE_COMPOSED_LAYOUT_NOT_MATERIALIZABLE}}
+  %0 = "tile.materialize_composed_layout"(%r, %c, %m) {layout = #tile.composed_layout<[[-1], [16]], [[-1], [1]], [[[16], [1]], [[16], [1]]], [0, 0]>} : (i64, i64, i64) -> i64
+  return
+}
+
+// -----
+
+func.func @materialize_composed_layout_dynamic_rejected(%a: i64, %b: i64,
+                                                        %c: i64) {
+  // expected-error @+1 {{TILE_COMPOSED_LAYOUT_NOT_MATERIALIZABLE}}
+  %0 = "tile.materialize_composed_layout"(%a, %b, %c) {layout = #tile.composed_layout<[[6, -1], 2], [[8, 2], 1], [[[3, 4], [1, 3]], [[4], [12]], [[2], [1]]], [2, 0, 1]>} : (i64, i64, i64) -> i64
+  return
+}
+
+// -----
+
+func.func @bad_composed_basis_rank() {
+  // expected-error @+1 {{TILE_COMPOSED_LAYOUT_BASIS_RANK}}
+  "test.buf"() {l = #tile.composed_layout<[[6, -1], 2], [[8, 2], 1], [[[3, 4], [1, 3]]], [2, 0, 1]>} : () -> ()
+  return
+}
+
+// -----
+
+func.func @bad_composed_profile() {
+  // expected-error @+1 {{TILE_COMPOSED_LAYOUT_PROFILE_MISMATCH}}
+  "test.buf"() {l = #tile.composed_layout<[[6, 2], 2], [[8], 1], [[[3, 4], [1, 3]], [[4], [12]], [[2], [1]]], [2, 0, 1]>} : () -> ()
+  return
+}
+
 // -----
 
 func.func @bad_unknown_axis() {

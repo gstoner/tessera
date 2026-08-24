@@ -1,11 +1,110 @@
 ---
-last_updated: 2026-08-23
+last_updated: 2026-08-24
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **shared admissibility
+parity validated; no AMD physical change.** The x86 consumer follows the same
+canonical dynamic-leaf order and mixed-radix mathematics already used by the
+gfx1151 lowering. CPU runtime assertions and AVX2/AVX-512 evidence transfer no
+wave/LDS schedule or Radeon claim.
+
+Cross-backend sync `LAYOUT-ALG-L4-X86-2026-08-24` — **shared rank-2 authority
+parity validated; no AMD physical change.** gfx1151 already consumes the same
+C++ coordinate mapping in its generated WMMA path. AVX-512 host admission,
+CPU intrinsics, and Ryzen evidence transfer no wave/LDS schedule or Radeon
+execution claim.
+
+Cross-backend sync `LAYOUT-ALG-L3-L5-DYNAMIC-2026-08-24` — **gfx1151 bounded
+dynamic scheduled execution and static tuple-product materialization are
+closed.** The shared factorization/residency ABI and Schedule Object v2 proof
+transfer as compiler contracts, not as a CUDA schedule. gfx1151 now derives
+runtime M/N/K through the canonical Schedule→Tile route, retains its own
+multi-wave WMMA package, and uses max shape guards. `37x35 @ 35x29` inside the
+`[64,64,48]` envelope matches the FP32 oracle on Radeon 8060S after HSACO
+serialization and launch. ROCm's generated WMMA A/B/output address expressions
+consume the shared rank-2 index authority; mixed-radix and static tuple
+codomains lower through the same scalar proof. Arbitrary physical ROCm leading
+dimensions, dynamic/non-separable tuple codomains, and selector-eligible timing
+remain open.
+
+Cross-backend sync `DYNAMIC-COMPOSED-SM120-2026-08-24` — **shared scalar-affine
+dynamic proof parity landed; AMD scheduled/device expansion remains open.**
+The shared carrier now represents nested outer trees with runtime shape/stride
+leaves, and `lower-tile-to-rocm` re-runs the same C++ affine proof before
+substituting runtime strides into its i64 linear base. This is host compiler
+evidence, not a gfx1151 dynamic scheduled-package or execution claim. The
+canonical gfx1151 package remains on its static target-owned multi-wave LDS
+route; adding its own bounded Graph and physical-stride ABI requires Radeon
+8060S proof. CUDA descriptor layout, launch geometry, and RTX evidence do not
+transfer. The subsequent synchronization record closes mixed-radix/static
+tuple-product materialization and bounded-dynamic compact execution. Arbitrary
+physical leading dimensions and dynamic/non-separable tuple codomains remain
+fail closed.
+
+Cross-backend sync `SCHEDULED-MATMUL-TAIL-EPILOGUE-LDS-2026-08-24` — **gfx1151
+canonical scheduled multi-wave LDS route and exact-device proof landed.** The
+ROCm scheduled package now requests `staging=lds` from its architecture-owned
+executable pipeline, includes staging in the compiler cache identity, and
+records `physical_route=gfx1151_multiwave_lds_wmma_2x4`. On Radeon 8060S, both
+`32x32x32` and ragged `17x19x23` canonical Graph→Schedule→Tile→HSACO packages
+execute and match the FP32 oracle. This changes no ROCm selector: the existing
+WSL host-wall LDS packet remains pruning-only. The shared Graph matmul operand
+model gained optional bias/residual lineage, but fused scheduled epilogues are
+currently NVIDIA-owned and ROCm rejects them rather than inheriting CUDA
+activation math or storage policy. Dynamic/nested composed layouts remain
+carrier-only pending an AMD-specific materializer.
+
+Cross-backend sync `SM120-MACRO-CTA-2026-08-24` — **CUDA mechanics are not
+applicable; the gfx1151 architecture-owned LDS comparison was remeasured.** The
+NVIDIA operation, `32x32`/four-warp ownership, `cp.async`, CTA barriers, launch
+geometry, and RTX 5070 evidence remain NVIDIA Target IR state. ROCm already
+owns independent multi-wave, double-buffered LDS benchmark kernels. A focused
+Radeon 8060S/gfx1151 WSL sweep measured register versus best pipelined LDS at
+0.0911/0.0996 ms for 512 cubed (LDS loses), 0.2796/0.2460 ms for 1024 cubed,
+and 2.1102/1.9512 ms for 2048 cubed. These are synchronized host-wall timings
+because HIP events remain unavailable under this WSL runtime, so they are
+pruning evidence only and do not promote a ROCm selector.
+
+The canonical scheduled package now consumes the target-owned multi-wave LDS
+pipeline and has exact numerical proof as recorded above. Its selector
+threshold remains open: shape, wait protocol, and any future promotion must
+come from a selector-eligible gfx1151 packet, not the CUDA contract.
+
+Cross-backend sync `SM120-SCHEDULED-LICM-2026-08-24` — **not applicable to
+ROCm codegen.** LICM was added to NVIDIA's private Tile-to-PTX packaging
+pipeline and the measurements are RTX 5070 evidence. gfx1151 retains its own
+WMMA schedule and lowering pipeline. The proposed macro-CTA reuse follow-up may
+share an abstract ownership vocabulary later, but no CUDA tile shape, staging
+policy, profiler result, or selector choice transfers to Radeon hardware.
+
+Cross-backend sync `SM120-BLOCK-COORDINATE-2026-08-24` — **not applicable to
+ROCm physical codegen.** The new operation is registered in the NVIDIA Target
+IR dialect and encodes a CUDA column-major CTA grid. ROCm keeps its existing
+target-owned workgroup coordinate mapping; no SM120 schedule, CUDA ABI, or RTX
+5070 evidence transfers to gfx1151.
+
+
+Cross-backend sync `CUTE-LAYOUT-MATERIALIZE-1-2026-08-23` — **shared static
+affine coordinate ABI has a ROCm lowering consumer and exact gfx1151 proof;
+scheduled-package expansion remains follow-up required.** The shared op returns a canonical i64 linear base, exactly
+the form ROCm's existing `tile.view{tile.linear_base}` fragment path
+understands. `lower-tile-to-rocm` rechecks and lowers only the native-authority
+proven static affine subset; it does not choose a physical layout or interpret
+dynamic/nested residues. The f16 m16n16k16 row-major-A/column-major-B path has
+compiler-artifact and exact gfx1151 numerical evidence: nonzero A-row and
+B-column panels, whose per-lane bases are produced through the shared operation,
+matched NumPy after HSACO serialization and HIP launch. Dynamic/nested carriers,
+other fragment contracts, and any schedule claim remain open. The proof was
+reconfirmed on 2026-08-24 after rebuilding `tessera-rocm-opt`, with
+`ROCM_PATH=/opt/rocm/core` supplying the linker/device-library root and
+`LD_LIBRARY_PATH=/opt/rocm/lib` supplying HIP. NVIDIA's SM120
+mapping and RTX 5070 numerical result do not transfer a schedule or a gfx1151
+device result.
 
 `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **host-free ROCm serialization lane in
 CI. Landed.**

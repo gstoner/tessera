@@ -1,0 +1,958 @@
+{
+  "schema": "tessera.nvidia.scheduled-macro-matmul.v3",
+  "device": "sm_120",
+  "host": {
+    "node": "The-Super-Bear",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "wsl": true
+  },
+  "method": "correctness_then_resident_buffer_cuda_events",
+  "decision": {
+    "route": "sm120_scheduled_macro_cta_32x32",
+    "minimum_flops": 67108864,
+    "eligible_rows": 3,
+    "all_numerical_rows_green": true,
+    "eligible_rows_low_variance": true,
+    "eligible_rows_at_least_three_percent_faster": true,
+    "scheduled_route_enabled": true,
+    "global_selector_changed": false,
+    "selector_eligibility": "pruning_only_wsl"
+  },
+  "rows": [
+    {
+      "shape_mkn": [
+        16,
+        32,
+        8
+      ],
+      "max_abs_error": {
+        "scheduled": 1.7881393432617188e-07,
+        "direct": 1.7881393432617188e-07
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.008736640214920044,
+          0.008693600073456764,
+          0.008358944207429886,
+          0.00841772835701704,
+          0.00823203194886446,
+          0.0085762245580554,
+          0.008235136047005653,
+          0.008362848311662674,
+          0.008341504260897636
+        ],
+        "direct": [
+          0.00818998459726572,
+          0.008470783941447735,
+          0.008645343594253063,
+          0.008321632631123066,
+          0.0086155841127038,
+          0.008690464310348034,
+          0.008579423651099205,
+          0.008408287540078163,
+          0.008388511836528778
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.008362848311662674,
+        "direct": 0.008470783941447735
+      },
+      "sample_cov": {
+        "scheduled": 0.022120309014185723,
+        "direct": 0.01967679035638337
+      },
+      "scheduled_over_direct": 0.9872578936576425,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 1,
+          "logical_input_bytes": 1536,
+          "unique_input_bytes": 1536,
+          "logical_input_redundancy": 1.0,
+          "output_bytes": 512,
+          "flops": 8192
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 1,
+          "logical_input_bytes": 1536,
+          "unique_input_bytes": 1536,
+          "logical_input_redundancy": 1.0,
+          "output_bytes": 512,
+          "flops": 8192
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        32,
+        32,
+        16
+      ],
+      "max_abs_error": {
+        "scheduled": 1.7881393432617188e-07,
+        "direct": 1.7881393432617188e-07
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.008265567943453789,
+          0.008337823674082756,
+          0.008180768229067326,
+          0.008666175417602062,
+          0.008228416554629803,
+          0.008036255836486816,
+          0.00838012807071209,
+          0.008448575623333454,
+          0.008117984049022198
+        ],
+        "direct": [
+          0.008236992172896862,
+          0.008208607323467731,
+          0.008382304571568966,
+          0.008800831623375416,
+          0.008269151672720909,
+          0.008687135763466358,
+          0.00846998393535614,
+          0.008659584447741508,
+          0.008330528624355793
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.008265567943453789,
+        "direct": 0.008382304571568966
+      },
+      "sample_cov": {
+        "scheduled": 0.02283437101982992,
+        "direct": 0.025754675962664744
+      },
+      "scheduled_over_direct": 0.9860734447050369,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 4,
+          "logical_input_bytes": 6144,
+          "unique_input_bytes": 3072,
+          "logical_input_redundancy": 2.0,
+          "output_bytes": 2048,
+          "flops": 32768
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 4,
+          "logical_input_bytes": 6144,
+          "unique_input_bytes": 3072,
+          "logical_input_redundancy": 2.0,
+          "output_bytes": 2048,
+          "flops": 32768
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        48,
+        64,
+        24
+      ],
+      "max_abs_error": {
+        "scheduled": 5.960464477539062e-07,
+        "direct": 5.960464477539062e-07
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.008578783832490444,
+          0.008635199628770351,
+          0.00823855958878994,
+          0.008281056769192219,
+          0.008454719558358192,
+          0.00858937669545412,
+          0.008302047848701477,
+          0.008495328016579151,
+          0.008320575580000877
+        ],
+        "direct": [
+          0.008294655941426754,
+          0.00848806370049715,
+          0.008598719723522663,
+          0.008648736402392387,
+          0.008159839548170567,
+          0.008577183820307255,
+          0.008245984092354774,
+          0.008561952039599419,
+          0.008352512493729591
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.008454719558358192,
+        "direct": 0.00848806370049715
+      },
+      "sample_cov": {
+        "scheduled": 0.017867895660225563,
+        "direct": 0.02093555655096622
+      },
+      "scheduled_over_direct": 0.9960716432727755,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 9,
+          "logical_input_bytes": 27648,
+          "unique_input_bytes": 9216,
+          "logical_input_redundancy": 3.0,
+          "output_bytes": 4608,
+          "flops": 147456
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 9,
+          "logical_input_bytes": 27648,
+          "unique_input_bytes": 9216,
+          "logical_input_redundancy": 3.0,
+          "output_bytes": 4608,
+          "flops": 147456
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 44,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        128,
+        128,
+        128
+      ],
+      "max_abs_error": {
+        "scheduled": 1.9073486328125e-06,
+        "direct": 1.9073486328125e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.008289951831102371,
+          0.008258815854787827,
+          0.008266719989478588,
+          0.007992063648998737,
+          0.007874015718698502,
+          0.008140640333294868,
+          0.008308960124850273,
+          0.008059199899435043,
+          0.008302111178636551
+        ],
+        "direct": [
+          0.008293247781693935,
+          0.008313311263918877,
+          0.008247488178312778,
+          0.00832214392721653,
+          0.00822227168828249,
+          0.00988953560590744,
+          0.008519263938069344,
+          0.008404480293393135,
+          0.00830131210386753
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.008258815854787827,
+        "direct": 0.008313311263918877
+      },
+      "sample_cov": {
+        "scheduled": 0.01939406244923616,
+        "direct": 0.062101721575807386
+      },
+      "scheduled_over_direct": 0.9934448010665053,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 128,
+          "logical_input_bytes": 786432,
+          "unique_input_bytes": 65536,
+          "logical_input_redundancy": 12.0,
+          "output_bytes": 65536,
+          "flops": 4194304
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 128,
+          "logical_input_bytes": 786432,
+          "unique_input_bytes": 65536,
+          "logical_input_redundancy": 12.0,
+          "output_bytes": 65536,
+          "flops": 4194304
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 42,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        128,
+        256,
+        64
+      ],
+      "max_abs_error": {
+        "scheduled": 3.0994415283203125e-06,
+        "direct": 3.0994415283203125e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.00833692867308855,
+          0.008545920252799988,
+          0.008119679987430573,
+          0.008446463383734226,
+          0.00836339220404625,
+          0.008386688306927681,
+          0.008215071633458138,
+          0.008248671889305115,
+          0.00793180800974369
+        ],
+        "direct": [
+          0.009026272222399712,
+          0.008994463831186295,
+          0.008457791991531849,
+          0.008802271448075771,
+          0.008488800376653671,
+          0.008472992107272148,
+          0.008255615830421448,
+          0.00858406350016594,
+          0.008399552665650845
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.00833692867308855,
+        "direct": 0.008488800376653671
+      },
+      "sample_cov": {
+        "scheduled": 0.022227502966311024,
+        "direct": 0.03141679897843848
+      },
+      "scheduled_over_direct": 0.982109167747329,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 64,
+          "logical_input_bytes": 786432,
+          "unique_input_bytes": 98304,
+          "logical_input_redundancy": 8.0,
+          "output_bytes": 32768,
+          "flops": 4194304
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 64,
+          "logical_input_bytes": 786432,
+          "unique_input_bytes": 98304,
+          "logical_input_redundancy": 8.0,
+          "output_bytes": 32768,
+          "flops": 4194304
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 40,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        256,
+        128,
+        256
+      ],
+      "max_abs_error": {
+        "scheduled": 1.9073486328125e-06,
+        "direct": 1.9073486328125e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.008587807416915894,
+          0.00919743999838829,
+          0.008856703527271748,
+          0.008939359337091446,
+          0.008821696043014526,
+          0.008811776526272297,
+          0.008848319761455059,
+          0.009024928323924541,
+          0.008876063860952854
+        ],
+        "direct": [
+          0.008771871216595173,
+          0.008964831940829754,
+          0.008967583999037743,
+          0.008780991658568382,
+          0.008872703649103642,
+          0.00890131201595068,
+          0.00905164796859026,
+          0.008841344155371189,
+          0.008671456016600132
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.008856703527271748,
+        "direct": 0.008872703649103642
+      },
+      "sample_cov": {
+        "scheduled": 0.018667446046568285,
+        "direct": 0.013238202980261762
+      },
+      "scheduled_over_direct": 0.9981967027791455,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 512,
+          "logical_input_bytes": 3145728,
+          "unique_input_bytes": 131072,
+          "logical_input_redundancy": 24.0,
+          "output_bytes": 262144,
+          "flops": 16777216
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 512,
+          "logical_input_bytes": 3145728,
+          "unique_input_bytes": 131072,
+          "logical_input_redundancy": 24.0,
+          "output_bytes": 262144,
+          "flops": 16777216
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 42,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        256,
+        256,
+        128
+      ],
+      "max_abs_error": {
+        "scheduled": 3.0994415283203125e-06,
+        "direct": 3.0994415283203125e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.010669631883502007,
+          0.00917721539735794,
+          0.009007680229842663,
+          0.009179807268083096,
+          0.008930400013923645,
+          0.009217279963195324,
+          0.009079104289412498,
+          0.00864681601524353,
+          0.009166495874524117
+        ],
+        "direct": [
+          0.009711839258670807,
+          0.009687296114861965,
+          0.009805631823837757,
+          0.009693599306046963,
+          0.009857567958533764,
+          0.009736928157508373,
+          0.009638912044465542,
+          0.009843680076301098,
+          0.009605376049876213
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.009166495874524117,
+        "direct": 0.009711839258670807
+      },
+      "sample_cov": {
+        "scheduled": 0.061572184535075285,
+        "direct": 0.009065414829220183
+      },
+      "scheduled_over_direct": 0.9438475689700276,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 256,
+          "logical_input_bytes": 3145728,
+          "unique_input_bytes": 196608,
+          "logical_input_redundancy": 16.0,
+          "output_bytes": 131072,
+          "flops": 16777216
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 256,
+          "logical_input_bytes": 3145728,
+          "unique_input_bytes": 196608,
+          "logical_input_redundancy": 16.0,
+          "output_bytes": 131072,
+          "flops": 16777216
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 40,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        256,
+        256,
+        256
+      ],
+      "max_abs_error": {
+        "scheduled": 4.291534423828125e-06,
+        "direct": 4.291534423828125e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.010881088674068451,
+          0.010307552292943,
+          0.0099233603104949,
+          0.010172543115913868,
+          0.010279328562319279,
+          0.01029500737786293,
+          0.010545375756919384,
+          0.010671263560652733,
+          0.010629280470311642
+        ],
+        "direct": [
+          0.011759135872125626,
+          0.011499232612550259,
+          0.011323200538754463,
+          0.011302496306598186,
+          0.011712544597685337,
+          0.01162464078515768,
+          0.011916288174688816,
+          0.011526592075824738,
+          0.011187040247023106
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.010307552292943,
+        "direct": 0.011526592075824738
+      },
+      "sample_cov": {
+        "scheduled": 0.028218806862440323,
+        "direct": 0.020698837308864005
+      },
+      "scheduled_over_direct": 0.8942410926956905,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 512,
+          "logical_input_bytes": 6291456,
+          "unique_input_bytes": 262144,
+          "logical_input_redundancy": 24.0,
+          "output_bytes": 262144,
+          "flops": 33554432
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 512,
+          "logical_input_bytes": 6291456,
+          "unique_input_bytes": 262144,
+          "logical_input_redundancy": 24.0,
+          "output_bytes": 262144,
+          "flops": 33554432
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 40,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        256,
+        512,
+        256
+      ],
+      "max_abs_error": {
+        "scheduled": 8.58306884765625e-06,
+        "direct": 8.58306884765625e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.011769183911383152,
+          0.011633791960775852,
+          0.011918559670448303,
+          0.011222399771213531,
+          0.011716287583112717,
+          0.01191609539091587,
+          0.011665408499538898,
+          0.011439776048064232,
+          0.011964607983827591
+        ],
+        "direct": [
+          0.016263457015156746,
+          0.01623263955116272,
+          0.016180001199245453,
+          0.016169056296348572,
+          0.016199424862861633,
+          0.016260895878076553,
+          0.016280096024274826,
+          0.016271039843559265,
+          0.01633366383612156
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.011716287583112717,
+        "direct": 0.016260895878076553
+      },
+      "sample_cov": {
+        "scheduled": 0.020740645822605163,
+        "direct": 0.0032694338876883217
+      },
+      "scheduled_over_direct": 0.7205191934663933,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+          "workgroups": 64,
+          "logical_input_bytes": 4194304,
+          "unique_input_bytes": 524288,
+          "logical_input_redundancy": 8.0,
+          "output_bytes": 262144,
+          "flops": 67108864
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 512,
+          "logical_input_bytes": 12582912,
+          "unique_input_bytes": 524288,
+          "logical_input_redundancy": 24.0,
+          "output_bytes": 262144,
+          "flops": 67108864
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 48,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 4096
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        512,
+        256,
+        512
+      ],
+      "max_abs_error": {
+        "scheduled": 3.814697265625e-06,
+        "direct": 3.814697265625e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.012955167330801487,
+          0.013039936311542988,
+          0.01316892821341753,
+          0.012863327749073505,
+          0.012850048020482063,
+          0.012877216562628746,
+          0.01299459207803011,
+          0.013057439588010311,
+          0.01277267187833786
+        ],
+        "direct": [
+          0.02859267219901085,
+          0.028606079518795013,
+          0.02860611118376255,
+          0.028612542897462845,
+          0.028579359874129295,
+          0.028580831363797188,
+          0.028611233457922935,
+          0.028619231656193733,
+          0.028604447841644287
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.012955167330801487,
+        "direct": 0.028606079518795013
+      },
+      "sample_cov": {
+        "scheduled": 0.009600783390319728,
+        "direct": 0.0004909238716094019
+      },
+      "scheduled_over_direct": 0.45288160938969535,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+          "workgroups": 256,
+          "logical_input_bytes": 8388608,
+          "unique_input_bytes": 524288,
+          "logical_input_redundancy": 16.0,
+          "output_bytes": 1048576,
+          "flops": 134217728
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 2048,
+          "logical_input_bytes": 25165824,
+          "unique_input_bytes": 524288,
+          "logical_input_redundancy": 48.0,
+          "output_bytes": 1048576,
+          "flops": 134217728
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 48,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 4096
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    },
+    {
+      "shape_mkn": [
+        512,
+        512,
+        512
+      ],
+      "max_abs_error": {
+        "scheduled": 8.821487426757812e-06,
+        "direct": 8.821487426757812e-06
+      },
+      "cuda_event_ms": {
+        "scheduled": [
+          0.022066816687583923,
+          0.022119199857115746,
+          0.022025983780622482,
+          0.022080736234784126,
+          0.022066112607717514,
+          0.022038303315639496,
+          0.022102560847997665,
+          0.02208038419485092,
+          0.023099327459931374
+        ],
+        "direct": [
+          0.05148719996213913,
+          0.05151734501123428,
+          0.05251481756567955,
+          0.05152441933751106,
+          0.051525697112083435,
+          0.051493022590875626,
+          0.05148451402783394,
+          0.05229852721095085,
+          0.05249571055173874
+        ]
+      },
+      "median_ms": {
+        "scheduled": 0.02208038419485092,
+        "direct": 0.05152441933751106
+      },
+      "sample_cov": {
+        "scheduled": 0.015481352077046262,
+        "direct": 0.009062345245374887
+      },
+      "scheduled_over_direct": 0.4285421258260712,
+      "traffic_model": {
+        "scheduled": {
+          "physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+          "workgroups": 256,
+          "logical_input_bytes": 16777216,
+          "unique_input_bytes": 1048576,
+          "logical_input_redundancy": 16.0,
+          "output_bytes": 1048576,
+          "flops": 268435456
+        },
+        "direct": {
+          "physical_route": "independent_warp_global",
+          "workgroups": 2048,
+          "logical_input_bytes": 50331648,
+          "unique_input_bytes": 1048576,
+          "logical_input_redundancy": 48.0,
+          "output_bytes": 1048576,
+          "flops": 268435456
+        }
+      },
+      "compile_resources": {
+        "scheduled": {
+          "provenance": "canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 48,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 4096
+          }
+        },
+        "direct": {
+          "provenance": "ptxas --arch=sm_120a -v",
+          "metrics": {
+            "registers_per_thread": 35,
+            "spill_load_bytes": 0,
+            "spill_store_bytes": 0,
+            "static_shared_memory_bytes": 0
+          }
+        }
+      },
+      "selector_changed": false
+    }
+  ]
+}

@@ -190,6 +190,32 @@ LogicalResult MatmulOp::verify() {
   if (!ShapedType::isDynamic(n) && !ShapedType::isDynamic(rn) && n != rn)
     return emitOpError("result column dimension must equal rhs N (")
            << n << " vs " << rn << ")";
+  bool hasBias = bool((*this)->getAttrOfType<StringAttr>("bias"));
+  bool hasResidual = bool((*this)->getAttrOfType<StringAttr>("residual"));
+  if (getEpilogueInputs().size() !=
+      static_cast<unsigned>(hasBias + hasResidual))
+    return emitOpError("epilogue input count must match bias/residual attributes");
+  unsigned epilogueIndex = 0;
+  if (hasBias) {
+    Value bias = getEpilogueInputs()[epilogueIndex++];
+    auto type = dyn_cast<RankedTensorType>(bias.getType());
+    if (!type || type.getRank() != 1 || !type.getElementType().isF32())
+      return emitOpError("bias epilogue expects rank-1 f32 [N]");
+    if (!ShapedType::isDynamic(n) && !ShapedType::isDynamic(type.getDimSize(0)) &&
+        n != type.getDimSize(0))
+      return emitOpError("bias epilogue extent must equal result N");
+  }
+  if (hasResidual) {
+    Value residual = getEpilogueInputs()[epilogueIndex];
+    auto type = dyn_cast<RankedTensorType>(residual.getType());
+    if (!type || type.getRank() != 2 || !type.getElementType().isF32())
+      return emitOpError("residual epilogue expects rank-2 f32 [M,N]");
+    if ((!ShapedType::isDynamic(m) && !ShapedType::isDynamic(type.getDimSize(0)) &&
+         m != type.getDimSize(0)) ||
+        (!ShapedType::isDynamic(n) && !ShapedType::isDynamic(type.getDimSize(1)) &&
+         n != type.getDimSize(1)))
+      return emitOpError("residual epilogue shape must equal the matmul result");
+  }
   return success();
 }
 

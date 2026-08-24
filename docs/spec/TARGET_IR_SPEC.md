@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-07-13
+last_updated: 2026-08-24
 ---
 
 # Tessera Target IR Specification
@@ -139,6 +139,22 @@ are metadata-only Tile IR aids. Target IR lowering elides them; correlation is
 preserved through compile-bundle metadata, artifact hashes, Chrome trace events,
 and replay manifests rather than executable target ops.
 
+### Composed-layout materialization boundary
+
+`tile.materialize_composed_layout` and its tuple-product form are proof-bearing
+Tile-to-Target inputs, not physical-layout suggestions. A backend consumer must
+re-run the shared C++ layout authority before emitting address arithmetic.
+Scalar maps use exact i64 mixed-radix quotient/remainder evaluation; a tuple
+codomain is preserved only as a product of independently proven scalar maps.
+Non-affine and non-separable tuple maps fail closed.
+
+NVIDIA, ROCm, and x86 implement this boundary for their documented admitted
+sets. The x86 consumer additionally emits runtime assertions that coordinates
+are within their outer extents, dynamic extents are positive, and dynamic
+strides are nonnegative before lowering to LLVM arithmetic. These CPU guards
+do not transfer to GPU execution models, and Apple remains without a physical
+consumer.
+
 ### 1.1 NVIDIA Hopper And Blackwell Contracts
 
 The NVIDIA backend accepts Tile IR and emits `tessera_nvidia.*` Target IR contracts before lowering to LLVM/NVVM artifact calls. These contracts are intentionally hardware-free and are valid without CUDA hardware.
@@ -150,6 +166,8 @@ The NVIDIA backend accepts Tile IR and emits `tessera_nvidia.*` Target IR contra
 | `tessera_nvidia.mbarrier` | Hopper SM90+ | Async transaction barrier contract. |
 | `tessera_nvidia.wmma` | Ampere/Ada fallback | Legacy WMMA contract. |
 | `tessera_nvidia.mma_sync` | Blackwell consumer SM120 | Warp-level `mma.sync` matmul contract (shape, dtype, accumulator dtype). Consumer Blackwell has no tcgen05/TMEM and no Hopper wgmma; FP4 goes through `mma.sync.aligned...block_scale`. |
+| `tessera_nvidia.block_coordinate` | Blackwell consumer SM120 | Pure two-result i64 macro-tile origin. The only valid contract is `arch=sm_120`, `tile_m=16`, `tile_n=8`, `grid_order=column_major_xy`; NVIDIA lowering alone maps it to `(ctaid.y*16, ctaid.x*8)`. |
+| `tessera_nvidia.macro_cta_matmul` | Blackwell consumer SM120 | Exact four-warp 32x32 CTA GEMM contract for f16/bf16 input and f32 accumulation. Exactly 128 threads cooperatively fill A[32,16]+B[16,32] shared panels and assign each warp one 16x16 quadrant as two m16n8k16 instructions. With no leading-dimension operands, the required protocol is two alternating 2 KiB slots, `staging=cp_async_shared_ab_16bit`, `stages=2`, and `completion=wait_group_0_cta_barrier`; M/N tails use source-size-zero async copies. With exactly three i64 `LDA/LDB/LDD` operands, the required protocol is `staging=masked_scalar_shared_ab_16bit`, `stages=1`, and `completion=cta_barrier`, so arbitrary runtime strides do not imply 16-byte alignment. Other leading-dimension arities or mixed protocols are invalid. K tails are masked or zero-filled under `bounds=zero_fill_mnk_tail`. Grid order is `column_major_xy`, and the operation does not reinterpret the `block_coordinate` ABI. |
 | `tessera_nvidia.tcgen05_mma` | Blackwell datacenter SM100 | TCGEN05 MMA contract with TMEM accumulation (datacenter sm_100a only — NOT consumer sm_120). |
 | `tessera_nvidia.tmem_alloc/load/store` | Blackwell datacenter SM100 | Tensor Memory allocation and movement contracts (datacenter sm_100a only — NOT consumer sm_120). |
 | `tessera_nvidia.cuda_kernel` | Optional runtime | CUDA/NVRTC runtime artifact marker. |
@@ -159,6 +177,7 @@ Named pipelines:
 - `tessera-lower-to-nvidia`
 - `tessera-lower-to-hopper`
 - `tessera-lower-to-blackwell`
+- `tessera-lower-to-nvidia-sm120`
 
 ### 1.2 Backend-Neutral Value Target IR Contract
 

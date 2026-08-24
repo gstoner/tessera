@@ -1232,6 +1232,7 @@ def _compile_native_tile_ir(
     input_level: ROCMInputLevel = ROCMInputLevel.TILE,
     tile_q: int = 64,
     tile_kv: int = 64,
+    staging: str = "register",
 ) -> tuple[
     str,
     str,
@@ -1251,7 +1252,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{library_identity}"
+            f"{tile_q}|{tile_kv}|{staging}|{library_identity}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1272,6 +1273,7 @@ def _compile_native_tile_ir(
         input_level=input_level,
         tile_q=tile_q,
         tile_kv=tile_kv,
+        staging=staging,
     )
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
@@ -1412,6 +1414,7 @@ def _compile_scheduled_matmul_tile_ir(tile_ir: str):
         tile_ir,
         directive="tessera_rocm.wmma",
         family="matmul",
+        staging="lds",
     )
 
 
@@ -1453,6 +1456,7 @@ def package_scheduled_matmul(
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
+    dynamic = artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -1468,12 +1472,12 @@ def package_scheduled_matmul(
             ScalarArgument(5, "K", "int64"),
         ),
         shape_guards=(
-            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
-            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
-            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
-            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
-            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
-            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.a_name, 0, "max" if artifact.dynamic_m else "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "max" if artifact.dynamic_k else "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "max" if artifact.dynamic_k else "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "max" if artifact.dynamic_n else "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "max" if artifact.dynamic_m else "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "max" if artifact.dynamic_n else "eq", artifact.n),
         ),
         geometry=LaunchGeometry(policy="rocm_wmma_macro_tile_grid"),
         ordering=OrderingSemantics(
@@ -1485,6 +1489,8 @@ def package_scheduled_matmul(
             "work_item": "E2E-REAL-3",
             "sync_key": "E2E-REAL-2026-08-05",
             "route": "canonical_scheduled_tile_consumer",
+            "physical_route": "gfx1151_multiwave_lds_wmma_2x4",
+            "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
             "a_storage": artifact.storage,
             "b_storage": artifact.storage,

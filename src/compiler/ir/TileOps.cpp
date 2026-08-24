@@ -8,7 +8,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "tessera/LayoutAlgebra.h"
+#include "tessera/Rank2Index.h"
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -20,6 +23,168 @@ using namespace mlir;
 
 namespace tessera {
 namespace tile {
+
+namespace {
+
+static bool encodeLayoutTree(Attribute attr,
+                             SmallVectorImpl<TesseraLayoutNodeV1> &out) {
+  if (auto integer = dyn_cast<IntegerAttr>(attr)) {
+    out.push_back({integer.getInt(), 0});
+    return true;
+  }
+  auto group = dyn_cast<ArrayAttr>(attr);
+  if (!group || group.empty() || group.size() > UINT32_MAX)
+    return false;
+  out.push_back({0, static_cast<uint32_t>(group.size())});
+  for (Attribute child : group)
+    if (!encodeLayoutTree(child, out))
+      return false;
+  return true;
+}
+
+static bool nativeCoalescible(Attribute shape, Attribute stride) {
+  SmallVector<TesseraLayoutNodeV1> shapeNodes, strideNodes;
+  if (!encodeLayoutTree(shape, shapeNodes) || !encodeLayoutTree(stride, strideNodes))
+    return false;
+  const size_t capacity = 2 * (shapeNodes.size() + strideNodes.size() + 1);
+  SmallVector<TesseraLayoutNodeV1> outputShape(capacity), outputStride(capacity);
+  size_t outputShapeCount = 0, outputStrideCount = 0;
+  return tessera_layout_coalesce_v1(
+             shapeNodes.data(), shapeNodes.size(), strideNodes.data(),
+             strideNodes.size(), outputShape.data(), outputShape.size(),
+             outputStride.data(), outputStride.size(), &outputShapeCount,
+             &outputStrideCount) == TESSERA_LAYOUT_OK;
+}
+
+static bool flattenAffineLeaves(Attribute attr,
+                                SmallVectorImpl<int64_t> &out) {
+  if (auto integer = dyn_cast<IntegerAttr>(attr)) {
+    if (integer.getInt() < -1)
+      return false;
+    out.push_back(integer.getInt());
+    return true;
+  }
+  auto group = dyn_cast<ArrayAttr>(attr);
+  if (!group || group.empty())
+    return false;
+  for (Attribute child : group)
+    if (!flattenAffineLeaves(child, out))
+      return false;
+  return true;
+}
+
+} // namespace
+
+bool isNativeMaterializableComposedLayout(TileComposedLayoutAttr layout) {
+  if (!nativeCoalescible(layout.getOuterShape(), layout.getOuterStride()))
+    return false;
+  for (Attribute entry : layout.getBasis()) {
+    auto pair = dyn_cast<ArrayAttr>(entry);
+    if (!pair || pair.size() != 2 || !nativeCoalescible(pair[0], pair[1]))
+      return false;
+  }
+  return true;
+}
+
+bool getStaticAffineComposedLayout(
+    TileComposedLayoutAttr layout, SmallVectorImpl<int64_t> &outerStrides,
+    SmallVectorImpl<int64_t> &basisStrides,
+    SmallVectorImpl<int64_t> &offsets) {
+  SmallVector<ComposedLayoutDynamicLeaf> dynamicLeaves;
+  if (!getAffineComposedLayout(layout, outerStrides, basisStrides, offsets,
+                               dynamicLeaves) ||
+      !dynamicLeaves.empty())
+    return false;
+  return true;
+}
+
+bool getMaterializableComposedLayout(
+    TileComposedLayoutAttr layout,
+    SmallVectorImpl<ComposedLayoutMaterializationMode> &modes,
+    SmallVectorImpl<ComposedLayoutDynamicLeaf> &dynamicLeaves) {
+  SmallVector<int64_t> outerShape, outerStrides;
+  if (!flattenAffineLeaves(layout.getOuterShape(), outerShape) ||
+      !flattenAffineLeaves(layout.getOuterStride(), outerStrides) ||
+      outerShape.size() != outerStrides.size() ||
+      outerShape.size() != layout.getBasis().size() ||
+      outerShape.size() != layout.getOffsets().size() ||
+      !isNativeMaterializableComposedLayout(layout))
+    return false;
+  for (auto [mode, value] : llvm::enumerate(outerShape))
+    if (value == -1)
+      dynamicLeaves.push_back({ComposedLayoutDynamicLeaf::Kind::OuterShape,
+                               static_cast<unsigned>(mode), 0});
+  for (auto [mode, value] : llvm::enumerate(outerStrides))
+    if (value == -1)
+      dynamicLeaves.push_back({ComposedLayoutDynamicLeaf::Kind::OuterStride,
+                               static_cast<unsigned>(mode), 0});
+  for (auto [mode, entry] : llvm::enumerate(layout.getBasis())) {
+    auto pair = dyn_cast<ArrayAttr>(entry);
+    if (!pair || pair.size() != 2)
+      return false;
+    ComposedLayoutMaterializationMode result;
+    result.outerShape = outerShape[mode];
+    result.outerStride = outerStrides[mode];
+    result.offset = layout.getOffsets()[mode];
+    if (!flattenAffineLeaves(pair[0], result.basisShapes) ||
+        !flattenAffineLeaves(pair[1], result.basisStrides) ||
+        result.basisShapes.size() != result.basisStrides.size() ||
+        result.basisShapes.empty())
+      return false;
+    for (auto [leaf, value] : llvm::enumerate(result.basisShapes))
+      if (value == -1)
+        dynamicLeaves.push_back({ComposedLayoutDynamicLeaf::Kind::BasisShape,
+                                 static_cast<unsigned>(mode),
+                                 static_cast<unsigned>(leaf)});
+    for (auto [leaf, value] : llvm::enumerate(result.basisStrides))
+      if (value == -1)
+        dynamicLeaves.push_back({ComposedLayoutDynamicLeaf::Kind::BasisStride,
+                                 static_cast<unsigned>(mode),
+                                 static_cast<unsigned>(leaf)});
+    modes.push_back(std::move(result));
+  }
+  return true;
+}
+
+bool getAffineComposedLayout(
+    TileComposedLayoutAttr layout, SmallVectorImpl<int64_t> &outerStrides,
+    SmallVectorImpl<int64_t> &basisStrides,
+    SmallVectorImpl<int64_t> &offsets,
+    SmallVectorImpl<ComposedLayoutDynamicLeaf> &dynamicLeaves) {
+  SmallVector<ComposedLayoutMaterializationMode> modes;
+  if (!getMaterializableComposedLayout(layout, modes, dynamicLeaves))
+    return false;
+  for (const auto &mode : modes) {
+    if (mode.basisShapes.size() != 1)
+      return false;
+    outerStrides.push_back(mode.outerStride);
+    basisStrides.push_back(mode.basisStrides.front());
+    offsets.push_back(mode.offset);
+  }
+  return true;
+}
+
+FailureOr<Value> materializeLinearIndex(OpBuilder &builder, Location loc,
+                                        Value row, Value column,
+                                        Value leadingDim, StringRef order) {
+  if (!row.getType().isIntOrIndex() || !column.getType().isIntOrIndex() ||
+      row.getType() != column.getType() || row.getType() != leadingDim.getType())
+    return failure();
+  layout::Rank2Order rank2Order;
+  if (order == "row_major")
+    rank2Order = layout::Rank2Order::RowMajor;
+  else if (order == "col_major")
+    rank2Order = layout::Rank2Order::ColumnMajor;
+  else
+    return failure();
+
+  Value coordinates[2] = {row, column};
+  const layout::Rank2IndexPlan plan = layout::rank2IndexPlan(rank2Order);
+  Value scaled = arith::MulIOp::create(
+      builder, loc, coordinates[plan.majorCoordinate], leadingDim);
+  return Value(arith::AddIOp::create(
+      builder, loc, scaled, coordinates[plan.minorCoordinate]));
+}
 
 namespace {
 // Read an optional discardable bool attr (transposeA/transposeB), default false.
@@ -752,6 +917,47 @@ LogicalResult ViewOp::verify() {
                 "linear origin immediately after base; got "
              << inputs << " operands";
   }
+  return success();
+}
+
+LogicalResult MaterializeComposedLayoutOp::verify() {
+  TileComposedLayoutAttr layout = getLayout();
+  SmallVector<ComposedLayoutMaterializationMode> modes;
+  SmallVector<ComposedLayoutDynamicLeaf> dynamicLeaves;
+  if (!getMaterializableComposedLayout(layout, modes, dynamicLeaves) ||
+      getCoordinates().size() != modes.size() + dynamicLeaves.size())
+    return emitOpError("TILE_COMPOSED_LAYOUT_NOT_MATERIALIZABLE: composed "
+                       "layout must be a scalar-output coordinate map accepted "
+                       "by the native layout authority, followed by one i64 "
+                       "operand per dynamic leaf in canonical preorder");
+  return success();
+}
+
+LogicalResult MaterializeComposedLayoutTupleOp::verify() {
+  ArrayAttr layouts = getLayouts();
+  if (layouts.empty() || getResults().size() != layouts.size())
+    return emitOpError("TILE_COMPOSED_LAYOUT_TUPLE_ARITY: requires one i64 "
+                       "result per scalar codomain component");
+  std::optional<size_t> coordinateRank;
+  for (Attribute attr : layouts) {
+    auto layout = dyn_cast<TileComposedLayoutAttr>(attr);
+    SmallVector<ComposedLayoutMaterializationMode> modes;
+    SmallVector<ComposedLayoutDynamicLeaf> dynamicLeaves;
+    if (!layout ||
+        !getMaterializableComposedLayout(layout, modes, dynamicLeaves) ||
+        !dynamicLeaves.empty())
+      return emitOpError("TILE_COMPOSED_LAYOUT_TUPLE_NOT_MATERIALIZABLE: "
+                         "every tuple component must be a statically proven "
+                         "scalar composed layout");
+    if (!coordinateRank)
+      coordinateRank = modes.size();
+    else if (*coordinateRank != modes.size())
+      return emitOpError("TILE_COMPOSED_LAYOUT_TUPLE_DOMAIN: every tuple "
+                         "component must consume the same coordinate rank");
+  }
+  if (getCoordinates().size() != *coordinateRank)
+    return emitOpError("TILE_COMPOSED_LAYOUT_TUPLE_COORDINATES: coordinate "
+                       "count must equal the shared domain rank");
   return success();
 }
 

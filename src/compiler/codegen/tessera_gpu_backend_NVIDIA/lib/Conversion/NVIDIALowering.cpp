@@ -4,6 +4,7 @@
 #include "Tessera/Transforms/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
@@ -229,7 +230,8 @@ static Value maskedLoadScalar(OpBuilder &builder, Location loc, Value base,
 }
 
 static FailureOr<Value> sm120SharedBuffer(Operation *anchor, OpBuilder &builder,
-                                          Type elementType, StringRef dtype) {
+                                          Type elementType, StringRef dtype,
+                                          bool doubleBuffered) {
   ModuleOp module = anchor->getParentOfType<ModuleOp>();
   if (!module)
     return failure();
@@ -237,7 +239,8 @@ static FailureOr<Value> sm120SharedBuffer(Operation *anchor, OpBuilder &builder,
   auto global = module.lookupSymbol<LLVM::GlobalOp>(symbol);
   // Four warps own a 32x32 CTA macro-tile.  One K panel stages A[32,16]
   // followed by B[32,16] in its column-major physical representation.
-  auto arrayTy = LLVM::LLVMArrayType::get(elementType, 1024);
+  auto arrayTy = LLVM::LLVMArrayType::get(
+      elementType, doubleBuffered ? 2048 : 1024);
   if (!global) {
     OpBuilder globalBuilder(module.getBodyRegion());
     globalBuilder.setInsertionPointToStart(module.getBody());
@@ -1202,6 +1205,18 @@ static LogicalResult materializeSm120MatmulKernel(
   unsigned dIndex = 2 + unsigned(hasBias) + unsigned(hasResidual);
   Value dBase = inputs[dIndex];
   Value m = inputs[dIndex + 1], n = inputs[dIndex + 2], k = inputs[dIndex + 3];
+  // Dynamic scheduled packages carry physical row strides after their logical
+  // M/N/K extents.  Keep the compact ABI as a strict subset: when the three
+  // values are absent, the mathematical row strides are K, K, and N.
+  bool hasLeadingDimensions = inputs.size() == dIndex + 7;
+  if (inputs.size() != dIndex + 4 && !hasLeadingDimensions) {
+    op->emitError("sm_120 matmul_kernel requires A, B, D, M, N, K and "
+                  "optional lda, ldb, ldd operands");
+    return failure();
+  }
+  Value lda = hasLeadingDimensions ? inputs[dIndex + 4] : k;
+  Value ldb = hasLeadingDimensions ? inputs[dIndex + 5] : k;
+  Value ldd = hasLeadingDimensions ? inputs[dIndex + 6] : n;
   Location loc = op->getLoc();
   Type inputType = desc.getAType() == "bf16"
       ? Type(builder.getBF16Type()) : Type(builder.getF16Type());
@@ -1213,9 +1228,17 @@ static LogicalResult materializeSm120MatmulKernel(
   bool sharedStaging = false;
   if (auto attr = op->getAttrOfType<StringAttr>("staging"))
     sharedStaging = attr.getValue() == "shared";
+  bool vectorizedSharedPanel = false;
+  if (auto attr =
+          op->getAttrOfType<BoolAttr>("tessera.vectorized_shared_panel"))
+    vectorizedSharedPanel = attr.getValue();
+  bool asyncSharedPanel = false;
+  if (auto attr = op->getAttrOfType<BoolAttr>("tessera.async_shared_panel"))
+    asyncSharedPanel = attr.getValue();
   FailureOr<Value> sharedBase = failure();
   if (sharedStaging) {
-    sharedBase = sm120SharedBuffer(op, builder, inputType, desc.getAType());
+    sharedBase = sm120SharedBuffer(op, builder, inputType, desc.getAType(),
+                                   asyncSharedPanel);
     if (failed(sharedBase)) {
       op->emitError("failed to materialize sm_120 shared staging buffer");
       return failure();
@@ -1280,6 +1303,130 @@ static LogicalResult materializeSm120MatmulKernel(
   Value kStep = i64Constant(builder, loc, canonicalTileK);
   Value zeroF32 = arith::ConstantFloatOp::create(
       builder, loc, builder.getF32Type(), APFloat(0.0f));
+  Value tid64 = arith::ExtUIOp::create(
+      builder, loc, builder.getI64Type(), tid);
+  auto asyncSlotOffset = [&](Value panelK) {
+    Value panel = arith::DivUIOp::create(builder, loc, panelK, sixteen);
+    Value slot = arith::AndIOp::create(
+        builder, loc, panel, i64Constant(builder, loc, 1));
+    return Value(mulI64(builder, loc, slot,
+                        i64Constant(builder, loc, 1024)));
+  };
+  auto stageAsyncPanel = [&](Value panelK, Value slotOffset) {
+    Value eight = i64Constant(builder, loc, 8);
+    Value isA = lessI64(builder, loc, tid64,
+                        i64Constant(builder, loc, 64));
+    auto branch = scf::IfOp::create(builder, loc, isA,
+                                    /*withElseRegion=*/true);
+    {
+      OpBuilder::InsertionGuard branchGuard(builder);
+      builder.setInsertionPointToStart(branch.thenBlock());
+      Value localRow = arith::DivUIOp::create(
+          builder, loc, tid64, i64Constant(builder, loc, 2));
+      Value chunk = mulI64(
+          builder, loc,
+          arith::RemUIOp::create(builder, loc, tid64,
+                                 i64Constant(builder, loc, 2)),
+          eight);
+      Value globalRow = addI64(builder, loc, macroRowOrigin, localRow);
+      Value globalK = addI64(builder, loc, panelK, chunk);
+      Value rowInBounds = lessI64(builder, loc, globalRow, m);
+      Value kInBounds = lessI64(builder, loc, globalK, k);
+      Value inBounds = arith::AndIOp::create(
+          builder, loc, rowInBounds, kInBounds);
+      Value remaining = arith::SelectOp::create(
+          builder, loc, kInBounds,
+          arith::SubIOp::create(builder, loc, k, globalK), zeroI64);
+      Value copiedElements = arith::SelectOp::create(
+          builder, loc, lessI64(builder, loc, remaining, eight), remaining,
+          eight);
+      Value globalLinear = addI64(
+          builder, loc, mulI64(builder, loc, globalRow, lda), globalK);
+      Value safeGlobalLinear = arith::SelectOp::create(
+          builder, loc, inBounds, globalLinear, zeroI64);
+      Value copyBytes64 = arith::SelectOp::create(
+          builder, loc, rowInBounds,
+          mulI64(builder, loc, copiedElements,
+                 i64Constant(builder, loc, 2)),
+          zeroI64);
+      Value copyBytes = arith::TruncIOp::create(
+          builder, loc, builder.getI32Type(), copyBytes64);
+      Value sharedLinear = addI64(
+          builder, loc, slotOffset,
+          addI64(builder, loc, mulI64(builder, loc, localRow, sixteen),
+                 chunk));
+      Value genericPtr = LLVM::GEPOp::create(
+          builder, loc, aBase.getType(), inputType, aBase,
+          ValueRange{safeGlobalLinear});
+      auto globalType = LLVM::LLVMPointerType::get(builder.getContext(), 1);
+      Value globalPtr = LLVM::AddrSpaceCastOp::create(
+          builder, loc, globalType, genericPtr);
+      Value sharedPtr = LLVM::GEPOp::create(
+          builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
+          ValueRange{sharedLinear});
+      NVVM::CpAsyncOp::create(builder, loc, sharedPtr, globalPtr, 16,
+                              NVVM::LoadCacheModifierKind::CA, copyBytes);
+    }
+    {
+      OpBuilder::InsertionGuard branchGuard(builder);
+      builder.setInsertionPointToStart(branch.elseBlock());
+      Value owner = arith::SubIOp::create(
+          builder, loc, tid64, i64Constant(builder, loc, 64));
+      Value localCol = arith::DivUIOp::create(
+          builder, loc, owner, i64Constant(builder, loc, 2));
+      Value chunk = mulI64(
+          builder, loc,
+          arith::RemUIOp::create(builder, loc, owner,
+                                 i64Constant(builder, loc, 2)),
+          eight);
+      Value globalCol = addI64(builder, loc, macroColOrigin, localCol);
+      Value globalK = addI64(builder, loc, panelK, chunk);
+      Value colInBounds = lessI64(builder, loc, globalCol, n);
+      Value kInBounds = lessI64(builder, loc, globalK, k);
+      Value inBounds = arith::AndIOp::create(
+          builder, loc, colInBounds, kInBounds);
+      Value remaining = arith::SelectOp::create(
+          builder, loc, kInBounds,
+          arith::SubIOp::create(builder, loc, k, globalK), zeroI64);
+      Value copiedElements = arith::SelectOp::create(
+          builder, loc, lessI64(builder, loc, remaining, eight), remaining,
+          eight);
+      Value globalLinear = addI64(
+          builder, loc, mulI64(builder, loc, globalCol, ldb), globalK);
+      Value safeGlobalLinear = arith::SelectOp::create(
+          builder, loc, inBounds, globalLinear, zeroI64);
+      Value copyBytes64 = arith::SelectOp::create(
+          builder, loc, colInBounds,
+          mulI64(builder, loc, copiedElements,
+                 i64Constant(builder, loc, 2)),
+          zeroI64);
+      Value copyBytes = arith::TruncIOp::create(
+          builder, loc, builder.getI32Type(), copyBytes64);
+      Value sharedLinear = addI64(
+          builder, loc, slotOffset,
+          addI64(builder, loc, i64Constant(builder, loc, 512),
+                 addI64(builder, loc,
+                        mulI64(builder, loc, localCol, sixteen), chunk)));
+      Value genericPtr = LLVM::GEPOp::create(
+          builder, loc, bBase.getType(), inputType, bBase,
+          ValueRange{safeGlobalLinear});
+      auto globalType = LLVM::LLVMPointerType::get(builder.getContext(), 1);
+      Value globalPtr = LLVM::AddrSpaceCastOp::create(
+          builder, loc, globalType, genericPtr);
+      Value sharedPtr = LLVM::GEPOp::create(
+          builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
+          ValueRange{sharedLinear});
+      NVVM::CpAsyncOp::create(builder, loc, sharedPtr, globalPtr, 16,
+                              NVVM::LoadCacheModifierKind::CA, copyBytes);
+    }
+    builder.setInsertionPointAfter(branch);
+    NVVM::CpAsyncCommitGroupOp::create(builder, loc);
+  };
+  if (asyncSharedPanel) {
+    stageAsyncPanel(zeroI64, zeroI64);
+    NVVM::CpAsyncWaitGroupOp::create(builder, loc, 0);
+    NVVM::BarrierOp::create(builder, loc);
+  }
   // A shared-staged warp computes two adjacent m16n8 fragments so each pair of
   // CTA barriers is amortized over eight MMA instructions rather than four.
   SmallVector<Value> init(sharedStaging ? 8 : 4, zeroF32);
@@ -1294,25 +1441,110 @@ static LogicalResult materializeSm120MatmulKernel(
     Value row1 = addI64(builder, loc, row0, eight);
     Value k0 = addI64(builder, loc, kOrigin, twoTig);
     Value k1 = addI64(builder, loc, k0, eight);
+    Value currentSlotOffset = asyncSharedPanel
+        ? asyncSlotOffset(kOrigin) : zeroI64;
 
     if (sharedStaging) {
-      Value tid64 = arith::ExtUIOp::create(
-          builder, loc, builder.getI64Type(), tid);
-      auto stageLoop = scf::ForOp::create(
-          builder, loc, tid64, i64Constant(builder, loc, 1024),
-          i64Constant(builder, loc, warps * 32));
-      {
-        OpBuilder::InsertionGuard stageGuard(builder);
-        builder.setInsertionPointToStart(stageLoop.getBody());
-        Value index = stageLoop.getInductionVar();
-        Value isA = lessI64(builder, loc, index,
-                            i64Constant(builder, loc, 512));
+      if (asyncSharedPanel) {
+        Value nextK = addI64(builder, loc, kOrigin, kStep);
+        Value hasNext = lessI64(builder, loc, nextK, k);
+        auto prefetch = scf::IfOp::create(builder, loc, hasNext,
+                                          /*withElseRegion=*/false);
+        {
+          OpBuilder::InsertionGuard prefetchGuard(builder);
+          builder.setInsertionPointToStart(prefetch.thenBlock());
+          stageAsyncPanel(nextK, asyncSlotOffset(nextK));
+        }
+        builder.setInsertionPointAfter(prefetch);
+      } else if (vectorizedSharedPanel) {
+        // Exactly 128 threads move the complete 2 KiB panel: warps 0-1 each
+        // own one aligned 16-byte A vector and warps 2-3 one B vector. Full
+        // CTA bounds are part of the target contract, so no masked tail is
+        // silently introduced here.
+        Value isA = lessI64(builder, loc, tid64,
+                            i64Constant(builder, loc, 64));
         auto branch = scf::IfOp::create(builder, loc, isA,
                                         /*withElseRegion=*/true);
         {
           OpBuilder::InsertionGuard branchGuard(builder);
           {
             builder.setInsertionPointToStart(branch.thenBlock());
+            Value localRow = arith::DivUIOp::create(
+                builder, loc, tid64, i64Constant(builder, loc, 2));
+            Value chunk = mulI64(
+                builder, loc,
+                arith::RemUIOp::create(
+                    builder, loc, tid64, i64Constant(builder, loc, 2)),
+                eight);
+            Value globalRow = addI64(builder, loc, macroRowOrigin, localRow);
+            Value globalK = addI64(builder, loc, kOrigin, chunk);
+            Value globalLinear = addI64(
+                builder, loc, mulI64(builder, loc, globalRow, lda), globalK);
+            Value sharedLinear = addI64(
+                builder, loc, currentSlotOffset,
+                addI64(builder, loc,
+                       mulI64(builder, loc, localRow, sixteen), chunk));
+            Value globalPtr = LLVM::GEPOp::create(
+                builder, loc, aBase.getType(), inputType, aBase,
+                ValueRange{globalLinear});
+            Value sharedPtr = LLVM::GEPOp::create(
+                builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
+                ValueRange{sharedLinear});
+            Value vector = LLVM::LoadOp::create(
+                builder, loc, VectorType::get({8}, inputType), globalPtr,
+                /*alignment=*/16);
+            LLVM::StoreOp::create(builder, loc, vector, sharedPtr,
+                                  /*alignment=*/16);
+          }
+          {
+            builder.setInsertionPointToStart(branch.elseBlock());
+            Value owner = arith::SubIOp::create(
+                builder, loc, tid64, i64Constant(builder, loc, 64));
+            Value localCol = arith::DivUIOp::create(
+                builder, loc, owner, i64Constant(builder, loc, 2));
+            Value chunk = mulI64(
+                builder, loc,
+                arith::RemUIOp::create(
+                    builder, loc, owner, i64Constant(builder, loc, 2)),
+                eight);
+            Value globalCol = addI64(builder, loc, macroColOrigin, localCol);
+            Value globalK = addI64(builder, loc, kOrigin, chunk);
+            Value globalLinear = addI64(
+                builder, loc, mulI64(builder, loc, globalCol, ldb), globalK);
+            Value sharedLinear = addI64(
+                builder, loc, currentSlotOffset,
+                addI64(builder, loc, i64Constant(builder, loc, 512),
+                       addI64(builder, loc,
+                              mulI64(builder, loc, localCol, sixteen), chunk)));
+            Value globalPtr = LLVM::GEPOp::create(
+                builder, loc, bBase.getType(), inputType, bBase,
+                ValueRange{globalLinear});
+            Value sharedPtr = LLVM::GEPOp::create(
+                builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
+                ValueRange{sharedLinear});
+            Value vector = LLVM::LoadOp::create(
+                builder, loc, VectorType::get({8}, inputType), globalPtr,
+                /*alignment=*/16);
+            LLVM::StoreOp::create(builder, loc, vector, sharedPtr,
+                                  /*alignment=*/16);
+          }
+        }
+      } else {
+        auto stageLoop = scf::ForOp::create(
+            builder, loc, tid64, i64Constant(builder, loc, 1024),
+            i64Constant(builder, loc, warps * 32));
+        {
+          OpBuilder::InsertionGuard stageGuard(builder);
+          builder.setInsertionPointToStart(stageLoop.getBody());
+          Value index = stageLoop.getInductionVar();
+          Value isA = lessI64(builder, loc, index,
+                              i64Constant(builder, loc, 512));
+          auto branch = scf::IfOp::create(builder, loc, isA,
+                                          /*withElseRegion=*/true);
+          {
+            OpBuilder::InsertionGuard branchGuard(builder);
+            {
+              builder.setInsertionPointToStart(branch.thenBlock());
             Value localRow = arith::DivUIOp::create(
                 builder, loc, index, sixteen);
             Value localK = arith::RemUIOp::create(
@@ -1323,17 +1555,16 @@ static LogicalResult materializeSm120MatmulKernel(
                 builder, loc, lessI64(builder, loc, globalRow, m),
                 lessI64(builder, loc, globalK, k));
             Value linear = addI64(
-                builder, loc, mulI64(builder, loc, globalRow, k), globalK);
+                builder, loc, mulI64(builder, loc, globalRow, lda), globalK);
             Value scalar = maskedLoadScalar(
                 builder, loc, aBase, inputType, linear, valid, 2);
             Value ptr = LLVM::GEPOp::create(
                 builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
                 ValueRange{index});
             LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/2);
-          }
-
-          {
-            builder.setInsertionPointToStart(branch.elseBlock());
+            }
+            {
+              builder.setInsertionPointToStart(branch.elseBlock());
             Value bIndex = arith::SubIOp::create(
                 builder, loc, index, i64Constant(builder, loc, 512));
             Value localCol = arith::DivUIOp::create(
@@ -1346,18 +1577,20 @@ static LogicalResult materializeSm120MatmulKernel(
                 builder, loc, lessI64(builder, loc, globalCol, n),
                 lessI64(builder, loc, globalK, k));
             Value linear = addI64(
-                builder, loc, mulI64(builder, loc, globalCol, k), globalK);
+                builder, loc, mulI64(builder, loc, globalCol, ldb), globalK);
             Value scalar = maskedLoadScalar(
                 builder, loc, bBase, inputType, linear, valid, 2);
             Value ptr = LLVM::GEPOp::create(
                 builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
                 ValueRange{index});
             LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/2);
+            }
           }
         }
+        builder.setInsertionPointAfter(stageLoop);
       }
-      builder.setInsertionPointAfter(stageLoop);
-      NVVM::BarrierOp::create(builder, loc);
+      if (!asyncSharedPanel)
+        NVVM::BarrierOp::create(builder, loc);
     }
 
     auto loadA = [&](Value row, Value col) {
@@ -1366,14 +1599,16 @@ static LogicalResult materializeSm120MatmulKernel(
             builder, loc, row, macroRowOrigin);
         Value localCol = arith::SubIOp::create(builder, loc, col, kOrigin);
         Value linear = addI64(
-            builder, loc, mulI64(builder, loc, localRow, sixteen), localCol);
+            builder, loc, currentSlotOffset,
+            addI64(builder, loc,
+                   mulI64(builder, loc, localRow, sixteen), localCol));
         Value ptr = LLVM::GEPOp::create(
             builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
             ValueRange{linear});
         return Value(LLVM::LoadOp::create(
             builder, loc, VectorType::get({2}, inputType), ptr, /*alignment=*/2));
       }
-      Value linear = addI64(builder, loc, mulI64(builder, loc, row, k), col);
+      Value linear = addI64(builder, loc, mulI64(builder, loc, row, lda), col);
       Value rowValid = lessI64(builder, loc, row, m);
       Value valid0 = arith::AndIOp::create(
           builder, loc, rowValid, lessI64(builder, loc, col, k));
@@ -1390,9 +1625,10 @@ static LogicalResult materializeSm120MatmulKernel(
         Value localCol = arith::SubIOp::create(
             builder, loc, fragmentCol, macroColOrigin);
         Value linear = addI64(
-            builder, loc, i64Constant(builder, loc, 512),
-            addI64(builder, loc,
-                   mulI64(builder, loc, localCol, sixteen), localRow));
+            builder, loc, currentSlotOffset,
+            addI64(builder, loc, i64Constant(builder, loc, 512),
+                   addI64(builder, loc,
+                          mulI64(builder, loc, localCol, sixteen), localRow)));
         Value ptr = LLVM::GEPOp::create(
             builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
             ValueRange{linear});
@@ -1400,7 +1636,7 @@ static LogicalResult materializeSm120MatmulKernel(
             builder, loc, VectorType::get({2}, inputType), ptr, /*alignment=*/2));
       }
       Value linear = addI64(
-          builder, loc, mulI64(builder, loc, fragmentCol, k), row);
+          builder, loc, mulI64(builder, loc, fragmentCol, ldb), row);
       Value colValid = lessI64(builder, loc, fragmentCol, n);
       Value valid0 = arith::AndIOp::create(
           builder, loc, colValid, lessI64(builder, loc, row, k));
@@ -1442,8 +1678,13 @@ static LogicalResult materializeSm120MatmulKernel(
     emitMma(colOrigin, 0);
     if (sharedStaging)
       emitMma(addI64(builder, loc, colOrigin, eight), 4);
-    if (sharedStaging)
+    if (sharedStaging) {
       NVVM::BarrierOp::create(builder, loc);
+      if (asyncSharedPanel) {
+        NVVM::CpAsyncWaitGroupOp::create(builder, loc, 0);
+        NVVM::BarrierOp::create(builder, loc);
+      }
+    }
     scf::YieldOp::create(builder, loc, next);
   }
 
@@ -1489,7 +1730,7 @@ static LogicalResult materializeSm120MatmulKernel(
         Value rowValid = lessI64(builder, loc, row, m);
         Value valid0 = arith::AndIOp::create(builder, loc, rowValid, colValid0);
         Value valid1 = arith::AndIOp::create(builder, loc, rowValid, colValid1);
-        Value linear = addI64(builder, loc, mulI64(builder, loc, row, n), outCol);
+        Value linear = addI64(builder, loc, mulI64(builder, loc, row, ldd), outCol);
         Value residualPair = maskedLoadPair(
             builder, loc, residualBase, f32, linear, valid0, valid1, 4);
         for (unsigned element = 0; element < 2; ++element) {
@@ -1513,7 +1754,7 @@ static LogicalResult materializeSm120MatmulKernel(
       Value rowValid = lessI64(builder, loc, row, m);
       Value valid0 = arith::AndIOp::create(builder, loc, rowValid, colValid0);
       Value valid1 = arith::AndIOp::create(builder, loc, rowValid, colValid1);
-      Value linear = addI64(builder, loc, mulI64(builder, loc, row, n), outCol);
+      Value linear = addI64(builder, loc, mulI64(builder, loc, row, ldd), outCol);
       Value ptr = LLVM::GEPOp::create(builder, loc, dBase.getType(), outputType,
                                       dBase, ValueRange{linear});
       Value outPair = pairFromScalars(
@@ -3289,18 +3530,13 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
       else
         row = arith::DivUIOp::create(builder, loc, row, two);
     }
+    Value relativeLinear = *tessera::tile::materializeLinearIndex(
+        builder, loc, relativeRow, relativeCol, leadingDim,
+        memory.getOrder());
     Value linear = precomputedLinearBase
-        ? addI64(builder, loc, linearBase,
-                 memory.getOrder() == "row_major"
-                     ? addI64(builder, loc,
-                              mulI64(builder, loc, relativeRow, leadingDim),
-                              relativeCol)
-                     : addI64(builder, loc,
-                              mulI64(builder, loc, relativeCol, leadingDim),
-                              relativeRow))
-        : memory.getOrder() == "row_major"
-              ? addI64(builder, loc, mulI64(builder, loc, row, leadingDim), col)
-              : addI64(builder, loc, mulI64(builder, loc, col, leadingDim), row);
+        ? addI64(builder, loc, linearBase, relativeLinear)
+        : *tessera::tile::materializeLinearIndex(
+              builder, loc, row, col, leadingDim, memory.getOrder());
     Value fragment;
     if (haveBounds && !isa<VectorType>(loadTy)) {
       // Scalar f32/f64 fragments have one logical element per register. Keep
@@ -3341,24 +3577,21 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
                                    logicalRow, rowBound),
             arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
                                    logicalCol, colBound));
+        Value relativeLogicalRow = role.getValue() == "a"
+            ? relativeRow
+            : addI64(builder, loc, relativeRow, laneValue);
+        Value relativeLogicalCol = role.getValue() == "a"
+            ? addI64(builder, loc, relativeCol, laneValue)
+            : relativeCol;
+        Value relativeElementLinear =
+            *tessera::tile::materializeLinearIndex(
+                builder, loc, relativeLogicalRow, relativeLogicalCol,
+                leadingDim, memory.getOrder());
         Value elementLinear = precomputedLinearBase
-            ? addI64(builder, loc, linearBase,
-                     memory.getOrder() == "row_major"
-                         ? addI64(builder, loc,
-                                  mulI64(builder, loc, relativeRow, leadingDim),
-                                  addI64(builder, loc, relativeCol, laneValue))
-                         : addI64(builder, loc,
-                                  mulI64(builder, loc,
-                                        addI64(builder, loc, relativeCol, laneValue),
-                                        leadingDim),
-                                  relativeRow))
-            : memory.getOrder() == "row_major"
-                  ? addI64(builder, loc,
-                           mulI64(builder, loc, logicalRow, leadingDim),
-                           logicalCol)
-                  : addI64(builder, loc,
-                           mulI64(builder, loc, logicalCol, leadingDim),
-                           logicalRow);
+            ? addI64(builder, loc, linearBase, relativeElementLinear)
+            : *tessera::tile::materializeLinearIndex(
+                  builder, loc, logicalRow, logicalCol, leadingDim,
+                  memory.getOrder());
         Value safeLinear = arith::SelectOp::create(
             builder, loc, inBounds, elementLinear, i64Constant(builder, loc, 0));
         Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy,
@@ -3486,14 +3719,16 @@ static LogicalResult materializeSm120AccumulatorStore(
   bool isF32 = desc && desc.getAccType() == "f32";
   bool isS32 = desc && (desc.getAccType() == "s32" ||
                         desc.getAccType() == "int32");
+  const bool dynamicLeadingDim = memory && memory.getLeadingDim() == 0;
+  const bool boundedDynamic = dynamicLeadingDim && store.getInputs().size() == 7;
   if (!isCanonicalSm120Mma16(desc) || (!isF32 && !isS32) ||
       !unpackLayout || !storeLayout || !memory ||
       unpackLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
       storeLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
       unpackLayout.getSwizzle() ||
       storeLayout.getSwizzle() || memory.getSpace() != "gmem" ||
-      memory.getOrder() != "row_major" || memory.getLeadingDim() == 0 ||
-      store.getInputs().size() != 4) {
+      memory.getOrder() != "row_major" ||
+      (!boundedDynamic && store.getInputs().size() != 4)) {
     op->emitError("sm_120 accumulator store requires unswizzled 16x8 row-major "
                   "gmem output and f32 or s32 accumulator");
     return failure();
@@ -3521,18 +3756,32 @@ static LogicalResult materializeSm120AccumulatorStore(
       {addI64(builder, loc, gid, eight), twoTig},
       {addI64(builder, loc, gid, eight),
        addI64(builder, loc, twoTig, one)}};
-  Value leadingDim = i64Constant(builder, loc, memory.getLeadingDim());
+  Value leadingDim = dynamicLeadingDim
+      ? store.getInputs()[6]
+      : i64Constant(builder, loc, memory.getLeadingDim());
+  Value rowBound = boundedDynamic ? store.getInputs()[4] : Value();
+  Value colBound = boundedDynamic ? store.getInputs()[5] : Value();
   for (auto [index, coord] : llvm::enumerate(coords)) {
     Value row = addI64(builder, loc, rowOrigin, coord.first);
     Value col = addI64(builder, loc, colOrigin, coord.second);
-    Value linear = addI64(builder, loc,
-                          mulI64(builder, loc, row, leadingDim), col);
+    Value linear = *tessera::tile::materializeLinearIndex(
+        builder, loc, row, col, leadingDim, "row_major");
     Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), accumulatorTy, base,
                                     ValueRange{linear});
     Value scalar = LLVM::ExtractValueOp::create(
         builder, loc, accumulatorTy, accumulator,
         ArrayRef<int64_t>{static_cast<int64_t>(index)});
-    LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
+    if (boundedDynamic) {
+      Value valid = arith::AndIOp::create(
+          builder, loc, lessI64(builder, loc, row, rowBound),
+          lessI64(builder, loc, col, colBound));
+      auto guarded = scf::IfOp::create(builder, loc, valid, false);
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(guarded.thenBlock());
+      LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
+    } else {
+      LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
+    }
   }
   return success();
 }
@@ -4544,7 +4793,8 @@ struct LowerTileToNVIDIAPass
   }
 
   void getDependentDialects(DialectRegistry &registry) const final {
-    registry.insert<arith::ArithDialect, func::FuncDialect,
+    registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
+                    func::FuncDialect,
                     LLVM::LLVMDialect, math::MathDialect, NVVM::NVVMDialect,
                     scf::SCFDialect,
                     tessera::nvidia::TesseraNVIDIADialect>();
@@ -4559,6 +4809,28 @@ struct LowerTileToNVIDIAPass
     module->setAttr("tessera.nvidia.arch",
                     moduleBuilder.getStringAttr(archStringForSM(smVersion)));
 
+    // Preserve a tuple codomain as a product of scalar proof operations.  The
+    // scalar materializer below remains the sole place that implements the
+    // mixed-radix arithmetic; this expansion only preserves product structure.
+    SmallVector<tessera::tile::MaterializeComposedLayoutTupleOp> tupleLayouts;
+    module.walk([&](tessera::tile::MaterializeComposedLayoutTupleOp op) {
+      tupleLayouts.push_back(op);
+    });
+    for (auto tuple : tupleLayouts) {
+      OpBuilder builder(tuple);
+      for (auto [index, attr] : llvm::enumerate(tuple.getLayouts())) {
+        OperationState state(tuple.getLoc(),
+                             "tile.materialize_composed_layout");
+        state.addOperands(tuple.getCoordinates());
+        state.addTypes(builder.getI64Type());
+        state.addAttribute("layout",
+                           cast<tessera::tile::TileComposedLayoutAttr>(attr));
+        Operation *component = builder.create(state);
+        tuple.getResults()[index].replaceAllUsesWith(component->getResult(0));
+      }
+      tuple.erase();
+    }
+
     if (smVersion >= kConsumerBlackwellSM &&
         failed(lowerTypedSm120Fragments(module))) {
       signalPassFailure();
@@ -4569,7 +4841,10 @@ struct LowerTileToNVIDIAPass
     module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.async_copy" ||
+          name == "tessera_nvidia.block_coordinate" ||
+          name == "tessera_nvidia.macro_cta_matmul" ||
           name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
+          name == "tile.materialize_composed_layout" ||
           name == "tile.reduce_kernel" || name == "tile.norm_kernel" ||
           name == "tile.cuda_intrinsic_kernel" ||
           name == "tile.packed_store" ||
@@ -4609,6 +4884,131 @@ struct LowerTileToNVIDIAPass
                       "SM100 (consumer sm_120 has no TMEM)");
         signalPassFailure();
         return;
+      }
+
+      if (name == "tessera_nvidia.block_coordinate") {
+        auto coordinate =
+            cast<tessera::nvidia::BlockCoordinateOp>(op);
+        Type i32 = builder.getI32Type();
+        Type i64 = builder.getI64Type();
+        // This is the sole lowering authority for the canonical SM120 grid:
+        // grid.x enumerates 8-column tiles and grid.y enumerates 16-row tiles.
+        // The operation verifier has already rejected every other contract.
+        Value blockX = arith::ExtUIOp::create(
+            builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
+        Value blockY = arith::ExtUIOp::create(
+            builder, loc, i64, NVVM::BlockIdYOp::create(builder, loc, i32));
+        Value rowBase = mulI64(builder, loc, blockY,
+                               i64Constant(builder, loc, 16));
+        Value colBase = mulI64(builder, loc, blockX,
+                               i64Constant(builder, loc, 8));
+        coordinate.getRowBase().replaceAllUsesWith(rowBase);
+        coordinate.getColBase().replaceAllUsesWith(colBase);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tessera_nvidia.macro_cta_matmul") {
+        // This target-only input need not contain a parsed Tile op, so load
+        // the dialect explicitly before constructing its physical descriptor.
+        getContext().getOrLoadDialect<tessera::tile::TesseraTileDialect>();
+        auto macro = cast<tessera::nvidia::MacroCTAMatmulOp>(op);
+        StringRef storage = macro.getStorage();
+        auto mma = tessera::tile::TileMmaDescAttr::get(
+            ctx, "mma_sync", 16, 8, 16, storage, storage, "f32",
+            "row_major", "col_major", 1);
+        auto epilogue = tessera::tile::TileEpilogueAttr::get(
+            ctx, /*bias=*/false, "none", "f32");
+        OperationState state(loc, "tile.matmul_kernel");
+        state.addOperands(op->getOperands());
+        state.addAttribute("mma", mma);
+        state.addAttribute("epilogue", epilogue);
+        state.addAttribute("warps", builder.getI64IntegerAttr(4));
+        state.addAttribute("staging", builder.getStringAttr("shared"));
+        state.addAttribute("tessera.canonical_k_loop", builder.getBoolAttr(true));
+        state.addAttribute("tessera.tile_m", builder.getI64IntegerAttr(16));
+        state.addAttribute("tessera.tile_n", builder.getI64IntegerAttr(8));
+        state.addAttribute("tessera.tile_k", builder.getI64IntegerAttr(16));
+        if (macro.getLeadingDimensions().empty()) {
+          state.addAttribute("tessera.vectorized_shared_panel",
+                             builder.getBoolAttr(true));
+          state.addAttribute("tessera.async_shared_panel",
+                             builder.getBoolAttr(true));
+        }
+        Operation *kernel = builder.create(state);
+        if (failed(materializeSm120MatmulKernel(
+                cast<tessera::tile::MatmulKernelOp>(kernel), builder))) {
+          signalPassFailure();
+          return;
+        }
+        op->erase();
+        continue;
+      }
+
+      // A composed layout reaches CUDA only through the shared proof boundary.
+      // Coordinates precede runtime leaves in the canonical order defined by
+      // TileDialect.h.  Nested outer tuples and dynamic scalar affine leaves
+      // are exact after substitution; tuple-valued basis maps use their proven
+      // mixed-radix div/rem materialization rather than flattening structure.
+      if (isTileOp(op, "tile.materialize_composed_layout")) {
+        auto materialize = cast<tessera::tile::MaterializeComposedLayoutOp>(op);
+        if (smVersion < kConsumerBlackwellSM) {
+          op->emitError("composed-layout CUDA materialization currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        SmallVector<tessera::tile::ComposedLayoutMaterializationMode> modes;
+        SmallVector<tessera::tile::ComposedLayoutDynamicLeaf> dynamicLeaves;
+        if (!tessera::tile::getMaterializableComposedLayout(
+                materialize.getLayout(), modes, dynamicLeaves) ||
+            materialize.getCoordinates().size() !=
+                modes.size() + dynamicLeaves.size()) {
+          op->emitError("composed layout is not a scalar-output map proven by "
+                        "the native layout authority");
+          signalPassFailure();
+          return;
+        }
+        ValueRange allOperands = materialize.getCoordinates();
+        ValueRange coordinates = allOperands.take_front(modes.size());
+        ValueRange runtimeLeaves = allOperands.drop_front(modes.size());
+        auto resolve = [&](tessera::tile::ComposedLayoutDynamicLeaf::Kind kind,
+                           unsigned mode, unsigned leafIndex,
+                           int64_t staticValue) -> Value {
+          if (staticValue != -1)
+            return i64Constant(builder, loc, staticValue);
+          for (auto [index, dynamicLeaf] : llvm::enumerate(dynamicLeaves))
+            if (dynamicLeaf.kind == kind && dynamicLeaf.mode == mode &&
+                dynamicLeaf.leaf == leafIndex)
+              return runtimeLeaves[index];
+          llvm_unreachable("verified dynamic composed-layout leaf is missing");
+        };
+        Value linear = i64Constant(builder, loc, 0);
+        for (auto [mode, coordinate] : llvm::enumerate(coordinates)) {
+          const auto &plan = modes[mode];
+          Value outerStride = resolve(
+              tessera::tile::ComposedLayoutDynamicLeaf::Kind::OuterStride,
+              mode, 0, plan.outerStride);
+          Value remaining = coordinate;
+          Value basis = i64Constant(builder, loc, plan.offset);
+          for (auto [leafIndex, staticShape] :
+               llvm::enumerate(plan.basisShapes)) {
+            Value shape = resolve(
+                tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisShape,
+                mode, leafIndex, staticShape);
+            Value stride = resolve(
+                tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisStride,
+                mode, leafIndex, plan.basisStrides[leafIndex]);
+            Value digit = arith::RemUIOp::create(builder, loc, remaining, shape);
+            basis = addI64(builder, loc, basis,
+                           mulI64(builder, loc, digit, stride));
+            remaining = arith::DivUIOp::create(builder, loc, remaining, shape);
+          }
+          linear = addI64(builder, loc, linear,
+                          mulI64(builder, loc, basis, outerStride));
+        }
+        materialize.getResult().replaceAllUsesWith(linear);
+        op->erase();
+        continue;
       }
 
       if (isTileOp(op, "tile.packed_store")) {
@@ -5682,11 +6082,20 @@ void registerTesseraNVIDIABackendPasses() {
       });
 }
 
-void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
+void registerTesseraNVIDIATargetDialect(DialectRegistry &registry) {
   registry.insert<arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
                   math::MathDialect, memref::MemRefDialect, scf::SCFDialect,
                   LLVM::LLVMDialect, NVVM::NVVMDialect,
-                  tessera::nvidia::TesseraNVIDIADialect,
+                  tessera::nvidia::TesseraNVIDIADialect>();
+}
+
+void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
+  registerTesseraNVIDIATargetDialect(registry);
+  // The backend tool parses Tile producer IR, including the buffer views
+  // emitted by the canonical scheduled-package path.  Keep this source
+  // dialect out of the narrower Target-IR registry above: Target IR must not
+  // accept upstream bufferization operations.
+  registry.insert<bufferization::BufferizationDialect,
                   tessera::tile::TesseraTileDialect>();
 }
 

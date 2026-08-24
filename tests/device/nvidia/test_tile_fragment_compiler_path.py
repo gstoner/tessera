@@ -35,6 +35,9 @@ NVFP4_FIXTURE = (ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nv
 NVFP4_ORIGIN_FIXTURE = (
     ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
     / "sm120_nvfp4_fragment_origins.mlir")
+COMPOSED_LAYOUT_FIXTURE = (
+    ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia"
+    / "sm120_composed_layout_fragment_store.mlir")
 _NVIDIA_OPT_CANDIDATES = tuple(
     Path(value) for value in (os.environ.get("TESSERA_NVIDIA_OPT"),) if value
 ) + (
@@ -310,6 +313,30 @@ def test_sm120_tile_fragment_compiler_path_matches_numpy() -> None:
             driver.close()
     max_error = float(np.max(np.abs(actual - reference)))
     assert max_error < 1e-2, f"compiler-generated Tile GEMM max_error={max_error}"
+
+
+def test_sm120_composed_layout_linear_base_reaches_fragment_mma() -> None:
+    """Nonzero composed A/B origins must select the same panels as NumPy."""
+    rng = np.random.default_rng(20260823)
+    a = np.ascontiguousarray(rng.uniform(-1, 1, (32, 16)), dtype=np.float16)
+    b = np.asfortranarray(rng.uniform(-1, 1, (16, 16)), dtype=np.float16)
+    a_row, a_col, b_row, b_col = 7, 0, 0, 5
+    reference = (a[a_row:a_row + 16, a_col:a_col + 16].astype(np.float32)
+                 @ b[b_row:b_row + 16, b_col:b_col + 8].astype(np.float32))
+    out = np.zeros((16, 8), dtype=np.float32)
+    with tempfile.TemporaryDirectory(prefix="tessera-sm120-composed-layout-") as tmp:
+        cubin = _compile_cubin(
+            Path(tmp), COMPOSED_LAYOUT_FIXTURE,
+            ("composed_layout_fragment_store",),
+            "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32")
+        driver = _CudaDriver()
+        try:
+            actual = driver.launch(
+                cubin, "composed_layout_fragment_store", [a, b, out], 2,
+                [a_row, a_col, b_row, b_col], (1, 1))
+        finally:
+            driver.close()
+    assert_matches(actual, reference, "f16", reduction_length=16)
 
 
 @pytest.mark.parametrize(

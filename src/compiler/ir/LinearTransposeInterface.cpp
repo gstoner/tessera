@@ -99,14 +99,15 @@ llvm::SmallVector<mlir::Value> MatmulOp::buildLinearTranspose(
     dLhs = builder
                .create<MatmulOp>(
                    getLoc(), getLhs().getType(), dy, getRhs(),
-                   mlir::IntegerAttr(), nullptr, builder.getBoolAttr(false),
+                   mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+                   builder.getBoolAttr(false),
                    builder.getBoolAttr(!getTransposeB()))
                .getResult();
   } else {
     dLhs = builder
                .create<MatmulOp>(
                    getLoc(), getLhs().getType(), getRhs(), dy,
-                   mlir::IntegerAttr(), nullptr,
+                   mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
                    builder.getBoolAttr(getTransposeB()),
                    builder.getBoolAttr(true))
                .getResult();
@@ -116,7 +117,7 @@ llvm::SmallVector<mlir::Value> MatmulOp::buildLinearTranspose(
     dRhs = builder
                .create<MatmulOp>(
                    getLoc(), getRhs().getType(), getLhs(), dy,
-                   mlir::IntegerAttr(), nullptr,
+                   mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
                    builder.getBoolAttr(!getTransposeA()),
                    builder.getBoolAttr(false))
                .getResult();
@@ -124,7 +125,8 @@ llvm::SmallVector<mlir::Value> MatmulOp::buildLinearTranspose(
     dRhs = builder
                .create<MatmulOp>(
                    getLoc(), getRhs().getType(), dy, getLhs(),
-                   mlir::IntegerAttr(), nullptr, builder.getBoolAttr(true),
+                   mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+                   builder.getBoolAttr(true),
                    builder.getBoolAttr(getTransposeA()))
                .getResult();
   }

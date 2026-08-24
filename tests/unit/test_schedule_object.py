@@ -11,6 +11,14 @@ from tessera.compiler.schedule_object import (
     ScheduleObject,
     ScheduleResidency,
     ScheduleRole,
+    prove_schedule_materialization,
+)
+from tessera.compiler.layout_algebra import NestedLayout, native_available
+
+
+requires_layout_algebra = pytest.mark.skipif(
+    not native_available(),
+    reason="requires the native C++ layout-algebra authority",
 )
 
 
@@ -40,7 +48,7 @@ def test_schedule_object_is_content_addressed_and_order_canonical() -> None:
 
     assert left.digest == right.digest
     assert len(left.digest) == 64
-    assert left.canonical_payload()["schema"] == "tessera.schedule_object.v1"
+    assert left.canonical_payload()["schema"] == "tessera.schedule_object.v2"
 
     declared = ScheduleObject("declared", (a, b))
     assert declared.edges == (
@@ -97,3 +105,49 @@ def test_schedule_object_rejects_cycles_unknown_edges_and_invalid_tiers() -> Non
         )
     with pytest.raises(ValueError, match="tier"):
         ScheduleResidency("x", "register")
+
+
+@requires_layout_algebra
+def test_schedule_object_binds_native_locality_residency_alias_and_lifetime() -> None:
+    proof = prove_schedule_materialization(
+        value="gradient",
+        read_layout=NestedLayout((8, 16), (16, 1)),
+        partition_layout=NestedLayout((16, 16), (16, 1)),
+        read_locality="coordinate",
+        partition_locality="block",
+        residency_tier="tile",
+        element_bytes=4,
+        capacity_bytes=2048,
+        lifetime="tile",
+    )
+    schedule = ScheduleObject(
+        "forge",
+        (ScheduleAction("mma", _vector()),),
+        residency=(ScheduleResidency("gradient", "tile"),),
+        materialization_proofs=(proof,),
+    )
+    payload = schedule.canonical_payload()["materialization_proofs"][0]
+    assert payload["materialized_elements"] == 128
+    assert payload["materialized_bytes"] == 512
+    assert payload["alias_policy"] == "no_input_output_alias"
+    assert payload["lifetime"] == "tile"
+
+
+@requires_layout_algebra
+def test_schedule_materialization_fails_closed_for_nonfactor_and_capacity() -> None:
+    with pytest.raises(ValueError, match="does not factor"):
+        prove_schedule_materialization(
+            value="state", read_layout=NestedLayout((2, 2), (8, 1)),
+            partition_layout=NestedLayout((2, 2), (2, 1)),
+            read_locality="row", partition_locality="coordinate",
+            residency_tier="tile", element_bytes=4, capacity_bytes=64,
+            lifetime="tile",
+        )
+    with pytest.raises(ValueError, match="capacity"):
+        prove_schedule_materialization(
+            value="weight", read_layout=NestedLayout((64, 64), (64, 1)),
+            partition_layout=NestedLayout((64, 64), (64, 1)),
+            read_locality="tensor", partition_locality="tensor",
+            residency_tier="layer", element_bytes=4, capacity_bytes=1024,
+            lifetime="layer",
+        )

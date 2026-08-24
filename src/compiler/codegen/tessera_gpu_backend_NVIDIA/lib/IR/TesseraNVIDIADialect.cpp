@@ -28,6 +28,65 @@ void TesseraNVIDIADialect::initialize() {
       >();
 }
 
+LogicalResult BlockCoordinateOp::verify() {
+  auto arch = getOperation()->getAttrOfType<StringAttr>("arch");
+  auto tileM = getOperation()->getAttrOfType<IntegerAttr>("tile_m");
+  auto tileN = getOperation()->getAttrOfType<IntegerAttr>("tile_n");
+  auto gridOrder = getOperation()->getAttrOfType<StringAttr>("grid_order");
+  if (!arch || arch.getValue() != "sm_120")
+    return emitOpError("requires arch=sm_120");
+  if (!tileM || tileM.getInt() != 16)
+    return emitOpError("requires tile_m=16");
+  if (!tileN || tileN.getInt() != 8)
+    return emitOpError("requires tile_n=8");
+  if (!gridOrder || gridOrder.getValue() != "column_major_xy")
+    return emitOpError("requires grid_order=column_major_xy");
+  return success();
+}
+
+LogicalResult MacroCTAMatmulOp::verify() {
+  auto exactString = [&](StringRef name, StringRef expected) {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr && attr.getValue() == expected;
+  };
+  auto exactInteger = [&](StringRef name, int64_t expected) {
+    auto attr = getOperation()->getAttrOfType<IntegerAttr>(name);
+    return attr && attr.getInt() == expected;
+  };
+  if (!exactString("arch", "sm_120"))
+    return emitOpError("requires arch=sm_120");
+  if (!exactInteger("cta_m", 32) || !exactInteger("cta_n", 32))
+    return emitOpError("requires a 32x32 CTA tile");
+  if (!exactInteger("tile_m", 16) || !exactInteger("tile_n", 8) ||
+      !exactInteger("tile_k", 16))
+    return emitOpError("requires the m16n8k16 instruction tile");
+  if (getLeadingDimensions().size() != 0 &&
+      getLeadingDimensions().size() != 3)
+    return emitOpError("requires either no physical strides or exactly lda, ldb, ldd");
+  bool dynamicStrides = getLeadingDimensions().size() == 3;
+  StringRef expectedStaging = dynamicStrides
+                                  ? "masked_scalar_shared_ab_16bit"
+                                  : "cp_async_shared_ab_16bit";
+  int64_t expectedStages = dynamicStrides ? 1 : 2;
+  StringRef expectedCompletion = dynamicStrides
+                                     ? "cta_barrier"
+                                     : "wait_group_0_cta_barrier";
+  if (!exactInteger("warps", 4) ||
+      !exactString("warp_ownership", "quadrant_2x2_two_n_tiles") ||
+      !(exactString("storage", "f16") || exactString("storage", "bf16")) ||
+      !exactString("accum", "f32") ||
+      !exactString("staging", expectedStaging) ||
+      !exactInteger("stages", expectedStages) ||
+      !exactString("completion", expectedCompletion) ||
+      !exactString("bounds", "zero_fill_mnk_tail") ||
+      !exactString("grid_order", "column_major_xy"))
+    return emitOpError("requires the canonical f16/bf16-to-f32 four-warp shared-panel ownership contract");
+  auto digest = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!digest || digest.getValue().size() != 64)
+    return emitOpError("requires a 64-character tessera.schedule_hash");
+  return success();
+}
+
 LogicalResult CudaMathKernelOp::verify() {
   if (getInputs().size() != 5)
     return emitOpError("expects A, B, C, destination, and N operands");

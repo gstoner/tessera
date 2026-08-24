@@ -147,9 +147,11 @@ from .schedule_object import (
     SCHEDULE_OBJECT_SCHEMA,
     ScheduleAction,
     ScheduleEdge,
+    ScheduleMaterializationProof,
     ScheduleObject,
     ScheduleResidency,
     ScheduleRole,
+    prove_schedule_materialization,
 )
 from .scheduled_reference_tier import (
     ScheduledReferenceTierArtifact,

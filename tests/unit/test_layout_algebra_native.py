@@ -54,6 +54,148 @@ def test_native_coordinate_algebra_exhausts_compact_layouts_to_64() -> None:
                     assert crd2idx(shape, stride, idx2crd(shape, linear)) == linear
 
 
+def test_native_coalesce_preserves_function_and_canonical_structure() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, coalesce
+
+    assert coalesce(NestedLayout((2, (1, 6)), (1, (6, 2)))) == NestedLayout(12, 1)
+    assert coalesce(NestedLayout((3, (4, 5)), (8, (1, 4)))) == NestedLayout(
+        (3, 20), (8, 1)
+    )
+
+
+def test_native_composition_splits_crossing_modes_without_flattening() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, composition
+
+    # CuTe's worked composition: B's extent-4 mode crosses A's radix-6
+    # boundary, so it must remain a nested (2,2), not a flattened (2,2,3).
+    lhs = NestedLayout((6, 2), (8, 2))
+    rhs = NestedLayout((4, 3), (3, 1))
+    assert composition(lhs, rhs) == NestedLayout(((2, 2), 3), ((24, 2), 8))
+
+
+def test_native_coalesce_keeps_dynamic_residue_structured() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, coalesce
+
+    assert coalesce(NestedLayout((2, -1, 4), (1, -1, 8))) == NestedLayout(
+        (2, -1, 4), (1, -1, 8)
+    )
+
+
+def test_native_compact_inverses_and_complement_match_documented_contracts() -> None:
+    from tessera.compiler.layout_algebra import (
+        NestedLayout,
+        complement,
+        left_inverse,
+        right_inverse,
+    )
+
+    source = NestedLayout((2, 4, 6), (4, 1, 8))
+    expected_inverse = NestedLayout((4, 2, 6), (2, 1, 8))
+    assert right_inverse(source) == expected_inverse
+    assert left_inverse(source) == expected_inverse
+
+    gaps = NestedLayout((2, 2), (4, 1))
+    assert complement(gaps, 24) == NestedLayout((2, 3), (2, 8))
+    assert complement(gaps) == NestedLayout((2, 1), (2, 8))
+
+
+def test_native_product_variants_preserve_their_documented_groupings() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, product
+
+    lhs = NestedLayout((3, 4), (4, 1))
+    rhs = NestedLayout((2, 5), (1, 2))
+    assert product(lhs, rhs) == NestedLayout(((3, 4), (2, 5)), ((4, 1), (12, 24)))
+    assert product(lhs, rhs, variant="tiled") == NestedLayout(
+        ((3, 4), 2, 5), ((4, 1), 12, 24)
+    )
+    assert product(lhs, rhs, variant="flat") == NestedLayout(
+        (3, 4, 2, 5), (4, 1, 12, 24)
+    )
+    assert product(lhs, rhs, variant="blocked") == NestedLayout(
+        ((3, 2), (4, 5)), ((4, 12), (1, 24))
+    )
+    assert product(lhs, rhs, variant="raked") == NestedLayout(
+        ((2, 3), (5, 4)), ((12, 4), (24, 1))
+    )
+
+
+def test_native_divide_variants_preserve_their_documented_groupings() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, divide
+
+    source = NestedLayout((6, 8), (8, 1))
+    tiler = NestedLayout((3, 4), (1, 3))
+    assert divide(source, tiler) == NestedLayout(((3, 2), (4, 2)), ((8, 24), (1, 4)))
+    assert divide(source, tiler, variant="zipped") == NestedLayout(
+        ((3, 4), (2, 2)), ((8, 1), (24, 4))
+    )
+    assert divide(source, tiler, variant="tiled") == NestedLayout(
+        ((3, 4), 2, 2), ((8, 1), 24, 4)
+    )
+    assert divide(source, tiler, variant="flat") == NestedLayout(
+        (3, 4, 2, 2), (8, 1, 24, 4)
+    )
+
+
+def test_native_general_composition_has_no_enumeration_ceiling_and_keeps_dynamic_tail() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, composition
+
+    outer = NestedLayout((2, 2), (1, 2))
+    assert composition(outer, NestedLayout(2**21, 1)) == NestedLayout(
+        (2, 2**20), (1, 2)
+    )
+
+    boundary_outer = NestedLayout((6, 2), (8, 2))
+    assert composition(boundary_outer, NestedLayout(-1, 3)) == NestedLayout(
+        (2, -1), (24, 2)
+    )
+
+
+def test_native_noncompact_divide_routes_through_general_composition() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, divide
+
+    source = NestedLayout((6, 8), (8, 1))
+    noncompact_tiler = NestedLayout((3, 4), (1, 6))
+    assert divide(source, noncompact_tiler) == NestedLayout(
+        ((3, 4), (2, 2)), ((8, 1), (24, 4))
+    )
+
+
+def test_native_slice_carries_fixed_coordinate_offset() -> None:
+    from tessera.compiler.layout_algebra import NestedLayout, SlicedLayout, slice_layout
+
+    assert slice_layout(NestedLayout((3, 4, 5), (20, 5, 1)), (-1, 2, -1)) == SlicedLayout(
+        NestedLayout((3, 5), (20, 1)), 10
+    )
+    assert slice_layout(NestedLayout((2, -1, 4), (1, -1, 8)), (-1, -1, 3)) == SlicedLayout(
+        NestedLayout((2, -1), (1, -1)), 24
+    )
+
+
+def test_native_factorization_and_cosize_residency_proofs() -> None:
+    from tessera.compiler.layout_algebra import (
+        NestedLayout,
+        factorizes,
+        prove_residency,
+    )
+
+    block = NestedLayout((16, 16), (16, 1))
+    coordinate = NestedLayout((1, 1), (16, 1))
+    row = NestedLayout((1, 16), (16, 1))
+    assert factorizes(coordinate, block).factorizes
+    assert factorizes(row, block).factorizes
+    assert not factorizes(NestedLayout((2, 2), (300, 1)), block).factorizes
+
+    padded = prove_residency(
+        NestedLayout((4, 4), (8, 1)), element_bytes=4, capacity_bytes=128
+    )
+    assert padded.elements == 28
+    assert padded.bytes == 112
+    assert padded.admitted
+    assert not prove_residency(
+        NestedLayout((4, 4), (8, 1)), element_bytes=4, capacity_bytes=64
+    ).admitted
+
+
 def test_gqa_fold_and_inverse_execute_through_the_native_plan() -> None:
     import tessera
 

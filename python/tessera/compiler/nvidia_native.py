@@ -21,7 +21,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, cast
 
-from .graph_ir import GraphIRModule
+from .graph_ir import GraphIRModule, tensor_ir_type
 from .native_artifact import (
     BufferBinding,
     DeviceLibraryRecord,
@@ -40,6 +40,12 @@ from .nvidia_math_contract import CUDA_MATH_CONTRACT_VERSION
 
 SM120_F16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.v1"
 SM120_BF16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1"
+SM120_STRIDED_F16_ABI = (
+    "tessera.nvidia.matmul.a_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+)
+SM120_STRIDED_BF16_ABI = (
+    "tessera.nvidia.matmul.a_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+)
 SM120_TF32_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.f32_tf32.v1"
 SM120_FP8_E4M3_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp8_e4m3.v1"
 SM120_FP8_E5M2_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp8_e5m2.v1"
@@ -140,6 +146,11 @@ SM120_EPILOGUE_ABIS = tuple(
     f"tessera.nvidia.matmul.a_b_{suffix}_d_m_n_k.{storage}.v1"
     for storage in ("f16", "bf16", "tf32", "e4m3", "e5m2")
     for suffix in ("bias", "residual", "bias_residual")
+)
+SM120_REDUCED_OUTPUT_ABIS = tuple(
+    f"tessera.nvidia.matmul.a_b_{suffix}d_m_n_k.{storage}.out_f16.v2"
+    for storage in ("f16", "bf16")
+    for suffix in ("", "bias_", "residual_", "bias_residual_")
 )
 
 
@@ -386,6 +397,7 @@ def emit_matmul_tile_ir(
     bias: bool = False,
     residual: bool = False,
     activation: str = "none",
+    output: str | None = None,
 ) -> str:
     """Emit a typed production Tile matmul consumed by LowerTileToNVIDIA."""
     if storage not in {"f64", "f16", "bf16", "tf32", "e4m3", "e5m2", "s8"}:
@@ -409,7 +421,12 @@ def emit_matmul_tile_ir(
         "s8": 32,
     }[storage]
     accum = "s32" if storage == "s8" else storage if storage == "f64" else "f32"
-    output = "i32" if storage == "s8" else storage if storage == "f64" else "f32"
+    inferred_output = "i32" if storage == "s8" else storage if storage == "f64" else "f32"
+    output = output or inferred_output
+    if output not in {inferred_output, "f16"} or (
+        output == "f16" and storage not in {"f16", "bf16"}
+    ):
+        raise ValueError(f"unsupported SM120 {storage}->{output} matmul output conversion")
     fragment_m = 8 if storage == "f64" else 16
     optional_args = ("%bias: !llvm.ptr, " if bias else "") + ("%residual: !llvm.ptr, " if residual else "")
     optional_operands = ("%bias, " if bias else "") + ("%residual, " if residual else "")
@@ -1629,9 +1646,12 @@ def _matmul_storage(module: GraphIRModule) -> str | None:
         return None
     fn = module.functions[0]
     op = fn.body[0]
-    if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) != 2:
+    if op.op_name not in {"tessera.matmul", "tessera.gemm"} or not 2 <= len(op.operands) <= 4:
         return None
-    names = tuple(value[1:] if value.startswith("%") else value for value in op.operands)
+    names = tuple(
+        value[1:] if value.startswith("%") else value
+        for value in op.operands[:2]
+    )
     args = {arg.name: arg for arg in fn.args}
     if any(name not in args for name in names):
         return None
@@ -1656,7 +1676,10 @@ def _matmul_storage(module: GraphIRModule) -> str | None:
     }:
         return None
     result_storage = "int32" if storage == "int8" else "fp64" if storage == "fp64" else "fp32"
-    if fn.result_types and fn.result_types[0].dtype != result_storage:
+    allowed_results = {result_storage}
+    if storage in {"fp16", "bf16"}:
+        allowed_results.add("fp16")
+    if fn.result_types and fn.result_types[0].dtype not in allowed_results:
         return None
     a_shape, b_shape = (_static_shape(module, name) for name in names)
     if not (a_shape and b_shape and a_shape[1] == b_shape[0]):
@@ -1884,6 +1907,12 @@ def _resource_metrics(stderr: str) -> dict[str, object]:
     return metrics
 
 
+_TILE_TO_PTX_MLIR_PASSES = (
+    "--loop-invariant-code-motion",
+    "--convert-scf-to-cf",
+)
+
+
 def _compile_tile_ir(
     tile_ir: str,
     entry: str,
@@ -1919,7 +1948,7 @@ def _compile_tile_ir(
     libdevice_fp = _library_record(libdevice).content_digest if libdevice is not None else "unavailable"
     toolchain_fp += f";cuda.libdevice={libdevice_fp}"
     codegen_contract = (
-        "tessera.nvidia.native.llc-sm_120a.math-llvm.v2;"
+        "tessera.nvidia.native.llc-sm_120a.math-llvm.v3-licm;"
         + CUDA_MATH_CONTRACT_VERSION
     )
     cache_key = hashlib.sha256(f"{compiler_fp}\n{toolchain_fp}\n{codegen_contract}\n{tile_ir}".encode()).hexdigest()
@@ -1936,7 +1965,11 @@ def _compile_tile_ir(
         llvm_mlir = _run(
             [
                 str(paths["mlir-opt"]),
-                "--convert-scf-to-cf",
+                # Fragment lane coordinates and static composed-layout terms
+                # are invariant across the mathematical K reduction. Hoist
+                # them while SCF still exposes the loop boundary; after
+                # convert-scf-to-cf that proof is needlessly harder to recover.
+                *_TILE_TO_PTX_MLIR_PASSES,
                 "--convert-math-to-llvm",
                 "--convert-arith-to-llvm",
                 "--convert-cf-to-llvm",
@@ -2037,6 +2070,10 @@ def package_matmul(
     bias_name = bias_value.removeprefix("%") if isinstance(bias_value, str) else None
     residual_name = residual_value.removeprefix("%") if isinstance(residual_value, str) else None
     fused = bias_value not in {None, False} or residual_value not in {None, False} or activation != "none"
+    output_storage = fn.result_types[0].dtype if fn.result_types else "fp32"
+    output_ir = "f16" if output_storage == "fp16" else (
+        "i32" if storage == "int8" else "f64" if storage == "fp64" else "f32"
+    )
     if fused:
         if storage not in {"fp16", "bf16", "tf32", "fp8_e4m3", "fp8_e5m2"}:
             raise ValueError("SM120 canonical fused epilogues require f16/bf16/TF32/FP8 matmul storage")
@@ -2058,6 +2095,14 @@ def package_matmul(
     if fused and (bias_name or residual_name):
         suffix = "bias_residual" if bias_name and residual_name else "bias" if bias_name else "residual"
         abi_id = f"tessera.nvidia.matmul.a_b_{suffix}_d_m_n_k.{storage_ir}.v1"
+    if output_ir == "f16":
+        prefix = (
+            "bias_residual_" if bias_name and residual_name
+            else "bias_" if bias_name
+            else "residual_" if residual_name
+            else ""
+        )
+        abi_id = f"tessera.nvidia.matmul.a_b_{prefix}d_m_n_k.{storage_ir}.out_f16.v2"
     if schedule == "auto":
         schedule = "shared" if storage in {"fp16", "bf16"} else "direct"
     entry = (
@@ -2065,6 +2110,8 @@ def package_matmul(
         if fused
         else f"tessera_tile_matmul_{schedule}_{storage_ir}"
     )
+    if output_ir == "f16":
+        entry += "_outf16"
     tile_ir = emit_matmul_tile_ir(
         entry=entry,
         storage=storage_ir,
@@ -2072,6 +2119,7 @@ def package_matmul(
         bias=bool(bias_name),
         residual=bool(residual_name),
         activation=activation,
+        output=output_ir,
     )
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
@@ -2096,7 +2144,10 @@ def package_matmul(
             metrics=metrics,
         ),
     )
-    a_name, b_name = tuple(value[1:] if value.startswith("%") else value for value in op.operands)
+    a_name, b_name = tuple(
+        value[1:] if value.startswith("%") else value
+        for value in op.operands[:2]
+    )
     a_shape = _static_shape(module, a_name)
     b_shape = _static_shape(module, b_name)
     assert a_shape is not None and b_shape is not None
@@ -2136,11 +2187,18 @@ def package_matmul(
         buffer_rows.append((bias_name, "input", "fp32", 1, 4, "row_major"))
     if residual_name:
         buffer_rows.append((residual_name, "input", "fp32", 2, 4, "row_major"))
+    output_dtype = (
+        "int32" if storage == "int8"
+        else storage if storage == "fp64"
+        else output_storage
+    )
+    if output_dtype is None:
+        raise ValueError("SM120 matmul output storage must be explicit")
     buffer_rows.append(
         (
             output_name,
             "output",
-            "int32" if storage == "int8" else storage if storage == "fp64" else "fp32",
+            output_dtype,
             2,
             8 if storage == "fp64" else 4,
             "row_major",
@@ -2193,6 +2251,7 @@ def package_matmul(
                 "activation": activation,
                 "residual": bool(residual_name),
                 "order": ["matmul", "bias", "activation", "residual"],
+                "output": output_ir,
             },
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
@@ -2213,7 +2272,26 @@ def package_scheduled_matmul(
     longer re-emits a second vendor-local schedule for this path.
     """
     artifact.validate()
-    base = package_matmul(module, pipeline_name=pipeline_name, schedule="shared")
+    dynamic = artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
+    package_module = module
+    if dynamic:
+        # Reuse the static package constructor only for buffer/dtype metadata;
+        # the image below is always rebuilt from the original bounded dynamic
+        # Tile artifact and the descriptor is widened before it can escape.
+        import copy
+        package_module = copy.deepcopy(module)
+        fn = package_module.functions[0]
+        args = {arg.name: arg for arg in fn.args}
+        args[artifact.a_name].ir_type = tensor_ir_type(
+            (artifact.m, artifact.k), artifact.a_dtype
+        )
+        args[artifact.b_name].ir_type = tensor_ir_type(
+            (artifact.k, artifact.n), artifact.b_dtype
+        )
+        fn.result_types[0] = tensor_ir_type(
+            (artifact.m, artifact.n), artifact.output_dtype
+        )
+    base = package_matmul(package_module, pipeline_name=pipeline_name, schedule="shared")
     entry = artifact.function_name
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = (
         _compile_tile_ir(artifact.tile_ir, entry)
@@ -2224,7 +2302,12 @@ def package_scheduled_matmul(
         toolchain_fingerprint=toolchain_fp,
         target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
         payload=ptx.encode("ascii"),
-        entry_points=(NativeEntryPoint(entry, base.descriptor.abi_id),),
+        entry_points=(NativeEntryPoint(
+            entry,
+            (SM120_STRIDED_F16_ABI if artifact.storage == "f16"
+             else SM120_STRIDED_BF16_ABI) if dynamic
+            else base.descriptor.abi_id,
+        ),),
         compile_state=compile_state,
         device_libraries=device_libraries,
         resource_record=ResourceRecord(
@@ -2232,15 +2315,57 @@ def package_scheduled_matmul(
             metrics=metrics,
         ),
     )
+    if "tessera_nvidia.macro_cta_matmul" in artifact.tile_ir:
+        physical_route = (
+            f"macro_cta_masked_scalar_shared_ab_{artifact.storage}"
+            if dynamic
+            else f"macro_cta_cp_async_2stage_shared_ab_{artifact.storage}"
+        )
+    elif "tessera.async_shared_panel = true" in artifact.tile_ir:
+        physical_route = f"macro_cta_cp_async_2stage_shared_ab_{artifact.storage}"
+    elif "staging = \"shared\"" in artifact.tile_ir:
+        physical_route = f"macro_cta_masked_scalar_shared_ab_{artifact.storage}"
+    else:
+        physical_route = "typed_fragment_global"
     descriptor = replace(
         base.descriptor,
         image_digest=image.image_digest,
         entry_symbol=entry,
+        abi_id=(SM120_STRIDED_F16_ABI if artifact.storage == "f16"
+                else SM120_STRIDED_BF16_ABI) if dynamic
+               else base.descriptor.abi_id,
+        buffers=tuple(
+            replace(binding, layout="strided") if binding.rank == 2 else binding
+            for binding in base.descriptor.buffers
+        ) if dynamic else base.descriptor.buffers,
+        scalars=(
+            ScalarArgument(len(base.descriptor.buffers), "M", "int64"),
+            ScalarArgument(len(base.descriptor.buffers) + 1, "N", "int64"),
+            ScalarArgument(len(base.descriptor.buffers) + 2, "K", "int64"),
+            ScalarArgument(len(base.descriptor.buffers) + 3, "LDA", "int64"),
+            ScalarArgument(len(base.descriptor.buffers) + 4, "LDB", "int64"),
+            ScalarArgument(len(base.descriptor.buffers) + 5, "LDD", "int64"),
+        ) if dynamic else base.descriptor.scalars,
+        shape_guards=tuple(
+            ShapeGuard(guard.binding, guard.dimension, "max", guard.value)
+            for guard in base.descriptor.shape_guards
+        ) if dynamic else base.descriptor.shape_guards,
+        geometry=LaunchGeometry(
+            policy=(
+                "sm120_scheduled_macro_cta_32x32_mn"
+                if "_macro_kernel" in entry
+                else "sm120_scheduled_typed_16x8_mn"
+            )
+        ),
         provenance={
             **base.descriptor.provenance,
             "route": "canonical_scheduled_tile_consumer",
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
+            "physical_route": physical_route,
+            "dynamic_shape_bounds": [artifact.m, artifact.n, artifact.k]
+            if dynamic else None,
+            "leading_dimension_abi": "runtime_i64" if dynamic else "compact",
         },
     )
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
@@ -3527,7 +3652,10 @@ __all__ = [
     "SM120_ATTN_BWD_LSE_F32_ABI",
     "SM120_BF16_ABI",
     "SM120_EPILOGUE_ABIS",
+    "SM120_REDUCED_OUTPUT_ABIS",
     "SM120_F16_ABI",
+    "SM120_STRIDED_F16_ABI",
+    "SM120_STRIDED_BF16_ABI",
     "SM120_FP8_E4M3_ABI",
     "SM120_FP8_E5M2_ABI",
     "SM120_NVFP4_ABI",

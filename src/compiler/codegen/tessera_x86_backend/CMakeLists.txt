@@ -117,6 +117,7 @@ add_library(tessera_x86_backend
 
 target_include_directories(tessera_x86_backend PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../layout_algebra/include
 )
 
 # Link libraries: none required for intrinsics; pthread for tests if needed
@@ -164,6 +165,9 @@ target_link_libraries(test_norm PRIVATE tessera_x86_backend)
 
 add_executable(test_gemm_f32 tests/test_gemm_f32.cpp)
 target_link_libraries(test_gemm_f32 PRIVATE tessera_x86_backend)
+
+add_executable(test_gemm_index_authority tests/test_gemm_index_authority.cpp)
+target_link_libraries(test_gemm_index_authority PRIVATE tessera_x86_backend)
 
 add_executable(test_posenc tests/test_posenc.cpp)
 target_link_libraries(test_posenc PRIVATE tessera_x86_backend)
@@ -235,6 +239,9 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_es_low_rank_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
+)
+target_include_directories(tessera_x86_elementwise PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../layout_algebra/include
 )
 
 # ------------------------------------------------------------------

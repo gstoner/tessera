@@ -2086,10 +2086,34 @@ struct LowerTileToROCMPass
       }
     }
 
+    // Tuple-valued layouts are products of scalar native-authority proofs.
+    // Expand only that product seam; scalar mixed-radix arithmetic remains in
+    // the single materializer below and therefore cannot drift by codomain.
+    SmallVector<tessera::tile::MaterializeComposedLayoutTupleOp> tupleLayouts;
+    getOperation().walk(
+        [&](tessera::tile::MaterializeComposedLayoutTupleOp op) {
+          tupleLayouts.push_back(op);
+        });
+    for (auto tuple : tupleLayouts) {
+      OpBuilder builder(tuple);
+      for (auto [index, attr] : llvm::enumerate(tuple.getLayouts())) {
+        OperationState state(tuple.getLoc(),
+                             "tile.materialize_composed_layout");
+        state.addOperands(tuple.getCoordinates());
+        state.addTypes(builder.getI64Type());
+        state.addAttribute("layout",
+                           cast<tessera::tile::TileComposedLayoutAttr>(attr));
+        Operation *component = builder.create(state);
+        tuple.getResults()[index].replaceAllUsesWith(component->getResult(0));
+      }
+      tuple.erase();
+    }
+
     SmallVector<Operation *> worklist;
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.mma" || name == "tile.matmul_kernel" ||
+          name == "tile.materialize_composed_layout" ||
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
           name == "tile.depth_attention_kernel" ||
@@ -2115,6 +2139,75 @@ struct LowerTileToROCMPass
     for (Operation *op : worklist) {
       OpBuilder builder(op);
       StringRef name = op->getName().getStringRef();
+
+      // The composed-layout carrier is shared, but its physical consumer is
+      // architecture-owned.  Materialize only the native-authority-proven
+      // scalar affine subset to the i64 linear base understood by ROCm's
+      // existing `tile.view {tile.linear_base}` fragment path. Nested outer
+      // tuples and runtime scalar leaves use the shared canonical operand
+      // order; tuple-valued basis maps retain exact mixed-radix div/rem.
+      if (name == "tile.materialize_composed_layout") {
+        auto materialize =
+            cast<tessera::tile::MaterializeComposedLayoutOp>(op);
+        SmallVector<tessera::tile::ComposedLayoutMaterializationMode> modes;
+        SmallVector<tessera::tile::ComposedLayoutDynamicLeaf> dynamicLeaves;
+        if (!tessera::tile::getMaterializableComposedLayout(
+                materialize.getLayout(), modes, dynamicLeaves) ||
+            materialize.getCoordinates().size() !=
+                modes.size() + dynamicLeaves.size()) {
+          op->emitError("composed layout is not a scalar-output map proven by "
+                        "the native layout authority");
+          signalPassFailure();
+          return;
+        }
+        Location loc = op->getLoc();
+        auto constant = [&](int64_t value) -> Value {
+          return arith::ConstantIntOp::create(builder, loc, value, 64);
+        };
+        ValueRange allOperands = materialize.getCoordinates();
+        ValueRange coordinates = allOperands.take_front(modes.size());
+        ValueRange runtimeLeaves = allOperands.drop_front(modes.size());
+        auto resolve = [&](tessera::tile::ComposedLayoutDynamicLeaf::Kind kind,
+                           unsigned mode, unsigned leafIndex,
+                           int64_t staticValue) -> Value {
+          if (staticValue != -1)
+            return constant(staticValue);
+          for (auto [index, leaf] : llvm::enumerate(dynamicLeaves))
+            if (leaf.kind == kind && leaf.mode == mode &&
+                leaf.leaf == leafIndex)
+              return runtimeLeaves[index];
+          llvm_unreachable("verified dynamic composed-layout leaf is missing");
+        };
+        Value linear = constant(0);
+        for (auto [mode, coordinate] : llvm::enumerate(coordinates)) {
+          const auto &plan = modes[mode];
+          Value outerStride = resolve(
+              tessera::tile::ComposedLayoutDynamicLeaf::Kind::OuterStride,
+              mode, 0, plan.outerStride);
+          Value remaining = coordinate;
+          Value basis = constant(plan.offset);
+          for (auto [leafIndex, staticShape] :
+               llvm::enumerate(plan.basisShapes)) {
+            Value shape = resolve(
+                tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisShape,
+                mode, leafIndex, staticShape);
+            Value stride = resolve(
+                tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisStride,
+                mode, leafIndex, plan.basisStrides[leafIndex]);
+            Value digit = arith::RemUIOp::create(builder, loc, remaining, shape);
+            basis = arith::AddIOp::create(
+                builder, loc, basis,
+                arith::MulIOp::create(builder, loc, digit, stride));
+            remaining = arith::DivUIOp::create(builder, loc, remaining, shape);
+          }
+          linear = arith::AddIOp::create(
+              builder, loc, linear,
+              arith::MulIOp::create(builder, loc, basis, outerStride));
+        }
+        materialize.getResult().replaceAllUsesWith(linear);
+        op->erase();
+        continue;
+      }
 
       if (name == "tile.attention_kernel") {
         if (failed(tessera_rocm::materializeROCMDirectAttention(

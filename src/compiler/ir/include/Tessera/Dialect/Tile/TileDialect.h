@@ -65,6 +65,66 @@ bool isTileControlType(::mlir::Type type);
 /// and warp-spec token sync mutually exclusive: no producer could satisfy both.
 ::llvm::SmallVector<::mlir::Value> dataOperands(::mlir::Operation *op);
 
+/// Revalidate a structured composed-layout carrier through the native L1
+/// layout-algebra ABI.  Backend boundaries call this rather than trusting that
+/// an earlier verifier happened to run.
+bool isNativeMaterializableComposedLayout(TileComposedLayoutAttr layout);
+
+/// One runtime leaf in the canonical preorder used by
+/// `tile.materialize_composed_layout`: outer shape, outer stride, then each
+/// basis shape/stride pair.  `mode` is the flattened logical mode after nested
+/// outer tuples are expanded.
+struct ComposedLayoutDynamicLeaf {
+  enum class Kind { OuterShape, OuterStride, BasisShape, BasisStride } kind;
+  unsigned mode;
+  unsigned leaf = 0;
+};
+
+struct ComposedLayoutMaterializationMode {
+  int64_t outerShape;
+  int64_t outerStride;
+  int64_t offset;
+  ::llvm::SmallVector<int64_t, 4> basisShapes;
+  ::llvm::SmallVector<int64_t, 4> basisStrides;
+};
+
+/// Extract every scalar-output layout accepted by the native authority. A
+/// tuple-valued basis maps one coordinate through mixed-radix div/rem before
+/// the outer stride is applied; this remains one exact i64 address, not a
+/// flattened approximation.
+bool getMaterializableComposedLayout(
+    TileComposedLayoutAttr layout,
+    ::llvm::SmallVectorImpl<ComposedLayoutMaterializationMode> &modes,
+    ::llvm::SmallVectorImpl<ComposedLayoutDynamicLeaf> &dynamicLeaves);
+
+/// Extract the affine composed-layout subset, preserving `-1` for a runtime
+/// leaf and returning the exact operand order needed to resolve those leaves.
+/// Compatibility extractor for the one-leaf affine subset.
+bool getAffineComposedLayout(
+    TileComposedLayoutAttr layout,
+    ::llvm::SmallVectorImpl<int64_t> &outerStrides,
+    ::llvm::SmallVectorImpl<int64_t> &basisStrides,
+    ::llvm::SmallVectorImpl<int64_t> &offsets,
+    ::llvm::SmallVectorImpl<ComposedLayoutDynamicLeaf> &dynamicLeaves);
+
+/// Extract the static affine subset of a composed layout.  The arrays encode
+/// `sum(outerStride[i] * (offset[i] + basisStride[i] * coordinate[i]))`.
+/// Any runtime leaf or tuple-valued basis map deliberately returns false.
+bool getStaticAffineComposedLayout(
+    TileComposedLayoutAttr layout,
+    ::llvm::SmallVectorImpl<int64_t> &outerStrides,
+    ::llvm::SmallVectorImpl<int64_t> &basisStrides,
+    ::llvm::SmallVectorImpl<int64_t> &offsets);
+
+/// Materialize the canonical rank-2 `crd2idx` expression used by physical
+/// emitters.  This is deliberately target-neutral: CUDA, ROCm, x86, and Apple
+/// may choose different schedules, but a declared row/column-major physical
+/// layout has exactly one index expression.
+::mlir::FailureOr<::mlir::Value> materializeLinearIndex(
+    ::mlir::OpBuilder &builder, ::mlir::Location loc, ::mlir::Value row,
+    ::mlir::Value column, ::mlir::Value leadingDim,
+    ::llvm::StringRef order);
+
 } // namespace tile
 } // namespace tessera
 

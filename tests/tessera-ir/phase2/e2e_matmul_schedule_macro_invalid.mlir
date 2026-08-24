@@ -12,6 +12,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       b_layout = "col_major", macro_tile_m = 24 : i64,
       macro_tile_n = 64 : i64, pipeline_depth = 1 : i64,
       raster_group = 1 : i64, raster_order = "row_major", storage = "f16",
+      bias = false, activation = "none", residual = false, output = "f32",
       tile_k = 16 : i64, tile_m = 16 : i64, tile_n = 16 : i64,
       warps = 1 : i64
     } : tensor<32x32xf32> -> tensor<32x32xf32>

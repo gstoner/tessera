@@ -20,8 +20,8 @@
 # ------------------------------------------------------------------
 # Core IR layer (must come first — other components link against it)
 # ------------------------------------------------------------------
-add_subdirectory(compiler/ir)          # TesseraIR dialect + tablegen
 add_subdirectory(compiler/layout_algebra) # shared host-free layout authority
+add_subdirectory(compiler/ir)          # TesseraIR dialect + tablegen
 add_subdirectory(collectives)          # Collective Target dialect + transport ABI
 
 # The Tile->x86 pass is part of the shared transform library, but its typed

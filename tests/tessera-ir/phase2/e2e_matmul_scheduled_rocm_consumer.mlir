@@ -1,5 +1,6 @@
 // REQUIRES: tessera-rocm-backend
-// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --generate-wmma-gemm-kernel --lower-tile-to-rocm='arch=gfx1151' %s | FileCheck %s
+// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --generate-wmma-gemm-kernel='via-tile=true' %s | FileCheck %s --check-prefix=TILE
+// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --generate-wmma-gemm-kernel='via-tile=true' --lower-tile-to-rocm='arch=gfx1151' %s | FileCheck %s
 
 module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
   func.func @rocm_scheduled_matmul(
@@ -16,3 +17,17 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
 // CHECK-NOT: tile.matmul_kernel
 // CHECK: gpu.func @rocm_scheduled_matmul
 // CHECK: tessera_rocm.wmma
+
+// TILE: tile.materialize_composed_layout
+// TILE-SAME: 17, 19
+// TILE-SAME: 19, 1
+// TILE: tile.fragment_pack
+// TILE: tile.materialize_composed_layout
+// TILE-SAME: 17, 19
+// TILE-SAME: 19, 1
+// TILE: tile.fragment_pack
+// TILE: tile.materialize_composed_layout
+// TILE-SAME: 19, 23
+// TILE-SAME: 23, 1
+// TILE: tile.fragment_pack
+// TILE: tile.mma

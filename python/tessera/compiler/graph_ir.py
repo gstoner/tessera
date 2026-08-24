@@ -226,6 +226,9 @@ def _canonicalize_spectral_attrs(
 # `f(Q, scores=s, top_k=2)` and `f(Q, top_k=2, scores=s)` would emit different
 # IR for the same program. The declared tuple pins the position.
 _KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
+    # Matmul epilogues preserve value lineage: bias and residual are tensor
+    # edges, while activation/output policy remains attributes.
+    "tessera.matmul": ("bias", "residual"),
     # Affine normalization has a fixed ABI: data, scale, bias. Alphabetical
     # fallback used to silently swap beta/gamma in the legacy candidate.
     "tessera.layer_norm": ("gamma", "beta"),

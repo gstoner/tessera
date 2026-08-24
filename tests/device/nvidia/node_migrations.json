@@ -38,7 +38,8 @@
     "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_rejected_async_work_does_not_advance_committed_cursor",
     "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[1-3-2]",
     "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[2-7-5]",
-    "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[4-8-3]"
+    "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[4-8-3]",
+    "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_composed_layout_linear_base_reaches_fragment_mma"
   ],
   "mappings": {
     "tests/unit/test_nvidia_moe_transport_compiled.py::test_dispatch_and_combine_match_oracles": "tests/device/nvidia/test_moe_transport.py::test_dispatch_and_combine_match_oracles",

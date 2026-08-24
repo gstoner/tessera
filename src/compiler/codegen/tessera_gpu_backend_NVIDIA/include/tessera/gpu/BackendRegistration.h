@@ -14,6 +14,10 @@ void buildTesseraNVIDIABackendPipeline(mlir::OpPassManager &pm);
 void buildTesseraHopperBackendPipeline(mlir::OpPassManager &pm);
 void buildTesseraBlackwellBackendPipeline(mlir::OpPassManager &pm);
 void registerTesseraNVIDIABackendPasses();
+/// Register only NVIDIA Target IR and the upstream dialects it uses.  This is
+/// intentionally narrower than the lowering registry: target-only validators
+/// must reject leaked Tile IR at parse time.
+void registerTesseraNVIDIATargetDialect(mlir::DialectRegistry &registry);
 void registerTesseraNVIDIABackendDialects(mlir::DialectRegistry &registry);
 
 // The pre-Target-IR WGMMA/TMA pipeline remains available for existing users.

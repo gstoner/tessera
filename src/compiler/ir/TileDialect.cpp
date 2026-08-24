@@ -7,6 +7,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 // C1 (2026-06-23) — generated attribute storage/printer/parser. Included BEFORE
@@ -87,6 +88,84 @@ LogicalResult TileLayoutAttr::verify(
   if (failed(
           checkTriple("replica", replicaCounts, replicaStrides, replicaAxes)))
     return failure();
+  return success();
+}
+
+namespace {
+
+static LogicalResult verifyComposedTree(
+    llvm::function_ref<InFlightDiagnostic()> emitError, Attribute value,
+    bool shape, StringRef which, unsigned &leafCount) {
+  if (auto integer = dyn_cast<IntegerAttr>(value)) {
+    const int64_t leaf = integer.getInt();
+    if (shape ? (leaf <= 0 && leaf != -1) : (leaf < 0 && leaf != -1))
+      return emitError() << "TILE_COMPOSED_LAYOUT_BAD_LEAF: " << which
+                         << (shape ? " shape" : " stride")
+                         << " leaf must be " << (shape ? "> 0 or -1" : ">= 0 or -1")
+                         << " (got " << leaf << ")";
+    ++leafCount;
+    return success();
+  }
+  auto group = dyn_cast<ArrayAttr>(value);
+  if (!group || group.empty())
+    return emitError() << "TILE_COMPOSED_LAYOUT_BAD_TREE: " << which
+                       << " must be a non-empty nested integer array";
+  for (Attribute child : group)
+    if (failed(verifyComposedTree(emitError, child, shape, which, leafCount)))
+      return failure();
+  return success();
+}
+
+static bool sameComposedProfile(Attribute lhs, Attribute rhs) {
+  const bool lhsLeaf = isa<IntegerAttr>(lhs);
+  const bool rhsLeaf = isa<IntegerAttr>(rhs);
+  if (lhsLeaf || rhsLeaf)
+    return lhsLeaf == rhsLeaf;
+  auto lhsGroup = dyn_cast<ArrayAttr>(lhs);
+  auto rhsGroup = dyn_cast<ArrayAttr>(rhs);
+  if (!lhsGroup || !rhsGroup || lhsGroup.size() != rhsGroup.size())
+    return false;
+  for (auto [left, right] : llvm::zip(lhsGroup, rhsGroup))
+    if (!sameComposedProfile(left, right))
+      return false;
+  return true;
+}
+
+} // namespace
+
+LogicalResult TileComposedLayoutAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, ArrayAttr outerShape,
+    ArrayAttr outerStride, ArrayAttr basis, ArrayRef<int64_t> offsets) {
+  unsigned outerLeaves = 0, outerStrideLeaves = 0;
+  if (failed(verifyComposedTree(emitError, outerShape, /*shape=*/true,
+                                "outer", outerLeaves)) ||
+      failed(verifyComposedTree(emitError, outerStride, /*shape=*/false,
+                                "outer", outerStrideLeaves)))
+    return failure();
+  if (!sameComposedProfile(outerShape, outerStride) ||
+      outerLeaves != outerStrideLeaves)
+    return emitError() << "TILE_COMPOSED_LAYOUT_PROFILE_MISMATCH: outer shape "
+                       << "and stride trees must have identical nesting";
+  if (basis.size() != outerLeaves || offsets.size() != outerLeaves)
+    return emitError() << "TILE_COMPOSED_LAYOUT_BASIS_RANK: outer coordinate "
+                       << "count, basis count, and offset count must match (got "
+                       << outerLeaves << "/" << basis.size() << "/"
+                       << offsets.size() << ")";
+  for (Attribute entry : basis) {
+    auto pair = dyn_cast<ArrayAttr>(entry);
+    if (!pair || pair.size() != 2)
+      return emitError() << "TILE_COMPOSED_LAYOUT_BAD_BASIS: each basis entry "
+                         << "must be [shape_tree, stride_tree]";
+    unsigned shapeLeaves = 0, strideLeaves = 0;
+    if (failed(verifyComposedTree(emitError, pair[0], /*shape=*/true,
+                                  "basis", shapeLeaves)) ||
+        failed(verifyComposedTree(emitError, pair[1], /*shape=*/false,
+                                  "basis", strideLeaves)))
+      return failure();
+    if (!sameComposedProfile(pair[0], pair[1]) || shapeLeaves != strideLeaves)
+      return emitError() << "TILE_COMPOSED_LAYOUT_PROFILE_MISMATCH: basis "
+                         << "shape and stride trees must have identical nesting";
+  }
   return success();
 }
 

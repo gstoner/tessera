@@ -16,8 +16,12 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -232,6 +236,13 @@ struct MatmulSchedule {
   int64_t pipelineDepth = 1;
   StringRef rasterOrder = "row_major";
   int64_t rasterGroup = 1;
+  bool dynamicM = false;
+  bool dynamicN = false;
+  bool dynamicK = false;
+  bool bias = false;
+  bool residual = false;
+  StringRef activation = "none";
+  StringRef output = "f32";
 };
 
 static StringRef moduleString(ModuleOp module, StringRef primary,
@@ -245,14 +256,14 @@ static StringRef moduleString(ModuleOp module, StringRef primary,
 
 static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
-  if (!module || op->getNumOperands() != 2 || op->getNumResults() != 1)
+  if (!module || op->getNumOperands() < 2 || op->getNumOperands() > 4 ||
+      op->getNumResults() != 1)
     return failure();
   auto lhs = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   auto rhs = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
   auto out = dyn_cast<RankedTensorType>(op->getResult(0).getType());
   if (!lhs || !rhs || !out || lhs.getRank() != 2 || rhs.getRank() != 2 ||
-      out.getRank() != 2 || !lhs.hasStaticShape() || !rhs.hasStaticShape() ||
-      !out.hasStaticShape())
+      out.getRank() != 2)
     return failure();
   if (auto transpose = op->getAttrOfType<BoolAttr>("transposeA");
       transpose && transpose.getValue())
@@ -264,25 +275,86 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   MatmulSchedule schedule;
   schedule.target = moduleString(module, "tessera.target", "target");
   schedule.arch = moduleString(module, "tessera.arch", "arch");
-  schedule.m = lhs.getDimSize(0);
-  schedule.k = lhs.getDimSize(1);
-  schedule.n = rhs.getDimSize(1);
+  bool nvidia_sm120 = schedule.target == "nvidia_sm120" &&
+                      (schedule.arch.empty() || schedule.arch.contains("sm_120"));
+  bool rocm_gfx1151 =
+      (schedule.target == "rocm" || schedule.target == "rocm_gfx1151") &&
+      (schedule.arch.empty() || schedule.arch.contains("gfx1151"));
+  SmallVector<int64_t> bounds;
+  if (auto attr = op->getAttrOfType<ArrayAttr>("shape_bounds")) {
+    for (Attribute value : attr) {
+      auto integer = dyn_cast<IntegerAttr>(value);
+      if (!integer)
+        return failure();
+      bounds.push_back(integer.getInt());
+    }
+  }
+  auto bounded = [&](int64_t extent, unsigned boundIndex,
+                     bool &dynamic) -> FailureOr<int64_t> {
+    dynamic = ShapedType::isDynamic(extent);
+    if (!dynamic)
+      return extent;
+    if ((!nvidia_sm120 && !rocm_gfx1151) || bounds.size() != 3 ||
+        bounds[boundIndex] <= 0)
+      return failure();
+    return bounds[boundIndex];
+  };
+  auto m = bounded(lhs.getDimSize(0), 0, schedule.dynamicM);
+  auto n = bounded(rhs.getDimSize(1), 1, schedule.dynamicN);
+  auto k = bounded(lhs.getDimSize(1), 2, schedule.dynamicK);
+  if (failed(m) || failed(n) || failed(k))
+    return failure();
+  schedule.m = *m;
+  schedule.n = *n;
+  schedule.k = *k;
+  auto compatible = [](int64_t extent, int64_t expected) {
+    return ShapedType::isDynamic(extent) || extent == expected;
+  };
   if (schedule.m <= 0 || schedule.n <= 0 || schedule.k <= 0 ||
-      rhs.getDimSize(0) != schedule.k || out.getDimSize(0) != schedule.m ||
-      out.getDimSize(1) != schedule.n)
+      !compatible(rhs.getDimSize(0), schedule.k) ||
+      !compatible(out.getDimSize(0), schedule.m) ||
+      !compatible(out.getDimSize(1), schedule.n))
     return failure();
 
   Type lhsElement = lhs.getElementType();
   Type rhsElement = rhs.getElementType();
   Type outElement = out.getElementType();
+  schedule.bias = bool(op->getAttrOfType<StringAttr>("bias"));
+  schedule.residual = bool(op->getAttrOfType<StringAttr>("residual"));
+  if (auto activation = op->getAttrOfType<StringAttr>("activation"))
+    schedule.activation = activation.getValue();
+  if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
+                          schedule.activation))
+    return failure();
+  if (op->getNumOperands() !=
+      static_cast<unsigned>(2 + schedule.bias + schedule.residual))
+    return failure();
+  unsigned epilogueOperand = 2;
+  if (schedule.bias) {
+    auto bias = dyn_cast<RankedTensorType>(
+        op->getOperand(epilogueOperand++).getType());
+    if (!bias || bias.getRank() != 1 || !bias.getElementType().isF32() ||
+        !compatible(bias.getDimSize(0), schedule.n))
+      return failure();
+  }
+  if (schedule.residual) {
+    auto residual = dyn_cast<RankedTensorType>(
+        op->getOperand(epilogueOperand).getType());
+    if (!residual || residual.getRank() != 2 ||
+        !residual.getElementType().isF32() ||
+        !compatible(residual.getDimSize(0), schedule.m) ||
+        !compatible(residual.getDimSize(1), schedule.n))
+      return failure();
+  }
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
   // This bounded physical schedule is gfx1151-owned.  The shared macro-tile
   // vocabulary is portable, but gfx1200/gfx1250 must supply their own exact-
   // device schedule and instruction-family profile rather than inheriting it.
   bool rocm = schedule.arch.contains("gfx1151");
-  bool nvidia_sm120 = schedule.target == "nvidia_sm120" &&
-                      (schedule.arch.empty() || schedule.arch.contains("sm_120"));
+  if ((schedule.bias || schedule.residual || schedule.activation != "none") &&
+      !nvidia_sm120)
+    return failure();
   // Apple GPU has no rank-2 f32 cooperative-matrix GEMM: the shared launch
   // contract is consumed as a batch-1 MPS BMM (apple_gpu_bmm_f32_batch1).  The
   // macro-tile below is a logical default only; the MPS route owns its own
@@ -330,13 +402,16 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
       schedule.arch = "gfx1151";
     return schedule;
   }
-  if (nvidia_sm120 && lhsElement.isF16() && rhsElement.isF16() &&
-      outElement.isF32()) {
+  if (nvidia_sm120 &&
+      ((lhsElement.isF16() && rhsElement.isF16()) ||
+       (lhsElement.isBF16() && rhsElement.isBF16())) &&
+      (outElement.isF32() || outElement.isF16())) {
     // Consumer Blackwell's owned MMA contract is warp-level m16n8k16 with
     // fp16 storage and fp32 accumulation.  The macro tile remains a launch
     // envelope; Tile/Target lowering owns fragment packing and repetition.
-    schedule.storage = "f16";
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
     schedule.accum = "f32";
+    schedule.output = outElement.isF16() ? "f16" : "f32";
     schedule.tileM = 16;
     schedule.tileN = 8;
     schedule.tileK = 16;
@@ -361,7 +436,11 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        Twine(schedule.macroTileN) + ";warps=" +
        Twine(schedule.warps) + ";pipeline_depth=" +
        Twine(schedule.pipelineDepth) + ";raster=row_major;group=" +
-       Twine(schedule.rasterGroup))
+       Twine(schedule.rasterGroup) + ";epilogue=b" + Twine(schedule.bias) +
+       ",a=" + schedule.activation + ",r=" + Twine(schedule.residual) +
+       ",out=" + schedule.output + ";dynamic=" +
+       Twine(schedule.dynamicM) + Twine(schedule.dynamicN) +
+       Twine(schedule.dynamicK))
           .str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -1761,7 +1840,8 @@ struct GraphToSchedulePass
       FailureOr<MatmulSchedule> selected = getMatmulSchedule(op);
       if (failed(selected)) {
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
-                      "x86 f32->f32, ROCm f16->f32, or Apple-GPU f32->f32 "
+                      "x86 f32->f32, ROCm f16->f32, NVIDIA f16/bf16->f32, "
+                      "or Apple-GPU f32->f32 "
                       "matmul with no transpose");
         return signalPassFailure();
       }
@@ -1786,6 +1866,11 @@ struct GraphToSchedulePass
                          builder.getI64IntegerAttr(selected->pipelineDepth));
       state.addAttribute("storage", builder.getStringAttr(selected->storage));
       state.addAttribute("accum", builder.getStringAttr(selected->accum));
+      state.addAttribute("bias", builder.getBoolAttr(selected->bias));
+      state.addAttribute("activation",
+                         builder.getStringAttr(selected->activation));
+      state.addAttribute("residual", builder.getBoolAttr(selected->residual));
+      state.addAttribute("output", builder.getStringAttr(selected->output));
       state.addAttribute("a_layout", builder.getStringAttr("row_major"));
       state.addAttribute("b_layout", builder.getStringAttr("col_major"));
       state.addAttribute("raster_order",
@@ -2466,7 +2551,8 @@ struct ScheduleToTilePass
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
-                    LLVM::LLVMDialect, memref::MemRefDialect,
+                    func::FuncDialect, LLVM::LLVMDialect, memref::MemRefDialect,
+                    NVVM::NVVMDialect, scf::SCFDialect,
                     schedule::ScheduleDialect>();
     tile::registerTileDialect(registry);
   }
@@ -2673,10 +2759,17 @@ struct ScheduleToTilePass
 
     SmallVector<schedule::MatmulOp> scheduledMatmuls;
     mod.walk([&](schedule::MatmulOp op) { scheduledMatmuls.push_back(op); });
+    // A Graph-facing tensor function is not a CUDA launch ABI.  The canonical
+    // SM120 consumer therefore emits one sibling LLVM kernel with the proven
+    // A/B/D/M/N/K ABI, then removes the now-consumed tensor wrapper once all
+    // schedule records have been checked.  Other backends retain their
+    // existing in-function carriers.
+    SmallVector<func::FuncOp> consumedNvidiaGraphFunctions;
     for (schedule::MatmulOp scheduled : scheduledMatmuls) {
       Operation *graph = scheduled.getSubject().getDefiningOp();
       if (!graph || graph->getName().getStringRef() != "tessera.matmul" ||
-          graph->getNumOperands() != 2 || graph->getNumResults() != 1) {
+          graph->getNumOperands() < 2 || graph->getNumOperands() > 4 ||
+          graph->getNumResults() != 1) {
         scheduled.emitError(
             "E2E-REAL-2 requires subject to be the retained Graph matmul result");
         return signalPassFailure();
@@ -2696,6 +2789,10 @@ struct ScheduleToTilePass
           scheduled.getPipelineDepthAttr().getInt() != selected->pipelineDepth ||
           scheduled.getStorage() != selected->storage ||
           scheduled.getAccum() != selected->accum ||
+          scheduled.getBias() != selected->bias ||
+          scheduled.getActivation() != selected->activation ||
+          scheduled.getResidual() != selected->residual ||
+          scheduled.getOutput() != selected->output ||
           scheduled.getArch() != selected->arch ||
           scheduled.getALayout() != "row_major" ||
           scheduled.getBLayout() != "col_major" ||
@@ -2717,10 +2814,388 @@ struct ScheduleToTilePass
         return signalPassFailure();
       }
 
+      Location loc = scheduled.getLoc();
+
+      if (selected->target == "nvidia_sm120") {
+        // The shared scheduling library intentionally has no link-time
+        // dependency on an optional target backend.  In a CUDA-enabled tool,
+        // load the registered target dialect by namespace before constructing
+        // its block-coordinate boundary operation.
+        if (!getContext().getOrLoadDialect("tessera_nvidia")) {
+          scheduled.emitError(
+              "SM120 scheduled matmul requires the registered NVIDIA Target IR dialect");
+          return signalPassFailure();
+        }
+        auto graphFunction = scheduled->getParentOfType<func::FuncOp>();
+        if (!graphFunction) {
+          scheduled.emitError("SM120 scheduled matmul requires a Graph func wrapper");
+          return signalPassFailure();
+        }
+        // The explicit scheduled route uses the conservative crossover from
+        // the retained SuperBear pruning packet: cases below 67.1M FLOPs are
+        // tied, regress, or fail the low-variance gate; all measured 67.1M+
+        // cases are low-variance wins. This is not a global selector promotion
+        // (WSL cannot supply that authority); it prevents the canonical route
+        // from choosing an unproven crossover.
+        const __int128 sm120Work = static_cast<__int128>(2) * selected->m *
+                                   selected->n * selected->k;
+        const bool dynamicSm120 = selected->dynamicM || selected->dynamicN ||
+                                  selected->dynamicK;
+        const bool macroSm120Producer =
+            selected->m >= 32 && selected->n >= 32 &&
+            selected->k >= 16 &&
+            (selected->storage == "f16" || selected->storage == "bf16") &&
+            selected->accum == "f32" &&
+            sm120Work >= 67108864;
+        const bool fusedEpilogue = selected->bias || selected->residual ||
+                                   selected->activation != "none";
+        std::string epilogueSuffix;
+        if (fusedEpilogue || selected->output == "f16")
+          epilogueSuffix =
+              (Twine("_fused_") + selected->storage + "_" +
+               selected->activation + "_b" + Twine(selected->bias) + "_r" +
+               Twine(selected->residual) +
+               (selected->output == "f16" ? "_outf16" : ""))
+                  .str();
+        std::string kernelName =
+            (graphFunction.getName() + epilogueSuffix +
+             (macroSm120Producer ? "_macro_kernel" : "_kernel"))
+                .str();
+        if (SymbolTable::lookupSymbolIn(mod, kernelName)) {
+          scheduled.emitError("SM120 scheduled matmul kernel symbol already exists");
+          return signalPassFailure();
+        }
+
+        auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+        auto i64 = builder.getI64Type();
+        SmallVector<Type> kernelInputs{pointerType, pointerType};
+        if (selected->bias)
+          kernelInputs.push_back(pointerType);
+        if (selected->residual)
+          kernelInputs.push_back(pointerType);
+        kernelInputs.append({pointerType, i64, i64, i64});
+        if (dynamicSm120)
+          kernelInputs.append({i64, i64, i64});
+        auto kernelType = LLVM::LLVMFunctionType::get(
+            LLVM::LLVMVoidType::get(&getContext()), kernelInputs, false);
+        OpBuilder moduleBuilder(mod.getBody(), mod.getBody()->end());
+        auto kernelFunction =
+            LLVM::LLVMFuncOp::create(moduleBuilder, loc, kernelName, kernelType);
+        kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
+        Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
+        OpBuilder kernelBuilder(entry, entry->begin());
+        auto mma = tile::TileMmaDescAttr::get(
+            &getContext(), "auto", selected->tileM, selected->tileN,
+            selected->tileK, selected->storage, selected->storage,
+            selected->accum, "row_major", "col_major", 1);
+        auto epilogue = tile::TileEpilogueAttr::get(
+            &getContext(), selected->bias, selected->activation,
+            selected->output);
+        const bool typedSm120Producer = selected->m >= 16 && selected->m % 16 == 0 &&
+                                        selected->n >= 8 && selected->n % 8 == 0 &&
+                                        selected->k >= 16 && selected->k % 16 == 0 &&
+                                        (selected->storage == "f16" ||
+                                         selected->storage == "bf16") &&
+                                        selected->accum == "f32" &&
+                                        !fusedEpilogue &&
+                                        selected->output == "f32";
+        if (macroSm120Producer && selected->k % 8 == 0 && !fusedEpilogue &&
+            selected->output == "f32") {
+          // NVIDIA owns this physical reuse boundary. One 128-thread CTA
+          // computes a 32x32 output tile: four warps own 2x2 16x16 quadrants,
+          // and each warp emits two adjacent m16n8 MMA tiles. A[32,16] and
+          // B[16,32] are staged once per K panel and protected by CTA barriers.
+          OperationState macroState(loc, "tessera_nvidia.macro_cta_matmul");
+          macroState.addOperands(entry->getArguments());
+          macroState.addAttribute("arch", kernelBuilder.getStringAttr("sm_120"));
+          macroState.addAttribute("cta_m", kernelBuilder.getI64IntegerAttr(32));
+          macroState.addAttribute("cta_n", kernelBuilder.getI64IntegerAttr(32));
+          macroState.addAttribute("tile_m", kernelBuilder.getI64IntegerAttr(16));
+          macroState.addAttribute("tile_n", kernelBuilder.getI64IntegerAttr(8));
+          macroState.addAttribute("tile_k", kernelBuilder.getI64IntegerAttr(16));
+          macroState.addAttribute("warps", kernelBuilder.getI64IntegerAttr(4));
+          macroState.addAttribute(
+              "warp_ownership",
+              kernelBuilder.getStringAttr("quadrant_2x2_two_n_tiles"));
+          macroState.addAttribute(
+              "storage", kernelBuilder.getStringAttr(selected->storage));
+          macroState.addAttribute(
+              "accum", kernelBuilder.getStringAttr(selected->accum));
+          macroState.addAttribute(
+              "staging",
+              kernelBuilder.getStringAttr(
+                  dynamicSm120 ? "masked_scalar_shared_ab_16bit"
+                               : "cp_async_shared_ab_16bit"));
+          macroState.addAttribute("stages",
+                                  kernelBuilder.getI64IntegerAttr(
+                                      dynamicSm120 ? 1 : 2));
+          macroState.addAttribute(
+              "completion",
+              kernelBuilder.getStringAttr(
+                  dynamicSm120 ? "cta_barrier"
+                               : "wait_group_0_cta_barrier"));
+          macroState.addAttribute(
+              "bounds", kernelBuilder.getStringAttr("zero_fill_mnk_tail"));
+          macroState.addAttribute(
+              "grid_order", kernelBuilder.getStringAttr("column_major_xy"));
+          macroState.addAttribute(
+              "tessera.schedule_hash",
+              kernelBuilder.getStringAttr(scheduled.getArtifactHash()));
+          macroState.addAttribute(
+              "tessera.macro_tile_m",
+              kernelBuilder.getI64IntegerAttr(selected->macroTileM));
+          macroState.addAttribute(
+              "tessera.macro_tile_n",
+              kernelBuilder.getI64IntegerAttr(selected->macroTileN));
+          kernelBuilder.create(macroState);
+        } else if (typedSm120Producer) {
+          // The narrow, exact m16n8k16 seed uses the same proof-bearing
+          // composed-layout carrier as the portable Tile path.  Larger
+          // scheduled problems retain tile.matmul_kernel until their tiled
+          // loop producer can preserve this fragment lineage end-to-end.
+          auto tileType = tile::TileValueType::get(&getContext());
+          auto typedMma = tile::TileMmaDescAttr::get(
+              &getContext(), "mma_sync", selected->tileM, selected->tileN,
+              selected->tileK, selected->storage, selected->storage,
+              selected->accum, "row_major", "col_major", 1);
+          SmallVector<StringAttr> laneReg{kernelBuilder.getStringAttr("laneid"),
+                                          kernelBuilder.getStringAttr("reg")};
+          auto aLayout = tile::TileLayoutAttr::get(
+              &getContext(), {16, 16}, {16, 1}, laneReg, {}, {}, {}, 0,
+              tile::TileSwizzleAttr());
+          auto bLayout = tile::TileLayoutAttr::get(
+              &getContext(), {16, 8}, {8, 1}, laneReg, {}, {}, {}, 0,
+              tile::TileSwizzleAttr());
+          auto aMemory = tile::TileMemoryLayoutAttr::get(
+              &getContext(), "gmem", "row_major", dynamicSm120 ? 0 : selected->k);
+          auto bMemory = tile::TileMemoryLayoutAttr::get(
+              &getContext(), "gmem", "col_major", dynamicSm120 ? 0 : selected->k);
+          auto dMemory = tile::TileMemoryLayoutAttr::get(
+              &getContext(), "gmem", "row_major", dynamicSm120 ? 0 : selected->n);
+          auto composed = [&](ArrayRef<int64_t> shape, ArrayRef<int64_t> strides) {
+            auto leaf = [&](int64_t value) -> Attribute {
+              return kernelBuilder.getI64IntegerAttr(value);
+            };
+            auto singleton = [&](int64_t value) {
+              return kernelBuilder.getArrayAttr({leaf(value)});
+            };
+            auto basis = kernelBuilder.getArrayAttr({
+                kernelBuilder.getArrayAttr({singleton(shape[0]), singleton(1)}),
+                kernelBuilder.getArrayAttr({singleton(shape[1]), singleton(1)}),
+            });
+            return tile::TileComposedLayoutAttr::get(
+                &getContext(), kernelBuilder.getArrayAttr({leaf(shape[0]), leaf(shape[1])}),
+                kernelBuilder.getArrayAttr({leaf(strides[0]), leaf(strides[1])}),
+                basis, {0, 0});
+          };
+          auto zero = arith::ConstantIntOp::create(kernelBuilder, loc, 0, 64);
+          // The launch ABI maps grid.x to N/8 and grid.y to M/16.  Carry the
+          // resulting logical origins into the shared views/materializations;
+          // the physical packer may then use only the proven linear base plus
+          // its fixed per-lane fragment coordinates.
+          OperationState coordinateState(
+              loc, "tessera_nvidia.block_coordinate");
+          coordinateState.addTypes({i64, i64});
+          coordinateState.addAttribute(
+              "arch", kernelBuilder.getStringAttr("sm_120"));
+          coordinateState.addAttribute(
+              "tile_m", kernelBuilder.getI64IntegerAttr(16));
+          coordinateState.addAttribute(
+              "tile_n", kernelBuilder.getI64IntegerAttr(8));
+          coordinateState.addAttribute(
+              "grid_order",
+              kernelBuilder.getStringAttr("column_major_xy"));
+          Operation *coordinates = kernelBuilder.create(coordinateState);
+          Value rowBase = coordinates->getResult(0);
+          Value colBase = coordinates->getResult(1);
+          auto materialize = [&](tile::TileComposedLayoutAttr layout,
+                                 ValueRange values) {
+            OperationState state(loc, "tile.materialize_composed_layout");
+            state.addOperands(values); state.addTypes(i64);
+            state.addAttribute("layout", layout);
+            return kernelBuilder.create(state)->getResult(0);
+          };
+          auto view = [&](Value base, Value linear, Value row, Value col,
+                          Value rowBound, Value colBound, Value leadingDim,
+                          tile::TileLayoutAttr layout,
+                          tile::TileMemoryLayoutAttr memory) {
+            OperationState state(loc, "tile.view");
+            state.addOperands({base, linear, row, col});
+            if (dynamicSm120)
+              state.addOperands({rowBound, colBound, leadingDim});
+            state.addTypes(tileType);
+            state.addAttribute("tile.layout", layout); state.addAttribute("tile.memory", memory);
+            state.addAttribute("tile.linear_base", kernelBuilder.getUnitAttr());
+            return kernelBuilder.create(state)->getResult(0);
+          };
+          auto aType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->storage, "f32", "a", "row_major", "mma_sync");
+          auto bType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->storage, "f32", "b", "col_major", "mma_sync");
+          auto cType = tile::FragmentType::get(&getContext(), 16, 8, 16, "f32", "f32", "acc", "row_major", "mma_sync");
+          auto pack = [&](Value source, Type type, StringRef role) {
+            OperationState state(loc, "tile.fragment_pack"); state.addOperands(source); state.addTypes(type);
+            state.addAttribute("role", kernelBuilder.getStringAttr(role)); state.addAttribute("mma", typedMma);
+            return kernelBuilder.create(state)->getResult(0);
+          };
+          OperationState zeroState(loc, "tile.fragment_zero"); zeroState.addTypes(cType);
+          zeroState.addAttribute("role", kernelBuilder.getStringAttr("acc")); zeroState.addAttribute("mma", typedMma);
+          Value c = kernelBuilder.create(zeroState)->getResult(0);
+          unsigned dIndex = 2 + unsigned(selected->bias) +
+                            unsigned(selected->residual);
+          Value runtimeM = entry->getArgument(dIndex + 1);
+          Value runtimeN = entry->getArgument(dIndex + 2);
+          Value runtimeK = entry->getArgument(dIndex + 3);
+          Value lda = dynamicSm120 ? entry->getArgument(dIndex + 4)
+                                   : Value(arith::ConstantIntOp::create(kernelBuilder, loc, selected->k, 64));
+          Value ldb = dynamicSm120 ? entry->getArgument(dIndex + 5)
+                                   : Value(arith::ConstantIntOp::create(kernelBuilder, loc, selected->k, 64));
+          Value ldd = dynamicSm120 ? entry->getArgument(dIndex + 6)
+                                   : Value(arith::ConstantIntOp::create(kernelBuilder, loc, selected->n, 64));
+          auto dynamicComposed = [&](bool columnMajor) {
+            auto leaf = [&](int64_t value) -> Attribute {
+              return kernelBuilder.getI64IntegerAttr(value);
+            };
+            auto singleton = [&](int64_t value) {
+              return kernelBuilder.getArrayAttr({leaf(value)});
+            };
+            auto basis = kernelBuilder.getArrayAttr({
+                kernelBuilder.getArrayAttr({singleton(-1), singleton(1)}),
+                kernelBuilder.getArrayAttr({singleton(-1), singleton(1)}),
+            });
+            SmallVector<Attribute> outerStride = columnMajor
+                ? SmallVector<Attribute>{singleton(1), singleton(-1)}
+                : SmallVector<Attribute>{singleton(-1), singleton(1)};
+            return tile::TileComposedLayoutAttr::get(
+                &getContext(), kernelBuilder.getArrayAttr({singleton(-1), singleton(-1)}),
+                kernelBuilder.getArrayAttr(outerStride),
+                basis, {0, 0});
+          };
+          Value kLimit = dynamicSm120
+              ? runtimeK
+              : Value(arith::ConstantIntOp::create(kernelBuilder, loc, selected->k, 64));
+          Value kStep = arith::ConstantIntOp::create(kernelBuilder, loc, 16, 64);
+          auto kLoop = scf::ForOp::create(kernelBuilder, loc, zero, kLimit, kStep,
+                                          ValueRange{c});
+          {
+            OpBuilder::InsertionGuard loopGuard(kernelBuilder);
+            kernelBuilder.setInsertionPointToStart(kLoop.getBody());
+            Value panel = kLoop.getInductionVar();
+            Value carry = kLoop.getRegionIterArgs().front();
+            auto aComposed = dynamicSm120
+                ? dynamicComposed(false)
+                : composed({selected->m, selected->k}, {selected->k, 1});
+            auto bComposed = dynamicSm120
+                ? dynamicComposed(true)
+                : composed({selected->k, selected->n}, {1, selected->k});
+            SmallVector<Value> aMaterialize{rowBase, panel};
+            SmallVector<Value> bMaterialize{panel, colBase};
+            if (dynamicSm120) {
+              // Canonical dynamic-leaf order is outer shapes, outer strides,
+              // then basis shapes.  The basis extents repeat the logical
+              // bounds intentionally: mixed-radix identity is `coord % dim`,
+              // never the old accidental `coord % 1` zero map.
+              aMaterialize.append(
+                  {runtimeM, runtimeK, lda, runtimeM, runtimeK});
+              bMaterialize.append(
+                  {runtimeK, runtimeN, ldb, runtimeK, runtimeN});
+            }
+            Value aTile = view(entry->getArgument(0),
+                materialize(aComposed, aMaterialize), rowBase, panel,
+                runtimeM, runtimeK, lda, aLayout, aMemory);
+            Value bTile = view(entry->getArgument(1),
+                materialize(bComposed, bMaterialize), panel, colBase,
+                runtimeK, runtimeN, ldb, bLayout, bMemory);
+            Value a = pack(aTile, aType, "a");
+            Value b = pack(bTile, bType, "b");
+            OperationState mmaState(loc, "tile.mma"); mmaState.addOperands({a, b, carry}); mmaState.addTypes(cType);
+            mmaState.addAttribute("mma", typedMma); mmaState.addAttribute("tessera.schedule_hash", kernelBuilder.getStringAttr(scheduled.getArtifactHash()));
+            mmaState.addAttribute("tessera.macro_tile_m", kernelBuilder.getI64IntegerAttr(selected->macroTileM));
+            mmaState.addAttribute("tessera.macro_tile_n", kernelBuilder.getI64IntegerAttr(selected->macroTileN));
+            Value next = kernelBuilder.create(mmaState)->getResult(0);
+            scf::YieldOp::create(kernelBuilder, loc, next);
+          }
+          kernelBuilder.setInsertionPointAfter(kLoop);
+          Value result = kLoop.getResult(0);
+          OperationState unpackState(loc, "tile.fragment_unpack"); unpackState.addOperands(result); unpackState.addTypes(tileType);
+          unpackState.addAttribute("tile.layout", bLayout); unpackState.addAttribute("mma", typedMma);
+          Value outTile = kernelBuilder.create(unpackState)->getResult(0);
+          OperationState storeState(loc, "tile.store");
+          storeState.addOperands({outTile, entry->getArgument(dIndex), rowBase, colBase});
+          if (dynamicSm120)
+            storeState.addOperands({runtimeM, runtimeN, ldd});
+          storeState.addAttribute("tile.layout", bLayout); storeState.addAttribute("tile.memory", dMemory);
+          kernelBuilder.create(storeState);
+        } else {
+        OperationState kernelState(loc, "tile.matmul_kernel");
+        kernelState.addOperands(entry->getArguments());
+        kernelState.addAttribute("mma", mma);
+        kernelState.addAttribute("epilogue", epilogue);
+        kernelState.addAttribute(
+            "warps", kernelBuilder.getI64IntegerAttr(
+                         macroSm120Producer ? 4 : selected->warps));
+        kernelState.addAttribute(
+            "staging", kernelBuilder.getStringAttr(
+                           macroSm120Producer ? "shared" : "global"));
+        if (selected->residual) {
+          kernelState.addAttribute("residual", kernelBuilder.getBoolAttr(true));
+          kernelState.addAttribute(
+              "epilogue_order",
+              kernelBuilder.getStringAttr(
+                  "matmul_bias_activation_residual"));
+        }
+        // A 16-byte cp.async vector may start at every row only when the
+        // packed row stride is a multiple of eight 16-bit elements.  Ragged
+        // K remains a valid macro-CTA case, but uses the masked scalar staging
+        // path so alignment is a proof obligation rather than an assumption.
+        if (macroSm120Producer && selected->k % 8 == 0) {
+          kernelState.addAttribute("tessera.vectorized_shared_panel",
+                                   kernelBuilder.getBoolAttr(true));
+          kernelState.addAttribute("tessera.async_shared_panel",
+                                   kernelBuilder.getBoolAttr(true));
+        }
+        kernelState.addAttribute(
+            "numeric_policy",
+            kernelBuilder.getDictionaryAttr({
+                kernelBuilder.getNamedAttr("storage",
+                                            kernelBuilder.getStringAttr(selected->storage)),
+                kernelBuilder.getNamedAttr("accum",
+                                            kernelBuilder.getStringAttr(selected->accum)),
+            }));
+        kernelState.addAttribute("tessera.canonical_k_loop",
+                                 kernelBuilder.getBoolAttr(true));
+        kernelState.addAttribute("tessera.tile_m",
+                                 kernelBuilder.getI64IntegerAttr(selected->tileM));
+        kernelState.addAttribute("tessera.tile_n",
+                                 kernelBuilder.getI64IntegerAttr(selected->tileN));
+        kernelState.addAttribute("tessera.tile_k",
+                                 kernelBuilder.getI64IntegerAttr(selected->tileK));
+        kernelState.addAttribute("tessera.macro_tile_m",
+                                 kernelBuilder.getI64IntegerAttr(selected->macroTileM));
+        kernelState.addAttribute("tessera.macro_tile_n",
+                                 kernelBuilder.getI64IntegerAttr(selected->macroTileN));
+        kernelState.addAttribute("tessera.pipeline_depth",
+                                 kernelBuilder.getI64IntegerAttr(selected->pipelineDepth));
+        kernelState.addAttribute("tessera.raster_order",
+                                 kernelBuilder.getStringAttr(selected->rasterOrder));
+        kernelState.addAttribute("tessera.raster_group",
+                                 kernelBuilder.getI64IntegerAttr(selected->rasterGroup));
+        kernelState.addAttribute("tessera.schedule_hash",
+                                 kernelBuilder.getStringAttr(scheduled.getArtifactHash()));
+        kernelBuilder.create(kernelState);
+        }
+        LLVM::ReturnOp::create(kernelBuilder, loc, ValueRange{});
+
+        scheduled.getScheduled().replaceAllUsesWith(graph->getResult(0));
+        scheduled.erase();
+        for (schedule::ArtifactOp artifact : matchingArtifacts)
+          artifact.erase();
+        if (!llvm::is_contained(consumedNvidiaGraphFunctions, graphFunction))
+          consumedNvidiaGraphFunctions.push_back(graphFunction);
+        continue;
+      }
+
       auto lhsType = cast<RankedTensorType>(graph->getOperand(0).getType());
       auto rhsType = cast<RankedTensorType>(graph->getOperand(1).getType());
       auto outType = cast<RankedTensorType>(graph->getResult(0).getType());
-      Location loc = scheduled.getLoc();
       builder.setInsertionPoint(scheduled);
       auto pointerType = LLVM::LLVMPointerType::get(&getContext());
       auto toPointer = [&](Value tensor, RankedTensorType type) {
@@ -2737,19 +3212,39 @@ struct ScheduleToTilePass
       Value b = toPointer(graph->getOperand(1), rhsType);
       auto outputMemref =
           MemRefType::get(outType.getShape(), outType.getElementType());
-      Value output = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value runtimeMIndex, runtimeNIndex, runtimeKIndex;
+      if (selected->dynamicM)
+        runtimeMIndex = builder.create<tensor::DimOp>(loc, graph->getOperand(0), 0);
+      if (selected->dynamicN)
+        runtimeNIndex = builder.create<tensor::DimOp>(loc, graph->getOperand(1), 1);
+      if (selected->dynamicK)
+        runtimeKIndex = builder.create<tensor::DimOp>(loc, graph->getOperand(0), 1);
+      SmallVector<Value> outputDynamicSizes;
+      if (outType.isDynamicDim(0))
+        outputDynamicSizes.push_back(runtimeMIndex);
+      if (outType.isDynamicDim(1))
+        outputDynamicSizes.push_back(runtimeNIndex);
+      Value output = builder.create<memref::AllocOp>(
+          loc, outputMemref, outputDynamicSizes);
       Value outputIndex =
           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, output);
       Value outputInteger = builder.create<arith::IndexCastOp>(
           loc, builder.getI64Type(), outputIndex);
       Value d = builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
-      Value m = builder.create<arith::ConstantIntOp>(loc, selected->m, 64);
-      Value n = builder.create<arith::ConstantIntOp>(loc, selected->n, 64);
-      Value k = builder.create<arith::ConstantIntOp>(loc, selected->k, 64);
+      auto extentI64 = [&](bool dynamic, Value runtimeIndex, int64_t bound) {
+        if (dynamic)
+          return Value(builder.create<arith::IndexCastOp>(
+              loc, builder.getI64Type(), runtimeIndex));
+        return Value(builder.create<arith::ConstantIntOp>(loc, bound, 64));
+      };
+      Value m = extentI64(selected->dynamicM, runtimeMIndex, selected->m);
+      Value n = extentI64(selected->dynamicN, runtimeNIndex, selected->n);
+      Value k = extentI64(selected->dynamicK, runtimeKIndex, selected->k);
 
       StringRef family = selected->target == "rocm" ? "wmma" : "auto";
       auto mma = tile::TileMmaDescAttr::get(
-          &getContext(), family, 16, 16, 16, selected->storage,
+          &getContext(), family, selected->tileM, selected->tileN,
+          selected->tileK, selected->storage,
           selected->storage, selected->accum, "row_major", "col_major", 1);
       auto epilogue = tile::TileEpilogueAttr::get(
           &getContext(), /*bias=*/false, "none", selected->accum);
@@ -2803,6 +3298,8 @@ struct ScheduleToTilePass
       for (schedule::ArtifactOp artifact : matchingArtifacts)
         artifact.erase();
     }
+    for (func::FuncOp graphFunction : consumedNvidiaGraphFunctions)
+      graphFunction.erase();
 
     SmallVector<Operation *> scheduledKernels;
     mod.walk([&](Operation *op) {

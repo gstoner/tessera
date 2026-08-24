@@ -13,6 +13,7 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
       b_layout = "col_major", pipeline_depth = 1 : i64,
       macro_tile_m = 16 : i64, macro_tile_n = 16 : i64,
       raster_group = 1 : i64, raster_order = "row_major", storage = "f32",
+      bias = false, activation = "none", residual = false, output = "f32",
       tile_k = 16 : i64, tile_m = 16 : i64, tile_n = 16 : i64,
       warps = 1 : i64
     } : tensor<64x48xf32> -> tensor<64x48xf32>

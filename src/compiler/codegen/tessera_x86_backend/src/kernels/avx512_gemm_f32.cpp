@@ -12,19 +12,25 @@
 #include <immintrin.h>
 #include <algorithm>
 #include <cstdint>
+#include "tessera/Rank2Index.h"
+
+using tessera::layout::linearIndex2D;
+using tessera::layout::Rank2Order;
 
 extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
                                             int64_t M, int64_t N, int64_t K,
                                             float* C) {
     for (int64_t m = 0; m < M; ++m) {
-        const float* a = A + m * K;
-        float* c = C + m * N;
+        const float* a = A + linearIndex2D<Rank2Order::RowMajor>(m, 0, K);
+        float* c = C + linearIndex2D<Rank2Order::RowMajor>(m, 0, N);
         int64_t n = 0;
         for (; n + 16 <= N; n += 16) {
             __m512 acc = _mm512_setzero_ps();
             for (int64_t k = 0; k < K; ++k)
                 acc = _mm512_fmadd_ps(_mm512_set1_ps(a[k]),
-                                      _mm512_loadu_ps(B + k * N + n), acc);
+                                      _mm512_loadu_ps(
+                                          B + linearIndex2D<Rank2Order::RowMajor>(k, n, N)),
+                                      acc);
             _mm512_storeu_ps(c + n, acc);
         }
         if (n < N) {
@@ -33,7 +39,9 @@ extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
             for (int64_t k = 0; k < K; ++k)
                 acc = _mm512_fmadd_ps(
                     _mm512_set1_ps(a[k]),
-                    _mm512_maskz_loadu_ps(tail, B + k * N + n), acc);
+                    _mm512_maskz_loadu_ps(
+                        tail, B + linearIndex2D<Rank2Order::RowMajor>(k, n, N)),
+                    acc);
             _mm512_mask_storeu_ps(c + n, tail, acc);
         }
     }
@@ -56,8 +64,10 @@ extern "C" int tessera_x86_avx512_gemm_f32_tiled(
         for (int64_t n0 = 0; n0 < N; n0 += BN) {
             const int64_t nEnd = std::min(n0 + BN, N);
             for (int64_t m = m0; m < mEnd; ++m) {
-                const float* a = A + m * K;
-                float* c = C + m * N;
+                const float* a =
+                    A + linearIndex2D<Rank2Order::RowMajor>(m, 0, K);
+                float* c =
+                    C + linearIndex2D<Rank2Order::RowMajor>(m, 0, N);
                 int64_t n = n0;
                 for (; n + 16 <= nEnd; n += 16) {
                     __m512 acc = _mm512_setzero_ps();
@@ -66,7 +76,9 @@ extern "C" int tessera_x86_avx512_gemm_f32_tiled(
                         for (int64_t k = k0; k < kEnd; ++k)
                             acc = _mm512_fmadd_ps(
                                 _mm512_set1_ps(a[k]),
-                                _mm512_loadu_ps(B + k * N + n), acc);
+                                _mm512_loadu_ps(
+                                    B + linearIndex2D<Rank2Order::RowMajor>(k, n, N)),
+                                acc);
                     }
                     _mm512_storeu_ps(c + n, acc);
                 }
@@ -81,7 +93,10 @@ extern "C" int tessera_x86_avx512_gemm_f32_tiled(
                         for (int64_t k = k0; k < kEnd; ++k)
                             acc = _mm512_fmadd_ps(
                                 _mm512_set1_ps(a[k]),
-                                _mm512_maskz_loadu_ps(tail, B + k * N + n), acc);
+                                _mm512_maskz_loadu_ps(
+                                    tail,
+                                    B + linearIndex2D<Rank2Order::RowMajor>(k, n, N)),
+                                acc);
                     }
                     _mm512_mask_storeu_ps(c + n, tail, acc);
                 }

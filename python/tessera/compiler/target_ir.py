@@ -894,6 +894,74 @@ class TargetIRVerifier:
             # Consumer Blackwell (sm_120) warp-level MMA — no warpgroup (mma.sync
             # is warp-scoped, unlike Hopper's warpgroup-scoped wgmma).
             self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c")
+        elif op.op_name == "tessera_nvidia.block_coordinate":
+            self._require(op, diagnostics, "arch", "tile_m", "tile_n", "grid_order")
+            expected = {
+                "arch": "sm_120",
+                "tile_m": 16,
+                "tile_n": 8,
+                "grid_order": "column_major_xy",
+            }
+            mismatched = [
+                f"{name}={op.attrs.get(name)!r} (expected {value!r})"
+                for name, value in expected.items()
+                if name in op.attrs and op.attrs[name] != value
+            ]
+            if mismatched:
+                diagnostics.append(TargetIRDiagnostic(
+                    "error",
+                    f"{op.op_name} invalid contract: {', '.join(mismatched)}",
+                    "TARGET_IR_NVIDIA_OP",
+                ))
+        elif op.op_name == "tessera_nvidia.macro_cta_matmul":
+            expected = {
+                "arch": "sm_120",
+                "cta_m": 32,
+                "cta_n": 32,
+                "tile_m": 16,
+                "tile_n": 8,
+                "tile_k": 16,
+                "warps": 4,
+                "warp_ownership": "quadrant_2x2_two_n_tiles",
+                "accum": "f32",
+                "bounds": "zero_fill_mnk_tail",
+                "grid_order": "column_major_xy",
+            }
+            self._require(
+                op, diagnostics, *expected, "storage", "staging", "stages",
+                "completion", "tessera.schedule_hash"
+            )
+            mismatched = [
+                f"{name}={op.attrs.get(name)!r} (expected {value!r})"
+                for name, value in expected.items()
+                if name in op.attrs and op.attrs[name] != value
+            ]
+            digest = op.attrs.get("tessera.schedule_hash")
+            storage = op.attrs.get("storage")
+            if "storage" in op.attrs and storage not in {"f16", "bf16"}:
+                mismatched.append("storage must be f16 or bf16")
+            staging_contract = (
+                op.attrs.get("staging"),
+                op.attrs.get("stages"),
+                op.attrs.get("completion"),
+            )
+            if all(value is not None for value in staging_contract) and staging_contract not in {
+                ("cp_async_shared_ab_16bit", 2, "wait_group_0_cta_barrier"),
+                ("masked_scalar_shared_ab_16bit", 1, "cta_barrier"),
+            }:
+                mismatched.append(
+                    "staging/stages/completion must name one coherent shared-panel protocol"
+                )
+            if "tessera.schedule_hash" in op.attrs and (
+                not isinstance(digest, str) or len(digest) != 64
+            ):
+                mismatched.append("tessera.schedule_hash must contain 64 characters")
+            if mismatched:
+                diagnostics.append(TargetIRDiagnostic(
+                    "error",
+                    f"{op.op_name} invalid contract: {', '.join(mismatched)}",
+                    "TARGET_IR_NVIDIA_OP",
+                ))
         elif op.op_name == "tessera_nvidia.nvfp4_block_scale_mma":
             self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c",
                           "scale_a", "scale_b", "scale_dtype", "scale_vector")

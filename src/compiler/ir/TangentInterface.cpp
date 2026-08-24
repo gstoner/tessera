@@ -128,7 +128,7 @@ static mlir::Value addIfPresent(mlir::OpBuilder &builder, mlir::Location loc,
 
 llvm::SmallVector<mlir::Value> AddOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (tangents.size() != 2 || (!tangents[0] && !tangents[1]))
+  if (tangents.size() < 2 || (!tangents[0] && !tangents[1]))
     return {};
   if (!tangents[0])
     return {tangents[1]};
@@ -209,7 +209,8 @@ llvm::SmallVector<mlir::Value> MatmulOp::buildTangent(
   mlir::Type type = getResult().getType();
   auto build = [&](mlir::Value lhs, mlir::Value rhs) {
     return builder
-        .create<MatmulOp>(getLoc(), type, lhs, rhs, getTileKAttr(),
+        .create<MatmulOp>(getLoc(), type, lhs, rhs, mlir::ValueRange{},
+                          getTileKAttr(),
                           getNumericPolicyAttr(), getTransposeAAttr(),
                           getTransposeBAttr())
         .getResult();

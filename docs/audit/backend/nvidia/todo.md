@@ -3,10 +3,155 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-23
+last_updated: 2026-08-24
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **shared admissibility
+parity validated; no CUDA physical change.** The x86 consumer follows the same
+canonical dynamic-leaf order and mixed-radix mathematics already proven by the
+SM120 consumer. CPU assertions and AVX2/AVX-512 evidence transfer no CUDA
+schedule, PTX, or RTX claim.
+
+Cross-backend sync `LAYOUT-ALG-L4-X86-2026-08-24` — **shared rank-2 authority
+parity validated; no CUDA physical change.** NVIDIA already consumes the same
+C++ coordinate mapping in its proven SM120 matmul paths. AVX-512 host admission,
+loop structure, intrinsics, performance, and Ryzen numerical evidence transfer
+no CUDA schedule or RTX claim.
+
+Cross-backend sync `LAYOUT-ALG-L3-L5-DYNAMIC-2026-08-24` — **L3/SO-4,
+mixed-radix/static tuple materialization, and dynamic macro-CTA execution are
+closed for the stated NVIDIA subset.** The native factorization/residency ABI
+and Schedule Object v2 proof are shared contracts. CUDA now consumes the shared
+rank-2 index authority, mixed-radix basis maps, and static tuple codomain
+products. Both the corrected narrow dynamic route (`17x19 @ 19x13`, padded
+`29/31/23`) and the alignment-safe scalar-shared macro route
+(`257x127 @ 127x259`, padded `139/137/269`) match FP32 oracles on RTX 5070. The
+post-correctness macro NCU row is 17.536 us, 40 registers/thread, 82.85% L2
+sector hit rate, and 13.89% active warps. Dynamic/non-separable tuple codomains,
+explicit pointer-offset alignment metadata, Apple/x86 index-template migration,
+and bare-metal selector authority remain open.
+
+Cross-backend sync `DYNAMIC-COMPOSED-SM120-2026-08-24` — **bounded dynamic
+Graph matmul, arbitrary leading dimensions, and scalar-affine nested
+materialization are exact-device proven.** A dynamic rank-2 NVIDIA matmul is
+admitted only with static `shape_bounds=[M,N,K]`. Its canonical scheduled Tile
+producer carries runtime `M/N/K/LDA/LDB/LDD`, bounded `tile.view` operands, and
+dynamic outer shape/stride leaves through `tile.materialize_composed_layout`;
+the CUDA target re-runs the shared C++ affine proof before emitting address
+arithmetic. The versioned strided f16/bf16 descriptor validates A `(LDA,1)`, B
+`(1,LDB)`, and D `(LDD,1)` element strides and the launch bridge allocates and
+copies their physical spans with overflow checks. RTX 5070 execution for
+`17x19 @ 19x13`, `LDA=29`, `LDB=31`, `LDD=23` matches the independent FP32
+oracle, including M/N bounds and the final K tail. The proof found and fixed a
+bounded B-fragment defect where the second packed lane advanced by `LDB`
+instead of contiguous K. The subsequent synchronization record closes
+mixed-radix/static tuple materialization and the alignment-safe dynamic macro
+route. Dynamic/non-separable tuple codomains and the bare-metal selector gate
+remain open.
+
+Cross-backend sync `SCHEDULED-MATMUL-TAIL-EPILOGUE-LDS-2026-08-24` — **SM120
+static K-tail and scheduled epilogue ABI closed; dynamic stride proof and
+bare-metal policy remain open.** The canonical package now distinguishes
+16-byte-row-aligned partial K panels from arbitrary-alignment K tails. The
+former uses `cp.async` source-size zero fill; the latter uses masked scalar
+shared staging. RTX 5070 cases `257x513 @ 513x257` and
+`257x520 @ 520x257` match the FP32 oracle. Graph matmul now carries optional
+fp32 bias and residual as ordered SSA operands, while Schedule/Tile preserve
+ReLU/GELU/SiLU and f16 reduced-output policy. The widened CUDA descriptor and
+runtime launch path execute bias→ReLU→residual with an f16 store on RTX 5070.
+The current host is WSL, so neither
+these correctness results nor the retained NCU observations can authorize a
+global selector change; the bare-metal packet is still required.
+After correctness, Nsight Compute on the aligned `257x520x257` tail reports
+scheduled/direct duration about `15.3/23.2 us`, `56/35` registers, `4.10 KiB/0`
+static shared memory, and `14.0%/23.3%` achieved occupancy. Logical input
+redundancy is `10.09x/26.19x`. Reports:
+`/tmp/tessera-sm120-k520-{scheduled,direct}.ncu-rep`. These are diagnostic
+profiler observations, not selector authority.
+
+Cross-backend sync `SM120-MACRO-CTA-2026-08-24` — **NVIDIA-owned async
+shared-panel contract implemented and exact-device proven; global selector
+unchanged.** Canonical f16/bf16-to-f32 scheduled matmul now emits the registered
+`tessera_nvidia.macro_cta_matmul` Target IR boundary. Its exact contract is one
+`32x32` CTA tile, four warps with `quadrant_2x2_two_n_tiles` ownership,
+`m16n8k16` MMA, two 2 KiB shared A/B slots, and `cp.async` commit/wait plus CTA
+barriers. The 128 threads cooperatively transfer one 16-byte vector each.
+Out-of-range M/N vectors use `cp.async` source-size zero, which zero-fills the
+shared panel without dereferencing an invalid address; K remains a positive
+multiple of 16. Exact RTX 5070 proof includes aligned and ragged FP16 plus
+ragged BF16 (`257x512 @ 512x257`).
+
+The retained nine-sample, 1000-repetition WSL CUDA-event packet admits only
+cases at or above 67,108,864 FLOPs. Its three eligible scheduled/direct ratios
+are 0.721 (`256x512x256`), 0.453 (`512x256x512`), and 0.429 (`512^3`); every
+eligible route has CoV below 3% and all numerical rows are green. Smaller cases
+remain on the typed fallback because repeated packets exposed launch-scale
+variance through 33.6M FLOPs. The route threshold is pruning-only WSL evidence,
+not global `target_perf` authority; a bare-metal packet is still required for
+global selector promotion.
+
+Post-correctness Nsight Compute at `256^3` records 8.22 us scheduled versus
+9.57 us direct, 48/35 registers per thread, 4 KiB/0 static shared memory, no
+spills, and L1/TEX throughput pressure of about 29%/80%. Achieved occupancy is
+lower (11.1%/21.6%), but panel reuse reduces load pressure enough to win. The
+reports are `/tmp/tessera-sm120-async-{scheduled,direct}-256.ncu-rep`; the
+durations are diagnostic profiler observations, not selector timings.
+
+Still open for this family: dynamic/non-separable tuple-codomain
+materialization, explicit pointer-offset alignment metadata, and a bare-metal
+selector packet. Static separable tuple products and the alignment-safe dynamic
+macro-CTA specialization are closed by the synchronization record at the top
+of this plan. Bounded dynamic extents and arbitrary runtime leading dimensions are closed by
+`DYNAMIC-COMPOSED-SM120-2026-08-24`; static K tails and the bounded scheduled
+epilogue ABI are closed by the synchronization record above.
+
+Cross-backend sync `SM120-SCHEDULED-LICM-2026-08-24` — **superseded for the
+macro route by `SM120-MACRO-CTA-2026-08-24`; narrow typed fallback retained.** The
+native pipeline now applies LICM before SCF destruction, hoisting invariant lane
+and composed-layout address terms out of the typed K loop. Five RTX 5070
+numerical cases pass. Final v2-packet scheduled/direct CUDA-event ratios were
+1.002 (`128x128x128`), 0.929 (`128x256x64`), and 0.901 (`256x256x256`). The
+first is tied and the rectangular scheduled sample contains an outlier, so one
+session does not define a safe selector boundary. On the largest case, separate NCU
+observations were 9.088/10.528 us, 303104/634368 DRAM bytes,
+187392/510976 executed instructions, and 40/35 registers per thread. The
+benchmark's logical traffic model exposes a 24x input-reuse gap at 256 cubed.
+A repeated largest-case ratio was 0.914, but scheduled/direct sample CoV was
+3.89%/1.76%, failing the low-variance promotion requirement.
+The target-owned macro-CTA follow-up described by this earlier checkpoint is
+now implemented above. This LICM record remains the evidence for the narrow
+typed fallback and changes no sibling physical schedule.
+
+Cross-backend sync `SM120-BLOCK-COORDINATE-2026-08-24` — **NVIDIA-owned
+coordinate boundary and macro numerical closure landed; selector unchanged.**
+The registered pure `tessera_nvidia.block_coordinate` op returns typed i64 row
+and column bases and verifies the sole contract `sm_120/16x8/column_major_xy`.
+Only NVIDIA lowering interprets it as `ctaid.y*16, ctaid.x*8`; the canonical
+scheduled producer consumes those SSA values in its two proven composed-layout
+materializations and typed K-loop MMA. RTX 5070 exact-device cases
+`16x32@32x8`, `32x32@32x16`, and `48x64@64x24` pass with max absolute error
+`<=5.97e-7`. Seven-sample CUDA-event scheduled/direct ratios were 1.003, 1.025,
+and 1.005, so no macro selector promotion is justified. Separate Nsight
+resource captures for the largest case recorded scheduled/direct 44/36
+registers per thread, 1024/1024 shared-memory bytes, and equal 2.08% active-warp
+occupancy. Reports are retained at `/tmp/tessera-sm120-{scheduled,direct}-macro.ncu-rep`.
+
+
+Cross-backend sync `CUTE-LAYOUT-MATERIALIZE-1-2026-08-23` — **SM120 static
+affine view-address bridge landed; physical layout selection remains open.**
+`tile.materialize_composed_layout` now takes one i64 coordinate per outer mode,
+rechecks the recursive carrier through `tessera_layout_coalesce_v1`, and admits
+only the static scalar-basis subset. SM120 lowers its canonical offset into the
+existing `tile.view{tile.linear_base}` consumer, preserving ordinary bounds and
+the selected fragment contract. It does not select a new register/shared-memory
+layout. Nested or dynamic-residue carriers fail closed. This is compiler
+lowering evidence plus exact RTX 5070 numerical proof for the static f16
+m16n8k16 row-major-A/column-major-B subset: nonzero A-row and B-column origins
+reached `tile.view → fragment_pack → mma.sync` and matched NumPy. It remains no
+layout-performance claim. Dynamic and non-affine carriers, other dtypes, and
+ROCm physical consumption remain follow-up required.
 
 Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
 CI serialization lane; NVIDIA outcome: follow-up available, not required.**

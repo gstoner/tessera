@@ -25,9 +25,13 @@ vocabulary.
 
 Target work exists for x86 AMX/AVX512, Apple Silicon CPU/GPU, NVIDIA CUDA, and
 AMD ROCm. Backend maturity varies by target: x86 CPU now has both the executed
-`tessera_jit` lane and AVX-512 `runtime.launch()` lanes; Apple CPU/GPU execute
+`tessera_jit` lane and AVX-512 `runtime.launch()` lanes. Native AVX-512 images
+are feature-admitted before loading, so AVX2 hosts remain safe development and
+host-free test machines. The x86 Target pass also materializes proven static,
+bounded-dynamic, nested, and static tuple-product composed layouts into guarded i64
+CPU address arithmetic; Apple CPU/GPU execute
 on capable Darwin hosts; AMD **gfx1151** (Strix Halo, RDNA 3.5) has a broad
-compiler-generated HIP runtime family; and NVIDIA **sm_120** (RTX 5070 Ti,
+compiler-generated HIP runtime family; and NVIDIA **sm_120** (RTX 5070,
 consumer Blackwell) runs a compiler-generated CUDA lane plus hand-emitted
 tensor-core `mma.sync` GEMM / flash-attention lanes selected by a measured,
 accuracy-budgeted arbiter. Remaining backend breadth and unproven architectures
@@ -98,7 +102,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current status snapshot (reviewed 2026-07-08). Generated dashboards are the
+Current status snapshot (reviewed 2026-08-24). Generated dashboards are the
 source of truth for exact counts and executable lanes:
 [`runtime_execution_matrix.md`](docs/audit/generated/runtime_execution_matrix.md),
 [`runtime_abi.md`](docs/audit/generated/runtime_abi.md), and
@@ -137,9 +141,30 @@ always-current counts — read them rather than trusting a number copied here:
 | Source validation | `mypy` ratchet, generated-doc drift gates, and focused generated-dashboard checks. | A checkout should not be treated as green until `scripts/validate.sh` or the relevant focused checks pass locally. |
 | CPU / x86 | `tessera_jit` MLIR->LLVM CPU execution for the covered op set; native x86 AMX/AVX512 runtime rows for matmul, elementwise, reductions, softmax/norm, losses, FFT/spectral, sparse, linalg, optimizer, RNG, SSM, and related families. | Broader dtype/layout/aliasing and buffer-binding contracts; more Graph IR canonicalizers reaching the executed path. |
 | Apple CPU/GPU | Apple CPU uses Accelerate/BNNS lanes. Apple GPU uses MPS, MPSGraph, MSL, packaged kernels, GA/EBM kernels, fused MoE expert FFN, and additive Metal 4 lanes where documented. Apple GPU also has `runtime.launch()` lanes for conv, losses, complex/geometric + conformal, Philox RNG, linalg (lu/qr/svd/cholesky-solve) + einsum/factorized, optimizers, reductions + 0-move/sort, scatter, MLA latent-KV, and speculative decode. Native f32 sparse/local-MoE coverage now includes CSR/COO SpMM, SDDMM, dense-block BSMM, and top-1 expert-block compute; unsupported sparse/MoE contracts remain explicit `reference_cpu` overrides. Every row is reported per lane: `native_gpu` only when it dispatches to MPS/MSL, otherwise `reference_cpu` uses the standalone oracle. FP4/FP6/FP8/NVFP4 quantize/dequantize remains gated on the macOS 27 / Metal 4.1 toolchain. | Apple hardware proof requires a capable Darwin host; non-Darwin stubs are CI fallbacks only. FP8/FP4/MX quantization stays gated on the macOS 27 Metal 4.1 tensor toolchain. |
-| ROCm | gfx1151 has real `runtime.launch()` lanes, including compiler-generated HIP for matmul-family, attention-family, elementwise, reductions, softmax/norm, losses, quant, FFT/spectral, linalg, sparse, scan, SSM, MoE, RoPE/ALiBi, GA/conformal, and where/argreduce. | CDNA/MI300-class proof, remaining target-map promotions, and performance hardening. |
-| NVIDIA | The execution matrix records sm_120's shipped `mma.sync` GEMM lane (`nvidia_mma`, `libtessera_nvidia_gemm.so`). Beyond it, a compiler-generated CUDA lane (`emit/nvidia_cuda.py`, all four fusable region kinds) plus hand-emitted tensor-core GEMM+epilogue (~6×) and flash-attention (~2.7×) lanes run through the accuracy-budgeted arbiter and are hardware-proven on an RTX 5070 Ti by the plugin/perf/conformance test gates (`test_nvidia_plugin.py`, `test_nvidia_perf_ratchet.py`) — not yet promoted into the execution matrix. | Promote the arbiter/emit lanes into the execution matrix; Hopper sm_90, datacenter sm_100, `wgmma`/`tcgen05`, NVFP4 execution, and broader op coverage. |
+| ROCm | gfx1151 has real `runtime.launch()` lanes, including compiler-generated HIP for matmul-family, attention-family, elementwise, reductions, softmax/norm, losses, quant, FFT/spectral, linalg, sparse, scan, SSM, MoE, RoPE/ALiBi, GA/conformal, and where/argreduce. Its canonical scheduled f16 matmul package now selects the target-owned multi-wave LDS pipeline and is numerically proven on Radeon 8060S for aligned and ragged shapes. | A selector-eligible bare-metal LDS timing packet, CDNA/MI300-class proof, remaining target-map promotions, and performance hardening. |
+| NVIDIA | sm_120 runs the shipped `mma.sync` GEMM lane and a canonical Graph → Schedule → Tile → NVIDIA package. Large scheduled f16/bf16 matmuls use a four-warp 32x32 macro CTA with f32 accumulation and zero-filled M/N/K tails. Alignment-proven static packages use two-stage `cp.async`; bounded dynamic packages with arbitrary `LDA/LDB/LDD` use one-stage masked scalar shared panels. Both routes, including odd physical strides, are exact-device proven on SuperBear's RTX 5070 through target-proven nested scalar-affine layout materialization. Scheduled bias, ReLU/GELU/SiLU, residual, and f16 reduced-output contracts use a widened CUDA descriptor; the combined ReLU path is exact-device proven. | Bare-metal promotion of the WSL-derived macro crossover; explicit pointer-offset alignment; dynamic/non-separable tuple-codomain materialization; Hopper sm_90; datacenter sm_100; `wgmma`/`tcgen05`; and broader native op coverage. |
 | Distributed GPU | APIs, sharding surfaces, and NCCL/RCCL adapter scaffolding exist; mock collectives cover development paths. | Real multi-rank NCCL/RCCL execution and overlap proof. |
+
+### Scheduled GPU Matmul Boundary
+
+The canonical matmul path is shared through Schedule and Tile IR, while each
+backend owns its physical schedule. On NVIDIA sm_120, the compiler selects the
+async macro-CTA route only for the explicitly scheduled f16/bf16-to-f32 package
+at or above 67,108,864 FLOPs. That threshold is a conservative WSL pruning
+boundary: the retained RTX 5070 packet is numerically green and low-variance in
+its admitted range, but it is not global selector authority. Smaller cases use
+the typed `tile.view → fragment_pack → mma` fallback. Static K tails use an
+alignment-proven partial `cp.async` or a masked scalar shared-panel path.
+Bounded dynamic macro packages also choose the masked path when runtime strides
+cannot prove 16-byte panel alignment.
+ROCm gfx1151 independently routes its canonical scheduled package through its
+Wave32 multi-wave LDS pipeline; CUDA warp shapes, `cp.async`, and thresholds
+never transfer across that boundary.
+
+See [`CUTE_IR_ASSESSMENT.md`](docs/audit/compiler/CUTE_IR_ASSESSMENT.md) for the
+layout algebra and proof boundary, and the
+[`NVIDIA`](docs/audit/backend/nvidia/todo.md) / [`ROCm`](docs/audit/backend/rocm/todo.md)
+plans for exact-device evidence and remaining gates.
 
 ---
 

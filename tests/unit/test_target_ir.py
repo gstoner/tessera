@@ -68,6 +68,122 @@ def test_target_ir_verifier_requires_nvidia_training_lineage_contract():
     assert "TARGET_IR_MISSING_ATTR" in result.format()
 
 
+def test_target_ir_verifier_accepts_exact_sm120_block_coordinate_contract():
+    module = TargetIRModule(
+        attrs={"tessera.ir.level": "target", "target": "nvidia_sm120"},
+        functions=[TargetFunction(
+            "coordinates", target="nvidia_sm120",
+            body=[TargetOp(
+                "tessera_nvidia.block_coordinate",
+                {
+                    "arch": "sm_120",
+                    "tile_m": 16,
+                    "tile_n": 8,
+                    "grid_order": "column_major_xy",
+                },
+                result="coords:2",
+                result_type="(i64, i64)",
+            )],
+        )],
+    )
+    assert module.verify().ok
+    assert "%coords:2" in module.to_mlir()
+
+
+@pytest.mark.parametrize(
+    "attribute,value",
+    [
+        ("arch", "sm_100a"),
+        ("tile_m", 32),
+        ("tile_n", 16),
+        ("grid_order", "row_major_xy"),
+    ],
+)
+def test_target_ir_verifier_rejects_noncanonical_block_coordinate_contract(
+        attribute, value):
+    attrs = {
+        "arch": "sm_120",
+        "tile_m": 16,
+        "tile_n": 8,
+        "grid_order": "column_major_xy",
+    }
+    attrs[attribute] = value
+    module = TargetIRModule(
+        attrs={"tessera.ir.level": "target", "target": "nvidia_sm120"},
+        functions=[TargetFunction(
+            "bad_coordinates", target="nvidia_sm120",
+            body=[TargetOp("tessera_nvidia.block_coordinate", attrs)],
+        )],
+    )
+    result = module.verify()
+    assert not result.ok
+    assert "TARGET_IR_NVIDIA_OP" in result.format()
+
+
+def _macro_cta_attrs() -> dict[str, object]:
+    return {
+        "arch": "sm_120",
+        "cta_m": 32,
+        "cta_n": 32,
+        "tile_m": 16,
+        "tile_n": 8,
+        "tile_k": 16,
+        "warps": 4,
+        "warp_ownership": "quadrant_2x2_two_n_tiles",
+        "storage": "f16",
+        "accum": "f32",
+        "staging": "cp_async_shared_ab_16bit",
+        "stages": 2,
+        "completion": "wait_group_0_cta_barrier",
+        "bounds": "zero_fill_mnk_tail",
+        "grid_order": "column_major_xy",
+        "tessera.schedule_hash": "a" * 64,
+    }
+
+
+def test_target_ir_verifier_accepts_exact_sm120_macro_cta_contract():
+    module = TargetIRModule(
+        attrs={"tessera.ir.level": "target", "target": "nvidia_sm120"},
+        functions=[TargetFunction(
+            "macro", target="nvidia_sm120",
+            body=[TargetOp("tessera_nvidia.macro_cta_matmul", _macro_cta_attrs())],
+        )],
+    )
+    assert module.verify().ok
+
+
+@pytest.mark.parametrize(
+    "attribute,value",
+    [
+        ("cta_m", 64),
+        ("warps", 8),
+        ("warp_ownership", "implicit"),
+        ("storage", "tf32"),
+        ("accum", "f16"),
+        ("staging", "global"),
+        ("stages", 3),
+        ("completion", "none"),
+        ("bounds", "masked"),
+        ("tessera.schedule_hash", "short"),
+    ],
+)
+def test_target_ir_verifier_rejects_noncanonical_macro_cta_contract(
+    attribute, value
+):
+    attrs = _macro_cta_attrs()
+    attrs[attribute] = value
+    module = TargetIRModule(
+        attrs={"tessera.ir.level": "target", "target": "nvidia_sm120"},
+        functions=[TargetFunction(
+            "bad_macro", target="nvidia_sm120",
+            body=[TargetOp("tessera_nvidia.macro_cta_matmul", attrs)],
+        )],
+    )
+    result = module.verify()
+    assert not result.ok
+    assert "TARGET_IR_NVIDIA_OP" in result.format()
+
+
 def test_lower_tile_to_rocm_target_ir_maps_mma_to_mfma_dma_wait():
     tile = TileIRModule(functions=[
         TileFunction(

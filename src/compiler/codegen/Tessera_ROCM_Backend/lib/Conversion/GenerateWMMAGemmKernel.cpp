@@ -60,6 +60,8 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
 
+#include <optional>
+
 using namespace mlir;
 
 namespace {
@@ -106,6 +108,9 @@ struct WmmaGemmRequest {
   bool canonicalKLoop = false;
   bool ssaOwnershipProof = false;
   bool raggedZeroPad = false;
+  // Populated only by the canonical Schedule -> Tile consumer.  These are
+  // static problem extents, never a substitute for dynamic leading dimensions.
+  int64_t staticM = 0, staticN = 0, staticK = 0;
   int64_t logicalTileM = 0, logicalTileN = 0, logicalTileK = 0;
   std::string accumulate;
   std::string rasterOrder = "row_major";
@@ -259,7 +264,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      StringRef activation = "none",
                      bool packedInt4Memory = false,
                      StringRef rasterOrder = "row_major",
-                     int64_t rasterGroup = 1) {
+                     int64_t rasterGroup = 1, int64_t staticM = 0,
+                     int64_t staticN = 0, int64_t staticK = 0) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -402,6 +408,40 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     state.addAttribute("tile.linear_base", bb.getUnitAttr());
     return bb.create(state)->getResult(0);
   };
+  // Materialize only the canonical static affine subset.  General tuple
+  // composition, dynamic outer shapes, and dynamic leading dimensions remain
+  // carrier-only until their target materializers own a proof boundary.
+  auto makeStaticRowMajorLayout = [&](int64_t rows, int64_t cols) {
+    auto i64 = [&](int64_t value) { return b.getI64IntegerAttr(value); };
+    auto leaf = [&](int64_t value) -> Attribute { return i64(value); };
+    auto singleton = [&](int64_t value) { return b.getArrayAttr({leaf(value)}); };
+    auto basis = b.getArrayAttr({
+        b.getArrayAttr({singleton(rows), singleton(1)}),
+        b.getArrayAttr({singleton(cols), singleton(1)}),
+    });
+    return tessera::tile::TileComposedLayoutAttr::get(
+        ctx, b.getArrayAttr({leaf(rows), leaf(cols)}),
+        b.getArrayAttr({leaf(cols), leaf(1)}), basis, {0, 0});
+  };
+  const bool materializeComposedBases =
+      viaTile && staticM > 0 && staticN > 0 && staticK > 0;
+  auto aLayout = materializeComposedBases
+                     ? makeStaticRowMajorLayout(staticM, staticK)
+                     : tessera::tile::TileComposedLayoutAttr();
+  auto bLayout = materializeComposedBases
+                     ? makeStaticRowMajorLayout(staticK, staticN)
+                     : tessera::tile::TileComposedLayoutAttr();
+  auto materializeBase = [&](OpBuilder &bb, Location l,
+                             tessera::tile::TileComposedLayoutAttr layout,
+                             Value row, Value col) -> Value {
+    Value row64 = bb.create<arith::IndexCastOp>(l, bb.getI64Type(), row);
+    Value col64 = bb.create<arith::IndexCastOp>(l, bb.getI64Type(), col);
+    OperationState state(l, "tile.materialize_composed_layout");
+    state.addOperands({row64, col64});
+    state.addTypes(bb.getI64Type());
+    state.addAttribute("layout", layout);
+    return bb.create(state)->getResult(0);
+  };
   auto packFragment = [&](OpBuilder &bb, Location l, Value tile,
                           Type type) -> Value {
     OperationState state(l, "tile.fragment_pack");
@@ -523,16 +563,19 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                           ValueRange acc, bool bounded) {
     SmallVector<Value> af(mt), bf(nt);
     for (int64_t mi = 0; mi < mt; ++mi) {
-      Value linearBase = bb.create<arith::AddIOp>(l, arK[mi], k0);
+      Value linearBase = materializeComposedBases
+                             ? materializeBase(bb, l, aLayout, arM[mi], k0)
+                             : bb.create<arith::AddIOp>(l, arK[mi], k0);
       Value view =
           makeTileView(bb, l, A, rowOrigin[mi], k0, linearBase, M, K, K,
                        bounded);
       af[mi] = packFragment(bb, l, view, aFragmentTy);
     }
-    Value bRowBase = bb.create<arith::MulIOp>(l, k0, N);
     for (int64_t ni = 0; ni < nt; ++ni) {
-      Value linearBase =
-          bb.create<arith::AddIOp>(l, bRowBase, colN[ni]);
+      Value linearBase = materializeComposedBases
+                             ? materializeBase(bb, l, bLayout, k0, colN[ni])
+                             : *tessera::tile::materializeLinearIndex(
+                                   bb, l, k0, colN[ni], N, "row_major");
       Value view =
           makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
                        bounded);
@@ -576,9 +619,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
       Value ak = bb.create<arith::AddIOp>(l, k0, ci);
-      Value akN = bb.create<arith::MulIOp>(l, ak, N);
       for (int64_t ni = 0; ni < nt; ++ni) {
-        Value lin = bb.create<arith::AddIOp>(l, akN, colN[ni]);
+        Value lin = *tessera::tile::materializeLinearIndex(
+            bb, l, ak, colN[ni], N, "row_major");
         Value v = loadLogical(bb, l, B, lin);
         bFrag[ni] =
             bb.create<vector::InsertOp>(l, v, bFrag[ni], ArrayRef<int64_t>{i});
@@ -613,9 +656,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
       Value ak = bb.create<arith::AddIOp>(l, k0, ci);
-      Value akN = bb.create<arith::MulIOp>(l, ak, N);
       for (int64_t ni = 0; ni < nt; ++ni) {
-        Value lin = bb.create<arith::AddIOp>(l, akN, colSafe[ni]);
+        Value lin = *tessera::tile::materializeLinearIndex(
+            bb, l, ak, colSafe[ni], N, "row_major");
         Value v = loadLogical(bb, l, B, lin);
         bFrag[ni] =
             bb.create<vector::InsertOp>(l, v, bFrag[ni], ArrayRef<int64_t>{i});
@@ -640,7 +683,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       Value akInb = bb.create<arith::CmpIOp>(l, slt, ak, K);
       for (int64_t mi = 0; mi < mt; ++mi) {
         Value inb = bb.create<arith::AndIOp>(l, arInb[mi], akInb);
-        Value lin = bb.create<arith::AddIOp>(l, arK[mi], ak);
+        Value lin = *tessera::tile::materializeLinearIndex(
+            bb, l, arM[mi], ak, K, "row_major");
         Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
         Value v = loadLogical(bb, l, A, safe);
         Value vm = bb.create<arith::SelectOp>(l, inb, v, storeZero);
@@ -649,8 +693,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       }
       for (int64_t ni = 0; ni < nt; ++ni) {
         Value inb = bb.create<arith::AndIOp>(l, akInb, colInb[ni]);
-        Value lin = bb.create<arith::AddIOp>(
-            l, bb.create<arith::MulIOp>(l, ak, N), colN[ni]);
+        Value lin = *tessera::tile::materializeLinearIndex(
+            bb, l, ak, colN[ni], N, "row_major");
         Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
         Value v = loadLogical(bb, l, B, safe);
         Value vm = bb.create<arith::SelectOp>(l, inb, v, storeZero);
@@ -707,8 +751,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           if (!T.isInt)
             dv = tessera::tile::emitFloatOutputConversion(
                 sb, loc, dv, outputType);
-          Value didx = sb.create<arith::AddIOp>(
-              loc, sb.create<arith::MulIOp>(loc, r, N), colN[ni]);
+          Value didx = *tessera::tile::materializeLinearIndex(
+              sb, loc, r, colN[ni], N, "row_major");
           if (!masked) {
             sb.create<memref::StoreOp>(loc, dv, D, ValueRange{didx});
             continue;
@@ -1123,6 +1167,25 @@ struct GenerateWMMAGemmKernelPass
       request.activation = epilogue.getActivation().str();
       request.output = epilogue.getOutputType().str();
       request.portableABI = true;
+      // Schedule -> Tile binds M/N/K as i64 constants.  Materialization is
+      // allowed only when those exact operands remain static; arbitrary Tile
+      // producers and dynamic leading dimensions keep the established path.
+      auto staticExtent = [&](unsigned operand) -> std::optional<int64_t> {
+        if (auto constant =
+                op->getOperand(operand).getDefiningOp<arith::ConstantIntOp>())
+          return constant.value();
+        return std::nullopt;
+      };
+      unsigned dimStart = op->getNumOperands() - 3;
+      auto staticM = staticExtent(dimStart);
+      auto staticN = staticExtent(dimStart + 1);
+      auto staticK = staticExtent(dimStart + 2);
+      if (staticM && staticN && staticK && *staticM > 0 && *staticN > 0 &&
+          *staticK > 0) {
+        request.staticM = *staticM;
+        request.staticN = *staticN;
+        request.staticK = *staticK;
+      }
       requests.push_back(std::move(request));
     }
 
@@ -1430,7 +1493,8 @@ struct GenerateWMMAGemmKernelPass
         emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
                         portableContract, viaTile, hasBias, activation,
                         packDesc && dt == "int4", request.rasterOrder,
-                        request.rasterGroup);
+                        request.rasterGroup, request.staticM, request.staticN,
+                        request.staticK);
       }
       if (gpuFunc->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
         gpuFunc->setAttr(

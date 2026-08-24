@@ -68,6 +68,142 @@ namespace {
 using tessera::common::ensureExternalDecl;
 using tessera::common::extractPtr;
 
+/// Consume the shared composed-layout carrier at the x86 Target boundary.
+/// The layout authority owns admissibility and canonical dynamic-leaf order;
+/// this target owns the scalar CPU realization and its runtime guards.
+static LogicalResult materializeX86ComposedLayouts(ModuleOp module) {
+  SmallVector<tessera::tile::MaterializeComposedLayoutTupleOp> tupleLayouts;
+  module.walk([&](tessera::tile::MaterializeComposedLayoutTupleOp op) {
+    tupleLayouts.push_back(op);
+  });
+  for (auto tuple : tupleLayouts) {
+    OpBuilder builder(tuple);
+    for (auto [index, attr] : llvm::enumerate(tuple.getLayouts())) {
+      OperationState state(tuple.getLoc(),
+                           "tile.materialize_composed_layout");
+      state.addOperands(tuple.getCoordinates());
+      state.addTypes(builder.getI64Type());
+      state.addAttribute(
+          "layout", cast<tessera::tile::TileComposedLayoutAttr>(attr));
+      Operation *component = builder.create(state);
+      tuple.getResults()[index].replaceAllUsesWith(component->getResult(0));
+    }
+    tuple.erase();
+  }
+
+  SmallVector<tessera::tile::MaterializeComposedLayoutOp> layouts;
+  module.walk([&](tessera::tile::MaterializeComposedLayoutOp op) {
+    layouts.push_back(op);
+  });
+  for (auto materialize : layouts) {
+    OpBuilder builder(materialize);
+    Location loc = materialize.getLoc();
+    SmallVector<tessera::tile::ComposedLayoutMaterializationMode> modes;
+    SmallVector<tessera::tile::ComposedLayoutDynamicLeaf> dynamicLeaves;
+    if (!tessera::tile::getMaterializableComposedLayout(
+            materialize.getLayout(), modes, dynamicLeaves) ||
+        materialize.getCoordinates().size() !=
+            modes.size() + dynamicLeaves.size()) {
+      materialize.emitError(
+          "x86 composed layout is not a scalar-output map proven by the "
+          "native layout authority");
+      return failure();
+    }
+
+    auto constant = [&](int64_t value) -> Value {
+      return arith::ConstantIntOp::create(builder, loc, value, 64);
+    };
+    auto requireNonnegative = [&](Value value, StringRef message) {
+      Value valid = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::sge, value, constant(0));
+      cf::AssertOp::create(builder, loc, valid, message);
+    };
+    auto requirePositive = [&](Value value, StringRef message) {
+      Value valid = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::sgt, value, constant(0));
+      cf::AssertOp::create(builder, loc, valid, message);
+    };
+
+    ValueRange allOperands = materialize.getCoordinates();
+    ValueRange coordinates = allOperands.take_front(modes.size());
+    ValueRange runtimeLeaves = allOperands.drop_front(modes.size());
+    for (Value coordinate : coordinates)
+      requireNonnegative(
+          coordinate, "x86 composed-layout coordinate must be nonnegative");
+    for (auto [index, leaf] : llvm::enumerate(dynamicLeaves)) {
+      Value value = runtimeLeaves[index];
+      using Kind = tessera::tile::ComposedLayoutDynamicLeaf::Kind;
+      if (leaf.kind == Kind::OuterShape || leaf.kind == Kind::BasisShape)
+        requirePositive(
+            value, "x86 composed-layout dynamic extent must be positive");
+      else
+        requireNonnegative(
+            value, "x86 composed-layout dynamic stride must be nonnegative");
+    }
+
+    auto resolve = [&](tessera::tile::ComposedLayoutDynamicLeaf::Kind kind,
+                       unsigned mode, unsigned leafIndex,
+                       int64_t staticValue) -> FailureOr<Value> {
+      if (staticValue != -1)
+        return constant(staticValue);
+      for (auto [index, leaf] : llvm::enumerate(dynamicLeaves))
+        if (leaf.kind == kind && leaf.mode == mode && leaf.leaf == leafIndex)
+          return runtimeLeaves[index];
+      return failure();
+    };
+
+    Value linear = constant(0);
+    for (auto [mode, coordinate] : llvm::enumerate(coordinates)) {
+      const auto &plan = modes[mode];
+      FailureOr<Value> outerShape = resolve(
+          tessera::tile::ComposedLayoutDynamicLeaf::Kind::OuterShape, mode, 0,
+          plan.outerShape);
+      FailureOr<Value> outerStride = resolve(
+          tessera::tile::ComposedLayoutDynamicLeaf::Kind::OuterStride, mode,
+          0, plan.outerStride);
+      if (failed(outerShape) || failed(outerStride)) {
+        materialize.emitError(
+            "x86 composed-layout dynamic outer leaf is missing");
+        return failure();
+      }
+      Value inBounds = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::slt, coordinate, *outerShape);
+      cf::AssertOp::create(
+          builder, loc, inBounds,
+          "x86 composed-layout coordinate exceeds its outer extent");
+      Value remaining = coordinate;
+      Value basis = constant(plan.offset);
+      for (auto [leafIndex, staticShape] :
+           llvm::enumerate(plan.basisShapes)) {
+        FailureOr<Value> shape = resolve(
+            tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisShape, mode,
+            leafIndex, staticShape);
+        FailureOr<Value> stride = resolve(
+            tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisStride, mode,
+            leafIndex, plan.basisStrides[leafIndex]);
+        if (failed(shape) || failed(stride)) {
+          materialize.emitError(
+              "x86 composed-layout dynamic basis leaf is missing");
+          return failure();
+        }
+        Value digit =
+            arith::RemUIOp::create(builder, loc, remaining, *shape);
+        basis = arith::AddIOp::create(
+            builder, loc, basis,
+            arith::MulIOp::create(builder, loc, digit, *stride));
+        remaining =
+            arith::DivUIOp::create(builder, loc, remaining, *shape);
+      }
+      linear = arith::AddIOp::create(
+          builder, loc, linear,
+          arith::MulIOp::create(builder, loc, basis, *outerStride));
+    }
+    materialize.getResult().replaceAllUsesWith(linear);
+    materialize.erase();
+  }
+  return success();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pattern: LowerMatmulToX86
 // ─────────────────────────────────────────────────────────────────────────────
@@ -409,6 +545,9 @@ struct TileToX86PassImpl
     patterns.add<LowerKVCacheToX86>(&getContext(), "tessera.kv_cache.read");
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
+      return signalPassFailure();
+
+    if (failed(materializeX86ComposedLayouts(getOperation())))
       return signalPassFailure();
 
     // X86-E2E-1 launch envelopes already carry raw pointers and dimensions.

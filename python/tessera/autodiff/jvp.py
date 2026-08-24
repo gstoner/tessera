@@ -206,13 +206,58 @@ def _jvp(name: str):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _matmul_activation(value, activation):
+    if activation == "none":
+        return value
+    if activation == "relu":
+        return np.maximum(0, value)
+    if activation == "silu":
+        return value / (1.0 + np.exp(-value))
+    if activation == "gelu":
+        coefficient = float(np.sqrt(2.0 / np.pi))
+        return value * 0.5 * (
+            1.0 + np.tanh(
+                coefficient * (value + 0.044715 * value**3)
+            )
+        )
+    raise ValueError(f"unsupported gemm activation {activation!r}")
+
+
+def _matmul_activation_derivative(value, activation):
+    if activation == "none":
+        return np.ones_like(value)
+    if activation == "relu":
+        return (value > 0).astype(value.dtype)
+    if activation == "silu":
+        sigmoid = 1.0 / (1.0 + np.exp(-value))
+        return sigmoid * (1.0 + value * (1.0 - sigmoid))
+    if activation == "gelu":
+        coefficient = float(np.sqrt(2.0 / np.pi))
+        cubic = 0.044715
+        inner = coefficient * (value + cubic * value**3)
+        tanh_inner = np.tanh(inner)
+        return 0.5 * (1.0 + tanh_inner) + (
+            0.5 * value * (1.0 - tanh_inner**2) * coefficient
+            * (1.0 + 3.0 * cubic * value**2)
+        )
+    raise ValueError(f"unsupported gemm activation {activation!r}")
+
+
 @_jvp("gemm")
-def jvp_gemm(primals, tangents, **_):
+def jvp_gemm(primals, tangents, *, bias=None, residual=None,
+             activation="none", **_):
     A, B = primals
     dA, dB = tangents
-    primal_out = np.matmul(A, B)
+    preactivation = np.matmul(A, B)
+    if bias is not None:
+        preactivation = preactivation + np.asarray(bias)
+    primal_out = _matmul_activation(preactivation, activation)
+    if residual is not None:
+        primal_out = primal_out + np.asarray(residual)
     # d(A@B) = dA @ B + A @ dB
-    tangent_out = np.matmul(dA, B) + np.matmul(A, dB)
+    tangent_out = (
+        np.matmul(dA, B) + np.matmul(A, dB)
+    ) * _matmul_activation_derivative(preactivation, activation)
     return primal_out, tangent_out
 
 

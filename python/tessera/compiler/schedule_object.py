@@ -14,11 +14,17 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from .benchmark_row import validate_resource_vector
+from .layout_algebra import NestedLayout, factorizes, prove_residency
 
 
-SCHEDULE_OBJECT_SCHEMA = "tessera.schedule_object.v1"
+SCHEDULE_OBJECT_SCHEMA = "tessera.schedule_object.v2"
 _EDGE_KINDS = frozenset({"data", "sync", "resource"})
 _RESIDENCY_TIERS = frozenset({"tile", "layer", "full"})
+_LOCALITY = frozenset(
+    {"coordinate", "row", "column", "block", "tensor", "layer", "global"}
+)
+_LIFETIMES = frozenset({"tile", "layer", "launch", "session"})
+_ALIAS_POLICIES = frozenset({"no_input_output_alias", "read_only_alias"})
 
 
 def _freeze_json(value: Any) -> Any:
@@ -124,6 +130,90 @@ class ScheduleResidency:
             )
 
 
+@dataclass(frozen=True, order=True)
+class ScheduleMaterializationProof:
+    value: str
+    read_locality: str
+    partition_locality: str
+    read_layout_digest: str
+    partition_layout_digest: str
+    residency_tier: str
+    materialized_elements: int
+    materialized_bytes: int
+    capacity_bytes: int
+    lifetime: str
+    alias_policy: str
+
+    def __post_init__(self) -> None:
+        if not self.value:
+            raise ValueError("schedule materialization proof value must be non-empty")
+        if self.read_locality not in _LOCALITY or self.partition_locality not in _LOCALITY:
+            raise ValueError("schedule materialization proof has invalid locality")
+        for name, digest in (
+            ("read", self.read_layout_digest),
+            ("partition", self.partition_layout_digest),
+        ):
+            if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+                raise ValueError(f"{name} layout digest must be lowercase sha256")
+        if self.residency_tier not in _RESIDENCY_TIERS:
+            raise ValueError("schedule materialization proof has invalid residency tier")
+        if self.materialized_elements <= 0 or self.materialized_bytes <= 0:
+            raise ValueError("schedule materialization footprint must be positive")
+        if self.capacity_bytes < self.materialized_bytes:
+            raise ValueError("schedule materialization exceeds declared capacity")
+        if self.lifetime not in _LIFETIMES:
+            raise ValueError("schedule materialization proof has invalid lifetime")
+        if self.alias_policy not in _ALIAS_POLICIES:
+            raise ValueError("schedule materialization proof has invalid alias policy")
+
+
+def _layout_digest(layout: NestedLayout) -> str:
+    payload = json.dumps(
+        {"shape": layout.shape, "stride": layout.stride},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def prove_schedule_materialization(
+    *,
+    value: str,
+    read_layout: NestedLayout,
+    partition_layout: NestedLayout,
+    read_locality: str,
+    partition_locality: str,
+    residency_tier: str,
+    element_bytes: int,
+    capacity_bytes: int,
+    lifetime: str,
+    alias_policy: str = "no_input_output_alias",
+) -> ScheduleMaterializationProof:
+    """Construct digest-bound L3/SO-4 evidence through the C++ authority."""
+
+    factor = factorizes(read_layout, partition_layout)
+    if not factor.factorizes:
+        raise ValueError("consumer read layout does not factor through producer partition")
+    residency = prove_residency(
+        read_layout, element_bytes=element_bytes, capacity_bytes=capacity_bytes
+    )
+    if not residency.admitted:
+        raise ValueError("layout cosize exceeds declared residency capacity")
+    return ScheduleMaterializationProof(
+        value=value,
+        read_locality=read_locality,
+        partition_locality=partition_locality,
+        read_layout_digest=_layout_digest(read_layout),
+        partition_layout_digest=_layout_digest(partition_layout),
+        residency_tier=residency_tier,
+        materialized_elements=residency.elements,
+        materialized_bytes=residency.bytes,
+        capacity_bytes=residency.capacity_bytes,
+        lifetime=lifetime,
+        alias_policy=alias_policy,
+    )
+
+
 @dataclass(frozen=True)
 class ScheduleObject:
     object_id: str
@@ -131,6 +221,7 @@ class ScheduleObject:
     edges: tuple[ScheduleEdge, ...] = ()
     roles: tuple[ScheduleRole, ...] = ()
     residency: tuple[ScheduleResidency, ...] = ()
+    materialization_proofs: tuple[ScheduleMaterializationProof, ...] = ()
     schema: str = SCHEDULE_OBJECT_SCHEMA
 
     def __post_init__(self) -> None:
@@ -177,6 +268,16 @@ class ScheduleObject:
             raise ValueError("schedule role names must be unique")
         if len({item.value for item in self.residency}) != len(self.residency):
             raise ValueError("schedule residency values must be unique")
+        if len({item.value for item in self.materialization_proofs}) != len(
+            self.materialization_proofs
+        ):
+            raise ValueError("schedule materialization proof values must be unique")
+        residency_by_value = {item.value: item.tier for item in self.residency}
+        for proof in self.materialization_proofs:
+            if residency_by_value.get(proof.value) != proof.residency_tier:
+                raise ValueError(
+                    "schedule materialization proof must match declared residency"
+                )
         self._validate_dag()
 
     def _validate_dag(self) -> None:
@@ -232,6 +333,22 @@ class ScheduleObject:
                 {"value": item.value, "tier": item.tier}
                 for item in sorted(self.residency)
             ],
+            "materialization_proofs": [
+                {
+                    "value": proof.value,
+                    "read_locality": proof.read_locality,
+                    "partition_locality": proof.partition_locality,
+                    "read_layout_digest": proof.read_layout_digest,
+                    "partition_layout_digest": proof.partition_layout_digest,
+                    "residency_tier": proof.residency_tier,
+                    "materialized_elements": proof.materialized_elements,
+                    "materialized_bytes": proof.materialized_bytes,
+                    "capacity_bytes": proof.capacity_bytes,
+                    "lifetime": proof.lifetime,
+                    "alias_policy": proof.alias_policy,
+                }
+                for proof in sorted(self.materialization_proofs)
+            ],
         }
 
     @property
@@ -246,7 +363,9 @@ __all__ = [
     "SCHEDULE_OBJECT_SCHEMA",
     "ScheduleAction",
     "ScheduleEdge",
+    "ScheduleMaterializationProof",
     "ScheduleObject",
     "ScheduleResidency",
     "ScheduleRole",
+    "prove_schedule_materialization",
 ]

@@ -101,6 +101,56 @@ def NVIDIA_CudaMathKindAttr
 def NVIDIA_MmaSyncOp : TesseraNVIDIA_Op<"mma_sync"> {
   let summary = "Consumer Blackwell (sm_120) warp-level mma.sync contract";
 }
+def NVIDIA_BlockCoordinateOp : Op<TesseraNVIDIADialect, "block_coordinate", [Pure]> {
+  let summary = "Typed SM120 macro-tile block-coordinate contract";
+  let description = [{
+    Materializes the row and column bases for the canonical SM120 physical
+    tile.  The exact attributes deliberately make grid interpretation a
+    target-owned, fail-closed contract rather than implicit producer
+    arithmetic.
+  }];
+  let arguments = (ins
+      StrAttr:$arch,
+      I64Attr:$tile_m,
+      I64Attr:$tile_n,
+      StrAttr:$grid_order);
+  let results = (outs I64:$row_base, I64:$col_base);
+  let hasVerifier = 1;
+}
+def NVIDIA_MacroCTAMatmulOp : Op<TesseraNVIDIADialect, "macro_cta_matmul"> {
+  let summary = "SM120 four-warp shared-panel matmul contract";
+  let description = [{
+    Owns the physical 32x32 CTA decomposition used to reuse one A[32,16] and
+    one B[16,32] panel across four warps. The operation is deliberately exact:
+    changing its warp ownership, staging space, grid order, or instruction tile
+    requires a new contract rather than reinterpretation by a lowering.
+  }];
+  let arguments = (ins
+      LLVM_AnyPointer:$a,
+      LLVM_AnyPointer:$b,
+      LLVM_AnyPointer:$d,
+      I64:$m,
+      I64:$n,
+      I64:$k,
+      Variadic<I64>:$leading_dimensions,
+      StrAttr:$arch,
+      I64Attr:$cta_m,
+      I64Attr:$cta_n,
+      I64Attr:$tile_m,
+      I64Attr:$tile_n,
+      I64Attr:$tile_k,
+      I64Attr:$warps,
+      StrAttr:$warp_ownership,
+      StrAttr:$storage,
+      StrAttr:$accum,
+      StrAttr:$staging,
+      I64Attr:$stages,
+      StrAttr:$completion,
+      StrAttr:$bounds,
+      StrAttr:$grid_order);
+  let results = (outs);
+  let hasVerifier = 1;
+}
 def NVIDIA_MmaFusedOp : TesseraNVIDIA_Op<"mma_fused"> {
   let summary = "sm_120 mma.sync GEMM with a fused pointwise epilogue";
 }

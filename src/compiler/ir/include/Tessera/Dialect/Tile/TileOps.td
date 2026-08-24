@@ -1197,6 +1197,59 @@ def Tile_LayoutAttr : Tile_Attr<"TileLayout", "layout"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+// LAYOUT-ALG-1/L1 — a composed layout cannot be collapsed into #tile.layout:
+// its basis is tuple-valued and a dynamic outer residue must survive to runtime.
+// ArrayAttr is intentionally used recursively here, rather than a string DSL:
+// leaves are IntegerAttr values and nested ArrayAttr values retain mode groups.
+// Each basis element is `[shape_tree, stride_tree]`; offsets are one per outer
+// coordinate.  The verifier below owns the structural/profile checks.
+def Tile_ComposedLayoutAttr : Tile_Attr<"TileComposedLayout", "composed_layout"> {
+  let summary = "Tuple-valued composed layout with explicit dynamic residues";
+  let description = [{
+    A carrier for `outer(offset + basis(coord))`. `outer_shape` and
+    `outer_stride` are recursive integer trees. `basis` is an array of paired
+    recursive `[shape, stride]` trees, one per outer coordinate; `-1` is the
+    dynamic-residue sentinel. This attribute is not a physical placement
+    layout. A target must materialize it through the layout-algebra authority
+    or reject it with a named diagnostic; it may never read it as #tile.layout.
+  }];
+  let parameters = (ins
+      AttrParameter<"::mlir::ArrayAttr", "outer shape tree">:$outerShape,
+      AttrParameter<"::mlir::ArrayAttr", "outer stride tree">:$outerStride,
+      AttrParameter<"::mlir::ArrayAttr", "tuple basis [shape,stride] trees">:$basis,
+      ArrayRefParameter<"int64_t", "per-basis outer offsets">:$offsets);
+  let assemblyFormat = "`<` $outerShape `,` $outerStride `,` $basis `,` `[` $offsets `]` `>`";
+  let genVerifyDecl = 1;
+}
+
+// Apply/prove the static affine subset of a composed layout through the shared
+// C++ layout authority.  The coordinates are explicit SSA values: that is the
+// binding which makes a later physical tile.view address derivable. Nested or
+// dynamic-residue layouts remain representable in the attribute but are not
+// address-materializable until their runtime coordinate carrier exists.
+def Tile_MaterializeComposedLayoutOp : Tile_Op<"materialize_composed_layout", [Pure]> {
+  let summary = "Prove and apply a composed layout to explicit coordinates";
+  let arguments = (ins Variadic<I64>:$coordinates,
+                       Tile_ComposedLayoutAttr:$layout);
+  let results = (outs I64:$result);
+  let assemblyFormat = "$coordinates $layout attr-dict `:` functional-type($coordinates, $result)";
+  let hasVerifier = 1;
+}
+
+// A tuple-valued codomain is a mathematical product of scalar composed
+// layouts over one coordinate domain.  Encoding it as an array of the same
+// proof-bearing attribute keeps scalar and tuple materialization under one C++
+// authority; no target may flatten the codomain or reinterpret tuple nesting.
+def Tile_MaterializeComposedLayoutTupleOp
+    : Tile_Op<"materialize_composed_layout_tuple", [Pure]> {
+  let summary = "Prove and apply a tuple-valued composed layout";
+  let arguments = (ins Variadic<I64>:$coordinates,
+                       ArrayAttr:$layouts);
+  let results = (outs Variadic<I64>:$results);
+  let assemblyFormat = "$coordinates $layouts attr-dict `:` functional-type($coordinates, $results)";
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // C3 (2026-06-23) — typed barrier domains + PipelineState (TIRx review, item C3)
 //

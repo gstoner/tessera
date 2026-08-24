@@ -2187,11 +2187,18 @@ def package_matmul(
         buffer_rows.append((bias_name, "input", "fp32", 1, 4, "row_major"))
     if residual_name:
         buffer_rows.append((residual_name, "input", "fp32", 2, 4, "row_major"))
+    output_dtype = (
+        "int32" if storage == "int8"
+        else storage if storage == "fp64"
+        else output_storage
+    )
+    if output_dtype is None:
+        raise ValueError("SM120 matmul output storage must be explicit")
     buffer_rows.append(
         (
             output_name,
             "output",
-            "int32" if storage == "int8" else storage if storage == "fp64" else output_storage,
+            output_dtype,
             2,
             8 if storage == "fp64" else 4,
             "row_major",
@@ -2328,7 +2335,7 @@ def package_scheduled_matmul(
                 else SM120_STRIDED_BF16_ABI) if dynamic
                else base.descriptor.abi_id,
         buffers=tuple(
-            replace(binding, layout="strided")
+            replace(binding, layout="strided") if binding.rank == 2 else binding
             for binding in base.descriptor.buffers
         ) if dynamic else base.descriptor.buffers,
         scalars=(

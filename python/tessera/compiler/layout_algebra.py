@@ -11,7 +11,7 @@ import ctypes
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 
 class LayoutAlgebraUnavailableError(RuntimeError):
@@ -173,9 +173,13 @@ def _configure(lib: ctypes.CDLL) -> ctypes.CDLL:
         ctypes.POINTER(_Residency),
     ]
     nodep = ctypes.POINTER(_Node)
-    nested_args = [nodep, ctypes.c_size_t, nodep, ctypes.c_size_t]
-    nested_out = [nodep, ctypes.c_size_t, nodep, ctypes.c_size_t,
-                  ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t)]
+    nested_args: list[Any] = [
+        nodep, ctypes.c_size_t, nodep, ctypes.c_size_t
+    ]
+    nested_out: list[Any] = [
+        nodep, ctypes.c_size_t, nodep, ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t),
+    ]
     lib.tessera_layout_coalesce_v1.argtypes = nested_args + nested_out
     lib.tessera_layout_right_inverse_v1.argtypes = nested_args + nested_out
     lib.tessera_layout_left_inverse_v1.argtypes = nested_args + nested_out

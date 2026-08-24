@@ -201,11 +201,14 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     a_name, b_name = (value.removeprefix("%") for value in op.operands[:2])
     if a_name not in args or b_name not in args:
         raise ValueError("scheduled matmul operands must be function arguments")
+
     def extent(value: object) -> int | None:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
+        if isinstance(value, (int, str)):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
 
     a_shape = tuple(extent(value) for value in args[a_name].ir_type.shape)
     b_shape = tuple(extent(value) for value in args[b_name].ir_type.shape)
@@ -214,10 +217,14 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("scheduled matmul requires rank-2 tensors")
     m_value, k_value = a_shape
     kb_value, n_value = b_shape
-    dynamic_m = m_value is None
-    dynamic_n = n_value is None
-    dynamic_k = k_value is None
-    dynamic = dynamic_m or dynamic_n or dynamic_k or None in b_shape or None in out_shape
+    # M, N, and K are equality-linked across the three tensor types. Preserve
+    # dynamicity if *any* occurrence of a logical dimension is dynamic; the
+    # packaging and target guards must not silently treat the same dimension
+    # as static merely because its first occurrence is static.
+    dynamic_m = m_value is None or out_shape[0] is None
+    dynamic_n = n_value is None or out_shape[1] is None
+    dynamic_k = k_value is None or kb_value is None
+    dynamic = dynamic_m or dynamic_n or dynamic_k
     raw_bounds = op.kwargs.get("shape_bounds")
     if dynamic:
         if target not in {"nvidia_sm120", "rocm_gfx1151"} or not isinstance(raw_bounds, (list, tuple)) or len(raw_bounds) != 3:
@@ -230,7 +237,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         except (TypeError, ValueError) as exc:
             raise ValueError("scheduled matmul shape_bounds must be positive integers") from exc
     else:
-        m, n, k = int(m_value), int(n_value), int(k_value)
+        assert m_value is not None and n_value is not None and k_value is not None
+        m, n, k = m_value, n_value, k_value
     compatible = lambda value, expected: value is None or value == expected
     if (
         min(m, n, k) <= 0

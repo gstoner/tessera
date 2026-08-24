@@ -1277,16 +1277,21 @@ LogicalResult MatmulKernelOp::verify() {
     if (!order || order.getValue() != "matmul_bias_activation_residual")
       return emitOpError("residual requires epilogue_order=matmul_bias_activation_residual");
   }
-  unsigned expected = blockScaled ? 8 : 6 + unsigned(epilogue.getBias()) + unsigned(residual);
-  if (getInputs().size() != expected)
+  unsigned pointerCount = blockScaled
+      ? 5
+      : 3 + unsigned(epilogue.getBias()) + unsigned(residual);
+  unsigned compactExpected = pointerCount + 3;
+  unsigned stridedExpected = pointerCount + 6;
+  bool strided = !blockScaled && getInputs().size() == stridedExpected;
+  if (getInputs().size() != compactExpected && !strided)
     return emitOpError() << (blockScaled
         ? "expects packed A, packed B, scale A, scale B, D, M, N, K operands"
-        : "expects A, B, optional bias, optional residual, D, M, N, K operands");
-  unsigned dimStart = expected - 3;
-  for (Value dim : getInputs().drop_front(dimStart))
+        : "expects A, B, optional bias, optional residual, D, M, N, K, "
+          "and optional LDA, LDB, LDD operands");
+  for (Value dim : getInputs().drop_front(pointerCount))
     if (!dim.getType().isInteger(64))
-      return emitOpError("M, N, and K must be i64");
-  for (Value pointer : getInputs().take_front(dimStart))
+      return emitOpError("M, N, K, and optional leading dimensions must be i64");
+  for (Value pointer : getInputs().take_front(pointerCount))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
     return emitOpError("matrix, scale, optional bias, and D operands must be !llvm.ptr");
   int64_t warps = 1;

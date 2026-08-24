@@ -14,6 +14,12 @@ from tessera.compiler.scheduled_matmul import ScheduledMatmulArtifact
 from tests._support.nvidia import nvidia_cuda_host_ready
 
 
+requires_tessera_opt = pytest.mark.skipif(
+    scheduled_matmul.find_tessera_opt() is None,
+    reason="requires the production tessera-opt compiler",
+)
+
+
 def _module(
     *,
     target: str,
@@ -80,21 +86,46 @@ def _module(
 
 def _dynamic_module(
     *, bounds: tuple[int, int, int] = (32, 24, 32), dtype: str = "fp16",
-    target: str = "nvidia_sm120",
+    target: str = "nvidia_sm120", activation: str = "none",
+    bias: bool = False, residual: bool = False,
 ) -> GraphIRModule:
     m, n, k = bounds
-    module = _module(target=target, shape=(m, k, n), dtype=dtype)
+    module = _module(
+        target=target, shape=(m, k, n), dtype=dtype,
+        activation=activation, bias=bias, residual=residual,
+    )
     fn = module.functions[0]
     element = "f16" if dtype == "fp16" else "bf16"
     fn.args[0].ir_type = IRType(f"tensor<?x?x{element}>", ("?", "?"), dtype)
     fn.args[1].ir_type = IRType(f"tensor<?x?x{element}>", ("?", "?"), dtype)
     fn.result_types[0] = IRType("tensor<?x?xf32>", ("?", "?"), "fp32")
     op = fn.body[0]
-    op.operand_types = [str(fn.args[0].ir_type), str(fn.args[1].ir_type)]
+    op.operand_types[:2] = [str(fn.args[0].ir_type), str(fn.args[1].ir_type)]
     op.result_type = str(fn.result_types[0])
     op.inferred_type = fn.result_types[0]
     op.kwargs["shape_bounds"] = [m, n, k]
     return module
+
+
+@pytest.mark.parametrize(
+    ("dynamic_operand", "expected"),
+    (("b_k", (False, False, True)), ("out_m", (True, False, False))),
+)
+def test_linked_secondary_dimension_dynamicity_is_retained(
+    dynamic_operand: str, expected: tuple[bool, bool, bool]
+) -> None:
+    module = _module(target="nvidia_sm120", shape=(32, 32, 24))
+    fn = module.functions[0]
+    op = fn.body[0]
+    if dynamic_operand == "b_k":
+        fn.args[1].ir_type = IRType("tensor<?x24xf16>", ("?", "24"), "fp16")
+        op.operand_types[1] = str(fn.args[1].ir_type)
+    else:
+        fn.result_types[0] = IRType("tensor<?x24xf32>", ("?", "24"), "fp32")
+        op.result_type = str(fn.result_types[0])
+        op.inferred_type = fn.result_types[0]
+    op.kwargs["shape_bounds"] = [32, 24, 32]
+    assert scheduled_matmul._graph_contract(module, "nvidia_sm120")[-3:] == expected
 
 
 _ARTIFACT_CONTRACT = {
@@ -175,6 +206,7 @@ def test_nvidia_sm120_bf16_uses_shared_scheduled_matmul_contract() -> None:
     )
 
 
+@requires_tessera_opt
 def test_nvidia_bounded_dynamic_graph_emits_strided_typed_carrier() -> None:
     artifact = scheduled_matmul.lower_scheduled_matmul(
         _dynamic_module(), target="nvidia_sm120"
@@ -189,6 +221,7 @@ def test_nvidia_bounded_dynamic_graph_emits_strided_typed_carrier() -> None:
     assert "i64, i64, i64, i64, i64, i64)" in artifact.tile_ir
 
 
+@requires_tessera_opt
 def test_rocm_bounded_dynamic_graph_emits_runtime_extent_wmma_carrier() -> None:
     artifact = scheduled_matmul.lower_scheduled_matmul(
         _dynamic_module(target="rocm", bounds=(64, 64, 48)),
@@ -204,6 +237,7 @@ def test_rocm_bounded_dynamic_graph_emits_runtime_extent_wmma_carrier() -> None:
     assert artifact.tile_ir.count("arith.index_cast") >= 3
 
 
+@requires_tessera_opt
 def test_nvidia_large_bounded_dynamic_graph_selects_alignment_safe_macro_cta() -> None:
     artifact = scheduled_matmul.lower_scheduled_matmul(
         _dynamic_module(bounds=(512, 512, 256)), target="nvidia_sm120"
@@ -243,7 +277,7 @@ def test_sm120_bounded_dynamic_strided_matmul_exact_device() -> None:
     b_storage = np.zeros((ldb, n), dtype=np.float16, order="F")
     b = b_storage[:k, :]
     b[...] = rng.standard_normal((k, n)).astype(np.float16)
-    d_storage = np.zeros((m, ldd), dtype=np.float32)
+    d_storage = np.full((m, ldd), -123.0, dtype=np.float32)
     output = d_storage[:, :n]
     runtime_artifact = rt.RuntimeArtifact(
         metadata={"target": "nvidia_sm120"},
@@ -261,6 +295,55 @@ def test_sm120_bounded_dynamic_strided_matmul_exact_device() -> None:
         output, a.astype(np.float32) @ b.astype(np.float32),
         rtol=2e-4, atol=2e-4,
     )
+    np.testing.assert_array_equal(d_storage[:, n:], -123.0)
+
+
+@pytest.mark.skipif(
+    not nvidia_cuda_host_ready()
+    or not nvidia_native.tools_available()
+    or scheduled_matmul.find_tessera_opt() is None,
+    reason="requires the SM120 CUDA compiler, PTX bridge, and RTX host",
+)
+def test_sm120_dynamic_fused_strided_matmul_exact_device() -> None:
+    bundle = compile_graph_module(
+        _dynamic_module(activation="relu", bias=True, residual=True),
+        source_origin="sm120-scheduled-dynamic-fused-strided-exact-device",
+        target="nvidia_sm120",
+        options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None and bundle.launch_descriptor is not None
+    m, n, k = 17, 13, 19
+    lda, ldb, ldd = 29, 31, 23
+    rng = np.random.default_rng(117_113_119)
+    a_storage = np.zeros((m, lda), dtype=np.float16)
+    a = a_storage[:, :k]
+    a[...] = rng.standard_normal((m, k)).astype(np.float16)
+    b_storage = np.zeros((ldb, n), dtype=np.float16, order="F")
+    b = b_storage[:k, :]
+    b[...] = rng.standard_normal((k, n)).astype(np.float16)
+    bias = rng.standard_normal(n).astype(np.float32)
+    residual_storage = np.zeros((m, ldd), dtype=np.float32)
+    residual = residual_storage[:, :n]
+    residual[...] = rng.standard_normal((m, n)).astype(np.float32)
+    d_storage = np.full((m, ldd), -321.0, dtype=np.float32)
+    output = d_storage[:, :n]
+    runtime_artifact = rt.RuntimeArtifact(
+        metadata={"target": "nvidia_sm120"},
+        native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+        tile_ir=bundle.tile.text if bundle.tile else None,
+        target_ir=bundle.target_ir.text if bundle.target_ir else None,
+    )
+    result = rt.launch(runtime_artifact, {
+        "a": a, "b": b, "bias": bias, "residual": residual, "o": output,
+        "M": m, "N": n, "K": k, "LDA": lda, "LDB": ldb, "LDD": ldd,
+    })
+    assert result["ok"] is True, result.get("reason")
+    expected = np.maximum(a.astype(np.float32) @ b.astype(np.float32) + bias, 0)
+    expected += residual
+    np.testing.assert_allclose(output, expected, rtol=2e-4, atol=2e-4)
+    np.testing.assert_array_equal(d_storage[:, n:], -321.0)
 
 
 @pytest.mark.skipif(
@@ -313,6 +396,7 @@ def test_sm120_dynamic_macro_cta_strided_matmul_exact_device() -> None:
     )
 
 
+@requires_tessera_opt
 def test_nvidia_sm120_scheduled_epilogue_and_reduced_output_are_retained() -> None:
     module = _module(
         target="nvidia_sm120", shape=(256, 256, 512), output_dtype="fp16",

@@ -3101,7 +3101,18 @@ def _submit_nvidia_sm120_native(
         m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
         dimensions = (m, n, k)
     if descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI}:
-        a, b, d = raw
+        a, b = raw[:2]
+        d = raw[-1]
+        epilogue = descriptor.provenance.get("epilogue", {})
+        has_bias = isinstance(epilogue, Mapping) and bool(epilogue.get("bias"))
+        has_residual = (
+            isinstance(epilogue, Mapping) and bool(epilogue.get("residual"))
+        )
+        expected_buffers = 3 + int(has_bias) + int(has_residual)
+        if len(raw) != expected_buffers:
+            raise RuntimeError(
+                "SM120 strided buffer count disagrees with its epilogue contract"
+            )
         if tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or tuple(d.shape) != (m, n):
             raise RuntimeError("SM120 strided A/B/D shapes disagree with M/N/K scalars")
         a_strides = tuple(int(value // a.itemsize) for value in a.strides)
@@ -3111,6 +3122,24 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError(
                 "SM120 strided A/B/D storage disagrees with LDA/LDB/LDD scalars"
             )
+        optional_index = 2
+        if has_bias:
+            bias = raw[optional_index]
+            optional_index += 1
+            if tuple(bias.shape) != (n,):
+                raise RuntimeError("SM120 strided bias shape disagrees with N")
+        if has_residual:
+            residual = raw[optional_index]
+            residual_strides = tuple(
+                int(value // residual.itemsize) for value in residual.strides
+            )
+            if (
+                tuple(residual.shape) != (m, n)
+                or residual_strides != (ldd, 1)
+            ):
+                raise RuntimeError(
+                    "SM120 strided residual storage disagrees with M/N/LDD"
+                )
     elif descriptor.abi_id in {
         SM120_F16_ABI,
         SM120_BF16_ABI,

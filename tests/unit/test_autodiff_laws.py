@@ -1039,6 +1039,50 @@ def test_forward_key_swallow_findings_are_pinned():
         f"set: {sorted(fixed)}")
 
 
+@pytest.mark.parametrize("activation", ("relu", "gelu", "silu"))
+def test_gemm_activation_rules_match_directional_finite_difference(activation):
+    from tessera.autodiff.jvp import get_jvp
+    from tessera.autodiff.vjp import get_vjp
+
+    rng = np.random.default_rng(741)
+    a = rng.normal(size=(3, 4))
+    b = rng.normal(size=(4, 2))
+    da = rng.normal(size=a.shape)
+    db = rng.normal(size=b.shape)
+    bias = rng.normal(size=(2,))
+    residual = rng.normal(size=(3, 2))
+    jvp = get_jvp("gemm")
+    vjp = get_vjp("gemm")
+    assert jvp is not None and vjp is not None
+    primal, tangent = jvp(
+        (a, b), (da, db), bias=bias, residual=residual,
+        activation=activation,
+    )
+    eps = 1.0e-6
+    import tessera
+    plus = tessera.ops.gemm(
+        a + eps * da, b + eps * db, bias=bias, residual=residual,
+        activation=activation,
+    )
+    minus = tessera.ops.gemm(
+        a - eps * da, b - eps * db, bias=bias, residual=residual,
+        activation=activation,
+    )
+    np.testing.assert_allclose(primal, tessera.ops.gemm(
+        a, b, bias=bias, residual=residual, activation=activation
+    ))
+    np.testing.assert_allclose(tangent, (plus - minus) / (2 * eps),
+                               rtol=2e-5, atol=2e-6)
+    dout = rng.normal(size=primal.shape)
+    d_a, d_b = vjp(
+        dout, a, b, bias=bias, residual=residual, activation=activation
+    )
+    np.testing.assert_allclose(
+        np.vdot(tangent, dout), np.vdot(da, d_a) + np.vdot(db, d_b),
+        rtol=2e-10, atol=2e-10,
+    )
+
+
 # ── dashboard determinism ────────────────────────────────────────────────────
 
 

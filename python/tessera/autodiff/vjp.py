@@ -192,22 +192,53 @@ def _attention_vjp(dout, Q, K, V, *, scale=None, mask=None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _matmul_activation_derivative(value, activation):
+    value = np.asarray(value)
+    if activation == "none":
+        return np.ones_like(value)
+    if activation == "relu":
+        return (value > 0).astype(value.dtype)
+    if activation == "silu":
+        sigmoid = 1.0 / (1.0 + np.exp(-value))
+        return sigmoid * (1.0 + value * (1.0 - sigmoid))
+    if activation == "gelu":
+        coefficient = float(np.sqrt(2.0 / np.pi))
+        cubic = 0.044715
+        inner = coefficient * (value + cubic * value**3)
+        tanh_inner = np.tanh(inner)
+        return 0.5 * (1.0 + tanh_inner) + (
+            0.5 * value * (1.0 - tanh_inner**2) * coefficient
+            * (1.0 + 3.0 * cubic * value**2)
+        )
+    raise ValueError(f"unsupported gemm activation {activation!r}")
+
+
 @_vjp("gemm")
-def vjp_gemm(dout, A, B, **_):
+def vjp_gemm(dout, A, B, *, bias=None, residual=None,
+             activation="none", **_):
     """C = A @ B  →  dA = dout @ B.T,  dB = A.T @ dout.
 
     Supports batched matmul where leading dims broadcast.
     """
-    dA = np.matmul(dout, np.swapaxes(B, -1, -2))
-    dB = np.matmul(np.swapaxes(A, -1, -2), dout)
+    preactivation = np.matmul(A, B)
+    if bias is not None:
+        preactivation = preactivation + np.asarray(bias)
+    local_dout = np.asarray(dout) * _matmul_activation_derivative(
+        preactivation, activation
+    )
+    dA = np.matmul(local_dout, np.swapaxes(B, -1, -2))
+    dB = np.matmul(np.swapaxes(A, -1, -2), local_dout)
     dA = _sum_to_shape(dA, A.shape)
     dB = _sum_to_shape(dB, B.shape)
     return (dA, dB)
 
 
 @_vjp("matmul")
-def vjp_matmul(dout, A, B, **_):
-    return vjp_gemm(dout, A, B)
+def vjp_matmul(dout, A, B, *, bias=None, residual=None,
+               activation="none", **_):
+    return vjp_gemm(
+        dout, A, B, bias=bias, residual=residual, activation=activation
+    )
 
 
 @_vjp("dequant_matmul")

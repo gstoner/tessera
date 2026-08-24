@@ -13,7 +13,13 @@ from tessera.compiler.schedule_object import (
     ScheduleRole,
     prove_schedule_materialization,
 )
-from tessera.compiler.layout_algebra import NestedLayout
+from tessera.compiler.layout_algebra import NestedLayout, native_available
+
+
+requires_layout_algebra = pytest.mark.skipif(
+    not native_available(),
+    reason="requires the native C++ layout-algebra authority",
+)
 
 
 def _vector(char: str = "a") -> dict[str, object]:
@@ -101,6 +107,7 @@ def test_schedule_object_rejects_cycles_unknown_edges_and_invalid_tiers() -> Non
         ScheduleResidency("x", "register")
 
 
+@requires_layout_algebra
 def test_schedule_object_binds_native_locality_residency_alias_and_lifetime() -> None:
     proof = prove_schedule_materialization(
         value="gradient",
@@ -126,6 +133,7 @@ def test_schedule_object_binds_native_locality_residency_alias_and_lifetime() ->
     assert payload["lifetime"] == "tile"
 
 
+@requires_layout_algebra
 def test_schedule_materialization_fails_closed_for_nonfactor_and_capacity() -> None:
     with pytest.raises(ValueError, match="does not factor"):
         prove_schedule_materialization(

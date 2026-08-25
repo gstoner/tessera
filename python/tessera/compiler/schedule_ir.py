@@ -23,8 +23,15 @@ from .tile_rasterization import (
     RasterOrder,
 )
 
-
-SCHEDULE_MEMORY_SPACES = {"register", "shared", "lds", "global", "managed", "host", "tmem"}
+SCHEDULE_MEMORY_SPACES = {
+    "register",
+    "shared",
+    "lds",
+    "global",
+    "managed",
+    "host",
+    "tmem",
+}
 SCHEDULE_OVERLAPS = {"none", "compute", "collective"}
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
 CONV2D_OPS = {"tessera.conv2d_nhwc", "tessera.conv2d"}
@@ -34,6 +41,7 @@ COLLECTIVE_OPS = {
     "tessera.reduce_scatter",
     "tessera.all_gather",
     "tessera.all_to_all",
+    "tessera.collective_permute",
 }
 MEDIA_OPS = {
     "tessera.image_preprocess",
@@ -100,12 +108,12 @@ class ScheduleOp:
         operand_text = ", ".join(self.operands)
         result_text = f"%{self.result} = " if self.result else ""
         if self.body:
-            lines = [f"{indent}{result_text}\"{self.op_name}\"({operand_text}) ({{"]
+            lines = [f'{indent}{result_text}"{self.op_name}"({operand_text}) ({{']
             for child in self.body:
                 lines.append(child.to_mlir(indent + "  "))
             lines.append(f"{indent}}}) {attr_text} : () -> ()")
             return "\n".join(lines)
-        return f"{indent}{result_text}\"{self.op_name}\"({operand_text}) {attr_text} : () -> ()"
+        return f'{indent}{result_text}"{self.op_name}"({operand_text}) {attr_text} : () -> ()'
 
 
 @dataclass
@@ -115,17 +123,21 @@ class ScheduleFunction:
     target: str = "cpu"
 
     def to_mlir(self, indent: str = "  ") -> str:
-        lines = [f"{indent}\"tessera.schedule.func\"() ({{"]
+        lines = [f'{indent}"tessera.schedule.func"() ({{']
         for op in self.body:
             lines.append(op.to_mlir(indent + "  "))
-        lines.append(f"{indent}}}) {{sym_name = {json.dumps(self.name)}, target = {json.dumps(self.target)}}} : () -> ()")
+        lines.append(
+            f"{indent}}}) {{sym_name = {json.dumps(self.name)}, target = {json.dumps(self.target)}}} : () -> ()"
+        )
         return "\n".join(lines)
 
 
 @dataclass
 class ScheduleIRModule:
     functions: list[ScheduleFunction] = field(default_factory=list)
-    attrs: dict[str, Any] = field(default_factory=lambda: {"tessera.ir.level": "schedule"})
+    attrs: dict[str, Any] = field(
+        default_factory=lambda: {"tessera.ir.level": "schedule"}
+    )
 
     def verify(self) -> ScheduleIRVerificationResult:
         return ScheduleIRVerifier().verify_module(self)
@@ -179,11 +191,13 @@ class ScheduleIRVerifier:
                 self._verify_state_read(op, diagnostics)
             elif op.op_name == "schedule.yield":
                 if not region_stack:
-                    diagnostics.append(GraphIRDiagnostic(
-                        "error",
-                        "schedule.yield must terminate a schedule region",
-                        code="SCHEDULE_IR_YIELD_OUTSIDE_REGION",
-                    ))
+                    diagnostics.append(
+                        GraphIRDiagnostic(
+                            "error",
+                            "schedule.yield must terminate a schedule region",
+                            code="SCHEDULE_IR_YIELD_OUTSIDE_REGION",
+                        )
+                    )
 
     def _verify_mesh_define(
         self,
@@ -195,19 +209,53 @@ class ScheduleIRVerifier:
         dims = op.attrs.get("dims")
         axes = op.attrs.get("axis_names")
         if not name:
-            diagnostics.append(GraphIRDiagnostic("error", "mesh.define requires sym_name", code="SCHEDULE_IR_MESH_NAME"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "mesh.define requires sym_name",
+                    code="SCHEDULE_IR_MESH_NAME",
+                )
+            )
         elif name in meshes:
-            diagnostics.append(GraphIRDiagnostic("error", f"duplicate mesh {name!r}", code="SCHEDULE_IR_DUP_MESH"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error", f"duplicate mesh {name!r}", code="SCHEDULE_IR_DUP_MESH"
+                )
+            )
         else:
             meshes[str(name)] = op
         if not isinstance(dims, list) or not dims:
-            diagnostics.append(GraphIRDiagnostic("error", "mesh.define requires non-empty dims", code="SCHEDULE_IR_MESH_DIMS"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "mesh.define requires non-empty dims",
+                    code="SCHEDULE_IR_MESH_DIMS",
+                )
+            )
         elif any(int(dim) <= 0 for dim in dims):
-            diagnostics.append(GraphIRDiagnostic("error", "mesh dimensions must be positive", code="SCHEDULE_IR_MESH_DIMS"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "mesh dimensions must be positive",
+                    code="SCHEDULE_IR_MESH_DIMS",
+                )
+            )
         if not isinstance(axes, list) or not axes:
-            diagnostics.append(GraphIRDiagnostic("error", "mesh.define requires axis_names", code="SCHEDULE_IR_MESH_AXES"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "mesh.define requires axis_names",
+                    code="SCHEDULE_IR_MESH_AXES",
+                )
+            )
         elif isinstance(dims, list) and len(dims) != len(axes):
-            diagnostics.append(GraphIRDiagnostic("error", "mesh dims and axis_names length mismatch", code="SCHEDULE_IR_MESH_RANK"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "mesh dims and axis_names length mismatch",
+                    code="SCHEDULE_IR_MESH_RANK",
+                )
+            )
 
     def _verify_mesh_region(
         self,
@@ -219,14 +267,37 @@ class ScheduleIRVerifier:
         mesh = str(op.attrs.get("mesh", ""))
         axis = op.attrs.get("axis")
         if mesh not in meshes:
-            diagnostics.append(GraphIRDiagnostic("error", f"mesh.region references undefined mesh {mesh!r}", code="SCHEDULE_IR_UNDEFINED_MESH"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    f"mesh.region references undefined mesh {mesh!r}",
+                    code="SCHEDULE_IR_UNDEFINED_MESH",
+                )
+            )
         else:
             axes = meshes[mesh].attrs.get("axis_names", [])
             if axis not in axes:
-                diagnostics.append(GraphIRDiagnostic("error", f"axis {axis!r} is not defined on mesh {mesh!r}", code="SCHEDULE_IR_UNKNOWN_AXIS"))
+                diagnostics.append(
+                    GraphIRDiagnostic(
+                        "error",
+                        f"axis {axis!r} is not defined on mesh {mesh!r}",
+                        code="SCHEDULE_IR_UNKNOWN_AXIS",
+                    )
+                )
         if not op.body or op.body[-1].op_name != "schedule.yield":
-            diagnostics.append(GraphIRDiagnostic("error", "mesh.region must end with schedule.yield", code="SCHEDULE_IR_REGION_TERMINATOR"))
-        self._verify_ops(op.body, diagnostics, meshes=meshes, region_stack=region_stack + ["mesh.region"])
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "mesh.region must end with schedule.yield",
+                    code="SCHEDULE_IR_REGION_TERMINATOR",
+                )
+            )
+        self._verify_ops(
+            op.body,
+            diagnostics,
+            meshes=meshes,
+            region_stack=region_stack + ["mesh.region"],
+        )
 
     def _verify_pipeline_region(
         self,
@@ -236,14 +307,43 @@ class ScheduleIRVerifier:
         region_stack: list[str],
     ) -> None:
         if not op.attrs.get("schedule"):
-            diagnostics.append(GraphIRDiagnostic("error", "pipeline.region requires schedule", code="SCHEDULE_IR_PIPELINE_SCHEDULE"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "pipeline.region requires schedule",
+                    code="SCHEDULE_IR_PIPELINE_SCHEDULE",
+                )
+            )
         if int(op.attrs.get("micro_batches", 0)) < 1:
-            diagnostics.append(GraphIRDiagnostic("error", "pipeline.region micro_batches must be >= 1", code="SCHEDULE_IR_PIPELINE_MICRO_BATCHES"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "pipeline.region micro_batches must be >= 1",
+                    code="SCHEDULE_IR_PIPELINE_MICRO_BATCHES",
+                )
+            )
         if not any(child.op_name == "schedule.stage" for child in op.body):
-            diagnostics.append(GraphIRDiagnostic("error", "pipeline.region requires at least one stage", code="SCHEDULE_IR_PIPELINE_STAGE"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "pipeline.region requires at least one stage",
+                    code="SCHEDULE_IR_PIPELINE_STAGE",
+                )
+            )
         if not op.body or op.body[-1].op_name != "schedule.yield":
-            diagnostics.append(GraphIRDiagnostic("error", "pipeline.region must end with schedule.yield", code="SCHEDULE_IR_REGION_TERMINATOR"))
-        self._verify_ops(op.body, diagnostics, meshes=meshes, region_stack=region_stack + ["pipeline.region"])
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "pipeline.region must end with schedule.yield",
+                    code="SCHEDULE_IR_REGION_TERMINATOR",
+                )
+            )
+        self._verify_ops(
+            op.body,
+            diagnostics,
+            meshes=meshes,
+            region_stack=region_stack + ["pipeline.region"],
+        )
 
     def _verify_stage(
         self,
@@ -253,31 +353,78 @@ class ScheduleIRVerifier:
         region_stack: list[str],
     ) -> None:
         if "pipeline.region" not in region_stack:
-            diagnostics.append(GraphIRDiagnostic("error", "stage must be inside pipeline.region", code="SCHEDULE_IR_STAGE_PARENT"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "stage must be inside pipeline.region",
+                    code="SCHEDULE_IR_STAGE_PARENT",
+                )
+            )
         devices = op.attrs.get("devices")
         if not isinstance(devices, list) or not devices:
-            diagnostics.append(GraphIRDiagnostic("error", "stage requires non-empty devices", code="SCHEDULE_IR_STAGE_DEVICES"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "stage requires non-empty devices",
+                    code="SCHEDULE_IR_STAGE_DEVICES",
+                )
+            )
         if not op.body or op.body[-1].op_name != "schedule.yield":
-            diagnostics.append(GraphIRDiagnostic("error", "stage must end with schedule.yield", code="SCHEDULE_IR_REGION_TERMINATOR"))
-        self._verify_ops(op.body, diagnostics, meshes=meshes, region_stack=region_stack + ["stage"])
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "stage must end with schedule.yield",
+                    code="SCHEDULE_IR_REGION_TERMINATOR",
+                )
+            )
+        self._verify_ops(
+            op.body, diagnostics, meshes=meshes, region_stack=region_stack + ["stage"]
+        )
 
-    def _verify_prefetch(self, op: ScheduleOp, diagnostics: list[GraphIRDiagnostic]) -> None:
+    def _verify_prefetch(
+        self, op: ScheduleOp, diagnostics: list[GraphIRDiagnostic]
+    ) -> None:
         if op.attrs.get("into") not in SCHEDULE_MEMORY_SPACES:
-            diagnostics.append(GraphIRDiagnostic("error", "prefetch has invalid memory space", code="SCHEDULE_IR_MEMORY_SPACE"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "prefetch has invalid memory space",
+                    code="SCHEDULE_IR_MEMORY_SPACE",
+                )
+            )
         if op.attrs.get("overlap") not in SCHEDULE_OVERLAPS:
-            diagnostics.append(GraphIRDiagnostic("error", "prefetch has invalid overlap policy", code="SCHEDULE_IR_OVERLAP"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "prefetch has invalid overlap policy",
+                    code="SCHEDULE_IR_OVERLAP",
+                )
+            )
 
-    def _verify_state_read(self, op: ScheduleOp, diagnostics: list[GraphIRDiagnostic]) -> None:
-        missing = [key for key in ("source", "result", "ordinal", "effect", "access")
-                   if key not in op.attrs]
+    def _verify_state_read(
+        self, op: ScheduleOp, diagnostics: list[GraphIRDiagnostic]
+    ) -> None:
+        missing = [
+            key
+            for key in ("source", "result", "ordinal", "effect", "access")
+            if key not in op.attrs
+        ]
         if missing:
-            diagnostics.append(GraphIRDiagnostic(
-                "error", f"state.read missing attrs: {', '.join(missing)}",
-                code="SCHEDULE_IR_STATE_READ_ATTR"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    f"state.read missing attrs: {', '.join(missing)}",
+                    code="SCHEDULE_IR_STATE_READ_ATTR",
+                )
+            )
         if op.attrs.get("effect") != "read":
-            diagnostics.append(GraphIRDiagnostic(
-                "error", "state.read must declare effect=read",
-                code="SCHEDULE_IR_STATE_READ_EFFECT"))
+            diagnostics.append(
+                GraphIRDiagnostic(
+                    "error",
+                    "state.read must declare effect=read",
+                    code="SCHEDULE_IR_STATE_READ_EFFECT",
+                )
+            )
 
 
 def lower_graph_to_schedule_ir(
@@ -290,7 +437,9 @@ def lower_graph_to_schedule_ir(
     graph_result = graph_module.verify(target=target_kind)
     if not graph_result.ok:
         raise GraphIRVerificationError(graph_result.format())
-    schedule_module = ScheduleIRModule(attrs={"tessera.ir.level": "schedule", "target": target_kind})
+    schedule_module = ScheduleIRModule(
+        attrs={"tessera.ir.level": "schedule", "target": target_kind}
+    )
     for graph_fn in graph_module.functions:
         body: list[ScheduleOp] = []
         mesh_ops = [
@@ -319,24 +468,31 @@ def lower_graph_to_schedule_ir(
                     )
                 ]
         body.extend(scheduled_ops)
-        body.append(ScheduleOp("schedule.artifact", {
-            "hash": f"{graph_fn.name}:{len(graph_fn.body)}:{target_kind}",
-            "arch": target_kind,
-            "shape_key": _shape_key(graph_fn.body),
-            "tile": {"m": tile[0], "n": tile[1], "k": tile[2]},
-            "movement": {
-                "prefetch": "auto",
-                "overlap": "compute",
-                "stages": _schedule_int(schedule_config, "num_stages", 2),
-            },
-            "numeric_policy": "f32@accum(f32)",
-            "cost_model": (
-                "measured"
-                if (schedule_config or {}).get("evidence") == "measured"
-                else "roofline"
-            ),
-        }))
-        schedule_module.functions.append(ScheduleFunction(graph_fn.name, body=body, target=target_kind))
+        body.append(
+            ScheduleOp(
+                "schedule.artifact",
+                {
+                    "hash": f"{graph_fn.name}:{len(graph_fn.body)}:{target_kind}",
+                    "arch": target_kind,
+                    "shape_key": _shape_key(graph_fn.body),
+                    "tile": {"m": tile[0], "n": tile[1], "k": tile[2]},
+                    "movement": {
+                        "prefetch": "auto",
+                        "overlap": "compute",
+                        "stages": _schedule_int(schedule_config, "num_stages", 2),
+                    },
+                    "numeric_policy": "f32@accum(f32)",
+                    "cost_model": (
+                        "measured"
+                        if (schedule_config or {}).get("evidence") == "measured"
+                        else "roofline"
+                    ),
+                },
+            )
+        )
+        schedule_module.functions.append(
+            ScheduleFunction(graph_fn.name, body=body, target=target_kind)
+        )
     return schedule_module
 
 
@@ -351,91 +507,164 @@ def _lower_graph_ops(
     for idx, op in enumerate(ops):
         op_name = canonical_graph_op_name(op.op_name)
         if op_name == "tessera.graph.debug_value":
-            scheduled.append(ScheduleOp("schedule.debug_artifact", {
-                **_base_attrs(op, idx),
-                "name": op.kwargs.get("name", op.result or f"debug_{idx}"),
-                "capture": "value_summary",
-            }))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.debug_artifact",
+                    {
+                        **_base_attrs(op, idx),
+                        "name": op.kwargs.get("name", op.result or f"debug_{idx}"),
+                        "capture": "value_summary",
+                    },
+                )
+            )
             continue
         if op_name.startswith("tessera.schedule."):
             scheduled.extend(_lower_schedule_directive(op, idx))
             continue
         if op_name.startswith("tessera.dist.") or op_name in COLLECTIVE_OPS:
             axis = op.kwargs.get("axis", "dp")
-            tensor_axis = axis if isinstance(axis, int) and not isinstance(axis, bool) else 0
-            mesh_axis = "default" if isinstance(axis, int) and not isinstance(axis, bool) else str(axis)
+            tensor_axis = (
+                axis if isinstance(axis, int) and not isinstance(axis, bool) else 0
+            )
+            mesh_axis = (
+                "default"
+                if isinstance(axis, int) and not isinstance(axis, bool)
+                else str(axis)
+            )
             kind = op_name.removeprefix("tessera.dist.").removeprefix("tessera.")
-            scheduled.append(ScheduleOp(
-                "schedule.collective",
-                {
-                    **_base_attrs(op, idx),
-                    "kind": kind,
-                    "mesh_axis": mesh_axis,
-                    "tensor_axis": tensor_axis,
-                    "reduction": op.kwargs.get("op", "sum"),
-                    "effect": "collective",
-                    "reshard_plan_digest": op.kwargs.get("reshard_plan_digest", ""),
-                    "subgroup": list(op.kwargs.get("subgroup", ())),
-                    "region_path": list(op.kwargs.get("region_path", ())),
-                    "scatter_axis": op.kwargs.get("scatter_axis", tensor_axis),
-                    "gather_axis": op.kwargs.get("gather_axis", tensor_axis),
-                    "matching_rounds": list(op.kwargs.get("matching_rounds", ())),
-                },
-                operands=list(op.operands),
-                result=op.result,
-                source_op=op,
-            ))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.collective",
+                    {
+                        **_base_attrs(op, idx),
+                        "kind": kind,
+                        "mesh_axis": mesh_axis,
+                        "tensor_axis": tensor_axis,
+                        "reduction": op.kwargs.get("op", "sum"),
+                        "effect": "collective",
+                        "reshard_plan_digest": op.kwargs.get("reshard_plan_digest", ""),
+                        "subgroup": list(op.kwargs.get("subgroup", ())),
+                        "region_path": list(op.kwargs.get("region_path", ())),
+                        "scatter_axis": op.kwargs.get("scatter_axis", tensor_axis),
+                        "gather_axis": op.kwargs.get("gather_axis", tensor_axis),
+                        "matching_rounds": list(op.kwargs.get("matching_rounds", ())),
+                        "source_peers": list(op.kwargs.get("source_peers", ())),
+                        "target_peers": list(op.kwargs.get("target_peers", ())),
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                    source_op=op,
+                )
+            )
             continue
         if op_name in MATMUL_OPS:
-            scheduled.extend([
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_m", "choices": [32, 64, 128, 256], "frozen": False}),
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_n", "choices": [32, 64, 128, 256], "frozen": False}),
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_k", "choices": [32, 64, 128, 256], "frozen": False}),
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "num_warps", "choices": [1, 2, 4, 8], "frozen": False}),
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "num_stages", "choices": [1, 2, 3, 4], "frozen": False}),
-                # Block rasterization: a permutation of block ids onto the tile
-                # grid. Semantics-preserving by construction (tile_rasterization
-                # .is_bijection proves it hardware-free), and one of the largest
-                # levers on cache locality there is — see
-                # docs/audit/compiler/TILESIGHT_ASSESSMENT.md §3.2.
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "raster_order", "choices": list(RASTER_ORDER_CHOICES), "frozen": False}),
-                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "raster_group", "choices": list(RASTER_GROUP_CHOICES), "frozen": False}),
-            ])
-            scheduled.append(ScheduleOp(
-                "schedule.tile",
-                {
-                    **_base_attrs(op, idx),
-                    "tile_m": tile_m,
-                    "tile_n": tile_n,
-                    "tile_k": tile_k,
-                    "num_warps": _schedule_int(
-                        schedule_config, "num_warps", 4
+            scheduled.extend(
+                [
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "tile_m",
+                            "choices": [32, 64, 128, 256],
+                            "frozen": False,
+                        },
                     ),
-                    "num_stages": _schedule_int(
-                        schedule_config, "num_stages", 2
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "tile_n",
+                            "choices": [32, 64, 128, 256],
+                            "frozen": False,
+                        },
                     ),
-                    "raster_order": _schedule_raster_order(schedule_config),
-                    "raster_group": _schedule_raster_group(schedule_config),
-                    "cost_model": (
-                        "measured"
-                        if (schedule_config or {}).get("evidence") == "measured"
-                        else "roofline"
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "tile_k",
+                            "choices": [32, 64, 128, 256],
+                            "frozen": False,
+                        },
                     ),
-                    "flops": _matmul_flops(op),
-                    "bytes_moved": _matmul_bytes(op),
-                },
-                operands=list(op.operands),
-                result=op.result,
-                source_op=op,
-            ))
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "num_warps",
+                            "choices": [1, 2, 4, 8],
+                            "frozen": False,
+                        },
+                    ),
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "num_stages",
+                            "choices": [1, 2, 3, 4],
+                            "frozen": False,
+                        },
+                    ),
+                    # Block rasterization: a permutation of block ids onto the tile
+                    # grid. Semantics-preserving by construction (tile_rasterization
+                    # .is_bijection proves it hardware-free), and one of the largest
+                    # levers on cache locality there is — see
+                    # docs/audit/compiler/TILESIGHT_ASSESSMENT.md §3.2.
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "raster_order",
+                            "choices": list(RASTER_ORDER_CHOICES),
+                            "frozen": False,
+                        },
+                    ),
+                    ScheduleOp(
+                        "schedule.knob",
+                        {
+                            **_base_attrs(op, idx),
+                            "name": "raster_group",
+                            "choices": list(RASTER_GROUP_CHOICES),
+                            "frozen": False,
+                        },
+                    ),
+                ]
+            )
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.tile",
+                    {
+                        **_base_attrs(op, idx),
+                        "tile_m": tile_m,
+                        "tile_n": tile_n,
+                        "tile_k": tile_k,
+                        "num_warps": _schedule_int(schedule_config, "num_warps", 4),
+                        "num_stages": _schedule_int(schedule_config, "num_stages", 2),
+                        "raster_order": _schedule_raster_order(schedule_config),
+                        "raster_group": _schedule_raster_group(schedule_config),
+                        "cost_model": (
+                            "measured"
+                            if (schedule_config or {}).get("evidence") == "measured"
+                            else "roofline"
+                        ),
+                        "flops": _matmul_flops(op),
+                        "bytes_moved": _matmul_bytes(op),
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                    source_op=op,
+                )
+            )
         elif op_name in CONV2D_OPS:
-            scheduled.append(ScheduleOp(
-                "schedule.tile",
-                {**_base_attrs(op, idx), "tile_h": 16, "tile_w": 16, "tile_c": 32},
-                operands=list(op.operands),
-                result=op.result,
-                source_op=op,
-            ))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.tile",
+                    {**_base_attrs(op, idx), "tile_h": 16, "tile_w": 16, "tile_c": 32},
+                    operands=list(op.operands),
+                    result=op.result,
+                    source_op=op,
+                )
+            )
         elif op_name == "tessera.flash_attn":
             scheduled.append(_flash_attention_pipeline(op, idx))
         elif op_name == "tessera.msa_sparse_attention":
@@ -451,41 +680,81 @@ def _lower_graph_ops(
         elif op_name in JEPA_OPS:
             scheduled.append(_jepa_op(op, idx))
         elif op_name == "tessera.kv_cache.read":
-            scheduled.append(ScheduleOp(
-                "schedule.state.read",
-                {
-                    **_base_attrs(op, idx),
-                    "effect": "read",
-                    "access": "paged_slice",
-                    "bounds": "start_end",
-                },
-                operands=list(op.operands),
-                result=op.result,
-                source_op=op,
-            ))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.state.read",
+                    {
+                        **_base_attrs(op, idx),
+                        "effect": "read",
+                        "access": "paged_slice",
+                        "bounds": "start_end",
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                    source_op=op,
+                )
+            )
         elif op_name in ROPE_OPS:
-            scheduled.append(ScheduleOp(
-                "schedule.elementwise",
-                {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"},
-                operands=list(op.operands), result=op.result, source_op=op))
-        elif op_name.startswith("tessera.scf.") or op_name in {"tessera.barrier", "tessera.assert"}:
-            scheduled.append(ScheduleOp("schedule.marker", {**_base_attrs(op, idx), **op.kwargs, "marker": op_name}))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.elementwise",
+                    {
+                        **_base_attrs(op, idx),
+                        "vectorize": True,
+                        "pattern": "rotary_pairs",
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                    source_op=op,
+                )
+            )
+        elif op_name.startswith("tessera.scf.") or op_name in {
+            "tessera.barrier",
+            "tessera.assert",
+        }:
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.marker",
+                    {**_base_attrs(op, idx), **op.kwargs, "marker": op_name},
+                )
+            )
         elif op.result is not None:
-            scheduled.append(ScheduleOp(
-                "schedule.elementwise",
-                {**_base_attrs(op, idx), "vectorize": True},
-                operands=list(op.operands), result=op.result, source_op=op))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.elementwise",
+                    {
+                        **_base_attrs(op, idx),
+                        **(
+                            dict(op.kwargs)
+                            if "reshard_plan_digest" in op.kwargs
+                            else {}
+                        ),
+                        "vectorize": True,
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                    source_op=op,
+                )
+            )
         operand_names = [operand.removeprefix("%") for operand in op.operands]
         if operand_names:
-            scheduled.append(ScheduleOp("schedule.layout", {"operands": operand_names, "layout": "row_major", "ordinal": idx}))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.layout",
+                    {"operands": operand_names, "layout": "row_major", "ordinal": idx},
+                )
+            )
         if op_name.startswith("tessera.kv_cache."):
-            scheduled.append(ScheduleOp("schedule.prefetch", {**_base_attrs(op, idx), "into": "shared", "overlap": "compute"}))
+            scheduled.append(
+                ScheduleOp(
+                    "schedule.prefetch",
+                    {**_base_attrs(op, idx), "into": "shared", "overlap": "compute"},
+                )
+            )
     return scheduled
 
 
-def _schedule_int(
-    config: dict[str, object] | None, name: str, default: int
-) -> int:
+def _schedule_int(config: dict[str, object] | None, name: str, default: int) -> int:
     if config is None or name not in config:
         return default
     value = config[name]
@@ -507,7 +776,8 @@ def _schedule_raster_order(config: dict[str, object] | None) -> str:
     if not isinstance(value, str) or value not in RASTER_ORDER_CHOICES:
         raise ValueError(
             f"schedule raster_order must be one of {list(RASTER_ORDER_CHOICES)}, "
-            f"got {value!r}")
+            f"got {value!r}"
+        )
     return value
 
 
@@ -535,20 +805,36 @@ def _lower_schedule_directive(op: IROp, ordinal: int) -> list[ScheduleOp]:
         depth = int(attrs.get("depth", attrs.get("stages", 1)))
         stage_count = max(1, depth)
         stages = [
-            ScheduleOp("schedule.stage", {"devices": [stage]}, body=[ScheduleOp("schedule.yield")])
+            ScheduleOp(
+                "schedule.stage",
+                {"devices": [stage]},
+                body=[ScheduleOp("schedule.yield")],
+            )
             for stage in range(stage_count)
         ]
         return [
             ScheduleOp(
                 "schedule.pipeline.region",
-                {"schedule": attrs.get("schedule", "gpipe"), "micro_batches": int(attrs.get("micro_batches", 1))},
+                {
+                    "schedule": attrs.get("schedule", "gpipe"),
+                    "micro_batches": int(attrs.get("micro_batches", 1)),
+                },
                 body=[*stages, ScheduleOp("schedule.yield")],
             )
         ]
     if name == "schedule.tile":
         return [ScheduleOp("schedule.tile", attrs)]
     if name == "schedule.prefetch":
-        return [ScheduleOp("schedule.prefetch", {**attrs, "into": attrs.get("into", attrs.get("scope", "shared")), "overlap": attrs.get("overlap", "compute")})]
+        return [
+            ScheduleOp(
+                "schedule.prefetch",
+                {
+                    **attrs,
+                    "into": attrs.get("into", attrs.get("scope", "shared")),
+                    "overlap": attrs.get("overlap", "compute"),
+                },
+            )
+        ]
     return [ScheduleOp(name, attrs)]
 
 
@@ -561,7 +847,16 @@ def _flash_attention_pipeline(op: IROp, ordinal: int) -> ScheduleOp:
                 "schedule.stage",
                 {"devices": [0]},
                 body=[
-                    ScheduleOp("schedule.prefetch", {**_base_attrs(op, ordinal), "into": "shared", "overlap": "compute", "tile_q": 64, "tile_kv": 64}),
+                    ScheduleOp(
+                        "schedule.prefetch",
+                        {
+                            **_base_attrs(op, ordinal),
+                            "into": "shared",
+                            "overlap": "compute",
+                            "tile_q": 64,
+                            "tile_kv": 64,
+                        },
+                    ),
                     ScheduleOp("schedule.yield"),
                 ],
             ),
@@ -625,8 +920,12 @@ def _msa_kv_outer_sparse(op: IROp, ordinal: int) -> ScheduleOp:
     block_size = int(attrs.get("block_size", 64))
     num_heads = int(attrs.get("num_heads", attrs.get("num_attention_heads", 1)))
     num_kv_heads = int(attrs.get("num_kv_heads", attrs.get("num_key_value_heads", 1)))
-    gqa_group_size = int(attrs.get("gqa_group_size", max(1, num_heads // max(1, num_kv_heads))))
-    mode = str(attrs.get("mode", "decode" if int(attrs.get("tile_q", 64)) == 1 else "prefill"))
+    gqa_group_size = int(
+        attrs.get("gqa_group_size", max(1, num_heads // max(1, num_kv_heads)))
+    )
+    mode = str(
+        attrs.get("mode", "decode" if int(attrs.get("tile_q", 64)) == 1 else "prefill")
+    )
     tile_q = int(attrs.get("tile_q", 1 if mode == "decode" else 64))
     tile_kv = int(attrs.get("tile_kv", max(block_size, 128)))
     head_dim = int(attrs.get("head_dim", 128))
@@ -644,7 +943,9 @@ def _msa_kv_outer_sparse(op: IROp, ordinal: int) -> ScheduleOp:
             "head_dim": head_dim,
             "mode": mode,
             "acc_dtype": attrs.get("acc_dtype", "fp32"),
-            "dense_equivalence_oracle": bool(attrs.get("dense_equivalence_oracle", False)),
+            "dense_equivalence_oracle": bool(
+                attrs.get("dense_equivalence_oracle", False)
+            ),
             "kv_traversal": "kv_outer",
             "online_softmax": True,
         },
@@ -773,7 +1074,13 @@ def _matmul_bytes(op: IROp) -> int:
 def _format_attr_dict(attrs: dict[str, Any]) -> str:
     if not attrs:
         return "{}"
-    return "{" + ", ".join(f"{key} = {_format_attr_value(value)}" for key, value in attrs.items()) + "}"
+    return (
+        "{"
+        + ", ".join(
+            f"{key} = {_format_attr_value(value)}" for key, value in attrs.items()
+        )
+        + "}"
+    )
 
 
 def _format_attr_value(value: Any) -> str:

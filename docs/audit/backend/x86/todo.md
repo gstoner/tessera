@@ -9,6 +9,9 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `SCHEDULE-AUTHORITY-RESHARD-2026-08-24` — **SO-3 exact Zen 5 regression and shared W5.4 mock boundary closed; native multi-rank remains open.** Compound spectral producers now infer their fused-stage action DAG, bind roles/resources into one Schedule Object, and stamp its digest through Schedule→Tile; the complete compiled AVX-512 spectral suite remains numerically unchanged on the Ryzen AI Max+ 395. Placement emits exact mesh-sized local-shard/collective SSA and executes every movement form on the deterministic mock mesh. Mock execution transfers no MPI/OFI/SHMEM proof and cannot satisfy DIST-NATIVE-1. `NUMPOL-CARRIER-1` (queue row 3b) owns the generalized S5 carrier; no x86 Target policy change is implied.
+
+
 Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
 dependence-inference semantics + MegaMoE R3 producer; x86 outcome: parity
 validated (AVX-512 host).** Same shared-analysis correction as the rocm

@@ -1,3 +1,8 @@
+// This file is fixture DATA for tests/unit/test_x86_composed_layout_exec.py,
+// which drives it through tessera-tile-to-x86 -> LLVM -> lli. It is not a lit
+// test: without this marker lit discovers it, reports Unresolved ("Test has no
+// 'RUN:' line"), and fails `check-tessera-ir` for the whole repository.
+// UNSUPPORTED: true
 // Exact CPU execution fixture. The engineering gate lowers this file through
 // tessera-tile-to-x86, upstream LLVM conversion, and lli; main returns zero
 // only when dynamic, nested mixed-radix, and tuple-product results all match.

@@ -12,12 +12,12 @@
 // so --allow-unregistered-dialect + --verify-each=false round-trip them.
 
 module attributes {
-  tessera.pipeline_plan = {
-    num_stages = 2,
-    num_micro_batches = 2,
-    interleaved = false,
-    num_chunks = 1
-  }
+  tessera.schedule_digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "fixture", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 2,
+  tessera.pp_num_micro_batches = 2,
+  tessera.pp_interleaved = false
 } {
 
   // The unregistered pipeline.* marker ops force generic module printing, so
@@ -33,9 +33,11 @@ module attributes {
     // CHECK: tessera.pipeline.send
     // CHECK-SAME: from_stage = 0
     // CHECK-SAME: micro_batch
+    // CHECK-SAME: tessera.schedule_digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     // CHECK: tessera.pipeline.recv
     // CHECK-SAME: micro_batch
     // CHECK-SAME: to_stage = 1
+    // CHECK: }) {tessera.schedule_digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     %b = "tessera.matmul"(%a, %w1) {tessera.layer = {stage = 1}} :
         (tensor<64x256xbf16>, tensor<256x128xbf16>) -> tensor<64x128xbf16>
 

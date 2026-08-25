@@ -8,14 +8,14 @@ caller so collective insertion remains a separate, reviewable transformation.
 from __future__ import annotations
 
 import hashlib
+import math
 import json
 from dataclasses import dataclass, replace
-from typing import Callable, Literal, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from .effects import Effect, registered_op_effect
-from .graph_ir import GraphIRFunction, IROp
+from .graph_ir import GraphIRFunction, IROp, IRType, tensor_ir_type
 from .op_catalog import get_op_spec
-
 
 PlacementKind = Literal["unknown", "replicated", "tiled", "partial_reduction"]
 
@@ -115,6 +115,16 @@ class ReshardPlan:
     digest: str
 
 
+@dataclass(frozen=True)
+class MockMeshExecutionResult:
+    """Deterministic execution evidence for one materialized placement graph."""
+
+    values: Mapping[str, tuple[Any, ...]]
+    returned: Mapping[str, tuple[Any, ...]]
+    executed_reshards: tuple[str, ...]
+    backend: str = "deterministic_mock_mesh"
+
+
 def _ssa(value: str) -> str:
     return str(value).strip().lstrip("%")
 
@@ -124,7 +134,9 @@ def _elementwise_rule(_op: IROp, operands: tuple[Placement, ...]) -> Placement:
     if not non_replicated:
         return Placement.replicated()
     first = non_replicated[0]
-    return first if all(item == first for item in non_replicated) else Placement.unknown()
+    return (
+        first if all(item == first for item in non_replicated) else Placement.unknown()
+    )
 
 
 def _reduction_rule(op: IROp, operands: tuple[Placement, ...]) -> Placement:
@@ -143,12 +155,9 @@ def _reduction_rule(op: IROp, operands: tuple[Placement, ...]) -> Placement:
     if reduced_mesh_axis is None:
         return source
     shifted = {
-        (dim - 1 if dim > axis else dim): mesh_axis
-        for dim, mesh_axis in tiled.items()
+        (dim - 1 if dim > axis else dim): mesh_axis for dim, mesh_axis in tiled.items()
     }
-    return Placement.partial_reduction(
-        (reduced_mesh_axis,), tiled_axes=shifted
-    )
+    return Placement.partial_reduction((reduced_mesh_axis,), tiled_axes=shifted)
 
 
 def _collective_rule(op: IROp, operands: tuple[Placement, ...]) -> Placement:
@@ -158,12 +167,19 @@ def _collective_rule(op: IROp, operands: tuple[Placement, ...]) -> Placement:
     name = op.op_name.removeprefix("tessera.")
     if name == "all_reduce":
         if source.kind == "partial_reduction":
-            return (Placement.tiled(dict(source.tiled_axes))
-                    if source.tiled_axes else Placement.replicated())
+            return (
+                Placement.tiled(dict(source.tiled_axes))
+                if source.tiled_axes
+                else Placement.replicated()
+            )
         return source
     mesh_axis = op.kwargs.get("mesh_axis", op.kwargs.get("axis_name"))
     tensor_axis = op.kwargs.get("tensor_axis", op.kwargs.get("axis"))
-    if not isinstance(mesh_axis, str) or not mesh_axis or not isinstance(tensor_axis, int):
+    if (
+        not isinstance(mesh_axis, str)
+        or not mesh_axis
+        or not isinstance(tensor_axis, int)
+    ):
         return Placement.unknown()
     if name == "all_gather" and source.kind == "tiled":
         tiled = dict(source.tiled_axes)
@@ -172,7 +188,10 @@ def _collective_rule(op: IROp, operands: tuple[Placement, ...]) -> Placement:
         tiled.pop(tensor_axis)
         return Placement.tiled(tiled) if tiled else Placement.replicated()
     if name == "reduce_scatter" and source.kind in {"replicated", "partial_reduction"}:
-        if source.kind == "partial_reduction" and mesh_axis not in source.reduction_axes:
+        if (
+            source.kind == "partial_reduction"
+            and mesh_axis not in source.reduction_axes
+        ):
             return Placement.unknown()
         return Placement.tiled({tensor_axis: mesh_axis})
     if name == "all_to_all" and source.kind == "tiled":
@@ -192,9 +211,16 @@ DEFAULT_PLACEMENT_RULES: Mapping[str, PlacementRule] = {
     **{
         name: _elementwise_rule
         for name in (
-            "tessera.add", "tessera.sub", "tessera.mul", "tessera.div",
-            "tessera.maximum", "tessera.minimum", "tessera.relu",
-            "tessera.exp", "tessera.log", "tessera.tanh",
+            "tessera.add",
+            "tessera.sub",
+            "tessera.mul",
+            "tessera.div",
+            "tessera.maximum",
+            "tessera.minimum",
+            "tessera.relu",
+            "tessera.exp",
+            "tessera.log",
+            "tessera.tanh",
         )
     },
     "tessera.reduce": _reduction_rule,
@@ -205,7 +231,9 @@ DEFAULT_PLACEMENT_RULES: Mapping[str, PlacementRule] = {
 }
 
 
-def _registered_rule(op: IROp, rules: Mapping[str, PlacementRule]) -> PlacementRule | None:
+def _registered_rule(
+    op: IROp, rules: Mapping[str, PlacementRule]
+) -> PlacementRule | None:
     direct = rules.get(op.op_name)
     if direct is not None:
         return direct
@@ -215,8 +243,12 @@ def _registered_rule(op: IROp, rules: Mapping[str, PlacementRule]) -> PlacementR
     # contraction, attention, or stencil halo exchange.
     spec = get_op_spec(op.op_name)
     if spec is not None and spec.lowering in {
-        "elementwise", "numeric_helper", "comparison", "logical",
-        "rotary_embedding", "quantize",
+        "elementwise",
+        "numeric_helper",
+        "comparison",
+        "logical",
+        "rotary_embedding",
+        "quantize",
     }:
         return _elementwise_rule
     if spec is not None and spec.lowering == "stable_reduction":
@@ -253,8 +285,11 @@ def propagate_sharding(
             )
             rule = _registered_rule(op, rules)
             effect_admitted = effect == Effect.pure or rule is _collective_rule
-            if not effect_admitted or has_region or rule is None or any(
-                item.kind == "unknown" for item in operands
+            if (
+                not effect_admitted
+                or has_region
+                or rule is None
+                or any(item.kind == "unknown" for item in operands)
             ):
                 inferred = Placement.unknown()
             else:
@@ -265,7 +300,9 @@ def propagate_sharding(
                         tuple(map(_ssa, op.operands)),
                         "incompatible_or_underspecified_placement",
                     )
-                    conflicts[(conflict.op_name, conflict.operands, conflict.reason)] = conflict
+                    conflicts[
+                        (conflict.op_name, conflict.operands, conflict.reason)
+                    ] = conflict
             for result in op.result_names:
                 name = _ssa(result)
                 if placements.get(name) != inferred:
@@ -286,7 +323,9 @@ def propagate_sharding(
         },
         "conflicts": [
             (item.op_name, item.operands, item.reason)
-            for item in sorted(conflicts.values(), key=lambda item: (item.op_name, item.operands))
+            for item in sorted(
+                conflicts.values(), key=lambda item: (item.op_name, item.operands)
+            )
         ],
     }
     digest = hashlib.sha256(
@@ -343,22 +382,33 @@ def plan_explicit_reshards(
                     "cannot reshard a value across sibling or escaping regions"
                 )
             action = _reshard_action(
-                value_name, op.op_name, op_index, operand_index, source, target,
-                subgroup=normalized_subgroup, region_path=consumer_region,
+                value_name,
+                op.op_name,
+                op_index,
+                operand_index,
+                source,
+                target,
+                subgroup=normalized_subgroup,
+                region_path=consumer_region,
             )
             actions.append(action)
-    matching_rounds = _matching_rounds(normalized_subgroup) if any(
-        action.collective == "all_to_all" for action in actions
-    ) else ()
+    matching_rounds = (
+        _matching_rounds(normalized_subgroup)
+        if any(action.collective == "all_to_all" for action in actions)
+        else ()
+    )
     payload = [
         {
-            "value": action.value, "consumer": action.consumer,
+            "value": action.value,
+            "consumer": action.consumer,
             "consumer_index": action.consumer_index,
             "operand_index": action.operand_index,
             "source": _placement_payload(action.source),
             "target": _placement_payload(action.target),
-            "collective": action.collective, "mesh_axes": action.mesh_axes,
-            "subgroup": action.subgroup, "region_path": action.region_path,
+            "collective": action.collective,
+            "mesh_axes": action.mesh_axes,
+            "subgroup": action.subgroup,
+            "region_path": action.region_path,
         }
         for action in actions
     ]
@@ -380,10 +430,8 @@ def _region_path(op: IROp) -> tuple[str, ...]:
     raise ValueError("region path must be a string or sequence")
 
 
-def _is_region_ancestor(
-    producer: tuple[str, ...], consumer: tuple[str, ...]
-) -> bool:
-    return len(producer) <= len(consumer) and consumer[:len(producer)] == producer
+def _is_region_ancestor(producer: tuple[str, ...], consumer: tuple[str, ...]) -> bool:
+    return len(producer) <= len(consumer) and consumer[: len(producer)] == producer
 
 
 def _matching_rounds(
@@ -411,23 +459,33 @@ def _matching_rounds(
 def materialize_reshard_plan(
     function: GraphIRFunction,
     plan: ReshardPlan,
+    *,
+    mesh_shape: Mapping[str, int] | None = None,
 ) -> GraphIRFunction:
-    """Insert planned placement conversions as real Graph SSA operations.
+    """Insert typed placement conversions as real Graph SSA operations.
 
-    The returned function is a copy.  Every collective is inserted immediately
-    before its exact consumer and rewires that operand.  The plan digest,
-    subgroup, region identity, and all-to-all matching rounds survive into
-    Schedule IR through ordinary operation attributes.  Replicated-to-tiled
-    local slicing remains fail-closed until a mesh-size-dependent result-shape
-    contract is available; emitting a same-shaped fake slice would be wrong.
+    Collective results use the exact local shape implied by the target
+    placement. Replicated-to-tiled movement is an operation-owned
+    ``tessera.slice`` with explicit reshard identity, not a same-shaped fake
+    collective. A missing, non-divisible, or dynamic mesh extent fails closed.
     """
+
+    mesh = _mesh_contract(plan, mesh_shape)
     by_consumer: dict[int, list[ReshardAction]] = {}
     for action in plan.actions:
         by_consumer.setdefault(action.consumer_index, []).append(action)
     body: list[IROp] = []
-    used_names = {
-        _ssa(name) for op in function.body for name in op.result_names
-    } | {_ssa(arg.name) for arg in function.args}
+    used_names = {_ssa(name) for op in function.body for name in op.result_names} | {
+        _ssa(arg.name) for arg in function.args
+    }
+    value_types: dict[str, IRType] = {
+        _ssa(arg.name): arg.ir_type for arg in function.args
+    }
+    for source_op in function.body:
+        for result_name in source_op.result_names:
+            if source_op.inferred_type is not None:
+                value_types[_ssa(result_name)] = source_op.inferred_type
+
     for op_index, source_op in enumerate(function.body):
         op = replace(
             source_op,
@@ -435,24 +493,38 @@ def materialize_reshard_plan(
             operand_types=list(source_op.operand_types),
             kwargs=dict(source_op.kwargs),
         )
-        for ordinal, action in enumerate(sorted(
-            by_consumer.get(op_index, ()), key=lambda item: item.operand_index
-        )):
-            if action.collective == "local_shard":
-                raise ValueError(
-                    "local-shard SSA materialization requires a typed mesh-size shape contract"
-                )
+        for ordinal, action in enumerate(
+            sorted(
+                by_consumer.get(op_index, ()),
+                key=lambda item: item.operand_index,
+            )
+        ):
             name = f"reshard_{op_index}_{action.operand_index}_{ordinal}"
             suffix = 0
             while name in used_names:
                 suffix += 1
                 name = f"reshard_{op_index}_{action.operand_index}_{ordinal}_{suffix}"
             used_names.add(name)
+            source_type = value_types.get(action.value)
+            if source_type is None:
+                raise ValueError(
+                    f"reshard value {action.value!r} lacks a structured tensor type"
+                )
+            target_type = _local_shard_type(source_type, action.target, mesh)
+            tensor_axis = _collective_tensor_axis(action)
             kwargs: dict[str, object] = {
                 "mesh_axis": action.mesh_axes[0],
-                "axis": _collective_tensor_axis(action),
-                "op": "sum" if action.collective in {"all_reduce", "reduce_scatter"} else "none",
+                "mesh_size": mesh[action.mesh_axes[0]],
+                "axis": tensor_axis,
+                "op": (
+                    "sum"
+                    if action.collective in {"all_reduce", "reduce_scatter"}
+                    else "none"
+                ),
+                "reshard_kind": action.collective,
                 "reshard_plan_digest": plan.digest,
+                "source_global_shape": list(source_type.shape),
+                "target_local_shape": list(target_type.shape),
                 "subgroup": list(action.subgroup),
                 "region_path": list(action.region_path),
             }
@@ -465,22 +537,200 @@ def materialize_reshard_plan(
             operand_type = op.operand_types[action.operand_index]
             inserted = IROp(
                 result=name,
-                op_name=f"tessera.{action.collective}",
+                op_name=(
+                    "tessera.slice"
+                    if action.collective == "local_shard"
+                    else f"tessera.{action.collective}"
+                ),
                 operands=[op.operands[action.operand_index]],
                 operand_types=[operand_type],
-                result_type=operand_type,
-                inferred_type=None,
+                result_type=str(target_type),
+                inferred_type=target_type,
                 kwargs=kwargs,
             )
             body.append(inserted)
+            value_types[name] = target_type
             op.operands[action.operand_index] = f"%{name}"
+            op.operand_types[action.operand_index] = str(target_type)
         body.append(op)
     return replace(function, body=body)
 
 
+def _mesh_contract(
+    plan: ReshardPlan, mesh_shape: Mapping[str, int] | None
+) -> dict[str, int]:
+    mesh = {str(axis): int(size) for axis, size in (mesh_shape or {}).items()}
+    for action in plan.actions:
+        for axis in action.mesh_axes:
+            if axis not in mesh and action.subgroup:
+                mesh[axis] = len(action.subgroup)
+            if axis not in mesh or mesh[axis] < 2:
+                raise ValueError(
+                    f"reshard mesh axis {axis!r} requires an explicit size >= 2"
+                )
+            if action.subgroup and len(action.subgroup) != mesh[axis]:
+                raise ValueError(
+                    f"reshard subgroup size does not match mesh axis {axis!r}"
+                )
+    return mesh
+
+
+def _local_shard_type(
+    global_type: IRType, placement: Placement, mesh: Mapping[str, int]
+) -> IRType:
+    if global_type.rank is None:
+        raise ValueError("typed reshard requires a statically ranked tensor")
+    shape = list(global_type.shape)
+    for dimension, mesh_axis in placement.tiled_axes:
+        if dimension >= len(shape):
+            raise ValueError("placement tensor axis is outside the tensor rank")
+        try:
+            extent = int(shape[dimension])
+        except ValueError as error:
+            raise ValueError("typed reshard requires static shard extents") from error
+        size = mesh.get(mesh_axis)
+        if size is None or extent % size:
+            raise ValueError(
+                f"tensor extent {extent} is not divisible by mesh axis {mesh_axis!r}"
+            )
+        shape[dimension] = str(extent // size)
+    return tensor_ir_type(tuple(shape), global_type.dtype, layout=global_type.layout)
+
+
+def execute_resharded_graph_on_mock_mesh(
+    function: GraphIRFunction,
+    rank_inputs: Mapping[str, Sequence[Any]],
+    *,
+    mesh_shape: Mapping[str, int],
+) -> MockMeshExecutionResult:
+    """Execute explicit reshard SSA on the deterministic in-process mesh.
+
+    This interpreter is deliberately small and fail-closed: it handles the
+    five distributed movement forms plus the pointwise consumers used by the
+    placement gate. Every movement is visible in ``executed_reshards``.
+    """
+
+    import numpy as np
+
+    from tessera.collectives import CollectiveAdapter
+
+    mesh = {str(axis): int(size) for axis, size in mesh_shape.items()}
+    world_size = math.prod(mesh.values()) if mesh else 0
+    if world_size < 2:
+        raise ValueError("mock reshard execution requires a multi-rank mesh")
+    adapter = CollectiveAdapter(backend="mock", world_size=world_size, mesh_axes=mesh)
+    values: dict[str, tuple[Any, ...]] = {}
+    for arg in function.args:
+        name = _ssa(arg.name)
+        per_rank = tuple(rank_inputs.get(name, ()))
+        if len(per_rank) != world_size:
+            raise ValueError(f"mock mesh input {name!r} requires one value per rank")
+        values[name] = tuple(np.asarray(value) for value in per_rank)
+
+    executed: list[str] = []
+    for op in function.body:
+        if op.result is None or len(op.result_names) != 1:
+            raise ValueError("mock reshard execution requires single-result SSA ops")
+        operands = [values.get(_ssa(name)) for name in op.operands]
+        if any(value is None for value in operands):
+            raise ValueError(f"mock mesh operation {op.op_name} has an unknown operand")
+        inputs = [tuple(value) for value in operands if value is not None]
+        name = _ssa(op.result_names[0])
+        if (
+            op.op_name == "tessera.slice"
+            and op.kwargs.get("reshard_kind") == "local_shard"
+        ):
+            axis = int(op.kwargs["axis"])
+            mesh_axis = str(op.kwargs["mesh_axis"])
+            size = mesh[mesh_axis]
+            outputs = []
+            for rank, value in enumerate(inputs[0]):
+                if value.shape[axis] % size:
+                    raise ValueError("mock local shard extent is not divisible")
+                coordinate = _mesh_axis_coordinate(rank, mesh, mesh_axis)
+                outputs.append(np.split(value, size, axis=axis)[coordinate])
+            result = tuple(outputs)
+            executed.append("local_shard")
+        elif op.op_name == "tessera.all_reduce":
+            result = tuple(
+                adapter.all_reduce(inputs[0], op=str(op.kwargs.get("op", "sum")))
+            )
+            executed.append("all_reduce")
+        elif op.op_name == "tessera.reduce_scatter":
+            result = tuple(
+                adapter.reduce_scatter(
+                    inputs[0],
+                    axis=int(op.kwargs.get("axis", 0)),
+                    op=str(op.kwargs.get("op", "sum")),
+                )
+            )
+            executed.append("reduce_scatter")
+        elif op.op_name == "tessera.all_gather":
+            result = tuple(
+                adapter.all_gather(inputs[0], axis=int(op.kwargs.get("axis", 0)))
+            )
+            executed.append("all_gather")
+        elif op.op_name == "tessera.all_to_all":
+            result = tuple(
+                adapter.all_to_all(
+                    inputs[0],
+                    scatter_axis=int(op.kwargs.get("scatter_axis", 0)),
+                    gather_axis=int(op.kwargs.get("gather_axis", 0)),
+                )
+            )
+            executed.append("all_to_all")
+        elif op.op_name == "tessera.collective_permute":
+            sources = tuple(int(item) for item in op.kwargs.get("source_peers", ()))
+            targets = tuple(int(item) for item in op.kwargs.get("target_peers", ()))
+            result = tuple(
+                adapter.collective_permute(
+                    inputs[0], pairs=tuple(zip(sources, targets))
+                )
+            )
+            executed.append("collective_permute")
+        elif op.op_name in {"tessera.add", "tessera.sub", "tessera.mul", "tessera.div"}:
+            operation: Any = {
+                "tessera.add": np.add,
+                "tessera.sub": np.subtract,
+                "tessera.mul": np.multiply,
+                "tessera.div": np.divide,
+            }[op.op_name]
+            result = tuple(operation(*rank_values) for rank_values in zip(*inputs))
+        elif op.op_name in {"tessera.sigmoid", "tessera.tanh", "tessera.relu"}:
+            operation = {
+                "tessera.sigmoid": lambda value: 1.0 / (1.0 + np.exp(-value)),
+                "tessera.tanh": np.tanh,
+                "tessera.relu": lambda value: np.maximum(value, 0),
+            }[op.op_name]
+            result = tuple(operation(value) for value in inputs[0])
+        else:
+            raise ValueError(f"mock mesh has no execution rule for {op.op_name!r}")
+        values[name] = tuple(np.asarray(value) for value in result)
+
+    returned = {_ssa(name): values[_ssa(name)] for name in function.return_values}
+    return MockMeshExecutionResult(
+        values=dict(values),
+        returned=returned,
+        executed_reshards=tuple(executed),
+    )
+
+
+def _mesh_axis_coordinate(
+    rank: int, mesh_shape: Mapping[str, int], mesh_axis: str
+) -> int:
+    axes = tuple(mesh_shape)
+    if mesh_axis not in axes:
+        raise ValueError(f"unknown mesh axis {mesh_axis!r}")
+    index = axes.index(mesh_axis)
+    stride = math.prod(tuple(mesh_shape[axis] for axis in axes[index + 1 :]))
+    return (rank // stride) % mesh_shape[mesh_axis]
+
+
 def _single_tiled_dim(placement: Placement) -> int:
     if len(placement.tiled_axes) != 1:
-        raise ValueError("collective SSA currently requires exactly one tiled tensor axis")
+        raise ValueError(
+            "collective SSA currently requires exactly one tiled tensor axis"
+        )
     return placement.tiled_axes[0][0]
 
 
@@ -555,8 +805,16 @@ def _reshard_action(
     else:
         raise ValueError(f"unsupported reshard transition {source.kind}->{target.kind}")
     return ReshardAction(
-        value, consumer, consumer_index, operand_index, source, target,
-        collective, axes, subgroup, region_path,
+        value,
+        consumer,
+        consumer_index,
+        operand_index,
+        source,
+        target,
+        collective,
+        axes,
+        subgroup,
+        region_path,
     )
 
 
@@ -569,6 +827,8 @@ __all__ = [
     "ReshardAction",
     "ReshardPlan",
     "ShardingPropagationResult",
+    "MockMeshExecutionResult",
+    "execute_resharded_graph_on_mock_mesh",
     "materialize_reshard_plan",
     "plan_explicit_reshards",
     "propagate_sharding",

@@ -9,7 +9,7 @@
 // send/recv SSA rewrites and PipelineScheduleLegalityPass proves the 1F1B
 // schedule is well-formed.
 //
-//   --tessera-pipeline-partition  (--num-stages N overrides the module attr)
+//   --tessera-pipeline-partition
 //
 // Cost model: heavy ops (matmul / gemm / batched_gemm / flash_attn /
 // conv2d_nhwc) weigh 4, everything else 1. Stages are contiguous in program
@@ -36,12 +36,6 @@ using namespace mlir;
 
 namespace {
 
-static int64_t readPlanNumStages(ModuleOp m, int64_t defaultVal) {
-  if (auto plan = m->getAttrOfType<DictionaryAttr>("tessera.pipeline_plan"))
-    if (auto v = plan.getAs<IntegerAttr>("num_stages"))
-      return v.getInt();
-  return defaultVal;
-}
 
 // Per-op cost — a small cost model so heavy compute dominates the balance.
 static int64_t opCost(Operation *op) {
@@ -68,10 +62,6 @@ struct PipelineStagePartitionPass
   PipelineStagePartitionPass(const PipelineStagePartitionPass &o)
       : PassWrapper(o) {}
 
-  Option<int> numStagesOpt{
-      *this, "num-stages",
-      llvm::cl::desc("Pipeline stage count (overrides module attr)"),
-      llvm::cl::init(0)};
 
   StringRef getArgument() const override {
     return "tessera-pipeline-partition";
@@ -84,8 +74,20 @@ struct PipelineStagePartitionPass
   void runOnOperation() override {
     ModuleOp module = getOperation();
     OpBuilder b(module.getContext());
-    int64_t numStages =
-        numStagesOpt > 0 ? numStagesOpt : readPlanNumStages(module, 1);
+    auto scheduleDigest =
+        module->getAttrOfType<StringAttr>("tessera.schedule_digest");
+    auto scheduleSteps =
+        module->getAttrOfType<ArrayAttr>("tessera.pipeline_steps");
+    auto numStagesAttr =
+        module->getAttrOfType<IntegerAttr>("tessera.pp_num_stages");
+    if (!scheduleDigest || scheduleDigest.getValue().size() != 64 ||
+        !scheduleSteps || scheduleSteps.empty() || !numStagesAttr) {
+      module.emitError(
+          "pipeline partition requires one complete digest-bound schedule carrier");
+      signalPassFailure();
+      return;
+    }
+    int64_t numStages = numStagesAttr.getInt();
     if (numStages <= 1)
       return; // single stage — nothing to partition.
 

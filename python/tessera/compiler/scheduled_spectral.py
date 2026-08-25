@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Mapping, Sequence
 
+from .benchmark_row import MeasuredResourceVector
+from .composition_cost import InferredActionDAG, infer_action_dag
+from .graph_ir import GraphIRFunction, IRArg, IROp, IRType
+from .schedule_object import ScheduleObject, ScheduleRole
 from .scheduled_fft import lower_scheduled_fft, validate_scheduled_fft_metadata
 from .scheduled_matmul import digest_text, find_tessera_opt, run_tessera_opt
 from .spectral_plan import next_power_of_two
-
 
 _OPS = (
     "tessera.spectral_filter",
@@ -27,6 +32,122 @@ _NORMALIZATIONS = ("backward", "forward", "ortho")
 _STORAGE_POLICIES = ("f32", "f16", "bf16")
 
 
+def _spectral_graph_function(
+    *, object_id: str, op_name: str, dct_type: int
+) -> tuple[GraphIRFunction, tuple[str, ...]]:
+    """Represent the fused physical producer as registered Graph actions."""
+
+    specs: tuple[tuple[str, str, tuple[str, ...]], ...]
+    if op_name == "tessera.spectral_filter":
+        specs = (
+            ("complex_multiply", "tessera.mul", ("%input0", "%input1")),
+            ("materialize_output", "tessera.reshape", ("%complex_multiply",)),
+        )
+    elif op_name == "tessera.dct" and dct_type == 2:
+        specs = (
+            ("even_extend", "tessera.pad", ("%input0",)),
+            ("fft", "tessera.fft", ("%even_extend",)),
+            ("phase_correct", "tessera.mul", ("%fft", "%phase")),
+            ("crop", "tessera.slice", ("%phase_correct",)),
+        )
+    elif op_name == "tessera.dct":
+        specs = (
+            ("direct_cosine", "tessera.dct", ("%input0",)),
+            ("materialize_output", "tessera.reshape", ("%direct_cosine",)),
+        )
+    elif op_name == "tessera.spectral_conv":
+        specs = (
+            ("pad_signal", "tessera.pad", ("%input0",)),
+            ("pad_kernel", "tessera.pad", ("%input1",)),
+            ("rfft_signal", "tessera.rfft", ("%pad_signal",)),
+            ("rfft_kernel", "tessera.rfft", ("%pad_kernel",)),
+            ("complex_multiply", "tessera.mul", ("%rfft_signal", "%rfft_kernel")),
+            ("inverse", "tessera.irfft", ("%complex_multiply",)),
+            ("crop", "tessera.slice", ("%inverse",)),
+        )
+    elif op_name == "tessera.stft":
+        specs = (
+            ("frame", "tessera.reshape", ("%input0",)),
+            ("apply_window", "tessera.mul", ("%frame", "%input1")),
+            ("transform", "tessera.rfft", ("%apply_window",)),
+        )
+    else:
+        specs = (
+            ("inverse", "tessera.irfft", ("%input0",)),
+            ("apply_window", "tessera.mul", ("%inverse", "%input1")),
+            ("overlap_add", "tessera.reduce_sum", ("%apply_window",)),
+        )
+    tensor = IRType("tensor<*xf32>")
+    names = {operand.lstrip("%") for _, _, operands in specs for operand in operands}
+    produced = {action_id for action_id, _, _ in specs}
+    args = [IRArg(name, tensor) for name in sorted(names - produced)]
+    ops = [
+        IROp(
+            result=f"%{action_id}",
+            op_name=graph_op,
+            operands=list(operands),
+            operand_types=["tensor<*xf32>"] * len(operands),
+            result_type="tensor<*xf32>",
+        )
+        for action_id, graph_op, operands in specs
+    ]
+    return (
+        GraphIRFunction(
+            name=object_id,
+            args=args,
+            body=ops,
+            return_values=[f"%{specs[-1][0]}"],
+        ),
+        tuple(action_id for action_id, _, _ in specs),
+    )
+
+
+def infer_spectral_action_dag(
+    *,
+    semantic_digest: str,
+    target: str,
+    architecture: str,
+    op_name: str,
+    dct_type: int,
+    workspace_bytes: int,
+) -> tuple[InferredActionDAG, ScheduleObject]:
+    """Infer the representative spectral producer DAG and bind SO identity."""
+
+    object_id = f"spectral:{semantic_digest}"
+    function, action_ids = _spectral_graph_function(
+        object_id=object_id, op_name=op_name, dct_type=dct_type
+    )
+    bytes_per_action = workspace_bytes // max(1, len(action_ids))
+    vectors = tuple(
+        MeasuredResourceVector(
+            compute_time_ms=1.0,
+            bytes_moved=bytes_per_action,
+            communication_bytes=0,
+            queue_identity=f"{target}:spectral:0",
+            resource_identity=architecture,
+            timing_provenance={
+                "source": "static_spectral_model",
+                "domain": "compiler",
+            },
+            artifact_digest=digest_text(
+                f"{semantic_digest}:{action_id}:{target}:{architecture}"
+            ),
+        ).as_dict()
+        for action_id in action_ids
+    )
+    inferred = infer_action_dag(function, vectors, action_ids=action_ids)
+    schedule = ScheduleObject(
+        object_id=object_id,
+        actions=inferred.actions,
+        edges=inferred.schedule_object.edges,
+        roles=(
+            ScheduleRole("spectral_compute", (architecture,)),
+            ScheduleRole("spectral_queue", (f"{target}:spectral:0",)),
+        ),
+    )
+    return inferred, schedule
+
+
 @dataclass(frozen=True)
 class SpectralArchitectureProfile:
     target: str
@@ -40,29 +161,49 @@ class SpectralArchitectureProfile:
 
 _ARCHITECTURE_PROFILES = {
     "x86": SpectralArchitectureProfile(
-        "x86", "x86", "zen5-avx512", "ready",
-        "tessera.x86.spectral_composite.v6", "exact_device_validated",
+        "x86",
+        "x86",
+        "zen5-avx512",
+        "ready",
+        "tessera.x86.spectral_composite.v6",
+        "exact_device_validated",
         "exact Zen 5 package",
     ),
     "rocm": SpectralArchitectureProfile(
-        "rocm", "rocm", "gfx1151", "ready",
-        "tessera.rocm.spectral_composite.v6", "exact_device_validated",
+        "rocm",
+        "rocm",
+        "gfx1151",
+        "ready",
+        "tessera.rocm.spectral_composite.v6",
+        "exact_device_validated",
         "exact gfx1151 package",
     ),
     "rocm_gfx1151": SpectralArchitectureProfile(
-        "rocm_gfx1151", "rocm", "gfx1151", "ready",
-        "tessera.rocm.spectral_composite.v6", "exact_device_validated",
+        "rocm_gfx1151",
+        "rocm",
+        "gfx1151",
+        "ready",
+        "tessera.rocm.spectral_composite.v6",
+        "exact_device_validated",
         "exact gfx1151 package",
     ),
     "rocm_gfx1200": SpectralArchitectureProfile(
-        "rocm_gfx1200", "rocm", "gfx1200", "fail_closed",
-        "tessera.rocm.spectral_composite.v6", "build_only",
+        "rocm_gfx1200",
+        "rocm",
+        "gfx1200",
+        "fail_closed",
+        "tessera.rocm.spectral_composite.v6",
+        "build_only",
         "architecture-stamped package exists; RDNA 4 schedule and exact-device "
         "evidence are required for execution",
     ),
     "rocm_gfx1250": SpectralArchitectureProfile(
-        "rocm_gfx1250", "rocm", "gfx1250", "fail_closed",
-        "tessera.rocm.spectral_composite.v6", "build_only",
+        "rocm_gfx1250",
+        "rocm",
+        "gfx1250",
+        "fail_closed",
+        "tessera.rocm.spectral_composite.v6",
+        "build_only",
         "architecture-stamped package exists; gfx1250 schedule and exact-device "
         "evidence are required for execution",
     ),
@@ -191,8 +332,7 @@ def define_spectral_program_contract(
     else:
         bounds = tuple(tuple(int(dim) for dim in shape) for shape in shape_bounds)
     if len(bounds) != len(signatures) or any(
-        len(bound) != len(signature)
-        for bound, signature in zip(bounds, signatures)
+        len(bound) != len(signature) for bound, signature in zip(bounds, signatures)
     ):
         raise ValueError("TSOL shape bounds must match every input signature")
     if any(dim <= 0 for shape in bounds for dim in shape):
@@ -257,6 +397,8 @@ class ScheduledSpectralArtifact:
     native_entry: str
     child_ffts: tuple[Mapping[str, Any], ...]
     template_digest: str
+    graph_analysis_digest: str
+    schedule_object: Mapping[str, Any]
     schedule_digest: str
 
     @property
@@ -288,7 +430,9 @@ class ScheduledSpectralArtifact:
         )
 
     def _input_shapes_text(self) -> str:
-        return "|".join("x".join(str(dim) for dim in shape) for shape in self.input_shapes)
+        return "|".join(
+            "x".join(str(dim) for dim in shape) for shape in self.input_shapes
+        )
 
     def _child_digests_text(self) -> str:
         return ",".join(str(child["schedule_digest"]) for child in self.child_ffts)
@@ -366,8 +510,16 @@ class ScheduledSpectralArtifact:
             ("x86", "zen5-avx512"),
         }:
             raise ValueError("TSOL package requires exact gfx1151 or Zen 5 AVX-512")
-        if digest_text(self._identity_payload()) != self.schedule_digest:
-            raise ValueError("TSOL package content identity mismatch")
+        semantic_digest = digest_text(self._identity_payload())
+        if self.schedule_object.get("object_id") != f"spectral:{semantic_digest}":
+            raise ValueError("TSOL Schedule Object semantic identity mismatch")
+        encoded_schedule = json.dumps(
+            self.schedule_object, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        if hashlib.sha256(encoded_schedule).hexdigest() != self.schedule_digest:
+            raise ValueError("TSOL Schedule Object content identity mismatch")
+        if len(self.graph_analysis_digest) != 64:
+            raise ValueError("TSOL inferred Graph analysis identity mismatch")
         for child in self.child_ffts:
             validate_scheduled_fft_metadata(
                 child, target=self.target, input_shape=child["input_shape"]
@@ -424,7 +576,10 @@ class ScheduledSpectralArtifact:
             raise ValueError("TSOL package requires one durable schedule artifact")
         if self.tile_ir.count("tile.spectral_program_kernel") != 1:
             raise ValueError("TSOL package requires one launch-level Tile program")
-        if any(name in self.tile_ir for name in ("schedule.spectral_program", "schedule.artifact")):
+        if any(
+            name in self.tile_ir
+            for name in ("schedule.spectral_program", "schedule.artifact")
+        ):
             raise ValueError("TSOL Tile package retained Schedule IR")
         if _HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
             raise ValueError("TSOL Tile package has stale schedule identity")
@@ -437,6 +592,8 @@ class ScheduledSpectralArtifact:
             {
                 "child_ffts": [dict(child) for child in self.child_ffts],
                 "schedule_digest": self.schedule_digest,
+                "graph_analysis_digest": self.graph_analysis_digest,
+                "schedule_object": dict(self.schedule_object),
                 "schedule_ir": self.schedule_ir,
                 "schedule_ir_digest": self.schedule_ir_digest,
                 "tile_ir": self.tile_ir,
@@ -537,7 +694,9 @@ def lower_scheduled_spectral(
         elements = math.prod(batch_shape or (1,)) * n
         workspace = (
             _packed_workspace_bytes(
-                (4, elements), (4, elements), (8, 2 * elements),
+                (4, elements),
+                (4, elements),
+                (8, 2 * elements),
                 (8, 2 * elements),
             )
             if semantic_contract.dct_type == 2
@@ -570,9 +729,7 @@ def lower_scheduled_spectral(
             ),
         )
         output = (
-            shapes[0][:normalized_axis]
-            + (output_n,)
-            + shapes[0][normalized_axis + 1 :]
+            shapes[0][:normalized_axis] + (output_n,) + shapes[0][normalized_axis + 1 :]
         )
         padding = (
             fft_n - shapes[0][normalized_axis],
@@ -655,7 +812,8 @@ def lower_scheduled_spectral(
         if stride <= 0 or shapes[0][normalized_axis] != win // 2 + 1:
             raise ValueError("istft spectrum/window/hop contract mismatch")
         batch_shape = tuple(
-            dim for index, dim in enumerate(shapes[0])
+            dim
+            for index, dim in enumerate(shapes[0])
             if index not in {frame_axis, normalized_axis}
         )
         batch = math.prod(batch_shape or (1,))
@@ -668,11 +826,7 @@ def lower_scheduled_spectral(
             ),
         )
         samples = (frames - 1) * stride + win
-        output = (
-            shapes[0][:frame_axis]
-            + (samples,)
-            + shapes[0][normalized_axis + 1 :]
-        )
+        output = shapes[0][:frame_axis] + (samples,) + shapes[0][normalized_axis + 1 :]
         workspace = (
             _packed_workspace_bytes(
                 (4, win),
@@ -725,18 +879,31 @@ def lower_scheduled_spectral(
         native_entry=entry,
         child_ffts=children,
         template_digest=semantic_contract.template_digest,
+        graph_analysis_digest="",
+        schedule_object={},
         schedule_digest="",
     )
     identity = provisional._identity_payload()
-    schedule_digest = digest_text(identity)
+    semantic_digest = digest_text(identity)
+    inferred, schedule_object = infer_spectral_action_dag(
+        semantic_digest=semantic_digest,
+        target=compiler_target,
+        architecture=architecture,
+        op_name=op_name,
+        dct_type=semantic_contract.dct_type,
+        workspace_bytes=workspace,
+    )
+    schedule_digest = schedule_object.digest
     input_names = tuple(f"a{index}" for index in range(len(shapes)))
     real_element = semantic_contract.storage
     input_elements = (
         ("complex<f32>", "complex<f32>")
         if op_name == "tessera.spectral_filter"
-        else ("complex<f32>", real_element)
-        if op_name == "tessera.istft"
-        else tuple(real_element for _ in shapes)
+        else (
+            ("complex<f32>", real_element)
+            if op_name == "tessera.istft"
+            else tuple(real_element for _ in shapes)
+        )
     )
     output_element = (
         "complex<f32>"
@@ -747,9 +914,9 @@ def lower_scheduled_spectral(
         "tensor<" + "x".join([*(str(dim) for dim in shape), element]) + ">"
         for shape, element in zip(shapes, input_elements)
     )
-    output_type = "tensor<" + "x".join(
-        [*(str(dim) for dim in output), output_element]
-    ) + ">"
+    output_type = (
+        "tensor<" + "x".join([*(str(dim) for dim in output), output_element]) + ">"
+    )
     operands = ", ".join(f"%{name}" for name in input_names)
     function_args = ", ".join(
         f"%{name}: {type_name}" for name, type_name in zip(input_names, input_types)
@@ -766,14 +933,14 @@ def lower_scheduled_spectral(
         f'input_signature = "{provisional._shapes_text(provisional.input_signature)}", '
         f'shape_bounds = "{provisional._shapes_text(provisional.shape_bounds)}", '
         f'template_digest = "{provisional.template_digest}", '
-        f'output_shape = array<i64: {output_shape_text}>, axis = {normalized_axis} : i64, '
-        f'dct_type = {semantic_contract.dct_type} : i64, '
+        f"output_shape = array<i64: {output_shape_text}>, axis = {normalized_axis} : i64, "
+        f"dct_type = {semantic_contract.dct_type} : i64, "
         f'shape_policy = "{semantic_contract.shape_policy}", storage = "{semantic_contract.storage}", '
         f'abi_storage = "{provisional.abi_storage}", '
         f'storage_conversion = "{provisional.storage_conversion}", '
         f'axis_packing = "{provisional.axis_packing}", '
-        f'padding = array<i64: {padding_text}>, crop = array<i64: {crop_text}>, '
-        f'window_length = {win} : i64, hop = {stride} : i64, frames = {frames} : i64, '
+        f"padding = array<i64: {padding_text}>, crop = array<i64: {crop_text}>, "
+        f"window_length = {win} : i64, hop = {stride} : i64, frames = {frames} : i64, "
         f'normalization = "{semantic_contract.normalization}", complex_layout = "interleaved_f32x2", '
         f'accumulation = "{accumulation}", workspace_bytes = {workspace} : i64, '
         f'workspace_policy = "{policy}", mutation_lineage = "inputs_immutable_output_fresh_v1", '
@@ -783,7 +950,8 @@ def lower_scheduled_spectral(
     )
     schedule_ir = (
         f'module attributes {{tessera.target = "{compiler_target}", '
-        f'tessera.arch = "{architecture}"}} {{\n'
+        f'tessera.arch = "{architecture}", '
+        f'tessera.schedule_digest = "{schedule_digest}"}} {{\n'
         f"  func.func @scheduled_spectral({function_args}) -> {output_type} {{\n"
         f'    %result = "schedule.spectral_program"({operands}) {{{attrs}}} : '
         f"({operand_types}) -> {output_type}\n"
@@ -803,6 +971,8 @@ def lower_scheduled_spectral(
             **provisional.__dict__,
             "schedule_ir": schedule_ir,
             "tile_ir": tile_ir,
+            "graph_analysis_digest": inferred.graph_analysis_digest,
+            "schedule_object": schedule_object.canonical_payload(),
             "schedule_digest": schedule_digest,
         }
     )
@@ -817,11 +987,15 @@ def validate_scheduled_spectral_metadata(
         raise ValueError("TSOL package requires tessera.scheduled_spectral.v5 metadata")
     shapes = tuple(tuple(int(dim) for dim in shape) for shape in input_shapes)
     declared_shapes = tuple(
-        tuple(int(dim) for dim in shape)
-        for shape in metadata.get("input_shapes") or ()
+        tuple(int(dim) for dim in shape) for shape in metadata.get("input_shapes") or ()
     )
-    signature = tuple(tuple(int(dim) for dim in shape) for shape in metadata.get("input_signature") or ())
-    bounds = tuple(tuple(int(dim) for dim in shape) for shape in metadata.get("shape_bounds") or ())
+    signature = tuple(
+        tuple(int(dim) for dim in shape)
+        for shape in metadata.get("input_signature") or ()
+    )
+    bounds = tuple(
+        tuple(int(dim) for dim in shape) for shape in metadata.get("shape_bounds") or ()
+    )
     semantic = define_spectral_program_contract(
         op_name=str(metadata.get("op_name")),
         input_signature=signature,

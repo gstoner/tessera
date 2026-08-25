@@ -853,73 +853,6 @@ static std::string fftScheduleDigest(const FFTSchedule &schedule) {
                      /*LowerCase=*/true);
 }
 
-static FailureOr<std::string> spectralProgramDigest(Operation *op) {
-  auto stringAttr = [&](StringRef name) -> StringAttr {
-    return op->getAttrOfType<StringAttr>(name);
-  };
-  auto intAttr = [&](StringRef name) -> IntegerAttr {
-    return op->getAttrOfType<IntegerAttr>(name);
-  };
-  auto output = op->getAttrOfType<DenseI64ArrayAttr>("output_shape");
-  auto padding = op->getAttrOfType<DenseI64ArrayAttr>("padding");
-  auto crop = op->getAttrOfType<DenseI64ArrayAttr>("crop");
-  for (StringRef name : {"target", "arch", "kind", "input_shapes",
-                         "input_signature", "shape_bounds", "template_digest",
-                         "shape_policy", "storage", "abi_storage",
-                         "storage_conversion", "axis_packing", "normalization",
-                         "complex_layout", "accumulation",
-                         "workspace_policy", "fusion_topology", "mutation_lineage",
-                         "native_entry", "child_fft_digests"})
-    if (!stringAttr(name)) return failure();
-  for (StringRef name : {"axis", "dct_type", "window_length", "hop", "frames",
-                         "workspace_bytes", "workgroup_size"})
-    if (!intAttr(name)) return failure();
-  if (!output || !padding || !crop) return failure();
-  auto arrayText = [](ArrayRef<int64_t> values, StringRef separator) {
-    std::string result;
-    for (int64_t value : values) {
-      if (!result.empty()) result += separator;
-      result += Twine(value).str();
-    }
-    return result;
-  };
-  std::string contract =
-      (Twine("schema=tessera.scheduled_spectral.v5;op=") +
-       stringAttr("kind").getValue() + ";target=" +
-       stringAttr("target").getValue() + ";arch=" +
-       stringAttr("arch").getValue() + ";inputs=" +
-       stringAttr("input_shapes").getValue() + ";output=" +
-       arrayText(output.asArrayRef(), "x") + ";axis=" +
-       Twine(intAttr("axis").getInt()) + ";dct_type=" +
-       Twine(intAttr("dct_type").getInt()) + ";shape_policy=" +
-       stringAttr("shape_policy").getValue() + ";storage=" +
-       stringAttr("storage").getValue() + ";abi_storage=" +
-       stringAttr("abi_storage").getValue() + ";storage_conversion=" +
-       stringAttr("storage_conversion").getValue() + ";axis_packing=" +
-       stringAttr("axis_packing").getValue() + ";input_signature=" +
-       stringAttr("input_signature").getValue() + ";shape_bounds=" +
-       stringAttr("shape_bounds").getValue() + ";template_digest=" +
-       stringAttr("template_digest").getValue() + ";padding=" +
-       arrayText(padding.asArrayRef(), ",") + ";crop=" +
-       arrayText(crop.asArrayRef(), ",") + ";window=" +
-       Twine(intAttr("window_length").getInt()) + ";hop=" +
-       Twine(intAttr("hop").getInt()) + ";frames=" +
-       Twine(intAttr("frames").getInt()) + ";normalization=" +
-       stringAttr("normalization").getValue() + ";complex_layout=" +
-       stringAttr("complex_layout").getValue() + ";accumulation=" +
-       stringAttr("accumulation").getValue() + ";workspace_bytes=" +
-       Twine(intAttr("workspace_bytes").getInt()) + ";workspace_policy=" +
-       stringAttr("workspace_policy").getValue() + ";fusion_topology=" +
-       stringAttr("fusion_topology").getValue() + ";mutation_lineage=" +
-       stringAttr("mutation_lineage").getValue() + ";native_entry=" +
-       stringAttr("native_entry").getValue() + ";child_fft_digests=" +
-       stringAttr("child_fft_digests").getValue() + ";workgroup=" +
-       Twine(intAttr("workgroup_size").getInt()))
-          .str();
-  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
-                     /*LowerCase=*/true);
-}
-
 static std::string spectralBackwardTypeSignature(ValueRange values) {
   std::string signature;
   llvm::raw_string_ostream stream(signature);
@@ -3624,10 +3557,12 @@ struct ScheduleToTilePass
     });
     for (Operation *scheduled : scheduledSpectralPrograms) {
       auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
-      FailureOr<std::string> derived = spectralProgramDigest(scheduled);
-      if (failed(derived) || !hash || *derived != hash.getValue()) {
+      auto scheduleDigest =
+          mod->getAttrOfType<StringAttr>("tessera.schedule_digest");
+      if (!hash || !scheduleDigest || hash.getValue().size() != 64 ||
+          hash.getValue() != scheduleDigest.getValue()) {
         scheduled->emitError(
-            "scheduled spectral program policy was altered after hashing");
+            "scheduled spectral program requires the module Schedule Object digest");
         return signalPassFailure();
       }
       SmallVector<schedule::ArtifactOp> matchingArtifacts;

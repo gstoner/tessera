@@ -7,7 +7,12 @@
 // for. Two equal-cost matmuls over 2 stages → stage 0 then stage 1.
 
 module attributes {
-  tessera.pipeline_plan = {num_stages = 2, num_micro_batches = 2, interleaved = false}
+  tessera.schedule_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "fixture", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 2,
+  tessera.pp_num_micro_batches = 2,
+  tessera.pp_interleaved = false
 } {
   // CHECK-LABEL: func.func @pipeline
   func.func @pipeline(%x: tensor<64x128xbf16>, %w0: tensor<128x256xbf16>,

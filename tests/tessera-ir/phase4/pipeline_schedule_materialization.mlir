@@ -1,16 +1,16 @@
 // RUN: tessera-opt --tessera-pipeline --allow-unregistered-dialect --verify-each=false %s | FileCheck %s
 //
-// The verified 1F1B plan is materialized as an explicit dependency order.
-// Each action owns a unique logical clock, so a stage is never asked to run
-// forward and backward concurrently.  The target runtime may overlap
-// independent actions while preserving this serialized semantic order.
+// The verified 1F1B Schedule Object is already materialized by the producer.
+// The lowering pipeline preserves its dependency carrier and stamps the same
+// digest on the owning function and inserted communication operations.
 
 module attributes {
-  tessera.pipeline_plan = {
-    num_stages = 2,
-    num_micro_batches = 3,
-    interleaved = false
-  }
+  tessera.schedule_digest = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "root", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 2,
+  tessera.pp_num_micro_batches = 3,
+  tessera.pp_interleaved = false
 } {
   func.func @pipeline(%x: tensor<64x128xbf16>,
                       %w0: tensor<128x256xbf16>,
@@ -23,11 +23,12 @@ module attributes {
   }
 }
 
-// CHECK: tessera.pipeline_schedule_kind = "1f1b.serialized_dependency_order.v1"
-// CHECK-SAME: tessera.pipeline_steps = [
-// CHECK-SAME: {clock = 0 : i64, micro_batch = 0 : i64, phase = "forward", region = "warmup", stage = 0 : i64}
-// CHECK-SAME: {clock = 1 : i64, micro_batch = 0 : i64, phase = "forward", region = "warmup", stage = 1 : i64}
-// CHECK-SAME: {clock = 2 : i64, micro_batch = 1 : i64, phase = "forward", region = "steady", stage = 0 : i64}
-// CHECK-SAME: {clock = 5 : i64, micro_batch = 0 : i64, phase = "backward", region = "steady", stage = 0 : i64}
-// CHECK-SAME: {clock = 10 : i64, micro_batch = 2 : i64, phase = "backward", region = "cooldown", stage = 1 : i64}
-// CHECK-SAME: {clock = 11 : i64, micro_batch = 2 : i64, phase = "backward", region = "cooldown", stage = 0 : i64}
+// CHECK: sym_name = "pipeline"
+// CHECK: tessera.pipeline.send
+// CHECK-SAME: tessera.schedule_digest = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+// CHECK: tessera.pipeline.recv
+// CHECK-SAME: tessera.schedule_digest = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+// CHECK: }) {tessera.schedule_digest = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+// CHECK: }) {tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1"
+// CHECK-SAME: tessera.pipeline_steps = [{action_id = "root"
+// CHECK-SAME: tessera.schedule_digest = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"

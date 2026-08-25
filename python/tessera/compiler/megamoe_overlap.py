@@ -7,15 +7,20 @@ import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
+import heapq
+
 from .composition_cost import (
     EXHAUSTIVE_ORACLE_MAX_ORDERS,
+    ActionDAGParity,
     CompositionCalibration,
     CompositionCandidate,
     CompositionPruningResult,
+    InferredActionDAG,
     TileAction,
+    compare_inferred_action_dag,
     prune_composition_candidates,
 )
-
+from .graph_ir import GraphIRFunction, IRArg, IROp, IRType
 
 MEGAMOE_OVERLAP_PLAN_SCHEMA = "tessera.megamoe_overlap_plan.v1"
 
@@ -78,9 +83,13 @@ class MegaMoEOverlapPlan:
             for kind in ("dispatch", "compute", "combine")
         }
         if set(self.action_dependencies) != expected_actions:
-            raise ValueError("MegaMoE action DAG must cover every chunk phase exactly once")
+            raise ValueError(
+                "MegaMoE action DAG must cover every chunk phase exactly once"
+            )
         for action, dependencies in self.action_dependencies.items():
-            if action in dependencies or not set(dependencies).issubset(expected_actions):
+            if action in dependencies or not set(dependencies).issubset(
+                expected_actions
+            ):
                 raise ValueError("MegaMoE action DAG has invalid dependencies")
         _require_digest(self.artifact_digest)
 
@@ -116,13 +125,15 @@ def build_megamoe_overlap_plan(
     start = 0
     for index in range(actual_chunks):
         stop = start + q + (1 if index < remainder else 0)
-        chunks.append(MegaMoEChunk(
-            index=index,
-            start=start,
-            stop=stop,
-            expert_capacity=int(capacities[index]),
-            dispatch_buffer_bytes=int(dispatch_buffer_bytes[index]),
-        ))
+        chunks.append(
+            MegaMoEChunk(
+                index=index,
+                start=start,
+                stop=stop,
+                expert_capacity=int(capacities[index]),
+                dispatch_buffer_bytes=int(dispatch_buffer_bytes[index]),
+            )
+        )
         start = stop
     live_limit = min(max_in_flight_chunks, actual_chunks)
     if live_limit < 1:
@@ -133,7 +144,10 @@ def build_megamoe_overlap_plan(
             "precede combine(c)"
         )
     live_bytes = max(
-        sum(chunk.dispatch_buffer_bytes for chunk in chunks[offset:offset + live_limit])
+        sum(
+            chunk.dispatch_buffer_bytes
+            for chunk in chunks[offset : offset + live_limit]
+        )
         for offset in range(actual_chunks)
     )
     if workspace_capacity_bytes is not None:
@@ -172,11 +186,111 @@ def build_megamoe_overlap_plan(
     )
 
 
-def composition_candidate_for_megamoe_plan(
+_PHASE_RANK = {"dispatch": 0, "compute": 1, "combine": 2}
+_MOE_TENSOR = "tensor<*xf32>"
+
+
+def megamoe_issue_order(plan: MegaMoEOverlapPlan) -> tuple[str, ...]:
+    """Deterministic topological issue order of the plan's action DAG.
+
+    Kahn traversal with a (chunk, phase) heap tie-break — the order every
+    consumer shares, so the Graph representation, the inferred DAG, the
+    resource-vector binding, and the parity oracle all index one sequence.
+    """
+
+    dependencies = plan.action_dependencies
+    indegree = {action: len(deps) for action, deps in dependencies.items()}
+    successors: dict[str, list[str]] = {}
+    for action, deps in dependencies.items():
+        for dep in deps:
+            successors.setdefault(dep, []).append(action)
+
+    def key(action: str) -> tuple[int, int]:
+        kind, chunk = action.split(":")
+        return (int(chunk), _PHASE_RANK[kind])
+
+    heap = [(key(action), action) for action, deg in indegree.items() if deg == 0]
+    heapq.heapify(heap)
+    order: list[str] = []
+    while heap:
+        _, action = heapq.heappop(heap)
+        order.append(action)
+        for successor in successors.get(action, []):
+            indegree[successor] -= 1
+            if indegree[successor] == 0:
+                heapq.heappush(heap, (key(successor), successor))
+    if len(order) != len(dependencies):
+        raise ValueError("MegaMoE action DAG has a cycle")
+    return tuple(order)
+
+
+def megamoe_graph_function(plan: MegaMoEOverlapPlan) -> GraphIRFunction:
+    """The chunk pipeline as Graph IR, in the deterministic issue order.
+
+    dispatch/combine are the registered ordered collectives
+    (`tessera.moe_dispatch` / `tessera.moe_combine`); expert compute is pure
+    `tessera.matmul` consuming its own chunk's dispatch result. Edges are NOT
+    written here — `infer_action_dag` derives them from these registered
+    semantics (SSA flow + ordered-collective serialization), which is what
+    makes the R3 candidate a consumer of W2.1/W2.2 facts (SO-3)."""
+
+    tensor = IRType(_MOE_TENSOR)
+    ops: list[IROp] = []
+    for action_id in megamoe_issue_order(plan):
+        kind, chunk = action_id.split(":")
+        if kind == "dispatch":
+            ops.append(
+                IROp(
+                    result=f"%dispatch{chunk}",
+                    op_name="tessera.moe_dispatch",
+                    operands=["%routed"],
+                    operand_types=[_MOE_TENSOR],
+                    result_type=_MOE_TENSOR,
+                )
+            )
+        elif kind == "compute":
+            ops.append(
+                IROp(
+                    result=f"%compute{chunk}",
+                    op_name="tessera.matmul",
+                    operands=[f"%dispatch{chunk}", "%weights"],
+                    operand_types=[_MOE_TENSOR, _MOE_TENSOR],
+                    result_type=_MOE_TENSOR,
+                )
+            )
+        else:
+            ops.append(
+                IROp(
+                    result=f"%combine{chunk}",
+                    op_name="tessera.moe_combine",
+                    operands=[f"%compute{chunk}"],
+                    operand_types=[_MOE_TENSOR],
+                    result_type=_MOE_TENSOR,
+                )
+            )
+    return GraphIRFunction(
+        name=plan.plan_id,
+        args=[IRArg("routed", tensor), IRArg("weights", tensor)],
+        body=ops,
+        return_values=[f"%combine{plan.num_chunks - 1}"],
+    )
+
+
+def megamoe_inferred_composition(
     plan: MegaMoEOverlapPlan,
     benchmark_rows: Mapping[str, Mapping[str, Any]],
-) -> CompositionCandidate:
-    """Bind measured R2 rows to every action in one executable plan."""
+) -> tuple[CompositionCandidate, InferredActionDAG, ActionDAGParity]:
+    """SO-3: the production candidate's edges are INFERRED, hand edges are
+    the coverage oracle.
+
+    The plan's hand-authored `action_dependencies` stop being the executed
+    DAG and become the declared oracle (#31): `compare_inferred_action_dag`
+    must show the generated edges cover every hand edge, or construction
+    fails closed — a generation regression can never silently weaken the
+    schedule. Additional conservative edges (the ordered-collective total
+    order) are reported separately on the parity result, per the SO-3
+    acceptance. The returned candidate carries the content-addressed
+    `ScheduleObject` (digest included) built from the inferred edges."""
 
     expected = set(plan.action_dependencies)
     if set(benchmark_rows) != expected:
@@ -185,15 +299,45 @@ def composition_candidate_for_megamoe_plan(
         raise ValueError(
             f"MegaMoE action evidence must be total; missing={missing}, extra={extra}"
         )
-    actions = tuple(
+    order = megamoe_issue_order(plan)
+    vectors = [
         TileAction.from_benchmark_row(
-            action_id,
-            benchmark_rows[action_id],
-            depends_on=plan.action_dependencies[action_id],
-        )
-        for action_id in sorted(expected)
+            action_id, benchmark_rows[action_id]
+        ).resource_vector
+        for action_id in order
+    ]
+    candidate, inferred = CompositionCandidate.from_graph(
+        plan.plan_id, megamoe_graph_function(plan), vectors, action_ids=order
     )
-    return CompositionCandidate(plan.plan_id, actions)
+    reference = tuple(
+        TileAction(
+            action_id,
+            vectors[index],
+            tuple(plan.action_dependencies[action_id]),
+        )
+        for index, action_id in enumerate(order)
+    )
+    parity = compare_inferred_action_dag(inferred, reference)
+    if not parity.conservative:
+        raise ValueError(
+            "inferred MegaMoE action DAG does not cover the hand-authored "
+            f"oracle edges: missing={parity.missing_reference_edges}"
+        )
+    return candidate, inferred, parity
+
+
+def composition_candidate_for_megamoe_plan(
+    plan: MegaMoEOverlapPlan,
+    benchmark_rows: Mapping[str, Mapping[str, Any]],
+) -> CompositionCandidate:
+    """Bind measured R2 rows to every action in one executable plan.
+
+    Since SO-3 the returned candidate's dependencies are inferred from the
+    registered Graph semantics (see `megamoe_inferred_composition`); the
+    hand-authored plan DAG is the fail-closed coverage oracle."""
+
+    candidate, _, _ = megamoe_inferred_composition(plan, benchmark_rows)
+    return candidate
 
 
 def prune_megamoe_overlap_plans(
@@ -259,5 +403,8 @@ __all__ = [
     "MegaMoEOverlapPlan",
     "build_megamoe_overlap_plan",
     "composition_candidate_for_megamoe_plan",
+    "megamoe_graph_function",
+    "megamoe_inferred_composition",
+    "megamoe_issue_order",
     "prune_megamoe_overlap_plans",
 ]

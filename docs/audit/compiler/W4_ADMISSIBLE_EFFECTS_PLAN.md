@@ -13,9 +13,12 @@ Ordering authority stays with
 and authority chain are in [`README.md`](README.md). This document owns the
 design and acceptance detail only.
 
-**No code yet.** This is the scope-before-build deliverable. Every claim
-below that could have been assumed was measured instead; the measurements
-are in §5.
+**Status.** Slice **E1 is implemented**
+(`python/tessera/compiler/recorded_product.py`, tests in
+`tests/unit/test_recorded_product.py`): the carrier, its per-class (R)
+requirements, the (C) confinement checks, region-level totality, and the
+content address. E2–E5 remain open. Every claim below that could have been
+assumed was measured instead; the measurements are in §5.
 
 ---
 
@@ -172,7 +175,7 @@ first is deliberately the smallest one that exercises the whole ABI.
 
 | # | Slice | Deliverable | Acceptance |
 |---|---|---|---|
-| E1 | **Product ABI + verifier** | One `tessera.recorded_product.v1` carrier: effect class, content-addressed `π`, declared write-set. A boundary verifier checks (R)-inputs are present and (C) write-set ⊆ declared, failing closed with a named diagnostic per class. | Positive and negative fixtures per class; a product whose write-set exceeds its declaration is rejected; **no** class is admitted without a `π`. |
+| E1 | **Product ABI + verifier — LANDED 2026-08-25** | One `tessera.recorded_product.v1` carrier: effect class, content-addressed `π`, declared write-set. A boundary verifier checks (R)-inputs are present and (C) write-set ⊆ declared, failing closed with a named diagnostic per class. | Positive and negative fixtures per class; a product whose write-set exceeds its declaration is rejected; **no** class is admitted without a `π`. |
 | E2 | **Keyed RNG (dropout family)** | Split `AUTODIFF_STOCHASTIC_EFFECT` into *unkeyed* vs *no adjoint rule*; admit keyed draws with a registered rule; carry the key as `π`. | Replay of a recorded dropout region is **bit-identical** (not distributional); unkeyed still fails; the two diagnostics are distinguishable. Gradient checked against the analytic pathwise rule. |
 | E3 | **Mutation, on the existing lineage** | `dtype` becomes real in `state_buffer_lineage`; the product binds lineage id + version **+ content digest**; region replay reads the recorded version and the verifier checks the digest. | Bit-identical replay of a stateful step; a tampered version fails closed; **a buffer whose bytes changed under an unchanged lineage id + version is REJECTED** (the §3.2 correction, with a negative test); a mixed-precision lineage no longer aliases (§5.2). |
 | E4 | **Ordered collectives (identity only)** | Communicator + sequence digest **+ reduction tree/algorithm and topology** as `π`; replay issues the recorded order under the recorded tree. | Mock-mesh replay reproduces the recorded order exactly; a reordered sequence fails closed; **a changed reduction tree fails closed** even when order and inputs match. Bit-identity of a collective RESULT additionally requires native deterministic evidence on real transport (RCCL/NCCL) — the mock check cannot establish it, so E4 claims identity only and the numerical claim moves to E5/DIST-NATIVE-1. |

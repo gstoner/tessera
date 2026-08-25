@@ -8,15 +8,14 @@ last_updated: 2026-08-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **shared recorded-product ABI
-for admissible effects (plan only, no code); NVIDIA outcome: follow-up
-required on adoption, not scoped in the first slices.** E5's physical
-acceptance is deliberately scoped to x86 + gfx1151, so no sm_120 row is
-claimed or implied. Two obligations land here when NVIDIA adopts the ABI:
-its own exact-device replay evidence (no ROCm/x86 result transfers), and —
-for collectives — NCCL deterministic-algorithm selection, since the plan
-requires the reduction tree to be bound before bit-identity may be claimed.
-
+Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
+landed): shared recorded-product carrier + verifier implemented in Python;
+NVIDIA outcome: not applicable at this slice, follow-up on adoption.** E1
+introduces no target-owned surface and E5's physical acceptance stays scoped
+to x86 + gfx1151, so no sm_120 row is claimed or implied. Obligations on
+adoption are unchanged: exact-device replay evidence of its own, and NCCL
+deterministic-algorithm selection, since the carrier requires the reduction
+tree to be bound before bit-identity may be claimed.
 
 Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
 Schedule->Tile spectral identity contract + pipeline carrier ordering; NVIDIA

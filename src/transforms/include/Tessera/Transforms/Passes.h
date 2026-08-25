@@ -131,8 +131,8 @@ std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass(int sm = 90);
 // Pipeline order (after Phase 2/3 distribution + effect annotation):
 //   1. tessera-gpu-collective-insertion — insert reduce_scatter/all_gather
 //      at DP/TP mesh boundaries (reads tessera.weight_sharding + tessera.effect)
-//   2. tessera-pipeline-stage-insertion — 1F1B stage split; insert send/recv
-//      at PP stage boundaries (reads tessera.pipeline_plan on module)
+//   2. tessera-pipeline-stage-insertion — insert send/recv at PP boundaries
+//      from the digest-bound tessera.pipeline_steps Schedule Object carrier
 
 // GPUCollectiveInsertionPass — inserts collective.reduce_scatter at
 // data-parallel gradient boundaries and collective.all_gather at tensor-

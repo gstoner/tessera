@@ -8,6 +8,9 @@ last_updated: 2026-08-24
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `SCHEDULE-AUTHORITY-RESHARD-2026-08-24` — **shared SO-3 and W5.4 contracts assessed; Apple physical follow-up not applicable yet.** Pipeline and compound-spectral lowering now consume one digest-bound Schedule Object, inferred producer edges, roles, and resource evidence without scalar reconstruction. Placement now emits exact mesh-sized local-shard/collective SSA and executes all movement forms on the deterministic mock mesh. These Graph/Schedule/Tile contracts are portable, but x86/gfx1151 spectral numerics and mock transport transfer no Metal schedule or Apple-device claim. A future Metal distributed consumer must bind its own mesh/runtime proof. `NUMPOL-CARRIER-1` (queue row 3b) owns the generalized S5 carrier; no Apple Target change lands in this synchronization.
+
+
 Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
 dependence-inference semantics + MegaMoE R3 producer; Apple outcome: not
 applicable today, inherited on adoption.** Same reason as the nvidia entry:

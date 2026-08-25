@@ -1,31 +1,12 @@
 //===- PipelineStageInsertionPass.cpp — Phase 4 ───────────────────────────===//
 //
-// Partitions the IR into pipeline stages and inserts micro-batch send/recv
-// communication ops at stage boundaries.
-//
-// The 1F1B (one-forward-one-backward) schedule is computed from:
-//   tessera.pipeline_plan = {num_stages, num_micro_batches, interleaved, …}
-//   on the module op (emitted by PipelinePlan::to_mlir_attrs()).
-//
-// What the pass does:
-//   1. Reads num_stages (p) and num_micro_batches (m) from the module attr.
-//   2. Splits the function body into `p` sequential schedule.pipeline.stage
-//      regions, one per device rank.
-//   3. Inserts `tessera.pipeline.send` at each stage's output and
-//      `tessera.pipeline.recv` at the next stage's input.
-//   4. Annotates each stage region with:
-//        {tessera.pp_stage = k, tessera.pp_num_micro_batches = m}
-//
-// For the current implementation, "splitting" is approximated by annotating
-// ops that carry a `tessera.layer = {stage = k}` attribute (set by
-// DistributedPlan layer specs). Full SSA splitting would require a complete
-// program-partitioning pass — that is deferred to Phase 5.
+// Inserts send/recv communication at already materialized pipeline boundaries.
+// The one schedule authority is the content-addressed Schedule Object emitted
+// by PipelinePlan. Its digest and dependency steps survive in module IR; this
+// pass consumes that carrier and never reconstructs a schedule from scalar
+// options or a parallel tessera.pipeline_plan dictionary.
 //
 // Registration: --tessera-pipeline-stage-insertion
-// Options:
-//   --num-stages        pipeline stage count (overrides module attr)
-//   --num-micro-batches micro-batch count    (overrides module attr)
-//   --interleaved       use interleaved 1F1B (default false)
 //
 //===----------------------------------------------------------------------===//
 
@@ -50,14 +31,6 @@ namespace {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Read an integer attribute from the module's tessera.pipeline_plan dict.
-static int64_t readPlanAttr(ModuleOp m, StringRef key, int64_t defaultVal) {
-  auto planAttr = m->getAttrOfType<DictionaryAttr>("tessera.pipeline_plan");
-  if (!planAttr) return defaultVal;
-  if (auto v = planAttr.getAs<IntegerAttr>(key))
-    return v.getInt();
-  return defaultVal;
-}
 
 /// Get the pipeline stage assigned to an op via `tessera.layer = {stage = k}`.
 static int64_t getOpStage(Operation *op) {
@@ -74,10 +47,12 @@ static int64_t getOpStage(Operation *op) {
 /// Emit a `tessera.pipeline.send` op carrying the activation tensor to the
 /// next pipeline stage.
 static void emitPipelineSend(OpBuilder &b, Location loc, Value activation,
-                              int64_t fromStage, int64_t microBatch) {
+                              int64_t fromStage, int64_t microBatch,
+                              StringAttr scheduleDigest) {
   OperationState state(loc, "tessera.pipeline.send");
   state.addOperands(activation);
   state.addAttribute("from_stage",  b.getI64IntegerAttr(fromStage));
+  state.addAttribute("tessera.schedule_digest", scheduleDigest);
   state.addAttribute("micro_batch", b.getI64IntegerAttr(microBatch));
   b.create(state);
 
@@ -89,9 +64,11 @@ static void emitPipelineSend(OpBuilder &b, Location loc, Value activation,
 /// Emit a `tessera.pipeline.recv` op that receives the activation from the
 /// previous pipeline stage and returns it as a new value.
 static Value emitPipelineRecv(OpBuilder &b, Location loc, Type activationType,
-                               int64_t toStage, int64_t microBatch) {
+                               int64_t toStage, int64_t microBatch,
+                               StringAttr scheduleDigest) {
   OperationState state(loc, "tessera.pipeline.recv");
   state.addAttribute("to_stage",    b.getI64IntegerAttr(toStage));
+  state.addAttribute("tessera.schedule_digest", scheduleDigest);
   state.addAttribute("micro_batch", b.getI64IntegerAttr(microBatch));
   state.addTypes(activationType);
   Operation *op = b.create(state);
@@ -115,18 +92,6 @@ struct PipelineStageInsertionPass
   PipelineStageInsertionPass(const PipelineStageInsertionPass &other)
       : PassWrapper(other) {}
 
-  Option<int> numStagesOpt{
-      *this, "num-stages",
-      llvm::cl::desc("Pipeline stage count (overrides module attr)"),
-      llvm::cl::init(0)};
-  Option<int> numMicroBatchesOpt{
-      *this, "num-micro-batches",
-      llvm::cl::desc("Micro-batch count (overrides module attr)"),
-      llvm::cl::init(0)};
-  Option<bool> interleavedOpt{
-      *this, "interleaved",
-      llvm::cl::desc("Use interleaved 1F1B schedule"),
-      llvm::cl::init(false)};
 
   StringRef getArgument() const override {
     return "tessera-pipeline-stage-insertion";
@@ -139,16 +104,34 @@ struct PipelineStageInsertionPass
     ModuleOp module = getOperation();
     OpBuilder b(module.getContext());
 
-    // ── Read pipeline parameters ─────────────────────────────────────────
-    int64_t numStages = numStagesOpt > 0
-        ? numStagesOpt
-        : readPlanAttr(module, "num_stages", 1);
-    int64_t numMicroBatches = numMicroBatchesOpt > 0
-        ? numMicroBatchesOpt
-        : readPlanAttr(module, "num_micro_batches", 1);
-    bool interleaved = interleavedOpt
-        ? (bool)interleavedOpt
-        : (readPlanAttr(module, "interleaved", 0) != 0);
+    // Consume the materialized Schedule Object carrier. Scalar plan dicts and
+    // pass-option overrides are intentionally not accepted as schedule data.
+    auto scheduleDigest =
+        module->getAttrOfType<StringAttr>("tessera.schedule_digest");
+    auto scheduleSchema =
+        module->getAttrOfType<StringAttr>("tessera.pipeline_schedule_schema");
+    auto scheduleSteps =
+        module->getAttrOfType<ArrayAttr>("tessera.pipeline_steps");
+    auto numStagesAttr =
+        module->getAttrOfType<IntegerAttr>("tessera.pp_num_stages");
+    auto numMicroBatchesAttr =
+        module->getAttrOfType<IntegerAttr>("tessera.pp_num_micro_batches");
+    auto interleavedAttr =
+        module->getAttrOfType<BoolAttr>("tessera.pp_interleaved");
+    if (!scheduleDigest || scheduleDigest.getValue().size() != 64 ||
+        !scheduleSchema ||
+        scheduleSchema.getValue() != "tessera.pipeline_schedule.v1" ||
+        !scheduleSteps || scheduleSteps.empty() || !numStagesAttr ||
+        !numMicroBatchesAttr || !interleavedAttr) {
+      module.emitError(
+          "pipeline stage insertion requires one complete digest-bound "
+          "tessera.pipeline_schedule.v1 carrier");
+      signalPassFailure();
+      return;
+    }
+    int64_t numStages = numStagesAttr.getInt();
+    int64_t numMicroBatches = numMicroBatchesAttr.getInt();
+    bool interleaved = interleavedAttr.getValue();
 
     if (numStages <= 1) {
       // Nothing to do — single stage, no pipeline boundaries
@@ -161,10 +144,11 @@ struct PipelineStageInsertionPass
                << " micro_batches=" << numMicroBatches
                << (interleaved ? " interleaved" : " standard-1F1B") << "\n");
 
-    // ── Annotate module with pipeline plan ───────────────────────────────
-    module->setAttr("tessera.pp_num_stages",       b.getI64IntegerAttr(numStages));
-    module->setAttr("tessera.pp_num_micro_batches", b.getI64IntegerAttr(numMicroBatches));
-    module->setAttr("tessera.pp_interleaved",       b.getBoolAttr(interleaved));
+    // Stamp the same content identity on every owning function. The resource
+    // vectors and reasoned edges remain in the out-of-band Schedule Object.
+    module.walk([&](func::FuncOp func) {
+      func->setAttr("tessera.schedule_digest", scheduleDigest);
+    });
 
     // ── Group ops by pipeline stage ──────────────────────────────────────
     // Collect (stage → ops) mapping across all functions
@@ -217,7 +201,8 @@ struct PipelineStageInsertionPass
 
           // Emit exactly one send after the producer.
           b.setInsertionPointAfter(op);
-          emitPipelineSend(b, op->getLoc(), result, stage, /*mb=*/0);
+          emitPipelineSend(b, op->getLoc(), result, stage, /*mb=*/0,
+                           scheduleDigest);
           ++sendCount;
 
           // Insert one recv before the first stage+1 consumer and rewire the
@@ -226,7 +211,8 @@ struct PipelineStageInsertionPass
             if (getOpStage(user) == stage + 1) {
               b.setInsertionPoint(user);
               Value recvVal = emitPipelineRecv(
-                  b, user->getLoc(), result.getType(), stage + 1, /*mb=*/0);
+                  b, user->getLoc(), result.getType(), stage + 1, /*mb=*/0,
+                  scheduleDigest);
               for (OpOperand &use : llvm::make_early_inc_range(result.getUses())) {
                 if (getOpStage(use.getOwner()) == stage + 1)
                   use.set(recvVal);
@@ -240,10 +226,13 @@ struct PipelineStageInsertionPass
     }
 
     // ── Annotate schedule.pipeline.region ops ────────────────────────────
+    // Preserve the owning Schedule Object identity on every pipeline region.
     module.walk([&](Operation *op) {
       if (op->getName().getStringRef().contains("schedule.pipeline")) {
-        op->setAttr("tessera.pp_num_stages",        b.getI64IntegerAttr(numStages));
-        op->setAttr("tessera.pp_num_micro_batches", b.getI64IntegerAttr(numMicroBatches));
+        op->setAttr("tessera.pp_num_stages", b.getI64IntegerAttr(numStages));
+        op->setAttr("tessera.pp_num_micro_batches",
+                    b.getI64IntegerAttr(numMicroBatches));
+        op->setAttr("tessera.schedule_digest", scheduleDigest);
       }
     });
 

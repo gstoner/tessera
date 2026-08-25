@@ -7,9 +7,8 @@
 //
 //   --tessera-pipeline-schedule-legality
 //
-// Reads the pipeline plan from the module: `tessera.pp_num_stages` /
-// `tessera.pp_num_micro_batches` / `tessera.pp_interleaved` (set by the
-// insertion pass) or the `tessera.pipeline_plan` dict. Invariants:
+// Reads the digest-bound `tessera.pipeline_steps` carrier and its materialized
+// scalar views. It never reconstructs steps from a `tessera.pipeline_plan`.
 //
 //   PP_MICRO_BATCHES_TOO_FEW
 //     1F1B needs micro_batches >= num_stages to fill the pipe; interleaved 1F1B
@@ -42,21 +41,11 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
 
-#include <algorithm>
 
 using namespace mlir;
 
 namespace {
 
-static int64_t readPlan(ModuleOp m, StringRef ppKey, StringRef planKey,
-                        int64_t defaultVal) {
-  if (auto v = m->getAttrOfType<IntegerAttr>(ppKey))
-    return v.getInt();
-  if (auto plan = m->getAttrOfType<DictionaryAttr>("tessera.pipeline_plan"))
-    if (auto v = plan.getAs<IntegerAttr>(planKey))
-      return v.getInt();
-  return defaultVal;
-}
 
 static int64_t opStage(Operation *op) {
   if (auto layer = op->getAttrOfType<DictionaryAttr>("tessera.layer"))
@@ -67,51 +56,6 @@ static int64_t opStage(Operation *op) {
   return -1;
 }
 
-static void materializeSchedule(ModuleOp module, int64_t numStages,
-                                int64_t microBatches) {
-  // Materialize a conservative dependency order rather than merely proving
-  // that a schedule could exist.  One action owns each logical clock, so no
-  // rank can be asked to execute forward and backward simultaneously.  A
-  // later target/runtime planner may overlap independent actions while
-  // preserving this order.
-  Builder b(module.getContext());
-  SmallVector<Attribute> steps;
-  int64_t clock = 0;
-  auto append = [&](StringRef region, StringRef phase, int64_t microBatch,
-                    int64_t stage) {
-    steps.push_back(b.getDictionaryAttr({
-        b.getNamedAttr("clock", b.getI64IntegerAttr(clock++)),
-        b.getNamedAttr("micro_batch", b.getI64IntegerAttr(microBatch)),
-        b.getNamedAttr("phase", b.getStringAttr(phase)),
-        b.getNamedAttr("region", b.getStringAttr(region)),
-        b.getNamedAttr("stage", b.getI64IntegerAttr(stage)),
-    }));
-  };
-  auto forwardSweep = [&](StringRef region, int64_t microBatch) {
-    for (int64_t stage = 0; stage < numStages; ++stage)
-      append(region, "forward", microBatch, stage);
-  };
-  auto backwardSweep = [&](StringRef region, int64_t microBatch) {
-    for (int64_t stage = numStages; stage-- > 0;)
-      append(region, "backward", microBatch, stage);
-  };
-
-  int64_t warmupBatches = std::min(numStages - 1, microBatches);
-  for (int64_t mb = 0; mb < warmupBatches; ++mb)
-    forwardSweep("warmup", mb);
-  int64_t steadyBatches = microBatches - warmupBatches;
-  for (int64_t mb = 0; mb < steadyBatches; ++mb) {
-    forwardSweep("steady", mb + warmupBatches);
-    backwardSweep("steady", mb);
-  }
-  for (int64_t mb = steadyBatches; mb < microBatches; ++mb)
-    backwardSweep("cooldown", mb);
-
-  module->setAttr("tessera.pipeline_steps", b.getArrayAttr(steps));
-  module->setAttr(
-      "tessera.pipeline_schedule_kind",
-      b.getStringAttr("1f1b.serialized_dependency_order.v1"));
-}
 
 struct PipelineScheduleLegalityPass
     : public PassWrapper<PipelineScheduleLegalityPass, OperationPass<ModuleOp>> {
@@ -121,20 +65,139 @@ struct PipelineScheduleLegalityPass
     return "tessera-pipeline-schedule-legality";
   }
   StringRef getDescription() const override {
-    return "Prove 1F1B legality and materialize explicit "
-           "warmup/steady/cooldown dependency steps.";
+    return "Prove 1F1B legality against the materialized Schedule Object "
+           "dependency carrier.";
   }
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
-    int64_t numStages = readPlan(module, "tessera.pp_num_stages", "num_stages", 1);
-    if (numStages <= 1)
-      return; // no pipeline.
+    auto scheduleDigest =
+        module->getAttrOfType<StringAttr>("tessera.schedule_digest");
+    auto scheduleSchema =
+        module->getAttrOfType<StringAttr>("tessera.pipeline_schedule_schema");
+    auto scheduleSteps =
+        module->getAttrOfType<ArrayAttr>("tessera.pipeline_steps");
+    auto numStagesAttr =
+        module->getAttrOfType<IntegerAttr>("tessera.pp_num_stages");
+    auto microBatchesAttr =
+        module->getAttrOfType<IntegerAttr>("tessera.pp_num_micro_batches");
+    auto interleavedAttr =
+        module->getAttrOfType<BoolAttr>("tessera.pp_interleaved");
+    if (!scheduleDigest || scheduleDigest.getValue().size() != 64 ||
+        !scheduleSchema ||
+        scheduleSchema.getValue() != "tessera.pipeline_schedule.v1" ||
+        !scheduleSteps || scheduleSteps.empty() || !numStagesAttr ||
+        !microBatchesAttr || !interleavedAttr) {
+      module.emitError(
+          "pipeline legality requires one complete digest-bound "
+          "tessera.pipeline_schedule.v1 carrier");
+      signalPassFailure();
+      return;
+    }
+    // The carrier IS the executable authority, so its rows are validated
+    // rather than counted: unique action ids, resolvable dependencies, an
+    // acyclic dependency order, and agreement with the declared pipeline
+    // dimensions. Previously only `!empty()` was checked, so a stale or
+    // hand-edited carrier with duplicate ids, dangling dependencies, or a
+    // cycle was accepted as authoritative (PR #626 review).
+    {
+      llvm::DenseSet<StringRef> seen;
+      llvm::SmallVector<StringRef> order;
+      llvm::DenseMap<StringRef, llvm::SmallVector<StringRef>> requires;
+      int64_t declaredStages = numStagesAttr.getInt();
+      int64_t declaredMicroBatches = microBatchesAttr.getInt();
+      for (Attribute entry : scheduleSteps) {
+        auto row = dyn_cast<DictionaryAttr>(entry);
+        if (!row) {
+          module.emitError("pipeline step carrier row is not a dictionary");
+          signalPassFailure();
+          return;
+        }
+        auto actionId = row.getAs<StringAttr>("action_id");
+        auto stage = row.getAs<IntegerAttr>("stage");
+        auto microBatch = row.getAs<IntegerAttr>("micro_batch");
+        auto clock = row.getAs<IntegerAttr>("clock");
+        auto dependsOn = row.getAs<ArrayAttr>("depends_on");
+        if (!actionId || actionId.getValue().empty() || !stage ||
+            !microBatch || !clock || !dependsOn) {
+          module.emitError(
+              "pipeline step carrier row requires action_id, stage, "
+              "micro_batch, clock, and depends_on");
+          signalPassFailure();
+          return;
+        }
+        if (!seen.insert(actionId.getValue()).second) {
+          module.emitError("duplicate pipeline action id '")
+              << actionId.getValue() << "'";
+          signalPassFailure();
+          return;
+        }
+        if (clock.getInt() < 0 || microBatch.getInt() < 0 ||
+            microBatch.getInt() >= declaredMicroBatches || stage.getInt() < 0) {
+          module.emitError("pipeline step '")
+              << actionId.getValue()
+              << "' disagrees with the declared pipeline dimensions";
+          signalPassFailure();
+          return;
+        }
+        // Virtual stages run 0..num_stages*num_chunks-1; without chunking the
+        // bound is num_stages.
+        int64_t chunks = 1;
+        if (auto chunkAttr =
+                module->getAttrOfType<IntegerAttr>("tessera.pp_num_chunks"))
+          chunks = std::max<int64_t>(1, chunkAttr.getInt());
+        if (stage.getInt() >= declaredStages * chunks) {
+          module.emitError("pipeline step '")
+              << actionId.getValue() << "' names virtual stage "
+              << stage.getInt() << " beyond the declared "
+              << (declaredStages * chunks);
+          signalPassFailure();
+          return;
+        }
+        llvm::SmallVector<StringRef> deps;
+        for (Attribute dependency : dependsOn) {
+          auto dependencyId = dyn_cast<StringAttr>(dependency);
+          if (!dependencyId) {
+            module.emitError("pipeline dependency is not a string");
+            signalPassFailure();
+            return;
+          }
+          deps.push_back(dependencyId.getValue());
+        }
+        requires[actionId.getValue()] = deps;
+        order.push_back(actionId.getValue());
+      }
+      // Dependencies must resolve, and the carrier's own order must be a
+      // topological order (a producer listed after its consumer would let the
+      // consumer issue first).
+      llvm::DenseMap<StringRef, size_t> position;
+      for (auto [index, id] : llvm::enumerate(order)) position[id] = index;
+      for (StringRef id : order) {
+        for (StringRef dependency : requires[id]) {
+          auto found = position.find(dependency);
+          if (found == position.end()) {
+            module.emitError("pipeline action '")
+                << id << "' depends on unknown action '" << dependency << "'";
+            signalPassFailure();
+            return;
+          }
+          if (found->second >= position[id]) {
+            module.emitError("pipeline action '")
+                << id << "' depends on '" << dependency
+                << "', which the carrier orders no earlier (cycle or "
+                   "producer-after-consumer)";
+            signalPassFailure();
+            return;
+          }
+        }
+      }
+    }
 
-    int64_t microBatches =
-        readPlan(module, "tessera.pp_num_micro_batches", "num_micro_batches", 1);
-    bool interleaved = readPlan(module, "tessera.pp_interleaved", "interleaved",
-                                0) != 0;
+    int64_t numStages = numStagesAttr.getInt();
+    if (numStages <= 1)
+      return;
+    int64_t microBatches = microBatchesAttr.getInt();
+    bool interleaved = interleavedAttr.getValue();
     bool anyError = false;
 
     // ── Micro-batch fill contract (Decision #17) ──
@@ -212,7 +275,6 @@ struct PipelineScheduleLegalityPass
       signalPassFailure();
       return;
     }
-    materializeSchedule(module, numStages, microBatches);
   }
 };
 

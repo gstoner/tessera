@@ -33,19 +33,23 @@ Reference: CLAUDE.md §Phase 4 — PipelinePlan
 """
 
 from __future__ import annotations
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, NamedTuple, Optional
-
+from .benchmark_row import MeasuredResourceVector
+from .schedule_object import ScheduleAction, ScheduleObject, ScheduleRole
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schedule step
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class Phase(Enum):
-    FORWARD  = "F"
+    FORWARD = "F"
     BACKWARD = "B"
-    IDLE     = "_"   # bubble
+    IDLE = "_"  # bubble
 
 
 class ScheduleStep(NamedTuple):
@@ -59,6 +63,7 @@ class ScheduleStep(NamedTuple):
         micro_batch : micro-batch index (0-based)
         phase       : FORWARD or BACKWARD
     """
+
     clock: int
     rank: int
     stage: int
@@ -69,6 +74,7 @@ class ScheduleStep(NamedTuple):
 # ─────────────────────────────────────────────────────────────────────────────
 # PipelinePlan
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PipelinePlan:
@@ -94,6 +100,7 @@ class PipelinePlan:
         assert step0.phase == Phase.FORWARD
         assert step0.micro_batch == 0
     """
+
     num_stages: int
     num_micro_batches: int
     interleaved: bool = False
@@ -104,16 +111,16 @@ class PipelinePlan:
         if self.num_stages < 1:
             raise ValueError(f"num_stages must be >= 1, got {self.num_stages}")
         if self.num_micro_batches < 1:
-            raise ValueError(f"num_micro_batches must be >= 1, got {self.num_micro_batches}")
+            raise ValueError(
+                f"num_micro_batches must be >= 1, got {self.num_micro_batches}"
+            )
         if self.decoupled and self.interleaved:
             raise ValueError(
                 "decoupled and interleaved schedules are mutually exclusive"
             )
         if self.interleaved:
             if self.num_chunks < 2:
-                raise ValueError(
-                    "Interleaved 1F1B requires num_chunks >= 2"
-                )
+                raise ValueError("Interleaved 1F1B requires num_chunks >= 2")
             min_m = self.num_stages * self.num_chunks
             if self.num_micro_batches < min_m:
                 raise ValueError(
@@ -199,14 +206,24 @@ class PipelinePlan:
         steps: List[ScheduleStep] = []
         for mb in range(m):
             for rank in range(p):
-                steps.append(ScheduleStep(
-                    clock=2 * mb, rank=rank, stage=rank,
-                    micro_batch=mb, phase=Phase.FORWARD,
-                ))
-                steps.append(ScheduleStep(
-                    clock=2 * mb + 1, rank=rank, stage=rank,
-                    micro_batch=mb, phase=Phase.BACKWARD,
-                ))
+                steps.append(
+                    ScheduleStep(
+                        clock=2 * mb,
+                        rank=rank,
+                        stage=rank,
+                        micro_batch=mb,
+                        phase=Phase.FORWARD,
+                    )
+                )
+                steps.append(
+                    ScheduleStep(
+                        clock=2 * mb + 1,
+                        rank=rank,
+                        stage=rank,
+                        micro_batch=mb,
+                        phase=Phase.BACKWARD,
+                    )
+                )
         steps.sort(key=lambda s: (s.clock, s.rank))
         return steps
 
@@ -217,10 +234,10 @@ class PipelinePlan:
         steps: List[ScheduleStep] = []
 
         # Per-rank state: next micro-batch to forward and backward
-        fwd_mb = list(range(p))      # rank k starts at micro-batch k
-        bwd_mb = [0] * p             # backward starts after warmup
+        fwd_mb = list(range(p))  # rank k starts at micro-batch k
+        bwd_mb = [0] * p  # backward starts after warmup
         fwd_ptr = [0] * p
-        bwd_ptr = [-1] * p           # -1 = not yet started
+        bwd_ptr = [-1] * p  # -1 = not yet started
 
         # We use a simpler direct formulation:
         # For rank r (stage r), forward of micro-batch m starts at clock (r + m)
@@ -230,18 +247,28 @@ class PipelinePlan:
             for rank in range(p):
                 # Forward
                 fwd_clock = rank + mb
-                steps.append(ScheduleStep(
-                    clock=fwd_clock, rank=rank, stage=rank,
-                    micro_batch=mb, phase=Phase.FORWARD,
-                ))
+                steps.append(
+                    ScheduleStep(
+                        clock=fwd_clock,
+                        rank=rank,
+                        stage=rank,
+                        micro_batch=mb,
+                        phase=Phase.FORWARD,
+                    )
+                )
                 # Backward (mirrored: last stage finishes backward first)
                 # In standard 1F1B, backward of mb on rank r starts at:
                 #   clock = (p - 1 - rank) + mb + p
                 bwd_clock = (p - 1 - rank) + mb + p
-                steps.append(ScheduleStep(
-                    clock=bwd_clock, rank=rank, stage=rank,
-                    micro_batch=mb, phase=Phase.BACKWARD,
-                ))
+                steps.append(
+                    ScheduleStep(
+                        clock=bwd_clock,
+                        rank=rank,
+                        stage=rank,
+                        micro_batch=mb,
+                        phase=Phase.BACKWARD,
+                    )
+                )
 
         steps.sort(key=lambda s: (s.clock, s.rank))
         return steps
@@ -264,14 +291,24 @@ class PipelinePlan:
                     virtual_stage = rank + chunk * p
                     fwd_clock = rank + mb + chunk * p
                     bwd_clock = fwd_clock + p * v
-                    steps.append(ScheduleStep(
-                        clock=fwd_clock, rank=rank, stage=virtual_stage,
-                        micro_batch=mb, phase=Phase.FORWARD,
-                    ))
-                    steps.append(ScheduleStep(
-                        clock=bwd_clock, rank=rank, stage=virtual_stage,
-                        micro_batch=mb, phase=Phase.BACKWARD,
-                    ))
+                    steps.append(
+                        ScheduleStep(
+                            clock=fwd_clock,
+                            rank=rank,
+                            stage=virtual_stage,
+                            micro_batch=mb,
+                            phase=Phase.FORWARD,
+                        )
+                    )
+                    steps.append(
+                        ScheduleStep(
+                            clock=bwd_clock,
+                            rank=rank,
+                            stage=virtual_stage,
+                            micro_batch=mb,
+                            phase=Phase.BACKWARD,
+                        )
+                    )
 
         steps.sort(key=lambda s: (s.clock, s.rank))
         return steps
@@ -296,8 +333,7 @@ class PipelinePlan:
 
         # Build grid[rank][clock] = label
         grid: List[List[str]] = [
-            ["__"] * (max_clock + 1)
-            for _ in range(self.num_stages)
+            ["__"] * (max_clock + 1) for _ in range(self.num_stages)
         ]
         for step in steps:
             if step.clock > max_clock:
@@ -311,14 +347,184 @@ class PipelinePlan:
         return "\n".join(lines)
 
     def to_mlir_attrs(self) -> str:
-        """Serialize for PipelineStageInsertionPass."""
+        """Materialize the digest-bound Schedule Object IR carrier.
+
+        Lowering consumes this carrier directly instead of rebuilding a 1F1B
+        schedule from a parallel scalar ``pipeline_plan``. Resource vectors
+        remain out-of-band in :attr:`schedule_object`; IR carries the digest
+        and the dependency/phase view needed by the pipeline passes.
+        """
+        schedule = self.schedule_object
+        step_by_id = {self._action_id(step): step for step in self.schedule_steps()}
+        rendered_steps = []
+        for action in schedule.actions:
+            step = step_by_id[action.action_id]
+            dependencies = ", ".join(
+                f'"{dependency}"' for dependency in action.depends_on
+            )
+            rendered_steps.append(
+                "{"
+                f'action_id = "{action.action_id}", '
+                f"clock = {step.clock}, "
+                f"depends_on = [{dependencies}], "
+                f"micro_batch = {step.micro_batch}, "
+                f'phase = "{step.phase.value}", '
+                f"rank = {step.rank}, "
+                f"stage = {step.stage}"
+                "}"
+            )
         return (
-            f'{{tessera.pipeline_plan = {{'
-            f'num_stages = {self.num_stages}, '
-            f'num_micro_batches = {self.num_micro_batches}, '
-            f'interleaved = {"true" if self.interleaved else "false"}, '
-            f'decoupled = {"true" if self.decoupled else "false"}, '
-            f'num_chunks = {self.num_chunks}}}}}'
+            "{"
+            f'tessera.schedule_digest = "{schedule.digest}", '
+            'tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1", '
+            f'tessera.pipeline_steps = [{", ".join(rendered_steps)}], '
+            f"tessera.pp_num_stages = {self.num_stages}, "
+            f"tessera.pp_num_micro_batches = {self.num_micro_batches}, "
+            f'tessera.pp_interleaved = {"true" if self.interleaved else "false"}, '
+            f'tessera.pp_decoupled = {"true" if self.decoupled else "false"}, '
+            f"tessera.pp_num_chunks = {self.num_chunks}"
+            "}"
+        )
+
+    @staticmethod
+    def _action_id(step: ScheduleStep) -> str:
+        return (
+            f"pipeline:{step.clock}:{step.rank}:{step.stage}:"
+            f"{step.micro_batch}:{step.phase.value}"
+        )
+
+    @property
+    def schedule_object(self) -> ScheduleObject:
+        """Return the one content-addressed authority for this pipeline."""
+
+        steps = tuple(self.schedule_steps())
+        # Key by the VIRTUAL STAGE, not the physical rank. Under interleaving
+        # one rank owns several virtual stages, so a (rank, micro_batch, phase)
+        # key collides across chunks: later chunks overwrite earlier ones, and
+        # a forward step then resolves its producer to a future chunk (dropped
+        # by the ordering filter below) or to nothing at all. Measured on
+        # num_stages=4, num_chunks=2: 64 of 128 steps collided and 32 of 56
+        # cross-stage forward steps lost their true producer edge, so the
+        # emitted Schedule Object permitted a virtual stage to run before the
+        # stage that feeds it (PR #626 review).
+        by_key = {(step.stage, step.micro_batch, step.phase): step for step in steps}
+        order_by_id = {self._action_id(step): index for index, step in enumerate(steps)}
+        # Virtual stage count is DERIVED from the emitted schedule: under
+        # interleaving it is num_stages x num_chunks, not num_stages.
+        total_stages = max((step.stage for step in steps), default=-1) + 1
+        inverted_backward: list[tuple[str, str]] = []
+        previous_by_rank: dict[int, ScheduleStep] = {}
+        actions: list[ScheduleAction] = []
+        for step in steps:
+            action_id = self._action_id(step)
+            dependencies: set[str] = set()
+            previous = previous_by_rank.get(step.rank)
+            if previous is not None:
+                dependencies.add(self._action_id(previous))
+            if step.phase == Phase.FORWARD and step.stage > 0:
+                upstream = by_key.get(
+                    (step.stage - 1, step.micro_batch, Phase.FORWARD)
+                )
+                if upstream is not None:
+                    dependencies.add(self._action_id(upstream))
+            if step.phase == Phase.BACKWARD:
+                own_forward = by_key.get(
+                    (step.stage, step.micro_batch, Phase.FORWARD)
+                )
+                if own_forward is not None:
+                    dependencies.add(self._action_id(own_forward))
+                if step.stage + 1 < total_stages:
+                    downstream = by_key.get(
+                        (step.stage + 1, step.micro_batch, Phase.BACKWARD)
+                    )
+                    if downstream is not None:
+                        downstream_id = self._action_id(downstream)
+                        if order_by_id[downstream_id] < order_by_id[action_id]:
+                            dependencies.add(downstream_id)
+                        else:
+                            # KNOWN PLANNER LIMITATION, surfaced by keying on
+                            # the virtual stage (PR #626 review). The
+                            # interleaved generator emits backward steps in
+                            # ASCENDING stage order (num_stages=2, chunks=2,
+                            # micro-batch 0: stage 0 B at clock 4 ... stage 3 B
+                            # at clock 7), which is the opposite of gradient
+                            # flow, so this edge cannot be expressed in the
+                            # emitted order. Recording it would claim an
+                            # ordering the schedule does not realize, so it is
+                            # omitted and counted; fixing the generator's
+                            # interleaved backward order is its own change.
+                            inverted_backward.append((action_id, downstream_id))
+
+            # A real producer ordered AFTER its consumer is a schedule defect,
+            # not something to drop: silently filtering it would emit a
+            # Schedule Object that permits the consumer to run first. Fail
+            # closed instead (PR #626 review).
+            late = sorted(
+                dependency
+                for dependency in dependencies
+                if order_by_id[dependency] >= order_by_id[action_id]
+            )
+            # Forward/own-forward edges MUST precede their consumer in any
+            # correct schedule; an inversion there is a defect, not a
+            # limitation, so it fails closed rather than being dropped.
+            if late:
+                raise ValueError(
+                    f"pipeline schedule places {action_id!r} before its "
+                    f"producers {late!r}; the emitted Schedule Object would "
+                    f"permit a stage to execute ahead of its input"
+                )
+            identity = json.dumps(
+                {
+                    "action_id": action_id,
+                    "dependencies": sorted(dependencies),
+                    "mode": (
+                        "decoupled"
+                        if self.decoupled
+                        else "interleaved" if self.interleaved else "1f1b"
+                    ),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            vector = MeasuredResourceVector(
+                compute_time_ms=1.0,
+                bytes_moved=0,
+                communication_bytes=0,
+                queue_identity=f"pipeline_rank:{step.rank}",
+                resource_identity=f"pipeline_stage:{step.stage}",
+                timing_provenance={
+                    "source": "static_pipeline_model",
+                    "domain": "compiler",
+                },
+                artifact_digest=hashlib.sha256(identity.encode()).hexdigest(),
+            ).as_dict()
+            actions.append(
+                ScheduleAction(
+                    action_id,
+                    vector,
+                    tuple(sorted(dependencies)),
+                    op_ref=f"schedule.pipeline.{step.phase.value.lower()}",
+                    scope=f"stage:{step.stage}",
+                )
+            )
+            previous_by_rank[step.rank] = step
+
+        mode = (
+            "decoupled"
+            if self.decoupled
+            else "interleaved" if self.interleaved else "1f1b"
+        )
+        roles = tuple(
+            ScheduleRole(f"stage_{stage}", (f"stage{stage}",))
+            for stage in range(self.num_stages)
+        )
+        return ScheduleObject(
+            object_id=(
+                f"pipeline:{mode}:stages={self.num_stages}:"
+                f"micro_batches={self.num_micro_batches}:chunks={self.num_chunks}"
+            ),
+            actions=tuple(actions),
+            roles=roles,
         )
 
     def __repr__(self) -> str:

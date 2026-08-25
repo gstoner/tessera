@@ -649,7 +649,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         input_dialects=("tessera", "func"),
         output_dialects=("tessera", "func"),
-        required_attrs=("tessera.pipeline_plan", "tessera.pp_stage"),
+        required_attrs=("tessera.schedule_digest", "tessera.pipeline_steps",
+                        "tessera.pp_num_stages", "tessera.pp_stage"),
         diagnostic_codes=(),
         pass_kind="transform",
         sprint="Pipeline-PP",
@@ -659,13 +660,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="PipelineScheduleLegalityPass",
         summary=(
             "Proves 1F1B micro-batch fill, stage occupancy, send/recv pairing, "
-            "and value-rewrite completeness, then materializes an explicit "
-            "warmup/steady/cooldown dependency order in "
-            "tessera.pipeline_steps."
+            "value-rewrite completeness, and the producer-materialized "
+            "Schedule Object dependency carrier without scalar reconstruction."
         ),
         input_dialects=("tessera", "func"),
         output_dialects=("tessera", "func"),
-        required_attrs=("tessera.pp_num_stages", "tessera.pp_num_micro_batches",
+        required_attrs=("tessera.schedule_digest", "tessera.pipeline_steps",
+                        "tessera.pp_num_stages", "tessera.pp_num_micro_batches",
                         "tessera.pp_stage"),
         diagnostic_codes=(
             "PP_EMPTY_STAGE",
@@ -681,13 +682,15 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-pipeline-stage-insertion",
         cpp_class="PipelineStageInsertionPass",
         summary=(
-            "Inserts tessera.pipeline.send/recv at cross-stage boundaries and "
-            "rewires the boundary uses to the recv (the real send/recv SSA "
-            "rewrite), driven by the tessera.pp_stage partition."
+            "Consumes the digest-bound Schedule Object carrier, inserts "
+            "tessera.pipeline.send/recv at cross-stage boundaries, stamps the "
+            "digest on emitted IR, and rewires boundary uses to recv results."
         ),
         input_dialects=("tessera", "func"),
         output_dialects=("tessera", "func"),
-        required_attrs=("tessera.pp_stage", "tessera.layer"),
+        required_attrs=("tessera.schedule_digest", "tessera.pipeline_steps",
+                        "tessera.pp_num_stages", "tessera.pp_num_micro_batches",
+                        "tessera.pp_stage", "tessera.layer"),
         preserved_attrs=("tessera.pp_stage",),
         diagnostic_codes=(),
         must_run_after=("tessera-pipeline-partition",),

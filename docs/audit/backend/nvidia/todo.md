@@ -8,6 +8,9 @@ last_updated: 2026-08-24
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `SCHEDULE-AUTHORITY-RESHARD-2026-08-24` — **shared SO-3 and W5.4 parity validated; no CUDA physical change.** Pipeline and compound-spectral lowering now consume one digest-bound Schedule Object, inferred producer edges, roles, and resource evidence without scalar reconstruction. Placement emits exact mesh-sized local-shard/collective SSA and all movement forms execute on the deterministic mock mesh. The carrier and verifier changes are shared; Zen 5/gfx1151 spectral evidence and mock transport transfer no CUDA schedule, NCCL proof, or RTX claim. `NUMPOL-CARRIER-1` owns the generalized S5 carrier; SM120 consumption remains a later architecture-owned assessment.
+
+
 Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
 dependence-inference semantics + MegaMoE R3 producer; NVIDIA outcome: not
 applicable today, inherited when NVIDIA adopts MoE plans.** The change is

@@ -853,73 +853,6 @@ static std::string fftScheduleDigest(const FFTSchedule &schedule) {
                      /*LowerCase=*/true);
 }
 
-static FailureOr<std::string> spectralProgramDigest(Operation *op) {
-  auto stringAttr = [&](StringRef name) -> StringAttr {
-    return op->getAttrOfType<StringAttr>(name);
-  };
-  auto intAttr = [&](StringRef name) -> IntegerAttr {
-    return op->getAttrOfType<IntegerAttr>(name);
-  };
-  auto output = op->getAttrOfType<DenseI64ArrayAttr>("output_shape");
-  auto padding = op->getAttrOfType<DenseI64ArrayAttr>("padding");
-  auto crop = op->getAttrOfType<DenseI64ArrayAttr>("crop");
-  for (StringRef name : {"target", "arch", "kind", "input_shapes",
-                         "input_signature", "shape_bounds", "template_digest",
-                         "shape_policy", "storage", "abi_storage",
-                         "storage_conversion", "axis_packing", "normalization",
-                         "complex_layout", "accumulation",
-                         "workspace_policy", "fusion_topology", "mutation_lineage",
-                         "native_entry", "child_fft_digests"})
-    if (!stringAttr(name)) return failure();
-  for (StringRef name : {"axis", "dct_type", "window_length", "hop", "frames",
-                         "workspace_bytes", "workgroup_size"})
-    if (!intAttr(name)) return failure();
-  if (!output || !padding || !crop) return failure();
-  auto arrayText = [](ArrayRef<int64_t> values, StringRef separator) {
-    std::string result;
-    for (int64_t value : values) {
-      if (!result.empty()) result += separator;
-      result += Twine(value).str();
-    }
-    return result;
-  };
-  std::string contract =
-      (Twine("schema=tessera.scheduled_spectral.v5;op=") +
-       stringAttr("kind").getValue() + ";target=" +
-       stringAttr("target").getValue() + ";arch=" +
-       stringAttr("arch").getValue() + ";inputs=" +
-       stringAttr("input_shapes").getValue() + ";output=" +
-       arrayText(output.asArrayRef(), "x") + ";axis=" +
-       Twine(intAttr("axis").getInt()) + ";dct_type=" +
-       Twine(intAttr("dct_type").getInt()) + ";shape_policy=" +
-       stringAttr("shape_policy").getValue() + ";storage=" +
-       stringAttr("storage").getValue() + ";abi_storage=" +
-       stringAttr("abi_storage").getValue() + ";storage_conversion=" +
-       stringAttr("storage_conversion").getValue() + ";axis_packing=" +
-       stringAttr("axis_packing").getValue() + ";input_signature=" +
-       stringAttr("input_signature").getValue() + ";shape_bounds=" +
-       stringAttr("shape_bounds").getValue() + ";template_digest=" +
-       stringAttr("template_digest").getValue() + ";padding=" +
-       arrayText(padding.asArrayRef(), ",") + ";crop=" +
-       arrayText(crop.asArrayRef(), ",") + ";window=" +
-       Twine(intAttr("window_length").getInt()) + ";hop=" +
-       Twine(intAttr("hop").getInt()) + ";frames=" +
-       Twine(intAttr("frames").getInt()) + ";normalization=" +
-       stringAttr("normalization").getValue() + ";complex_layout=" +
-       stringAttr("complex_layout").getValue() + ";accumulation=" +
-       stringAttr("accumulation").getValue() + ";workspace_bytes=" +
-       Twine(intAttr("workspace_bytes").getInt()) + ";workspace_policy=" +
-       stringAttr("workspace_policy").getValue() + ";fusion_topology=" +
-       stringAttr("fusion_topology").getValue() + ";mutation_lineage=" +
-       stringAttr("mutation_lineage").getValue() + ";native_entry=" +
-       stringAttr("native_entry").getValue() + ";child_fft_digests=" +
-       stringAttr("child_fft_digests").getValue() + ";workgroup=" +
-       Twine(intAttr("workgroup_size").getInt()))
-          .str();
-  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
-                     /*LowerCase=*/true);
-}
-
 static std::string spectralBackwardTypeSignature(ValueRange values) {
   std::string signature;
   llvm::raw_string_ostream stream(signature);
@@ -3624,11 +3557,63 @@ struct ScheduleToTilePass
     });
     for (Operation *scheduled : scheduledSpectralPrograms) {
       auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
-      FailureOr<std::string> derived = spectralProgramDigest(scheduled);
-      if (failed(derived) || !hash || *derived != hash.getValue()) {
+      auto scheduleDigest =
+          mod->getAttrOfType<StringAttr>("tessera.schedule_digest");
+      if (!hash || !scheduleDigest || hash.getValue().size() != 64 ||
+          hash.getValue() != scheduleDigest.getValue()) {
         scheduled->emitError(
-            "scheduled spectral program policy was altered after hashing");
+            "scheduled spectral program requires the module Schedule Object digest");
         return signalPassFailure();
+      }
+      // Matching digest strings alone do NOT bind the attributes this pass
+      // then consumes: a cached or hand-edited program could keep both
+      // digests and still change workspace_bytes or native_entry, which the
+      // native launch would use (PR #626 review). Re-verify every consumed
+      // policy value against the semantic payload the producer carried.
+      auto semantic =
+          mod->getAttrOfType<StringAttr>("tessera.spectral_semantic");
+      if (!semantic || semantic.getValue().empty()) {
+        scheduled->emitError(
+            "scheduled spectral program requires the module "
+            "tessera.spectral_semantic payload to verify consumed policy");
+        return signalPassFailure();
+      }
+      auto payloadField = [&](StringRef field) -> StringRef {
+        StringRef payload = semantic.getValue();
+        size_t at = payload.find((field + "=").str());
+        while (at != StringRef::npos && at != 0 && payload[at - 1] != ';')
+          at = payload.find((field + "=").str(), at + 1);
+        if (at == StringRef::npos) return StringRef();
+        StringRef rest = payload.drop_front(at + field.size() + 1);
+        size_t end = rest.find(';');
+        return end == StringRef::npos ? rest : rest.take_front(end);
+      };
+      auto requireMatches = [&](StringRef field, const Twine &actual) -> bool {
+        StringRef declared = payloadField(field);
+        if (declared.empty() || declared != actual.str()) {
+          scheduled->emitError("scheduled spectral program attribute '")
+              << field << "' is " << actual
+              << ", which disagrees with the carried semantic payload ('"
+              << declared << "'); the digest does not cover a changed policy";
+          return false;
+        }
+        return true;
+      };
+      if (auto workspaceAttr =
+              scheduled->getAttrOfType<IntegerAttr>("workspace_bytes")) {
+        if (!requireMatches("workspace_bytes",
+                            Twine(workspaceAttr.getInt())))
+          return signalPassFailure();
+      }
+      if (auto entryAttr =
+              scheduled->getAttrOfType<StringAttr>("native_entry")) {
+        if (!requireMatches("native_entry", entryAttr.getValue()))
+          return signalPassFailure();
+      }
+      if (auto normalizationAttr =
+              scheduled->getAttrOfType<StringAttr>("normalization")) {
+        if (!requireMatches("normalization", normalizationAttr.getValue()))
+          return signalPassFailure();
       }
       SmallVector<schedule::ArtifactOp> matchingArtifacts;
       mod.walk([&](schedule::ArtifactOp artifact) {

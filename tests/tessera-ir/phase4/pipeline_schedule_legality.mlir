@@ -8,7 +8,12 @@
 // 0->1 boundary gets a paired send/recv, and the 1F1B schedule verifies.
 // expected-remark@+1 {{pipeline-stage-insertion}}
 module attributes {
-  tessera.pipeline_plan = {num_stages = 2, num_micro_batches = 2, interleaved = false}
+  tessera.schedule_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "ok", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 2,
+  tessera.pp_num_micro_batches = 2,
+  tessera.pp_interleaved = false
 } {
   func.func @ok(%x: tensor<64x128xbf16>, %w0: tensor<128x256xbf16>,
                 %w1: tensor<256x128xbf16>) -> tensor<64x128xbf16> {
@@ -24,7 +29,12 @@ module attributes {
 // two independent matmuls have no 0->1 dataflow, so no comm / remark is emitted.
 // expected-error@+1 {{PP_MICRO_BATCHES_TOO_FEW}}
 module attributes {
-  tessera.pipeline_plan = {num_stages = 2, num_micro_batches = 1, interleaved = false}
+  tessera.schedule_digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "few", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 2,
+  tessera.pp_num_micro_batches = 1,
+  tessera.pp_interleaved = false
 } {
   func.func @few(%x: tensor<4x4xbf16>, %w: tensor<4x4xbf16>) -> tensor<4x4xbf16> {
     %a = "tessera.matmul"(%x, %w) : (tensor<4x4xbf16>, tensor<4x4xbf16>) -> tensor<4x4xbf16>
@@ -39,7 +49,12 @@ module attributes {
 // stage 0 and leaves stage 1 empty — a hole in the send/recv chain.
 // expected-error@+1 {{PP_EMPTY_STAGE}}
 module attributes {
-  tessera.pipeline_plan = {num_stages = 2, num_micro_batches = 2, interleaved = false}
+  tessera.schedule_digest = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "empty", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 2,
+  tessera.pp_num_micro_batches = 2,
+  tessera.pp_interleaved = false
 } {
   func.func @empty(%x: tensor<4x4xbf16>, %w: tensor<4x4xbf16>) -> tensor<4x4xbf16> {
     %a = "tessera.matmul"(%x, %w) : (tensor<4x4xbf16>, tensor<4x4xbf16>) -> tensor<4x4xbf16>
@@ -53,7 +68,12 @@ module attributes {
 // skipping stage 1 — the adjacent-only insertion never routes it, so the value
 // crosses a stage boundary with no send/recv (pre-tagged to force the skip).
 module attributes {
-  tessera.pipeline_plan = {num_stages = 3, num_micro_batches = 3, interleaved = false}
+  tessera.schedule_digest = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1",
+  tessera.pipeline_steps = [{action_id = "skip", clock = 0, depends_on = [], micro_batch = 0, phase = "F", rank = 0, stage = 0}],
+  tessera.pp_num_stages = 3,
+  tessera.pp_num_micro_batches = 3,
+  tessera.pp_interleaved = false
 } {
   func.func @skip(%x: tensor<4x4xbf16>, %w: tensor<4x4xbf16>) -> tensor<4x4xbf16> {
     // expected-error@+1 {{PP_UNROUTED_CROSS_STAGE_VALUE}}

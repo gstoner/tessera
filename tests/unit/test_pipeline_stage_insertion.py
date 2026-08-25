@@ -4,6 +4,7 @@ Phase 4 — test_pipeline_stage_insertion.py
 Tests for PipelinePlan: 1F1B schedule generation, bubble fraction, and
 interleaved variant.
 """
+
 import pytest
 from tessera.compiler.pipeline_planner import PipelinePlan, Phase, ScheduleStep
 
@@ -16,13 +17,14 @@ class TestPipelinePlanBasic:
     def test_bubble_fraction_standard(self):
         # (p-1)/m = (4-1)/8 = 0.375
         plan = PipelinePlan(num_stages=4, num_micro_batches=8)
-        assert abs(plan.bubble_fraction - 3/8) < 1e-9
+        assert abs(plan.bubble_fraction - 3 / 8) < 1e-9
 
     def test_bubble_fraction_interleaved(self):
         # (p-1)/(m*v) = (4-1)/(8*2) = 0.1875
-        plan = PipelinePlan(num_stages=4, num_micro_batches=8,
-                            interleaved=True, num_chunks=2)
-        assert abs(plan.bubble_fraction - 3/16) < 1e-9
+        plan = PipelinePlan(
+            num_stages=4, num_micro_batches=8, interleaved=True, num_chunks=2
+        )
+        assert abs(plan.bubble_fraction - 3 / 16) < 1e-9
 
     def test_warmup_steps(self):
         plan = PipelinePlan(num_stages=4, num_micro_batches=8)
@@ -38,13 +40,15 @@ class TestPipelinePlanBasic:
 
     def test_interleaved_needs_num_chunks_ge_2(self):
         with pytest.raises(ValueError, match="num_chunks >= 2"):
-            PipelinePlan(num_stages=4, num_micro_batches=8,
-                         interleaved=True, num_chunks=1)
+            PipelinePlan(
+                num_stages=4, num_micro_batches=8, interleaved=True, num_chunks=1
+            )
 
     def test_interleaved_needs_enough_micro_batches(self):
         with pytest.raises(ValueError):
-            PipelinePlan(num_stages=4, num_micro_batches=4,
-                         interleaved=True, num_chunks=2)  # need m >= 8
+            PipelinePlan(
+                num_stages=4, num_micro_batches=4, interleaved=True, num_chunks=2
+            )  # need m >= 8
 
 
 class TestScheduleSteps:
@@ -79,14 +83,23 @@ class TestScheduleSteps:
         steps = self._steps(num_stages=2, num_micro_batches=4)
         for rank in range(2):
             for mb in range(4):
-                fwd_clk = next(s.clock for s in steps
-                               if s.rank == rank and s.micro_batch == mb
-                               and s.phase == Phase.FORWARD)
-                bwd_clk = next(s.clock for s in steps
-                               if s.rank == rank and s.micro_batch == mb
-                               and s.phase == Phase.BACKWARD)
-                assert fwd_clk < bwd_clk, \
-                    f"rank {rank} mb {mb}: fwd@{fwd_clk} not before bwd@{bwd_clk}"
+                fwd_clk = next(
+                    s.clock
+                    for s in steps
+                    if s.rank == rank
+                    and s.micro_batch == mb
+                    and s.phase == Phase.FORWARD
+                )
+                bwd_clk = next(
+                    s.clock
+                    for s in steps
+                    if s.rank == rank
+                    and s.micro_batch == mb
+                    and s.phase == Phase.BACKWARD
+                )
+                assert (
+                    fwd_clk < bwd_clk
+                ), f"rank {rank} mb {mb}: fwd@{fwd_clk} not before bwd@{bwd_clk}"
 
     def test_steps_sorted_by_clock(self):
         steps = self._steps()
@@ -102,8 +115,9 @@ class TestScheduleSteps:
 
 class TestInterleaved:
     def test_interleaved_steps_include_all_micro_batches(self):
-        plan = PipelinePlan(num_stages=2, num_micro_batches=4,
-                            interleaved=True, num_chunks=2)
+        plan = PipelinePlan(
+            num_stages=2, num_micro_batches=4, interleaved=True, num_chunks=2
+        )
         steps = plan.schedule_steps()
         fwd = [s for s in steps if s.phase == Phase.FORWARD]
         for rank in range(2):
@@ -112,8 +126,9 @@ class TestInterleaved:
 
     def test_interleaved_bubble_less_than_standard(self):
         std = PipelinePlan(num_stages=4, num_micro_batches=8)
-        itr = PipelinePlan(num_stages=4, num_micro_batches=8,
-                           interleaved=True, num_chunks=2)
+        itr = PipelinePlan(
+            num_stages=4, num_micro_batches=8, interleaved=True, num_chunks=2
+        )
         assert itr.bubble_fraction < std.bubble_fraction
 
 
@@ -134,8 +149,9 @@ class TestPipelinePlanMLIR:
         assert "interleaved = false" in attr
 
     def test_to_mlir_attrs_interleaved_true(self):
-        plan = PipelinePlan(num_stages=2, num_micro_batches=4,
-                            interleaved=True, num_chunks=2)
+        plan = PipelinePlan(
+            num_stages=2, num_micro_batches=4, interleaved=True, num_chunks=2
+        )
         attr = plan.to_mlir_attrs()
         assert "interleaved = true" in attr
 
@@ -144,6 +160,28 @@ class TestPipelinePlanMLIR:
         r = repr(plan)
         assert "bubble" in r
         assert "37.50%" in r
+
+    def test_emits_one_digest_bound_schedule_carrier(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=8)
+        attrs = plan.to_mlir_attrs()
+        assert "tessera.pipeline_plan" not in attrs
+        assert f'tessera.schedule_digest = "{plan.schedule_object.digest}"' in attrs
+        assert (
+            'tessera.pipeline_schedule_schema = "tessera.pipeline_schedule.v1"' in attrs
+        )
+        assert "tessera.pipeline_steps = [" in attrs
+
+    def test_schedule_object_preserves_roles_resources_and_dependencies(self):
+        schedule = PipelinePlan(num_stages=4, num_micro_batches=8).schedule_object
+        assert {role.name for role in schedule.roles} == {
+            "stage_0",
+            "stage_1",
+            "stage_2",
+            "stage_3",
+        }
+        assert all(action.resource_vector for action in schedule.actions)
+        assert schedule.edges
+        assert len(schedule.digest) == 64
 
 
 class TestDecoupledStage:
@@ -169,16 +207,22 @@ class TestDecoupledStage:
 
     def test_decoupled_and_interleaved_mutually_exclusive(self):
         with pytest.raises(ValueError, match="mutually exclusive"):
-            PipelinePlan(num_stages=4, num_micro_batches=8,
-                         decoupled=True, interleaved=True, num_chunks=2)
+            PipelinePlan(
+                num_stages=4,
+                num_micro_batches=8,
+                decoupled=True,
+                interleaved=True,
+                num_chunks=2,
+            )
 
     def test_all_micro_batches_covered(self):
         plan = PipelinePlan(num_stages=4, num_micro_batches=4, decoupled=True)
         steps = plan.schedule_steps()
         for phase in (Phase.FORWARD, Phase.BACKWARD):
             for rank in range(4):
-                mbs = {s.micro_batch for s in steps
-                       if s.rank == rank and s.phase == phase}
+                mbs = {
+                    s.micro_batch for s in steps if s.rank == rank and s.phase == phase
+                }
                 assert mbs == {0, 1, 2, 3}
 
     def test_no_cross_stage_activation_dependency(self):
@@ -202,10 +246,20 @@ class TestDecoupledStage:
         steps = plan.schedule_steps()
         for rank in range(3):
             for mb in range(5):
-                fwd = next(s.clock for s in steps if s.rank == rank
-                           and s.micro_batch == mb and s.phase == Phase.FORWARD)
-                bwd = next(s.clock for s in steps if s.rank == rank
-                           and s.micro_batch == mb and s.phase == Phase.BACKWARD)
+                fwd = next(
+                    s.clock
+                    for s in steps
+                    if s.rank == rank
+                    and s.micro_batch == mb
+                    and s.phase == Phase.FORWARD
+                )
+                bwd = next(
+                    s.clock
+                    for s in steps
+                    if s.rank == rank
+                    and s.micro_batch == mb
+                    and s.phase == Phase.BACKWARD
+                )
                 assert fwd < bwd
 
     def test_to_mlir_attrs_decoupled_flag(self):

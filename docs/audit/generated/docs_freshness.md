@@ -167,7 +167,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/COMPILER_AUDIT.md` | - | 2026-08-10 | 14 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 16 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 27 | ✓ |
-| `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-15 | 9 | ✓ |
+| `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-24 | 0 | ✓ |
 | `compiler/CUTE_IR_ASSESSMENT.md` | - | 2026-08-24 | 0 | ✓ |
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 16 | ✓ |
 | `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-08-09 | 15 | ✓ |

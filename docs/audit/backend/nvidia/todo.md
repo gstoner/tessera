@@ -8,6 +8,17 @@ last_updated: 2026-08-24
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
+`numeric_policy` carrier contract (integrated-plan queue row 3b); NVIDIA
+outcome: follow-up required, sequenced behind W1.1.** Newly owned row,
+nothing implemented yet. NVIDIA will consume the same carrier, but its typed
+fragment producers are still open under W1.1 — the carrier work here should
+follow that, not race it, or the two will collide at the same seam. CAKE
+(#32's original derivation) is an NVIDIA-facing consumer, so the barrier and
+TCGen05 fragment paths are the ones to check first. sm_120 exact-device
+evidence required before any numerical claim; no ROCm/x86 result transfers.
+
+
 Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **shared ABI
 assessed; no CUDA physical change.** Apple now exports the existing C++ rank-2
 plan through the native layout ABI for its MSL emitters and owns fresh M1 Max

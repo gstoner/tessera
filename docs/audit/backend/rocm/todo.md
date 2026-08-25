@@ -7,6 +7,19 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
+`numeric_policy` carrier contract (integrated-plan queue row 3b); ROCm
+outcome: follow-up required — ROCm owns the worked reference.** The row is
+newly owned and nothing is implemented yet; this entry records the
+architecture-specific obligation, not parity. ROCm is the one backend with a
+partial carrier today: the W1.1 typed route carries the accumulator inside
+`!tile.fragment<…, acc, …>`. The generalization must RE-EXPRESS that path as
+an instance of the general carrier (#31 — one implementation per boundary,
+not a second), with bit-identical gfx1151 outputs as the acceptance bar, and
+extend it to the pointwise/reduction/butterfly chains that carry no policy
+today. Exact-device gfx1151 evidence required before any numerical claim.
+
+
 Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **shared ABI
 assessed; no AMD physical change.** Apple now exports the existing C++ rank-2
 plan through the native layout ABI for its MSL emitters and owns fresh M1 Max

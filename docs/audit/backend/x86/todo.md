@@ -9,6 +9,17 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
+`numeric_policy` carrier contract (integrated-plan queue row 3b); x86
+outcome: follow-up required.** Newly owned row, nothing implemented yet.
+x86 has no fragment type, so it has NO carrier today — the accumulator
+contract stated at Graph IR does not exist by the time the AVX-512 emitters
+pick an instruction (Decision #32's original defect, on this backend in its
+purest form). The row's acceptance names bit-identical existing x86 outputs,
+so this backend is both a consumer of the contract and a regression gate for
+it. Clean Zen 5 evidence required for any realizability verdict (FORGE §1.3).
+
+
 Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **shared ABI
 assessed; no x86 physical change.** Apple now exports the existing C++ rank-2
 plan through the native layout ABI for its MSL emitters and owns fresh M1 Max

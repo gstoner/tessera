@@ -206,7 +206,8 @@ learn from `numeric_policy`, not from a special case), and the PDE plan §III.4
 
 **Stands:** partially landed where W1.1 reached — `!tile.fragment<…, acc, …>`
 carries the accumulator on the typed ROCm route. Generalizing beyond MMA
-fragments (pointwise/reduction/butterfly chains) has **no owning row**.
+fragments (pointwise/reduction/butterfly chains) is owned by
+**NUMPOL-CARRIER-1 (integrated-plan queue row 3b, 2026-08-24)**.
 **FORGE §1.3 supplies the measured target** this carrier was missing: whether
 the fused-epilogue fp32-accumulator win is realizable flips 913× → 1.1× → 1.0×
 purely as a function of `accum` × state dtype — a fact only a compiler carrying
@@ -311,7 +312,7 @@ and it is deliberately host-free).
 | S2 schedule object | **W5.2** (c/e/g landed/landing) | IR-surviving schedule datum; stated entry point (CAKE Ph 3); roles vocabulary (CAKE Ph 2) |
 | S3 calibration + arbiter | W5.2b/c landed; TileSight §4 items | **Calibration sweeps** (fleet-box task, small); rasterization-knob consumers; certificate-driven candidate rejection (PDE §III.2) |
 | S4 keys + certificates | Governance (#21a/#29/#30, drift-gated) | Per-lane, carried inside each plan |
-| S5 numeric_policy carrier | W1.1 (fragments only) | **Generalized carrier + boundary verifier** — no row |
+| S5 numeric_policy carrier | W1.1 (fragments only) | **Owned 2026-08-24: INTEGRATED_COMPILER_PLAN queue row 3b (NUMPOL-CARRIER-1)** |
 | S6 structural-op tranche | — | **Entire tranche — no row** (G1b, scan, segment_sum, tridiagonal, attention modes, index ops) |
 | S7 memory tiers + prefetch | W2.4a (sync floor); E4 chunk machinery | **Prefetch edge + feasibility check + KV-cache invariants** — no row beyond SparDA's own table |
 | S8 transform substrate | AD-* rows (partial) | **Real batching; implicit-diff hardening** — no rows; schedule-AD deliberately deferred |

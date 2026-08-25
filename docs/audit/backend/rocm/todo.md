@@ -6,6 +6,8 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; ROCm outcome: **parity VALIDATED, exact-device (gfx1151)**.** The keyed Philox RNG family executes its recorded product on the WSL-visible Radeon 8060S through `rocm_rng_compiled` with `execution_kind=native_gpu` asserted exactly, so the row cannot pass by falling through to a CPU lane. Replay from the product alone is BIT-IDENTICAL on device, a changed counter changes the draw (non-vacuous), and the same product matches the x86 result and the algorithm reference bit-for-bit. Correctness only — no timing is claimed on WSL, and the collective class's native-RCCL evidence remains separately open under the E4 key.
+
 
 Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
 recorded products (identity only); ROCm outcome: follow-up required (owns the native evidence).** The product

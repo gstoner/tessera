@@ -8,6 +8,8 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; x86 outcome: **parity VALIDATED (AVX-512 host)**.** Same family through `x86_rng_compiled` with `execution_kind=native_cpu` asserted exactly. Replay from the recorded product is bit-identical, and the cross-target row shows this host and gfx1151 produce the same bits from the same product.
+
 
 Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
 recorded products (identity only); x86 outcome: parity validated (host-side analysis only).** The product

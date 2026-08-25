@@ -7,6 +7,8 @@ last_updated: 2026-08-25
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; NVIDIA outcome: not applicable — no row claimed.** E5's physical acceptance was scoped to x86 + gfx1151 and executed there. No sm_120 evidence exists or is implied; an NVIDIA row would need its own exact-device replay on NR2 Pro, since no result transfers between architectures.
+
 
 Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
 recorded products (identity only); NVIDIA outcome: not applicable today, inherited on adoption.** The product

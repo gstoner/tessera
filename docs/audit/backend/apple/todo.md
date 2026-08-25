@@ -7,6 +7,8 @@ last_updated: 2026-08-25
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; Apple outcome: not applicable — no row claimed.** As with NVIDIA: no M1 Max row was run and none is implied. The keyed-RNG class rests on counter-based purity, which holds on any target, so an Apple row is a matter of running it rather than of new design.
+
 
 Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
 recorded products (identity only); Apple outcome: not applicable today.** The product

@@ -8,33 +8,47 @@ last_updated: 2026-08-24
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **reachable Metal
+physical-consumer tail closed.** The versioned native layout ABI now exports
+the existing `Rank2Index.h` coordinate plan to source emitters without a Python
+fallback. Steel Tile GEMM plus the scalar, tiled, cooperative-matrix,
+reduction, normalization, attention, and gated-matmul MSL families request
+their A/B/C rank-2 order from that authority before emitting address text.
+All 20 reachable `(raster_order, raster_group)` combinations retain the
+established row-major expressions. A fresh Apple7/M1 Max process using the
+rebuilt runtime passed the compiler-selected canonical GEMM cohort 3/3,
+including `13x16 @ 16x11` ragged zero-pad/store, and the fused cooperative
+matrix pointwise/reduction cohort 38/38 against independent NumPy oracles.
+Dynamic non-separable tuple codomains remain fail closed; no raster choice or
+production-route promotion is implied.
+
 Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **shared contract assessed;
-Metal consumer remains open.** The x86 target pass now consumes static,
+reachable Metal rank-2 consumer now closed independently.** The x86 target pass now consumes static,
 bounded-dynamic, nested, and tuple-product layouts through the shared proof,
 but its scalar CPU `div/rem`, runtime assertions, and AVX2/AVX-512 evidence do
 not define MSL address arithmetic or prove an Apple device. Non-affine and
 non-separable tuple codomains remain fail closed fleet-wide.
 
 Cross-backend sync `LAYOUT-ALG-L4-X86-2026-08-24` — **shared authority parity
-assessed; Metal migration remains open.** The header-only rank-2 mapping is
-portable, but AVX-512 loop nests, intrinsics, host admission, and Ryzen evidence
-do not transfer to MSL. Apple must still migrate its reachable text-emitter
-indices and prove byte-identical mapping on an Apple host.
+and Metal migration closed.** AVX-512 evidence did not transfer: Apple now
+consumes the same C++ rank-2 plan through the no-fallback native ABI, retains
+the established emitted arithmetic, and owns fresh M1 Max numerical proof.
 
 Cross-backend sync `LAYOUT-ALG-L3-L5-DYNAMIC-2026-08-24` — **shared proof and
-carrier parity assessed; Metal physical adoption remains follow-up required.**
+carrier parity assessed; reachable Metal rank-2 adoption closed.**
 Factorization/residency and Schedule Object v2 proof fields are portable. The
 new tuple-product Tile carrier is registered and static components retain the
-same native algebra proof, but Apple has no materializer for it. CUDA/ROCm
+same native algebra proof; Apple has no reachable tuple-product schedule and
+keeps that carrier fail closed. CUDA/ROCm
 device results, shared-panel/LDS schedules, and index-template changes do not
-transfer. Apple must route its remaining MSL text-emitter indices through the
-shared authority and supply Apple-device proof before claiming L4 parity.
+transfer. Apple's reachable MSL indices now use shared authority with independent
+device proof; this does not admit a dynamic or non-separable tuple layout.
 
 Cross-backend sync `DYNAMIC-COMPOSED-SM120-2026-08-24` — **shared carrier
-parity assessed; Metal materialization remains follow-up required.** Nested
+parity assessed; unsupported Metal dynamic layouts remain fail closed.** Nested
 outer shape/stride trees with dynamic scalar-affine leaves now verify through
-the common Tile contract, but Apple has no target-owned consumer for the
-materialization operation. CUDA's six-scalar strided ABI, CTA mapping, and RTX
+the common Tile contract, but Apple has no reachable schedule that requests
+that dynamic materialization. CUDA's six-scalar strided ABI, CTA mapping, and RTX
 5070 numerical proof transfer no MSL address rule or Apple-device evidence.
 Tuple-valued/non-affine carriers continue to fail closed.
 
@@ -68,10 +82,11 @@ changes no Metal threadgroup mapping, MSL ABI, or Apple exact-device evidence.
 
 
 Cross-backend sync `CUTE-LAYOUT-MATERIALIZE-1-2026-08-23` — **shared static
-affine coordinate ABI; Apple outcome: follow-up required.** The new canonical
-i64 linear-base producer has no Metal physical consumer. NVIDIA's SM120 view
-mapping and RTX 5070 proof transfer neither an MSL address mapping nor Mac
-evidence.
+affine coordinate ABI; reachable Apple rank-2 subset closed independently.**
+Metal source emitters now obtain their coordinate order from the same native
+C++ plan and have M1 Max proof. The general dynamic/tuple Tile producer remains
+fail closed because no Apple schedule requests it. NVIDIA's SM120 view mapping
+and RTX 5070 proof transfer neither an MSL address mapping nor Mac evidence.
 
 Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
 CI serialization lane; Apple outcome: not applicable.**

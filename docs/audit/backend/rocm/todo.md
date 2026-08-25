@@ -7,6 +7,13 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **shared ABI
+assessed; no AMD physical change.** Apple now exports the existing C++ rank-2
+plan through the native layout ABI for its MSL emitters and owns fresh M1 Max
+proof. gfx1151 continues to consume the same authority in its ROCm lowering;
+Metal source templates, simdgroup scheduling, and Apple evidence transfer no
+wave/LDS schedule or Radeon claim.
+
 Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **shared admissibility
 parity validated; no AMD physical change.** The x86 consumer follows the same
 canonical dynamic-leaf order and mixed-radix mathematics already used by the

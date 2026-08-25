@@ -1,4 +1,5 @@
 #include "tessera/LayoutAlgebra.h"
+#include "tessera/Rank2Index.h"
 
 #include <algorithm>
 #include <cctype>
@@ -590,6 +591,24 @@ extern "C" {
 
 const char *tessera_layout_algebra_version_v1(void) {
   return "tessera.layout_algebra.v1";
+}
+
+int tessera_layout_rank2_index_plan_v1(
+    int order, TesseraLayoutRank2IndexPlanV1 *result) {
+  if (!result)
+    return TESSERA_LAYOUT_INVALID_ARGUMENT;
+  tessera::layout::Rank2Order nativeOrder;
+  if (order == TESSERA_LAYOUT_ROW_MAJOR)
+    nativeOrder = tessera::layout::Rank2Order::RowMajor;
+  else if (order == TESSERA_LAYOUT_COLUMN_MAJOR)
+    nativeOrder = tessera::layout::Rank2Order::ColumnMajor;
+  else
+    return TESSERA_LAYOUT_INVALID_ARGUMENT;
+  const tessera::layout::Rank2IndexPlan plan =
+      tessera::layout::rank2IndexPlan(nativeOrder);
+  result->major_coordinate = plan.majorCoordinate;
+  result->minor_coordinate = plan.minorCoordinate;
+  return TESSERA_LAYOUT_OK;
 }
 
 int tessera_layout_size_v1(const int64_t *shape, size_t rank, int64_t *result) {

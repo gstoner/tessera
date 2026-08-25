@@ -25,6 +25,15 @@ int main() {
 
   assert(std::strcmp(tessera_layout_algebra_version_v1(),
                      "tessera.layout_algebra.v1") == 0);
+  TesseraLayoutRank2IndexPlanV1 rank2Plan{};
+  assert(tessera_layout_rank2_index_plan_v1(TESSERA_LAYOUT_ROW_MAJOR,
+                                            &rank2Plan) == TESSERA_LAYOUT_OK);
+  assert(rank2Plan.major_coordinate == 0 && rank2Plan.minor_coordinate == 1);
+  assert(tessera_layout_rank2_index_plan_v1(TESSERA_LAYOUT_COLUMN_MAJOR,
+                                            &rank2Plan) == TESSERA_LAYOUT_OK);
+  assert(rank2Plan.major_coordinate == 1 && rank2Plan.minor_coordinate == 0);
+  assert(tessera_layout_rank2_index_plan_v1(7, &rank2Plan) ==
+         TESSERA_LAYOUT_INVALID_ARGUMENT);
   int64_t shape[] = {2, 3, 4};
   int64_t stride[] = {12, 4, 1};
   int64_t coord[] = {1, 2, 3};

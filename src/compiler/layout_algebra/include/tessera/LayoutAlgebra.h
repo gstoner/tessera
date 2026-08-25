@@ -35,6 +35,19 @@ enum TesseraLayoutVariantV1 {
   TESSERA_LAYOUT_RAKED = 5,
 };
 
+// Physical rank-2 order exported for source emitters that cannot include the
+// C++ Rank2Index.h authority directly.  The returned coordinate indices are
+// the same plan consumed by Tile IR and native target kernels.
+enum TesseraLayoutRank2OrderV1 {
+  TESSERA_LAYOUT_ROW_MAJOR = 0,
+  TESSERA_LAYOUT_COLUMN_MAJOR = 1,
+};
+
+typedef struct TesseraLayoutRank2IndexPlanV1 {
+  uint8_t major_coordinate;
+  uint8_t minor_coordinate;
+} TesseraLayoutRank2IndexPlanV1;
+
 // A layout tree is carried across the ABI as a preorder sequence.  A leaf has
 // child_count == 0 and value is its extent (shape tree) or stride (stride
 // tree).  A group has child_count > 0 and value == 0.  Shape and stride trees
@@ -193,6 +206,8 @@ TESSERA_LAYOUT_EXPORT int tessera_layout_residency_v1(
     const int64_t *shape, const int64_t *stride, size_t rank,
     int64_t element_bytes, int64_t capacity_bytes,
     TesseraLayoutResidencyV1 *result);
+TESSERA_LAYOUT_EXPORT int tessera_layout_rank2_index_plan_v1(
+    int order, TesseraLayoutRank2IndexPlanV1 *result);
 TESSERA_LAYOUT_EXPORT const char *tessera_layout_algebra_version_v1(void);
 
 #ifdef __cplusplus

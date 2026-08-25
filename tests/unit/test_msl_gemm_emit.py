@@ -19,6 +19,7 @@ from tessera.compiler.msl_gemm_emit import (
     validate_msl_gemm_structure,
     validate_steel_gemm_structure,
 )
+from tessera.compiler.tile_rasterization import RASTER_GROUP_CHOICES, RasterOrder
 
 
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
@@ -164,6 +165,33 @@ def test_steel_row_major_keeps_the_established_direct_coordinates():
     assert "const uint m0 = tgid.y * BM;" in msl
     assert "const uint n0 = tgid.x * BN;" in msl
     assert "const uint grid_m" not in msl
+
+
+def test_every_reachable_steel_raster_consumes_the_native_rank2_plan(monkeypatch):
+    """Raster changes tile assignment; native rank-2 authority still owns A/B/C."""
+    import tessera.compiler.msl_gemm_emit as emitter
+
+    native = emitter.rank2_index_expression
+    calls: list[tuple[str, str, str]] = []
+
+    def observe(row: str, column: str, leading_dimension: str, **kwargs) -> str:
+        calls.append((row, column, leading_dimension))
+        return native(row, column, leading_dimension, **kwargs)
+
+    monkeypatch.setattr(emitter, "rank2_index_expression", observe)
+    for order in RasterOrder:
+        for group in RASTER_GROUP_CHOICES:
+            calls.clear()
+            msl = emitter.emit_steel_gemm_msl(
+                "f16", 32, 32, 16, partial_edge=True,
+                raster_order=order, raster_group=group,
+            )
+            assert validate_steel_gemm_structure(
+                msl, dtype="f16", partial_edge=True
+            ).ok
+            assert {"K", "N", "BK", "BN", "F"} <= {
+                leading_dimension for _, _, leading_dimension in calls
+            }
 
 
 def test_steel_rejects_non_fragment_multiple_tile():

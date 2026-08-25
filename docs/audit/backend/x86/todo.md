@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **shared ABI
+assessed; no x86 physical change.** Apple now exports the existing C++ rank-2
+plan through the native layout ABI for its MSL emitters and owns fresh M1 Max
+proof. The four x86 core GEMMs continue to include the header authority
+directly; Metal source templates, simdgroup scheduling, and Apple evidence
+transfer no CPU ISA, host-admission, or performance claim.
+
 Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **x86 composed-layout
 consumer and exact CPU proof closed for the shared materializable set.**
 `tessera-tile-to-x86` now re-runs the native C++ layout proof, expands tuple

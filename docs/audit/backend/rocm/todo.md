@@ -1,11 +1,25 @@
 ---
-last_updated: 2026-08-24
+last_updated: 2026-08-25
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
+Schedule->Tile spectral identity contract + pipeline carrier ordering; ROCm
+outcome: parity validated (exact-device, gfx1151).** The spectral module now
+carries two preimages (`tessera.spectral_semantic`, `tessera.schedule_payload`)
+and the shared C++ consumer REQUIRES them, re-deriving the identity chain with
+sha256 instead of comparing digest strings. Verification-only: no kernel, no
+launch parameter, and no numerical result changes. Validated here: the ROCm
+compiled spectral and spectral-backward device lanes plus the x86 spectral lane
+(44 tests) pass unchanged, and the full IR lit suite stays 356/0. The same PR
+fixes the interleaved pipeline carrier's backward ordering; ROCm consumes that
+carrier through the shared pipeline passes and its lit fixtures (phase4 6/6)
+remain green.
+
 
 Cross-backend sync `SCHEDULE-AUTHORITY-RESHARD-2026-08-24` — **SO-3 exact gfx1151 regression and shared W5.4 mock boundary closed; native RCCL remains open.** Compound spectral producers now infer their fused-stage action DAG, bind roles/resources into one Schedule Object, and stamp its digest through Schedule→Tile; the complete compiled gfx1151 spectral suite remains numerically unchanged on the WSL-visible Radeon 8060S. Placement emits exact mesh-sized local-shard/collective SSA and executes every movement form on the deterministic mock mesh. Mock execution is not RCCL or multi-process evidence and cannot satisfy DIST-NATIVE-1. `NUMPOL-CARRIER-1` (queue row 3b) owns the generalized S5 carrier; no AMD Target policy promotion is implied.
 

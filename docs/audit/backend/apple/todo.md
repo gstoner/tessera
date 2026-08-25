@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-24
+last_updated: 2026-08-25
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
+Schedule->Tile spectral identity contract + pipeline carrier ordering; Apple
+outcome: not applicable today, inherited on adoption.** Apple has no Metal
+consumer for the scheduled spectral program, so nothing in the Apple lane
+compiles through the changed verification and no M1 Max evidence is implied.
+Noted for whoever adds one: the contract now requires BOTH preimages on the
+module, so an Apple producer must carry them rather than only the digest.
+
 
 Cross-backend sync `SCHEDULE-AUTHORITY-RESHARD-2026-08-24` — **shared SO-3 and W5.4 contracts assessed; Apple physical follow-up not applicable yet.** Pipeline and compound-spectral lowering now consume one digest-bound Schedule Object, inferred producer edges, roles, and resource evidence without scalar reconstruction. Placement now emits exact mesh-sized local-shard/collective SSA and executes all movement forms on the deterministic mock mesh. These Graph/Schedule/Tile contracts are portable, but x86/gfx1151 spectral numerics and mock transport transfer no Metal schedule or Apple-device claim. A future Metal distributed consumer must bind its own mesh/runtime proof. `NUMPOL-CARRIER-1` (queue row 3b) owns the generalized S5 carrier; no Apple Target change lands in this synchronization.
 

@@ -333,10 +333,86 @@ def region_digest(products: Sequence[RecordedProduct]) -> str:
 
 __all__ = [
     "ADMITTED_EFFECT_CLASSES",
+    "STOCHASTIC_REFUSALS",
     "RECORDED_PRODUCT_SCHEMA",
     "RecordedProduct",
     "RecordedProductError",
     "region_digest",
+    "stochastic_product_for_call",
     "verify_confinement",
     "verify_region_products",
 ]
+
+
+# ── W4-EFFECTS-1 slice E2: classifying a stochastic call form ───────────────
+#
+# "Keyed RNG is admissible" is a claim about a CALL FORM, not about an op
+# name. Measured on `tessera.dropout`, whose three forms differ:
+#
+#   dropout(x, p, seed=N)          replay bit-identical      -> admissible
+#   dropout(x, p)                  ambient OS entropy        -> closed
+#   dropout(x, p, rng=<generator>) generator ADVANCES per
+#                                  call; its position is not
+#                                  in the product            -> closed
+#
+# The third is the one worth naming: it looks keyed, and is not. Recording
+# the generator object identity would not help — replay needs its position,
+# which the object does not expose and the product does not carry.
+
+#: Reasons a stochastic call form cannot be admitted, as stable strings.
+STOCHASTIC_REFUSALS = {
+    "ambient": (
+        "draws from ambient entropy; no recorded value determines the result"
+    ),
+    "stateful_generator": (
+        "draws from a caller-owned generator whose position advances per call; "
+        "the product would name the generator but not the state replay needs"
+    ),
+}
+
+
+def stochastic_product_for_call(
+    *,
+    op: str,
+    occurrence_id: str,
+    shape: Sequence[int],
+    dtype: str,
+    seed: int | None = None,
+    key: Mapping[str, Any] | None = None,
+    generator: Any = None,
+) -> RecordedProduct:
+    """Build the `keyed_rng` product for an admissible draw, or fail closed.
+
+    Exactly one source of randomness may be identified, and it must be one
+    whose replay is a function of the recorded value: an S4 ``key`` (the
+    counter-based generator, pure in its key) or a ``seed`` that is used to
+    construct a fresh generator per call. A caller-owned generator and
+    ambient entropy are refused by name.
+    """
+    if key is not None and seed is not None:
+        raise RecordedProductError(
+            f"{op}: a draw may identify either a key or a seed, not both; "
+            f"two sources make the recorded product ambiguous"
+        )
+    if generator is not None:
+        raise RecordedProductError(
+            f"AUTODIFF_STOCHASTIC_UNKEYED: {op} "
+            f"{STOCHASTIC_REFUSALS['stateful_generator']}"
+        )
+    if key is None and seed is None:
+        raise RecordedProductError(
+            f"AUTODIFF_STOCHASTIC_UNKEYED: {op} "
+            f"{STOCHASTIC_REFUSALS['ambient']}"
+        )
+    identity: dict[str, Any] = {"shape": list(shape), "dtype": dtype}
+    if key is not None:
+        identity["key"] = dict(key)
+    else:
+        assert seed is not None  # the ambient case returned above
+        identity["key"] = {"seed": int(seed)}
+    return RecordedProduct(
+        op=op,
+        occurrence_id=occurrence_id,
+        effect_class="keyed_rng",
+        product=identity,
+    )

@@ -7,6 +7,19 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); ROCm outcome: parity validated, no behaviour
+change on this backend.** The blanket `AUTODIFF_STOCHASTIC_EFFECT` refusal is
+split into the two questions it conflated: REPLAYABILITY (does the op carry a
+`keyed_rng` recorded product?) and DIFFERENTIABILITY (does it have an
+adjoint?). The gate stays fail-closed — an op with no product is refused, and
+absence is not permission — so every program that compiled before still
+compiles and every program refused before is still refused, only with a
+diagnostic that names which question failed. Validated here: full IR lit
+suite 357 passed / 0 failed, autodiff paired + law suites 230 passed. No
+gfx1151 kernel, artifact, or numerical result changes.
+
+
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;
 ROCm outcome: still follow-up required, no ROCm surface consumes it yet.**

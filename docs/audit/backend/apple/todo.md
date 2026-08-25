@@ -8,6 +8,13 @@ last_updated: 2026-08-25
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); Apple outcome: not applicable, no behaviour
+change.** Same reason as the nvidia entry — a target-neutral diagnostic split
+over a fail-closed gate. No Metal surface changes and no M1 Max evidence is
+implied.
+
+
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;
 Apple outcome: not applicable at this slice, follow-up on adoption.** E1 is

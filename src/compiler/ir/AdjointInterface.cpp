@@ -21,6 +21,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallVector.h"
@@ -37,6 +38,38 @@ llvm::SmallVector<mlir::Value> StopGradientOp::buildAdjoint(
   // The null value is intentional: accumulateCotangent ignores it, so reverse
   // activity ends at this op while the forward value remains an identity.
   return {mlir::Value()};
+}
+
+// W4-EFFECTS-1 slice E2b — the pathwise adjoint of a keyed dropout.
+//
+// Under the declared `constant_noise` estimator the forward is
+//   y = x * m / (1 - p),   m_i in {0, 1} drawn from the op's key,
+// so the Jacobian is the DIAGONAL operator diag(m / (1 - p)). A diagonal
+// operator is symmetric, hence J^T = J and the adjoint is the SAME
+// operation applied to the cotangent:
+//   dx = dropout(dout, same key)
+// which is why this mirrors `DropoutOp::buildTangent` exactly rather than
+// inventing a second formula (Decision #31).
+//
+// This is only correct because the draw is REPLAYABLE: cloning the op
+// reproduces `m` bit-for-bit only when the mask is a function of the
+// recorded key. The same guard the tangent uses therefore applies — an
+// unkeyed training draw has no reproducible mask, so no adjoint is emitted
+// and the pass reports the op as non-differentiable rather than silently
+// applying a DIFFERENT mask in the backward pass, which would produce a
+// plausible but wrong gradient.
+llvm::SmallVector<mlir::Value> DropoutOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  bool training = getTraining();
+  double probability = getP() ? getP()->convertToDouble() : 0.5;
+  if (training && probability > 0.0 && !getSeedAttr())
+    return {mlir::Value()};
+  mlir::IRMapping mapping;
+  mlir::Operation *replay = builder.clone(*getOperation(), mapping);
+  replay->setOperand(0, outputCotangents[0]);
+  return {replay->getResult(0)};
 }
 
 llvm::SmallVector<mlir::Value> DepthAttnOp::buildAdjoint(

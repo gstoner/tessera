@@ -9,6 +9,16 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); x86 outcome: parity validated, no behaviour
+change on this backend.** Same gate split as the rocm entry; it is a
+diagnostic refinement over a fail-closed check, not a relaxation. Validated
+on the AVX-512 host with the same lit and autodiff suites. The Python-side
+call-form classifier that decides which draws may carry a product lives here
+too (`stochastic_product_for_call`), and its verdicts are pinned against the
+op's MEASURED behaviour rather than a convention.
+
+
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;
 x86 outcome: still follow-up required, no x86 surface consumes it yet.** Same

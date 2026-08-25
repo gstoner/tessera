@@ -8,6 +8,15 @@ last_updated: 2026-08-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); NVIDIA outcome: not applicable, no behaviour
+change.** The pass is target-neutral and the change is a diagnostic split
+over a fail-closed check, so no sm_120 artifact or numerical result moves and
+no NVIDIA-owned surface needs revalidation. What NVIDIA inherits when a
+stochastic family is admitted on its lane: the same product requirement, and
+its own exact-device replay evidence.
+
+
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;
 NVIDIA outcome: not applicable at this slice, follow-up on adoption.** E1

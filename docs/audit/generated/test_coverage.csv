@@ -151,7 +151,7 @@ dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_t
 det,5,0,1,5,0,fp32,directly_tested,5 direct test references
 digamma,17,0,0,17,0,bf16 f32 fp32,directly_tested,17 direct test references
 div,13,2,2,15,0,bf16 f16 f32 fp16 fp32,directly_tested,15 direct test references
-dropout,39,13,5,52,0,bf16 f32 fp32 fp64,directly_tested,52 direct test references
+dropout,59,17,5,76,0,bf16 f32 fp32 fp64,directly_tested,76 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests

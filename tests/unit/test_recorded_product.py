@@ -347,3 +347,118 @@ def test_scalar_draw_is_a_valid_shape_not_a_missing_field():
                         product={"key": {}, "shape": (), "dtype": "f32"})
     with pytest.raises(RecordedProductError, match="empty"):
         _collective(topology={})
+
+
+# ── E2: admissibility is a property of the CALL FORM, not the op ────────────
+
+def test_only_reproducible_call_forms_get_a_product():
+    """Measured on the real op, then encoded here. `tessera.dropout` has
+    three call forms and only one of them replays from recorded data."""
+    from tessera.compiler.recorded_product import stochastic_product_for_call
+
+    ok = stochastic_product_for_call(
+        op="tessera.dropout", occurrence_id="bb0.op0", shape=(4,),
+        dtype="f32", seed=7)
+    assert ok.effect_class == "keyed_rng"
+    assert ok.product["key"]["seed"] == 7
+
+    with pytest.raises(RecordedProductError, match="ambient entropy"):
+        stochastic_product_for_call(
+            op="tessera.dropout", occurrence_id="bb0.op0", shape=(4,),
+            dtype="f32")
+    with pytest.raises(RecordedProductError, match="advances per call"):
+        stochastic_product_for_call(
+            op="tessera.dropout", occurrence_id="bb0.op0", shape=(4,),
+            dtype="f32", generator=object())
+    with pytest.raises(RecordedProductError, match="not both"):
+        stochastic_product_for_call(
+            op="tessera.dropout", occurrence_id="bb0.op0", shape=(4,),
+            dtype="f32", seed=1, key={"seed": 2})
+
+
+def test_the_call_form_verdicts_match_the_measured_behaviour():
+    """The classifier's verdicts are not a convention: each is what the op
+    actually does. This is the check that keeps the table honest if the
+    reference implementation ever changes."""
+    import numpy as np
+
+    from tessera import ops
+
+    x = np.ones((256,), dtype=np.float32)
+
+    # admitted form: replay is bit-identical
+    assert np.array_equal(ops.dropout(x, 0.3, seed=11),
+                          ops.dropout(x, 0.3, seed=11))
+
+    # refused form 1: ambient entropy does not replay
+    assert not np.array_equal(ops.dropout(x, 0.3), ops.dropout(x, 0.3))
+
+    # refused form 2: a caller-owned generator advances between calls
+    class _Wrap:
+        def __init__(self, g):
+            self.g = g
+
+        def _generator(self):
+            return self.g
+
+    shared = _Wrap(np.random.default_rng(5))
+    assert not np.array_equal(ops.dropout(x, 0.3, rng=shared),
+                              ops.dropout(x, 0.3, rng=shared))
+
+
+# ── E2b: the adjoint the recorded product licenses ──────────────────────────
+
+def test_keyed_dropout_jacobian_is_diagonal_so_its_adjoint_is_itself():
+    """W4-EFFECTS-1 E2b. The compiler emits `dx = dropout(dout, same key)`.
+    That is the adjoint only because the Jacobian is DIAGONAL — a diagonal
+    operator equals its own transpose — and because the mask REPLAYS from the
+    key. Both are checked exactly; the pairing identity is then checked in
+    float64, since two dot products over different vectors accumulate in
+    different orders and bit equality there would be a statement about
+    summation, not about the operator.
+    """
+    import numpy as np
+
+    from tessera import ops
+
+    n, p, seed = 4096, 0.25, 7
+    rng = np.random.default_rng(0)
+    x = rng.standard_normal(n).astype(np.float32)
+    ones = np.ones(n, dtype=np.float32)
+
+    # the mask is a function of the key
+    mask = ops.dropout(ones, p, seed=seed)
+    assert np.array_equal(mask, ops.dropout(ones, p, seed=seed))
+
+    # the forward is exactly elementwise scaling by that mask
+    assert np.array_equal(ops.dropout(x, p, seed=seed), x * mask)
+
+    # J v == diag(mask) v, EXACTLY -> J is diagonal -> J^T = J
+    v = rng.standard_normal(n).astype(np.float32)
+    u = rng.standard_normal(n).astype(np.float32)
+    assert np.array_equal(ops.dropout(v, p, seed=seed), mask * v)
+    assert np.array_equal(ops.dropout(u, p, seed=seed), mask * u)
+
+    # therefore <Jv, u> == <v, Ju> up to summation order
+    lhs = float(np.dot(ops.dropout(v, p, seed=seed).astype(np.float64),
+                       u.astype(np.float64)))
+    rhs = float(np.dot(v.astype(np.float64),
+                       ops.dropout(u, p, seed=seed).astype(np.float64)))
+    assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-7
+
+    # and the emitted adjoint IS the analytic pathwise gradient
+    dout = rng.standard_normal(n).astype(np.float32)
+    assert np.array_equal(ops.dropout(dout, p, seed=seed), dout * mask)
+
+
+def test_an_unkeyed_dropout_has_no_reproducible_mask_so_no_adjoint():
+    """The guard that makes the adjoint sound. Without a key the backward
+    would apply a DIFFERENT mask than the forward — a plausible-looking but
+    wrong gradient — so the op must not be differentiated at all. This test
+    measures the premise: two ambient draws disagree."""
+    import numpy as np
+
+    from tessera import ops
+
+    x = np.ones((512,), dtype=np.float32)
+    assert not np.array_equal(ops.dropout(x, 0.3), ops.dropout(x, 0.3))

@@ -69,6 +69,61 @@ bool hasStochasticEffect(mlir::Operation *op) {
   return getRegisteredSemanticEffect(op) == SemanticEffectLevel::Random;
 }
 
+// W4-EFFECTS-1 slice E2. A stochastic op used to be rejected wholesale, which
+// conflated two unrelated questions: whether the draw can be REPLAYED, and
+// whether it can be DIFFERENTIATED. They are now separate, and each refusal
+// says which one failed.
+//
+// Admission requires a recorded product of class `keyed_rng` (the E1 carrier,
+// `python/tessera/compiler/recorded_product.py`). The product is what makes
+// replay a function of recorded data: the S4 generator is counter-based, so a
+// keyed draw is a pure function of its key. An op with no product stays
+// closed — absence is not permission.
+constexpr const char *kRecordedProductClass =
+    "tessera.recorded_product.effect_class";
+constexpr const char *kRecordedProductDigest =
+    "tessera.recorded_product.digest";
+
+bool carriesKeyedRngProduct(mlir::Operation *op) {
+  auto cls = op->getAttrOfType<mlir::StringAttr>(kRecordedProductClass);
+  auto digest = op->getAttrOfType<mlir::StringAttr>(kRecordedProductDigest);
+  return cls && cls.getValue() == "keyed_rng" && digest &&
+         digest.getValue().size() == 64;
+}
+
+// Diagnose precisely why a stochastic op cannot enter the region. Returns
+// true when the op is admitted.
+bool admitStochasticOp(mlir::Operation *op) {
+  if (!hasStochasticEffect(op))
+    return true;
+  auto cls = op->getAttrOfType<mlir::StringAttr>(kRecordedProductClass);
+  if (!cls) {
+    op->emitError()
+        << "AUTODIFF_STOCHASTIC_NO_PRODUCT: stochastic op " << op->getName()
+        << " carries no recorded product, so its replay is not a function of "
+           "recorded data. A keyed draw must carry a `keyed_rng` product "
+           "(W4-EFFECTS-1 E1); an ambient or generator-stateful draw has no "
+           "product and stays fail-closed";
+    return false;
+  }
+  if (cls.getValue() != "keyed_rng") {
+    op->emitError()
+        << "AUTODIFF_STOCHASTIC_UNKEYED: stochastic op " << op->getName()
+        << " carries a '" << cls.getValue()
+        << "' product, which does not establish reproducibility for a draw; "
+           "only `keyed_rng` does";
+    return false;
+  }
+  if (!carriesKeyedRngProduct(op)) {
+    op->emitError()
+        << "AUTODIFF_STOCHASTIC_NO_PRODUCT: stochastic op " << op->getName()
+        << " declares a keyed_rng product without a 64-character content "
+           "digest; the product is not addressable and cannot be verified";
+    return false;
+  }
+  return true;
+}
+
 void eraseStopGradientBarriers(mlir::func::FuncOp func) {
   llvm::SmallVector<mlir::Operation *> barriers;
   func.walk([&](mlir::Operation *op) {
@@ -1452,13 +1507,10 @@ private:
           return mlir::failure();
         }
       }
-      if (hasStochasticEffect(op)) {
-        op->emitError()
-            << "AUTODIFF_STOCHASTIC_EFFECT: active stochastic op "
-            << op->getName()
-            << " requires an explicit pathwise or score-function adjoint";
+      // Replayability and differentiability are separate questions, and a
+      // refusal now says which one failed (W4-EFFECTS-1 E2).
+      if (!admitStochasticOp(op))
         return mlir::failure();
-      }
       forwardOps.push_back(op);
     }
 

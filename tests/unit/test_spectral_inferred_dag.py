@@ -126,3 +126,56 @@ def test_spectral_lowering_requires_the_semantic_payload():
     assert "tessera.spectral_semantic" not in stripped
     with pytest.raises(RuntimeError, match="tessera.spectral_semantic"):
         run_tessera_opt(find_tessera_opt(), stripped, "--tessera-schedule-to-tile")
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires tessera-opt")
+def test_spectral_policy_and_its_declaration_cannot_be_co_edited():
+    """The hole left open by the first fix, now closed.
+
+    Verifying the consumed attributes against a carried declaration stops a
+    lone attribute edit, but not an edit of BOTH. The consumer now checks a
+    hash chain instead: sha256(tessera.schedule_payload) must equal the
+    module digest, and that payload must name
+    object_id "spectral:<sha256(tessera.spectral_semantic)>". Changing the
+    attribute and its declaration together breaks the second link.
+    """
+    artifact = lower_scheduled_spectral(
+        target="x86",
+        op_name="tessera.spectral_filter",
+        input_shapes=((2, 17), (2, 17)),
+    )
+    match = re.search(r"workspace_bytes = (\d+) : i64", artifact.schedule_ir)
+    assert match
+    bumped = int(match.group(1)) + 4096
+    # Edit the attribute AND the declaration that vouches for it.
+    co_edited = artifact.schedule_ir.replace(
+        match.group(0), f"workspace_bytes = {bumped} : i64", 1
+    ).replace(
+        f"workspace_bytes={match.group(1)};", f"workspace_bytes={bumped};", 1
+    )
+    assert f"workspace_bytes = {bumped} : i64" in co_edited
+    assert f"workspace_bytes={bumped};" in co_edited
+    with pytest.raises(RuntimeError, match="does not hash to the object_id"):
+        run_tessera_opt(find_tessera_opt(), co_edited, "--tessera-schedule-to-tile")
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires tessera-opt")
+def test_spectral_schedule_payload_must_hash_to_the_module_digest():
+    """The other link: a payload that is not the preimage of the digest the
+    module claims is rejected, so a schedule cannot be swapped underneath a
+    digest string."""
+    artifact = lower_scheduled_spectral(
+        target="x86",
+        op_name="tessera.spectral_conv",
+        input_shapes=((2, 13), (2, 7)),
+    )
+    # The payload contains escaped quotes, so match them explicitly.
+    swapped = re.sub(
+        r'tessera\.schedule_payload = "(?:[^"\\]|\\.)*"',
+        'tessera.schedule_payload = "not-the-payload"',
+        artifact.schedule_ir,
+        count=1,
+    )
+    assert 'tessera.schedule_payload = "not-the-payload"' in swapped
+    with pytest.raises(RuntimeError, match="does not hash to the module Schedule"):
+        run_tessera_opt(find_tessera_opt(), swapped, "--tessera-schedule-to-tile")

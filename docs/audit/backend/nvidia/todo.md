@@ -3,10 +3,20 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-24
+last_updated: 2026-08-25
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
+Schedule->Tile spectral identity contract + pipeline carrier ordering; NVIDIA
+outcome: not applicable today, inherited on adoption.** No NVIDIA Target
+consumer exists for the scheduled spectral program (its dialect is off by
+default in this build and the spectral physical lanes are x86/gfx1151), so no
+sm_120 artifact or numerical result changes. When an NVIDIA spectral consumer
+lands it inherits the same required preimages; the pipeline-carrier ordering
+fix is target-neutral and applies unchanged.
+
 
 Cross-backend sync `SCHEDULE-AUTHORITY-RESHARD-2026-08-24` — **shared SO-3 and W5.4 parity validated; no CUDA physical change.** Pipeline and compound-spectral lowering now consume one digest-bound Schedule Object, inferred producer edges, roles, and resource evidence without scalar reconstruction. Placement emits exact mesh-sized local-shard/collective SSA and all movement forms execute on the deterministic mock mesh. The carrier and verifier changes are shared; Zen 5/gfx1151 spectral evidence and mock transport transfer no CUDA schedule, NCCL proof, or RTX claim. `NUMPOL-CARRIER-1` owns the generalized S5 carrier; SM120 consumption remains a later architecture-owned assessment.
 

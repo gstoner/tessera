@@ -285,12 +285,40 @@ class PipelinePlan:
         v = self.num_chunks
         steps: List[ScheduleStep] = []
 
+        total_stages = p * v
         for chunk in range(v):
             for mb in range(m):
                 for rank in range(p):
                     virtual_stage = rank + chunk * p
                     fwd_clock = rank + mb + chunk * p
-                    bwd_clock = fwd_clock + p * v
+                    # Backward MIRRORS the stage term. `fwd_clock + p*v` was a
+                    # constant offset, so backward inherited forward's
+                    # ASCENDING virtual-stage order — the opposite of gradient
+                    # flow, which made stage s's backward run before the
+                    # stage s+1 backward that produces its input gradient
+                    # (measured p=2/v=2, micro-batch 0: stage 0 B at clock 4
+                    # ... stage 3 B at clock 7). Reversing the stage term
+                    # keeps the makespan identical — first backward clock is
+                    # still `total_stages`, last is still
+                    # `2*total_stages + m - 2` — while ordering gradients
+                    # from the last virtual stage back to the first.
+                    #
+                    # MEASURED CAVEAT (corrected 2026-08-25): this builder is
+                    # an analytical bubble model, NOT a resource-feasible
+                    # timeline — it already placed several steps on the same
+                    # (rank, clock) slot. Swept over p<=6, v<=5, m<=12: the
+                    # reordering leaves that collision count unchanged in
+                    # 235/360 configurations and INCREASES it in the other
+                    # 125 (by at most 9, mean +1); it never decreases it. An
+                    # earlier note here claimed the count was identical — that
+                    # was generalised from three configurations that happened
+                    # to be among the unchanged ones. Dependency correctness
+                    # and makespan are unaffected (proved in
+                    # test_pipeline_schedule_carrier.py); making the model
+                    # resource-feasible is separate, pre-existing work.
+                    bwd_clock = (
+                        (total_stages - 1 - virtual_stage) + mb + total_stages
+                    )
                     steps.append(
                         ScheduleStep(
                             clock=fwd_clock,
@@ -412,7 +440,6 @@ class PipelinePlan:
         # Virtual stage count is DERIVED from the emitted schedule: under
         # interleaving it is num_stages x num_chunks, not num_stages.
         total_stages = max((step.stage for step in steps), default=-1) + 1
-        inverted_backward: list[tuple[str, str]] = []
         previous_by_rank: dict[int, ScheduleStep] = {}
         actions: list[ScheduleAction] = []
         for step in steps:
@@ -421,7 +448,15 @@ class PipelinePlan:
             previous = previous_by_rank.get(step.rank)
             if previous is not None:
                 dependencies.add(self._action_id(previous))
-            if step.phase == Phase.FORWARD and step.stage > 0:
+            # A DECOUPLED schedule's defining property is that each stage
+            # owns a self-contained objective and trains directly from data:
+            # there is no cross-stage activation or gradient dependency. The
+            # carrier previously asserted them anyway (the forward edge
+            # silently passed the ordering filter, the backward one was
+            # dropped), over-constraining a schedule built to have zero
+            # cross-stage coupling. Only program order per rank and the
+            # stage's own forward->backward edge are real here.
+            if step.phase == Phase.FORWARD and step.stage > 0 and not self.decoupled:
                 upstream = by_key.get(
                     (step.stage - 1, step.micro_batch, Phase.FORWARD)
                 )
@@ -433,27 +468,17 @@ class PipelinePlan:
                 )
                 if own_forward is not None:
                     dependencies.add(self._action_id(own_forward))
-                if step.stage + 1 < total_stages:
+                if step.stage + 1 < total_stages and not self.decoupled:
                     downstream = by_key.get(
                         (step.stage + 1, step.micro_batch, Phase.BACKWARD)
                     )
                     if downstream is not None:
-                        downstream_id = self._action_id(downstream)
-                        if order_by_id[downstream_id] < order_by_id[action_id]:
-                            dependencies.add(downstream_id)
-                        else:
-                            # KNOWN PLANNER LIMITATION, surfaced by keying on
-                            # the virtual stage (PR #626 review). The
-                            # interleaved generator emits backward steps in
-                            # ASCENDING stage order (num_stages=2, chunks=2,
-                            # micro-batch 0: stage 0 B at clock 4 ... stage 3 B
-                            # at clock 7), which is the opposite of gradient
-                            # flow, so this edge cannot be expressed in the
-                            # emitted order. Recording it would claim an
-                            # ordering the schedule does not realize, so it is
-                            # omitted and counted; fixing the generator's
-                            # interleaved backward order is its own change.
-                            inverted_backward.append((action_id, downstream_id))
+                        # The interleaved generator now emits backward in
+                        # descending virtual-stage order, so this gradient
+                        # edge is expressible and is REQUIRED like any other;
+                        # an inversion here falls into the fail-closed check
+                        # below rather than being recorded as a limitation.
+                        dependencies.add(self._action_id(downstream))
 
             # A real producer ordered AFTER its consumer is a schedule defect,
             # not something to drop: silently filtering it would emit a
@@ -464,9 +489,10 @@ class PipelinePlan:
                 for dependency in dependencies
                 if order_by_id[dependency] >= order_by_id[action_id]
             )
-            # Forward/own-forward edges MUST precede their consumer in any
-            # correct schedule; an inversion there is a defect, not a
-            # limitation, so it fails closed rather than being dropped.
+            # Every declared edge MUST precede its consumer in a correct
+            # schedule — forward chain, own-forward, and the backward
+            # gradient chain alike; an inversion is a defect, so it fails
+            # closed rather than being silently dropped.
             if late:
                 raise ValueError(
                     f"pipeline schedule places {action_id!r} before its "

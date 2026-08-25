@@ -7,6 +7,24 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
+dependence-inference semantics + MegaMoE R3 producer; ROCm outcome: parity
+validated (host analysis; gfx1151 numerics unchanged).** The MegaMoE
+candidate's edges are now inferred from registered Graph semantics rather
+than hand-authored, and three over-conservatisms in the SHARED analysis were
+corrected (they made any pipeline containing transport infer a total chain):
+ordered collectives order against each other rather than against all local
+work; a registered op declaring `aliasing="none"` yields a fresh alias root
+even when effectful; and a pure op with a disjoint alias set has no memory
+dependence on an effectful op (plus no alias edge between two pure ops).
+gfx1151 owns the executing MoE transport lane, so it is the backend most
+exposed: the change is analysis-only (prune/rank), selector authority remains
+measured scalar latency, and no generated code or numerical result changes —
+verified by the MoE transport and composition suites on this box. Exact-device
+re-validation is only required if a future change makes the inferred DAG
+select rather than prune.
+
+
 Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
 `numeric_policy` carrier contract (integrated-plan queue row 3b); ROCm
 outcome: follow-up required — ROCm owns the worked reference.** The row is

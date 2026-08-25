@@ -8,6 +8,16 @@ last_updated: 2026-08-24
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
+dependence-inference semantics + MegaMoE R3 producer; NVIDIA outcome: not
+applicable today, inherited when NVIDIA adopts MoE plans.** The change is
+host-side schedule ANALYSIS (Python R3 composition), not target codegen: no
+NVIDIA-owned surface compiles through it and no sm_120 artifact or numerical
+result changes. When an NVIDIA MoE transport lane adopts the overlap plan it
+inherits the corrected inference unchanged; the exact-device evidence rules
+are unaffected (no ROCm/x86 analysis result transfers a NVIDIA claim).
+
+
 Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
 `numeric_policy` carrier contract (integrated-plan queue row 3b); NVIDIA
 outcome: follow-up required, sequenced behind W1.1.** Newly owned row,

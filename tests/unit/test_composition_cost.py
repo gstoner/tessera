@@ -375,7 +375,6 @@ def test_w5_2e_unknown_alias_facts_add_conservative_reference_edges():
     [
         ("tessera.randn", {"tessera.stochastic_identity": "seed_counter"},
          "stochastic_identity"),
-        ("tessera.all_reduce", {}, "ordered_collective"),
         ("tessera.scf.if.begin", {"region": "then"}, "region_boundary"),
         ("tessera.unknown_external", {}, "unregistered_effect"),
     ],
@@ -403,6 +402,67 @@ def test_w5_2e_fail_closed_barriers_serialize_surrounding_actions(
     }
     assert reason in edge_reasons[("before", "barrier")]
     assert reason in edge_reasons[("barrier", "after")]
+
+
+def test_ordered_collectives_order_against_each_other_not_local_work():
+    """CORRECTED SEMANTICS (PR #625 review).
+
+    An ordered collective constrains the order OF COLLECTIVES — every rank
+    must issue them in the same relative order. It does not pin unrelated
+    local work: data flowing through a collective is ordered by the
+    SSA/alias/memory-dependence edges instead. The old blanket rule
+    (serialize against every surrounding op) contradicted the plan's own
+    overlap requirement — W5.2d's MegaMoE row REQUIRES dispatch(c+1) to
+    precede combine(c) — and made any pipeline containing transport infer a
+    total chain, erasing the compute/communication overlap R3 exists to
+    model. Measured before the fix: 12 MegaMoE actions inferred all 66
+    edges of the complete order.
+    """
+    ty = tensor_ir_type(("4",), "fp32")
+    first = _graph_op("first", "tessera.all_reduce", ["%x"])
+    local = _graph_op("local", "tessera.mul", ["%y", "%y"])
+    second = _graph_op("second", "tessera.all_reduce", ["%z"])
+    fn = GraphIRFunction(
+        "f",
+        args=[IRArg("x", ty), IRArg("y", ty), IRArg("z", ty)],
+        result_types=[ty], body=[first, local, second],
+        return_values=["%second"],
+    )
+    inferred = infer_action_dag(
+        fn, (_vector("a"), _vector("b"), _vector("c")),
+        action_ids=("first", "local", "second"),
+    )
+    edges = {
+        (edge.predecessor, edge.successor): set(edge.reasons)
+        for edge in inferred.dependencies
+    }
+    # The two collectives keep their relative order...
+    assert "ordered_collective" in edges[("first", "second")]
+    # ...and independent local work is free to overlap either of them.
+    assert ("first", "local") not in edges
+    assert ("local", "second") not in edges
+
+
+def test_pure_op_with_disjoint_values_has_no_memory_dependence():
+    """A REGISTERED pure op touches no hidden state, so it cannot depend on
+    an effectful op through memory unless they share a value. Without this
+    every effectful op serialized all surrounding pure work (PR #625)."""
+    from tessera.compiler.graph_dataflow import analyze_graph_dataflow
+
+    ty = tensor_ir_type(("4",), "fp32")
+    collective = _graph_op("collective", "tessera.all_reduce", ["%x"])
+    disjoint = _graph_op("disjoint", "tessera.mul", ["%y", "%y"])
+    shared = _graph_op("shared", "tessera.mul", ["%collective", "%y"])
+    fn = GraphIRFunction(
+        "f",
+        args=[IRArg("x", ty), IRArg("y", ty)],
+        result_types=[ty], body=[collective, disjoint, shared],
+        return_values=["%shared"],
+    )
+    analysis = analyze_graph_dataflow(fn)
+    assert not analysis.has_memory_dependence(collective, disjoint)
+    # Sharing a value keeps the dependence — the refinement is alias-gated.
+    assert analysis.has_memory_dependence(collective, shared)
 
 
 @pytest.mark.parametrize("margin", [-0.1, float("nan"), float("inf")])

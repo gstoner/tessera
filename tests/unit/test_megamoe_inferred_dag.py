@@ -108,11 +108,66 @@ def test_inferred_edges_cover_the_hand_oracle_and_report_extras():
     )
     assert parity.conservative
     assert not parity.missing_reference_edges
-    # The ordered-collective total order adds conservative edges beyond the
-    # hand DAG — reported separately, never silently merged.
+    # Extra edges are reported separately, never silently merged — but they
+    # must be the SOUND ones (transitive collective ordering), not a total
+    # chain. See test_overlap_is_preserved below for the teeth.
     assert parity.additional_conservative_edges
+    for predecessor, successor in parity.additional_conservative_edges:
+        kinds = {predecessor.split(":")[0], successor.split(":")[0]}
+        assert kinds <= {"dispatch", "combine"}, (predecessor, successor)
     # Every inferred dependency names its supporting reasons.
     assert all(dep.reasons for dep in inferred.dependencies)
+
+
+def test_overlap_is_preserved_not_serialized():
+    """PR #625 review, P1 — the defect this file previously encoded as
+    healthy conservatism.
+
+    Emitting the per-chunk transport as ordered collectives used to make
+    `infer_action_dag` serialize every collective against every surrounding
+    operation, so a 12-action plan inferred all 66 edges of the complete
+    order: R3 would then estimate and prune MegaMoE overlap plans as
+    sequential pipelines, which is exactly the property the plan exists to
+    choose between. The inferred DAG must keep compute off the collective
+    chain.
+    """
+    plan = _plan()
+    _, inferred, _ = megamoe_inferred_composition(plan, _resource_rows(plan))
+    actions = len(inferred.actions)
+    edges = {(d.predecessor, d.successor) for d in inferred.dependencies}
+    assert len(edges) < actions * (actions - 1) // 2, "inferred a total chain"
+    # The canonical overlap: compute of the next chunk is NOT forced after the
+    # previous chunk's combine.
+    assert ("combine:0", "compute:1") not in edges
+    # Independent expert compute stays independent.
+    assert ("compute:0", "compute:1") not in edges
+    # ...while the collectives keep their required relative order.
+    assert ("dispatch:0", "dispatch:1") in edges
+    assert ("combine:0", "combine:1") in edges
+
+
+def test_schedule_digest_binds_plan_identity():
+    """PR #625 review, P2 — action ids and graph shape are functions of the
+    chunk COUNT, so two plans sharing a plan_id and chunk count but differing
+    in capacities, buffer sizes, token ranges, or the in-flight limit used to
+    content-address to the SAME digest with identical benchmark rows."""
+    left = _plan()
+    right = build_megamoe_overlap_plan(
+        plan_id=left.plan_id,
+        num_tokens=96,
+        num_chunks=4,
+        capacities=[16] * 4,
+        dispatch_buffer_bytes=[8192] * 4,
+    )
+    assert left.artifact_digest != right.artifact_digest
+    left_candidate = composition_candidate_for_megamoe_plan(
+        left, _resource_rows(left))
+    right_candidate = composition_candidate_for_megamoe_plan(
+        right, _resource_rows(right))
+    assert (left_candidate.schedule_object.digest
+            != right_candidate.schedule_object.digest)
+    # The candidate id stays the plan id, so pruning keys are unchanged.
+    assert left_candidate.candidate_id == left.plan_id
 
 
 def test_candidate_carries_the_content_addressed_schedule_object():

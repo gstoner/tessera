@@ -136,17 +136,47 @@ def infer_action_dag(
         current_unknown = _unknown_dataflow_reasons(analysis, op)
         for before in range(index):
             previous = ops[before]
+            previous_barriers = _barrier_reasons(previous)
             for reason in current_barriers:
-                add(before, index, reason)
-            for reason in _barrier_reasons(previous):
-                add(before, index, reason)
+                if reason != ORDERED_COLLECTIVE_REASON:
+                    add(before, index, reason)
+            for reason in previous_barriers:
+                if reason != ORDERED_COLLECTIVE_REASON:
+                    add(before, index, reason)
+            # An ordered collective constrains the ORDER OF COLLECTIVES — every
+            # rank must issue them in the same relative order — not the order of
+            # unrelated local work. Serializing a collective against every
+            # surrounding operation makes any pipeline with per-chunk transport
+            # a total chain, which erases exactly the compute/communication
+            # overlap a schedule exists to express (measured on the MegaMoE
+            # producer: 12 actions, 66 inferred edges = the complete order;
+            # PR #625 review). Data flowing through a collective is still
+            # ordered by the SSA/alias/memory-dependence edges below, and any
+            # collective that also carries mutation/state/I/O keeps its
+            # all-pairs barrier above.
+            if (
+                ORDERED_COLLECTIVE_REASON in current_barriers
+                and ORDERED_COLLECTIVE_REASON in previous_barriers
+            ):
+                add(before, index, ORDERED_COLLECTIVE_REASON)
             for reason in current_unknown:
                 add(before, index, reason)
             for reason in _unknown_dataflow_reasons(analysis, previous):
                 add(before, index, reason)
             if analysis.has_memory_dependence(previous, op):
                 add(before, index, "memory_dependence")
-            if _may_share_alias(analysis, previous, op):
+            # Two REGISTERED pure ops cannot conflict: neither writes, so
+            # sharing a read-only operand (a weight tensor every expert reads)
+            # is not a dependence. Ordering them on that alias made every
+            # consumer of a common input sequential (PR #625 review). Any
+            # write-through-alias case has at least one effectful side and
+            # still takes the edge below.
+            both_pure = (
+                registered_op_effect(previous.op_name, previous.kwargs)
+                == Effect.pure
+                and registered_op_effect(op.op_name, op.kwargs) == Effect.pure
+            )
+            if not both_pure and _may_share_alias(analysis, previous, op):
                 add(before, index, "alias_set")
 
     dependencies = tuple(
@@ -225,6 +255,15 @@ def compare_inferred_action_dag(
     )
 
 
+ORDERED_COLLECTIVE_REASON = "ordered_collective"
+"""Edge reason whose scope is collective-to-collective, not all-pairs.
+
+Every other barrier reason (unregistered effect, mutation/state/I/O,
+stochastic identity, region boundary) serializes against ALL surrounding
+work and stays fail-closed; this one is an ordering relation among the
+ordered collectives themselves."""
+
+
 def _ssa(name: str) -> str:
     return str(name).strip().lstrip("%")
 
@@ -240,7 +279,7 @@ def _barrier_reasons(op: IROp) -> tuple[str, ...]:
     ) or op.kwargs.get("tessera.stochastic_identity") not in (None, "none"):
         result.add("stochastic_identity")
     if effect == Effect.collective and op.kwargs.get("ordered", True):
-        result.add("ordered_collective")
+        result.add(ORDERED_COLLECTIVE_REASON)
     if effect in {Effect.state, Effect.memory, Effect.io}:
         result.add("mutation_or_effect")
     if op.op_name.startswith(("tessera.scf.", "scf.")) or any(

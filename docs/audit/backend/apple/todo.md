@@ -8,6 +8,14 @@ last_updated: 2026-08-24
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
+dependence-inference semantics + MegaMoE R3 producer; Apple outcome: not
+applicable today, inherited on adoption.** Same reason as the nvidia entry:
+host-side schedule analysis only, no Metal surface consumes it, no Apple
+artifact or numerical result changes. Apple's MoE/transport families would
+inherit the corrected inference if and when they adopt the overlap plan.
+
+
 Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
 `numeric_policy` carrier contract (integrated-plan queue row 3b); Apple
 outcome: follow-up required.** Newly owned row, nothing implemented yet.

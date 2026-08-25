@@ -10,7 +10,7 @@ add,156,46,11,202,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,202 direct t
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,7,0,0,7,0,bf16 f16 f32 fp32 int32,directly_tested,7 direct test references
 all_gather,5,0,0,5,0,fp32,directly_tested,5 direct test references
-all_reduce,12,2,2,14,0,f32 fp32 fp8_e4m3 int8,directly_tested,14 direct test references
+all_reduce,14,2,3,16,0,f32 fp32 fp8_e4m3 int8,directly_tested,16 direct test references
 all_to_all,6,0,0,6,0,fp32,directly_tested,6 direct test references
 amax,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
 amin,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
@@ -322,7 +322,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,48,11,1,59,0,,directly_tested,59 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
-mul,143,41,11,184,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,184 direct test references
+mul,146,41,12,187,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,187 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,15,0,0,15,0,fp32,directly_tested,15 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'

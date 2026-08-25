@@ -21,6 +21,7 @@ from .composition_cost import (
     prune_composition_candidates,
 )
 from .graph_ir import GraphIRFunction, IRArg, IROp, IRType
+from .schedule_object import ScheduleObject
 
 MEGAMOE_OVERLAP_PLAN_SCHEMA = "tessera.megamoe_overlap_plan.v1"
 
@@ -309,6 +310,20 @@ def megamoe_inferred_composition(
     candidate, inferred = CompositionCandidate.from_graph(
         plan.plan_id, megamoe_graph_function(plan), vectors, action_ids=order
     )
+    # Bind the PLAN's identity into the schedule identity (PR #625 review):
+    # the action ids and the graph shape are functions of the chunk COUNT, so
+    # two plans that differ in token ranges, expert capacities, dispatch-buffer
+    # sizes, or the in-flight limit would otherwise content-address to the same
+    # digest with identical benchmark rows. `plan.artifact_digest` already
+    # content-addresses exactly those fields, so the schedule object carries it.
+    schedule = ScheduleObject(
+        f"{plan.plan_id}@{plan.artifact_digest}",
+        inferred.schedule_object.actions,
+        inferred.schedule_object.edges,
+        inferred.schedule_object.roles,
+        inferred.schedule_object.residency,
+    )
+    candidate = CompositionCandidate(plan.plan_id, candidate.actions, schedule)
     reference = tuple(
         TileAction(
             action_id,

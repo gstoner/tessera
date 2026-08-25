@@ -7,21 +7,21 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **515** ops in `primitive_coverage` registry.
-- **5610** total Python-test references, **1338** total lit-fixture references.
+- **5621** total Python-test references, **1338** total lit-fixture references.
 - **70** ops have **zero** references in either test surface.
 - **114** ops have ≤1 reference ("thinly tested").
-- **183** ops have ≥10 references ("well tested").
+- **184** ops have ≥10 references ("well tested").
 - **175** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  484 |  278 |  762 |  23 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  485 |  278 |  763 |  23 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  142 |   79 |  221 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  156 |   46 |  202 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  150 |   50 |  200 |  31 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |  143 |   41 |  184 |  11 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |  146 |   41 |  187 |  12 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  132 |   37 |  169 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |  135 |   17 |  152 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |  121 |   18 |  139 |   6 | `bf16`, `f16`, `f32`, `f64` … |

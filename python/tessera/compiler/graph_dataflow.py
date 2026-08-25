@@ -125,10 +125,24 @@ class GraphDataflow:
                         roots = operand_facts[operand_index].alias_roots
                     except (ValueError, IndexError):
                         roots = None
-                elif effect == Effect.pure and spec is not None:
+                elif spec is not None and str(aliasing or "none") == "none":
+                    # A REGISTERED op that declares it aliases nothing produces
+                    # a fresh value, whether or not it is effectful (Decision
+                    # #30 — derive from the declaration; #29 — a declaration
+                    # must have a consumer, and this is it). Treating every
+                    # effectful producer's result as possibly-hidden-state made
+                    # `unknown_alias_fact` an all-pairs barrier, so any pipeline
+                    # containing transport inferred a TOTAL chain and lost the
+                    # overlap it exists to express (measured: MegaMoE, 12
+                    # actions → 66 edges = complete order; PR #625 review).
+                    # The op's effect still orders it: mutation/state/I/O keep
+                    # their all-pairs barrier, ordered collectives order against
+                    # each other, and value-scoped memory dependence is computed
+                    # separately below.
                     roots = frozenset({result_name})
                 else:
-                    # Unregistered/effectful producers may alias hidden state.
+                    # Unregistered producers, or a declared operand alias we
+                    # could not resolve, may alias hidden state.
                     roots = None
                 facts[result_name] = ValueFact(result_shape, roots, False)
                 producers[result_name] = op
@@ -195,9 +209,31 @@ class GraphDataflow:
         right = registered_op_effect(rhs.op_name, rhs.kwargs)
         if left == Effect.pure and right == Effect.pure:
             return False
-        # IROp currently has no value-scoped MemoryEffectOpInterface mirror.
-        # Effectful pairs therefore remain top instead of guessing from names.
+        if (left == Effect.pure or right == Effect.pure) and not self.values_may_alias(
+            lhs, rhs
+        ):
+            # One side is REGISTERED pure: by definition it touches no hidden
+            # state, so the only way it can depend on the effectful side
+            # through memory is via a value they share — and their alias sets
+            # are provably disjoint here. Without this, every effectful op
+            # serialized against all surrounding pure work and any pipeline
+            # containing transport inferred a total chain (PR #625 review).
+            return False
+        # Two effectful ops: IROp still has no value-scoped
+        # MemoryEffectOpInterface mirror, so they remain top rather than
+        # guessing from names. Their relative order is preserved.
         return True
+
+    def values_may_alias(self, lhs: IROp, rhs: IROp) -> bool:
+        """True if any value of `lhs` may alias any value of `rhs`."""
+
+        left_values = tuple(lhs.operands) + tuple(lhs.result_names)
+        right_values = tuple(rhs.operands) + tuple(rhs.result_names)
+        return any(
+            self.may_alias(left, right)
+            for left in left_values
+            for right in right_values
+        )
 
     def snapshot(self) -> Mapping[str, ValueFact]:
         return dict(self._facts) if self.valid else {}

@@ -9,6 +9,15 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `SO3-INFER-EDGES-2026-08-24` — **shared W2.1/W5.2e
+dependence-inference semantics + MegaMoE R3 producer; x86 outcome: parity
+validated (AVX-512 host).** Same shared-analysis correction as the rocm
+entry. x86 hosts the R3/composition analysis itself, so this backend is the
+regression gate for the change: the composition-cost, graph-dataflow, and
+MegaMoE suites pass on this host against the corrected semantics, with no
+generated code or numerical change (analysis is prune/rank-only).
+
+
 Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
 `numeric_policy` carrier contract (integrated-plan queue row 3b); x86
 outcome: follow-up required.** Newly owned row, nothing implemented yet.

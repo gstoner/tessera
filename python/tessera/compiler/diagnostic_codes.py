@@ -953,6 +953,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
 
     # ── async_copy/wait_async single-contract reconciliation (2026-08-10) ──
     DiagnosticCode(
+        code="MATMUL_SCHEDULE_ACCUM_UNSUPPORTED",
+        pass_origin="GraphToSchedulePass",
+        severity="error",
+        summary=(
+            "numeric_policy.accum names an accumulator the selected matmul "
+            "schedule does not provide."
+        ),
+        fix_hint=(
+            "The schedule infers accum from operand/result element types per "
+            "target. `accum` selects what the program computes, so a mismatch "
+            "is refused rather than replaced by the inference. Declare the "
+            "accumulator the target provides, or omit the key."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
         code="NUMERIC_POLICY_MATH_MODE_NOT_REDUCING",
         pass_origin="IRContractLegalityPass",
         severity="error",

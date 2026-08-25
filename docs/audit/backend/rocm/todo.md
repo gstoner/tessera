@@ -7,6 +7,20 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **shared recorded-product ABI
+for admissible effects (plan only, no code); ROCm outcome: follow-up required
+(gfx1151 is a named acceptance host).** The plan defines one
+`tessera.recorded_product.v1` carrier plus its fail-closed verifier so keyed
+RNG, recorded-state mutation, and ordered collectives may enter a
+differentiated region. ROCm is named in E5 as one of the two exact-device
+hosts, and it owns the class the plan flags as hardest: a collective's
+bit-identical replay needs the reduction tree/algorithm bound, and native
+RCCL deterministic evidence — a mock mesh cannot establish it (measured:
+identical inputs and issue order give three different bit patterns for
+sequential vs pairwise vs ring reduction). No ROCm code changes yet and no
+device claim is made by this plan.
+
+
 Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
 Schedule->Tile spectral identity contract + pipeline carrier ordering; ROCm
 outcome: parity validated (exact-device, gfx1151).** The spectral module now

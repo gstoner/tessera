@@ -92,9 +92,22 @@ collision-freedom, per-rank disjointness, and distributional sanity.
 content-addresses `(name, role, shape, dtype, version, access, parents)`.
 That is precisely a mutation product: replay reads the recorded **version**.
 
-* `π(E)` = the lineage id of each buffer `E` writes, plus the version it
-  advances to. (R) holds when the replay binds the same versions; (C) holds
-  when the declared `access` covers the write-set.
+* `π(E)` = for each buffer `E` writes, its lineage id, the version it
+  advances to, **and a content digest of the bytes that version names**.
+  (C) holds when the declared `access` covers the write-set.
+* **(R) does NOT follow from the lineage id and version alone** — corrected
+  2026-08-25 after review. `_buffer` hashes name, role, shape, dtype,
+  version, access, and parent ids; it does **not** hash contents (§5.2). Two
+  buffers with identical metadata and different bytes therefore share a
+  lineage id, so a replay that binds "version N" can bind *different bytes*
+  and produce a different gradient — silently, which is the exact failure
+  mode this whole gate exists to prevent. The metadata lineage is an
+  identity, not a value authority. The product must therefore carry either a
+  content digest or an immutable snapshot, and the verifier must check it;
+  a version-to-content authority (a buffer store keyed by
+  `(lineage_id, version)` whose entries are immutable) is the alternative
+  design if snapshot cost is prohibitive. Either way, **metadata identity is
+  necessary and not sufficient**.
 * **Do not invent a second lineage schema** (#31). Extend the existing one.
 * **Named precondition, measured in §5.2:** the identity separates version,
   shape, access, parents, and role — but `dtype` is *hardcoded* `"f32"` with
@@ -113,10 +126,20 @@ schedule authority now derives exactly that: since #625 the inference emits
 collective↔collective ordering edges (and nothing spurious), and since #626
 the pipeline carrier's rows are validated for a topological order.
 
-* `π(E)` = the communicator identity plus the position of `E` in the
-  recorded collective sequence (a digest over that sequence).
-* (R) holds when replay issues the same sequence; (C) holds when the
-  collective's write-set is its declared outputs.
+* `π(E)` = the communicator identity, the position of `E` in the recorded
+  collective sequence (a digest over that sequence), **and the reduction
+  tree / algorithm plus the topology parameters that select it**.
+* **Issue order alone does NOT give (R)** — corrected 2026-08-25 after
+  review. Floating-point addition is not associative, so the reduction tree
+  is part of the result rather than an implementation detail. Measured
+  (§5.3): the same 1024 f32 values reduced with identical inputs and
+  identical issue order give **three different bit patterns** for
+  sequential, pairwise-tree, and ring reductions, and the ring result
+  changes again with the rank count. `LANGUAGE_AND_IR_SPEC.md` §11 already
+  says this — *"Deterministic profiles require fixed collective ordering and
+  reduction trees"* — and the first draft of this plan bound only the first
+  half.
+* (C) holds when the collective's write-set is its declared outputs.
 * **Gate:** this slice may not claim multi-rank correctness from a mock mesh.
   W5.4's mock executor proves the SSA is consumable; DIST-NATIVE-1 owns the
   real transport. Recorded-product *identity* can land before that; a
@@ -151,8 +174,8 @@ first is deliberately the smallest one that exercises the whole ABI.
 |---|---|---|---|
 | E1 | **Product ABI + verifier** | One `tessera.recorded_product.v1` carrier: effect class, content-addressed `π`, declared write-set. A boundary verifier checks (R)-inputs are present and (C) write-set ⊆ declared, failing closed with a named diagnostic per class. | Positive and negative fixtures per class; a product whose write-set exceeds its declaration is rejected; **no** class is admitted without a `π`. |
 | E2 | **Keyed RNG (dropout family)** | Split `AUTODIFF_STOCHASTIC_EFFECT` into *unkeyed* vs *no adjoint rule*; admit keyed draws with a registered rule; carry the key as `π`. | Replay of a recorded dropout region is **bit-identical** (not distributional); unkeyed still fails; the two diagnostics are distinguishable. Gradient checked against the analytic pathwise rule. |
-| E3 | **Mutation, on the existing lineage** | `dtype` becomes real in `state_buffer_lineage`; recorded products bind buffer versions; region replay reads the recorded version. | Bit-identical replay of a stateful step; a tampered version fails closed; a mixed-precision lineage no longer aliases (the §5.2 precondition, with a negative test). |
-| E4 | **Ordered collectives (identity only)** | Communicator + sequence digest as `π`; replay issues the recorded order. | Mock-mesh replay reproduces the recorded order exactly; a reordered sequence fails closed. **No** native-transport or multi-rank numerical claim. |
+| E3 | **Mutation, on the existing lineage** | `dtype` becomes real in `state_buffer_lineage`; the product binds lineage id + version **+ content digest**; region replay reads the recorded version and the verifier checks the digest. | Bit-identical replay of a stateful step; a tampered version fails closed; **a buffer whose bytes changed under an unchanged lineage id + version is REJECTED** (the §3.2 correction, with a negative test); a mixed-precision lineage no longer aliases (§5.2). |
+| E4 | **Ordered collectives (identity only)** | Communicator + sequence digest **+ reduction tree/algorithm and topology** as `π`; replay issues the recorded order under the recorded tree. | Mock-mesh replay reproduces the recorded order exactly; a reordered sequence fails closed; **a changed reduction tree fails closed** even when order and inputs match. Bit-identity of a collective RESULT additionally requires native deterministic evidence on real transport (RCCL/NCCL) — the mock check cannot establish it, so E4 claims identity only and the numerical claim moves to E5/DIST-NATIVE-1. |
 | E5 | **One physical packet family end to end** | The queue row's actual ask: one family carrying an admissible effect through Schedule→Tile→target on x86 and gfx1151. | Exact-device rows on both hosts, bit-identical to the recorded execution; digests bound; no reference-lane fallback. |
 
 Estimated shape: E1 is the load-bearing one; E2 is the cheapest real proof;
@@ -178,6 +201,20 @@ introduced this file.
 
 The first row is the one that matters: **(R) is satisfied by construction**,
 so a recorded key is a sufficient product.
+
+### 5.3 Why a collective needs its reduction tree bound (§3.3)
+
+1024 f32 values, identical inputs, identical issue order:
+
+| reduction | result |
+|---|---|
+| sequential (rank order) | `-50370.79` |
+| pairwise binary tree | `-50370.76` |
+| ring, 8 partials | `-50370.758` |
+
+Pairwise-distinct bit patterns, max gap `3.1e-2`; the ring result changes
+again with the rank count (p = 2, 4, 8). Floating-point addition is
+non-associative, so the tree is part of the value.
 
 ### 5.2 What the mutation lineage identity separates
 

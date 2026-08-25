@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
+recorded products (identity only); ROCm outcome: follow-up required (owns the native evidence).** The product
+binds communicator, issue order, reduction algorithm and topology; the
+verifier rejects a permuted order and a changed tree under an identical
+order. Order evidence comes from the deterministic mock-mesh executor.
+STATED LIMIT: the mock establishes ORDER only. Bit-identity of a collective RESULT needs native RCCL deterministic-algorithm evidence on gfx1151, because floating-point addition is not associative and the reduction tree is part of the value (measured: identical inputs and identical issue order give three different bit patterns for sequential, pairwise and ring). No such claim is made here.
+
+
+Cross-backend sync `W4-EFFECTS-1-E3-2026-08-25` — **shared state-lineage
+identity change; ROCm outcome: parity validated, no behaviour change.**
+`state_buffer_lineage`'s `dtype` becomes a real parameter instead of a
+hardcoded "f32", so mixed-precision recorded state can no longer alias two
+materially different buffers under one lineage id. The default is "f32", so
+every lineage id built today is byte-identical and no package digest moves —
+verified by the existing stateful/optimizer suites (81 tests). Mutation
+products now additionally bind a content digest, which is new surface rather
+than a change to an existing one. No gfx1151 kernel or numerical result
+changes.
+
+
 Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
 change (AutodiffPairedPass); ROCm outcome: parity validated, no behaviour
 change on this backend.** The blanket `AUTODIFF_STOCHASTIC_EFFECT` refusal is

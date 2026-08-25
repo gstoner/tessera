@@ -9,6 +9,22 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
+recorded products (identity only); x86 outcome: parity validated (host-side analysis only).** The product
+binds communicator, issue order, reduction algorithm and topology; the
+verifier rejects a permuted order and a changed tree under an identical
+order. Order evidence comes from the deterministic mock-mesh executor.
+Nothing in the AVX-512 lane changes: this slice is host-side recording and verification with no kernel or numerical effect. The mock-mesh order evidence runs here.
+
+
+Cross-backend sync `W4-EFFECTS-1-E3-2026-08-25` — **shared state-lineage
+identity change; x86 outcome: parity validated, no behaviour change.** Same
+change as the rocm entry, and the same evidence: the f32 default keeps every
+existing lineage id byte-stable, so the AVX-512 stateful packages
+(Lion/Adafactor/sequence-mixer) keep their digests. The E3 content-digest
+binding is additive.
+
+
 Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
 change (AutodiffPairedPass); x86 outcome: parity validated, no behaviour
 change on this backend.** Same gate split as the rocm entry; it is a

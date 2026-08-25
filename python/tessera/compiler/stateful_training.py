@@ -45,12 +45,24 @@ def _buffer(
     version: int,
     access: str,
     parents: Sequence[str] = (),
+    dtype: str = "f32",
 ) -> dict[str, Any]:
+    """One logical buffer's identity.
+
+    `dtype` is a real parameter (W4-EFFECTS-1 E3 precondition). It used to be
+    hardcoded `"f32"`: every lineage built today happens to be f32, so nothing
+    collided, but the identity could not EXPRESS a bf16 or fp8 buffer, so the
+    moment recorded state became mixed precision two materially different
+    buffers would have shared a lineage id. A recorded mutation product binds
+    that id, so the aliasing would have reached replay.
+    """
+    if not dtype:
+        raise ValueError("state buffer lineage requires an explicit dtype")
     identity = {
         "name": name,
         "role": role,
         "shape": [int(dim) for dim in shape],
-        "dtype": "f32",
+        "dtype": str(dtype),
         "version": int(version),
         "access": access,
         "parents": list(parents),

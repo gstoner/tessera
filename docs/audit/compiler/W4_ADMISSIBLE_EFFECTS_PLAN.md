@@ -24,8 +24,14 @@ differentiability (`AUTODIFF_OP_NOT_DIFFERENTIABLE`), and
 `stochastic_product_for_call` admits only call forms whose replay is a
 function of recorded data — measured, not assumed: `dropout(x, p,
 seed=N)` replays bit-identically while the ambient and
-caller-generator forms do not. **E2b** (the dropout `AdjointInterface`
-that replays the mask from the product) and E3–E5 remain open. Every claim below that could have been
+caller-generator forms do not. **E2b** (the dropout `AdjointInterface` that replays the mask from the
+product) is landed too: the Jacobian is `diag(m/(1-p))`, diagonal and
+hence its own transpose, so `dx = dropout(dout, same key)`. **E3 is
+landed**: `dtype` is a real parameter of the lineage identity (the
+measured precondition — the default keeps every existing lineage id
+byte-stable), and a mutation product binds lineage id + version + a
+**content digest**, with `verify_recorded_state` rejecting changed
+bytes under an unchanged identity. **E4 is landed**: the product binds communicator + order + reduction tree + topology, the verifier rejects a permuted order AND a changed tree under an identical order, and the recorded order is taken from the real W5.4 mock-mesh executor rather than a synthetic list — with the scope boundary explicit in code and tests, that this establishes ORDER and that result bit-identity still requires native deterministic evidence. **E5 remains open** (one physical family end to end on x86 + gfx1151). Every claim below that could have been
 assumed was measured instead; the measurements are in §5.
 
 ---
@@ -185,8 +191,8 @@ first is deliberately the smallest one that exercises the whole ABI.
 |---|---|---|---|
 | E1 | **Product ABI + verifier — LANDED 2026-08-25** | One `tessera.recorded_product.v1` carrier: effect class, content-addressed `π`, declared write-set. A boundary verifier checks (R)-inputs are present and (C) write-set ⊆ declared, failing closed with a named diagnostic per class. | Positive and negative fixtures per class; a product whose write-set exceeds its declaration is rejected; **no** class is admitted without a `π`. |
 | E2 | **Keyed RNG (dropout family)** — gate split LANDED 2026-08-25; the adjoint (E2b) remains | Split `AUTODIFF_STOCHASTIC_EFFECT` into *unkeyed* vs *no adjoint rule*; admit keyed draws with a registered rule; carry the key as `π`. | Replay of a recorded dropout region is **bit-identical** (not distributional); unkeyed still fails; the two diagnostics are distinguishable. Gradient checked against the analytic pathwise rule. |
-| E3 | **Mutation, on the existing lineage** | `dtype` becomes real in `state_buffer_lineage`; the product binds lineage id + version **+ content digest**; region replay reads the recorded version and the verifier checks the digest. | Bit-identical replay of a stateful step; a tampered version fails closed; **a buffer whose bytes changed under an unchanged lineage id + version is REJECTED** (the §3.2 correction, with a negative test); a mixed-precision lineage no longer aliases (§5.2). |
-| E4 | **Ordered collectives (identity only)** | Communicator + sequence digest **+ reduction tree/algorithm and topology** as `π`; replay issues the recorded order under the recorded tree. | Mock-mesh replay reproduces the recorded order exactly; a reordered sequence fails closed; **a changed reduction tree fails closed** even when order and inputs match. Bit-identity of a collective RESULT additionally requires native deterministic evidence on real transport (RCCL/NCCL) — the mock check cannot establish it, so E4 claims identity only and the numerical claim moves to E5/DIST-NATIVE-1. |
+| E3 | **Mutation, on the existing lineage** — LANDED 2026-08-25 | `dtype` becomes real in `state_buffer_lineage`; the product binds lineage id + version **+ content digest**; region replay reads the recorded version and the verifier checks the digest. | Bit-identical replay of a stateful step; a tampered version fails closed; **a buffer whose bytes changed under an unchanged lineage id + version is REJECTED** (the §3.2 correction, with a negative test); a mixed-precision lineage no longer aliases (§5.2). |
+| E4 | **Ordered collectives (identity only)** — LANDED 2026-08-25 | Communicator + sequence digest **+ reduction tree/algorithm and topology** as `π`; replay issues the recorded order under the recorded tree. | Mock-mesh replay reproduces the recorded order exactly; a reordered sequence fails closed; **a changed reduction tree fails closed** even when order and inputs match. Bit-identity of a collective RESULT additionally requires native deterministic evidence on real transport (RCCL/NCCL) — the mock check cannot establish it, so E4 claims identity only and the numerical claim moves to E5/DIST-NATIVE-1. |
 | E5 | **One physical packet family end to end** | The queue row's actual ask: one family carrying an admissible effect through Schedule→Tile→target on x86 and gfx1151. | Exact-device rows on both hosts, bit-identical to the recorded execution; digests bound; no reference-lane fallback. |
 
 Estimated shape: E1 is the load-bearing one; E2 is the cheapest real proof;

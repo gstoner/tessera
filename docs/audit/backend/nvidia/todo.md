@@ -8,6 +8,22 @@ last_updated: 2026-08-25
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
+recorded products (identity only); NVIDIA outcome: not applicable today, inherited on adoption.** The product
+binds communicator, issue order, reduction algorithm and topology; the
+verifier rejects a permuted order and a changed tree under an identical
+order. Order evidence comes from the deterministic mock-mesh executor.
+When an NVIDIA collective family adopts recorded products it inherits the same requirement, and NCCL deterministic-algorithm selection becomes the gating evidence for any result claim.
+
+
+Cross-backend sync `W4-EFFECTS-1-E3-2026-08-25` — **shared state-lineage
+identity change; NVIDIA outcome: not applicable today, inherited on
+adoption.** The lineage is host-side package identity, not target codegen; no
+sm_120 artifact changes. Worth knowing when NVIDIA stateful packages adopt
+recorded products: the dtype field is now real, so a bf16 or fp8 optimizer
+state gets its own identity rather than aliasing the f32 one.
+
+
 Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
 change (AutodiffPairedPass); NVIDIA outcome: not applicable, no behaviour
 change.** The pass is target-neutral and the change is a diagnostic split

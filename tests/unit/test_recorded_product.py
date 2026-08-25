@@ -462,3 +462,278 @@ def test_an_unkeyed_dropout_has_no_reproducible_mask_so_no_adjoint():
 
     x = np.ones((512,), dtype=np.float32)
     assert not np.array_equal(ops.dropout(x, 0.3), ops.dropout(x, 0.3))
+
+
+# ── E3: recorded state binds the VALUE, not only the identity ───────────────
+
+def test_lineage_dtype_is_real_so_mixed_precision_cannot_alias():
+    """W4-EFFECTS-1 E3 precondition. `_buffer` hardcoded `dtype="f32"`, so the
+    identity could not express a bf16 or fp8 buffer: two materially different
+    buffers would have shared a lineage id, and a mutation product binds that
+    id, so the aliasing would have reached replay. The default keeps every
+    lineage id built today byte-stable."""
+    from tessera.compiler.stateful_training import _buffer
+
+    base = dict(name="moment", role="moment", shape=(4, 8), version=1,
+                access="read_write")
+    f32 = _buffer(**base)["lineage_id"]
+    assert f32 == _buffer(**base, dtype="f32")["lineage_id"]   # stable default
+    ids = {f32,
+           _buffer(**base, dtype="bf16")["lineage_id"],
+           _buffer(**base, dtype="fp8_e4m3")["lineage_id"],
+           _buffer(**base, dtype="f64")["lineage_id"]}
+    assert len(ids) == 4, "dtypes must not alias in the lineage identity"
+
+
+def test_content_digest_separates_what_metadata_cannot():
+    """The digest must see differences the lineage identity is blind to."""
+    import numpy as np
+
+    from tessera.compiler.recorded_product import content_digest
+
+    a = np.arange(12, dtype=np.float32)
+    assert content_digest(a) == content_digest(a.copy())
+    # same dtype and shape, one element changed — invisible to metadata
+    changed = a.copy()
+    changed[5] = 99.0
+    assert content_digest(a) != content_digest(changed)
+    # identical BYTES, different shape or interpretation
+    assert content_digest(a) != content_digest(a.reshape(3, 4))
+    assert content_digest(a) != content_digest(a.view(np.int32))
+    assert content_digest(a) != content_digest(a.astype(np.float64))
+    # numerically equal, different bits: (R) is bit-identity, so these differ
+    signed_zero = a.copy()
+    signed_zero[0] = -0.0
+    assert np.array_equal(a, signed_zero)          # equal as numbers...
+    assert content_digest(a) != content_digest(signed_zero)   # ...not as bits
+
+
+def test_replay_rejects_changed_bytes_under_an_unchanged_identity():
+    """The core E3 claim. Identity matches, version matches, VALUE moved —
+    the case that would otherwise reach a gradient computation."""
+    import numpy as np
+
+    from tessera.compiler.recorded_product import (
+        mutation_product_for_buffer,
+        verify_recorded_state,
+    )
+
+    moment = np.zeros((4, 8), dtype=np.float32)
+    recorded = mutation_product_for_buffer(
+        op="tessera.optimizer_step", occurrence_id="bb0.op1",
+        lineage_id="a" * 64, version=3, buffer=moment, write_set=("moment",))
+
+    verify_recorded_state(recorded, moment)              # unchanged: fine
+    verify_recorded_state(recorded, moment.copy())       # equal bytes: fine
+
+    drifted = moment.copy()
+    drifted[2, 3] = 1e-7                                 # one element
+    with pytest.raises(RecordedProductError, match="the VALUE changed"):
+        verify_recorded_state(recorded, drifted)
+
+    # a different buffer of the SAME metadata shape/dtype is equally rejected
+    with pytest.raises(RecordedProductError, match="the VALUE changed"):
+        verify_recorded_state(recorded, np.ones((4, 8), dtype=np.float32))
+
+
+def test_mutation_replay_is_bit_identical_end_to_end():
+    """Record a stateful step, replay it from the product, require bit
+    identity — the acceptance bar the plan sets for E3."""
+    import numpy as np
+
+    from tessera.compiler.recorded_product import (
+        mutation_product_for_buffer,
+        verify_recorded_state,
+    )
+
+    def step(param, grad, moment, lr=0.1, beta=0.9):
+        new_moment = beta * moment + (1.0 - beta) * grad
+        return param - lr * new_moment, new_moment
+
+    rng = np.random.default_rng(3)
+    param = rng.standard_normal((4, 8)).astype(np.float32)
+    grad = rng.standard_normal((4, 8)).astype(np.float32)
+    moment = np.zeros((4, 8), dtype=np.float32)
+
+    new_param, new_moment = step(param, grad, moment)
+    recorded = mutation_product_for_buffer(
+        op="tessera.optimizer_step", occurrence_id="bb0.op1",
+        lineage_id="a" * 64, version=1, buffer=new_moment,
+        write_set=("moment",))
+
+    replay_param, replay_moment = step(param, grad, moment)
+    assert np.array_equal(new_param, replay_param)
+    assert np.array_equal(new_moment, replay_moment)
+    verify_recorded_state(recorded, replay_moment)       # the product agrees
+
+    # a replay that started from the wrong version state is caught
+    _, wrong = step(param, grad, moment + np.float32(1e-6))
+    with pytest.raises(RecordedProductError, match="the VALUE changed"):
+        verify_recorded_state(recorded, wrong)
+
+
+def test_verify_recorded_state_rejects_the_wrong_effect_class():
+    from tessera.compiler.recorded_product import verify_recorded_state
+
+    import numpy as np
+
+    with pytest.raises(RecordedProductError, match="applies to"):
+        verify_recorded_state(_rng(), np.zeros(4, dtype=np.float32))
+
+
+# ── E4: ordered collectives — order AND tree ────────────────────────────────
+
+def _collective_record(sequence=("all_reduce:0", "all_gather:1", "all_reduce:2"),
+                       algorithm="ring_f32_pairwise_v1",
+                       topology=None):
+    from tessera.compiler.recorded_product import collective_product_for_sequence
+
+    return collective_product_for_sequence(
+        op="tessera.all_reduce", occurrence_id="bb0.op2",
+        communicator="dp:0-7", sequence=sequence,
+        reduction_algorithm=algorithm,
+        topology=topology if topology is not None else {"ranks": 8, "chunks": 4},
+        write_set=("grad",))
+
+
+def test_collective_replay_requires_the_same_order():
+    from tessera.compiler.recorded_product import verify_collective_replay
+
+    recorded = _collective_record()
+    order = ["all_reduce:0", "all_gather:1", "all_reduce:2"]
+    verify_collective_replay(recorded, order,
+                             reduction_algorithm="ring_f32_pairwise_v1",
+                             topology={"ranks": 8, "chunks": 4})
+
+    permuted = ["all_gather:1", "all_reduce:0", "all_reduce:2"]
+    with pytest.raises(RecordedProductError, match="different collective sequence"):
+        verify_collective_replay(recorded, permuted,
+                                 reduction_algorithm="ring_f32_pairwise_v1",
+                                 topology={"ranks": 8, "chunks": 4})
+
+
+def test_a_changed_reduction_tree_fails_closed_even_when_the_order_matches():
+    """The case order-only checking cannot see. Floating-point addition is not
+    associative, so the tree is part of the value — verified numerically in
+    `test_reduction_tree_changes_the_bits` below, which is WHY the product
+    binds the algorithm and the topology that selects it."""
+    from tessera.compiler.recorded_product import verify_collective_replay
+
+    recorded = _collective_record()
+    order = ["all_reduce:0", "all_gather:1", "all_reduce:2"]
+
+    with pytest.raises(RecordedProductError, match="not associative"):
+        verify_collective_replay(recorded, order,
+                                 reduction_algorithm="tree_f32_v2",
+                                 topology={"ranks": 8, "chunks": 4})
+    with pytest.raises(RecordedProductError, match="topology selects the tree"):
+        verify_collective_replay(recorded, order,
+                                 reduction_algorithm="ring_f32_pairwise_v1",
+                                 topology={"ranks": 4, "chunks": 4})
+
+
+def test_reduction_tree_changes_the_bits():
+    """The measurement the E4 contract rests on: identical inputs and an
+    identical issue order still give different results under different
+    reduction trees, so binding the order alone would not give (R)."""
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    values = (rng.standard_normal(1024).astype(np.float32) * np.float32(1e3))
+
+    def sequential(v):
+        acc = np.float32(0)
+        for element in v:
+            acc = np.float32(acc + element)
+        return acc
+
+    def pairwise(v):
+        v = v.copy()
+        while len(v) > 1:
+            if len(v) % 2:
+                v = np.append(v, np.float32(0))
+            v = (v[0::2] + v[1::2]).astype(np.float32)
+        return v[0]
+
+    def ring(v, partials):
+        return sequential(np.array([sequential(c) for c in
+                                    np.array_split(v, partials)],
+                                   dtype=np.float32))
+
+    results = {sequential(values), pairwise(values), ring(values, 8)}
+    assert len(results) == 3, "expected three distinct bit patterns"
+    # and the ring result depends on the rank count, i.e. on the topology
+    assert ring(values, 2) != ring(values, 8)
+
+
+def test_empty_sequence_records_no_order():
+    from tessera.compiler.recorded_product import collective_product_for_sequence
+
+    with pytest.raises(RecordedProductError, match="non-empty sequence"):
+        collective_product_for_sequence(
+            op="tessera.all_reduce", occurrence_id="bb0.op2",
+            communicator="dp:0-7", sequence=(),
+            reduction_algorithm="ring_f32_pairwise_v1",
+            topology={"ranks": 8}, write_set=("grad",))
+
+
+def test_collective_product_records_the_real_mock_mesh_order():
+    """E4 against the actual W5.4 executor rather than a synthetic list: run a
+    placement graph on the deterministic mock mesh, record the order it really
+    issued, and require the replay to reproduce it. A permutation of that same
+    order is rejected.
+
+    Scope, stated because it bounds the claim: this establishes ORDER. Bit
+    identity of a collective RESULT needs native deterministic evidence on
+    real transport — a mock mesh cannot provide it, and E4 does not claim it.
+    """
+    import numpy as np
+
+    from tessera.compiler.graph_ir import GraphIRFunction, IRArg, IROp, tensor_ir_type
+    from tessera.compiler.recorded_product import (
+        collective_product_for_sequence,
+        verify_collective_replay,
+    )
+    from tessera.compiler.sharding_propagation import (
+        execute_resharded_graph_on_mock_mesh,
+    )
+
+    ty = tensor_ir_type(("4", "2"), "fp32")
+    op = IROp(result="out", op_name="tessera.all_reduce", operands=["%x"],
+              operand_types=[str(ty)], result_type=str(ty), inferred_type=ty,
+              kwargs={"axis": "data", "op": "sum"})
+    fn = GraphIRFunction("mock_collective", args=[IRArg("x", ty)],
+                         result_types=[ty], body=[op], return_values=["%out"])
+    ranks = [np.arange(8, dtype=np.float32).reshape(4, 2),
+             np.arange(8, dtype=np.float32).reshape(4, 2) + 10]
+
+    execution = execute_resharded_graph_on_mock_mesh(
+        fn, {"x": ranks}, mesh_shape={"data": 2})
+    issued = list(execution.executed_reshards)
+    assert issued, "the mock mesh should have issued at least one movement"
+
+    recorded = collective_product_for_sequence(
+        op="tessera.all_reduce", occurrence_id="bb0.op0",
+        communicator="data:0-1", sequence=issued,
+        reduction_algorithm="mock_mesh_sum_v1",
+        topology={"ranks": 2, "axis": "data"}, write_set=("out",))
+
+    # replaying the same graph issues the same order
+    replay = execute_resharded_graph_on_mock_mesh(
+        fn, {"x": ranks}, mesh_shape={"data": 2})
+    verify_collective_replay(recorded, list(replay.executed_reshards),
+                             reduction_algorithm="mock_mesh_sum_v1",
+                             topology={"ranks": 2, "axis": "data"})
+
+    # a permutation of the very same movements is refused
+    if len(issued) > 1:
+        with pytest.raises(RecordedProductError,
+                           match="different collective sequence"):
+            verify_collective_replay(recorded, list(reversed(issued)),
+                                     reduction_algorithm="mock_mesh_sum_v1",
+                                     topology={"ranks": 2, "axis": "data"})
+    # and the tree is bound even though the mock cannot prove result bits
+    with pytest.raises(RecordedProductError, match="not associative"):
+        verify_collective_replay(recorded, issued,
+                                 reduction_algorithm="tree_v2",
+                                 topology={"ranks": 2, "axis": "data"})

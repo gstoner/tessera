@@ -337,9 +337,15 @@ __all__ = [
     "RECORDED_PRODUCT_SCHEMA",
     "RecordedProduct",
     "RecordedProductError",
+    "collective_product_for_sequence",
+    "collective_sequence_digest",
+    "content_digest",
+    "mutation_product_for_buffer",
     "region_digest",
     "stochastic_product_for_call",
+    "verify_collective_replay",
     "verify_confinement",
+    "verify_recorded_state",
     "verify_region_products",
 ]
 
@@ -416,3 +422,177 @@ def stochastic_product_for_call(
         effect_class="keyed_rng",
         product=identity,
     )
+
+
+# ── W4-EFFECTS-1 slice E3: recorded state ───────────────────────────────────
+#
+# A mutation product binds the buffer's IDENTITY (lineage id + version) and
+# its VALUE (a content digest). Identity alone is not enough:
+# `state_buffer_lineage` hashes name/role/shape/dtype/version/access/parents
+# and not contents, so two buffers with identical metadata and different
+# bytes share a lineage id. A replay binding "version N" could then bind
+# different bytes and produce a different gradient — silently, which is the
+# failure the whole gate exists to prevent.
+
+
+def content_digest(buffer: Any) -> str:
+    """Content address of a buffer's VALUE.
+
+    Covers dtype and shape as well as bytes: the same bit pattern read as
+    f32 and as int32 is two different values, and a reshape is a different
+    buffer even when the bytes are identical.
+    """
+    import numpy as np
+
+    array = np.ascontiguousarray(buffer)
+    header = f"{array.dtype.str}|{array.shape}".encode()
+    hasher = hashlib.sha256()
+    hasher.update(header)
+    hasher.update(array.tobytes())
+    return hasher.hexdigest()
+
+
+def mutation_product_for_buffer(
+    *,
+    op: str,
+    occurrence_id: str,
+    lineage_id: str,
+    version: int,
+    buffer: Any,
+    write_set: Sequence[str],
+) -> RecordedProduct:
+    """Record a mutation: what was written, which version, and what it held."""
+    return RecordedProduct(
+        op=op,
+        occurrence_id=occurrence_id,
+        effect_class="recorded_mutation",
+        product={
+            "lineage_id": lineage_id,
+            "version": int(version),
+            "content_digest": content_digest(buffer),
+        },
+        write_set=tuple(write_set),
+    )
+
+
+def verify_recorded_state(recorded: RecordedProduct, buffer: Any) -> None:
+    """Check (R) for a mutation: the bytes at replay are the bytes recorded.
+
+    Rejects the case metadata identity cannot see — an unchanged lineage id
+    and version over CHANGED bytes.
+    """
+    if recorded.effect_class != "recorded_mutation":
+        raise RecordedProductError(
+            f"{recorded.op}: verify_recorded_state applies to "
+            f"recorded_mutation, not {recorded.effect_class}"
+        )
+    actual = content_digest(buffer)
+    expected = str(recorded.product["content_digest"])
+    if actual != expected:
+        raise RecordedProductError(
+            f"{recorded.op}: recorded state for lineage "
+            f"{recorded.product['lineage_id']} version "
+            f"{recorded.product['version']} hashes to {actual[:12]}… but the "
+            f"product recorded {expected[:12]}…; the identity matched while "
+            f"the VALUE changed, so replay would not reproduce the recorded "
+            f"execution (reproducibility)"
+        )
+
+
+# ── W4-EFFECTS-1 slice E4: ordered collectives ──────────────────────────────
+#
+# An ordered collective's requirement is that every rank issues collectives in
+# the same relative order. That is necessary and NOT sufficient for (R):
+# floating-point addition is not associative, so the reduction TREE is part of
+# the value. Measured: 1024 f32 values, identical inputs and identical issue
+# order, reduced sequentially / by pairwise tree / by ring give three
+# different bit patterns, and the ring result changes again with rank count.
+# `LANGUAGE_AND_IR_SPEC` section 11 says the same thing normatively —
+# "Deterministic profiles require fixed collective ordering and reduction
+# trees" — so the product binds both.
+#
+# Scope boundary, deliberately narrow: a recorded sequence proves ORDER.
+# Bit-identity of a collective RESULT additionally requires native
+# deterministic evidence on real transport; a deterministic mock mesh cannot
+# establish it, and this module does not pretend otherwise.
+
+
+def collective_sequence_digest(sequence: Sequence[str]) -> str:
+    """Content address of an ordered collective sequence.
+
+    Order-SENSITIVE by construction: a permutation is a different sequence,
+    which is the whole point.
+    """
+    return _digest({"sequence": [str(item) for item in sequence]})
+
+
+def collective_product_for_sequence(
+    *,
+    op: str,
+    occurrence_id: str,
+    communicator: str,
+    sequence: Sequence[str],
+    reduction_algorithm: str,
+    topology: Mapping[str, Any],
+    write_set: Sequence[str],
+) -> RecordedProduct:
+    """Record a collective: who, in what order, and under which tree."""
+    if not sequence:
+        raise RecordedProductError(
+            f"{op}: an ordered-collective product needs a non-empty sequence; "
+            f"an empty one records no order at all"
+        )
+    return RecordedProduct(
+        op=op,
+        occurrence_id=occurrence_id,
+        effect_class="ordered_collective",
+        product={
+            "communicator": communicator,
+            "sequence_digest": collective_sequence_digest(sequence),
+            "reduction_algorithm": reduction_algorithm,
+            "topology": dict(topology),
+        },
+        write_set=tuple(write_set),
+    )
+
+
+def verify_collective_replay(
+    recorded: RecordedProduct,
+    observed_sequence: Sequence[str],
+    *,
+    reduction_algorithm: str,
+    topology: Mapping[str, Any],
+) -> None:
+    """Check (R) for a collective: same order, same tree, same topology.
+
+    A changed tree is rejected even when the order and inputs match — that is
+    the case order-only checking cannot see, and the one that silently moves
+    the result's bits.
+    """
+    if recorded.effect_class != "ordered_collective":
+        raise RecordedProductError(
+            f"{recorded.op}: verify_collective_replay applies to "
+            f"ordered_collective, not {recorded.effect_class}"
+        )
+    observed = collective_sequence_digest(observed_sequence)
+    if observed != str(recorded.product["sequence_digest"]):
+        raise RecordedProductError(
+            f"{recorded.op}: replay issued a different collective sequence "
+            f"({observed[:12]}… vs recorded "
+            f"{str(recorded.product['sequence_digest'])[:12]}…); ranks would "
+            f"not agree on the order (reproducibility)"
+        )
+    if reduction_algorithm != str(recorded.product["reduction_algorithm"]):
+        raise RecordedProductError(
+            f"{recorded.op}: replay used reduction algorithm "
+            f"{reduction_algorithm!r} but the product recorded "
+            f"{recorded.product['reduction_algorithm']!r}. Floating-point "
+            f"addition is not associative, so a different tree is a different "
+            f"value even under an identical order (reproducibility)"
+        )
+    if _thaw(dict(topology)) != _thaw(recorded.product["topology"]):
+        raise RecordedProductError(
+            f"{recorded.op}: replay topology {dict(topology)!r} differs from "
+            f"the recorded {_thaw(recorded.product['topology'])!r}; the "
+            f"topology selects the tree"
+        )

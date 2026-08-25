@@ -934,8 +934,11 @@ Ordered delivery, host-free throughout except where noted:
    implementation** in the support library with a ctypes binding, per the
    2026-08-16 home decision — not a Python/C++ pair, so Decision #31 is
    satisfied by construction rather than by declared-oracle exemption. The
-   binding fails closed with a named diagnostic and ships **no fallback path**,
-   because a fallback is a second implementation in disguise. Exhaustive proof
+   binding fails closed with a named diagnostic and ships **no layout-evaluation
+   fallback path**, because a fallback is a second implementation in disguise.
+   The fixed rank-2 source-text template used by host-free MSL emission is an
+   explicitly bounded exception: it does not evaluate a layout, has only the
+   two ABI orders, and is checked against the native plan. Exhaustive proof
    over all layouts to size 64 runs on **both sides of the ABI**. Every operation
    is accepted on **two independent axes — function and result structure**;
    `test_layout_algebra_contracts.py` already enforces the pair, and an

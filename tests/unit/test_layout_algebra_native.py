@@ -70,6 +70,22 @@ def test_native_rank2_plan_owns_emitter_coordinate_order() -> None:
         rank2_index_expression("row", "column", "stride", order="diagonal")
 
 
+def test_rank2_source_template_remains_usable_without_native_library(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tessera.compiler.layout_algebra as algebra
+
+    monkeypatch.setattr(algebra, "_LIB", None)
+    monkeypatch.setattr(algebra, "_candidate_libraries", lambda: ())
+
+    assert algebra.rank2_index_expression("row", "column", "columns") == (
+        "row * columns + column"
+    )
+    assert algebra.rank2_index_expression(
+        "row", "column", "rows", order="column_major"
+    ) == "column * rows + row"
+
+
 def test_native_coalesce_preserves_function_and_canonical_structure() -> None:
     from tessera.compiler.layout_algebra import NestedLayout, coalesce
 

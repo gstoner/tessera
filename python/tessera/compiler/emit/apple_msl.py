@@ -76,7 +76,7 @@ SYNTH_VARIANTS = ("broadcast", "dot")
 
 
 def _rank2(row: str, column: str, leading_dimension: str) -> str:
-    """Materialize row-major MSL index text through the C++ layout authority."""
+    """Materialize canonical row-major MSL index text from the shared contract."""
 
     return rank2_index_expression(row, column, leading_dimension)
 

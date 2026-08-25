@@ -682,8 +682,9 @@ ABI surface, the build wiring, and A1/A2.
 - §1.2's three defects carried as negative fixtures
   ([`test_layout_algebra_contracts.py`](../../../tests/unit/test_layout_algebra_contracts.py)
   is the existing corpus and moves to driving the real implementation);
-- A1 (named fail-closed diagnostic, no fallback path) and A2 (declared build
-  dependency + binding-loads test) from L0;
+- A1 (named fail-closed diagnostic for layout evaluation, with the bounded
+  native-equivalent rank-2 source-text template retained for host-free MSL
+  emission) and A2 (declared build dependency + binding-loads test) from L0;
 - host-free — no device, no MLIR, no dialect load.
 
 **Do not land L1 without L2 committed** — otherwise it is a Decision #29

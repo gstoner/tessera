@@ -1,8 +1,8 @@
 """ctypes binding to Tessera's single C++ layout-algebra authority.
 
-There is intentionally no Python implementation fallback.  Layout semantics
-affect generated addresses, so an absent or stale native symbol is a compiler
-configuration error rather than permission to use a second implementation.
+Layout operations require the native ABI.  The one exception is the fixed
+rank-2 *source-text* template used by host-free MSL emitters: it does not
+evaluate an address or choose a layout, and has a native-equivalence test.
 """
 
 from __future__ import annotations
@@ -412,26 +412,34 @@ def rank2_index_expression(
 ) -> str:
     """Emit a rank-2 linear-index expression from the native mapping plan.
 
-    This function deliberately performs no Python-side layout decision.  It
-    only substitutes caller-owned source expressions into the coordinate order
-    returned by :file:`Rank2Index.h` through the versioned native ABI.
+    A source-only emitter may run before a shared library exists (for example,
+    in a CPU-only package test).  In that case, use the fixed ABI mapping as a
+    declarative text template.  All layout evaluation and every available
+    native binding remain fail-closed; native-equivalence tests guard this
+    template against :file:`Rank2Index.h` drift.
     """
 
     orders = {"row_major": 0, "column_major": 1, "col_major": 1}
     if order not in orders:
         raise LayoutAlgebraError(f"unsupported rank-2 order {order!r}")
-    plan = _Rank2IndexPlan()
-    status = _library().tessera_layout_rank2_index_plan_v1(
-        orders[order], ctypes.byref(plan)
-    )
-    if status:
-        raise LayoutAlgebraError(
-            f"rank-2 index planning failed with native status {status}"
+    try:
+        plan = _Rank2IndexPlan()
+        status = _library().tessera_layout_rank2_index_plan_v1(
+            orders[order], ctypes.byref(plan)
         )
+        if status:
+            raise LayoutAlgebraError(
+                f"rank-2 index planning failed with native status {status}"
+            )
+        coordinate_order = (plan.major_coordinate, plan.minor_coordinate)
+    except LayoutAlgebraUnavailableError:
+        # Source text only: a rank-2 row/column mapping has exactly the two
+        # ABI-defined orders.  Do not extend this exception to layout values.
+        coordinate_order = ((0, 1), (1, 0))[orders[order]]
     coordinates = (str(row), str(column))
     return (
-        f"{coordinates[plan.major_coordinate]} * {leading_dimension} + "
-        f"{coordinates[plan.minor_coordinate]}"
+        f"{coordinates[coordinate_order[0]]} * {leading_dimension} + "
+        f"{coordinates[coordinate_order[1]]}"
     )
 
 

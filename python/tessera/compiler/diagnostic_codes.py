@@ -1065,6 +1065,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
+        code="NVIDIA_MATH_MODE_UNAVAILABLE",
+        pass_origin="runtime._nvidia_gemm_selection",
+        severity="error",
+        summary=(
+            "numeric_policy.math_mode names an arithmetic the shipped NVIDIA "
+            "mma.sync lane does not provide."
+        ),
+        fix_hint=(
+            "The only fp32-storage kernel is mma.sync m16n8k8 in TF32 (11 "
+            "significand bits vs fp32's 24); tensor cores have no IEEE-fp32 "
+            'instruction. Declare math_mode="tf32" to accept that, or route '
+            "the matmul to a non-tensor-core path."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
         code="ROCM_WMMA_ACCUM_UNSUPPORTED",
         pass_origin="GenerateWMMAGemmKernel",
         severity="error",

@@ -2164,6 +2164,86 @@ _NVIDIA_GEMM_SYMBOLS = {
 _NVIDIA_NVFP4_SYMBOL = "tessera_nvidia_mma_gemm_nvfp4"
 
 
+#: NUMPOL-CARRIER-1 (queue row 3b) — `math_mode` finally has a consumer.
+#:
+#: Measured 2026-08-25: this table dispatched fp32 storage to the tf32 kernel
+#: UNCONDITIONALLY, and the comment cited Decision #15a as the reason. #15a
+#: says the opposite — "TF32 is not a storage dtype. Model as math_mode='tf32'
+#: on fp32 via numeric_policy" — precisely so the reduced arithmetic is a
+#: choice the PROGRAM makes. Here the storage dtype made it instead, which is
+#: the conflation #15a exists to forbid.
+#:
+#: The cost is not marginal. TF32 keeps 11 significand bits against fp32's 24,
+#: and the operands are rounded before the multiply, so no accumulator width
+#: recovers it. Measured against an fp64 reference, median relative error on
+#: 64xKx64 GEMMs: 1.64e-07 -> 2.93e-04 at K=128 (1783x), 3.63e-07 -> 2.91e-04
+#: at K=4096 (800x). A program that asked for fp32 was getting tf32 results
+#: and no diagnostic.
+#:
+#: Separately, `math_mode` had NO MLIR consumer at all: in C++ it appeared only
+#: inside a rejection message. This is Decision #29's case (a declared key
+#: nothing reads) meeting #21a's (a semantic key silently defaulting).
+def _nvidia_gemm_selection(
+    a_dtype: Any, b_dtype: Any, math_mode: Optional[str]
+) -> tuple[str, Any]:
+    """Pick the shipped GEMM symbol and its storage dtype.
+
+    Pure, so the contract is testable on a host with no NVIDIA device — which
+    is the only reason this logic is extracted at all. Raises ValueError with a
+    named diagnostic rather than substituting a different arithmetic.
+    """
+    import numpy as np
+
+    bf16 = _bfloat16_dtype()
+    if a_dtype == np.float16 and b_dtype == np.float16:
+        return _NVIDIA_GEMM_SYMBOLS["float16"], np.float16
+    if bf16 is not None and a_dtype == bf16 and b_dtype == bf16:
+        return _NVIDIA_GEMM_SYMBOLS["bfloat16"], bf16
+    if a_dtype == np.float32 and b_dtype == np.float32:
+        # The only shipped fp32-storage kernel is mma.sync m16n8k8 in TF32.
+        # There is no IEEE-fp32 tensor-core instruction on any NVIDIA part, so
+        # an explicit ieee request cannot be honoured here and must say so
+        # instead of returning tf32 numbers under an fp32 label.
+        if math_mode in ("ieee",):
+            raise ValueError(
+                "NVIDIA_MATH_MODE_UNAVAILABLE: numeric_policy declares "
+                'math_mode="ieee" on fp32 storage, but the shipped mma.sync '
+                "lane has only a TF32 kernel (11 significand bits vs fp32's "
+                "24) — tensor cores have no IEEE-fp32 instruction. Refusing "
+                "rather than returning tf32 results under an fp32 label; "
+                "measured, that substitution costs 800x-1783x relative error. "
+                'Declare math_mode="tf32" to accept it, or route this matmul '
+                "to a non-tensor-core path."
+            )
+        if math_mode not in (None, "tf32", "default"):
+            raise ValueError(
+                "NVIDIA_MATH_MODE_UNAVAILABLE: numeric_policy declares "
+                f"math_mode={math_mode!r} on fp32 storage; the shipped "
+                'mma.sync lane provides "tf32" only.'
+            )
+        return _NVIDIA_GEMM_SYMBOLS["float32"], np.float32
+    if str(a_dtype) in ("float8_e4m3fn", "float8_e5m2") and a_dtype == b_dtype:
+        return _NVIDIA_GEMM_SYMBOLS[str(a_dtype)], a_dtype
+    raise ValueError(
+        "nvidia_mma executor handles f16/bf16/fp32(tf32-math)/"
+        "fp8_e4m3/fp8_e5m2 storage "
+        f"(f32 accumulate); got {a_dtype} @ {b_dtype}"
+    )
+
+
+def _nvidia_math_mode(op: Any) -> Optional[str]:
+    """The declared math_mode, from the op's numeric_policy or kwargs."""
+    if not isinstance(op, dict):
+        return None
+    kwargs = op.get("kwargs") or {}
+    policy = kwargs.get("numeric_policy") or op.get("numeric_policy") or {}
+    if isinstance(policy, dict) and policy.get("math_mode") is not None:
+        return str(policy["math_mode"])
+    if kwargs.get("math_mode") is not None:
+        return str(kwargs["math_mode"])
+    return None
+
+
 def _nvidia_gemm_lib_path() -> Optional[Path]:
     """Locate the shipped GEMM lib (env override → canonical CMake build dir)."""
     env = os.environ.get("TESSERA_NVIDIA_GEMM_LIB")
@@ -2294,23 +2374,8 @@ def _execute_nvidia_mma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise ValueError(f"nvidia_mma matmul needs rank-2 operands with matching K; got {a.shape} @ {b.shape}")
 
-    bf16 = _bfloat16_dtype()
     store: Any
-    if a.dtype == np.float16 and b.dtype == np.float16:
-        sym, store = _NVIDIA_GEMM_SYMBOLS["float16"], np.float16
-    elif bf16 is not None and a.dtype == bf16 and b.dtype == bf16:
-        sym, store = _NVIDIA_GEMM_SYMBOLS["bfloat16"], bf16
-    elif a.dtype == np.float32 and b.dtype == np.float32:
-        # fp32 storage → tf32-math GEMM (Decision #15a).
-        sym, store = _NVIDIA_GEMM_SYMBOLS["float32"], np.float32
-    elif str(a.dtype) in ("float8_e4m3fn", "float8_e5m2") and a.dtype == b.dtype:
-        sym, store = _NVIDIA_GEMM_SYMBOLS[str(a.dtype)], a.dtype
-    else:
-        raise ValueError(
-            "nvidia_mma executor handles f16/bf16/fp32(tf32-math)/"
-            "fp8_e4m3/fp8_e5m2 storage "
-            f"(f32 accumulate); got {a.dtype} @ {b.dtype}"
-        )
+    sym, store = _nvidia_gemm_selection(a.dtype, b.dtype, _nvidia_math_mode(op))
     fn = getattr(lib, sym, None)
     if fn is None:
         raise RuntimeError(

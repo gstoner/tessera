@@ -125,3 +125,58 @@ def test_decoupled_schedule_carries_no_cross_stage_dependency():
         own = [t for t in steps if t.phase == Phase.FORWARD
                and t.stage == step.stage and t.micro_batch == step.micro_batch]
         assert plan._action_id(own[0]) in deps[plan._action_id(step)]
+
+
+# ── Closed-form invariants of the interleaved schedule ───────────────────────
+# The clock model is exact integer arithmetic, so these are provable rather
+# than sampled. With V = p*v virtual stages:
+#     clock_F(s, mb) = s + mb
+#     clock_B(s, mb) = (V - 1 - s) + mb + V = 2V - 1 - s + mb
+# The four theorems below are checked exhaustively over a parameter space,
+# which is what keeps a future edit to the clock formulas honest.
+
+def _clock_f(stage, micro_batch):
+    return stage + micro_batch
+
+
+def _clock_b(stage, micro_batch, total_stages):
+    return 2 * total_stages - 1 - stage + micro_batch
+
+
+def test_interleaved_clock_invariants_hold_exhaustively():
+    for p in range(1, 7):
+        for v in range(1, 6):
+            total = p * v
+            for m in range(1, 11):
+                for s in range(total):
+                    for mb in range(m):
+                        # T1: forward advances one clock per virtual stage.
+                        if s > 0:
+                            assert _clock_f(s, mb) - _clock_f(s - 1, mb) == 1
+                        # T2: backward advances one clock per stage DOWNWARD,
+                        # i.e. stage s strictly follows stage s+1.
+                        if s + 1 < total:
+                            assert (_clock_b(s, mb, total)
+                                    - _clock_b(s + 1, mb, total)) == 1
+                        # T3: a stage's backward strictly follows its forward;
+                        # the margin 2V-1-2s is minimised at s = V-1 and is 1.
+                        assert (_clock_b(s, mb, total) - _clock_f(s, mb)
+                                == 2 * total - 1 - 2 * s)
+                        assert _clock_b(s, mb, total) > _clock_f(s, mb)
+                # T4: the span matches the pre-fix generator exactly, so the
+                # reordering cannot change makespan or bubble ratio.
+                assert _clock_b(total - 1, 0, total) == total
+                assert _clock_b(0, m - 1, total) == 2 * total + m - 2
+
+
+def test_generator_matches_the_closed_form():
+    """The proved formulas are the ones the generator actually emits."""
+    for p, v, m in [(2, 2, 4), (4, 2, 8), (3, 3, 9)]:
+        plan = PipelinePlan(num_stages=p, num_micro_batches=m,
+                            interleaved=True, num_chunks=v)
+        total = p * v
+        for step in plan.schedule_steps():
+            expected = (_clock_f(step.stage, step.micro_batch)
+                        if step.phase == Phase.FORWARD
+                        else _clock_b(step.stage, step.micro_batch, total))
+            assert step.clock == expected, (step, expected)

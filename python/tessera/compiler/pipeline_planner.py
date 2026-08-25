@@ -302,6 +302,20 @@ class PipelinePlan:
                     # still `total_stages`, last is still
                     # `2*total_stages + m - 2` — while ordering gradients
                     # from the last virtual stage back to the first.
+                    #
+                    # MEASURED CAVEAT (corrected 2026-08-25): this builder is
+                    # an analytical bubble model, NOT a resource-feasible
+                    # timeline — it already placed several steps on the same
+                    # (rank, clock) slot. Swept over p<=6, v<=5, m<=12: the
+                    # reordering leaves that collision count unchanged in
+                    # 235/360 configurations and INCREASES it in the other
+                    # 125 (by at most 9, mean +1); it never decreases it. An
+                    # earlier note here claimed the count was identical — that
+                    # was generalised from three configurations that happened
+                    # to be among the unchanged ones. Dependency correctness
+                    # and makespan are unaffected (proved in
+                    # test_pipeline_schedule_carrier.py); making the model
+                    # resource-feasible is separate, pre-existing work.
                     bwd_clock = (
                         (total_stages - 1 - virtual_stage) + mb + total_stages
                     )

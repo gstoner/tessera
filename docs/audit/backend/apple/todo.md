@@ -8,6 +8,18 @@ last_updated: 2026-08-24
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `NUMPOL-CARRIER-1-2026-08-24` — **shared Schedule→Tile
+`numeric_policy` carrier contract (integrated-plan queue row 3b); Apple
+outcome: follow-up required.** Newly owned row, nothing implemented yet.
+Apple consumes the contract through the MSL emitters and the value-preserving
+Target-IR lane; its `simdgroup_matrix` coopmat path is the natural first
+carrier site (the accumulator choice there is exactly what the policy must
+survive to reach). Note the standing seam: the Python MSL synthesizer and the
+C++ MLIR pipeline are two disconnected compilers, so the carrier must be
+designed not to require a third policy representation. M1 Max evidence
+required before any numerical claim.
+
+
 Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **reachable Metal
 physical-consumer tail closed.** The versioned native layout ABI now exports
 the existing `Rank2Index.h` coordinate plan to source emitters without a Python

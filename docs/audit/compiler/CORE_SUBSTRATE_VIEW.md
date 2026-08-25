@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-08-24
 audit_role: reference
 verification: every previously prose-only mathematical claim this view inherits
         is machine-checked — 13/13 in research/core_substrate/verify_substrate_math.py
@@ -206,7 +206,8 @@ learn from `numeric_policy`, not from a special case), and the PDE plan §III.4
 
 **Stands:** partially landed where W1.1 reached — `!tile.fragment<…, acc, …>`
 carries the accumulator on the typed ROCm route. Generalizing beyond MMA
-fragments (pointwise/reduction/butterfly chains) has **no owning row**.
+fragments (pointwise/reduction/butterfly chains) is owned by
+**NUMPOL-CARRIER-1 (integrated-plan queue row 3b, 2026-08-24)**.
 **FORGE §1.3 supplies the measured target** this carrier was missing: whether
 the fused-epilogue fp32-accumulator win is realizable flips 913× → 1.1× → 1.0×
 purely as a function of `accum` × state dtype — a fact only a compiler carrying
@@ -311,19 +312,21 @@ and it is deliberately host-free).
 | S2 schedule object | **W5.2** (c/e/g landed/landing) | IR-surviving schedule datum; stated entry point (CAKE Ph 3); roles vocabulary (CAKE Ph 2) |
 | S3 calibration + arbiter | W5.2b/c landed; TileSight §4 items | **Calibration sweeps** (fleet-box task, small); rasterization-knob consumers; certificate-driven candidate rejection (PDE §III.2) |
 | S4 keys + certificates | Governance (#21a/#29/#30, drift-gated) | Per-lane, carried inside each plan |
-| S5 numeric_policy carrier | W1.1 (fragments only) | **Generalized carrier + boundary verifier** — no row |
+| S5 numeric_policy carrier | W1.1 (fragments only) | **Owned 2026-08-24: INTEGRATED_COMPILER_PLAN queue row 3b (NUMPOL-CARRIER-1)** |
 | S6 structural-op tranche | — | **Entire tranche — no row** (G1b, scan, segment_sum, tridiagonal, attention modes, index ops) |
 | S7 memory tiers + prefetch | W2.4a (sync floor); E4 chunk machinery | **Prefetch edge + feasibility check + KV-cache invariants** — no row beyond SparDA's own table |
 | S8 transform substrate | AD-* rows (partial) | **Real batching; implicit-diff hardening** — no rows; schedule-AD deliberately deferred |
 | S9 locality + residency (FORGE) | — (precedents: `TrainingStepFusionPass`, `LOWER-COUNT-1`, `numeric_policy` on `MatmulOp`) | **Entire pair — no rows** (FORGE W1–W4 in its own order); host-free |
 
-Four flagged inputs for the integrated plan (recommendation only; ordering is
-its call): a row for the **structural-op tranche** (S6 — serves three plans),
-a row for the **generalized numeric_policy carrier** (S5 — three plans mandate
-it via #32), and the **calibration sweeps** as an explicit small task rather
-than a perpetual "still open" footnote (S3 — it silently gates four other
-items). Fourth: **rows for FORGE W1→W2→W3→W4** (S9 — host-free, and W2's
-residency proof is the cheapest honest answer to every future memory claim).
+Flagged inputs for the integrated plan (recommendation only; ordering is its
+call). **One of the original four is now closed:** the **generalized
+numeric_policy carrier** (S5) was adopted as integrated-plan queue row 3b,
+`NUMPOL-CARRIER-1`, on 2026-08-24 — do not re-propose it. The three that
+remain open: a row for the **structural-op tranche** (S6 — serves three
+plans); the **calibration sweeps** as an explicit small task rather than a
+perpetual "still open" footnote (S3 — it silently gates four other items);
+and **rows for FORGE W1→W2→W3→W4** (S9 — host-free, and W2's residency proof
+is the cheapest honest answer to every future memory claim).
 
 ## 4. The updated build sequence (proposal — ordering authority stays with the integrated plan)
 

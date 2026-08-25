@@ -8,15 +8,14 @@ last_updated: 2026-08-25
 
 # Apple compiler, exact-device, and performance plan
 
-Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **shared recorded-product ABI
-for admissible effects (plan only, no code); Apple outcome: follow-up
-required on adoption, not scoped in the first slices.** E5 is scoped to
-x86 + gfx1151, so no M1 Max row is claimed. Noted for whoever adopts it: the
-Apple RNG lane must carry the same key as `π` (the admissibility of keyed RNG
-rests on counter-based purity, which holds for the S4 generator regardless of
-target), and Apple's Python-synthesizer / C++-pipeline seam means the product
-must not require a third representation.
-
+Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
+landed): shared recorded-product carrier + verifier implemented in Python;
+Apple outcome: not applicable at this slice, follow-up on adoption.** E1 is
+host-neutral Python; no Metal surface consumes it and no M1 Max row is
+claimed. Noted for adoption: the keyed-RNG class rests on counter-based
+purity, which holds for the S4 generator on any target, and the carrier is a
+single serialized payload so Apple's Python-synthesizer / C++-pipeline seam
+does not need a third representation.
 
 Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
 Schedule->Tile spectral identity contract + pipeline carrier ordering; Apple

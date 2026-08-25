@@ -34,17 +34,19 @@ from tessera.compiler.recorded_product import (
 
 
 def _rng(**over):
+    occurrence = over.pop("occurrence_id", "bb0.op0")
     payload = {"key": {"seed": 7, "path": ("dropout", 0)}, "shape": (4, 8),
                "dtype": "f32"}
     payload.update(over)
-    return RecordedProduct(op="tessera.dropout", effect_class="keyed_rng",
-                           product=payload)
+    over["occurrence_id"] = occurrence
+    return RecordedProduct(op="tessera.dropout", occurrence_id=over.pop("occurrence_id", "bb0.op0"),
+                           effect_class="keyed_rng", product=payload)
 
 
 def _mutation(**over):
     payload = {"lineage_id": "a" * 64, "version": 3, "content_digest": "b" * 64}
     payload.update(over)
-    return RecordedProduct(op="tessera.optimizer_step",
+    return RecordedProduct(op="tessera.optimizer_step", occurrence_id="bb0.op1",
                            effect_class="recorded_mutation", product=payload,
                            write_set=("moment",))
 
@@ -54,7 +56,7 @@ def _collective(**over):
                "reduction_algorithm": "ring_f32_pairwise_v1",
                "topology": {"ranks": 8, "chunks": 4}}
     payload.update(over)
-    return RecordedProduct(op="tessera.all_reduce",
+    return RecordedProduct(op="tessera.all_reduce", occurrence_id="bb0.op2",
                            effect_class="ordered_collective", product=payload,
                            write_set=("grad",))
 
@@ -68,7 +70,7 @@ def test_admitted_classes_exclude_io():
     assert set(ADMITTED_EFFECT_CLASSES) == {
         "keyed_rng", "recorded_mutation", "ordered_collective", "observational"}
     with pytest.raises(RecordedProductError, match="not admissible"):
-        RecordedProduct(op="tessera.read_file", effect_class="io",
+        RecordedProduct(op="tessera.read_file", occurrence_id="occ", effect_class="io",
                         product={"path": "/tmp/x"})
 
 
@@ -117,8 +119,8 @@ def test_collective_requires_its_reduction_algorithm_not_only_order():
 
 def test_empty_product_is_rejected():
     with pytest.raises(RecordedProductError, match="non-empty"):
-        RecordedProduct(op="tessera.dropout", effect_class="keyed_rng",
-                        product={})
+        RecordedProduct(op="tessera.dropout", occurrence_id="occ",
+                        effect_class="keyed_rng", product={})
 
 
 # ── (C): confinement ────────────────────────────────────────────────────────
@@ -134,7 +136,7 @@ def test_write_outside_the_declared_set_is_rejected():
 def test_over_declaration_is_allowed_but_stray_writes_are_not():
     """Declaring more than written is conservative and cannot hide a stray
     write; the converse is exactly what (C) forbids."""
-    item = RecordedProduct(op="tessera.optimizer_step",
+    item = RecordedProduct(op="tessera.optimizer_step", occurrence_id="occ",
                            effect_class="recorded_mutation",
                            product={"lineage_id": "a"*64, "version": 1,
                                     "content_digest": "b"*64},
@@ -149,15 +151,15 @@ def test_over_declaration_is_allowed_but_stray_writes_are_not():
     ("keyed_rng", {"key": {"seed": 1}, "shape": (2,), "dtype": "f32"}),
 ])
 def test_non_writing_classes_may_not_declare_a_write_set(cls, payload):
-    RecordedProduct(op="op", effect_class=cls, product=payload)  # no write-set
+    RecordedProduct(op="op", occurrence_id="occ", effect_class=cls, product=payload)  # no write-set
     with pytest.raises(RecordedProductError, match="writes nothing"):
-        RecordedProduct(op="op", effect_class=cls, product=payload,
+        RecordedProduct(op="op", occurrence_id="occ", effect_class=cls, product=payload,
                         write_set=("something",))
 
 
 def test_duplicate_write_set_names_are_rejected():
     with pytest.raises(RecordedProductError, match="duplicate"):
-        RecordedProduct(op="tessera.optimizer_step",
+        RecordedProduct(op="tessera.optimizer_step", occurrence_id="occ",
                         effect_class="recorded_mutation",
                         product={"lineage_id": "a"*64, "version": 1,
                                  "content_digest": "b"*64},
@@ -166,24 +168,55 @@ def test_duplicate_write_set_names_are_rejected():
 
 # ── region-level totality ───────────────────────────────────────────────────
 
-def test_every_effectful_op_needs_exactly_one_product():
-    rng, mutation = _rng(), _mutation()
-    by_op = verify_region_products(
-        [rng, mutation],
-        effectful_ops=["tessera.dropout", "tessera.optimizer_step"])
-    assert set(by_op) == {"tessera.dropout", "tessera.optimizer_step"}
+def test_every_effectful_occurrence_needs_exactly_one_product():
+    rng, mutation = _rng(), _mutation()          # bb0.op0, bb0.op1
+    by_occ = verify_region_products(
+        [rng, mutation], effectful_occurrences=["bb0.op0", "bb0.op1"])
+    assert set(by_occ) == {"bb0.op0", "bb0.op1"}
 
-    # an effectful op with no product stays fail-closed
+    # an effectful occurrence with no product stays fail-closed
+    with pytest.raises(RecordedProductError, match="without a recorded product"):
+        verify_region_products([rng], effectful_occurrences=["bb0.op0", "bb0.op1"])
+    # a product for an occurrence that is not on the path is equally wrong
+    with pytest.raises(RecordedProductError, match="not on the"):
+        verify_region_products([rng, mutation], effectful_occurrences=["bb0.op0"])
+    # two products for one occurrence
+    with pytest.raises(RecordedProductError, match="more than one"):
+        verify_region_products([rng, _rng()], effectful_occurrences=["bb0.op0"])
+
+
+def test_two_calls_of_the_same_op_are_two_occurrences():
+    """PR #629 review, P1. Keying by op NAME breaks both ways for a region
+    containing two `tessera.dropout` calls: the second product is rejected as
+    a duplicate, and — worse — a set of names collapses the repetition, so a
+    SINGLE product satisfies both occurrences and one effect goes unchecked.
+    """
+    first = _rng(occurrence_id="bb0.op0")
+    second = _rng(occurrence_id="bb0.op7", key={"seed": 7, "path": ("dropout", 1)})
+    assert first.op == second.op == "tessera.dropout"
+    assert first.digest != second.digest
+
+    by_occ = verify_region_products(
+        [first, second], effectful_occurrences=["bb0.op0", "bb0.op7"])
+    assert len(by_occ) == 2
+
+    # one product can no longer satisfy two occurrences of the same op
     with pytest.raises(RecordedProductError, match="without a recorded product"):
         verify_region_products(
-            [rng],
-            effectful_ops=["tessera.dropout", "tessera.optimizer_step"])
-    # a product for an op that is not on the path is equally wrong
-    with pytest.raises(RecordedProductError, match="not on the region"):
-        verify_region_products([rng, mutation], effectful_ops=["tessera.dropout"])
-    # two products for one op
-    with pytest.raises(RecordedProductError, match="more than one"):
-        verify_region_products([rng, _rng()], effectful_ops=["tessera.dropout"])
+            [first], effectful_occurrences=["bb0.op0", "bb0.op7"])
+    # and a repeated occurrence id is itself rejected: totality would be
+    # uncheckable
+    with pytest.raises(RecordedProductError, match="repeated"):
+        verify_region_products(
+            [first], effectful_occurrences=["bb0.op0", "bb0.op0"])
+
+
+def test_occurrence_id_is_required():
+    with pytest.raises(RecordedProductError, match="occurrence id"):
+        RecordedProduct(op="tessera.dropout", occurrence_id="",
+                        effect_class="keyed_rng",
+                        product={"key": {"seed": 1}, "shape": (2,),
+                                 "dtype": "f32"})
 
 
 # ── identity: the digest must separate everything that matters ──────────────
@@ -197,7 +230,8 @@ def test_digest_separates_every_field_that_changes_the_value():
     assert _mutation(content_digest="c" * 64).digest != base
     assert _mutation(lineage_id="d" * 64).digest != base
     assert RecordedProduct(
-        op="tessera.optimizer_step", effect_class="recorded_mutation",
+        op="tessera.optimizer_step", occurrence_id="bb0.op1",
+        effect_class="recorded_mutation",
         product={"lineage_id": "a"*64, "version": 3, "content_digest": "b"*64},
         write_set=("variance",)).digest != base          # write-set counts
     assert _rng().digest != _rng(shape=(4, 9)).digest
@@ -242,7 +276,7 @@ def test_keyed_rng_product_actually_reproduces_the_draw_bit_for_bit():
     key = RNGKey(seed).fold_in(path[0]).fold_in(path[1])
     recorded_values = normal(key, shape)
     product = RecordedProduct(
-        op="tessera.dropout", effect_class="keyed_rng",
+        op="tessera.dropout", occurrence_id="bb0.op0", effect_class="keyed_rng",
         product={"key": {"seed": seed, "path": list(path)},
                  "shape": list(shape), "dtype": "f32"})
 
@@ -258,3 +292,58 @@ def test_keyed_rng_product_actually_reproduces_the_draw_bit_for_bit():
     # A different product must NOT reproduce it — otherwise the test is vacuous.
     other = RNGKey(seed).fold_in(path[0]).fold_in(path[1] + 1)
     assert not np.array_equal(recorded_values, normal(other, shape))
+
+
+# ── review fixes: immutability and the scalar draw ──────────────────────────
+
+def test_product_is_deeply_immutable_and_the_digest_cannot_drift():
+    """PR #629 review, P2. A frozen dataclass only stops rebinding the FIELD.
+    Without a deep freeze a caller could mutate `product["shape"][0]` after
+    construction and move the content address of a carrier that had already
+    been indexed or serialized — defeating the point of content addressing.
+    """
+    item = _rng()
+    before = item.digest
+
+    with pytest.raises(TypeError):
+        item.product["dtype"] = "bf16"          # mapping is read-only
+    with pytest.raises(TypeError):
+        item.product["key"]["seed"] = 99        # nested mapping too
+    assert isinstance(item.product["shape"], tuple)  # sequences are tuples
+    with pytest.raises(TypeError):
+        item.product["shape"][0] = 99
+
+    assert item.digest == before
+    # the canonical payload is a plain, freshly-built structure: mutating the
+    # copy a caller receives must not touch the carrier either
+    payload = item.canonical_payload()
+    payload["product"]["dtype"] = "bf16"
+    assert item.product["dtype"] == "f32"
+    assert item.digest == before
+
+
+def test_scalar_draw_is_a_valid_shape_not_a_missing_field():
+    """PR #629 review, P2. `()` is the canonical scalar draw — `rng.normal`
+    accepts and defaults to it — so it must not be read as an absent field.
+    The equivalent JSON form `[]` must behave the same way."""
+    from tessera.rng import RNGKey, normal
+
+    scalar = RecordedProduct(
+        op="tessera.dropout", occurrence_id="bb0.op0", effect_class="keyed_rng",
+        product={"key": {"seed": 3}, "shape": (), "dtype": "f32"})
+    assert scalar.product["shape"] == ()
+    json_form = RecordedProduct(
+        op="tessera.dropout", occurrence_id="bb0.op0", effect_class="keyed_rng",
+        product={"key": {"seed": 3}, "shape": [], "dtype": "f32"})
+    assert json_form.digest == scalar.digest      # () and [] are one value
+
+    # and the scalar draw it describes is real
+    assert normal(RNGKey(3), ()).shape == ()
+
+    # emptiness that IS meaningless still fails closed
+    with pytest.raises(RecordedProductError, match="empty"):
+        RecordedProduct(op="tessera.dropout", occurrence_id="bb0.op0",
+                        effect_class="keyed_rng",
+                        product={"key": {}, "shape": (), "dtype": "f32"})
+    with pytest.raises(RecordedProductError, match="empty"):
+        _collective(topology={})

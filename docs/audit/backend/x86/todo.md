@@ -9,13 +9,14 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
-Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **shared recorded-product ABI
-for admissible effects (plan only, no code); x86 outcome: follow-up required
-(AVX-512 is a named acceptance host).** Same contract as the rocm entry. x86
-is the other E5 exact-device host and is the natural home for the E2 keyed-RNG
-slice, whose acceptance bar is bit-identical replay of a recorded dropout
-region rather than a distributional check. No x86 code changes yet.
-
+Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
+landed): shared recorded-product carrier + verifier implemented in Python;
+x86 outcome: still follow-up required, no x86 surface consumes it yet.** Same
+carrier as the rocm entry. E1 is host-neutral Python with no target coupling,
+so nothing in the AVX-512 lane compiles through it and no evidence is claimed.
+x86 remains the natural home for the E2 keyed-RNG slice, whose acceptance bar
+is bit-identical replay of a recorded dropout region; E1 already demonstrates
+that property against the live S4 generator at the library level.
 
 Cross-backend sync `SPECTRAL-PAYLOAD-CHAIN-2026-08-25` — **shared
 Schedule->Tile spectral identity contract + pipeline carrier ordering; x86

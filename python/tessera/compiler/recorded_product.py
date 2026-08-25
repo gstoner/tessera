@@ -43,6 +43,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 
@@ -77,6 +78,20 @@ _REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "observational": ("origin",),
 }
 
+#: Fields whose EMPTINESS is meaningless, per class. `shape` is absent here
+#: on purpose: `()` is the scalar draw.
+_MUST_BE_NON_EMPTY: dict[str, tuple[str, ...]] = {
+    "keyed_rng": ("key",),
+    "recorded_mutation": ("lineage_id", "content_digest"),
+    "ordered_collective": (
+        "communicator",
+        "sequence_digest",
+        "reduction_algorithm",
+        "topology",
+    ),
+    "observational": ("origin",),
+}
+
 #: Classes whose write-set must be empty, by definition of the class.
 _MUST_NOT_WRITE = frozenset({"observational", "keyed_rng"})
 
@@ -93,10 +108,29 @@ def _digest(value: Any) -> str:
 
 
 def _freeze(value: Any) -> Any:
+    """Deeply immutable snapshot.
+
+    A frozen dataclass only stops rebinding the FIELD; without this the
+    caller could still mutate `product["shape"][0]` after construction and,
+    because the digest is derived from that state, change the carrier's
+    content address after it had been indexed or serialized. Mappings become
+    read-only proxies and sequences become tuples all the way down.
+    """
     if isinstance(value, Mapping):
-        return {str(k): _freeze(v) for k, v in sorted(value.items())}
+        return MappingProxyType(
+            {str(k): _freeze(v) for k, v in sorted(value.items())}
+        )
     if isinstance(value, (list, tuple)):
-        return [_freeze(v) for v in value]
+        return tuple(_freeze(v) for v in value)
+    return value
+
+
+def _thaw(value: Any) -> Any:
+    """Plain JSON containers for hashing and serialization."""
+    if isinstance(value, Mapping):
+        return {str(k): _thaw(v) for k, v in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(v) for v in value]
     return value
 
 
@@ -112,6 +146,7 @@ class RecordedProduct:
     """
 
     op: str
+    occurrence_id: str
     effect_class: str
     product: Mapping[str, Any]
     write_set: tuple[str, ...] = ()
@@ -124,6 +159,15 @@ class RecordedProduct:
             )
         if not self.op:
             raise RecordedProductError("recorded product requires an op name")
+        if not self.occurrence_id:
+            raise RecordedProductError(
+                f"{self.op}: recorded product requires an occurrence id. Two "
+                f"calls of one operation in a region share an op NAME, so "
+                f"keying by name would reject the second as a duplicate and "
+                f"let a single product satisfy both — admitting an unchecked "
+                f"effect. Use the region carrier's operation id "
+                f"(`StructuredOperation.operation_id`)"
+            )
         if self.effect_class not in ADMITTED_EFFECT_CLASSES:
             raise RecordedProductError(
                 f"effect class {self.effect_class!r} is not admissible; "
@@ -137,15 +181,34 @@ class RecordedProduct:
                 f"product; an effect admitted without one is exactly the "
                 f"silent-divergence case the gate exists to prevent"
             )
+        # ABSENCE, not emptiness: `shape = ()` is the canonical scalar draw
+        # and `tessera.rng.normal` both accepts and defaults to it, so an
+        # empty tuple is a legitimate value rather than a missing field.
+        # Fields whose emptiness IS meaningless are listed per class below.
         missing = [
             name
             for name in _REQUIRED_FIELDS[self.effect_class]
-            if self.product.get(name) in (None, "", ())
+            if name not in self.product
+            or self.product[name] is None
+            or self.product[name] == ""
         ]
         if missing:
             raise RecordedProductError(
                 f"{self.op}: {self.effect_class} product is missing "
                 f"{missing} — replay would not be a function of the product "
+                f"(reproducibility)"
+            )
+        empty = [
+            name
+            for name in _MUST_BE_NON_EMPTY.get(self.effect_class, ())
+            if name in self.product
+            and hasattr(self.product[name], "__len__")
+            and len(self.product[name]) == 0
+        ]
+        if empty:
+            raise RecordedProductError(
+                f"{self.op}: {self.effect_class} product has empty {empty}; "
+                f"these fields carry the identity replay depends on "
                 f"(reproducibility)"
             )
         if self.effect_class in _MUST_NOT_WRITE and self.write_set:
@@ -160,20 +223,25 @@ class RecordedProduct:
             )
         object.__setattr__(self, "product", _freeze(self.product))
         object.__setattr__(self, "write_set", tuple(self.write_set))
+        # Fix the content address at construction. Recomputing it on every
+        # access would let any later mutation of nested state move the
+        # address of a carrier that has already been indexed or serialized.
+        object.__setattr__(self, "_digest", _digest(self.canonical_payload()))
 
     def canonical_payload(self) -> dict[str, Any]:
         return {
             "schema": self.schema,
             "op": self.op,
             "effect_class": self.effect_class,
-            "product": _freeze(self.product),
+            "op_occurrence": self.occurrence_id,
+            "product": _thaw(self.product),
             "write_set": list(self.write_set),
         }
 
     @property
     def digest(self) -> str:
-        """Content address of the whole product, including the write-set."""
-        return _digest(self.canonical_payload())
+        """Content address, fixed at construction (see `__post_init__`)."""
+        return str(getattr(self, "_digest"))
 
     def to_mlir_attr(self) -> str:
         """Render as one MLIR dictionary attribute for the region carrier."""
@@ -209,33 +277,51 @@ def verify_confinement(
 def verify_region_products(
     products: Sequence[RecordedProduct],
     *,
-    effectful_ops: Sequence[str],
+    effectful_occurrences: Sequence[str],
 ) -> dict[str, RecordedProduct]:
-    """Every effectful op on the path must carry exactly one product.
+    """Every effectful OCCURRENCE on the path must carry exactly one product.
 
-    This is the region-level half of the gate: an op with no product is not
-    admitted, which keeps "admissible" from silently meaning "unchecked".
+    Keyed by occurrence, never by op name. A region containing two
+    `tessera.dropout` calls has two occurrences with two keys and two
+    distinct products; keying by name would reject the second as a duplicate
+    and — worse — let one product satisfy both, since a set of names
+    collapses the repetition and the totality check would pass with an
+    effect left unchecked.
+
+    This is the region-level half of the gate: an occurrence with no product
+    is not admitted, which keeps "admissible" from silently meaning
+    "unchecked".
     """
-    by_op: dict[str, RecordedProduct] = {}
+    by_occurrence: dict[str, RecordedProduct] = {}
     for item in products:
-        if item.op in by_op:
+        if item.occurrence_id in by_occurrence:
             raise RecordedProductError(
-                f"{item.op}: more than one recorded product for one operation"
+                f"{item.occurrence_id}: more than one recorded product for "
+                f"one occurrence"
             )
-        by_op[item.op] = item
-    missing = sorted(set(effectful_ops) - set(by_op))
+        by_occurrence[item.occurrence_id] = item
+    requested = list(effectful_occurrences)
+    duplicates = sorted(
+        {name for name in requested if requested.count(name) > 1}
+    )
+    if duplicates:
+        raise RecordedProductError(
+            f"occurrence ids {duplicates} are repeated; each effectful "
+            f"occurrence needs a distinct id or totality cannot be checked"
+        )
+    missing = sorted(set(requested) - set(by_occurrence))
     if missing:
         raise RecordedProductError(
-            f"effectful ops {missing} entered a differentiated region without "
-            f"a recorded product; they remain fail-closed"
+            f"effectful occurrences {missing} entered a differentiated region "
+            f"without a recorded product; they remain fail-closed"
         )
-    extra = sorted(set(by_op) - set(effectful_ops))
+    extra = sorted(set(by_occurrence) - set(requested))
     if extra:
         raise RecordedProductError(
-            f"recorded products {extra} name ops that are not on the region's "
-            f"effectful path"
+            f"recorded products {extra} name occurrences that are not on the "
+            f"region's effectful path"
         )
-    return by_op
+    return by_occurrence
 
 
 def region_digest(products: Sequence[RecordedProduct]) -> str:

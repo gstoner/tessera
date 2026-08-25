@@ -53,6 +53,7 @@ from tessera.compiler.fusion_core import (
     select_attention_lowering,
     should_fuse_region,
 )
+from tessera.compiler.layout_algebra import rank2_index_expression
 
 #: The target id this module emits for — passed to the target-parametric
 #: ``EpilogueOp.emit`` / ``ReductionOp.emit`` vocab accessors (B2).
@@ -74,6 +75,12 @@ _ENTRY = "synth_matmul_epi"
 SYNTH_VARIANTS = ("broadcast", "dot")
 
 
+def _rank2(row: str, column: str, leading_dimension: str) -> str:
+    """Materialize canonical row-major MSL index text from the shared contract."""
+
+    return rank2_index_expression(row, column, leading_dimension)
+
+
 def _prologue_msl(region: "FusedRegion", indent: str) -> str:
     """MSL that transforms the loaded A element ``a`` in place — each prologue op
     wrapped as ``{ float v = a; <op.msl>; a = v; }`` so the EPILOGUE_OPS bodies
@@ -86,33 +93,36 @@ def _prologue_msl(region: "FusedRegion", indent: str) -> str:
 def _matmul_body(variant: str, prologue: str = "") -> str:
     # ``prologue`` (possibly empty) transforms the loaded A element ``a`` before
     # the multiply — ``matmul(act(A), B)``.  When empty, the bodies are the
-    # original byte-identical forms so existing kernels are unperturbed.
+    # established arithmetic form so existing kernels remain semantically
+    # unchanged while coordinate order comes from the shared authority.
+    b_index = _rank2("k", "n", "N")
+    b_base = _rank2("k", "0", "N")
     if variant == "broadcast":
         if not prologue:
-            return """    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
-    for (int k = 0; k < K; ++k) {
+            return f"""    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {{
         float a = A[a_off + k];
-        int b_off = k * N;
+        int b_off = {b_base};
         for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
-    }"""
+    }}"""
         return f"""    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
     for (int k = 0; k < K; ++k) {{
         float a = A[a_off + k];
-{prologue}        int b_off = k * N;
+{prologue}        int b_off = {b_base};
         for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
     }}"""
     if variant == "dot":
         if not prologue:
-            return """    for (int n = 0; n < N; ++n) {
+            return f"""    for (int n = 0; n < N; ++n) {{
         float acc = 0.0f;
-        for (int k = 0; k < K; ++k) acc += A[a_off + k] * B[k * N + n];
+        for (int k = 0; k < K; ++k) acc += A[a_off + k] * B[{b_index}];
         scores[n] = acc;
-    }"""
+    }}"""
         return f"""    for (int n = 0; n < N; ++n) {{
         float acc = 0.0f;
         for (int k = 0; k < K; ++k) {{
             float a = A[a_off + k];
-{prologue}            acc += a * B[k * N + n];
+{prologue}            acc += a * B[{b_index}];
         }}
         scores[n] = acc;
     }}"""
@@ -161,10 +171,12 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
                     if region.has_residual else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
     matmul_body = _matmul_body(variant, _prologue_msl(region, "        "))
+    a_base = _rank2("row", "0", "K")
+    o_base = _rank2("row", "0", "N")
 
     if region.reduction is None:
         # pure pointwise (+ optional residual): one pass, write O directly.
-        finalize = f"""    int o_off = row * N;
+        finalize = f"""    int o_off = {o_base};
     for (int n = 0; n < N; ++n) {{
         float v = scores[n];
 {pointwise}
@@ -182,7 +194,7 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
     }}
 """
         red = REDUCTION_OPS[region.reduction].emit(_MSL_TARGET).format(eps=region.eps)
-        finalize = f"""    int o_off = row * N;
+        finalize = f"""    int o_off = {o_base};
 {pw_pass}{red}"""
 
     return f"""#include <metal_stdlib>
@@ -201,7 +213,7 @@ kernel void {_ENTRY}(
     if (N > {SYNTH_MAX_N}) return;
     int row = (int)gid;
     float scores[{SYNTH_MAX_N}];
-    int a_off = row * K;
+    int a_off = {a_base};
 {matmul_body}
 {finalize}
 }}
@@ -222,7 +234,7 @@ _TILED_REDUCTIONS: dict[str, str] = {
         "        threadgroup_barrier(mem_flags::mem_threadgroup);\n"
         "    }}\n"
         "    float _inv = rsqrt(tg_red[0] / float(N) + {eps}f);\n"
-        "    int o_off = row * N;\n"
+        "    int o_off = {o_base};\n"
         "    for (int n = lid_i; n < N; n += T) O[o_off + n] = ST(tg_scores[n] * _inv);\n",
     "softmax":
         "    float _lmax = -INFINITY;\n"
@@ -245,7 +257,7 @@ _TILED_REDUCTIONS: dict[str, str] = {
         "        threadgroup_barrier(mem_flags::mem_threadgroup);\n"
         "    }}\n"
         "    float _sm = tg_red[0];\n"
-        "    int o_off = row * N;\n"
+        "    int o_off = {o_base};\n"
         "    if (_sm == 0.0f) {{ for (int n = lid_i; n < N; n += T) O[o_off + n] = ST(0.0f); }}\n"
         "    else {{ float _inv = 1.0f / _sm;"
         " for (int n = lid_i; n < N; n += T) O[o_off + n] = ST(tg_scores[n] * _inv); }}\n",
@@ -265,6 +277,9 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
+    b_index = _rank2("k", "n", "N")
+    a_base = _rank2("row", "0", "K")
+    o_base = _rank2("row", "0", "N")
 
     # M4 prologue: transform the loaded A element before the multiply. Empty form
     # keeps the original single-line accumulate byte-identical.
@@ -274,20 +289,20 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
         float s = 0.0f;
         for (int k = 0; k < K; ++k) {{
             float a = A[a_off + k];
-{pro}            s += a * B[k * N + n];
+{pro}            s += a * B[{b_index}];
         }}
         tg_scores[n] = s;
     }}"""
     else:
-        matmul_loop = """    for (int n = lid_i; n < N; n += T) {
+        matmul_loop = f"""    for (int n = lid_i; n < N; n += T) {{
         float s = 0.0f;
-        for (int k = 0; k < K; ++k) s += A[a_off + k] * B[k * N + n];
+        for (int k = 0; k < K; ++k) s += A[a_off + k] * B[{b_index}];
         tg_scores[n] = s;
-    }"""
+    }}"""
 
     if region.reduction is None:
         # pure pointwise: cooperative epilogue writes O directly, no reduction.
-        body = f"""    int o_off = row * N;
+        body = f"""    int o_off = {o_base};
     for (int n = lid_i; n < N; n += T) {{
         float v = tg_scores[n];
 {pointwise}
@@ -304,7 +319,9 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
     }}
     threadgroup_barrier(mem_flags::mem_threadgroup);
 """
-        red = _TILED_REDUCTIONS[region.reduction].format(eps=region.eps)
+        red = _TILED_REDUCTIONS[region.reduction].format(
+            eps=region.eps, o_base=o_base
+        )
         body = pw_pass + red
         red_scratch = f"    threadgroup float tg_red[{_TILED_THREADS}];\n"
 
@@ -326,7 +343,7 @@ kernel void {_ENTRY_TILED}(
     int row = (int)tg_pos;
     if (row >= M) return;
     int lid_i = (int)lid;
-{red_scratch}    int a_off = row * K;
+{red_scratch}    int a_off = {a_base};
 {matmul_loop}
     threadgroup_barrier(mem_flags::mem_threadgroup);
 {body}
@@ -397,6 +414,12 @@ def synthesize_matmul_epilogue_coopmat_msl(region: FusedRegion,
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
     sg_in = f"simdgroup_matrix<{io}, 8, 8>"
+    a_global = _rank2("gr", "gk", "K")
+    b_global = _rank2("gk", "gc", "N")
+    a_staged = _rank2("(r0 + i * 8)", "kk", "BK")
+    b_staged = _rank2("kk", "(c0 + j * 8)", "BN")
+    c_staged = _rank2("(r0 + i * 8)", "(c0 + j * 8)", "BN")
+    output = _rank2("gr", "gc", "N")
 
     return f"""#include <metal_stdlib>
 #include <metal_simdgroup_matrix>
@@ -437,20 +460,20 @@ kernel void {_ENTRY_COOPMAT}(
         for (int e = int(tid); e < BM * BK; e += THREADS) {{
             int r = e / BK, kk = e % BK;
             int gr = brow + r, gk = k0 + kk;
-            As[e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
+            As[e] = (gr < M && gk < K) ? A[{a_global}] : ({io})0;
         }}
         for (int e = int(tid); e < BK * BN; e += THREADS) {{
             int kk = e / BN, c = e % BN;
             int gk = k0 + kk, gc = bcol + c;
-            Bs[e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
+            Bs[e] = (gk < K && gc < N) ? B[{b_global}] : ({io})0;
         }}
         threadgroup_barrier(mem_flags::mem_threadgroup);
         for (int kk = 0; kk < BK; kk += 8) {{
             {sg_in} a[NR], b[NC];
             for (int i = 0; i < NR; ++i)
-                simdgroup_load(a[i], As + (r0 + i * 8) * BK + kk, BK);
+                simdgroup_load(a[i], As + {a_staged}, BK);
             for (int j = 0; j < NC; ++j)
-                simdgroup_load(b[j], Bs + kk * BN + (c0 + j * 8), BN);
+                simdgroup_load(b[j], Bs + {b_staged}, BN);
             for (int i = 0; i < NR; ++i)
                 for (int j = 0; j < NC; ++j)
                     simdgroup_multiply_accumulate(acc[i][j], a[i], b[j], acc[i][j]);
@@ -462,7 +485,7 @@ kernel void {_ENTRY_COOPMAT}(
     // pointwise epilogue per element (bias[n] indexes the global column).
     for (int i = 0; i < NR; ++i)
         for (int j = 0; j < NC; ++j)
-            simdgroup_store(acc[i][j], Cs + (r0 + i * 8) * BN + (c0 + j * 8), BN);
+            simdgroup_store(acc[i][j], Cs + {c_staged}, BN);
     threadgroup_barrier(mem_flags::mem_threadgroup);
     for (int e = int(tid); e < BM * BN; e += THREADS) {{
         int r = e / BN, c = e % BN;
@@ -471,7 +494,7 @@ kernel void {_ENTRY_COOPMAT}(
             float v = Cs[e];
             int n = gc;
 {pointwise}
-            O[gr * N + gc] = ({io})v;
+            O[{output}] = ({io})v;
         }}
     }}
 }}
@@ -499,19 +522,19 @@ SYNTH_COOPMAT_REDUCE_MAX_N = 512
 _COOPMAT_REDUCTIONS: dict[str, str] = {
     "rmsnorm":
         "        float _ss = 0.0f;\n"
-        "        for (int c = 0; c < N; ++c) _ss += Cs[rr * N + c] * Cs[rr * N + c];\n"
+        "        for (int c = 0; c < N; ++c) _ss += Cs[{cs_index}] * Cs[{cs_index}];\n"
         "        float _invr = rsqrt(_ss / float(N) + {eps}f);\n"
         "        for (int c = 0; c < N; ++c)\n"
-        "            O[(brow + rr) * N + c] = ({io})(Cs[rr * N + c] * _invr);\n",
+        "            O[{output_index}] = ({io})(Cs[{cs_index}] * _invr);\n",
     "softmax":
         "        float _mx = -INFINITY;\n"
-        "        for (int c = 0; c < N; ++c) _mx = max(_mx, Cs[rr * N + c]);\n"
+        "        for (int c = 0; c < N; ++c) _mx = max(_mx, Cs[{cs_index}]);\n"
         "        float _sm = 0.0f;\n"
-        "        for (int c = 0; c < N; ++c) {{ float e = exp(Cs[rr * N + c] - _mx);"
-        " Cs[rr * N + c] = e; _sm += e; }}\n"
+        "        for (int c = 0; c < N; ++c) {{ float e = exp(Cs[{cs_index}] - _mx);"
+        " Cs[{cs_index}] = e; _sm += e; }}\n"
         "        float _inv = (_sm > 0.0f) ? (1.0f / _sm) : 0.0f;\n"
         "        for (int c = 0; c < N; ++c)\n"
-        "            O[(brow + rr) * N + c] = ({io})(Cs[rr * N + c] * _inv);\n",
+        "            O[{output_index}] = ({io})(Cs[{cs_index}] * _inv);\n",
 }
 
 
@@ -535,10 +558,17 @@ def synthesize_matmul_reduction_coopmat_msl(region: FusedRegion,
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
-    reduce_block = _COOPMAT_REDUCTIONS[region.reduction].format(io=io, eps=region.eps)
+    cs_index = _rank2("rr", "c", "N")
+    output_index = _rank2("(brow + rr)", "c", "N")
+    reduce_block = _COOPMAT_REDUCTIONS[region.reduction].format(
+        io=io, eps=region.eps, cs_index=cs_index, output_index=output_index
+    )
     sg_in = f"simdgroup_matrix<{io}, 8, 8>"
     bm = _COOPMAT_REDUCE_BM
     maxn = SYNTH_COOPMAT_REDUCE_MAX_N
+    a_global = _rank2("gr", "gk", "K")
+    b_global = _rank2("gk", "gc", "N")
+    b_staged = _rank2("kk", "(j * 8)", "32")
 
     return f"""#include <metal_stdlib>
 #include <metal_simdgroup_matrix>
@@ -574,12 +604,12 @@ kernel void {_ENTRY_COOPMAT_REDUCE}(
             for (int e = int(tid); e < BM * BK; e += 32) {{
                 int r = e / BK, kk = e % BK;
                 int gr = brow + r, gk = k0 + kk;
-                As[e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
+                As[e] = (gr < M && gk < K) ? A[{a_global}] : ({io})0;
             }}
             for (int e = int(tid); e < BK * 32; e += 32) {{
                 int kk = e / 32, c = e % 32;
                 int gk = k0 + kk, gc = jb + c;
-                Bs[e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
+                Bs[e] = (gk < K && gc < N) ? B[{b_global}] : ({io})0;
             }}
             threadgroup_barrier(mem_flags::mem_threadgroup);
             for (int kk = 0; kk < BK; kk += 8) {{
@@ -587,7 +617,7 @@ kernel void {_ENTRY_COOPMAT_REDUCE}(
                 simdgroup_load(a, As + kk, BK);
                 for (int j = 0; j < 4; ++j) {{
                     {sg_in} b;
-                    simdgroup_load(b, Bs + kk * 32 + j * 8, 32);
+                    simdgroup_load(b, Bs + {b_staged}, 32);
                     simdgroup_multiply_accumulate(acc[j], a, b, acc[j]);
                 }}
             }}
@@ -1038,6 +1068,7 @@ def synthesize_norm_chain_msl(region: NormChainRegion, dtype: str = "f32") -> st
     reused reduction block. ``dtype`` selects I/O (float/half/bfloat); the
     accumulator + math are always fp32."""
     io = _io_type(dtype)
+    o_base = _rank2("row", "0", "N")
     residual_param = (f"    device const {io}* residual [[buffer(4)]],\n"
                       if region.add_residual else "")
     residual_add = ("        v += float(residual[o_off + n]);\n"
@@ -1077,7 +1108,7 @@ kernel void {_NORM_CHAIN_ENTRY}(
     if (gid >= (uint)M) return;
     if (N > {SYNTH_MAX_N}) return;
     int row = (int)gid;
-    int o_off = row * N;
+    int o_off = {o_base};
     float scores[{SYNTH_MAX_N}];
     for (int n = 0; n < N; ++n) {{
         float v = float(X[o_off + n]);
@@ -1490,6 +1521,10 @@ def synthesize_attention_msl(region: AttentionRegion = AttentionRegion(),
     accumulators + softmax are fp32 throughout, the O-write goes through
     ``ST(...)`` (bfloat rejects implicit float→bfloat assignment)."""
     io = _io_type(dtype)
+    q_base = _rank2("m", "0", "D")
+    k_base = _rank2("n", "0", "D")
+    v_index = _rank2("n", "dv", "Dv")
+    o_base = _rank2("m", "0", "Dv")
     return f"""#include <metal_stdlib>
 using namespace metal;
 using ST = {io};
@@ -1510,12 +1545,12 @@ kernel void {_ATTN_ENTRY}(
     if (Nk > {SYNTH_MAX_N}) return;
     int m = (int)gid;
     float scores[{SYNTH_MAX_N}];
-    int q_off = m * D;
+    int q_off = {q_base};
     float mx = -INFINITY;
     for (int n = 0; n < Nk; ++n) {{
         if (causal != 0 && n > m) {{ scores[n] = -INFINITY; continue; }}
         float s = 0.0f;
-        int k_off = n * D;
+        int k_off = {k_base};
         for (int d = 0; d < D; ++d) s += float(Q[q_off + d]) * float(K[k_off + d]);
         s *= scale;
         scores[n] = s;
@@ -1528,10 +1563,10 @@ kernel void {_ATTN_ENTRY}(
         sm += e;
     }}
     float inv = (sm > 0.0f) ? (1.0f / sm) : 0.0f;
-    int o_off = m * Dv;
+    int o_off = {o_base};
     for (int dv = 0; dv < Dv; ++dv) {{
         float acc = 0.0f;
-        for (int n = 0; n < Nk; ++n) acc += scores[n] * float(V[n * Dv + dv]);
+        for (int n = 0; n < Nk; ++n) acc += scores[n] * float(V[{v_index}]);
         O[o_off + dv] = ST(acc * inv);
     }}
 }}
@@ -1553,6 +1588,10 @@ def synthesize_attention_online_msl(region: AttentionRegion = AttentionRegion(),
     symbol per kernel. ``dtype`` selects the I/O type; reads cast to float,
     accumulators are fp32, the O-write goes through ``ST(...)``."""
     io = _io_type(dtype)
+    q_base = _rank2("m", "0", "D")
+    k_base = _rank2("n", "0", "D")
+    v_base = _rank2("n", "0", "Dv")
+    o_base = _rank2("m", "0", "Dv")
     return f"""#include <metal_stdlib>
 using namespace metal;
 using ST = {io};
@@ -1572,7 +1611,7 @@ kernel void {_ATTN_ONLINE_ENTRY}(
     if (gid >= (uint)M) return;
     if (Dv > {SYNTH_MAX_D}) return;
     int m = (int)gid;
-    int q_off = m * D;
+    int q_off = {q_base};
     float acc[{SYNTH_MAX_D}];
     for (int d = 0; d < Dv; ++d) acc[d] = 0.0f;
     float run_max = -INFINITY;
@@ -1581,7 +1620,7 @@ kernel void {_ATTN_ONLINE_ENTRY}(
         // causal: every key n > m is masked, and so is every later key — stop.
         if (causal != 0 && n > m) break;
         float s = 0.0f;
-        int k_off = n * D;
+        int k_off = {k_base};
         for (int d = 0; d < D; ++d) s += float(Q[q_off + d]) * float(K[k_off + d]);
         s *= scale;
         float new_max = max(run_max, s);
@@ -1589,12 +1628,12 @@ kernel void {_ATTN_ONLINE_ENTRY}(
         float corr = exp(run_max - new_max);
         float p = exp(s - new_max);
         run_sum = run_sum * corr + p;
-        int v_off = n * Dv;
+        int v_off = {v_base};
         for (int d = 0; d < Dv; ++d) acc[d] = acc[d] * corr + p * float(V[v_off + d]);
         run_max = new_max;
     }}
     float inv = (run_sum > 0.0f) ? (1.0f / run_sum) : 0.0f;
-    int o_off = m * Dv;
+    int o_off = {o_base};
     for (int d = 0; d < Dv; ++d) O[o_off + d] = ST(acc[d] * inv);
 }}
 """
@@ -1716,6 +1755,9 @@ def synthesize_gated_matmul_msl(region: GatedMatmulRegion = GatedMatmulRegion(),
     rejects implicit float→bfloat). ``dtype`` selects the I/O type."""
     io = _io_type(dtype)
     act = EPILOGUE_OPS[region.gate_act].emit(_MSL_TARGET)        # operates on `v`
+    a_base = _rank2("row", "0", "K")
+    w_base = _rank2("k", "0", "H")
+    o_base = _rank2("row", "0", "H")
     return f"""#include <metal_stdlib>
 using namespace metal;
 using ST = {io};
@@ -1735,16 +1777,16 @@ kernel void {_GATED_ENTRY}(
     float gate[{SYNTH_GATED_MAX_H}];
     float up[{SYNTH_GATED_MAX_H}];
     for (int n = 0; n < H; ++n) {{ gate[n] = 0.0f; up[n] = 0.0f; }}
-    int a_off = row * K;
+    int a_off = {a_base};
     for (int k = 0; k < K; ++k) {{
         float a = float(A[a_off + k]);
-        int w_off = k * H;
+        int w_off = {w_base};
         for (int n = 0; n < H; ++n) {{
             gate[n] += a * float(Wg[w_off + n]);
             up[n]   += a * float(Wu[w_off + n]);
         }}
     }}
-    int o_off = row * H;
+    int o_off = {o_base};
     for (int n = 0; n < H; ++n) {{
         float v = gate[n];
         {act}

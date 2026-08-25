@@ -544,8 +544,11 @@ path and the gfx1151 generated WMMA A/B/output path; rebuilding both backends
 preserves their established arithmetic and both exact-device dynamic rows stay
 green. The x86 f32/f64/bf16/u8s8 core GEMMs now consume the same header-only
 rank-2 authority, with odd-shape/vector-tail numerical proof on an AVX-512
-Ryzen AI Max+ 395 host. AVX2 hosts fail closed before loading that image. L4
-remains landing only for the Apple text-emitter migration and device proof.
+Ryzen AI Max+ 395 host. AVX2 hosts fail closed before loading that image. Apple
+now consumes the same plan through the versioned no-fallback native ABI in all
+reachable rank-2 MSL emitters. All 20 raster combinations preserve the existing
+expressions; canonical and fused cooperative-matrix cohorts pass on M1 Max.
+L4 is closed without promoting a raster choice.
 
 **L5 x86-consumer checkpoint (2026-08-24).** The x86 Target pass now re-runs
 the shared native proof and materializes the complete scalar-output set admitted
@@ -679,8 +682,9 @@ ABI surface, the build wiring, and A1/A2.
 - §1.2's three defects carried as negative fixtures
   ([`test_layout_algebra_contracts.py`](../../../tests/unit/test_layout_algebra_contracts.py)
   is the existing corpus and moves to driving the real implementation);
-- A1 (named fail-closed diagnostic, no fallback path) and A2 (declared build
-  dependency + binding-loads test) from L0;
+- A1 (named fail-closed diagnostic for layout evaluation, with the bounded
+  native-equivalent rank-2 source-text template retained for host-free MSL
+  emission) and A2 (declared build dependency + binding-loads test) from L0;
 - host-free — no device, no MLIR, no dialect load.
 
 **Do not land L1 without L2 committed** — otherwise it is a Decision #29
@@ -742,9 +746,12 @@ only — types, interface, and the fold pass — and there is no second
 implementation to differential-test, which was the bulk of the original
 estimate. This is the concrete dividend of the C++-first decision.
 
-CUDA, ROCm, and x86 now consume the shared materializable set through
-architecture-owned lowering, including static tuple products. Apple remains the physical-consumer tail; no
-other backend's exact-device or host evidence transfers to Metal.
+CUDA, ROCm, and x86 consume the shared materializable set through
+architecture-owned lowering, including static tuple products. Apple consumes
+its currently reachable rank-2 physical subset through the same C++ plan and
+owns independent Metal proof. Dynamic non-separable Apple tuple codomains
+remain fail closed; no other backend's exact-device or host evidence transfers
+to Metal.
 
 *Sequencing:* this follows W1.1 step 4, it does not precede it — the same
 Decision #31 ordering argument [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md)

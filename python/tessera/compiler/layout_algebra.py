@@ -1,8 +1,8 @@
 """ctypes binding to Tessera's single C++ layout-algebra authority.
 
-There is intentionally no Python implementation fallback.  Layout semantics
-affect generated addresses, so an absent or stale native symbol is a compiler
-configuration error rather than permission to use a second implementation.
+Layout operations require the native ABI.  The one exception is the fixed
+rank-2 *source-text* template used by host-free MSL emitters: it does not
+evaluate an address or choose a layout, and has a native-equivalence test.
 """
 
 from __future__ import annotations
@@ -93,6 +93,13 @@ class _Residency(ctypes.Structure):
     ]
 
 
+class _Rank2IndexPlan(ctypes.Structure):
+    _fields_ = [
+        ("major_coordinate", ctypes.c_uint8),
+        ("minor_coordinate", ctypes.c_uint8),
+    ]
+
+
 _LIB: ctypes.CDLL | None = None
 _LOAD_ERROR: str | None = None
 
@@ -112,7 +119,10 @@ def _candidate_libraries() -> tuple[Path, ...]:
     if selected := os.environ.get("TESSERA_BUILD_DIR"):
         build_dirs.append(Path(selected).expanduser())
     else:
-        build_dirs.extend(root / name for name in ("build", "build-rocm", "build-x86"))
+        build_dirs.extend(
+            root / name
+            for name in ("build", "build-apple", "build-rocm", "build-x86")
+        )
     for build in build_dirs:
         for name in names:
             candidates.extend(
@@ -172,6 +182,11 @@ def _configure(lib: ctypes.CDLL) -> ctypes.CDLL:
         i64p, i64p, ctypes.c_size_t, ctypes.c_int64, ctypes.c_int64,
         ctypes.POINTER(_Residency),
     ]
+    lib.tessera_layout_rank2_index_plan_v1.argtypes = [
+        ctypes.c_int,
+        ctypes.POINTER(_Rank2IndexPlan),
+    ]
+    lib.tessera_layout_rank2_index_plan_v1.restype = ctypes.c_int
     nodep = ctypes.POINTER(_Node)
     nested_args: list[Any] = [
         nodep, ctypes.c_size_t, nodep, ctypes.c_size_t
@@ -386,6 +401,46 @@ def crd2idx(shape: Sequence[int], stride: Sequence[int], coord: Sequence[int]) -
     if status:
         raise LayoutAlgebraError(f"layout coordinate failed with native status {status}")
     return result.value
+
+
+def rank2_index_expression(
+    row: str,
+    column: str,
+    leading_dimension: str,
+    *,
+    order: str = "row_major",
+) -> str:
+    """Emit a rank-2 linear-index expression from the native mapping plan.
+
+    A source-only emitter may run before a shared library exists (for example,
+    in a CPU-only package test).  In that case, use the fixed ABI mapping as a
+    declarative text template.  All layout evaluation and every available
+    native binding remain fail-closed; native-equivalence tests guard this
+    template against :file:`Rank2Index.h` drift.
+    """
+
+    orders = {"row_major": 0, "column_major": 1, "col_major": 1}
+    if order not in orders:
+        raise LayoutAlgebraError(f"unsupported rank-2 order {order!r}")
+    try:
+        plan = _Rank2IndexPlan()
+        status = _library().tessera_layout_rank2_index_plan_v1(
+            orders[order], ctypes.byref(plan)
+        )
+        if status:
+            raise LayoutAlgebraError(
+                f"rank-2 index planning failed with native status {status}"
+            )
+        coordinate_order = (plan.major_coordinate, plan.minor_coordinate)
+    except LayoutAlgebraUnavailableError:
+        # Source text only: a rank-2 row/column mapping has exactly the two
+        # ABI-defined orders.  Do not extend this exception to layout values.
+        coordinate_order = ((0, 1), (1, 0))[orders[order]]
+    coordinates = (str(row), str(column))
+    return (
+        f"{coordinates[coordinate_order[0]]} * {leading_dimension} + "
+        f"{coordinates[coordinate_order[1]]}"
+    )
 
 
 def idx2crd(shape: Sequence[int], index: int) -> tuple[int, ...]:
@@ -628,6 +683,7 @@ __all__ = [
     "native_available",
     "product",
     "prove_residency",
+    "rank2_index_expression",
     "rearrange_plan",
     "rearrange_shape_plan",
     "left_inverse",

@@ -8,6 +8,13 @@ last_updated: 2026-08-24
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `LAYOUT-ALG-APPLE-PHYSICAL-2026-08-24` — **shared ABI
+assessed; no CUDA physical change.** Apple now exports the existing C++ rank-2
+plan through the native layout ABI for its MSL emitters and owns fresh M1 Max
+proof. NVIDIA continues to consume the same header authority in CUDA; Metal
+source templates, simdgroup scheduling, and Apple evidence transfer no CUDA
+schedule, PTX, or RTX claim.
+
 Cross-backend sync `LAYOUT-ALG-L5-X86-2026-08-24` — **shared admissibility
 parity validated; no CUDA physical change.** The x86 consumer follows the same
 canonical dynamic-leaf order and mixed-radix mathematics already proven by the
@@ -30,8 +37,9 @@ products. Both the corrected narrow dynamic route (`17x19 @ 19x13`, padded
 (`257x127 @ 127x259`, padded `139/137/269`) match FP32 oracles on RTX 5070. The
 post-correctness macro NCU row is 17.536 us, 40 registers/thread, 82.85% L2
 sector hit rate, and 13.89% active warps. Dynamic/non-separable tuple codomains,
-explicit pointer-offset alignment metadata, Apple/x86 index-template migration,
-and bare-metal selector authority remain open.
+explicit pointer-offset alignment metadata, and bare-metal selector authority
+remain open. Apple/x86 rank-2 index-template migration is closed by
+architecture-owned evidence.
 
 Cross-backend sync `DYNAMIC-COMPOSED-SM120-2026-08-24` — **bounded dynamic
 Graph matmul, arbitrary leading dimensions, and scalar-affine nested

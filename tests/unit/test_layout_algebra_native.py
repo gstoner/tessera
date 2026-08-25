@@ -54,6 +54,38 @@ def test_native_coordinate_algebra_exhausts_compact_layouts_to_64() -> None:
                     assert crd2idx(shape, stride, idx2crd(shape, linear)) == linear
 
 
+def test_native_rank2_plan_owns_emitter_coordinate_order() -> None:
+    from tessera.compiler.layout_algebra import (
+        LayoutAlgebraError,
+        rank2_index_expression,
+    )
+
+    assert rank2_index_expression("row", "column", "columns") == (
+        "row * columns + column"
+    )
+    assert rank2_index_expression(
+        "row", "column", "rows", order="column_major"
+    ) == "column * rows + row"
+    with pytest.raises(LayoutAlgebraError, match="unsupported rank-2 order"):
+        rank2_index_expression("row", "column", "stride", order="diagonal")
+
+
+def test_rank2_source_template_remains_usable_without_native_library(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tessera.compiler.layout_algebra as algebra
+
+    monkeypatch.setattr(algebra, "_LIB", None)
+    monkeypatch.setattr(algebra, "_candidate_libraries", lambda: ())
+
+    assert algebra.rank2_index_expression("row", "column", "columns") == (
+        "row * columns + column"
+    )
+    assert algebra.rank2_index_expression(
+        "row", "column", "rows", order="column_major"
+    ) == "column * rows + row"
+
+
 def test_native_coalesce_preserves_function_and_canonical_structure() -> None:
     from tessera.compiler.layout_algebra import NestedLayout, coalesce
 

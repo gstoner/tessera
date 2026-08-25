@@ -48,6 +48,7 @@ from .apple_fragment import (
     select_apple_simdgroup_fragment,
 )
 from .apple_target import AppleGPUTargetProfile
+from .layout_algebra import rank2_index_expression
 from .tile_rasterization import RasterOrder, emit_c
 
 # Apple GPU SIMD-scoped matrix multiply uses 8×8 fragments (the simdgroup_matrix
@@ -149,6 +150,12 @@ def _scalar(dtype: str) -> str:
     return s
 
 
+def _rank2(row: str, column: str, leading_dimension: str) -> str:
+    """Materialize canonical row-major MSL index text from the shared contract."""
+
+    return rank2_index_expression(row, column, leading_dimension)
+
+
 def emit_simdgroup_gemm_msl(
     dtype: str = "bf16",
     m: int = 8,
@@ -186,6 +193,9 @@ def emit_simdgroup_gemm_msl(
     ACC = _scalar(accum)
     f = SIMDGROUP_FRAG
     name = entry or f"tessera_simdgroup_gemm_{dtype}"
+    a_index = _rank2("m0", "k0", "K")
+    b_index = _rank2("k0", "n0", "N")
+    c_index = _rank2("m0", "n0", "N")
     return f"""//
 // Tessera rung-2.5 emission — Apple simdgroup_matrix {dtype} GEMM (steel-style skeleton).
 // NOT a complete/optimal kernel: a production GEMM also needs threadgroup staging,
@@ -214,11 +224,11 @@ kernel void {name}(
       make_filled_simdgroup_matrix<{ACC}, {f}, {f}>({ACC}(0));
   for (uint k0 = 0; k0 < K; k0 += {f}u) {{
     simdgroup_matrix<{T}, {f}, {f}> a, b;
-    simdgroup_load(a, A + m0 * K + k0, K);      // row-major A tile, stride K
-    simdgroup_load(b, B + k0 * N + n0, N);      // row-major B tile, stride N
+    simdgroup_load(a, A + {a_index}, K);      // row-major A tile, stride K
+    simdgroup_load(b, B + {b_index}, N);      // row-major B tile, stride N
     simdgroup_multiply_accumulate(acc, a, b, acc);  // acc = a * b + acc
   }}
-  simdgroup_store(acc, C + m0 * N + n0, N);     // row-major C tile, stride N
+  simdgroup_store(acc, C + {c_index}, N);     // row-major C tile, stride N
 }}
 """
 
@@ -226,12 +236,14 @@ kernel void {name}(
 def _steel_compute_block(mf: int, nf: int, T: str, f: int, a_src: str, b_src: str) -> str:
     """The BK-deep fragment inner product, reading the staged tiles via ``a_src`` /
     ``b_src`` base expressions (``As`` or ``As[buf]`` for single/double buffer)."""
+    a_index = _rank2("(im * F)", "kf", "BK")
+    b_index = _rank2("kf", "(in * F)", "BN")
     return f"""    for (uint kf = 0; kf < BK; kf += F) {{
       simdgroup_matrix<{T}, {f}, {f}> a[{mf}], b[{nf}];
       for (uint im = 0; im < {mf}u; ++im)
-        simdgroup_load(a[im], {a_src} + (im * F) * BK + kf, BK);
+        simdgroup_load(a[im], {a_src} + {a_index}, BK);
       for (uint in = 0; in < {nf}u; ++in)
-        simdgroup_load(b[in], {b_src} + kf * BN + (in * F), BN);
+        simdgroup_load(b[in], {b_src} + {b_index}, BN);
       for (uint im = 0; im < {mf}u; ++im)
         for (uint in = 0; in < {nf}u; ++in)
           simdgroup_multiply_accumulate(
@@ -242,13 +254,15 @@ def _steel_compute_block(mf: int, nf: int, T: str, f: int, a_src: str, b_src: st
 def _steel_stage_block(T: str, a_dst: str, b_dst: str, k_expr: str) -> str:
     """Cooperative bounds-guarded global→threadgroup staging load (zero-padded at
     ragged edges), writing into the ``a_dst``/``b_dst`` buffer expressions."""
+    a_index = _rank2("(m0 + r)", f"({k_expr} + c)", "K")
+    b_index = _rank2(f"({k_expr} + r)", "(n0 + c)", "N")
     return f"""    for (uint i = tid; i < BM * BK; i += tcount) {{
       uint r = i / BK, c = i % BK;
-      {a_dst}[i] = (m0 + r < M && {k_expr} + c < K) ? A[(m0 + r) * K + ({k_expr} + c)] : {T}(0);
+      {a_dst}[i] = (m0 + r < M && {k_expr} + c < K) ? A[{a_index}] : {T}(0);
     }}
     for (uint i = tid; i < BK * BN; i += tcount) {{
       uint r = i / BN, c = i % BN;
-      {b_dst}[i] = ({k_expr} + r < K && n0 + c < N) ? B[({k_expr} + r) * N + (n0 + c)] : {T}(0);
+      {b_dst}[i] = ({k_expr} + r < K && n0 + c < N) ? B[{b_index}] : {T}(0);
     }}"""
 
 
@@ -383,6 +397,9 @@ def emit_steel_gemm_msl(
   }}"""
 
     # ── store (whole-fragment vs partial-edge) ──
+    c_fragment_index = _rank2("cr", "cc", "N")
+    c_edge_index = _rank2("(cr + rr)", "(cc + cl)", "N")
+    scratch_index = _rank2("rr", "cl", "F")
     if partial_edge:
         store = f"""  // B1: edge-aware store. The full/edge test is threadgroup-uniform (keyed on
   // tgid + compile-time loop counters), so the scratch barriers are hit uniformly.
@@ -391,7 +408,7 @@ def emit_steel_gemm_msl(
     for (uint in = 0; in < {nf}u; ++in) {{
       uint cr = m0 + im * F, cc = n0 + in * F;
       if (cr + F <= M && cc + F <= N) {{
-        simdgroup_store(acc[im * {nf}u + in], C + cr * N + cc, N);   // full fragment fast path
+        simdgroup_store(acc[im * {nf}u + in], C + {c_fragment_index}, N);   // full fragment fast path
       }} else {{
         simdgroup_store(acc[im * {nf}u + in], Cs, F);                // stage 8x8 to scratch
         threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -399,7 +416,7 @@ def emit_steel_gemm_msl(
           uint rows = min(F, M - cr), cols = min(F, N - cc);
           for (uint e = tid; e < rows * cols; e += tcount) {{
             uint rr = e / cols, cl = e % cols;
-            C[(cr + rr) * N + (cc + cl)] = Cs[rr * F + cl];
+            C[{c_edge_index}] = Cs[{scratch_index}];
           }}
         }}
         threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -412,7 +429,7 @@ def emit_steel_gemm_msl(
     for (uint in = 0; in < {nf}u; ++in) {{
       uint cr = m0 + im * F, cc = n0 + in * F;
       if (cr + F <= M && cc + F <= N)
-        simdgroup_store(acc[im * {nf}u + in], C + cr * N + cc, N);
+        simdgroup_store(acc[im * {nf}u + in], C + {c_fragment_index}, N);
     }}
   }}"""
 

@@ -48,6 +48,38 @@ def test_synthesized_msl_has_the_expected_shape():
     assert "0.5f*v*(1.0f+tanh" in src                  # gelu epilogue inlined
 
 
+def test_reachable_rank2_msl_families_consume_the_native_layout_plan(monkeypatch):
+    import tessera.compiler.emit.apple_msl as emitter
+    from tessera.compiler.fusion_core import NormChainRegion
+
+    native = emitter.rank2_index_expression
+    calls: list[tuple[str, str, str]] = []
+
+    def observe(row: str, column: str, leading_dimension: str, **kwargs) -> str:
+        calls.append((row, column, leading_dimension))
+        return native(row, column, leading_dimension, **kwargs)
+
+    monkeypatch.setattr(emitter, "rank2_index_expression", observe)
+    families = (
+        lambda: emitter.synthesize_matmul_epilogue_msl(FusedRegion(("gelu",))),
+        lambda: emitter.synthesize_matmul_epilogue_msl_tiled(FusedRegion(("gelu",))),
+        lambda: emitter.synthesize_matmul_epilogue_coopmat_msl(
+            FusedRegion(("gelu",))
+        ),
+        lambda: emitter.synthesize_matmul_reduction_coopmat_msl(
+            FusedRegion((), reduction="softmax")
+        ),
+        lambda: emitter.synthesize_norm_chain_msl(NormChainRegion("rmsnorm")),
+        lambda: emitter.synthesize_attention_msl(AttentionRegion()),
+        lambda: emitter.synthesize_attention_online_msl(AttentionRegion()),
+        lambda: emitter.synthesize_gated_matmul_msl(GatedMatmulRegion()),
+    )
+    for synthesize in families:
+        calls.clear()
+        assert "kernel void" in synthesize()
+        assert calls
+
+
 def test_no_bias_region_omits_the_bias_buffer():
     src = synthesize_matmul_epilogue_msl(FusedRegion(("silu",)))
     assert "device const float* bias" not in src

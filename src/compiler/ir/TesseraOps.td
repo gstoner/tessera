@@ -2343,7 +2343,8 @@ def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultEle
 def Tessera_DropoutOp : Op<
   Tessera_Dialect, "dropout",
   [MemoryEffects<[MemWrite]>,
-   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>,
+   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
 > {
   let summary = "Reference random dropout with optional deterministic seed";
   let hasVerifier = 1;

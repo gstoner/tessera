@@ -6,6 +6,41 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; ROCm outcome: **parity VALIDATED, exact-device (gfx1151)**.** The keyed Philox RNG family executes its recorded product on the WSL-visible Radeon 8060S through `rocm_rng_compiled` with `execution_kind=native_gpu` asserted exactly, so the row cannot pass by falling through to a CPU lane. Replay from the product alone is BIT-IDENTICAL on device, a changed counter changes the draw (non-vacuous), and the same product matches the x86 result and the algorithm reference bit-for-bit. Correctness only — no timing is claimed on WSL, and the collective class's native-RCCL evidence remains separately open under the E4 key.
+
+
+Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
+recorded products (identity only); ROCm outcome: follow-up required (owns the native evidence).** The product
+binds communicator, issue order, reduction algorithm and topology; the
+verifier rejects a permuted order and a changed tree under an identical
+order. Order evidence comes from the deterministic mock-mesh executor.
+STATED LIMIT: the mock establishes ORDER only. Bit-identity of a collective RESULT needs native RCCL deterministic-algorithm evidence on gfx1151, because floating-point addition is not associative and the reduction tree is part of the value (measured: identical inputs and identical issue order give three different bit patterns for sequential, pairwise and ring). No such claim is made here.
+
+
+Cross-backend sync `W4-EFFECTS-1-E3-2026-08-25` — **shared state-lineage
+identity change; ROCm outcome: parity validated, no behaviour change.**
+`state_buffer_lineage`'s `dtype` becomes a real parameter instead of a
+hardcoded "f32", so mixed-precision recorded state can no longer alias two
+materially different buffers under one lineage id. The default is "f32", so
+every lineage id built today is byte-identical and no package digest moves —
+verified by the existing stateful/optimizer suites (81 tests). Mutation
+products now additionally bind a content digest, which is new surface rather
+than a change to an existing one. No gfx1151 kernel or numerical result
+changes.
+
+
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); ROCm outcome: parity validated, no behaviour
+change on this backend.** The blanket `AUTODIFF_STOCHASTIC_EFFECT` refusal is
+split into the two questions it conflated: REPLAYABILITY (does the op carry a
+`keyed_rng` recorded product?) and DIFFERENTIABILITY (does it have an
+adjoint?). The gate stays fail-closed — an op with no product is refused, and
+absence is not permission — so every program that compiled before still
+compiles and every program refused before is still refused, only with a
+diagnostic that names which question failed. Validated here: full IR lit
+suite 357 passed / 0 failed, autodiff paired + law suites 230 passed. No
+gfx1151 kernel, artifact, or numerical result changes.
+
 
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;

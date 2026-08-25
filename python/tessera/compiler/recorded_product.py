@@ -333,10 +333,298 @@ def region_digest(products: Sequence[RecordedProduct]) -> str:
 
 __all__ = [
     "ADMITTED_EFFECT_CLASSES",
+    "STOCHASTIC_REFUSALS",
     "RECORDED_PRODUCT_SCHEMA",
     "RecordedProduct",
     "RecordedProductError",
+    "collective_product_for_sequence",
+    "collective_sequence_digest",
+    "content_digest",
+    "mutation_product_for_buffer",
     "region_digest",
+    "stochastic_product_for_call",
+    "verify_collective_replay",
     "verify_confinement",
+    "verify_recorded_state",
     "verify_region_products",
 ]
+
+
+# ── W4-EFFECTS-1 slice E2: classifying a stochastic call form ───────────────
+#
+# "Keyed RNG is admissible" is a claim about a CALL FORM, not about an op
+# name. Measured on `tessera.dropout`, whose three forms differ:
+#
+#   dropout(x, p, seed=N)          replay bit-identical      -> admissible
+#   dropout(x, p)                  ambient OS entropy        -> closed
+#   dropout(x, p, rng=<generator>) generator ADVANCES per
+#                                  call; its position is not
+#                                  in the product            -> closed
+#
+# The third is the one worth naming: it looks keyed, and is not. Recording
+# the generator object identity would not help — replay needs its position,
+# which the object does not expose and the product does not carry.
+
+#: Reasons a stochastic call form cannot be admitted, as stable strings.
+STOCHASTIC_REFUSALS = {
+    "ambient": (
+        "draws from ambient entropy; no recorded value determines the result"
+    ),
+    "stateful_generator": (
+        "draws from a caller-owned generator whose position advances per call; "
+        "the product would name the generator but not the state replay needs"
+    ),
+}
+
+
+def stochastic_product_for_call(
+    *,
+    op: str,
+    occurrence_id: str,
+    shape: Sequence[int],
+    dtype: str,
+    seed: int | None = None,
+    key: Mapping[str, Any] | None = None,
+    generator: Any = None,
+) -> RecordedProduct:
+    """Build the `keyed_rng` product for an admissible draw, or fail closed.
+
+    Exactly one source of randomness may be identified, and it must be one
+    whose replay is a function of the recorded value: an S4 ``key`` (the
+    counter-based generator, pure in its key) or a ``seed`` that is used to
+    construct a fresh generator per call. A caller-owned generator and
+    ambient entropy are refused by name.
+    """
+    if key is not None and seed is not None:
+        raise RecordedProductError(
+            f"{op}: a draw may identify either a key or a seed, not both; "
+            f"two sources make the recorded product ambiguous"
+        )
+    if generator is not None:
+        raise RecordedProductError(
+            f"AUTODIFF_STOCHASTIC_UNKEYED: {op} "
+            f"{STOCHASTIC_REFUSALS['stateful_generator']}"
+        )
+    if key is None and seed is None:
+        raise RecordedProductError(
+            f"AUTODIFF_STOCHASTIC_UNKEYED: {op} "
+            f"{STOCHASTIC_REFUSALS['ambient']}"
+        )
+    identity: dict[str, Any] = {"shape": list(shape), "dtype": dtype}
+    if key is not None:
+        identity["key"] = dict(key)
+    else:
+        assert seed is not None  # the ambient case returned above
+        identity["key"] = {"seed": int(seed)}
+    return RecordedProduct(
+        op=op,
+        occurrence_id=occurrence_id,
+        effect_class="keyed_rng",
+        product=identity,
+    )
+
+
+# ── W4-EFFECTS-1 slice E3: recorded state ───────────────────────────────────
+#
+# A mutation product binds the buffer's IDENTITY (lineage id + version) and
+# its VALUE (a content digest). Identity alone is not enough:
+# `state_buffer_lineage` hashes name/role/shape/dtype/version/access/parents
+# and not contents, so two buffers with identical metadata and different
+# bytes share a lineage id. A replay binding "version N" could then bind
+# different bytes and produce a different gradient — silently, which is the
+# failure the whole gate exists to prevent.
+
+
+def content_digest(buffer: Any) -> str:
+    """Content address of a buffer's VALUE.
+
+    Covers dtype and shape as well as bytes: the same bit pattern read as
+    f32 and as int32 is two different values, and a reshape is a different
+    buffer even when the bytes are identical.
+    """
+    import numpy as np
+
+    array = np.ascontiguousarray(buffer)
+    header = f"{array.dtype.str}|{array.shape}".encode()
+    hasher = hashlib.sha256()
+    hasher.update(header)
+    hasher.update(array.tobytes())
+    return hasher.hexdigest()
+
+
+def mutation_product_for_buffer(
+    *,
+    op: str,
+    occurrence_id: str,
+    lineage_id: str,
+    version: int,
+    buffer: Any,
+    write_set: Sequence[str],
+) -> RecordedProduct:
+    """Record a mutation: what was written, which version, and what it held."""
+    return RecordedProduct(
+        op=op,
+        occurrence_id=occurrence_id,
+        effect_class="recorded_mutation",
+        product={
+            "lineage_id": lineage_id,
+            "version": int(version),
+            "content_digest": content_digest(buffer),
+        },
+        write_set=tuple(write_set),
+    )
+
+
+def verify_recorded_state(
+    recorded: RecordedProduct,
+    buffer: Any,
+    *,
+    lineage_id: str,
+    version: int,
+) -> None:
+    """Check (R) for a mutation: the SAME state object, at the SAME version,
+    holding the SAME bytes.
+
+    All three, and the identity half is not optional (PR #630 review). Digest
+    equality alone answers "do these bytes match what was recorded" — a
+    weaker question than the one (R) asks. Two distinct states can hold equal
+    bytes: a freshly zeroed Adam moment and a different parameter's zeroed
+    moment are byte-identical, as is the same buffer one step before and after
+    a no-op update. A content-only check calls those replays faithful, so a
+    replay that reattached the recorded product to the WRONG buffer, or to the
+    right buffer at the wrong version, verified clean. Requiring the caller to
+    name the lineage and version it is replaying makes that unstatable rather
+    than merely unlikely, and no default is offered because a defaulted
+    identity is the permissive answer to a semantic question (#21a).
+
+    The two directions are separate defects and get separate messages:
+      * identity mismatch — right bytes, wrong object (or wrong version);
+      * content mismatch  — right object, drifted bytes.
+    """
+    if recorded.effect_class != "recorded_mutation":
+        raise RecordedProductError(
+            f"{recorded.op}: verify_recorded_state applies to "
+            f"recorded_mutation, not {recorded.effect_class}"
+        )
+
+    recorded_lineage = str(recorded.product["lineage_id"])
+    recorded_version = int(recorded.product["version"])
+    if str(lineage_id) != recorded_lineage or int(version) != recorded_version:
+        raise RecordedProductError(
+            f"{recorded.op}: product records lineage {recorded_lineage!r} "
+            f"version {recorded_version}, but replay presented lineage "
+            f"{str(lineage_id)!r} version {int(version)}; the bytes are not "
+            f"the question — a product only speaks for the state it recorded, "
+            f"so this replay is unverified even if the contents happen to "
+            f"agree (reproducibility)"
+        )
+
+    actual = content_digest(buffer)
+    expected = str(recorded.product["content_digest"])
+    if actual != expected:
+        raise RecordedProductError(
+            f"{recorded.op}: recorded state for lineage {recorded_lineage} "
+            f"version {recorded_version} hashes to {actual[:12]}… but the "
+            f"product recorded {expected[:12]}…; the identity matched while "
+            f"the VALUE changed, so replay would not reproduce the recorded "
+            f"execution (reproducibility)"
+        )
+
+
+# ── W4-EFFECTS-1 slice E4: ordered collectives ──────────────────────────────
+#
+# An ordered collective's requirement is that every rank issues collectives in
+# the same relative order. That is necessary and NOT sufficient for (R):
+# floating-point addition is not associative, so the reduction TREE is part of
+# the value. Measured: 1024 f32 values, identical inputs and identical issue
+# order, reduced sequentially / by pairwise tree / by ring give three
+# different bit patterns, and the ring result changes again with rank count.
+# `LANGUAGE_AND_IR_SPEC` section 11 says the same thing normatively —
+# "Deterministic profiles require fixed collective ordering and reduction
+# trees" — so the product binds both.
+#
+# Scope boundary, deliberately narrow: a recorded sequence proves ORDER.
+# Bit-identity of a collective RESULT additionally requires native
+# deterministic evidence on real transport; a deterministic mock mesh cannot
+# establish it, and this module does not pretend otherwise.
+
+
+def collective_sequence_digest(sequence: Sequence[str]) -> str:
+    """Content address of an ordered collective sequence.
+
+    Order-SENSITIVE by construction: a permutation is a different sequence,
+    which is the whole point.
+    """
+    return _digest({"sequence": [str(item) for item in sequence]})
+
+
+def collective_product_for_sequence(
+    *,
+    op: str,
+    occurrence_id: str,
+    communicator: str,
+    sequence: Sequence[str],
+    reduction_algorithm: str,
+    topology: Mapping[str, Any],
+    write_set: Sequence[str],
+) -> RecordedProduct:
+    """Record a collective: who, in what order, and under which tree."""
+    if not sequence:
+        raise RecordedProductError(
+            f"{op}: an ordered-collective product needs a non-empty sequence; "
+            f"an empty one records no order at all"
+        )
+    return RecordedProduct(
+        op=op,
+        occurrence_id=occurrence_id,
+        effect_class="ordered_collective",
+        product={
+            "communicator": communicator,
+            "sequence_digest": collective_sequence_digest(sequence),
+            "reduction_algorithm": reduction_algorithm,
+            "topology": dict(topology),
+        },
+        write_set=tuple(write_set),
+    )
+
+
+def verify_collective_replay(
+    recorded: RecordedProduct,
+    observed_sequence: Sequence[str],
+    *,
+    reduction_algorithm: str,
+    topology: Mapping[str, Any],
+) -> None:
+    """Check (R) for a collective: same order, same tree, same topology.
+
+    A changed tree is rejected even when the order and inputs match — that is
+    the case order-only checking cannot see, and the one that silently moves
+    the result's bits.
+    """
+    if recorded.effect_class != "ordered_collective":
+        raise RecordedProductError(
+            f"{recorded.op}: verify_collective_replay applies to "
+            f"ordered_collective, not {recorded.effect_class}"
+        )
+    observed = collective_sequence_digest(observed_sequence)
+    if observed != str(recorded.product["sequence_digest"]):
+        raise RecordedProductError(
+            f"{recorded.op}: replay issued a different collective sequence "
+            f"({observed[:12]}… vs recorded "
+            f"{str(recorded.product['sequence_digest'])[:12]}…); ranks would "
+            f"not agree on the order (reproducibility)"
+        )
+    if reduction_algorithm != str(recorded.product["reduction_algorithm"]):
+        raise RecordedProductError(
+            f"{recorded.op}: replay used reduction algorithm "
+            f"{reduction_algorithm!r} but the product recorded "
+            f"{recorded.product['reduction_algorithm']!r}. Floating-point "
+            f"addition is not associative, so a different tree is a different "
+            f"value even under an identical order (reproducibility)"
+        )
+    if _thaw(dict(topology)) != _thaw(recorded.product["topology"]):
+        raise RecordedProductError(
+            f"{recorded.op}: replay topology {dict(topology)!r} differs from "
+            f"the recorded {_thaw(recorded.product['topology'])!r}; the "
+            f"topology selects the tree"
+        )

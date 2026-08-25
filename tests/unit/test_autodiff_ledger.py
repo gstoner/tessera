@@ -53,6 +53,12 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
             "momentum", "nesterov", "adam", "adam_w",
             "fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
             "spectral_filter", "spectral_conv", "stop_gradient", "depth_attn",
+            # W4-EFFECTS-1 E2b: a KEYED dropout has a native pathwise adjoint.
+            # Its Jacobian is diag(m/(1-p)) — diagonal, hence its own
+            # transpose — so the adjoint is the same op applied to the
+            # cotangent. Sound only because the mask replays from the
+            # recorded key; an unkeyed draw still emits no adjoint.
+            "dropout",
     }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
         "emits a CustomAdjointCallOp is a Python round-trip, not native"

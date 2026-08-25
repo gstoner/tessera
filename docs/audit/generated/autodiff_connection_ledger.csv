@@ -87,7 +87,7 @@ dequantize_nvfp4,quantize,yes,none,none,,,,,,,,python_reference=python-unit-regi
 det,linalg_function,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 digamma,elementwise,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 div,elementwise,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
-dropout,random_mask,yes,none,native,,,,,,,,python_reference=python-unit-registry;ir_tangent=llvm23-core,,,
+dropout,random_mask,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
 dynamic_slice,indexing,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 dynamic_update_slice,indexing,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 ebm_energy_quadratic,ebm,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,

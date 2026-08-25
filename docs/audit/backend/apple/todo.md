@@ -7,6 +7,29 @@ last_updated: 2026-08-25
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; Apple outcome: not applicable — no row claimed.** As with NVIDIA: no M1 Max row was run and none is implied. The keyed-RNG class rests on counter-based purity, which holds on any target, so an Apple row is a matter of running it rather than of new design.
+
+
+Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
+recorded products (identity only); Apple outcome: not applicable today.** The product
+binds communicator, issue order, reduction algorithm and topology; the
+verifier rejects a permuted order and a changed tree under an identical
+order. Order evidence comes from the deterministic mock-mesh executor.
+No Metal collective surface consumes this; no M1 Max evidence is implied.
+
+
+Cross-backend sync `W4-EFFECTS-1-E3-2026-08-25` — **shared state-lineage
+identity change; Apple outcome: not applicable today, inherited on
+adoption.** Same reason as the nvidia entry — host-side package identity, no
+Metal surface consumes it, no M1 Max evidence implied.
+
+
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); Apple outcome: not applicable, no behaviour
+change.** Same reason as the nvidia entry — a target-neutral diagnostic split
+over a fail-closed gate. No Metal surface changes and no M1 Max evidence is
+implied.
+
 
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;

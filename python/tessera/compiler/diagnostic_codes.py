@@ -120,6 +120,42 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="AD-CORE-EFFECT-CONTROL-1",
     ),
     DiagnosticCode(
+        code="AUTODIFF_STOCHASTIC_NO_PRODUCT",
+        pass_origin="AutodiffPairedPass",
+        severity="error",
+        summary=(
+            "A stochastic operation entered a differentiated region without a "
+            "recorded product, so its replay is not a function of recorded "
+            "data."
+        ),
+        fix_hint=(
+            "Attach a keyed_rng recorded product (W4-EFFECTS-1 E1) carrying "
+            "the draw's key, shape and dtype, with a 64-character content "
+            "digest. A seed in the op's attributes is not a recorded product. "
+            "An ambient draw, or one from a caller-owned generator whose "
+            "position advances per call, has no product and stays fail-closed."
+        ),
+        spec="docs/audit/compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md",
+        sprint="W4-EFFECTS-1",
+    ),
+    DiagnosticCode(
+        code="AUTODIFF_STOCHASTIC_UNKEYED",
+        pass_origin="AutodiffPairedPass",
+        severity="error",
+        summary=(
+            "A stochastic operation carries a recorded product whose class "
+            "does not establish reproducibility for a draw."
+        ),
+        fix_hint=(
+            "Only a keyed_rng product makes a draw replayable; the counter-"
+            "based generator is a pure function of its key. Re-record the "
+            "effect with that class, or leave the operation outside the "
+            "differentiated region."
+        ),
+        spec="docs/audit/compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md",
+        sprint="W4-EFFECTS-1",
+    ),
+    DiagnosticCode(
         code="AUTODIFF_STOCHASTIC_EFFECT",
         pass_origin="AutodiffPass/AutodiffPairedPass",
         severity="error",

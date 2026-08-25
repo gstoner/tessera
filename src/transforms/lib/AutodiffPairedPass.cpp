@@ -43,6 +43,8 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SHA256.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -67,6 +69,66 @@ constexpr const char *kAutodiffMarker = "tessera.autodiff";
 using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
 bool hasStochasticEffect(mlir::Operation *op) {
   return getRegisteredSemanticEffect(op) == SemanticEffectLevel::Random;
+}
+
+// W4-EFFECTS-1 slice E2. A stochastic op used to be rejected wholesale, which
+// conflated two unrelated questions: whether the draw can be REPLAYED, and
+// whether it can be DIFFERENTIATED. They are now separate, and each refusal
+// says which one failed.
+//
+// Admission requires a recorded product of class `keyed_rng` (the E1 carrier,
+// `python/tessera/compiler/recorded_product.py`). The product is what makes
+// replay a function of recorded data: the S4 generator is counter-based, so a
+// keyed draw is a pure function of its key. An op with no product stays
+// closed — absence is not permission.
+constexpr const char *kRecordedProductClass =
+    "tessera.recorded_product.effect_class";
+constexpr const char *kRecordedProductDigest =
+    "tessera.recorded_product.digest";
+
+// Reject a product we cannot VERIFY. Checking the class string and the
+// digest's length would admit any hand-written 64-character value — the
+// gate's own positive fixture used "1111…" and was accepted — so a corrupted
+// or fabricated carrier could walk through the fail-closed reproducibility
+// check (PR #630 review). The carrier is therefore validated as a CHAIN:
+//   sha256(payload) == digest, and the payload says it belongs to THIS op,
+//   in this class, under the schema this compiler understands.
+// Breaking any link changes a hash, so a product cannot be pasted between
+// operations or edited in place.
+bool carriesKeyedRngProduct(mlir::Operation *op) {
+  return tessera::carriesVerifiedRecordedProduct(op, "keyed_rng");
+}
+
+// Diagnose precisely why a stochastic op cannot enter the region. Returns
+// true when the op is admitted.
+bool admitStochasticOp(mlir::Operation *op) {
+  if (!hasStochasticEffect(op))
+    return true;
+  auto cls = op->getAttrOfType<mlir::StringAttr>(kRecordedProductClass);
+  if (!cls) {
+    op->emitError()
+        << "AUTODIFF_STOCHASTIC_NO_PRODUCT: stochastic op " << op->getName()
+        << " carries no recorded product, so its replay is not a function of "
+           "recorded data. A keyed draw must carry a `keyed_rng` product "
+           "(W4-EFFECTS-1 E1); an ambient or generator-stateful draw has no "
+           "product and stays fail-closed";
+    return false;
+  }
+  if (cls.getValue() != "keyed_rng") {
+    op->emitError()
+        << "AUTODIFF_STOCHASTIC_UNKEYED: stochastic op " << op->getName()
+        << " carries a '" << cls.getValue()
+        << "' product, which does not establish reproducibility for a draw; "
+           "only `keyed_rng` does";
+    return false;
+  }
+  std::string failure = tessera::recordedProductFailure(op, "keyed_rng");
+  if (!failure.empty()) {
+    op->emitError() << "AUTODIFF_STOCHASTIC_NO_PRODUCT: stochastic op "
+                    << op->getName() << " " << failure;
+    return false;
+  }
+  return true;
 }
 
 void eraseStopGradientBarriers(mlir::func::FuncOp func) {
@@ -368,8 +430,16 @@ buildCFGStateSentinel(mlir::OpBuilder &builder, mlir::Location loc,
 static bool isReplayableCFGBodyOperation(mlir::Operation &operation) {
   if (operation.hasTrait<mlir::OpTrait::IsTerminator>())
     return true;
-  if (operation.getNumRegions() == 0)
+  if (operation.getNumRegions() == 0) {
+    // Same admission as the structured region walk, from the same verifier —
+    // a keyed draw admissible in an scf.if body must be admissible in a
+    // structurized CFG body, or W4's family would depend on which of the two
+    // replayability walks happened to see it (#31).
+    if (getRegisteredSemanticEffect(&operation) == SemanticEffectLevel::Random &&
+        carriesVerifiedRecordedProduct(&operation, "keyed_rng"))
+      return true;
     return getRegisteredSemanticEffect(&operation) == SemanticEffectLevel::Pure;
+  }
   if (!llvm::isa<mlir::scf::IfOp, mlir::scf::ForOp, mlir::scf::WhileOp>(
           operation))
     return false;
@@ -1452,13 +1522,10 @@ private:
           return mlir::failure();
         }
       }
-      if (hasStochasticEffect(op)) {
-        op->emitError()
-            << "AUTODIFF_STOCHASTIC_EFFECT: active stochastic op "
-            << op->getName()
-            << " requires an explicit pathwise or score-function adjoint";
+      // Replayability and differentiability are separate questions, and a
+      // refusal now says which one failed (W4-EFFECTS-1 E2).
+      if (!admitStochasticOp(op))
         return mlir::failure();
-      }
       forwardOps.push_back(op);
     }
 

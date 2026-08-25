@@ -441,8 +441,16 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.autodiff.residual_policy",
             "tessera.autodiff.residual_sources",
         ),
+        # W4-EFFECTS-1 slice E2 split the blanket stochastic refusal, so this
+        # pass no longer emits AUTODIFF_STOCHASTIC_EFFECT — a keyed draw
+        # carrying a verified product is now ADMITTED. Listing a code the
+        # pass cannot emit is a declaration with no producer, the mirror of
+        # #29, and it tells a reader the family is still refused wholesale.
+        # (The in-place `tessera-autodiff` pass still emits the old code and
+        # keeps it.)
         diagnostic_codes=(
-            "AUTODIFF_STOCHASTIC_EFFECT",
+            "AUTODIFF_STOCHASTIC_NO_PRODUCT",
+            "AUTODIFF_STOCHASTIC_UNKEYED",
             "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
         ),
         pass_kind="transform",

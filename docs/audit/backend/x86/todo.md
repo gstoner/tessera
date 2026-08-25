@@ -8,6 +8,34 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; x86 outcome: **parity VALIDATED (AVX-512 host)**.** Same family through `x86_rng_compiled` with `execution_kind=native_cpu` asserted exactly. Replay from the recorded product is bit-identical, and the cross-target row shows this host and gfx1151 produce the same bits from the same product.
+
+
+Cross-backend sync `W4-EFFECTS-1-E4-2026-08-25` — **ordered-collective
+recorded products (identity only); x86 outcome: parity validated (host-side analysis only).** The product
+binds communicator, issue order, reduction algorithm and topology; the
+verifier rejects a permuted order and a changed tree under an identical
+order. Order evidence comes from the deterministic mock-mesh executor.
+Nothing in the AVX-512 lane changes: this slice is host-side recording and verification with no kernel or numerical effect. The mock-mesh order evidence runs here.
+
+
+Cross-backend sync `W4-EFFECTS-1-E3-2026-08-25` — **shared state-lineage
+identity change; x86 outcome: parity validated, no behaviour change.** Same
+change as the rocm entry, and the same evidence: the f32 default keeps every
+existing lineage id byte-stable, so the AVX-512 stateful packages
+(Lion/Adafactor/sequence-mixer) keep their digests. The E3 content-digest
+binding is additive.
+
+
+Cross-backend sync `W4-EFFECTS-1-E2-2026-08-25` — **shared autodiff gate
+change (AutodiffPairedPass); x86 outcome: parity validated, no behaviour
+change on this backend.** Same gate split as the rocm entry; it is a
+diagnostic refinement over a fail-closed check, not a relaxation. Validated
+on the AVX-512 host with the same lit and autodiff suites. The Python-side
+call-form classifier that decides which draws may carry a product lives here
+too (`stochastic_product_for_call`), and its verdicts are pinned against the
+op's MEASURED behaviour rather than a convention.
+
 
 Cross-backend sync `W4-EFFECTS-1-2026-08-25` — **UPDATED 2026-08-25 (slice E1
 landed): shared recorded-product carrier + verifier implemented in Python;

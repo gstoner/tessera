@@ -1,0 +1,200 @@
+---
+last_updated: 2026-08-25
+audit_role: plan
+plan_state: open
+---
+
+# W4-EFFECTS-1 — operation-owned recorded products for admissible effects
+
+Scoped plan for the last open item of integrated-plan queue **order 2**
+(W4-PRODUCT-1): *"one physical packet family with admissible effects."*
+Ordering authority stays with
+[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md); the compiler map
+and authority chain are in [`README.md`](README.md). This document owns the
+design and acceptance detail only.
+
+**No code yet.** This is the scope-before-build deliverable. Every claim
+below that could have been assumed was measured instead; the measurements
+are in §5.
+
+---
+
+## 1. What is actually blocked today
+
+`AutodiffPairedPass` admits a region into reverse mode only when every op on
+the path is differentiable and effect-free, with one carve-out: *compiler
+generated* replay-safe assertions (the `cf.assert` extent checks W4.3
+landed). Everything else fails closed:
+
+| Gate | Site | Diagnostic |
+|---|---|---|
+| Stochastic | `hasStochasticEffect` → `SemanticEffectLevel::Random` | `AUTODIFF_STOCHASTIC_EFFECT` |
+| Nested region | unsupported nested-region op | `AUTODIFF_NESTED_REGION` |
+| Non-differentiable | no registered adjoint | `AUTODIFF_OP_NOT_DIFFERENTIABLE` |
+| Mutation / state / I/O / ordered collective | registered effect > pure | region rejected |
+
+Failing closed here was correct: a region whose replay differs from its
+record produces a **wrong gradient**, silently. The task is not to weaken
+the gate but to give each effect class a *product* that makes replay
+provably identical — and to keep the classes that cannot have one closed.
+
+---
+
+## 2. The admissibility criterion
+
+An effectful operation `E` is **admissible** in a recorded product iff there
+exists a recorded value `π(E)` — content-addressed, carried in the package —
+such that:
+
+> **(R) Reproducibility.** For all replays, `E(inputs, π)` equals the
+> recorded execution **bit-for-bit**, not merely in distribution.
+>
+> **(C) Confinement.** `E`'s write-set is contained in values `π` names.
+> Nothing outside the recorded frame observes `E`, and `E` observes nothing
+> outside it.
+
+(R) without (C) admits an op that reproduces its own value while mutating a
+neighbour's state; (C) without (R) admits an op that touches nothing but
+returns different numbers on replay. Both are required, and both must be
+*checked by the verifier*, not asserted by the producer.
+
+A class that cannot satisfy (R) — a genuine external read — is not made
+admissible by better bookkeeping and stays closed. That is a conclusion, not
+a limitation to route around.
+
+---
+
+## 3. Per-class verdicts
+
+### 3.1 Keyed RNG — **ADMISSIBLE** (first slice)
+
+The enabling fact is mathematical, not architectural: the S4 generator is
+counter-based (Philox), so a draw is a **pure function of its key**. §5.1
+measures purity, replay bit-identity, split independence, derivation
+collision-freedom, per-rank disjointness, and distributional sanity.
+
+* `π(E)` = the op's `RNGKey` (seed + counter + derivation path) plus shape
+  and dtype — nothing else. This is already what
+  `tessera.stochastic_identity` names; the product makes it *carried and
+  verified* rather than merely declared.
+* (R) holds by purity; (C) holds because a keyed draw writes only its result.
+* **Unkeyed** RNG stays closed: no `π` exists, which is exactly the split the
+  queue row already anticipates ("unkeyed RNG … remain fail closed").
+* Adjoint note: admitting the op into the region is orthogonal to *how* it is
+  differentiated. `AUTODIFF_STOCHASTIC_EFFECT` currently conflates the two.
+  Splitting it is part of this slice: a keyed draw with a registered pathwise
+  or score-function rule is admitted; one without a rule still fails, with a
+  diagnostic that says which of the two is missing.
+
+### 3.2 Mutation of recorded state — **ADMISSIBLE, reusing the existing ABI**
+
+`tessera.state_buffer_lineage.v1` (`stateful_training.py`) already
+content-addresses `(name, role, shape, dtype, version, access, parents)`.
+That is precisely a mutation product: replay reads the recorded **version**.
+
+* `π(E)` = the lineage id of each buffer `E` writes, plus the version it
+  advances to. (R) holds when the replay binds the same versions; (C) holds
+  when the declared `access` covers the write-set.
+* **Do not invent a second lineage schema** (#31). Extend the existing one.
+* **Named precondition, measured in §5.2:** the identity separates version,
+  shape, access, parents, and role — but `dtype` is *hardcoded* `"f32"` with
+  no caller override. Every lineage constructed today is f32, so nothing
+  collides now; the moment recorded state becomes mixed precision (bf16
+  master weights, fp8 optimizer state) two materially different buffers would
+  share an id. Making `dtype` real is a **precondition of this slice**, not a
+  follow-up, and it is exactly the defect class that produced the MegaMoE
+  schedule-digest fix in #625.
+
+### 3.3 Ordered collectives — **ADMISSIBLE, gated on the schedule authority**
+
+An ordered collective's requirement is that every rank issues collectives in
+the *same relative order*. That is a property of a total order, and the
+schedule authority now derives exactly that: since #625 the inference emits
+collective↔collective ordering edges (and nothing spurious), and since #626
+the pipeline carrier's rows are validated for a topological order.
+
+* `π(E)` = the communicator identity plus the position of `E` in the
+  recorded collective sequence (a digest over that sequence).
+* (R) holds when replay issues the same sequence; (C) holds when the
+  collective's write-set is its declared outputs.
+* **Gate:** this slice may not claim multi-rank correctness from a mock mesh.
+  W5.4's mock executor proves the SSA is consumable; DIST-NATIVE-1 owns the
+  real transport. Recorded-product *identity* can land before that; a
+  numerical multi-rank claim cannot.
+
+### 3.4 I/O — **NOT ADMISSIBLE** (stays closed, by argument)
+
+An external read is not a function of any recorded value, so no `π` satisfies
+(R). The existing carve-out is narrower than it looks and should stay narrow:
+a compiler-generated assertion is admissible because it is *observational* —
+it writes nothing and its only effect is the abort decision, which the STATUS
+/ trap contract already makes explicit. Recording a file read would record a
+**value**, not the effect, and replay would silently diverge the first time
+the file changed. This class is closed on principle; the plan says so rather
+than leaving it looking unfinished.
+
+### 3.5 Alias-sensitive work — **CONDITIONAL, already half-built**
+
+Admissible exactly when the alias facts are *known*: W2.1 supplies roots, and
+#625 made a registered op's declared `aliasing="none"` yield a fresh root even
+when effectful. Unknown alias facts remain a fail-closed barrier — that is
+(C) being enforced, and it must not be relaxed to make a family fit.
+
+---
+
+## 4. Delivery slices
+
+Each slice is independently reviewable and carries its own evidence. The
+first is deliberately the smallest one that exercises the whole ABI.
+
+| # | Slice | Deliverable | Acceptance |
+|---|---|---|---|
+| E1 | **Product ABI + verifier** | One `tessera.recorded_product.v1` carrier: effect class, content-addressed `π`, declared write-set. A boundary verifier checks (R)-inputs are present and (C) write-set ⊆ declared, failing closed with a named diagnostic per class. | Positive and negative fixtures per class; a product whose write-set exceeds its declaration is rejected; **no** class is admitted without a `π`. |
+| E2 | **Keyed RNG (dropout family)** | Split `AUTODIFF_STOCHASTIC_EFFECT` into *unkeyed* vs *no adjoint rule*; admit keyed draws with a registered rule; carry the key as `π`. | Replay of a recorded dropout region is **bit-identical** (not distributional); unkeyed still fails; the two diagnostics are distinguishable. Gradient checked against the analytic pathwise rule. |
+| E3 | **Mutation, on the existing lineage** | `dtype` becomes real in `state_buffer_lineage`; recorded products bind buffer versions; region replay reads the recorded version. | Bit-identical replay of a stateful step; a tampered version fails closed; a mixed-precision lineage no longer aliases (the §5.2 precondition, with a negative test). |
+| E4 | **Ordered collectives (identity only)** | Communicator + sequence digest as `π`; replay issues the recorded order. | Mock-mesh replay reproduces the recorded order exactly; a reordered sequence fails closed. **No** native-transport or multi-rank numerical claim. |
+| E5 | **One physical packet family end to end** | The queue row's actual ask: one family carrying an admissible effect through Schedule→Tile→target on x86 and gfx1151. | Exact-device rows on both hosts, bit-identical to the recorded execution; digests bound; no reference-lane fallback. |
+
+Estimated shape: E1 is the load-bearing one; E2 is the cheapest real proof;
+E5 is the row that lets queue order 2 close.
+
+---
+
+## 5. Measurements taken while scoping (2026-08-25)
+
+Evidence, not assumption. Re-runnable from the commands in the PR that
+introduced this file.
+
+### 5.1 RNG facts the admissibility of §3.1 rests on
+
+| Property | Result |
+|---|---|
+| Purity + bit-identical replay of `normal(key, …)` | identical, max abs diff `0.0` |
+| Child streams pairwise distinct; distinct from parent | no duplicates |
+| Max abs correlation between distinct child streams (n=4000) | `0.032` vs noise band `3/√n = 0.047` |
+| Collisions over 800 distinct `split`/`fold_in` derivations | `0` |
+| Per-rank stream duplication across 8 ranks | none |
+| KS test vs `N(0,1)`, n=200000 | `D = 0.0018`, `p = 0.55` |
+
+The first row is the one that matters: **(R) is satisfied by construction**,
+so a recorded key is a sufficient product.
+
+### 5.2 What the mutation lineage identity separates
+
+Distinguishes `version`, `shape`, `access`, `parents`, `role` — verified
+individually. Does **not** carry a real `dtype` (hardcoded `"f32"`, not a
+parameter). Hence the precondition in §3.2.
+
+---
+
+## 6. What this plan deliberately does not do
+
+* It does not weaken any existing gate to make a family fit. Every class that
+  stays closed does so with an argument, not a TODO.
+* It does not claim multi-rank or native-transport correctness from mock
+  execution (§3.3).
+* It does not introduce a second lineage or a second product schema where one
+  exists (#31).
+* It does not treat "the tests pass" as evidence for a replay claim: the
+  acceptance bar for E2–E4 is **bit-identity of replay**, which a
+  distributional check cannot establish.

@@ -130,9 +130,32 @@ declaration logic itself (a function lowering one of two policy-carrying ops
 loses a value while the name survives — `re_expressed`, not
 `represented_in_type`), which is the mechanism working.
 
-*Open.* (a) The W1.1 `!tile.fragment<…, acc, …>` route re-expressed as an
-instance of the general carrier, bit-identical on gfx1151 — ROCm owns the
-worked reference and this slice did not touch it. (b) `math_mode` still has NO
+*Open, and item (a) is not what the row assumed.* Measured 2026-08-25 while
+scoping it: for the MMA path the policy **already survives to the bottom**.
+`TileIRLoweringPass` forwards it onto `tile.mma`, and `TileToROCM.cpp` carries
+it onto the `tessera_rocm.*` ops — but all three of its uses are
+`copyAttrIfPresent`. It is **forwarded, never read**. The accumulator that
+actually reaches the hardware is inferred independently in
+`GenerateWMMAGemmKernel.cpp` as `fragmentAcc = T.isInt ? "i32" : "f32"`, in a
+file that does not mention `numeric_policy` at all.
+
+So there are two sources of truth for one fact, and the declared one loses.
+They agree today only because every real program uses fp32. A policy of
+`{storage="bf16", accum="fp16"}` — legal, and now schema-checked — silently
+gets f32 on gfx1151, and `accumulatorProbeDtypes` returns an EMPTY candidate
+set for any accumulator that is not `i32`/`f32`, so nothing downstream could
+honour it either. This is not hypothetical hardware: the in-repo ISA archive
+records `V_WMMA_F16_16X16X16_F16` on RDNA 3.5 alongside the f32-accumulate
+forms, so an f16 accumulator is a real gfx1151 capability the compiler cannot
+currently be asked for.
+
+That makes (a) a **Decision #29** item rather than a plumbing one — the
+carrier is built and the consumer is missing, which is the case #29 calls
+worse than a missing declaration because it reads as a closed contract in
+review. The slice is: have the ROCm generator read `numeric_policy.accum`,
+defaulting to today's inference when absent (so every existing program is
+bit-identical), and extend the probe/intrinsic selection to the f16-accumulate
+WMMA. It needs exact-device proof on the Radeon 8060S, not a fixture. (b) `math_mode` still has NO
 MLIR consumer: measured, it appears in C++ only inside a rejection message,
 while `mma_selector.py` / `nvidia_dtype_contract.py` consume it on the Python
 side. A semantic key with no consumer below the frontend is Decision #29's

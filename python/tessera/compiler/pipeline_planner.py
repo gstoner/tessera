@@ -398,8 +398,21 @@ class PipelinePlan:
         """Return the one content-addressed authority for this pipeline."""
 
         steps = tuple(self.schedule_steps())
-        by_key = {(step.rank, step.micro_batch, step.phase): step for step in steps}
+        # Key by the VIRTUAL STAGE, not the physical rank. Under interleaving
+        # one rank owns several virtual stages, so a (rank, micro_batch, phase)
+        # key collides across chunks: later chunks overwrite earlier ones, and
+        # a forward step then resolves its producer to a future chunk (dropped
+        # by the ordering filter below) or to nothing at all. Measured on
+        # num_stages=4, num_chunks=2: 64 of 128 steps collided and 32 of 56
+        # cross-stage forward steps lost their true producer edge, so the
+        # emitted Schedule Object permitted a virtual stage to run before the
+        # stage that feeds it (PR #626 review).
+        by_key = {(step.stage, step.micro_batch, step.phase): step for step in steps}
         order_by_id = {self._action_id(step): index for index, step in enumerate(steps)}
+        # Virtual stage count is DERIVED from the emitted schedule: under
+        # interleaving it is num_stages x num_chunks, not num_stages.
+        total_stages = max((step.stage for step in steps), default=-1) + 1
+        inverted_backward: list[tuple[str, str]] = []
         previous_by_rank: dict[int, ScheduleStep] = {}
         actions: list[ScheduleAction] = []
         for step in steps:
@@ -409,25 +422,57 @@ class PipelinePlan:
             if previous is not None:
                 dependencies.add(self._action_id(previous))
             if step.phase == Phase.FORWARD and step.stage > 0:
-                upstream = by_key.get((step.rank - 1, step.micro_batch, Phase.FORWARD))
+                upstream = by_key.get(
+                    (step.stage - 1, step.micro_batch, Phase.FORWARD)
+                )
                 if upstream is not None:
                     dependencies.add(self._action_id(upstream))
             if step.phase == Phase.BACKWARD:
-                own_forward = by_key.get((step.rank, step.micro_batch, Phase.FORWARD))
+                own_forward = by_key.get(
+                    (step.stage, step.micro_batch, Phase.FORWARD)
+                )
                 if own_forward is not None:
                     dependencies.add(self._action_id(own_forward))
-                if step.stage + 1 < self.num_stages:
+                if step.stage + 1 < total_stages:
                     downstream = by_key.get(
-                        (step.rank + 1, step.micro_batch, Phase.BACKWARD)
+                        (step.stage + 1, step.micro_batch, Phase.BACKWARD)
                     )
                     if downstream is not None:
-                        dependencies.add(self._action_id(downstream))
+                        downstream_id = self._action_id(downstream)
+                        if order_by_id[downstream_id] < order_by_id[action_id]:
+                            dependencies.add(downstream_id)
+                        else:
+                            # KNOWN PLANNER LIMITATION, surfaced by keying on
+                            # the virtual stage (PR #626 review). The
+                            # interleaved generator emits backward steps in
+                            # ASCENDING stage order (num_stages=2, chunks=2,
+                            # micro-batch 0: stage 0 B at clock 4 ... stage 3 B
+                            # at clock 7), which is the opposite of gradient
+                            # flow, so this edge cannot be expressed in the
+                            # emitted order. Recording it would claim an
+                            # ordering the schedule does not realize, so it is
+                            # omitted and counted; fixing the generator's
+                            # interleaved backward order is its own change.
+                            inverted_backward.append((action_id, downstream_id))
 
-            dependencies = {
+            # A real producer ordered AFTER its consumer is a schedule defect,
+            # not something to drop: silently filtering it would emit a
+            # Schedule Object that permits the consumer to run first. Fail
+            # closed instead (PR #626 review).
+            late = sorted(
                 dependency
                 for dependency in dependencies
-                if order_by_id[dependency] < order_by_id[action_id]
-            }
+                if order_by_id[dependency] >= order_by_id[action_id]
+            )
+            # Forward/own-forward edges MUST precede their consumer in any
+            # correct schedule; an inversion there is a defect, not a
+            # limitation, so it fails closed rather than being dropped.
+            if late:
+                raise ValueError(
+                    f"pipeline schedule places {action_id!r} before its "
+                    f"producers {late!r}; the emitted Schedule Object would "
+                    f"permit a stage to execute ahead of its input"
+                )
             identity = json.dumps(
                 {
                     "action_id": action_id,

@@ -3565,6 +3565,56 @@ struct ScheduleToTilePass
             "scheduled spectral program requires the module Schedule Object digest");
         return signalPassFailure();
       }
+      // Matching digest strings alone do NOT bind the attributes this pass
+      // then consumes: a cached or hand-edited program could keep both
+      // digests and still change workspace_bytes or native_entry, which the
+      // native launch would use (PR #626 review). Re-verify every consumed
+      // policy value against the semantic payload the producer carried.
+      auto semantic =
+          mod->getAttrOfType<StringAttr>("tessera.spectral_semantic");
+      if (!semantic || semantic.getValue().empty()) {
+        scheduled->emitError(
+            "scheduled spectral program requires the module "
+            "tessera.spectral_semantic payload to verify consumed policy");
+        return signalPassFailure();
+      }
+      auto payloadField = [&](StringRef field) -> StringRef {
+        StringRef payload = semantic.getValue();
+        size_t at = payload.find((field + "=").str());
+        while (at != StringRef::npos && at != 0 && payload[at - 1] != ';')
+          at = payload.find((field + "=").str(), at + 1);
+        if (at == StringRef::npos) return StringRef();
+        StringRef rest = payload.drop_front(at + field.size() + 1);
+        size_t end = rest.find(';');
+        return end == StringRef::npos ? rest : rest.take_front(end);
+      };
+      auto requireMatches = [&](StringRef field, const Twine &actual) -> bool {
+        StringRef declared = payloadField(field);
+        if (declared.empty() || declared != actual.str()) {
+          scheduled->emitError("scheduled spectral program attribute '")
+              << field << "' is " << actual
+              << ", which disagrees with the carried semantic payload ('"
+              << declared << "'); the digest does not cover a changed policy";
+          return false;
+        }
+        return true;
+      };
+      if (auto workspaceAttr =
+              scheduled->getAttrOfType<IntegerAttr>("workspace_bytes")) {
+        if (!requireMatches("workspace_bytes",
+                            Twine(workspaceAttr.getInt())))
+          return signalPassFailure();
+      }
+      if (auto entryAttr =
+              scheduled->getAttrOfType<StringAttr>("native_entry")) {
+        if (!requireMatches("native_entry", entryAttr.getValue()))
+          return signalPassFailure();
+      }
+      if (auto normalizationAttr =
+              scheduled->getAttrOfType<StringAttr>("normalization")) {
+        if (!requireMatches("normalization", normalizationAttr.getValue()))
+          return signalPassFailure();
+      }
       SmallVector<schedule::ArtifactOp> matchingArtifacts;
       mod.walk([&](schedule::ArtifactOp artifact) {
         if (artifact.getHash() == hash.getValue())

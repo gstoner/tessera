@@ -94,6 +94,105 @@ struct PipelineScheduleLegalityPass
       signalPassFailure();
       return;
     }
+    // The carrier IS the executable authority, so its rows are validated
+    // rather than counted: unique action ids, resolvable dependencies, an
+    // acyclic dependency order, and agreement with the declared pipeline
+    // dimensions. Previously only `!empty()` was checked, so a stale or
+    // hand-edited carrier with duplicate ids, dangling dependencies, or a
+    // cycle was accepted as authoritative (PR #626 review).
+    {
+      llvm::DenseSet<StringRef> seen;
+      llvm::SmallVector<StringRef> order;
+      llvm::DenseMap<StringRef, llvm::SmallVector<StringRef>> requires;
+      int64_t declaredStages = numStagesAttr.getInt();
+      int64_t declaredMicroBatches = microBatchesAttr.getInt();
+      for (Attribute entry : scheduleSteps) {
+        auto row = dyn_cast<DictionaryAttr>(entry);
+        if (!row) {
+          module.emitError("pipeline step carrier row is not a dictionary");
+          signalPassFailure();
+          return;
+        }
+        auto actionId = row.getAs<StringAttr>("action_id");
+        auto stage = row.getAs<IntegerAttr>("stage");
+        auto microBatch = row.getAs<IntegerAttr>("micro_batch");
+        auto clock = row.getAs<IntegerAttr>("clock");
+        auto dependsOn = row.getAs<ArrayAttr>("depends_on");
+        if (!actionId || actionId.getValue().empty() || !stage ||
+            !microBatch || !clock || !dependsOn) {
+          module.emitError(
+              "pipeline step carrier row requires action_id, stage, "
+              "micro_batch, clock, and depends_on");
+          signalPassFailure();
+          return;
+        }
+        if (!seen.insert(actionId.getValue()).second) {
+          module.emitError("duplicate pipeline action id '")
+              << actionId.getValue() << "'";
+          signalPassFailure();
+          return;
+        }
+        if (clock.getInt() < 0 || microBatch.getInt() < 0 ||
+            microBatch.getInt() >= declaredMicroBatches || stage.getInt() < 0) {
+          module.emitError("pipeline step '")
+              << actionId.getValue()
+              << "' disagrees with the declared pipeline dimensions";
+          signalPassFailure();
+          return;
+        }
+        // Virtual stages run 0..num_stages*num_chunks-1; without chunking the
+        // bound is num_stages.
+        int64_t chunks = 1;
+        if (auto chunkAttr =
+                module->getAttrOfType<IntegerAttr>("tessera.pp_num_chunks"))
+          chunks = std::max<int64_t>(1, chunkAttr.getInt());
+        if (stage.getInt() >= declaredStages * chunks) {
+          module.emitError("pipeline step '")
+              << actionId.getValue() << "' names virtual stage "
+              << stage.getInt() << " beyond the declared "
+              << (declaredStages * chunks);
+          signalPassFailure();
+          return;
+        }
+        llvm::SmallVector<StringRef> deps;
+        for (Attribute dependency : dependsOn) {
+          auto dependencyId = dyn_cast<StringAttr>(dependency);
+          if (!dependencyId) {
+            module.emitError("pipeline dependency is not a string");
+            signalPassFailure();
+            return;
+          }
+          deps.push_back(dependencyId.getValue());
+        }
+        requires[actionId.getValue()] = deps;
+        order.push_back(actionId.getValue());
+      }
+      // Dependencies must resolve, and the carrier's own order must be a
+      // topological order (a producer listed after its consumer would let the
+      // consumer issue first).
+      llvm::DenseMap<StringRef, size_t> position;
+      for (auto [index, id] : llvm::enumerate(order)) position[id] = index;
+      for (StringRef id : order) {
+        for (StringRef dependency : requires[id]) {
+          auto found = position.find(dependency);
+          if (found == position.end()) {
+            module.emitError("pipeline action '")
+                << id << "' depends on unknown action '" << dependency << "'";
+            signalPassFailure();
+            return;
+          }
+          if (found->second >= position[id]) {
+            module.emitError("pipeline action '")
+                << id << "' depends on '" << dependency
+                << "', which the carrier orders no earlier (cycle or "
+                   "producer-after-consumer)";
+            signalPassFailure();
+            return;
+          }
+        }
+      }
+    }
+
     int64_t numStages = numStagesAttr.getInt();
     if (numStages <= 1)
       return;

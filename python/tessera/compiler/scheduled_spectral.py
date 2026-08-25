@@ -948,10 +948,18 @@ def lower_scheduled_spectral(
         f'native_entry = "{entry}", child_fft_digests = "{child_digests}", '
         f'workgroup_size = {1 if compiler_target == "x86" else 256} : i64'
     )
+    # Carry the exact semantic payload the physical launch consumes,
+    # so the Schedule->Tile consumer can re-verify the attributes it
+    # uses instead of trusting a digest string alone (PR #626 review).
+    semantic_payload = (
+        f"workspace_bytes={workspace};"
+        f"native_entry={entry};"
+        f"normalization={semantic_contract.normalization}"
+    )
     schedule_ir = (
         f'module attributes {{tessera.target = "{compiler_target}", '
         f'tessera.arch = "{architecture}", '
-        f'tessera.schedule_digest = "{schedule_digest}"}} {{\n'
+        f'tessera.schedule_digest = "{schedule_digest}", tessera.spectral_semantic = "{semantic_payload}"}} {{\n'
         f"  func.func @scheduled_spectral({function_args}) -> {output_type} {{\n"
         f'    %result = "schedule.spectral_program"({operands}) {{{attrs}}} : '
         f"({operand_types}) -> {output_type}\n"

@@ -951,15 +951,28 @@ def lower_scheduled_spectral(
     # Carry the exact semantic payload the physical launch consumes,
     # so the Schedule->Tile consumer can re-verify the attributes it
     # uses instead of trusting a digest string alone (PR #626 review).
-    semantic_payload = (
-        f"workspace_bytes={workspace};"
-        f"native_entry={entry};"
-        f"normalization={semantic_contract.normalization}"
+    # Carry the two preimages that make the consumer's verification a CHAIN
+    # rather than a string comparison (PR #626 follow-up):
+    #   sha256(schedule_payload) == tessera.schedule_digest, and that payload
+    #   contains object_id "spectral:<sha256(identity)>", and the identity
+    #   text carries the policy fields the launch consumes.
+    # Editing any link breaks a hash, so the attribute and its declaration
+    # can no longer be co-edited.
+    def _mlir_escape(text: str) -> str:
+        return text.replace(chr(92), chr(92) * 2).replace(chr(34), chr(92) + chr(34))
+
+    semantic_payload = _mlir_escape(identity)
+    schedule_payload = _mlir_escape(
+        json.dumps(
+            schedule_object.canonical_payload(),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     )
     schedule_ir = (
         f'module attributes {{tessera.target = "{compiler_target}", '
         f'tessera.arch = "{architecture}", '
-        f'tessera.schedule_digest = "{schedule_digest}", tessera.spectral_semantic = "{semantic_payload}"}} {{\n'
+        f'tessera.schedule_digest = "{schedule_digest}", tessera.spectral_semantic = "{semantic_payload}", tessera.schedule_payload = "{schedule_payload}"}} {{\n'
         f"  func.func @scheduled_spectral({function_args}) -> {output_type} {{\n"
         f'    %result = "schedule.spectral_program"({operands}) {{{attrs}}} : '
         f"({operand_types}) -> {output_type}\n"

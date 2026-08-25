@@ -3572,10 +3572,39 @@ struct ScheduleToTilePass
       // policy value against the semantic payload the producer carried.
       auto semantic =
           mod->getAttrOfType<StringAttr>("tessera.spectral_semantic");
-      if (!semantic || semantic.getValue().empty()) {
+      auto schedulePayload =
+          mod->getAttrOfType<StringAttr>("tessera.schedule_payload");
+      if (!semantic || semantic.getValue().empty() || !schedulePayload ||
+          schedulePayload.getValue().empty()) {
         scheduled->emitError(
             "scheduled spectral program requires the module "
-            "tessera.spectral_semantic payload to verify consumed policy");
+            "tessera.spectral_semantic and tessera.schedule_payload "
+            "preimages to verify consumed policy");
+        return signalPassFailure();
+      }
+      // Verify the identity CHAIN, so the attributes and the declaration
+      // that vouches for them cannot be co-edited:
+      //   sha256(schedule_payload) == tessera.schedule_digest, and that
+      //   payload names object_id "spectral:<sha256(spectral_semantic)>".
+      // Breaking any link changes a hash.
+      auto hexDigest = [](StringRef text) {
+        llvm::SHA256 hasher;
+        hasher.update(text);
+        return llvm::toHex(hasher.final(), /*LowerCase=*/true);
+      };
+      if (hexDigest(schedulePayload.getValue()) != scheduleDigest.getValue()) {
+        scheduled->emitError(
+            "tessera.schedule_payload does not hash to the module Schedule "
+            "Object digest; the carried schedule is not the one addressed");
+        return signalPassFailure();
+      }
+      std::string expectedObjectId =
+          ("spectral:" + hexDigest(semantic.getValue()));
+      if (!schedulePayload.getValue().contains(expectedObjectId)) {
+        scheduled->emitError(
+            "tessera.spectral_semantic does not hash to the object_id inside "
+            "the digest-bound schedule payload; the declared policy is not "
+            "the one the schedule identity covers");
         return signalPassFailure();
       }
       auto payloadField = [&](StringRef field) -> StringRef {

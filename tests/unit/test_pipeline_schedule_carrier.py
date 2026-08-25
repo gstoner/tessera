@@ -80,3 +80,48 @@ def test_every_dependency_precedes_its_consumer():
             for dependency in action.depends_on:
                 assert order[dependency] < order[action.action_id], (
                     f"{action.action_id} depends on later {dependency}")
+
+
+def test_interleaved_backward_runs_from_the_last_virtual_stage_back():
+    """The generator defect the carrier work surfaced: backward clocks were
+    `forward + p*v`, a CONSTANT offset, so gradients were scheduled in
+    ASCENDING virtual-stage order — stage s's backward ran before the stage
+    s+1 backward that produces its input gradient. The stage term is now
+    mirrored, so backward flows from the last virtual stage back to the
+    first, and the makespan is unchanged."""
+    plan = PipelinePlan(num_stages=2, num_micro_batches=4,
+                        interleaved=True, num_chunks=2)
+    steps = plan.schedule_steps()
+    clock = {(s.stage, s.micro_batch, s.phase): s.clock for s in steps}
+    total_stages = max(s.stage for s in steps) + 1
+    for mb in range(4):
+        forward = [clock[(s, mb, Phase.FORWARD)] for s in range(total_stages)]
+        backward = [clock[(s, mb, Phase.BACKWARD)] for s in range(total_stages)]
+        assert forward == sorted(forward), "forward must ascend by stage"
+        assert backward == sorted(backward, reverse=True), (
+            "backward must DESCEND by stage — gradients flow from the last "
+            f"virtual stage back to the first; got {backward}")
+        assert backward[-1] > forward[-1], "a stage's backward follows its forward"
+    # Order-only change: the schedule spans exactly the same clocks.
+    assert max(s.clock for s in steps) == 2 * total_stages + 4 - 2
+
+
+def test_decoupled_schedule_carries_no_cross_stage_dependency():
+    """A decoupled stage owns a self-contained objective and trains directly
+    from data — zero cross-stage coupling is the whole point. The carrier
+    used to assert cross-stage forward edges anyway (and silently drop the
+    backward ones), over-constraining the schedule."""
+    plan = PipelinePlan(num_stages=4, num_micro_batches=4, decoupled=True)
+    steps = plan.schedule_steps()
+    stage_of = {plan._action_id(s): s.stage for s in steps}
+    for action in plan.schedule_object.actions:
+        for dependency in action.depends_on:
+            assert stage_of[dependency] == stage_of[action.action_id], (
+                f"{action.action_id} depends across stages on {dependency}")
+    # The real intra-stage edge survives: backward follows its own forward.
+    backward = [s for s in steps if s.phase == Phase.BACKWARD]
+    deps = {a.action_id: set(a.depends_on) for a in plan.schedule_object.actions}
+    for step in backward:
+        own = [t for t in steps if t.phase == Phase.FORWARD
+               and t.stage == step.stage and t.micro_batch == step.micro_batch]
+        assert plan._action_id(own[0]) in deps[plan._action_id(step)]

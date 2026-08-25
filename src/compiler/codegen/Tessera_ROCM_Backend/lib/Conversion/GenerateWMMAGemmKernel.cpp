@@ -1356,6 +1356,53 @@ struct GenerateWMMAGemmKernelPass
         return signalPassFailure();
       }
 
+      // ── NUMPOL-CARRIER-1: the declared accumulator gets a CONSUMER ──
+      //
+      // Measured 2026-08-25: `numeric_policy` was carried faithfully all the
+      // way here — TileIRLoweringPass puts it on `tile.mma`, TileToROCM copies
+      // it onto `tessera_rocm.wmma_gemm` — and then nothing read it. The
+      // accumulator that reached the hardware was inferred a few lines above
+      // from the STORAGE dtype alone. Two sources of truth for one fact, and
+      // the declared one lost; they agreed only because every real program
+      // asks for fp32.
+      //
+      // That is Decision #29's case (a declaration whose consumer does not
+      // exist reads as a closed contract while carrying nothing) sitting on
+      // top of #21a's (a semantic key silently defaulting). `accum` is a
+      // semantic key: it decides what the program COMPUTES, so an accumulator
+      // this path cannot provide must fail closed here rather than be quietly
+      // replaced by f32 and reported as success.
+      //
+      // gfx1151 really does have the alternative — the ISA archive records
+      // `V_WMMA_F16_16X16X16_F16` on RDNA 3.5 — but its ROCDL form is
+      // `(v16f16, v16f16, v16f16) -> v16f16` with an `opsel` bit selecting a
+      // half, a different accumulator ABI from the v8f32 path emitted below.
+      // Wiring that is its own slice with its own device proof. Until then the
+      // honest answer to "accumulate in f16" is a diagnostic, not an f32
+      // kernel.
+      if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy")) {
+        if (auto accumAttr = policy.getAs<StringAttr>("accum")) {
+          StringRef declared = accumAttr.getValue();
+          StringRef provided = T.isInt ? "int32" : "fp32";
+          bool matches = declared == provided ||
+                         (T.isInt && (declared == "i32" || declared == "int32")) ||
+                         (!T.isInt && (declared == "f32" || declared == "fp32"));
+          if (!matches) {
+            op->emitError(
+                  "ROCM_WMMA_ACCUM_UNSUPPORTED: numeric_policy declares "
+                  "accum=\"")
+                << declared << "\" for storage '" << dt
+                << "', but the gfx1151 WMMA path emitted here accumulates in "
+                << provided
+                << ". Refusing rather than substituting: `accum` selects what "
+                   "the program computes, so silently widening or narrowing it "
+                   "would report success for a different computation "
+                   "(Decisions #21a/#29).";
+            return signalPassFailure();
+          }
+        }
+      }
+
       // C4 reconciliation: the storage-pack `factor` (logical values per byte
       // container) must equal this dtype's `packFactor` — the single packing
       // contract. (Verify against `packFactor`, the logical contract, NOT

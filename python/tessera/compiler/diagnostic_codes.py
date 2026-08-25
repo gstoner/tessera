@@ -1048,6 +1048,24 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
+        code="ROCM_WMMA_ACCUM_UNSUPPORTED",
+        pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary=(
+            "numeric_policy.accum names an accumulator the emitted gfx1151 "
+            "WMMA path does not provide."
+        ),
+        fix_hint=(
+            "`accum` selects what the program computes, so it is refused "
+            "rather than substituted. The f16-accumulate WMMA "
+            "(V_WMMA_F16_16X16X16_F16) exists on RDNA 3.5 but has a different "
+            "accumulator ABI (v16f16 + opsel) and is not wired yet; declare "
+            'accum="fp32" (or "int32" for integer storage), or omit it.'
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
         code="TILE_ASYNC_STAGE_NEGATIVE",
         pass_origin="AsyncCopyOp::verify / WaitAsyncOp::verify",
         severity="error",

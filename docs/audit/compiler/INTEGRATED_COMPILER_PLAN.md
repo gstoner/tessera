@@ -152,10 +152,29 @@ currently be asked for.
 That makes (a) a **Decision #29** item rather than a plumbing one — the
 carrier is built and the consumer is missing, which is the case #29 calls
 worse than a missing declaration because it reads as a closed contract in
-review. The slice is: have the ROCm generator read `numeric_policy.accum`,
-defaulting to today's inference when absent (so every existing program is
-bit-identical), and extend the probe/intrinsic selection to the f16-accumulate
-WMMA. It needs exact-device proof on the Radeon 8060S, not a fixture. (b) `math_mode` still has NO
+review.
+
+**(a) is now closed for the consumer half, and the codegen half is deferred on
+measurement (2026-08-25).** `GenerateWMMAGemmKernel` reads
+`numeric_policy.accum` and refuses with `ROCM_WMMA_ACCUM_UNSUPPORTED` when it
+names an accumulator this path does not provide, rather than substituting f32
+and reporting success for a different computation. Every existing program is
+untouched: a real before/after control — capture, revert the file, rebuild,
+recapture — showed the generated output **byte-identical across all 65 ROCm
+fixtures**, and the gfx1151 device lanes come back at the recorded baseline.
+
+Wiring the f16-accumulate WMMA itself is deferred, and the reason is a
+measurement rather than effort. Its ROCDL form is `(v16f16, v16f16, v16f16) ->
+v16f16` with an `opsel` bit — a different accumulator ABI, not a parameter
+swap. What it buys is half the accumulator VGPR footprint; what it costs,
+measured on 16x16x16-tiled GEMMs against an fp64 reference, is 5212x (K=64)
+rising to 7856x (K=4096) relative error. That is a real choice for short-K
+inference shapes and a bad one for training — which is precisely the kind of
+decision a declared policy should make and a storage-dtype inference cannot,
+so the interface is the deliverable and the codegen follows a measured need.
+Revisit when an occupancy-limited kernel shows the accumulator is the binding
+constraint, the same basis on which Decision #26a deferred the AIR emitter —
+not on the grounds that the instruction exists. (b) `math_mode` still has NO
 MLIR consumer: measured, it appears in C++ only inside a rejection message,
 while `mma_selector.py` / `nvidia_dtype_contract.py` consume it on the Python
 side. A semantic key with no consumer below the frontend is Decision #29's

@@ -151,7 +151,7 @@ dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_t
 det,5,0,1,5,0,fp32,directly_tested,5 direct test references
 digamma,17,0,0,17,0,bf16 f32 fp32,directly_tested,17 direct test references
 div,13,2,2,15,0,bf16 f16 f32 fp16 fp32,directly_tested,15 direct test references
-dropout,59,17,5,76,0,bf16 f32 f64 fp32 fp64 fp8_e4m3,directly_tested,76 direct test references
+dropout,59,28,5,87,0,bf16 f32 f64 fp32 fp64 fp8_e4m3,directly_tested,87 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
@@ -396,7 +396,7 @@ rng_multinomial,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_normal,11,3,0,14,0,fp32,directly_tested,14 direct test references
 rng_permutation,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_philox_normal,4,0,1,4,0,,directly_tested,4 direct test references
-rng_philox_uniform,4,0,0,4,0,f32,directly_tested,4 direct test references
+rng_philox_uniform,4,1,0,5,0,f32,directly_tested,5 direct test references
 rng_poisson,3,0,0,3,0,,directly_tested,3 direct test references
 rng_randint,3,0,0,3,0,,directly_tested,3 direct test references
 rng_split,3,0,0,3,0,,directly_tested,3 direct test references

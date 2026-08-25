@@ -43,6 +43,8 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SHA256.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -84,11 +86,17 @@ constexpr const char *kRecordedProductClass =
 constexpr const char *kRecordedProductDigest =
     "tessera.recorded_product.digest";
 
+// Reject a product we cannot VERIFY. Checking the class string and the
+// digest's length would admit any hand-written 64-character value — the
+// gate's own positive fixture used "1111…" and was accepted — so a corrupted
+// or fabricated carrier could walk through the fail-closed reproducibility
+// check (PR #630 review). The carrier is therefore validated as a CHAIN:
+//   sha256(payload) == digest, and the payload says it belongs to THIS op,
+//   in this class, under the schema this compiler understands.
+// Breaking any link changes a hash, so a product cannot be pasted between
+// operations or edited in place.
 bool carriesKeyedRngProduct(mlir::Operation *op) {
-  auto cls = op->getAttrOfType<mlir::StringAttr>(kRecordedProductClass);
-  auto digest = op->getAttrOfType<mlir::StringAttr>(kRecordedProductDigest);
-  return cls && cls.getValue() == "keyed_rng" && digest &&
-         digest.getValue().size() == 64;
+  return tessera::carriesVerifiedRecordedProduct(op, "keyed_rng");
 }
 
 // Diagnose precisely why a stochastic op cannot enter the region. Returns
@@ -114,11 +122,10 @@ bool admitStochasticOp(mlir::Operation *op) {
            "only `keyed_rng` does";
     return false;
   }
-  if (!carriesKeyedRngProduct(op)) {
-    op->emitError()
-        << "AUTODIFF_STOCHASTIC_NO_PRODUCT: stochastic op " << op->getName()
-        << " declares a keyed_rng product without a 64-character content "
-           "digest; the product is not addressable and cannot be verified";
+  std::string failure = tessera::recordedProductFailure(op, "keyed_rng");
+  if (!failure.empty()) {
+    op->emitError() << "AUTODIFF_STOCHASTIC_NO_PRODUCT: stochastic op "
+                    << op->getName() << " " << failure;
     return false;
   }
   return true;
@@ -423,8 +430,16 @@ buildCFGStateSentinel(mlir::OpBuilder &builder, mlir::Location loc,
 static bool isReplayableCFGBodyOperation(mlir::Operation &operation) {
   if (operation.hasTrait<mlir::OpTrait::IsTerminator>())
     return true;
-  if (operation.getNumRegions() == 0)
+  if (operation.getNumRegions() == 0) {
+    // Same admission as the structured region walk, from the same verifier —
+    // a keyed draw admissible in an scf.if body must be admissible in a
+    // structurized CFG body, or W4's family would depend on which of the two
+    // replayability walks happened to see it (#31).
+    if (getRegisteredSemanticEffect(&operation) == SemanticEffectLevel::Random &&
+        carriesVerifiedRecordedProduct(&operation, "keyed_rng"))
+      return true;
     return getRegisteredSemanticEffect(&operation) == SemanticEffectLevel::Pure;
+  }
   if (!llvm::isa<mlir::scf::IfOp, mlir::scf::ForOp, mlir::scf::WhileOp>(
           operation))
     return false;

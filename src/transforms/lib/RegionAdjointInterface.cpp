@@ -67,6 +67,17 @@ static bool isReplayable(Region &region) {
       if (guard && guard.getValue())
         return;
     }
+    // W4-EFFECTS-1 (PR #630 review). An effectful op that carries a VERIFIED
+    // recorded product is replayable by construction — that is what the
+    // product means. Without this, a keyed dropout admitted at the top level
+    // was still rejected the moment it appeared inside a supported scf.if /
+    // scf.for / scf.while, so the newly admitted family failed with
+    // AUTODIFF_REGION_ADJOINT under exactly the control flow W4 exists to
+    // support. The check is the SHARED one, so admission cannot diverge
+    // between a top-level op and the same op nested in a region (#31).
+    if (getRegisteredSemanticEffect(op) == SemanticEffectLevel::Random &&
+        carriesVerifiedRecordedProduct(op, "keyed_rng"))
+      return;
     if (getRegisteredSemanticEffect(op) != SemanticEffectLevel::Pure)
       replayable = false;
   });

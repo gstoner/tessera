@@ -1,4 +1,6 @@
 #include "Tessera/Transforms/SemanticEffects.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SHA256.h"
 
 #include "mlir/Interfaces/CastInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -81,6 +83,70 @@ bool isSemanticSchedulingBarrier(Operation *op) {
       return true;
 
   return getRegisteredSemanticEffect(op) != SemanticEffectLevel::Pure;
+}
+
+
+static constexpr const char *kRecordedProductClass =
+    "tessera.recorded_product.effect_class";
+static constexpr const char *kRecordedProductDigest =
+    "tessera.recorded_product.digest";
+static constexpr const char *kRecordedProductSchemaAttr =
+    "tessera.recorded_product.schema";
+static constexpr const char *kRecordedProductPayload =
+    "tessera.recorded_product.payload";
+static constexpr const char *kRecordedProductSchemaValue =
+    "tessera.recorded_product.v1";
+
+static bool isLowercaseHex64(llvm::StringRef text) {
+  if (text.size() != 64)
+    return false;
+  for (char c : text)
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+      return false;
+  return true;
+}
+
+std::string recordedProductFailure(mlir::Operation *op,
+                                   llvm::StringRef requiredClass) {
+  auto cls = op->getAttrOfType<mlir::StringAttr>(kRecordedProductClass);
+  if (!cls)
+    return "carries no recorded product";
+  if (cls.getValue() != requiredClass)
+    return ("carries a '" + cls.getValue() + "' product, not '" +
+            requiredClass + "'")
+        .str();
+  auto schema = op->getAttrOfType<mlir::StringAttr>(kRecordedProductSchemaAttr);
+  if (!schema || schema.getValue() != kRecordedProductSchemaValue)
+    return "declares no supported recorded-product schema";
+  auto digest = op->getAttrOfType<mlir::StringAttr>(kRecordedProductDigest);
+  if (!digest || !isLowercaseHex64(digest.getValue()))
+    return "has no lowercase 64-hex content digest";
+  auto payload = op->getAttrOfType<mlir::StringAttr>(kRecordedProductPayload);
+  if (!payload || payload.getValue().empty())
+    return "carries a digest but not the payload it addresses, so the "
+           "product cannot be verified";
+  llvm::SHA256 hasher;
+  hasher.update(payload.getValue());
+  if (llvm::toHex(hasher.final(), /*LowerCase=*/true) != digest.getValue())
+    return "payload does not hash to its declared digest; the recorded "
+           "product is not the one addressed";
+  // The payload must describe THIS operation, in THIS class: otherwise a
+  // valid product could be copied from another op and still verify.
+  std::string opNeedle = ("\"op\":\"" + op->getName().getStringRef() + "\"").str();
+  if (!payload.getValue().contains(opNeedle))
+    return ("payload does not name " + op->getName().getStringRef() +
+            "; a product recorded for another operation cannot admit this one")
+        .str();
+  std::string classNeedle =
+      ("\"effect_class\":\"" + requiredClass + "\"").str();
+  if (!payload.getValue().contains(classNeedle))
+    return "payload's effect class disagrees with the declared attribute";
+  return {};
+}
+
+bool carriesVerifiedRecordedProduct(mlir::Operation *op,
+                                    llvm::StringRef requiredClass) {
+  return recordedProductFailure(op, requiredClass).empty();
 }
 
 } // namespace tessera

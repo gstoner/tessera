@@ -475,24 +475,56 @@ def mutation_product_for_buffer(
     )
 
 
-def verify_recorded_state(recorded: RecordedProduct, buffer: Any) -> None:
-    """Check (R) for a mutation: the bytes at replay are the bytes recorded.
+def verify_recorded_state(
+    recorded: RecordedProduct,
+    buffer: Any,
+    *,
+    lineage_id: str,
+    version: int,
+) -> None:
+    """Check (R) for a mutation: the SAME state object, at the SAME version,
+    holding the SAME bytes.
 
-    Rejects the case metadata identity cannot see — an unchanged lineage id
-    and version over CHANGED bytes.
+    All three, and the identity half is not optional (PR #630 review). Digest
+    equality alone answers "do these bytes match what was recorded" — a
+    weaker question than the one (R) asks. Two distinct states can hold equal
+    bytes: a freshly zeroed Adam moment and a different parameter's zeroed
+    moment are byte-identical, as is the same buffer one step before and after
+    a no-op update. A content-only check calls those replays faithful, so a
+    replay that reattached the recorded product to the WRONG buffer, or to the
+    right buffer at the wrong version, verified clean. Requiring the caller to
+    name the lineage and version it is replaying makes that unstatable rather
+    than merely unlikely, and no default is offered because a defaulted
+    identity is the permissive answer to a semantic question (#21a).
+
+    The two directions are separate defects and get separate messages:
+      * identity mismatch — right bytes, wrong object (or wrong version);
+      * content mismatch  — right object, drifted bytes.
     """
     if recorded.effect_class != "recorded_mutation":
         raise RecordedProductError(
             f"{recorded.op}: verify_recorded_state applies to "
             f"recorded_mutation, not {recorded.effect_class}"
         )
+
+    recorded_lineage = str(recorded.product["lineage_id"])
+    recorded_version = int(recorded.product["version"])
+    if str(lineage_id) != recorded_lineage or int(version) != recorded_version:
+        raise RecordedProductError(
+            f"{recorded.op}: product records lineage {recorded_lineage!r} "
+            f"version {recorded_version}, but replay presented lineage "
+            f"{str(lineage_id)!r} version {int(version)}; the bytes are not "
+            f"the question — a product only speaks for the state it recorded, "
+            f"so this replay is unverified even if the contents happen to "
+            f"agree (reproducibility)"
+        )
+
     actual = content_digest(buffer)
     expected = str(recorded.product["content_digest"])
     if actual != expected:
         raise RecordedProductError(
-            f"{recorded.op}: recorded state for lineage "
-            f"{recorded.product['lineage_id']} version "
-            f"{recorded.product['version']} hashes to {actual[:12]}… but the "
+            f"{recorded.op}: recorded state for lineage {recorded_lineage} "
+            f"version {recorded_version} hashes to {actual[:12]}… but the "
             f"product recorded {expected[:12]}…; the identity matched while "
             f"the VALUE changed, so replay would not reproduce the recorded "
             f"execution (reproducibility)"

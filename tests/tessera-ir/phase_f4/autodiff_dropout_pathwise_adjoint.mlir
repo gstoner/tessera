@@ -1,4 +1,4 @@
-// RUN: tessera-opt --tessera-autodiff-paired %s -split-input-file | FileCheck %s
+// RUN: tessera-opt --tessera-autodiff-paired %s | FileCheck %s
 
 // W4-EFFECTS-1 slice E2b — the pathwise adjoint of a KEYED dropout.
 //
@@ -9,6 +9,11 @@
 // cotangent: dx = dropout(dout, same key). That is only sound because the
 // draw REPLAYS from the key — verified numerically in
 // tests/unit/test_recorded_product.py (J v == diag(m) v bitwise).
+//
+// The recorded product here is a REAL one, emitted by the E1 carrier: its
+// digest is the sha256 of the payload beside it, and the payload names this
+// operation. The pass recomputes both, so a fabricated digest cannot admit
+// an op (PR #630 review).
 
 module {
   func.func @keyed_dropout(%x: tensor<4xf32>) -> tensor<4xf32>
@@ -16,21 +21,17 @@ module {
     %y = "tessera.dropout"(%x) {
       p = 2.500000e-01 : f64, seed = 7 : i64,
       tessera.effect_kind = "random", training = true,
-      tessera.recorded_product.effect_class = "keyed_rng",
-      tessera.recorded_product.digest = "1111111111111111111111111111111111111111111111111111111111111111"
+      tessera.recorded_product.schema = "tessera.recorded_product.v1", tessera.recorded_product.effect_class = "keyed_rng", tessera.recorded_product.digest = "d12f47730f725eeabca93e9fc56c0650b0e518c5597dc8b7334d05728bb71f11", tessera.recorded_product.payload = "{\"effect_class\":\"keyed_rng\",\"op\":\"tessera.dropout\",\"op_occurrence\":\"bb0.op0\",\"product\":{\"dtype\":\"f32\",\"key\":{\"counter\":0,\"seed\":7},\"shape\":[4]},\"schema\":\"tessera.recorded_product.v1\",\"write_set\":[]}"
     } : (tensor<4xf32>) -> tensor<4xf32>
     return %y : tensor<4xf32>
   }
 }
 
-// The region is admitted — neither refusal fires — and a paired backward exists.
 // CHECK-LABEL: func.func @keyed_dropout(
 // CHECK-SAME: tessera.autodiff.paired = @keyed_dropout__bwd
 // CHECK-NOT: AUTODIFF_STOCHASTIC
 // CHECK-NOT: AUTODIFF_OP_NOT_DIFFERENTIABLE
 
-// The backward applies the SAME keyed draw to the cotangent: same seed, same
-// probability. A different key here would silently produce a wrong gradient.
 // CHECK-LABEL: func.func @keyed_dropout__bwd(
 // CHECK-SAME: tessera.autodiff.role = "backward"
 // CHECK: tessera.dropout %arg1

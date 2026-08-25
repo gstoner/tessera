@@ -523,17 +523,51 @@ def test_replay_rejects_changed_bytes_under_an_unchanged_identity():
         op="tessera.optimizer_step", occurrence_id="bb0.op1",
         lineage_id="a" * 64, version=3, buffer=moment, write_set=("moment",))
 
-    verify_recorded_state(recorded, moment)              # unchanged: fine
-    verify_recorded_state(recorded, moment.copy())       # equal bytes: fine
+    at = dict(lineage_id="a" * 64, version=3)
+    verify_recorded_state(recorded, moment, **at)        # unchanged: fine
+    verify_recorded_state(recorded, moment.copy(), **at)  # equal bytes: fine
 
     drifted = moment.copy()
     drifted[2, 3] = 1e-7                                 # one element
     with pytest.raises(RecordedProductError, match="the VALUE changed"):
-        verify_recorded_state(recorded, drifted)
+        verify_recorded_state(recorded, drifted, **at)
 
     # a different buffer of the SAME metadata shape/dtype is equally rejected
     with pytest.raises(RecordedProductError, match="the VALUE changed"):
-        verify_recorded_state(recorded, np.ones((4, 8), dtype=np.float32))
+        verify_recorded_state(recorded, np.ones((4, 8), dtype=np.float32), **at)
+
+
+def test_replay_rejects_the_right_bytes_under_the_wrong_identity():
+    """PR #630 review, P2 — the other direction, which a content-only check
+    cannot see at all.
+
+    Zero-initialised optimizer state is the everyday instance: every lineage's
+    first moment is the same bytes, so a content digest cannot distinguish
+    them. If a replay reattaches a product to the wrong buffer — or to the
+    right buffer at the wrong version — the digests agree and the old check
+    called the replay faithful, which is precisely the claim it must not make.
+    """
+    import numpy as np
+
+    from tessera.compiler.recorded_product import (
+        mutation_product_for_buffer,
+        verify_recorded_state,
+    )
+
+    mine = np.zeros((4, 8), dtype=np.float32)
+    theirs = np.zeros((4, 8), dtype=np.float32)      # a DIFFERENT state...
+    recorded = mutation_product_for_buffer(
+        op="tessera.optimizer_step", occurrence_id="bb0.op1",
+        lineage_id="a" * 64, version=3, buffer=mine, write_set=("moment",))
+
+    from tessera.compiler.recorded_product import content_digest
+    assert content_digest(mine) == content_digest(theirs)  # ...same bytes
+
+    with pytest.raises(RecordedProductError, match="lineage"):
+        verify_recorded_state(recorded, theirs, lineage_id="b" * 64, version=3)
+    # right lineage, wrong version — a no-op update leaves bytes identical
+    with pytest.raises(RecordedProductError, match="version"):
+        verify_recorded_state(recorded, mine, lineage_id="a" * 64, version=4)
 
 
 def test_mutation_replay_is_bit_identical_end_to_end():
@@ -564,12 +598,13 @@ def test_mutation_replay_is_bit_identical_end_to_end():
     replay_param, replay_moment = step(param, grad, moment)
     assert np.array_equal(new_param, replay_param)
     assert np.array_equal(new_moment, replay_moment)
-    verify_recorded_state(recorded, replay_moment)       # the product agrees
+    at = dict(lineage_id="a" * 64, version=1)
+    verify_recorded_state(recorded, replay_moment, **at)  # the product agrees
 
     # a replay that started from the wrong version state is caught
     _, wrong = step(param, grad, moment + np.float32(1e-6))
     with pytest.raises(RecordedProductError, match="the VALUE changed"):
-        verify_recorded_state(recorded, wrong)
+        verify_recorded_state(recorded, wrong, **at)
 
 
 def test_verify_recorded_state_rejects_the_wrong_effect_class():
@@ -578,7 +613,8 @@ def test_verify_recorded_state_rejects_the_wrong_effect_class():
     import numpy as np
 
     with pytest.raises(RecordedProductError, match="applies to"):
-        verify_recorded_state(_rng(), np.zeros(4, dtype=np.float32))
+        verify_recorded_state(_rng(), np.zeros(4, dtype=np.float32),
+                              lineage_id="a" * 64, version=0)
 
 
 # ── E4: ordered collectives — order AND tree ────────────────────────────────

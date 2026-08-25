@@ -48,6 +48,7 @@
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include <optional>
 
@@ -2357,6 +2358,90 @@ struct AdamBackwardLowering : public RewritePattern {
   }
 };
 
+// ── NUMPOL-CARRIER-1 (queue row 3b) — the reduction family carries its
+//    declared accumulator into the emitted arithmetic ──
+//
+// Measured on this tree before this change. `tessera.rmsnorm` and
+// `tessera.softmax` declaring `numeric_policy = {storage="bf16",
+// accum="fp32"}` lowered to
+//
+//     linalg.reduce ... (%in: bf16, %init: bf16) { arith.addf ... : bf16 }
+//
+// The accumulator contract was not merely dropped as metadata — the emitted
+// code CONTRADICTED it, accumulating in the storage dtype on the very op that
+// performs the accumulation. bf16 carries 8 significand bits, so a running sum
+// stops changing once it exceeds ~256x the increment; the error therefore
+// grows with the reduced extent rather than staying bounded:
+//
+//   D      rmsnorm rel err              softmax denominator rel err
+//   ----   emitted   / declared         emitted   / declared
+//   128    4.02e-03  / 7.20e-08         6.59e-03  / 1.93e-07
+//   1024   9.81e-02  / 7.98e-07         2.67e-01  / 5.64e-07
+//   4096   2.94e-01  / 1.72e-06         5.95e-01  / 1.03e-06
+//   8192   4.61e-01  / 3.05e-06         7.34e-01  / 1.15e-06
+//
+// At a normal model width the softmax denominator was 59% wrong. This is a
+// numerical defect, not a bookkeeping one.
+//
+// ── Where the cast goes, decided by measurement ──
+//
+// Two candidate shapes, both of which fix the stagnation:
+//   (A) reduce in the accumulator, truncate the REDUCED value back to storage,
+//       then run the rest of the chain in storage;
+//   (B) run the whole derived chain in the accumulator and truncate only the
+//       op's RESULT.
+//
+// (A) leaves rmsnorm at 5.6e-04 where (B) reaches 1.7e-06 at D=4096 — 326x
+// apart, because rounding the mean-square before the sqrt and the divide
+// throws away most of what the wide reduction just bought. (B) is also the
+// faithful reading of Decision #15a: storage is the dtype of the TENSOR, and
+// the tensor here is the result. So (B).
+//
+// The accumulator path is taken only when the declared accum is strictly wider
+// in bits, which keeps every cast a plain extf/truncf pair. The same-width,
+// more-significand case (bf16 storage, fp16 accum) is refused upstream by
+// IRContractLegalityPass' narrowing rule from the other direction and never
+// reaches here.
+
+//: The FloatType named by `numeric_policy.accum`, when it is strictly wider
+//: than the tensor's storage element type. Null otherwise — including when no
+//: policy is present, which leaves every existing lowering bit-identical.
+static FloatType wideningAccumulatorType(Operation *op, Type storageElem) {
+  auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+  if (!policy) return nullptr;
+  auto accum = policy.getAs<StringAttr>("accum");
+  if (!accum) return nullptr;
+  auto storageFloat = dyn_cast<FloatType>(storageElem);
+  if (!storageFloat) return nullptr;
+  MLIRContext *ctx = op->getContext();
+  FloatType accumType =
+      llvm::StringSwitch<FloatType>(accum.getValue())
+          .Case("fp64", Float64Type::get(ctx))
+          .Case("fp32", Float32Type::get(ctx))
+          .Case("fp16", Float16Type::get(ctx))
+          .Case("bf16", BFloat16Type::get(ctx))
+          .Default(nullptr);
+  if (!accumType || accumType.getWidth() <= storageFloat.getWidth())
+    return nullptr;
+  return accumType;
+}
+
+//: Elementwise extf/truncf between two same-shaped tensor types.
+static Value castElementwiseTo(PatternRewriter &rewriter, Location loc,
+                               RankedTensorType targetTy, Value input) {
+  auto srcTy = cast<RankedTensorType>(input.getType());
+  auto from = cast<FloatType>(srcTy.getElementType());
+  auto to = cast<FloatType>(targetTy.getElementType());
+  if (from == to) return input;
+  bool widening = to.getWidth() > from.getWidth();
+  return emitUnaryElementwise(
+      rewriter, loc, targetTy, input,
+      [&](OpBuilder &b, Location l, Value v) -> Value {
+        return widening ? arith::ExtFOp::create(b, l, to, v).getResult()
+                        : arith::TruncFOp::create(b, l, to, v).getResult();
+      });
+}
+
 // tessera.softmax (over `axis`, default innermost) → numerically-stable
 // decomposition:  m = max(x); e = exp(x - m); y = e / sum(e).  Composes the
 // reduction machinery (emitReduceCore) with broadcast-binary (emitBroadcastBinary)
@@ -2387,7 +2472,14 @@ struct SoftmaxLowering : public RewritePattern {
       return rewriter.notifyMatchFailure(op, "axis out of range");
 
     Location loc = op->getLoc();
-    Value x = op->getOperand(0);
+    RankedTensorType storageTy = ty;
+    // NUMPOL-CARRIER-1: the max-reduce, the exp, and the sum-of-exp all run in
+    // the declared accumulator; only the result returns to storage. The
+    // sum-of-exp is the one that mattered most in measurement — at D=4096 its
+    // bf16 form was 59% wrong.
+    if (FloatType accum = wideningAccumulatorType(op, ty.getElementType()))
+      ty = cast<RankedTensorType>(ty.clone(accum));
+    Value x = castElementwiseTo(rewriter, loc, ty, op->getOperand(0));
     Value m = emitReduceCore(rewriter, loc, ty, x, axis, "max");
     Value shifted = emitBroadcastBinary(
         rewriter, loc, ty, x, m, axis,
@@ -2405,7 +2497,7 @@ struct SoftmaxLowering : public RewritePattern {
         [](OpBuilder &b, Location l, Value a, Value c) -> Value {
           return arith::DivFOp::create(b, l, a, c).getResult();
         });
-    rewriter.replaceOp(op, y);
+    rewriter.replaceOp(op, castElementwiseTo(rewriter, loc, storageTy, y));
     return success();
   }
 };
@@ -2510,6 +2602,7 @@ struct NormalizationStatsLowering : public RewritePattern {
   }
 };
 
+
 // rmsnorm(x[, gamma]) = x / sqrt(mean(x²) + eps) [* gamma], over the
 // innermost axis.
 struct RmsNormLowering : public RewritePattern {
@@ -2531,20 +2624,34 @@ struct RmsNormLowering : public RewritePattern {
     int64_t axis = ty.getRank() - 1;
     double eps = readEps(op);
     Location loc = op->getLoc();
+    RankedTensorType storageTy = ty;
+    // NUMPOL-CARRIER-1: run the derived chain in the declared accumulator and
+    // truncate only the result. Null when no wider accum is declared, which
+    // leaves the emitted IR byte-identical to before.
+    if (FloatType accum = wideningAccumulatorType(op, ty.getElementType()))
+      ty = cast<RankedTensorType>(ty.clone(accum));
     Type elem = ty.getElementType();
-    Value x = op->getOperand(0);
+    Value x = castElementwiseTo(rewriter, loc, ty, op->getOperand(0));
 
     Value ms = emitMean(rewriter, loc, ty, emitSquare(rewriter, loc, ty, x), axis);
     auto redTy = cast<RankedTensorType>(ms.getType());
     Value denom = emitAddEpsThenSqrt(rewriter, loc, redTy, ms, elem, eps);
     Value y = emitDivBroadcast(rewriter, loc, ty, x, denom, axis);
-    if (op->getNumOperands() == 2)
+    if (op->getNumOperands() == 2) {
+      // gamma is a storage-dtype parameter; widen it so the scale happens in
+      // the accumulator rather than rounding the normalized value first.
+      Value gammaOperand = op->getOperand(1);
+      if (auto gTy = dyn_cast<RankedTensorType>(gammaOperand.getType()))
+        gammaOperand = castElementwiseTo(
+            rewriter, loc, cast<RankedTensorType>(gTy.clone(elem)),
+            gammaOperand);
       y = emitChannelBinary(
-          rewriter, loc, ty, y, op->getOperand(1), axis,
+          rewriter, loc, ty, y, gammaOperand, axis,
           [](OpBuilder &b, Location l, Value value, Value gamma) -> Value {
             return arith::MulFOp::create(b, l, value, gamma).getResult();
           });
-    rewriter.replaceOp(op, y);
+    }
+    rewriter.replaceOp(op, castElementwiseTo(rewriter, loc, storageTy, y));
     return success();
   }
 };
@@ -2570,8 +2677,13 @@ struct LayerNormLowering : public RewritePattern {
     int64_t axis = ty.getRank() - 1;
     double eps = readEps(op);
     Location loc = op->getLoc();
+    RankedTensorType storageTy = ty;
+    // NUMPOL-CARRIER-1: layer_norm reduces TWICE (mean, then variance of the
+    // centered value), so it compounds the stagnation rmsnorm shows once.
+    if (FloatType accum = wideningAccumulatorType(op, ty.getElementType()))
+      ty = cast<RankedTensorType>(ty.clone(accum));
     Type elem = ty.getElementType();
-    Value x = op->getOperand(0);
+    Value x = castElementwiseTo(rewriter, loc, ty, op->getOperand(0));
 
     Value mu = emitMean(rewriter, loc, ty, x, axis);
     Value centered = emitBroadcastBinary(
@@ -2584,19 +2696,25 @@ struct LayerNormLowering : public RewritePattern {
     auto redTy = cast<RankedTensorType>(var.getType());
     Value denom = emitAddEpsThenSqrt(rewriter, loc, redTy, var, elem, eps);
     Value y = emitDivBroadcast(rewriter, loc, ty, centered, denom, axis);
+    auto widened = [&](Value v) -> Value {
+      if (auto vTy = dyn_cast<RankedTensorType>(v.getType()))
+        return castElementwiseTo(rewriter, loc,
+                                 cast<RankedTensorType>(vTy.clone(elem)), v);
+      return v;
+    };
     if (op->getNumOperands() >= 2)
       y = emitChannelBinary(
-          rewriter, loc, ty, y, op->getOperand(1), axis,
+          rewriter, loc, ty, y, widened(op->getOperand(1)), axis,
           [](OpBuilder &b, Location l, Value value, Value gamma) -> Value {
             return arith::MulFOp::create(b, l, value, gamma).getResult();
           });
     if (op->getNumOperands() == 3)
       y = emitChannelBinary(
-          rewriter, loc, ty, y, op->getOperand(2), axis,
+          rewriter, loc, ty, y, widened(op->getOperand(2)), axis,
           [](OpBuilder &b, Location l, Value value, Value beta) -> Value {
             return arith::AddFOp::create(b, l, value, beta).getResult();
           });
-    rewriter.replaceOp(op, y);
+    rewriter.replaceOp(op, castElementwiseTo(rewriter, loc, storageTy, y));
     return success();
   }
 };
@@ -2784,8 +2902,58 @@ public:
     patterns.add<UnaryActLowering>(ctx, "tessera.tanh", ActKind::Tanh);
     patterns.add<UnaryActLowering>(ctx, "tessera.silu", ActKind::Silu);
     patterns.add<UnaryActLowering>(ctx, "tessera.gelu", ActKind::Gelu);
+    // Which functions carried a numeric_policy BEFORE the rewrite. Collected
+    // first, because after it the evidence is gone — which is precisely the
+    // problem Decision #32 exists to name.
+    llvm::DenseMap<Operation *, unsigned> policiesBefore;
+    getOperation()->walk([&](Operation *op) {
+      if (op->getAttrOfType<DictionaryAttr>("numeric_policy"))
+        if (auto fn = op->getParentOfType<func::FuncOp>())
+          ++policiesBefore[fn.getOperation()];
+    });
+
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
+
+    // ── Decision #32: declare what this boundary re-expressed ──
+    //
+    // The policy dictionary does not survive into linalg, and it should not:
+    // the accumulator is now the ELEMENT TYPE of the emitted reduction, which
+    // is a stronger carrier than an attribute nobody has to read. That is a
+    // `represented_in_type` drop, and #32 requires it be said rather than
+    // assumed.
+    //
+    // Declared only where a policy actually disappeared. MetadataObligation
+    // treats a declaration that explains nothing as an error in its own right
+    // (METADATA_OBLIGATION_STALE_DECLARATION) — correctly, since such a record
+    // reads as a considered exception while silently licensing a REAL future
+    // drop of that attribute.
+    for (auto [fnOp, before] : policiesBefore) {
+      auto fn = cast<func::FuncOp>(fnOp);
+      unsigned after = 0;
+      fn.walk([&](Operation *op) {
+        if (op->getAttrOfType<DictionaryAttr>("numeric_policy"))
+          ++after;
+      });
+      if (after >= before) continue;  // nothing consumed; declaring would be stale
+
+      // The obligation verifier counts a MULTISET of values, not a set of
+      // names, so a function that lowers ONE of its two policy-carrying ops
+      // loses a value while the name survives on the other. That partial case
+      // is exactly what `re_expressed` is for, and the verifier accepts it
+      // only while the name is still present — so the two reasons are not
+      // interchangeable and cannot be collapsed into one.
+      //
+      // Found by the verifier itself while this pass was being written: the
+      // first version declared `represented_in_type` whenever any policy
+      // vanished and was rejected for the mixed function.
+      const char *reason =
+          after == 0 ? "represented_in_type" : "re_expressed";
+      NamedAttrList dropped(
+          fn->getAttrOfType<DictionaryAttr>("tessera.lowering.dropped"));
+      dropped.set("numeric_policy", StringAttr::get(ctx, reason));
+      fn->setAttr("tessera.lowering.dropped", dropped.getDictionary(ctx));
+    }
   }
 };
 

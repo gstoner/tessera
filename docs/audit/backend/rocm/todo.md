@@ -4616,3 +4616,35 @@ existing shared spectral and native-product contracts with CUDA-owned cuFFT and
 Philox consumers. gfx1151 retains its Stockham/Bluestein, compound spectral,
 spectral backward, and Philox packages and exact-device evidence. No CUDA plan,
 workspace, or schedule is transferred to ROCm.
+
+
+Cross-backend sync `NUMPOL-CARRIER-1-SCHEMA-AND-REDUCTION-2026-08-25` — **the
+policy gets a schema and the reduction family carries its accumulator;
+ROCm outcome: follow-up required — ROCm still owns the worked reference.** Two measured defects closed, both shared,
+neither architecture-specific.
+
+*Schema.* `numeric_policy` was a bare `DictionaryAttrBase` whose ODS predicate
+checked only "is a dictionary". Measured before the change: five malformed
+policies were all ACCEPTED while the documented TF32-as-storage violation
+correctly failed, so the pass was running and simply had nothing to say. The
+sharpest was a typo — `getAs<StringAttr>("accum")` returns null for a
+misspelled key exactly as for an absent one, so an op carried a policy that
+looked like it stated an accumulator contract and stated none. Seven new
+diagnostics now refuse unknown keys, non-string values, unknown dtypes/modes, a
+math_mode that does not reduce its storage, and an accumulator NARROWER in
+significand bits than its storage.
+
+*Reduction carrier.* `{storage="bf16", accum="fp32"}` on rmsnorm / softmax /
+layer_norm lowered to `arith.addf … : bf16` — the emitted code contradicted the
+declared contract on the very op that performs the accumulation. Executed on
+Zen 5 through `--tessera-to-linalg` → LLVM → native object: a 4096-wide softmax
+row summed to **1.466** (a 47% violation of the function's defining property)
+versus **1.000169** once the declared accumulator is honoured. The whole
+derived chain now runs in the accumulator with a single truncation at the
+result — chosen by measurement over truncating the reduced value, which is 326x
+worse. With no policy the emitted IR is byte-identical, so nothing widens
+without being asked. The Graph→Linalg boundary is now bracketed by the
+Decision #32 record/verify pair and declares `represented_in_type` /
+`re_expressed`.
+
+gfx1151 exposure: the executed evidence above is Zen 5 CPU and transfers no AMD claim. The W1.1 `!tile.fragment<…, acc, …>` route is untouched by this slice and its re-expression as an instance of the general carrier — with bit-identical gfx1151 output as the bar — remains the open half of row 3b.

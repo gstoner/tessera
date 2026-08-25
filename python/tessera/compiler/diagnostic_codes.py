@@ -953,6 +953,101 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
 
     # ── async_copy/wait_async single-contract reconciliation (2026-08-10) ──
     DiagnosticCode(
+        code="NUMERIC_POLICY_MATH_MODE_NOT_REDUCING",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "numeric_policy.math_mode names an arithmetic at least as precise "
+            "as the storage it claims to reduce, so it rounds nothing."
+        ),
+        fix_hint=(
+            "A math mode is a NARROWER arithmetic performed on wider storage. "
+            'TF32 (11 significand bits) is an fp32 mode; on bf16 storage (8) '
+            "it is a no-op. Drop it, or widen storage. See Decision #15a."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
+        code="NUMERIC_POLICY_NARROWING_ACCUM",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "numeric_policy declares an accumulator with fewer significand "
+            "bits than its storage, which is strictly dominated at its own "
+            "bit budget and makes the wider storage unobservable."
+        ),
+        fix_hint=(
+            "Widen accum to at least the storage dtype, or narrow storage to "
+            "the accum dtype and keep the bandwidth. Measured: at 48 dtype "
+            "bits, fp16/fp32 is 25.8x more accurate than fp32/fp16, and the "
+            "fp32/bf16 result is bit-identical to bf16/bf16."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
+        code="NUMERIC_POLICY_NON_STRING_VALUE",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "A numeric_policy entry holds a non-string value, which reads "
+            "back as ABSENT through StringAttr lookup."
+        ),
+        fix_hint="Write the dtype or mode as a quoted name.",
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
+        code="NUMERIC_POLICY_UNKNOWN_ACCUM",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary="numeric_policy.accum is not a known accumulator dtype.",
+        fix_hint=(
+            "Use fp64/fp32/fp16/bf16 or int64/int32/int16/int8. Sub-8-bit "
+            "formats are storage dtypes, not accumulators."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
+        code="NUMERIC_POLICY_UNKNOWN_KEY",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "numeric_policy contains a key no Tessera contract defines — the "
+            "way a misspelling becomes a silently absent semantic contract."
+        ),
+        fix_hint=(
+            "Legal keys: storage, accum, math_mode, rounding_mode, softmax. "
+            "A typo'd `accum` leaves the op with no accumulator contract "
+            "while appearing to state one (Decisions #15a/#21a)."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
+        code="NUMERIC_POLICY_UNKNOWN_MATH_MODE",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary="numeric_policy.math_mode is outside the declared legal set.",
+        fix_hint="Use ieee, default, tf32, bf16x3 or fp16x2.",
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
+        code="NUMERIC_POLICY_UNKNOWN_ROUNDING_MODE",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary="numeric_policy.rounding_mode is outside the declared legal set.",
+        fix_hint=(
+            "Use round_to_nearest_even/_away, round_toward_zero/_positive/"
+            "_negative, or stochastic."
+        ),
+        spec="python/tessera/compiler/rounding.py",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
         code="TILE_ASYNC_STAGE_NEGATIVE",
         pass_origin="AsyncCopyOp::verify / WaitAsyncOp::verify",
         severity="error",

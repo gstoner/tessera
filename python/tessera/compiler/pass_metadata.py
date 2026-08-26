@@ -585,6 +585,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(
             "NUMERIC_POLICY_MATH_MODE_NOT_REDUCING",
             "NUMERIC_POLICY_NARROWING_ACCUM",
+            "NUMERIC_POLICY_NOT_A_DICTIONARY",
             "NUMERIC_POLICY_NON_STRING_VALUE",
             "NUMERIC_POLICY_UNKNOWN_ACCUM",
             "NUMERIC_POLICY_UNKNOWN_KEY",

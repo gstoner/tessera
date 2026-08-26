@@ -215,8 +215,36 @@ struct IRContractLegality
 
   // ── Dtype: numeric_policy storage/accum coupling ──
   static LogicalResult checkNumericPolicy(Operation *op) {
-    auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
-    if (!policy) return success();
+    Attribute rawPolicy = op->getAttr("numeric_policy");
+    if (!rawPolicy) return success();
+    auto policy = llvm::dyn_cast<DictionaryAttr>(rawPolicy);
+    if (!policy) {
+      // NUMPOL-CARRIER-1 (queue row 3b). `getAttrOfType<DictionaryAttr>`
+      // returns null for a WRONGLY TYPED attribute exactly as it does for an
+      // absent one, so a numeric_policy that was not a dictionary used to be
+      // skipped in silence by this checker AND by every consumer of the
+      // attribute. Measured: the spectral scheduler emitted
+      // `numeric_policy = "f32;ortho"` — a StringAttr holding a private
+      // semicolon-delimited encoding — and it was invisible to all of them.
+      // (That contract has been renamed to tessera.spectral_accumulation /
+      // tessera.spectral_normalization, since a reduction-ORDER contract is
+      // not a Decision #15a numeric_policy: its value could be
+      // "deterministic_f32_ascending_frames", which is not a dtype at all.)
+      //
+      // Refusing here is what stops the collision recurring. One attribute
+      // name must mean one thing, or its consumers are reading a different
+      // contract than its producers wrote (#31).
+      auto diag = op->emitOpError(
+          "NUMERIC_POLICY_NOT_A_DICTIONARY: numeric_policy must be a "
+          "dictionary of {storage, accum, math_mode, rounding_mode, softmax}");
+      diag << ", got " << rawPolicy << ".";
+      diag.attachNote()
+          << "A wrongly typed attribute reads back as ABSENT through every "
+             "consumer's DictionaryAttr lookup, so an unrelated contract "
+             "parked under this name is not merely unchecked — it is "
+             "invisible. Give a different contract a different name.";
+      return failure();
+    }
 
     // ── Schema first: every key known, every value a string ──
     // These run BEFORE the storage lookup, because the old early return on a

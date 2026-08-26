@@ -178,11 +178,45 @@ not on the grounds that the instruction exists. (b) `math_mode` still has NO
 MLIR consumer: measured, it appears in C++ only inside a rejection message,
 while `mma_selector.py` / `nvidia_dtype_contract.py` consume it on the Python
 side. A semantic key with no consumer below the frontend is Decision #29's
-case, and it is the NVIDIA half of this row. (c) The FORGE §1.3 realizability
-verdict — the row's stated acceptance target — needs the carried `accum` x
-state dtype to reach the point where the decision is made; the schema and the
-reduction carrier are its precondition, not its delivery. (d) Butterfly /
-pointwise chains beyond the reduction family.
+case, and it is the NVIDIA half of this row. (c) **Closed.** The FORGE §1.3
+realizability verdict lives in `compiler/precision_realizability.py`, decided
+from the carried policy plus the state dtypes. Reproducing §1.3 first caught a
+modelling error of my own: rounding the gradient to the MASTER dtype is a
+no-op for fp32 masters, so all three rows came back 1.0x. The gradient's
+storage write is bf16 in mixed precision, and that write is what the fusion
+removes. Corrected, the structure reproduces — 208x / 1.2x / 1.0x against the
+assessment's 913x / 1.1x / 1.0x: the masked rows match closely, the unmasked
+row agrees in kind but not magnitude. **That asymmetry set the interface.**
+The oracle puts a number on the question it can answer soundly — is the
+benefit masked? — and refuses to number the unmasked case, whose size depends
+on gradient distribution and step count a compiler does not know. A diagnostic
+promising 913x and delivering 208x would be worse than one saying "large;
+measure it". Its tests re-derive the table by RUNNING the training loop, so a
+wrong oracle fails even when it agrees with the write-up.
+
+(d) **Not what the row assumed.** No pointwise op and no spectral/butterfly op
+declares `numeric_policy` at all, so there was nothing to carry. For pointwise
+that is correct: there is no accumulation, so `accum` is meaningless. For the
+butterfly chain it was hiding something. The spectral scheduler emitted
+`numeric_policy = "f32;ortho"` — a **StringAttr** holding a private
+semicolon-delimited encoding, under the name of a well-defined DictionaryAttr.
+Since `getAttrOfType<DictionaryAttr>` returns null for a wrongly typed
+attribute exactly as for an absent one, that contract was invisible to the
+schema validator and to every accumulator consumer — and it is not a #15a
+policy in the first place: its value can be
+`"deterministic_f32_ascending_frames"`, a reduction-ORDER contract rather than
+a dtype. Renamed to `tessera.spectral_accumulation` /
+`tessera.spectral_normalization` (349 spectral tests unchanged; the schedule
+digest is computed separately, so identities are stable), and
+`NUMERIC_POLICY_NOT_A_DICTIONARY` now refuses the wrongly typed case so the
+collision cannot recur. Ops declaring the attribute in ODS were already
+covered by its constraint; the gap was the discardable case, which is exactly
+where the spectral contract lived.
+
+**Still open on row 3b:** whether an FFT stage chain should declare an
+accumulator at all is now a clean question rather than a hidden one, and is
+not answered here; and the NVIDIA-side device proof for (a)/(b) is owed on
+NR2 Pro.
 
 ### Architecture expansion after the shared gates
 

@@ -1016,6 +1016,26 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
+        code="NUMERIC_POLICY_NOT_A_DICTIONARY",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "numeric_policy is present but is not a dictionary, so every "
+            "consumer's DictionaryAttr lookup reads it back as absent."
+        ),
+        fix_hint=(
+            "A wrongly typed attribute is invisible, not merely unchecked. "
+            "If this is a different contract, give it a different name — the "
+            "spectral reduction-order contract became "
+            "tessera.spectral_accumulation / tessera.spectral_normalization "
+            "for exactly this reason. Ops that declare numeric_policy in ODS "
+            "are already covered by the attribute constraint; this catches "
+            "the discardable case on ops that do not."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
         code="NUMERIC_POLICY_UNKNOWN_ACCUM",
         pass_origin="IRContractLegalityPass",
         severity="error",
@@ -1066,6 +1086,12 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     DiagnosticCode(
         code="NVIDIA_MATH_MODE_UNAVAILABLE",
+        # Emitted from runtime.py, not a C++ pass: the selection was
+        # deliberately extracted into a pure Python function so its contract
+        # is testable on a host with no NVIDIA device. The registry's
+        # mlir/python split keeps the C++-emission cross-check honest, and it
+        # caught this entry the first time the full sweep ran.
+        language="python",
         pass_origin="runtime._nvidia_gemm_selection",
         severity="error",
         summary=(

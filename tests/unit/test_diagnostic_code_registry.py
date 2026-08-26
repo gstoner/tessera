@@ -284,17 +284,49 @@ def test_every_python_code_is_registered() -> None:
         pytest.fail("\n".join(msg_lines))
 
 
+def _python_source_texts() -> list[str]:
+    """Raw text of every .py under python/tessera/, minus the registry itself
+    (which names every code by definition, so including it would make the
+    emission gate vacuous)."""
+    registry_file = PYTHON_TESSERA_ROOT / "compiler" / "diagnostic_codes.py"
+    texts: list[str] = []
+    for path in PYTHON_TESSERA_ROOT.rglob("*.py"):
+        if path == registry_file:
+            continue
+        try:
+            texts.append(path.read_text(errors="replace"))
+        except OSError:
+            continue
+    return texts
+
+
 def test_python_implemented_codes_appear_in_python_source() -> None:
     """Every Python-language registered code with status='implemented'
     must appear in at least one .py file.  Codes with
     status='spec_contract' are exempt — they document a TSOL contract
     that hasn't been wired into Python emission sites yet."""
-    py_codes = _scan_codes_in_python()
     implemented_python = [
         c for c in REGISTERED_CODES
         if c.language == "python" and c.status == "implemented"
     ]
-    missing = [c.code for c in implemented_python if c.code not in py_codes]
+    # Searched by EXACT registered name, not by the prefix patterns.
+    #
+    # `_scan_codes_in_python` recognises four prefixes, and its own comment
+    # records this trap biting once already: "a drift gate that cannot see a
+    # family does not report a gap in it; it reports nothing, which reads
+    # identically to compliance." For THIS direction — is a registered code
+    # actually emitted? — the registry already names every code, so prefix
+    # matching can only lose codes it has never heard of. It did:
+    # NVIDIA_MATH_MODE_UNAVAILABLE is emitted from runtime.py and matched no
+    # pattern, so the gate reported it missing from a file it is in.
+    #
+    # The prefix scan is still what finds UNREGISTERED codes (the other
+    # direction), where the registry cannot be the oracle. Both are kept.
+    sources = _python_source_texts()
+    missing = [
+        c.code for c in implemented_python
+        if not any(c.code in text for text in sources)
+    ]
     assert not missing, (
         f"Registered Python codes claimed as 'implemented' that don't "
         f"appear in any .py file: {missing}.  Either flip their status "

@@ -132,3 +132,32 @@ module {
   }
 }
 // CHECK: NUMERIC_POLICY_UNKNOWN_MATH_MODE
+
+// -----
+
+// ── a numeric_policy that is not a dictionary at all ──
+// `getAttrOfType<DictionaryAttr>` returns null for a WRONGLY TYPED attribute
+// exactly as it does for an absent one, so this used to be skipped in silence
+// by the checker AND by every consumer of the attribute. Measured: the
+// spectral scheduler emitted `numeric_policy = "f32;ortho"`, a private
+// semicolon-delimited string, and it was invisible to all of them — while
+// carrying something that is not a Decision #15a policy at all (its value
+// could be "deterministic_f32_ascending_frames", a reduction-ORDER contract,
+// not a dtype). That contract is now named tessera.spectral_accumulation /
+// tessera.spectral_normalization, and this refusal is what stops the
+// collision recurring: one attribute name means one thing, or its consumers
+// read a different contract than its producers wrote (#31).
+//
+// Ops that DECLARE numeric_policy in ODS are already covered by the attribute
+// constraint; `tessera.relu` does not declare it, so the attribute is
+// discardable here — which is precisely where the spectral case lived.
+module {
+  func.func @policy_is_a_string(%a: tensor<4xf32>) -> tensor<4xf32> {
+    // expected-error @+1 {{NUMERIC_POLICY_NOT_A_DICTIONARY}}
+    %0 = "tessera.relu"(%a) {numeric_policy = "f32;ortho"}
+      : (tensor<4xf32>) -> tensor<4xf32>
+    return %0 : tensor<4xf32>
+  }
+}
+// CHECK: NUMERIC_POLICY_NOT_A_DICTIONARY
+// CHECK-SAME: got "f32;ortho"

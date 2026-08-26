@@ -4616,3 +4616,73 @@ existing shared spectral and native-product contracts with CUDA-owned cuFFT and
 Philox consumers. gfx1151 retains its Stockham/Bluestein, compound spectral,
 spectral backward, and Philox packages and exact-device evidence. No CUDA plan,
 workspace, or schedule is transferred to ROCm.
+
+
+Cross-backend sync `NUMPOL-CARRIER-1-SCHEMA-AND-REDUCTION-2026-08-25` — **the
+policy gets a schema and the reduction family carries its accumulator;
+ROCm outcome: follow-up required — ROCm still owns the worked reference.** Two measured defects closed, both shared,
+neither architecture-specific.
+
+*Schema.* `numeric_policy` was a bare `DictionaryAttrBase` whose ODS predicate
+checked only "is a dictionary". Measured before the change: five malformed
+policies were all ACCEPTED while the documented TF32-as-storage violation
+correctly failed, so the pass was running and simply had nothing to say. The
+sharpest was a typo — `getAs<StringAttr>("accum")` returns null for a
+misspelled key exactly as for an absent one, so an op carried a policy that
+looked like it stated an accumulator contract and stated none. Seven new
+diagnostics now refuse unknown keys, non-string values, unknown dtypes/modes, a
+math_mode that does not reduce its storage, and an accumulator NARROWER in
+significand bits than its storage.
+
+*Reduction carrier.* `{storage="bf16", accum="fp32"}` on rmsnorm / softmax /
+layer_norm lowered to `arith.addf … : bf16` — the emitted code contradicted the
+declared contract on the very op that performs the accumulation. Executed on
+Zen 5 through `--tessera-to-linalg` → LLVM → native object: a 4096-wide softmax
+row summed to **1.466** (a 47% violation of the function's defining property)
+versus **1.000169** once the declared accumulator is honoured. The whole
+derived chain now runs in the accumulator with a single truncation at the
+result — chosen by measurement over truncating the reduced value, which is 326x
+worse. With no policy the emitted IR is byte-identical, so nothing widens
+without being asked. The Graph→Linalg boundary is now bracketed by the
+Decision #32 record/verify pair and declares `represented_in_type` /
+`re_expressed`.
+
+gfx1151 exposure: the executed evidence above is Zen 5 CPU and transfers no
+AMD claim.
+
+**But scoping the ROCm half turned up a Decision #29 defect on this backend,
+now closed.** For the MMA path the policy already survived to the bottom —
+`TileIRLoweringPass` puts it on `tile.mma`, `TileToROCM.cpp` carries it onto
+the `tessera_rocm.*` ops — yet all three of its uses there are
+`copyAttrIfPresent`: forwarded, never read. The accumulator that reached the
+hardware was inferred separately in `GenerateWMMAGemmKernel.cpp` as
+`fragmentAcc = T.isInt ? "i32" : "f32"`, in a file that did not mention
+`numeric_policy` at all. Two sources of truth for one fact, and the declared
+one lost; they agreed only because every real program asks for fp32.
+
+`GenerateWMMAGemmKernel` now reads the declared accum and refuses with
+`ROCM_WMMA_ACCUM_UNSUPPORTED` when it names an accumulator this path does not
+provide — never substituting f32 and reporting success for a different
+computation (#21a: `accum` decides what the program computes). Existing
+programs are untouched, proven by a real before/after control (capture,
+revert the file, rebuild, recapture): generated output is **byte-identical
+across all 65 ROCm fixtures**, and the gfx1151 device lanes return the
+recorded baseline (fp8 20, wmma 1) with the WMMA runtime confirmed live on
+the Radeon 8060S.
+
+Wiring the f16-accumulate WMMA itself is **deferred on measurement**. gfx1151
+has it — the in-repo ISA archive records `V_WMMA_F16_16X16X16_F16` on RDNA
+3.5 — but its ROCDL form is `(v16f16, v16f16, v16f16) -> v16f16` with an
+`opsel` bit selecting a half: a different accumulator ABI, not a parameter
+swap. It buys half the accumulator VGPR footprint and costs, measured on
+16x16x16-tiled GEMMs against an fp64 reference, 5212x relative error at K=64
+rising to 7856x at K=4096. Right for short-K inference shapes, wrong for
+training — exactly the decision a declared policy should make and a
+storage-dtype inference cannot. Revisit when an occupancy-limited kernel
+shows the accumulator is the binding constraint, not because the instruction
+exists.
+
+The W1.1 `!tile.fragment<…, acc, …>` TYPE parameter is still populated from
+the same storage-derived inference rather than from the policy; unifying
+those two remains open, and is now a narrower job than it looked, since the
+op-level consumer above is the one that decides what executes.

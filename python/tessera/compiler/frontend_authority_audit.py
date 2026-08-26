@@ -1,0 +1,191 @@
+"""E2E-REAL-6F (integrated-plan queue order 1) — what the AST-oracle deletion
+gate actually knows.
+
+MASTER_AUDIT §1 states the gate: delete the AST `_OpExtractor` and the
+Graph-to-backend reconstruction **only after** differential execution and
+architecture-owned proof cover each migrated family. Order 1's deliverable
+ends "the three former `JitFn` compatibility helpers are deleted."
+
+Measured 2026-08-25: **nothing recorded which families that covers.** The
+differential certificates live in per-`JitFn` dicts
+(`_frontend_differential_certificates`,
+`_frontend_nonreexecuting_certificates`) and die with the instance; no
+generated doc, registry, or test enumerated them. So the gate could never be
+honestly declared satisfied — not because the work was missing, but because
+the evidence had nowhere to live. A condition nobody can evaluate is not a
+gate; it is a sentence.
+
+This module is that evidence, derived from the plugin registry rather than
+asserted. Each `register_native_vjp_plugin` call already declares the whole
+ownership spine — Graph ops, Schedule consumer, Tile consumer, per-target
+consumers, migration state, and **differential policy** — so the dashboard
+reports what the compiler itself declares, and drifts the moment a family is
+added without one.
+
+── Reading the differential-policy column ──
+
+The policy decides which certification path can prove a family, and therefore
+whether that family blocks the deletion:
+
+``pure_only``
+    Certifiable by `certify_frontends`, which re-executes the source. Safe
+    because the family is pure: running it twice is observationally the same
+    as running it once.
+``zero_dropout_attention``
+    Same, restricted to the configuration where the attention family is pure —
+    a keyed draw would make re-execution a different program.
+``non_reexecuting_state_lineage``
+    Cannot use the re-executing path at all: the source mutates state, so a
+    second execution is a *different* program and the certificate would compare
+    two things that were never meant to be equal. Certified instead by
+    `certify_frontends_non_reexecuting`, against declared graph consumers.
+
+That third class is the one worth watching. A family in it whose consumers are
+not declared has no certification path at all, and the honest report for it is
+"unprovable", never "assumed fine".
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+from dataclasses import dataclass
+from typing import Sequence
+
+__all__ = ["FamilyRow", "collect_rows", "render_dashboard", "render_csv"]
+
+#: Which certification entry point can prove a family under each policy.
+_CERTIFIER = {
+    "pure_only": "certify_frontends",
+    "zero_dropout_attention": "certify_frontends",
+    "non_reexecuting_state_lineage": "certify_frontends_non_reexecuting",
+}
+
+
+@dataclass(frozen=True)
+class FamilyRow:
+    family: str
+    ops: tuple[str, ...]
+    migration_state: str
+    differential_policy: str
+    certifier: str
+    schedule_consumer: str
+    tile_consumer: str
+    targets: tuple[str, ...]
+
+    @property
+    def blocks_oracle_deletion(self) -> bool:
+        """True when this family has no certification path, so the AST oracle
+        cannot yet be deleted on its account."""
+        return self.certifier == "none"
+
+
+def collect_rows() -> list[FamilyRow]:
+    """One row per registered family, merged across the ops it owns."""
+    from .native_vjp_plugins import _PLUGINS
+
+    merged: dict[str, dict] = {}
+    for op_name, (declaration, _executor) in _PLUGINS.items():
+        entry = merged.setdefault(
+            declaration.family,
+            {
+                "ops": set(),
+                "declaration": declaration,
+            },
+        )
+        entry["ops"].add(op_name)
+
+    rows: list[FamilyRow] = []
+    for family, entry in merged.items():
+        declaration = entry["declaration"]
+        policy = declaration.differential_policy
+        rows.append(
+            FamilyRow(
+                family=family,
+                ops=tuple(sorted(entry["ops"])),
+                migration_state=declaration.migration_state,
+                differential_policy=policy,
+                certifier=_CERTIFIER.get(policy, "none"),
+                schedule_consumer=declaration.schedule_consumer,
+                tile_consumer=declaration.tile_consumer,
+                targets=tuple(sorted(declaration.target_consumers)),
+            )
+        )
+    return sorted(rows, key=lambda row: row.family)
+
+
+def _counts(rows: Sequence[FamilyRow]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.differential_policy] = counts.get(row.differential_policy, 0) + 1
+    return counts
+
+
+def render_dashboard() -> str:
+    rows = collect_rows()
+    blocking = [row for row in rows if row.blocks_oracle_deletion]
+    out = io.StringIO()
+    out.write("# Frontend authority — differential coverage by family\n\n")
+    out.write(
+        "Generated by `python -m tessera.compiler.generated_docs --write "
+        "frontend_authority`. Do not hand-edit.\n\n"
+        "E2E-REAL-6F (integrated-plan queue order 1). MASTER_AUDIT §1 permits "
+        "deleting the AST `_OpExtractor` and the Graph-to-backend "
+        "reconstruction only after differential execution covers each migrated "
+        "family. Before this doc, nothing enumerated that coverage: the "
+        "certificates lived in per-`JitFn` dicts and died with the instance, so "
+        "the gate could not be evaluated at all.\n\n"
+        "Rows are derived from the `register_native_vjp_plugin` declarations, "
+        "so a family added without one does not silently appear covered — it "
+        "does not appear.\n\n"
+    )
+    out.write(f"- families: **{len(rows)}**\n")
+    for policy, count in sorted(_counts(rows).items()):
+        out.write(f"- `{policy}`: {count} → certified by "
+                  f"`{_CERTIFIER.get(policy, 'none')}`\n")
+    out.write(
+        f"- **families with no certification path: {len(blocking)}**"
+        f"{' — these block the oracle deletion' if blocking else ''}\n\n"
+    )
+    out.write(
+        "| family | ops | migration state | differential policy | certifier | "
+        "schedule consumer | tile consumer | targets |\n"
+    )
+    out.write("|---|---|---|---|---|---|---|---|\n")
+    for row in rows:
+        out.write(
+            f"| `{row.family}` | {', '.join(f'`{op}`' for op in row.ops)} | "
+            f"{row.migration_state} | {row.differential_policy} | "
+            f"`{row.certifier}` | `{row.schedule_consumer}` | "
+            f"`{row.tile_consumer}` | {', '.join(row.targets)} |\n"
+        )
+    out.write(
+        "\n## What this doc does and does not prove\n\n"
+        "It proves that every listed family **declares** an ownership spine and "
+        "a differential policy with a certification path. It does not prove a "
+        "certificate was produced for a particular program: certification runs "
+        "at call time, against concrete arguments. Read this as the set of "
+        "families for which the gate is *evaluable*, and the per-family "
+        "execution tests as whether it passed.\n\n"
+        "The distinction matters because the failure it guards against is "
+        "specific: a family migrated to the tracer with no declared policy "
+        "would previously have left no trace anywhere, and the oracle deletion "
+        "would have looked safe.\n"
+    )
+    return out.getvalue()
+
+
+def render_csv() -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow([
+        "family", "ops", "migration_state", "differential_policy", "certifier",
+        "schedule_consumer", "tile_consumer", "targets",
+    ])
+    for row in collect_rows():
+        writer.writerow([
+            row.family, " ".join(row.ops), row.migration_state,
+            row.differential_policy, row.certifier, row.schedule_consumer,
+            row.tile_consumer, " ".join(row.targets),
+        ])
+    return buffer.getvalue()

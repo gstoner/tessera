@@ -978,7 +978,25 @@ def lower_scheduled_spectral(
         f"({operand_types}) -> {output_type}\n"
         f'    "schedule.artifact"() {{hash = "{schedule_digest}", '
         f'arch = "{architecture}", shape_key = "{provisional._input_shapes_text()}", '
-        f'numeric_policy = "{accumulation};{semantic_contract.normalization}"}} : () -> ()\n'
+        # NUMPOL-CARRIER-1 (queue row 3b): this used to emit
+        #     numeric_policy = "f32;ortho"
+        # a StringAttr holding a private semicolon-delimited encoding, under
+        # the name of a well-defined DictionaryAttr. Two consequences, both
+        # measured: every numeric_policy consumer reads the attribute with
+        # `getAttrOfType<DictionaryAttr>`, which returns null for a string —
+        # so this contract was silently skipped by the schema validator and
+        # unreadable by the accumulator consumers. And it is not a Decision
+        # #15a numeric_policy in the first place: `accumulation` can be
+        # "deterministic_f32_ascending_frames", a reduction-ORDER contract,
+        # not a dtype.
+        #
+        # So it is renamed rather than reshaped. Squeezing an order contract
+        # into the dtype attribute would make the collision permanent; giving
+        # it its own name makes both readable. The schedule digest is computed
+        # from `schedule_object.digest` and not from this text, so identities
+        # are unchanged.
+        f'tessera.spectral_accumulation = "{accumulation}", '
+        f'tessera.spectral_normalization = "{semantic_contract.normalization}"}} : () -> ()\n'
         f"    return %result : {output_type}\n"
         f"  }}\n"
         f"}}\n"

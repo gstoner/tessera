@@ -1,3 +1,10 @@
+// This file is fixture DATA for tests/unit/test_rocm_wmma_gemm_generated.py,
+// which drives it itself. It is not a lit test: without this marker lit
+// discovers it, reports Unresolved ("Test has no 'RUN:' line"), and fails
+// `check-tessera-rocm` for the whole repository — the exact twin of the x86
+// case fixed in PR #626, and equally invisible to CI, which does not run this
+// suite at all (lane removed 2026-08-19).
+// UNSUPPORTED: true
 // The shared producer receives per-lane coordinates.  `tile.linear_base` is a
 // scalar SSA value per GPU lane, so it must include the lane-resolved row/col
 // before ROCm's fragment pack issues its contiguous-K vector load.

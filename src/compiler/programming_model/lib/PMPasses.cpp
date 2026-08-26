@@ -254,7 +254,9 @@ static StringRef moduleString(ModuleOp module, StringRef primary,
   return {};
 }
 
-static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
+//: The schedule as INFERRED from operand/result element types per target.
+//: Wrapped below so the declared policy is checked on every exit path.
+static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
   if (!module || op->getNumOperands() < 2 || op->getNumOperands() > 4 ||
       op->getNumResults() != 1)
@@ -422,6 +424,58 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
       schedule.arch = "sm_120";
     return schedule;
   }
+  return failure();
+}
+
+// ── NUMPOL-CARRIER-1: the declared accumulator gets a consumer here too ──
+//
+// The schedule above infers `accum` from the operand/result element types,
+// per target. That inference is coherent and it is not the declared contract:
+// `numeric_policy.accum` reached this op, was never read, and the inferred
+// value won. Same shape as the ROCm WMMA generator, one level up.
+//
+// `accum` is a semantic key — it decides what the program COMPUTES — so a
+// declared accumulator this schedule cannot provide fails closed rather than
+// being silently replaced by the inferred one and reported as success
+// (Decisions #21a/#29). Every reachable case infers "f32" today, and no
+// in-tree program declares anything else, so this changes no existing
+// selection or schedule digest.
+//
+// Not device-proven: the sm_120 typed route this feeds needs the NR2 Pro box,
+// which this change was not developed on. What IS proven here is that the
+// refusal fires, that a matching declaration passes, and that the emitted IR
+// for every existing fixture is unchanged.
+static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
+  FailureOr<MatmulSchedule> schedule = getInferredMatmulSchedule(op);
+  if (failed(schedule))
+    return schedule;
+  auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+  if (!policy)
+    return schedule;
+  auto declaredAttr = policy.getAs<StringAttr>("accum");
+  if (!declaredAttr)
+    return schedule;
+  StringRef declared = declaredAttr.getValue();
+  StringRef inferred = schedule->accum;
+  // The policy spells dtypes in the Decision #15a vocabulary ("fp32"); the
+  // schedule spells them in MLIR's ("f32"). Same fact, two spellings — #32's
+  // point that a level may rename an attribute without losing it.
+  auto normalize = [](StringRef name) -> StringRef {
+    return llvm::StringSwitch<StringRef>(name)
+        .Case("fp64", "f64").Case("fp32", "f32").Case("fp16", "f16")
+        .Case("int32", "i32").Case("int64", "i64").Case("int16", "i16")
+        .Case("int8", "i8")
+        .Default(name);
+  };
+  if (normalize(declared) == normalize(inferred))
+    return schedule;
+  op->emitError("MATMUL_SCHEDULE_ACCUM_UNSUPPORTED: numeric_policy declares "
+                "accum=\"")
+      << declared << "\", but the selected " << schedule->target
+      << " matmul schedule accumulates in \"" << inferred
+      << "\". Refusing rather than substituting: `accum` selects what the "
+         "program computes, so honouring the inference here would report "
+         "success for a different computation (Decisions #21a/#29).";
   return failure();
 }
 
@@ -2961,9 +3015,17 @@ struct ScheduleToTilePass
             state.addAttribute("tile.linear_base", kernelBuilder.getUnitAttr());
             return kernelBuilder.create(state)->getResult(0);
           };
-          auto aType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->storage, "f32", "a", "row_major", "mma_sync");
-          auto bType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->storage, "f32", "b", "col_major", "mma_sync");
-          auto cType = tile::FragmentType::get(&getContext(), 16, 8, 16, "f32", "f32", "acc", "row_major", "mma_sync");
+          // NUMPOL-CARRIER-1: the fragment type's accumulator FOLLOWS the
+          // schedule rather than restating it. `selected->accum` sat two
+          // lines away from `selected->storage` and was ignored while the
+          // literal "f32" was written three times — one fact, four copies,
+          // and only the copies were reachable from the declared policy.
+          // Every case selects "f32" today, so this is bit-identical; what it
+          // removes is the place a future non-f32 schedule would silently
+          // disagree with its own fragment types.
+          auto aType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->storage, selected->accum, "a", "row_major", "mma_sync");
+          auto bType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->storage, selected->accum, "b", "col_major", "mma_sync");
+          auto cType = tile::FragmentType::get(&getContext(), 16, 8, 16, selected->accum, selected->accum, "acc", "row_major", "mma_sync");
           auto pack = [&](Value source, Type type, StringRef role) {
             OperationState state(loc, "tile.fragment_pack"); state.addOperands(source); state.addTypes(type);
             state.addAttribute("role", kernelBuilder.getStringAttr(role)); state.addAttribute("mma", typedMma);

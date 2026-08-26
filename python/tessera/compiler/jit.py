@@ -342,6 +342,47 @@ def _signature_ir_args(fn: Callable) -> Tuple[Any, ...]:
         return ()
 
 
+def _serialized_numeric_policy(op: Any) -> Optional[Dict[str, Any]]:
+    """The op's carried `numeric_policy`, as a plain dict for the runtime ABI.
+
+    PR #631 review. `IROp.numeric_policy` is the CANONICAL carrier — populated
+    by `numeric_policy_pass.propagate_numeric_policy` so downstream passes need
+    not re-derive storage/accum/math_mode from the op name — and every artifact
+    builder below serialized only `op.kwargs`. A propagated policy therefore
+    never reached the runtime, so the NVIDIA `math_mode` consumer added in this
+    branch could only ever see a policy that a caller had happened to encode as
+    a raw kwarg. The consumer was right and unreachable.
+
+    Emitted only when a policy is present, so the payload for every
+    policy-free op stays byte-identical.
+    """
+    policy = getattr(op, "numeric_policy", None)
+    if policy is None:
+        return None
+    if isinstance(policy, dict):
+        return {k: v for k, v in policy.items() if v is not None}
+    fields = ("storage", "accum", "rounding", "scale", "quant_axis",
+              "deterministic", "math_mode")
+    out = {name: getattr(policy, name) for name in fields
+           if getattr(policy, name, None) is not None}
+    return out or None
+
+
+def _op_payload(op: Any) -> Dict[str, Any]:
+    """One runtime-ABI operation record. Single writer, so a field added for
+    one target cannot go missing on another."""
+    payload: Dict[str, Any] = {
+        "op_name": op.op_name,
+        "result": op.result,
+        "operands": [o[1:] if o.startswith("%") else o for o in op.operands],
+        "kwargs": dict(op.kwargs),
+    }
+    policy = _serialized_numeric_policy(op)
+    if policy is not None:
+        payload["numeric_policy"] = policy
+    return payload
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -2044,12 +2085,7 @@ class JitFn:
                 "output_descriptor": {"name": self.cpu_plan.output_name},
                 "cpu_tile": list(self.cpu_plan.tile),
                 "ops": [
-                    {
-                        "op_name": op.op_name,
-                        "result": op.result,
-                        "operands": [operand[1:] if operand.startswith("%") else operand for operand in op.operands],
-                        "kwargs": dict(op.kwargs),
-                    }
+                    _op_payload(op)
                     for op in self.cpu_plan.ops
                 ],
                 "guards": {
@@ -2067,12 +2103,7 @@ class JitFn:
             and self.compile_bundle.executable
         ):
             ops_payload = [
-                {
-                    "op_name": op.op_name,
-                    "result": op.result,
-                    "operands": [operand[1:] if operand.startswith("%") else operand for operand in op.operands],
-                    "kwargs": dict(op.kwargs),
-                }
+                _op_payload(op)
                 for op in self.cpu_plan.ops
             ]
             accelerate_ops = [
@@ -2138,12 +2169,7 @@ class JitFn:
             and self.compile_bundle.executable
         ):
             ops_payload = [
-                {
-                    "op_name": op.op_name,
-                    "result": op.result,
-                    "operands": [operand[1:] if operand.startswith("%") else operand for operand in op.operands],
-                    "kwargs": dict(op.kwargs),
-                }
+                _op_payload(op)
                 for op in self.cpu_plan.ops
             ]
             # The strict f32/rank-2 descriptor schema is the matmul/gemm contract
@@ -2194,13 +2220,7 @@ class JitFn:
             # artifact_only (the generic branch below) — no behavior change.
             assert self.cpu_plan is not None  # narrowed by the guard above
             ops_payload = [
-                {
-                    "op_name": op.op_name,
-                    "result": op.result,
-                    "operands": [o[1:] if o.startswith("%") else o
-                                 for o in op.operands],
-                    "kwargs": dict(op.kwargs),
-                }
+                _op_payload(op)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -2222,13 +2242,7 @@ class JitFn:
             # and the artifact stays artifact_only — no behavior change.
             assert self.cpu_plan is not None  # narrowed by the guard above
             ops_payload = [
-                {
-                    "op_name": op.op_name,
-                    "result": op.result,
-                    "operands": [o[1:] if o.startswith("%") else o
-                                 for o in op.operands],
-                    "kwargs": dict(op.kwargs),
-                }
+                _op_payload(op)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -2245,13 +2259,7 @@ class JitFn:
         elif self._uses_rocm_grouped_gemm_default():
             assert self.cpu_plan is not None
             ops_payload = [
-                {
-                    "op_name": op.op_name,
-                    "result": op.result,
-                    "operands": [o[1:] if o.startswith("%") else o
-                                 for o in op.operands],
-                    "kwargs": dict(op.kwargs),
-                }
+                _op_payload(op)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -2273,13 +2281,7 @@ class JitFn:
             # stays artifact_only (the generic branch below) — no behavior change.
             assert self.cpu_plan is not None  # narrowed by the guard above
             ops_payload = [
-                {
-                    "op_name": op.op_name,
-                    "result": op.result,
-                    "operands": [o[1:] if o.startswith("%") else o
-                                 for o in op.operands],
-                    "kwargs": dict(op.kwargs),
-                }
+                _op_payload(op)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({

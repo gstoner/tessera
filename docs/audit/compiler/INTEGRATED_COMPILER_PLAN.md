@@ -67,14 +67,14 @@ This section owns what to do with those counts.
 
 | Order | Work item | Deliverable | Acceptance gate | Depends on |
 |---:|---|---|---|---|
-| 1 | **E2E-REAL-6F — remaining optimizer VJP authority complete; family migration continues** | SGD and Momentum/Nesterov on x86/gfx1151 plus Adam/AdamW on gfx1151 use explicit non-reexecuting plugins and one typed `schedule.optimizer_vjp` → `tile.training_kernel` artifact. The package binds tracer proof, state/cotangent lineage, numeric identity, target ownership, and exact Tile digest. Unsupported target pairs fail before construction. The three former `JitFn` compatibility helpers are deleted. | One-execution/plugin tests for the three ABI shapes; Schedule/Tile verifier negatives; existing AVX-512 and gfx1151 physical regressions; runtime receives no source Graph or operation dictionary. | E2E-REAL-6E state-lineage package. |
-| 2 | **W4-PRODUCT-1 — executable multi-block regions** | The bounded arbitrary-CFG compiler boundary, per-slot dynamic saved-value envelopes, companion logical-shape tapes, mixed-state SAVE/HYBRID tapes, and nested canonical bodies are landed. Exact polynomial specialization guards remain outside Presburger proofs and require complete witnesses. Compiler-generated replay-safe assertions are admitted; mutation, unkeyed RNG, I/O, alias-sensitive work, and ordered collectives remain fail closed pending operation-owned recorded-product ABIs. The gfx1151 irreducible-state-machine row landed 2026-08-21: `--generate-rocm-state-machine-kernel` lowers a paired `bounded_state_machine_v1` function (forward AND generated backward) to one per-thread device kernel — per-element program counter, structured-CFG digest stamped on the gpu.func, `cf.assert` bound check host-enforced through a STATUS buffer — with both entry paths of a two-entry SCC executing on gfx1151 against the analytic oracle (`test_rocm_state_machine_exec.py`). The sibling x86 row landed 2026-08-21 as well: the same paired functions compile through `tessera_jit` (tessera-to-linalg → elementwise-to-linalg → one-shot-bufferize → loops → LLVM → ORC JIT) and execute natively on the AVX-512 host — both entry paths, forward + backward, digest/residual-policy bound, native `cf.assert` bound trap, proof-of-execution counter (`test_x86_state_machine_exec.py`). Next: one physical packet family with admissible effects. | Existing region verifier/paired VJP fixtures stay green; padded tape bounds must never replace logical extents; native x86/gfx1151 numerical rows must bind the exact CFG and residual digests before physical execution is claimed. | W2.1 dataflow, W2.2 effects, current bounded W4 carrier. |
+| 1 | **E2E-REAL-6F — remaining optimizer VJP authority complete; family migration continues** (the deletion gate became MEASURABLE 2026-08-25 — `generated/frontend_authority_coverage.md`; see the note below the table) | SGD and Momentum/Nesterov on x86/gfx1151 plus Adam/AdamW on gfx1151 use explicit non-reexecuting plugins and one typed `schedule.optimizer_vjp` → `tile.training_kernel` artifact. The package binds tracer proof, state/cotangent lineage, numeric identity, target ownership, and exact Tile digest. Unsupported target pairs fail before construction. The three former `JitFn` compatibility helpers are deleted. | One-execution/plugin tests for the three ABI shapes; Schedule/Tile verifier negatives; existing AVX-512 and gfx1151 physical regressions; runtime receives no source Graph or operation dictionary. | E2E-REAL-6E state-lineage package. |
+| 2 | **W4-PRODUCT-1 — executable multi-block regions** | The bounded arbitrary-CFG compiler boundary, per-slot dynamic saved-value envelopes, companion logical-shape tapes, mixed-state SAVE/HYBRID tapes, and nested canonical bodies are landed. Exact polynomial specialization guards remain outside Presburger proofs and require complete witnesses. Compiler-generated replay-safe assertions are admitted; mutation, unkeyed RNG, I/O, alias-sensitive work, and ordered collectives remain fail closed pending operation-owned recorded-product ABIs. The gfx1151 irreducible-state-machine row landed 2026-08-21: `--generate-rocm-state-machine-kernel` lowers a paired `bounded_state_machine_v1` function (forward AND generated backward) to one per-thread device kernel — per-element program counter, structured-CFG digest stamped on the gpu.func, `cf.assert` bound check host-enforced through a STATUS buffer — with both entry paths of a two-entry SCC executing on gfx1151 against the analytic oracle (`test_rocm_state_machine_exec.py`). The sibling x86 row landed 2026-08-21 as well: the same paired functions compile through `tessera_jit` (tessera-to-linalg → elementwise-to-linalg → one-shot-bufferize → loops → LLVM → ORC JIT) and execute natively on the AVX-512 host — both entry paths, forward + backward, digest/residual-policy bound, native `cf.assert` bound trap, proof-of-execution counter (`test_x86_state_machine_exec.py`). One physical packet family with admissible effects landed 2026-08-25 (W4-EFFECTS-1 slices E1-E5, PR #630). Next: the `tessera.control_scan` reverse rule — see the note below the table. | Existing region verifier/paired VJP fixtures stay green; padded tape bounds must never replace logical extents; native x86/gfx1151 numerical rows must bind the exact CFG and residual digests before physical execution is claimed. | W2.1 dataflow, W2.2 effects, current bounded W4 carrier. |
 | 3 | **SO-3 + W5.2e-PRODUCER-1 — one schedule authority closed 2026-08-24.** The MegaMoE producer likewise consumes `infer_action_dag` with the hand-authored plan DAG demoted to a fail-closed coverage oracle (#31), and adopting it EXPOSED three over-conservatisms in the shared inference that made any pipeline containing transport infer a total chain — ordered collectives serialized against all local work, registered effectful producers discarded their declared `aliasing="none"`, and every effectful/pure pair was assumed memory-dependent — each corrected with the sound rule and pinned by tests (a 12-action MegaMoE plan went from all 66 edges of the complete order to 36, still oracle-covering, extras collective-ordering only). Its schedule digest binds the plan's own artifact digest. **Two follow-ups closed 2026-08-25:** the interleaved generator emitted backward passes in ASCENDING virtual-stage order (`bwd_clock = fwd_clock + p*v`, a constant offset), the opposite of gradient flow — the stage term is now mirrored, so gradients run from the last virtual stage back to the first with the makespan bit-identical (`2*p*v + m - 2`), the backward gradient edge is expressible again and is REQUIRED rather than excused, and the same work found that DECOUPLED schedules were carrying fabricated cross-stage edges despite being defined by having none. And the spectral policy is now bound by a hash CHAIN rather than a comparison: `sha256(tessera.schedule_payload)` must equal the module digest, and that payload must name `object_id "spectral:<sha256(tessera.spectral_semantic)>"`, so the consumed attributes and the declaration vouching for them can no longer be co-edited. | Pipeline lowering now requires the digest-bound `tessera.pipeline_schedule.v1` carrier, stamps its Schedule Object digest on functions and communication ops, and has no scalar-plan/options reconstruction path. The spectral producer represents fused stages as registered Graph actions, consumes `infer_action_dag`, binds roles/resources into the content-addressed Schedule Object, and requires that digest at Schedule→Tile. MegaMoE R3 likewise consumes inferred registered-semantics edges; its former handwritten DAG is only a fail-closed coverage oracle and additional conservative collective edges remain reported. | Inferred spectral and MegaMoE DAG tests preserve reasoned edges, roles, and resource vectors; stale/missing digest carriers fail closed; focused schedule/producer suite passes (225 tests plus dedicated carrier tests); compiled spectral numerics are unchanged across the complete Zen 5 AVX-512 and WSL gfx1151 suites (42 tests). | SO-1/SO-2 and W5.2e inference. |
-| 3b | **NUMPOL-CARRIER-1 — the S5 generalized `numeric_policy` carrier (owned 2026-08-24)** | One carrier design for storage/accumulator/math-mode that survives Schedule and Tile IR beyond MMA fragments (pointwise, reduction, and butterfly chains), plus the Decision #32 boundary verifier that FAILS on silent loss instead of recording it. Builds on the landed W1.1 `!tile.fragment<…, acc, …>` accumulator carrier (typed ROCm route) as the worked reference. Four mandating consumers: CAKE (#32's original derivation), game-theory §6 (fusion is a correctness feature — the zeta intermediate must not round through fp32), PDE §III.4 (interim `tessera.info_loss` records retire), and AD-JET-IR-1 (coefficient/cotangent policy, W6.3 §2.3). FORGE §1.3 supplies the measured acceptance target: the fused-epilogue fp32-accumulator realizability verdict (913× → 1.1× → 1.0× purely as a function of accum × state dtype) must be decided by the carried policy, not a special case. | Carrier attribute round-trips Schedule→Tile with a lit-verified boundary check per crossing; a lowering that drops the policy fails closed with a named diagnostic (#21a/#32); the W1.1 fragment path re-expressed as an instance of the general carrier without behavior change (bit-identical existing gfx1151/x86 outputs); the PDE `tessera.info_loss` interim records replaced by carrier facts; dashboard row tracks per-boundary coverage. May proceed in parallel with Orders 3 and 5 (orthogonal IR-carrier work; the schedule authority does not consume the policy). | W1.1 fragments (landed); Decision #32; #21a semantic-key discipline. |
+| 3b | **NUMPOL-CARRIER-1 — the S5 generalized `numeric_policy` carrier (owned 2026-08-24; steps 1–2 landed 2026-08-25 — schema + reduction-family carrier, see the status note under this table)** | One carrier design for storage/accumulator/math-mode that survives Schedule and Tile IR beyond MMA fragments (pointwise, reduction, and butterfly chains), plus the Decision #32 boundary verifier that FAILS on silent loss instead of recording it. Builds on the landed W1.1 `!tile.fragment<…, acc, …>` accumulator carrier (typed ROCm route) as the worked reference. Four mandating consumers: CAKE (#32's original derivation), game-theory §6 (fusion is a correctness feature — the zeta intermediate must not round through fp32), PDE §III.4 (interim `tessera.info_loss` records retire), and AD-JET-IR-1 (coefficient/cotangent policy, W6.3 §2.3). FORGE §1.3 supplies the measured acceptance target: the fused-epilogue fp32-accumulator realizability verdict (913× → 1.1× → 1.0× purely as a function of accum × state dtype) must be decided by the carried policy, not a special case. | Carrier attribute round-trips Schedule→Tile with a lit-verified boundary check per crossing; a lowering that drops the policy fails closed with a named diagnostic (#21a/#32); the W1.1 fragment path re-expressed as an instance of the general carrier without behavior change (bit-identical existing gfx1151/x86 outputs); the PDE `tessera.info_loss` interim records replaced by carrier facts; dashboard row tracks per-boundary coverage. May proceed in parallel with Orders 3 and 5 (orthogonal IR-carrier work; the schedule authority does not consume the policy). | W1.1 fragments (landed); Decision #32; #21a semantic-key discipline. |
 | 4 | **LAYOUT-ALG-1 L4 — physical layout decisions closed 2026-08-24** | L3 factorization/residency and SO-4 proof attachment are implemented. Mixed-radix/static tuple products, SM120 dynamic strided typed+macro routes, gfx1151 bounded-dynamic execution, the four x86 core GEMM index families, and every reachable Apple MSL rank-2 template consume shared authority. Dynamic non-separable tuple codomains remain fail closed. | Existing raster/index outputs remain bit-identical; unresolved layouts fail closed; materialization proof covers alias, capacity, and lifetime; Apple7 canonical and fused-cooperative cohorts pass exact-device; no architecture's schedule is promoted by another architecture's evidence. | Current L1/L3/L5 authority and architecture-owned device proofs. |
 | 5 | **W5.4-RESHARD-1 — executable placement closed 2026-08-24.** | Fixed-point placement now derives exact mesh-sized local result types and inserts explicit reshard SSA at the consumer boundary, including registered `tessera.slice` local shards rather than fake same-shaped collectives. Plan digest, subgroup, matching rounds, and nested region path survive Graph→Schedule→Tile. A deterministic mock-mesh executor consumes that SSA directly. | 13 focused placement tests plus 76 shared Schedule/Tile/collective tests pass. Nondivisible shapes, mesh/subgroup mismatch, unknown placement, and sibling-region escape fail closed. `local_shard`, `all_reduce`, `reduce_scatter`, `all_gather`, `all_to_all`, and `collective_permute` execute numerically with an explicit movement trace. Native transport remains a separate evidence gate. | Orders 2–4. |
 | 6 | **DIST-NATIVE-1 — real multi-rank execution** | Bind explicit reshard/collective SSA to NCCL/RCCL and MPI/OFI/SHMEM launchers, including subgroup communicators and process-rank ownership. Keep ROCm LSA, GIN/RMA, Copy Engine, and gfx1250 DDA as independent advanced gates. | Two-rank then multi-rank numerical packets; deterministic ordering; communicator/topology digest match; fail-closed missing transport; no mock result may satisfy the native gate. | Order 5. |
-| 7 | **AD-TSOL-STFT-BWD-1 — native spectral products** | Add native STFT/ISTFT backward packages on AVX-512 and gfx1151, including signal/window tangents, overlap-add identity, packed-real lineage, and normalization. | Directional and duality properties; aligned/ragged and fp32/fp16/bf16 storage; content-addressed Schedule→Tile→Target lineage; exact-host/device correctness. | Order 1 plugin boundary and existing spectral VJP carriers. |
+| 7 | **AD-TSOL-STFT-BWD-1 — native spectral products** (adjoint contract + implementation strategy established 2026-08-25; kernels open — see the note below the table) | Add native STFT/ISTFT backward packages on AVX-512 and gfx1151, including signal/window tangents, overlap-add identity, packed-real lineage, and normalization. | Directional and duality properties; aligned/ragged and fp32/fp16/bf16 storage; content-addressed Schedule→Tile→Target lineage; exact-host/device correctness. | Order 1 plugin boundary and existing spectral VJP carriers. |
 | 8 | **TSOL-POLICY-PHYS-1 — complete the spectral policy envelope** | Physically adopt centered padding, explicit transform length, one-sided/full spectrum, ISTFT output length, arbitrary axes/strides, broadcasting, and streaming/chunk state on x86 and gfx1151. | Differential oracle for every policy combination; bounded-dynamic legality; workspace/state lineage; no silent fallback to a full-complex or host-composed path. | Order 7. |
 | 9 | **TSOL-SCALE-1 — ND and large transforms** | Add 2D/ND, batched nontrivial-stride, large-transform six-step/Bailey, and large-prime execution behind selector-visible algorithm identities. | Correctness across prime/composite/ragged shapes; plan/twiddle/workspace cache identity; packed-vs-full and library comparisons; retain/promote/reject per architecture. | Order 8 and evidence tooling below. |
 | 10 | **TSOL-SHARD-1 — distributed TSOL contracts** | Close the 18 partial TSOL sharding rows by routing spectral, solver, sparse/segment, and layout families through W5.4 placement and explicit reshard operations. | Registry totality, mock-mesh numerical tests, and no claim of native transport before exact multi-rank proof. | Orders 5–6. |
@@ -83,6 +83,261 @@ This section owns what to do with those counts.
 | 13 | **EVIDENCE-PACKET-1 — one selector packet contract** | Make every physical benchmark emit the same schema for semantic/artifact/image digests, dtype/shape/policy envelope, resources, clocks, warm/cold state, samples, source cleanliness, and eligibility. | Schema validator and replay test; packets with missing native clocks, dirty sources, mismatched digests, or unsupported architectures are promotion-ineligible rather than silently downgraded. | Order 12. |
 | 14 | **COMPILER-DEVEX-1 — runnable compiler tools** | Promote `tprof` and `tessera-opt` from `compile_only` only after installed-driver smoke, dialect/pass inventory, negative target-load tests, and reproducible integration/numerical entry points exist. | Clean-build host smoke, `--version`/build provenance, positive and fail-closed fixtures, and generated surface-status promotion through its owning registry. | Orders 1–4 and 12. |
 
+**NUMPOL-CARRIER-1 status (2026-08-25) — steps 1 and 2 landed; the ceiling and
+the NVIDIA/ROCm halves are open.**
+
+*Step 1 — the policy gets a schema.* The row assumed a payload that could be
+carried. Measured first, and it could not be: `numeric_policy` was a bare
+`DictionaryAttrBase` whose ODS predicate checked only "is a dictionary". Five
+malformed policies were all ACCEPTED (exit 0) while the documented
+TF32-as-storage violation correctly failed — so the pass was running and simply
+had nothing to say about a typo'd key, a non-string value, a nonexistent dtype,
+a `math_mode` that reduces nothing, or an accumulator narrower than its
+storage. The typo is the sharpest: `getAs<StringAttr>` returns null for a
+misspelled key exactly as for an absent one, so the op carried a policy that
+looked like it stated an accumulator contract and stated none — Decision #21a's
+scar in a fresh place. Seven diagnostics now refuse each case, registered and
+cross-checked.
+
+The narrowing rule is refused rather than warned, on measurement: at a fixed
+dtype-bit budget the narrowing policy is strictly dominated by the one that
+swaps storage and accumulator (25.8x for the fp16/fp32 pair, K=4096 dot product
+vs an fp64 reference), and with a narrower accumulator the wider storage is
+BIT-IDENTICALLY unobservable. There is no program for which it is the right
+answer. Comparison is on significand bits, not width, so fp16-storage
+accumulating into bf16 is caught.
+
+*Step 2 — the reduction family carries its accumulator.* The gap was worse than
+"metadata is lost". `{storage="bf16", accum="fp32"}` on rmsnorm / softmax /
+layer_norm lowered to `arith.addf … : bf16`: the emitted code CONTRADICTED the
+declared contract on the very op that performs the accumulation. Executed on
+this box through `--tessera-to-linalg` → LLVM → native object, a 4096-wide
+softmax row summed to **1.466** — a 47% violation of the function's defining
+property — versus **1.000169** once the accumulator is honoured. The residual
+is bf16 storage rounding of the output, which is what the policy asked for.
+Cast placement was a measured fork: truncating the REDUCED value back to
+storage leaves 5.6e-04 where truncating only the RESULT reaches 1.7e-06 (326x),
+and the latter is the faithful reading of #15a, where storage is the dtype of
+the tensor and the tensor is the result. With no policy the emitted IR is
+byte-identical — a carrier that widens unasked is a global dtype promotion, not
+a carrier.
+
+The Graph→Linalg crossing is now bracketed by the Decision #32 record/verify
+pair and declares `represented_in_type` / `re_expressed`. It was NOT bracketed
+before: the pair straddles only Graph→Tile in the production pipelines, which
+is why this drop was silent. The verifier then caught a defect in the
+declaration logic itself (a function lowering one of two policy-carrying ops
+loses a value while the name survives — `re_expressed`, not
+`represented_in_type`), which is the mechanism working.
+
+*Open, and item (a) is not what the row assumed.* Measured 2026-08-25 while
+scoping it: for the MMA path the policy **already survives to the bottom**.
+`TileIRLoweringPass` forwards it onto `tile.mma`, and `TileToROCM.cpp` carries
+it onto the `tessera_rocm.*` ops — but all three of its uses are
+`copyAttrIfPresent`. It is **forwarded, never read**. The accumulator that
+actually reaches the hardware is inferred independently in
+`GenerateWMMAGemmKernel.cpp` as `fragmentAcc = T.isInt ? "i32" : "f32"`, in a
+file that does not mention `numeric_policy` at all.
+
+So there are two sources of truth for one fact, and the declared one loses.
+They agree today only because every real program uses fp32. A policy of
+`{storage="bf16", accum="fp16"}` — legal, and now schema-checked — silently
+gets f32 on gfx1151, and `accumulatorProbeDtypes` returns an EMPTY candidate
+set for any accumulator that is not `i32`/`f32`, so nothing downstream could
+honour it either. This is not hypothetical hardware: the in-repo ISA archive
+records `V_WMMA_F16_16X16X16_F16` on RDNA 3.5 alongside the f32-accumulate
+forms, so an f16 accumulator is a real gfx1151 capability the compiler cannot
+currently be asked for.
+
+That makes (a) a **Decision #29** item rather than a plumbing one — the
+carrier is built and the consumer is missing, which is the case #29 calls
+worse than a missing declaration because it reads as a closed contract in
+review.
+
+**(a) is now closed for the consumer half, and the codegen half is deferred on
+measurement (2026-08-25).** `GenerateWMMAGemmKernel` reads
+`numeric_policy.accum` and refuses with `ROCM_WMMA_ACCUM_UNSUPPORTED` when it
+names an accumulator this path does not provide, rather than substituting f32
+and reporting success for a different computation. Every existing program is
+untouched: a real before/after control — capture, revert the file, rebuild,
+recapture — showed the generated output **byte-identical across all 65 ROCm
+fixtures**, and the gfx1151 device lanes come back at the recorded baseline.
+
+Wiring the f16-accumulate WMMA itself is deferred, and the reason is a
+measurement rather than effort. Its ROCDL form is `(v16f16, v16f16, v16f16) ->
+v16f16` with an `opsel` bit — a different accumulator ABI, not a parameter
+swap. What it buys is half the accumulator VGPR footprint; what it costs,
+measured on 16x16x16-tiled GEMMs against an fp64 reference, is 5212x (K=64)
+rising to 7856x (K=4096) relative error. That is a real choice for short-K
+inference shapes and a bad one for training — which is precisely the kind of
+decision a declared policy should make and a storage-dtype inference cannot,
+so the interface is the deliverable and the codegen follows a measured need.
+Revisit when an occupancy-limited kernel shows the accumulator is the binding
+constraint, the same basis on which Decision #26a deferred the AIR emitter —
+not on the grounds that the instruction exists. (b) `math_mode` still has NO
+MLIR consumer: measured, it appears in C++ only inside a rejection message,
+while `mma_selector.py` / `nvidia_dtype_contract.py` consume it on the Python
+side. A semantic key with no consumer below the frontend is Decision #29's
+case, and it is the NVIDIA half of this row. (c) **Closed.** The FORGE §1.3
+realizability verdict lives in `compiler/precision_realizability.py`, decided
+from the carried policy plus the state dtypes. Reproducing §1.3 first caught a
+modelling error of my own: rounding the gradient to the MASTER dtype is a
+no-op for fp32 masters, so all three rows came back 1.0x. The gradient's
+storage write is bf16 in mixed precision, and that write is what the fusion
+removes. Corrected, the structure reproduces — 208x / 1.2x / 1.0x against the
+assessment's 913x / 1.1x / 1.0x: the masked rows match closely, the unmasked
+row agrees in kind but not magnitude. **That asymmetry set the interface.**
+The oracle puts a number on the question it can answer soundly — is the
+benefit masked? — and refuses to number the unmasked case, whose size depends
+on gradient distribution and step count a compiler does not know. A diagnostic
+promising 913x and delivering 208x would be worse than one saying "large;
+measure it". Its tests re-derive the table by RUNNING the training loop, so a
+wrong oracle fails even when it agrees with the write-up.
+
+(d) **Not what the row assumed.** No pointwise op and no spectral/butterfly op
+declares `numeric_policy` at all, so there was nothing to carry. For pointwise
+that is correct: there is no accumulation, so `accum` is meaningless. For the
+butterfly chain it was hiding something. The spectral scheduler emitted
+`numeric_policy = "f32;ortho"` — a **StringAttr** holding a private
+semicolon-delimited encoding, under the name of a well-defined DictionaryAttr.
+Since `getAttrOfType<DictionaryAttr>` returns null for a wrongly typed
+attribute exactly as for an absent one, that contract was invisible to the
+schema validator and to every accumulator consumer — and it is not a #15a
+policy in the first place: its value can be
+`"deterministic_f32_ascending_frames"`, a reduction-ORDER contract rather than
+a dtype. Renamed to `tessera.spectral_accumulation` /
+`tessera.spectral_normalization` (349 spectral tests unchanged; the schedule
+digest is computed separately, so identities are stable), and
+`NUMERIC_POLICY_NOT_A_DICTIONARY` now refuses the wrongly typed case so the
+collision cannot recur. Ops declaring the attribute in ODS were already
+covered by its constraint; the gap was the discardable case, which is exactly
+where the spectral contract lived.
+
+**Still open on row 3b:** whether an FFT stage chain should declare an
+accumulator at all is now a clean question rather than a hidden one, and is
+not answered here; and the NVIDIA-side device proof for (a)/(b) is owed on
+NR2 Pro.
+
+
+**E2E-REAL-6F: the deletion gate had no measurement (2026-08-25).** Order 1
+ends "the three former `JitFn` compatibility helpers are deleted", and
+MASTER_AUDIT §1 permits that only after differential execution covers each
+migrated family. Measured: **nothing enumerated that coverage.** The
+certificates live in per-`JitFn` dicts
+(`_frontend_differential_certificates`, `_frontend_nonreexecuting_certificates`)
+and die with the instance; no generated doc, registry, or test listed the
+families. The gate could not be evaluated at all — not because the work was
+missing, but because the evidence had nowhere to live, and a condition nobody
+can evaluate is not a gate.
+
+`generated/frontend_authority_coverage.md` is now that evidence, derived from
+the `register_native_vjp_plugin` declarations rather than asserted, so a family
+added without one does not silently appear covered — it does not appear.
+**13 families**, 37 owned Graph ops: 7 `pure_only`, 5
+`non_reexecuting_state_lineage`, 1 `zero_dropout_attention`, and **0 with no
+certification path**. The policy split is load-bearing rather than
+bookkeeping: `certify_frontends` proves equality by RE-EXECUTING the source, so
+for a state-mutating family the second run is a different program and such a
+certificate would compare two things never meant to be equal — and would pass.
+A drift test pins that the five stateful families use
+`certify_frontends_non_reexecuting`, that every named certifier exists (a
+certifier named but absent would make every row citing it read as proven), and
+that a family with an unhandled policy is reported as blocking — that last one
+a control, since without it the whole gate passes vacuously on a registry that
+happens to be clean.
+
+Scope, so the row is not over-read: this proves the gate is **evaluable** for
+all 13 families and that each declares a whole Graph→Schedule→Tile→target
+spine. It does not prove a certificate was produced for a particular program —
+certification runs at call time against concrete arguments. The remaining
+deletion work is per-family execution evidence, and it now has somewhere to be
+recorded.
+
+**W4-PRODUCT-1: `tessera.control_scan` is the one control primitive with no
+reverse rule (measured 2026-08-25).** Bounded `if`, counted `for`, and
+canonical bounded `while` all differentiate through the scf region machinery.
+Scan did not, and said only that some interface was missing —
+`AUTODIFF_OP_NOT_DIFFERENTIABLE`, true and unhelpful. All four
+`tessera.control_*` ops carry `[Pure]` and nothing else; the reverse machinery
+lives on the scf ops, and scan has no path there.
+
+**The mathematics is settled, not open, and is now recorded executably**
+(`tests/unit/test_control_scan_vjp_contract.py`). For
+`(c_{t+1}, y_t) = body(c_t, x_t)` the reverse recurrence is
+`(cbar_t, xbar_t) = body_vjp(c_t, x_t; cbar_{t+1}, ybar_t)` for `t = T-1..0`,
+so **the adjoint of a scan is a scan** over reversed t, carrying the carry
+cotangent and consuming `(c_t, x_t, ybar_t)`. Checked against central
+differences on a nonlinear body: max absolute error 4.7e-10 on both the init
+and the `xs` cotangents. The rows include a control that must fail (a rule
+that forgets the per-step `ybar` — the likeliest slip, since the stacked
+output is the operand a for-loop rule does not have), a row proving the
+per-step carries are a CORRECTNESS requirement rather than a memory
+optimisation (evaluating `body_vjp` at the final carry throughout is wrong by
+>1e-3), and a row proving RECOMPUTE reproduces SAVE bit-identically.
+
+**What blocks it is structural.** The reverse scan needs the BODY's paired
+backward — a companion function this pass generates — and a residual tape of
+the intermediate carries, which the forward scan does not stack.
+`AdjointInterface::buildAdjoint` receives only an OpBuilder positioned at the
+forward site and is contractually limited to emitting ops there, so it can
+create neither. The rule therefore belongs beside the scf region handling in
+`AutodiffPairedPass`, where companion functions and residual policies already
+live. `AUTODIFF_CONTROL_SCAN_UNSUPPORTED` now says exactly that, with the
+recurrence and the SAVE/RECOMPUTE/HYBRID connection in its notes, so the next
+implementation starts from the contract instead of re-deriving it — and does
+not put the rule in the wrong place.
+
+Not claimed: the compiler rule itself. This slice makes the gap named,
+bounded, fail-closed, and oracle-backed; the paired-pass implementation and
+its device rows are the next block.
+
+**AD-TSOL-STFT-BWD-1: the adjoint contract is settled and the kernels are not
+(2026-08-25).** Measured state before starting:
+
+| | forward | tangent (JVP) | adjoint (VJP) |
+|---|---|---|---|
+| x86 AVX-512 | native (`tessera_x86_stft_f32` / `istft_f32`) | native (`tessera_x86_istft_jvp_f32`) | **none** |
+| gfx1151 | none | none | **none** |
+
+So the asymmetry is forward-yes / tangent-yes / adjoint-no on x86, and nothing
+at all on ROCm — the AMD half is the bigger lift, since it has no forward STFT
+to build beside. Both targets **fail closed** today
+(`tile.spectral_backward_kernel` accepts only `tessera.spectral_conv` and
+`tessera.spectral_filter`), which is correct and was tested on gfx1151 only;
+the x86 refusal now has its fixture too.
+
+Both operators are LINEAR, so the VJP is the adjoint and the contract is
+checkable exactly rather than approximately. Recorded in
+`tests/unit/test_stft_adjoint_contract.py`: the reference VJPs satisfy
+`<STFT(x), Xbar> == <x, STFT^H(Xbar)>` to 0.0 and 4e-16, the COLA overlap-add
+identity holds to 4.4e-16, and the adjoint from first principles reproduces
+the reference to 1.4e-15 —
+
+    STFT^H(Xbar)[n + tH] += w[n] * Re( sum_f Xbar[t,f] * exp(+2i*pi*f*n/N) )
+
+each STORED bin counted once.
+
+**Implementation strategy, decided by measurement: no new FFT kernel is
+needed.** `irfft` reconstructs the Hermitian pair and so counts each interior
+bin twice; halving the interior bins — leaving DC and Nyquist alone, since
+they are self-conjugate — makes `N * irfft` the per-frame adjoint transform,
+verified to 1.4e-15. The same expression without the halving is wrong by
+127%, so that correction is pinned by its own control. The backward is
+therefore bin scaling → inverse real transform → window multiply →
+overlap-add scatter.
+
+**Two shortcuts refuted, so the next implementer does not spend a day on
+them.** Reusing the existing forward ISTFT kernel would have made the package
+nearly free, and it cannot: ISTFT is not `STFT^H` up to any global scale
+(best-fit residual 0.968 for backward/forward/ortho), nor after undoing the
+COLA window-sum division (0.887). The division is pointwise and the windowing
+differs; the adjoint is a different program.
+
+Not claimed: the kernels. Writing the AVX-512 C symbol, the gfx1151 package,
+the `TileToX86Pass`/`TileToROCM` emission, the package builder, plugin
+registration, and the exact-device rows on both boxes is the next block. It
+now starts from a verified contract and a measured strategy instead of a
+derivation.
 ### Architecture expansion after the shared gates
 
 - **ROCm:** gfx1151 owns the first exact-device correctness and calibrated

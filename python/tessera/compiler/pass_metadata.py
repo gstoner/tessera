@@ -449,6 +449,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         # (The in-place `tessera-autodiff` pass still emits the old code and
         # keeps it.)
         diagnostic_codes=(
+            "AUTODIFF_CONTROL_SCAN_UNSUPPORTED",
             "AUTODIFF_STOCHASTIC_NO_PRODUCT",
             "AUTODIFF_STOCHASTIC_UNKEYED",
             "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
@@ -566,6 +567,36 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(),
         pass_kind="transform",
         sprint="COMP-GRAPH-DATAFLOW-W2.1-2026-08-11",
+    ),
+    PassMetadata(
+        name="tessera-ir-contracts",
+        cpp_class="IRContractLegality",
+        summary=(
+            "IR contract legality — numeric_policy SCHEMA (legal key set, "
+            "string-valued entries, known dtypes/modes, accumulator not "
+            "narrower in significand bits than storage, math_mode actually "
+            "reducing), the Decision #15a storage/accum coupling, aliasing, "
+            "and buffer-binding contracts."
+        ),
+        input_dialects=("tessera",),
+        output_dialects=("tessera",),
+        # Registering these makes them cross-checked against the diagnostic
+        # registry by test_diagnostic_codes_are_registered; the pass had no
+        # metadata entry before NUMPOL-CARRIER-1, so its codes were unchecked.
+        diagnostic_codes=(
+            "NUMERIC_POLICY_ACCUM_UNREALIZABLE",
+            "NUMERIC_POLICY_MATH_MODE_NOT_REDUCING",
+            "NUMERIC_POLICY_NARROWING_ACCUM",
+            "NUMERIC_POLICY_NOT_A_DICTIONARY",
+            "NUMERIC_POLICY_NON_STRING_VALUE",
+            "NUMERIC_POLICY_UNKNOWN_ACCUM",
+            "NUMERIC_POLICY_UNKNOWN_KEY",
+            "NUMERIC_POLICY_UNKNOWN_MATH_MODE",
+            "NUMERIC_POLICY_UNKNOWN_ROUNDING_MODE",
+        ),
+        must_run_after=("tessera-compute-legalize",),
+        pass_kind="verifier",
+        sprint="NUMPOL-CARRIER-1",
     ),
     PassMetadata(
         name="tessera-layout-legality",

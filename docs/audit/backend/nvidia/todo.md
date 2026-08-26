@@ -3771,3 +3771,45 @@ Compiler JVP packaging now admits exact `nvidia_sm120`. Seeded dropout binds
 both primal and tangent children to the identical Philox key/counter attributes,
 proving mask replay rather than resampling; unseeded training JVP fails closed.
 Exact-device evidence: 22 tests in the three NVIDIA fixtures.
+
+
+Cross-backend sync `NUMPOL-CARRIER-1-SCHEMA-AND-REDUCTION-2026-08-25` — **the
+policy gets a schema and the reduction family carries its accumulator;
+NVIDIA outcome: shared contract only; no CUDA change.** Two measured defects closed, both shared,
+neither architecture-specific.
+
+*Schema.* `numeric_policy` was a bare `DictionaryAttrBase` whose ODS predicate
+checked only "is a dictionary". Measured before the change: five malformed
+policies were all ACCEPTED while the documented TF32-as-storage violation
+correctly failed, so the pass was running and simply had nothing to say. The
+sharpest was a typo — `getAs<StringAttr>("accum")` returns null for a
+misspelled key exactly as for an absent one, so an op carried a policy that
+looked like it stated an accumulator contract and stated none. Seven new
+diagnostics now refuse unknown keys, non-string values, unknown dtypes/modes, a
+math_mode that does not reduce its storage, and an accumulator NARROWER in
+significand bits than its storage.
+
+*Reduction carrier.* `{storage="bf16", accum="fp32"}` on rmsnorm / softmax /
+layer_norm lowered to `arith.addf … : bf16` — the emitted code contradicted the
+declared contract on the very op that performs the accumulation. Executed on
+Zen 5 through `--tessera-to-linalg` → LLVM → native object: a 4096-wide softmax
+row summed to **1.466** (a 47% violation of the function's defining property)
+versus **1.000169** once the declared accumulator is honoured. The whole
+derived chain now runs in the accumulator with a single truncation at the
+result — chosen by measurement over truncating the reduced value, which is 326x
+worse. With no policy the emitted IR is byte-identical, so nothing widens
+without being asked. The Graph→Linalg boundary is now bracketed by the
+Decision #32 record/verify pair and declares `represented_in_type` /
+`re_expressed`.
+
+The schema and the reduction carrier are target-independent Graph-level contracts. Zen 5 execution transfers no sm_120 claim.
+
+**`math_mode` now has a consumer on the runtime dispatch, and closing it exposed an INTERNAL CONTRADICTION on this backend — NR2 Pro proof owed.** This queue already records (above) that "the shared MMA selector now requires explicit `math_mode=\"tf32\"` for fp32". `runtime.py` did not: `_NVIDIA_GEMM_SYMBOLS` mapped `"float32"` to `tessera_nvidia_mma_gemm_tf32` and the dispatch took it **unconditionally**, with a comment citing Decision #15a as the reason. So two components held opposite policies for the same fact, and the permissive one is the one that executes. #15a says "TF32 is not a storage dtype. Model as `math_mode='tf32'` on fp32 via numeric_policy" — precisely so the reduced arithmetic is a choice the program makes; the storage dtype was making it instead, and the comment made the violation read as compliance.
+
+Measured against an fp64 reference on 64xKx64 GEMMs (median relative error): fp32 1.64e-07 → tf32 2.93e-04 at K=128 (**1783x**); 3.02e-07 → 3.01e-04 at K=1024 (998x); 3.63e-07 → 2.91e-04 at K=4096 (800x). TF32 keeps 11 significand bits against fp32's 24 and rounds the OPERANDS, so no accumulator width recovers it. A program that asked for fp32 got tf32 numbers and no diagnostic.
+
+Selection is now the pure function `runtime._nvidia_gemm_selection`, so its contract is host-testable on a box with no CUDA: explicit `math_mode="tf32"` selects the tf32 kernel, `"ieee"` (or any mode the lane lacks) is refused with `NVIDIA_MATH_MODE_UNAVAILABLE` rather than handed tf32 numbers under an fp32 label, and narrow-storage paths are untouched. This makes the runtime agree with the selector contract this backend already adopted — it is not a new policy.
+
+**Absent `math_mode` deliberately keeps today's TF32 behaviour**, and that is the owed decision rather than an oversight. By #21a a semantic key should fail closed on absence; changing the default would alter every existing fp32 NVIDIA program from a host that cannot execute one, which is exactly the claim the fleet rule forbids. A test pins the current behaviour so the follow-up has a fixed baseline. **Owed on NR2 Pro (RTX 5070 Ti):** execute the tf32 and f16 lanes, confirm the selection reaches the intended kernel, and decide whether absent-`math_mode` should fail closed.
+
+Also on this backend, not device-proven here: the sm_120 typed route's `!tile.fragment` accumulator now follows `selected->accum` instead of a hardcoded `"f32"` written three times beside that unused field, and a declared accum the schedule cannot provide fails closed with `MATMUL_SCHEDULE_ACCUM_UNSUPPORTED`. Byte-identical across all 169 Graph→Schedule→Tile fixtures under a before/after control.

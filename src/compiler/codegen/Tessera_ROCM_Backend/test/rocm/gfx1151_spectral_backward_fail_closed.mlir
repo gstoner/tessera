@@ -20,4 +20,4 @@ module {
   }
 }
 
-// CHECK: error: compound spectral adjoint kind has no gfx1151 native package
+// CHECK: error: native ROCm STFT/ISTFT adjoint requires the bounded uncentered onesided contiguous policy and explicit fp32 accumulation

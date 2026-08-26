@@ -11,13 +11,14 @@
 // becomes a fallthrough: the next `else if` added above it changes which
 // kinds reach the error, and nothing notices.
 //
-// Order 7 asks for native STFT/ISTFT backward on AVX-512 and gfx1151. Until
-// those packages exist, `tessera.stft` must fail here — never silently pick a
-// neighbouring kernel, since the two obvious candidates are both measurably
-// wrong: ISTFT is not the STFT adjoint up to any global scale (best-fit
-// residual 0.968), nor after undoing the COLA window-sum division (0.887).
-// Both refutations are pinned in tests/unit/test_stft_adjoint_contract.py,
-// along with the adjoint the eventual kernel must implement.
+// Order 7 now has a bounded AVX-512 STFT/ISTFT package through the native VJP
+// plugin, but this generic TileToX86 kind is not wired to that content-addressed
+// ABI. It must therefore continue to fail here — never silently pick a
+// neighbouring kernel. The two obvious candidates are both measurably wrong:
+// ISTFT is not the STFT adjoint up to any global scale (best-fit residual
+// 0.968), nor after undoing the COLA window-sum division (0.887). Both
+// refutations and the implemented adjoint oracle are pinned in
+// tests/unit/test_stft_adjoint_contract.py.
 
 module {
   llvm.func @spectral_backward(

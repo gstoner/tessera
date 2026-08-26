@@ -673,9 +673,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "are package-owned, as are arbitrary-axis packing "
                             "and f16/bf16 conversion around f32 accumulation.",
     "x86_spectral_backward_compiled": "x86 AVX-512 compound spectral VJP "
-                            "package for complex64 filtering and unbroadcast "
-                            "float32 full convolution; consumes tracer, "
-                            "Schedule, and Tile digests without Graph re-entry.",
+                            "package for complex64 filtering, unbroadcast "
+                            "float32 full convolution, and bounded uncentered "
+                            "onesided batched STFT/ISTFT over f16/bf16/f32 "
+                            "real storage with f32 accumulation; even-length "
+                            "STFT stored-bin adjoints use packed AVX-512 C2R "
+                            "and odd lengths retain the scalar oracle tail; "
+                            "consumes tracer, Schedule, and Tile digests "
+                            "without Graph re-entry.",
     "x86_sparse_compiled": "x86 CPU sparse linear algebra (spmm_csr / spmm_coo / "
                             "sddmm / bsmm) — GENUINELY sparse AVX-512 kernels "
                             "(spmm = row-wise AXPY over CSR nonzeros, sddmm = "
@@ -1765,9 +1770,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         executor_id="x86_spectral_backward_compiled", runtime_status="success",
         reason="The native-VJP family plugin binds traced Graph identity to "
                "the content-addressed spectral_backward Schedule/Tile contract "
-               "and launches the AVX-512 compound adjoint ABI.",
+               "and launches the AVX-512 compound adjoint ABI. The bounded "
+               "uncentered onesided batched STFT/ISTFT envelope accepts "
+               "f16/bf16/f32 real storage with f32 accumulation; even-length "
+               "STFT uses the packed-C2R stored-bin adjoint and ragged batch "
+               "tails remain shape-exact.",
         execution_mode="cpu_avx512", direction="backward",
-        op_family="spectral_filter", backward_aliases=("spectral_conv",),
+        op_family="spectral_filter",
+        backward_aliases=("spectral_conv", "stft", "istft"),
         device_proof="device_verified_abi", evidence_target="x86_avx512",
         numerical_fixture="tests/unit/test_autodiff_spectral_target_binding.py",
         proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
@@ -1914,7 +1924,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_mode="cpu_avx512", direction="backward",
         op_family="adafactor", device_proof="device_verified_abi",
         evidence_target="x86_avx512",
-        numerical_fixture="tests/unit/test_x86_optimizer_compiled.py",
+        numerical_fixture="tests/unit/test_autodiff_stateful_plugin_binding.py",
         proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
         residual_policy="save_inputs_and_state",
         residual_tradeoff="The adjoint recomputes updated moments from inputs."),

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-25
+last_updated: 2026-08-26
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,97 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **Order 8c–8g
+AVX-512 bounded package landed and is independently host-proven.** The v8 x86
+package consumes rank/shape/element-stride descriptors without Python
+`ascontiguousarray`, including negative and interior-axis strides. Forward and
+reverse support explicit `n_fft >= window` (including n=20/window=15), odd
+lengths, and one-sided or full-complex spectra. Independent NumPy/Python-VJP
+packets cover non-contiguous axis-1/axis-2 operands and full-spectrum adjoint
+weighting; the reverse Schedule→Tile digest binds
+`native_runtime_stride_descriptor_v1`. Streaming state now chains policy,
+window, tail, counters, and parent-state digests and rejects lineage drift, but
+that target-neutral oracle is not an AVX-512 streaming execution claim.
+Per-batch windows now right-align and broadcast across transform batches in
+forward, inverse, and both native adjoints; `dwindow` reduces exactly over the
+broadcast axes and that identity is Schedule→Tile digest-bound. The physical
+streaming entry consumes original chunk strides plus a canonical tail and
+emits frames/next-tail without Python framing or concatenation. Runtime-origin
+state certificates bind the artifact and parent lineage. Independent forward,
+Python-VJP, and chunk/monolithic packets pass on this AVX-512 host. No x86
+evidence transfers to gfx1151, CUDA, or Metal. The separately executed
+gfx1151 expanded reverse packet is architecture-owned and does not replace or
+augment these AVX-512 certificates.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8B-2026-08-26` — **Order 8b parity
+validated on the AVX-512 host.** Centered STFT and centered/cropped ISTFT now
+execute arbitrary normalized logical axes for C-contiguous tensors. Native
+package packing uses Schedule→Tile-bound `outer`/`inner` dimensions rather than
+a Python transpose, and both forward and reverse pass the nontrivial
+`(outer, inner)=(2,3)` NumPy/Python-VJP packet for f32/f16/bf16; f32 also
+satisfies the native forward/adjoint identity. Negative-axis normalization and
+extent-overflow ABI regressions are pinned. Non-contiguous views still fail
+closed and are not claimed as physical stride support. Full spectrum, broader
+lengths, broadcasting, true strides, and streaming remain open; gfx1151
+evidence was not transferred.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8A-2026-08-26` — **Order 8a parity
+validated on the AVX-512 host.** The native compound package now owns centered
+constant/reflect padding and centered or explicitly cropped ISTFT output for
+the bounded n=16/n=18 final-axis envelope. f32, f16, and bf16 storage execute
+with f32 accumulation; the native reverse matches the independent Python VJP
+and centered-reflect STFT satisfies the forward/adjoint inner-product identity.
+The Schedule→Tile digest binds center, pad mode, crop, and output length.
+Non-contiguous storage, unsupported lengths, and altered identities fail
+closed. Full-spectrum, broader explicit transform lengths, broadcasting, true
+strides, and streaming state remain open in Order 8. No x86 evidence transfers
+to ROCm, CUDA, or Metal.
+
+Cross-backend sync `AD-TSOL-STFT-GFX1151-2026-08-26` — **gfx1151 Order 7
+closure assessed; x86 parity remains independently proven.** The AMD direct-DFT
+kernel and its certificates transfer no AVX-512 evidence. The existing x86
+packed-C2R n=16/n=18 f32/f16/bf16 package retains its own host proofs. The
+shared compound-spectral Schedule→Tile carrier now binds
+`numeric_policy={storage,accum=fp32}` separately from reduction order; x86
+metadata regeneration and Tile identity validate it. Order 8 owns broader
+policy on both architectures.
+
+Cross-backend sync `E2E-REAL-6F-EXACT-CERT-2026-08-26` — **all 10 declared x86
+native-VJP families exact-host certified on AVX-512.** The all-family packet
+runs independent numerical oracles and requires runtime-origin
+`x86_avx512` attestations before exact set equality with the live plugin
+registry can pass. This includes factored Adafactor, SGD/Momentum, Lion,
+attention, normalization, losses, sequence mixer, and spectral reverse.
+Test-double launches remain `runtime_unattested`. No ROCm, SM120, or Apple
+evidence is inferred; those targets retain their own packets and hardware
+requirements.
+
+Cross-backend sync `BOUNDED-GATE-RELAXATION-2026-08-26` — **AVX-512
+STFT/ISTFT backward expanded through stored-bin vectorization and low-precision
+envelopes; MPI rank transport started.** Content-addressed native packages execute the exact transpose
+of uncentered, one-sided, last-axis f32 STFT/ISTFT with explicit hop,
+`n_fft == window`, and uncropped ISTFT length. Signal/spectrum and window
+cotangents match the independent Python VJP oracle. The STFT frame adjoint now
+uses packed C2R with proven interior-bin half weights and real DC/Nyquist
+projection; n=18 mixed-radix ragged batches and explicit f16/bf16 two-byte
+storage ABIs pass with f32 accumulation. Factored Adafactor also executes via
+the public family plugin and emits a tamper-evident execution certificate
+binding its topology and compiler spine. Unsupported policy,
+shape, dtype, axis, target, or altered digest fails before launch. The shared
+bounded symbol-body `control_scan` reverse also lowers and passes its direct
+compiler regression. DIST-NATIVE-1 now lowers all five explicit collective SSA
+forms through Schedule→Tile into a content-addressed rank-local MPI artifact.
+The artifact binds Schedule hash, communicator, ordered subgroup, reshard plan,
+issue ordinal, topology, dtype, and shape. A project-local bundled MPICH
+4.1.2/`mpi4py` environment executed the checked-in two-process numerical packet:
+all five collectives and a reordered two-rank derived communicator pass, while
+order, subgroup, artifact/topology digest, dtype, and shape mismatches fail in
+shared admission before transport. This is exact x86 host MPI evidence, not an
+NCCL/RCCL or mock promotion; a >2-rank proper-subgroup packet remains open. The composed-layout
+review changed only the duplicated ROCm/CUDA physical emitters; x86 already
+uses the canonical quotient-retaining layout algebra, so no x86 schedule or
+ABI change was required.
+
 Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; x86 outcome: **parity VALIDATED (AVX-512 host)**.** Same family through `x86_rng_compiled` with `execution_kind=native_cpu` asserted exactly. Replay from the recorded product is bit-identical, and the cross-target row shows this host and gfx1151 produce the same bits from the same product.
 
 

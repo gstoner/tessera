@@ -478,6 +478,14 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 ),
                 dtypes=("fp32", "f32"),
             ),
+            **_ops(
+                "ready", ("tessera.stft", "tessera.istft"),
+                reason=(
+                    "x86 AVX-512 spectral package carries f16/bf16/f32 "
+                    "storage through explicit two-byte ABIs with f32 accumulation"
+                ),
+                dtypes=("fp16", "bf16", "fp32", "f32"),
+            ),
         },
         supported_dtypes=tuple(sorted(x86_ready_storage_dtypes())) + ("f32",),
         features=(

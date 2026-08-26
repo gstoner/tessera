@@ -19,6 +19,7 @@
 #include <cstring>
 #include <memory>
 #include <map>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -733,7 +734,7 @@ extern "C" int tessera_x86_fft_c2r_full_complex_f32(
 }
 
 extern "C" const char* tessera_x86_spectral_composite_package_abi() {
-    return "tessera.x86.spectral_composite.v6";
+  return "tessera.x86.spectral_composite.v8";
 }
 
 extern "C" int tessera_x86_spectral_filter_f32(
@@ -1100,6 +1101,24 @@ bool valid_spectral_storage(int storage) {
     return storage >= 0 && storage <= 2;
 }
 
+bool checked_spectral_product(int64_t lhs, int64_t rhs, int64_t& result) {
+    if (lhs <= 0 || rhs <= 0 ||
+        lhs > std::numeric_limits<int64_t>::max() / rhs)
+        return false;
+    result = lhs * rhs;
+    return static_cast<uint64_t>(result) <=
+           std::numeric_limits<size_t>::max();
+}
+
+bool checked_spectral_framed_length(int64_t frames, int64_t hop, int64_t win,
+                                    int64_t& samples) {
+    if (frames <= 0 || hop <= 0 || win <= 0 ||
+        frames - 1 > (std::numeric_limits<int64_t>::max() - win) / hop)
+        return false;
+    samples = (frames - 1) * hop + win;
+    return true;
+}
+
 void unpack_spectral_storage(const void* input, float* output, int64_t elements,
                              int storage) {
     for (int64_t i = 0; i < elements; ++i)
@@ -1238,6 +1257,35 @@ void unpack_axis_storage(const void* input, void* output, int64_t outer,
     pack_axis_storage(input, output, outer, inner, axis_extent, bytes);
 }
 
+bool pack_layout_storage(const void* input, void* output, int64_t rank,
+                         const int64_t* shape, const int64_t* strides,
+                         size_t bytes, int64_t& elements) {
+    if (!input || !output || !shape || !strides || rank <= 0 || rank > 8)
+        return false;
+    elements = 1;
+    for (int64_t dim = 0; dim < rank; ++dim) {
+        if (!checked_spectral_product(elements, shape[dim], elements) ||
+            (shape[dim] > 1 && strides[dim] == 0))
+            return false;
+    }
+    const auto* source = static_cast<const unsigned char*>(input);
+    auto* destination = static_cast<unsigned char*>(output);
+    for (int64_t linear = 0; linear < elements; ++linear) {
+        int64_t remaining = linear;
+        int64_t sourceIndex = 0;
+        for (int64_t dim = rank - 1; dim >= 0; --dim) {
+            const int64_t coordinate = remaining % shape[dim];
+            remaining /= shape[dim];
+            sourceIndex += coordinate * strides[dim];
+        }
+        std::memcpy(destination + size_t(linear) * bytes,
+                    source + std::ptrdiff_t(sourceIndex) *
+                                 std::ptrdiff_t(bytes),
+                    bytes);
+    }
+    return true;
+}
+
 }  // namespace
 
 extern "C" int tessera_x86_dct_strided_storage(
@@ -1322,4 +1370,544 @@ extern "C" int tessera_x86_istft_strided_storage(
         unpack_axis_storage(packed_output.data(), output, outer, samples, inner,
                             bytes);
     return rc;
+}
+
+// TSOL-POLICY-PHYS-1 bounded policy wrappers. Padding/trimming is owned by the
+// native package, not reconstructed by the Python launcher. pad_mode is
+// 0=constant, 1=reflect. Explicit ISTFT length is cropping-only in this slice.
+extern "C" int tessera_x86_stft_policy_strided_storage(
+    const char* digest, const void* input, const void* window, float* output,
+    int64_t outer, int64_t samples, int64_t inner, int64_t win, int64_t hop,
+    int64_t frames, int storage, float output_scale, int center, int pad_mode) {
+    if (!valid_spectral_storage(storage) || !digest || !input || !window ||
+        !output || outer <= 0 || inner <= 0 ||
+        samples <= 0 || win <= 0 || hop <= 0 || (center != 0 && center != 1) ||
+        (pad_mode != 0 && pad_mode != 1))
+        return 30;
+    const int64_t pad = center ? win / 2 : 0;
+    if (pad_mode == 1 && samples <= pad) return 31;
+    if (samples > std::numeric_limits<int64_t>::max() - 2 * pad)
+        return 32;
+    const int64_t padded_samples = samples + 2 * pad;
+    int64_t covered = 0, batch = 0, input_elements = 0;
+    int64_t padded_elements = 0, output_elements = 0, rows = 0;
+    if (!checked_spectral_framed_length(frames, hop, win, covered) ||
+        padded_samples < win || frames != (padded_samples - win) / hop + 1 ||
+        !checked_spectral_product(outer, inner, batch) ||
+        !checked_spectral_product(batch, samples, input_elements) ||
+        !checked_spectral_product(batch, padded_samples, padded_elements) ||
+        !checked_spectral_product(batch, frames, rows))
+        return 32;
+    const int64_t bins = win / 2 + 1;
+    if (!checked_spectral_product(rows, bins, output_elements)) return 32;
+    const size_t bytes = spectral_storage_bytes(storage);
+    if (static_cast<uint64_t>(input_elements) > SIZE_MAX / bytes ||
+        static_cast<uint64_t>(padded_elements) > SIZE_MAX / bytes ||
+        static_cast<uint64_t>(output_elements) > SIZE_MAX / (2 * sizeof(float)))
+        return 32;
+    std::vector<unsigned char> packed_input(size_t(input_elements) * bytes);
+    std::vector<unsigned char> padded(size_t(padded_elements) * bytes,
+                                      0);
+    std::vector<float> packed_output(size_t(2 * output_elements));
+    pack_axis_storage(input, packed_input.data(), outer, samples, inner, bytes);
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t at = 0; at < padded_samples; ++at) {
+        int64_t source = at - pad;
+        bool present = source >= 0 && source < samples;
+        if (!present && pad_mode == 1) {
+          source = source < 0 ? -source : 2 * samples - 2 - source;
+          present = source >= 0 && source < samples;
+        }
+        if (present)
+          std::memcpy(padded.data() + size_t(row * padded_samples + at) * bytes,
+                      packed_input.data() + size_t(row * samples + source) * bytes,
+                      bytes);
+      }
+    int rc = tessera_x86_stft_storage(
+        digest, padded.data(), window, packed_output.data(), batch,
+        padded_samples, win, hop, frames, storage, output_scale);
+    if (!rc)
+      unpack_axis_storage(packed_output.data(), output, outer, frames * bins,
+                          inner, sizeof(float) * 2);
+    return rc;
+}
+
+extern "C" int tessera_x86_istft_policy_strided_storage(
+    const char* digest, const float* input, const void* window, void* output,
+    int64_t outer, int64_t frames, int64_t bins, int64_t inner, int64_t win,
+    int64_t hop, int storage, float output_scale, int center,
+    int64_t output_samples) {
+    if (!valid_spectral_storage(storage) || !digest || !input || !window ||
+        !output || outer <= 0 || inner <= 0 ||
+        bins != win / 2 + 1 || frames <= 0 || hop <= 0 || win <= 0 ||
+        (center != 0 && center != 1))
+        return 40;
+    int64_t raw_samples = 0;
+    if (!checked_spectral_framed_length(frames, hop, win, raw_samples)) return 41;
+    const int64_t start = center ? win / 2 : 0;
+    const int64_t available = raw_samples - 2 * start;
+    int64_t batch = 0, rows = 0, input_elements = 0;
+    int64_t raw_elements = 0, cropped_elements = 0;
+    if (output_samples <= 0 || output_samples > available ||
+        !checked_spectral_product(outer, inner, batch) ||
+        !checked_spectral_product(batch, frames, rows) ||
+        !checked_spectral_product(rows, bins, input_elements) ||
+        !checked_spectral_product(batch, raw_samples, raw_elements) ||
+        !checked_spectral_product(batch, output_samples, cropped_elements))
+        return 41;
+    const size_t bytes = spectral_storage_bytes(storage);
+    if (static_cast<uint64_t>(input_elements) > SIZE_MAX / (2 * sizeof(float)) ||
+        static_cast<uint64_t>(raw_elements) > SIZE_MAX / bytes ||
+        static_cast<uint64_t>(cropped_elements) > SIZE_MAX / bytes)
+        return 41;
+    std::vector<float> packed_input(size_t(2 * input_elements));
+    std::vector<unsigned char> raw(size_t(raw_elements) * bytes);
+    std::vector<unsigned char> cropped(size_t(cropped_elements) * bytes);
+    pack_axis_storage(input, packed_input.data(), outer, frames * bins, inner,
+                      sizeof(float) * 2);
+    int rc = tessera_x86_istft_storage(
+        digest, packed_input.data(), window, raw.data(), batch, frames, win,
+        hop, storage, output_scale);
+    if (!rc) {
+      for (int64_t row = 0; row < batch; ++row)
+        std::memcpy(cropped.data() + size_t(row * output_samples) * bytes,
+                    raw.data() + size_t(row * raw_samples + start) * bytes,
+                    size_t(output_samples) * bytes);
+      unpack_axis_storage(cropped.data(), output, outer, output_samples, inner,
+                          bytes);
+    }
+    return rc;
+}
+
+// v7 layout ABI. Shape and stride values are in logical elements, not bytes.
+// The package owns all gather/window-padding work; callers pass the original
+// view pointer and never materialize a contiguous logical tensor in Python.
+extern "C" int tessera_x86_stft_policy_layout_storage(
+    const char* digest, const void* input, const void* window, float* output,
+    int64_t rank, const int64_t* shape, const int64_t* strides, int64_t axis,
+    int64_t windowStride, int64_t fftN, int64_t win, int64_t hop,
+    int64_t frames, int storage, float outputScale, int center, int padMode,
+    int onesided) {
+    if (!valid_spectral_storage(storage) || !digest || !input || !window ||
+        !output || rank <= 0 || axis < 0 || axis >= rank || fftN < win ||
+        win <= 0 || hop <= 0 || windowStride == 0 ||
+        (onesided != 0 && onesided != 1))
+        return 60;
+    const size_t bytes = spectral_storage_bytes(storage);
+    int64_t elements = 1;
+    for (int64_t dim = 0; dim < rank; ++dim)
+        if (!checked_spectral_product(elements, shape[dim], elements)) return 61;
+    if (static_cast<uint64_t>(elements) > SIZE_MAX / bytes ||
+        static_cast<uint64_t>(fftN) > SIZE_MAX / bytes)
+        return 61;
+    std::vector<unsigned char> contiguous(size_t(elements) * bytes);
+    int64_t packedElements = 0;
+    if (!pack_layout_storage(input, contiguous.data(), rank, shape, strides,
+                             bytes, packedElements) || packedElements != elements)
+        return 61;
+    std::vector<unsigned char> paddedWindow(size_t(fftN) * bytes, 0);
+    const int64_t windowOffset = (fftN - win) / 2;
+    const auto* windowBytes = static_cast<const unsigned char*>(window);
+    for (int64_t index = 0; index < win; ++index)
+        std::memcpy(paddedWindow.data() + size_t(windowOffset + index) * bytes,
+                    windowBytes + std::ptrdiff_t(index * windowStride) *
+                                      std::ptrdiff_t(bytes),
+                    bytes);
+    int64_t outer = 1, inner = 1;
+    for (int64_t dim = 0; dim < axis; ++dim)
+        if (!checked_spectral_product(outer, shape[dim], outer)) return 61;
+    for (int64_t dim = axis + 1; dim < rank; ++dim)
+        if (!checked_spectral_product(inner, shape[dim], inner)) return 61;
+    const int64_t samples = shape[axis];
+    if (onesided)
+        return tessera_x86_stft_policy_strided_storage(
+            digest, contiguous.data(), paddedWindow.data(), output, outer,
+            samples, inner, fftN, hop, frames, storage, outputScale, center,
+            padMode);
+
+    int64_t batch = 0;
+    if (!checked_spectral_product(outer, inner, batch)) return 61;
+    const int64_t pad = center ? fftN / 2 : 0;
+    if (padMode == 1 && samples <= pad) return 62;
+    std::vector<unsigned char> axisPacked(size_t(elements) * bytes);
+    pack_axis_storage(contiguous.data(), axisPacked.data(), outer, samples,
+                      inner, bytes);
+    std::vector<float> x(size_t(batch * samples));
+    std::vector<float> w(static_cast<size_t>(fftN));
+    unpack_spectral_storage(axisPacked.data(), x.data(), batch * samples, storage);
+    unpack_spectral_storage(paddedWindow.data(), w.data(), fftN, storage);
+    std::vector<float> full(size_t(2 * batch * frames * fftN), 0.0f);
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t frame = 0; frame < frames; ++frame)
+        for (int64_t local = 0; local < fftN; ++local) {
+          int64_t source = frame * hop + local - pad;
+          if ((source < 0 || source >= samples) && padMode == 1)
+            source = source < 0 ? -source : 2 * samples - 2 - source;
+          const float value = source >= 0 && source < samples
+                                  ? x[row * samples + source]
+                                  : 0.0f;
+          full[2 * ((row * frames + frame) * fftN + local)] = value * w[local];
+        }
+    if (execute_any_fft(full.data(), batch * frames, fftN, false, digest))
+        return 63;
+    if (outputScale != 1.0f)
+        scale_complex(full.data(), batch * frames * fftN, outputScale);
+    unpack_axis_storage(full.data(), output, outer, frames * fftN, inner,
+                        sizeof(float) * 2);
+    return 0;
+}
+
+extern "C" int tessera_x86_istft_policy_layout_storage(
+    const char* digest, const float* input, const void* window, void* output,
+    int64_t rank, const int64_t* shape, const int64_t* strides, int64_t axis,
+    int64_t windowStride, int64_t fftN, int64_t win, int64_t hop, int storage,
+    float outputScale, int center, int64_t outputSamples, int onesided) {
+    if (!valid_spectral_storage(storage) || !digest || !input || !window ||
+        !output || rank < 2 || axis <= 0 || axis >= rank || fftN < win ||
+        windowStride == 0 || (onesided != 0 && onesided != 1))
+        return 70;
+    const int64_t frameAxis = axis - 1;
+    const int64_t frames = shape[frameAxis];
+    const int64_t bins = shape[axis];
+    const int64_t expectedBins = onesided ? fftN / 2 + 1 : fftN;
+    if (bins != expectedBins) return 70;
+    int64_t spectrumElements = 1;
+    for (int64_t dim = 0; dim < rank; ++dim)
+        if (!checked_spectral_product(spectrumElements, shape[dim],
+                                      spectrumElements)) return 71;
+    std::vector<float> contiguous(size_t(2 * spectrumElements));
+    int64_t packedElements = 0;
+    if (!pack_layout_storage(input, contiguous.data(), rank, shape, strides,
+                             sizeof(float) * 2, packedElements) ||
+        packedElements != spectrumElements)
+        return 71;
+    const size_t bytes = spectral_storage_bytes(storage);
+    std::vector<unsigned char> paddedWindow(size_t(fftN) * bytes, 0);
+    const int64_t windowOffset = (fftN - win) / 2;
+    const auto* windowBytes = static_cast<const unsigned char*>(window);
+    for (int64_t index = 0; index < win; ++index)
+        std::memcpy(paddedWindow.data() + size_t(windowOffset + index) * bytes,
+                    windowBytes + std::ptrdiff_t(index * windowStride) *
+                                      std::ptrdiff_t(bytes), bytes);
+    int64_t outer = 1, inner = 1;
+    for (int64_t dim = 0; dim < frameAxis; ++dim)
+        if (!checked_spectral_product(outer, shape[dim], outer)) return 71;
+    for (int64_t dim = axis + 1; dim < rank; ++dim)
+        if (!checked_spectral_product(inner, shape[dim], inner)) return 71;
+    if (onesided)
+        return tessera_x86_istft_policy_strided_storage(
+            digest, contiguous.data(), paddedWindow.data(), output, outer,
+            frames, bins, inner, fftN, hop, storage, outputScale, center,
+            outputSamples);
+
+    int64_t batch = 0;
+    if (!checked_spectral_product(outer, inner, batch)) return 71;
+    std::vector<float> packed(size_t(2 * spectrumElements));
+    pack_axis_storage(contiguous.data(), packed.data(), outer, frames * bins,
+                      inner, sizeof(float) * 2);
+    if (execute_any_fft(packed.data(), batch * frames, fftN, true, digest))
+        return 72;
+    std::vector<float> w(static_cast<size_t>(fftN));
+    unpack_spectral_storage(paddedWindow.data(), w.data(), fftN, storage);
+    const int64_t rawSamples = (frames - 1) * hop + fftN;
+    const int64_t start = center ? fftN / 2 : 0;
+    const int64_t available = rawSamples - 2 * start;
+    if (outputSamples <= 0 || outputSamples > available) return 73;
+    std::vector<float> cropped(size_t(batch * outputSamples));
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t sample = 0; sample < outputSamples; ++sample) {
+        const int64_t rawAt = sample + start;
+        float numerator = 0.0f, weight = 0.0f;
+        for (int64_t frame = 0; frame < frames; ++frame) {
+          const int64_t local = rawAt - frame * hop;
+          if (local < 0 || local >= fftN) continue;
+          const float windowValue = w[local];
+          numerator += packed[2 * ((row * frames + frame) * fftN + local)] *
+                       windowValue;
+          weight += windowValue * windowValue;
+        }
+        cropped[row * outputSamples + sample] =
+            numerator / std::max(weight, 1.0e-12f) * outputScale;
+      }
+    std::vector<unsigned char> stored(size_t(batch * outputSamples) * bytes);
+    pack_spectral_storage(cropped.data(), stored.data(), batch * outputSamples,
+                          storage);
+    unpack_axis_storage(stored.data(), output, outer, outputSamples, inner,
+                        bytes);
+    return 0;
+}
+
+namespace {
+
+bool expand_broadcast_windows(const void* window, int storage,
+                              int64_t windowRank,
+                              const int64_t* windowShape,
+                              const int64_t* windowStrides,
+                              const std::vector<int64_t>& batchShape,
+                              int64_t fftN, std::vector<float>& expanded) {
+    if (!window || !windowShape || !windowStrides || windowRank < 1 ||
+        windowRank > 8 || windowRank - 1 > int64_t(batchShape.size()))
+        return false;
+    const int64_t win = windowShape[windowRank - 1];
+    if (win <= 0 || win > fftN) return false;
+    const int64_t leading = int64_t(batchShape.size()) - (windowRank - 1);
+    for (int64_t dim = 0; dim < windowRank - 1; ++dim) {
+        const int64_t extent = windowShape[dim];
+        if (extent <= 0 || (extent != 1 && extent != batchShape[leading + dim]))
+            return false;
+    }
+    int64_t batch = 1;
+    for (int64_t extent : batchShape)
+        if (!checked_spectral_product(batch, extent, batch)) return false;
+    expanded.assign(size_t(batch * fftN), 0.0f);
+    const int64_t offset = (fftN - win) / 2;
+    std::vector<int64_t> coordinate(batchShape.size());
+    for (int64_t row = 0; row < batch; ++row) {
+        int64_t remaining = row;
+        for (int64_t dim = int64_t(batchShape.size()) - 1; dim >= 0; --dim) {
+            coordinate[dim] = remaining % batchShape[dim];
+            remaining /= batchShape[dim];
+        }
+        int64_t base = 0;
+        for (int64_t dim = 0; dim < windowRank - 1; ++dim) {
+            const int64_t at = windowShape[dim] == 1 ? 0 : coordinate[leading + dim];
+            base += at * windowStrides[dim];
+        }
+        for (int64_t local = 0; local < win; ++local)
+            expanded[row * fftN + offset + local] = load_spectral_storage(
+                window, base + local * windowStrides[windowRank - 1], storage);
+    }
+    return true;
+}
+
+}  // namespace
+
+// v8 broadcast ABI: both tensors carry their original logical layout. Window
+// batch dimensions are right-aligned with the transform batch and may be one.
+extern "C" int tessera_x86_stft_policy_broadcast_layout_storage(
+    const char* digest, const void* input, const void* window, float* output,
+    int64_t rank, const int64_t* shape, const int64_t* strides, int64_t axis,
+    int64_t windowRank, const int64_t* windowShape,
+    const int64_t* windowStrides, int64_t fftN, int64_t hop, int64_t frames,
+    int storage, float outputScale, int center, int padMode, int onesided) {
+    if (!digest || !input || !window || !output ||
+        !valid_spectral_storage(storage) || rank <= 0 || rank > 8 ||
+        axis < 0 || axis >= rank || fftN <= 0 || hop <= 0 || frames <= 0 ||
+        (center != 0 && center != 1) || (padMode != 0 && padMode != 1) ||
+        (onesided != 0 && onesided != 1)) return 80;
+    int64_t elements = 0;
+    const size_t bytes = spectral_storage_bytes(storage);
+    std::vector<unsigned char> contiguous;
+    int64_t total = 1;
+    for (int64_t dim = 0; dim < rank; ++dim)
+        if (!checked_spectral_product(total, shape[dim], total)) return 81;
+    contiguous.resize(size_t(total) * bytes);
+    if (!pack_layout_storage(input, contiguous.data(), rank, shape, strides,
+                             bytes, elements) || elements != total) return 81;
+    int64_t outer = 1, inner = 1;
+    std::vector<int64_t> batchShape;
+    for (int64_t dim = 0; dim < rank; ++dim) {
+        if (dim < axis) outer *= shape[dim];
+        else if (dim > axis) inner *= shape[dim];
+        if (dim != axis) batchShape.push_back(shape[dim]);
+    }
+    const int64_t batch = outer * inner, samples = shape[axis];
+    const int64_t pad = center ? fftN / 2 : 0;
+    const int64_t paddedSamples = std::max(samples + 2 * pad, fftN);
+    if (frames != (paddedSamples - fftN) / hop + 1 ||
+        (padMode == 1 && center && samples <= pad)) return 82;
+    std::vector<unsigned char> axisPacked(size_t(total) * bytes);
+    pack_axis_storage(contiguous.data(), axisPacked.data(), outer, samples,
+                      inner, bytes);
+    std::vector<float> x(static_cast<size_t>(total));
+    unpack_spectral_storage(axisPacked.data(), x.data(), total, storage);
+    std::vector<float> windows;
+    if (!expand_broadcast_windows(window, storage, windowRank, windowShape,
+                                  windowStrides, batchShape, fftN, windows))
+        return 83;
+    const int64_t bins = onesided ? fftN / 2 + 1 : fftN;
+    std::vector<float> packed(size_t(2 * batch * frames * bins));
+    constexpr double kTwoPi = 6.283185307179586476925286766559;
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t frame = 0; frame < frames; ++frame)
+        for (int64_t bin = 0; bin < bins; ++bin) {
+          double real = 0.0, imag = 0.0;
+          for (int64_t local = 0; local < fftN; ++local) {
+            int64_t source = frame * hop + local - pad;
+            if ((source < 0 || source >= samples) && padMode == 1)
+              source = source < 0 ? -source : 2 * samples - 2 - source;
+            const double value = source >= 0 && source < samples
+                ? double(x[row * samples + source]) * windows[row * fftN + local]
+                : 0.0;
+            const double angle = kTwoPi * double(bin * local) / double(fftN);
+            real += value * std::cos(angle);
+            imag -= value * std::sin(angle);
+          }
+          const int64_t at = (row * frames + frame) * bins + bin;
+          packed[2 * at] = float(real * outputScale);
+          packed[2 * at + 1] = float(imag * outputScale);
+        }
+    unpack_axis_storage(packed.data(), output, outer, frames * bins, inner,
+                        sizeof(float) * 2);
+    return 0;
+}
+
+// Order 8g causal streaming ABI. The tail is canonical batch-major storage;
+// chunk layout and per-batch window broadcasting stay physical-package owned.
+extern "C" int tessera_x86_streaming_stft_broadcast_layout_storage(
+    const char* digest, const void* input, const void* tail,
+    const void* window, float* output, void* nextTail,
+    int64_t rank, const int64_t* shape, const int64_t* strides, int64_t axis,
+    int64_t tailSamples, int64_t windowRank, const int64_t* windowShape,
+    const int64_t* windowStrides, int64_t fftN, int64_t hop, int64_t frames,
+    int storage, float outputScale, int onesided) {
+    if (!digest || !input || !window || !output || !nextTail ||
+        (tailSamples && !tail) || !valid_spectral_storage(storage) ||
+        rank <= 0 || rank > 8 || axis < 0 || axis >= rank || fftN <= 0 ||
+        hop <= 0 || hop > fftN || tailSamples < 0 || tailSamples >= fftN ||
+        frames < 0 || (onesided != 0 && onesided != 1)) return 100;
+    const size_t bytes = spectral_storage_bytes(storage);
+    int64_t elements = 1, outer = 1, inner = 1;
+    std::vector<int64_t> batchShape;
+    for (int64_t dim = 0; dim < rank; ++dim) {
+        if (!checked_spectral_product(elements, shape[dim], elements)) return 101;
+        if (dim < axis && !checked_spectral_product(outer, shape[dim], outer))
+            return 101;
+        if (dim > axis && !checked_spectral_product(inner, shape[dim], inner))
+            return 101;
+        if (dim != axis) batchShape.push_back(shape[dim]);
+    }
+    int64_t batch = 0;
+    if (!checked_spectral_product(outer, inner, batch)) return 101;
+    const int64_t chunkSamples = shape[axis];
+    const int64_t combinedSamples = tailSamples + chunkSamples;
+    const int64_t expectedFrames =
+        combinedSamples < fftN ? 0 : (combinedSamples - fftN) / hop + 1;
+    if (frames != expectedFrames) return 102;
+    std::vector<unsigned char> contiguous(size_t(elements) * bytes);
+    int64_t packedElements = 0;
+    if (!pack_layout_storage(input, contiguous.data(), rank, shape, strides,
+                             bytes, packedElements) || packedElements != elements)
+        return 103;
+    std::vector<unsigned char> axisPacked(size_t(elements) * bytes);
+    pack_axis_storage(contiguous.data(), axisPacked.data(), outer, chunkSamples,
+                      inner, bytes);
+    std::vector<float> chunk(static_cast<size_t>(elements));
+    unpack_spectral_storage(axisPacked.data(), chunk.data(), elements, storage);
+    std::vector<float> prior(size_t(batch * tailSamples));
+    if (tailSamples)
+        unpack_spectral_storage(tail, prior.data(), batch * tailSamples, storage);
+    std::vector<float> windows;
+    if (!expand_broadcast_windows(window, storage, windowRank, windowShape,
+                                  windowStrides, batchShape, fftN, windows))
+        return 104;
+    const int64_t bins = onesided ? fftN / 2 + 1 : fftN;
+    std::vector<float> packed(size_t(2 * batch * frames * bins), 0.0f);
+    auto sample = [&](int64_t row, int64_t at) {
+        return at < tailSamples ? prior[row * tailSamples + at]
+                                : chunk[row * chunkSamples + at - tailSamples];
+    };
+    constexpr double kTwoPi = 6.283185307179586476925286766559;
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t frame = 0; frame < frames; ++frame)
+        for (int64_t bin = 0; bin < bins; ++bin) {
+          double real = 0.0, imag = 0.0;
+          for (int64_t local = 0; local < fftN; ++local) {
+            const double value = sample(row, frame * hop + local) *
+                                 windows[row * fftN + local];
+            const double angle = kTwoPi * double(bin * local) / double(fftN);
+            real += value * std::cos(angle);
+            imag -= value * std::sin(angle);
+          }
+          const int64_t at = (row * frames + frame) * bins + bin;
+          packed[2 * at] = float(real * outputScale);
+          packed[2 * at + 1] = float(imag * outputScale);
+        }
+    if (frames)
+        unpack_axis_storage(packed.data(), output, outer, frames * bins, inner,
+                            sizeof(float) * 2);
+    const int64_t nextSamples = combinedSamples - frames * hop;
+    std::vector<float> next(size_t(batch * nextSamples));
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t at = 0; at < nextSamples; ++at)
+        next[row * nextSamples + at] =
+            sample(row, frames * hop + at);
+    pack_spectral_storage(next.data(), nextTail, batch * nextSamples, storage);
+    return 0;
+}
+
+extern "C" int tessera_x86_istft_policy_broadcast_layout_storage(
+    const char* digest, const float* input, const void* window, void* output,
+    int64_t rank, const int64_t* shape, const int64_t* strides, int64_t axis,
+    int64_t windowRank, const int64_t* windowShape,
+    const int64_t* windowStrides, int64_t fftN, int64_t hop, int storage,
+    float outputScale, int center, int64_t outputSamples, int onesided) {
+    if (!digest || !input || !window || !output ||
+        !valid_spectral_storage(storage) || rank < 2 || rank > 8 ||
+        axis <= 0 || axis >= rank || fftN <= 0 || hop <= 0 ||
+        outputSamples <= 0 || (center != 0 && center != 1) ||
+        (onesided != 0 && onesided != 1)) return 90;
+    const int64_t frameAxis = axis - 1, frames = shape[frameAxis];
+    const int64_t bins = shape[axis];
+    if (bins != (onesided ? fftN / 2 + 1 : fftN)) return 91;
+    int64_t elements = 1;
+    for (int64_t dim = 0; dim < rank; ++dim)
+        if (!checked_spectral_product(elements, shape[dim], elements)) return 91;
+    std::vector<float> contiguous(size_t(2 * elements));
+    int64_t packedElements = 0;
+    if (!pack_layout_storage(input, contiguous.data(), rank, shape, strides,
+                             sizeof(float) * 2, packedElements) ||
+        packedElements != elements) return 91;
+    int64_t outer = 1, inner = 1;
+    std::vector<int64_t> batchShape;
+    for (int64_t dim = 0; dim < rank; ++dim) {
+        if (dim < frameAxis) outer *= shape[dim];
+        else if (dim > axis) inner *= shape[dim];
+        if (dim != frameAxis && dim != axis) batchShape.push_back(shape[dim]);
+    }
+    const int64_t batch = outer * inner;
+    std::vector<float> spectra(size_t(2 * elements));
+    pack_axis_storage(contiguous.data(), spectra.data(), outer, frames * bins,
+                      inner, sizeof(float) * 2);
+    std::vector<float> windows;
+    if (!expand_broadcast_windows(window, storage, windowRank, windowShape,
+                                  windowStrides, batchShape, fftN, windows))
+        return 92;
+    const int64_t rawSamples = (frames - 1) * hop + fftN;
+    const int64_t trim = center ? fftN / 2 : 0;
+    if (outputSamples > rawSamples - 2 * trim) return 93;
+    constexpr double kTwoPi = 6.283185307179586476925286766559;
+    std::vector<float> result(size_t(batch * outputSamples));
+    for (int64_t row = 0; row < batch; ++row)
+      for (int64_t outputAt = 0; outputAt < outputSamples; ++outputAt) {
+        const int64_t sample = outputAt + trim;
+        double numerator = 0.0, weightSum = 0.0;
+        for (int64_t frame = 0; frame < frames; ++frame) {
+          const int64_t local = sample - frame * hop;
+          if (local < 0 || local >= fftN) continue;
+          double frameValue = 0.0;
+          for (int64_t bin = 0; bin < bins; ++bin) {
+            double multiplicity = 1.0;
+            if (onesided && bin > 0 && !(fftN % 2 == 0 && bin == bins - 1))
+              multiplicity = 2.0;
+            const int64_t at = (row * frames + frame) * bins + bin;
+            const double angle = kTwoPi * double(bin * local) / double(fftN);
+            frameValue += multiplicity *
+                (double(spectra[2 * at]) * std::cos(angle) -
+                 double(spectra[2 * at + 1]) * std::sin(angle));
+          }
+          frameValue *= outputScale / double(fftN);
+          const double w = windows[row * fftN + local];
+          numerator += frameValue * w;
+          weightSum += w * w;
+        }
+        result[row * outputSamples + outputAt] =
+            float(numerator / std::max(weightSum, 1.0e-12));
+      }
+    const size_t bytes = spectral_storage_bytes(storage);
+    std::vector<unsigned char> stored(size_t(batch * outputSamples) * bytes);
+    pack_spectral_storage(result.data(), stored.data(), batch * outputSamples,
+                          storage);
+    unpack_axis_storage(stored.data(), output, outer, outputSamples, inner, bytes);
+    return 0;
 }

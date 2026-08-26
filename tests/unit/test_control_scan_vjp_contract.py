@@ -1,15 +1,12 @@
-"""W4 / queue order 2 — the scan reverse rule, stated executably before it is
-implemented in the compiler.
+"""W4 / queue order 2 — the scan reverse rule and its numerical oracle.
 
-`tessera.control_scan` is the fourth control primitive and the only one with
-no reverse rule; it fails closed with AUTODIFF_CONTROL_SCAN_UNSUPPORTED
-(`tests/tessera-ir/phase_f4/autodiff_control_scan_unsupported.mlir`).
+`tessera.control_scan` is the fourth control primitive. The bounded symbol-body
+form is normalized to SCF inside paired reverse mode; payload/dynamic/malformed
+forms still fail closed with AUTODIFF_CONTROL_SCAN_UNSUPPORTED.
 
-What blocks it is structural, not mathematical, and this file is the evidence
-for that claim: the rule is written out and checked against central
-differences here, so the C++ implementation has an oracle to match rather than
-a derivation to redo. When the paired pass grows the rule, these rows become
-its differential reference.
+The bounded compiler implementation consumes this rule through canonical SCF
+normalization. These rows remain its independent differential reference; they
+also explain why broader dynamic/payload forms stay outside the first envelope.
 
 ── The rule ──
 

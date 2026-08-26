@@ -927,9 +927,17 @@ static FailureOr<std::string> spectralBackwardDigest(Operation *op) {
   auto normalization = stringAttr("normalization");
   auto layout = stringAttr("spectrum_layout");
   auto padMode = stringAttr("pad_mode");
+  auto axisPacking = stringAttr("axis_packing");
+  auto windowBroadcast = stringAttr("window_broadcast");
   auto lineage = stringAttr("mutation_lineage");
+  auto numericPolicy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+  auto numericStorage =
+      numericPolicy ? numericPolicy.getAs<StringAttr>("storage") : StringAttr();
+  auto numericAccum =
+      numericPolicy ? numericPolicy.getAs<StringAttr>("accum") : StringAttr();
   if (!kind || !target || !arch || !normalization || !layout || !padMode ||
-      !lineage)
+      !axisPacking || !windowBroadcast ||
+      !lineage || !numericStorage || !numericAccum)
     return failure();
   auto integer = [&](StringRef name, int64_t fallback) {
     auto attr = op->getAttrOfType<IntegerAttr>(name);
@@ -948,18 +956,21 @@ static FailureOr<std::string> spectralBackwardDigest(Operation *op) {
                             ? outputSignature.getValue().str()
                             : spectralBackwardTypeSignature(op->getResults());
   std::string contract =
-      (Twine("schema=tessera.spectral_backward.v1;kind=") + kind.getValue() +
+      (Twine("schema=tessera.spectral_backward.v3;kind=") + kind.getValue() +
        ";target=" + target.getValue() + ";arch=" + arch.getValue() +
        ";inputs=" + inputs + ";outputs=" + outputs +
        ";axis=" + Twine(integer("axis", -1)) + ";logical_length=" +
        Twine(integer("logical_length", -1)) + ";normalization=" +
        normalization.getValue() + ";spectrum_layout=" + layout.getValue() +
+       ";axis_packing=" + axisPacking.getValue() +
        ";hop=" + Twine(integer("hop", -1)) + ";center=" +
        Twine(boolean("center", false) ? 1 : 0) + ";onesided=" +
        Twine(boolean("onesided", true) ? 1 : 0) + ";pad_mode=" +
        padMode.getValue() + ";output_length=" +
        Twine(integer("output_length", -1)) + ";mutation_lineage=" +
-       lineage.getValue())
+       lineage.getValue() + ";numeric_storage=" + numericStorage.getValue() +
+       ";numeric_accum=" + numericAccum.getValue() +
+       ";window_broadcast=" + windowBroadcast.getValue())
           .str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -2126,6 +2137,54 @@ struct GraphToSchedulePass
         op->setAttr("onesided", builder.getBoolAttr(true));
       if (!op->hasAttr("pad_mode"))
         op->setAttr("pad_mode", builder.getStringAttr("constant"));
+      if (!op->hasAttr("axis_packing"))
+        op->setAttr("axis_packing",
+                    builder.getStringAttr("native_runtime_stride_descriptor_v1"));
+      if (!op->hasAttr("window_broadcast")) {
+        StringRef kind = op->getAttrOfType<StringAttr>("kind").getValue();
+        op->setAttr("window_broadcast", builder.getStringAttr(
+            kind == "tessera.stft" || kind == "tessera.istft"
+                ? "trailing_batch_broadcast_v1"
+                : "not_applicable"));
+      }
+      if (!op->hasAttr("numeric_policy")) {
+        StringRef storage = "fp32";
+        auto kind = op->getAttrOfType<StringAttr>("kind").getValue();
+        unsigned storageOperand = kind == "tessera.istft" ? 2 : 1;
+        if (storageOperand < op->getNumOperands()) {
+          auto tensor = dyn_cast<RankedTensorType>(
+              op->getOperand(storageOperand).getType());
+          if (tensor) {
+            Type element = tensor.getElementType();
+            if (element.isF16()) storage = "fp16";
+            else if (element.isBF16()) storage = "bf16";
+          }
+        }
+        op->setAttr(
+            "numeric_policy",
+            builder.getDictionaryAttr({
+                builder.getNamedAttr("storage", builder.getStringAttr(storage)),
+                builder.getNamedAttr("accum", builder.getStringAttr("fp32")),
+            }));
+      }
+      auto numericPolicy =
+          op->getAttrOfType<DictionaryAttr>("numeric_policy");
+      auto numericStorage = numericPolicy
+                                ? numericPolicy.getAs<StringAttr>("storage")
+                                : StringAttr();
+      auto numericAccum = numericPolicy
+                              ? numericPolicy.getAs<StringAttr>("accum")
+                              : StringAttr();
+      if (!numericStorage || !numericAccum ||
+          (numericStorage.getValue() != "fp16" &&
+           numericStorage.getValue() != "bf16" &&
+           numericStorage.getValue() != "fp32") ||
+          numericAccum.getValue() != "fp32") {
+        op->emitError(
+            "NUMERIC_POLICY_ACCUM_UNREALIZABLE: spectral butterfly chains "
+            "require explicit fp16/bf16/fp32 storage with fp32 accumulation");
+        return signalPassFailure();
+      }
       op->setAttr(
           "input_signature",
           builder.getStringAttr(spectralBackwardTypeSignature(op->getOperands())));
@@ -2146,9 +2205,9 @@ struct GraphToSchedulePass
       for (StringRef name : {"target", "arch", "kind", "axis",
                              "logical_length", "normalization",
                              "spectrum_layout", "hop", "center", "onesided",
-                             "pad_mode", "output_length",
+                             "pad_mode", "axis_packing", "window_broadcast", "output_length",
                              "input_signature", "output_signature",
-                             "mutation_lineage"})
+                             "mutation_lineage", "numeric_policy"})
         if (Attribute attr = op->getAttr(name)) state.addAttribute(name, attr);
       Operation *scheduled = builder.create(state);
       for (auto [original, replacement] :
@@ -3513,9 +3572,9 @@ struct ScheduleToTilePass
       for (StringRef name : {"target", "arch", "kind", "axis",
                              "logical_length", "normalization",
                              "spectrum_layout", "hop", "center", "onesided",
-                             "pad_mode", "output_length",
+                             "pad_mode", "axis_packing", "window_broadcast", "output_length",
                              "input_signature", "output_signature",
-                             "mutation_lineage"})
+                             "mutation_lineage", "numeric_policy"})
         if (Attribute attr = scheduled->getAttr(name))
           kernelState.addAttribute(name, attr);
       auto kindAttr = scheduled->getAttrOfType<StringAttr>("kind");
@@ -3530,28 +3589,34 @@ struct ScheduleToTilePass
       auto dyType = ranked(graph->getOperand(0).getType());
       auto inputType = ranked(graph->getOperand(1).getType());
       auto parameterType = ranked(graph->getOperand(2).getType());
-      if (!dyType || !inputType || !parameterType ||
-          dyType.getRank() != inputType.getRank() ||
-          inputType.getRank() != parameterType.getRank()) {
-        scheduled->emitError("native compound adjoints require equal-rank static operands");
+      if (!dyType || !inputType || !parameterType) {
+        scheduled->emitError(
+            "native compound adjoints require static ranked operands");
         return signalPassFailure();
       }
       int64_t axis = axisAttr.getInt();
       if (axis < 0) axis += inputType.getRank();
-      if (axis != inputType.getRank() - 1) {
+      if ((kind == "tessera.spectral_filter" ||
+           kind == "tessera.spectral_conv") &&
+          axis != inputType.getRank() - 1) {
         scheduled->emitError("initial native compound adjoints require the last axis");
         return signalPassFailure();
       }
-      int64_t inputLength = inputType.getDimSize(axis);
-      int64_t parameterLength = parameterType.getDimSize(axis);
-      int64_t cotangentLength = dyType.getDimSize(axis);
-      if (inputLength <= 0 || parameterLength <= 0 || cotangentLength <= 0) {
-        scheduled->emitError(
-            "initial native compound adjoints require positive static extents");
-        return signalPassFailure();
-      }
-      int64_t batch = inputType.getNumElements() / inputLength;
+      auto isRealStorage = [](Type type) {
+        return type.isF32() || type.isF16() || type.isBF16();
+      };
+      auto storageName = [&](Type type) -> StringRef {
+        if (type.isF16()) return "f16";
+        if (type.isBF16()) return "bf16";
+        return "f32";
+      };
       if (kind == "tessera.spectral_filter") {
+        if (dyType.getRank() != inputType.getRank() ||
+            inputType.getRank() != parameterType.getRank()) {
+          scheduled->emitError(
+              "native spectral-filter adjoint requires equal-rank operands");
+          return signalPassFailure();
+        }
         auto complex = dyn_cast<ComplexType>(inputType.getElementType());
         if (!complex || !complex.getElementType().isF32() ||
             inputType != parameterType || inputType != dyType) {
@@ -3561,6 +3626,16 @@ struct ScheduleToTilePass
         kernelState.addAttribute(
             "elements", builder.getI64IntegerAttr(inputType.getNumElements()));
       } else if (kind == "tessera.spectral_conv") {
+        if (dyType.getRank() != inputType.getRank() ||
+            inputType.getRank() != parameterType.getRank()) {
+          scheduled->emitError(
+              "native spectral-conv adjoint requires equal-rank operands");
+          return signalPassFailure();
+        }
+        int64_t inputLength = inputType.getDimSize(axis);
+        int64_t parameterLength = parameterType.getDimSize(axis);
+        int64_t cotangentLength = dyType.getDimSize(axis);
+        int64_t batch = inputType.getNumElements() / inputLength;
         if (!inputType.getElementType().isF32() ||
             !parameterType.getElementType().isF32() ||
             !dyType.getElementType().isF32() ||
@@ -3596,6 +3671,163 @@ struct ScheduleToTilePass
             "parameter_length", builder.getI64IntegerAttr(parameterLength));
         kernelState.addAttribute(
             "normalization_scale", builder.getF32FloatAttr(scale));
+      } else if (kind == "tessera.stft") {
+        auto dyComplex = dyn_cast<ComplexType>(dyType.getElementType());
+        auto logicalLengthAttr =
+            scheduled->getAttrOfType<IntegerAttr>("logical_length");
+        auto hopAttr = scheduled->getAttrOfType<IntegerAttr>("hop");
+        auto normalizationAttr =
+            scheduled->getAttrOfType<StringAttr>("normalization");
+        auto centerAttr = scheduled->getAttrOfType<BoolAttr>("center");
+        auto padModeAttr = scheduled->getAttrOfType<StringAttr>("pad_mode");
+        auto onesidedAttr = scheduled->getAttrOfType<BoolAttr>("onesided");
+        auto spectrumLayoutAttr =
+            scheduled->getAttrOfType<StringAttr>("spectrum_layout");
+        if (!dyComplex || !dyComplex.getElementType().isF32() ||
+            !isRealStorage(inputType.getElementType()) ||
+            inputType.getElementType() != parameterType.getElementType() ||
+            parameterType.getRank() < 1 ||
+            dyType.getRank() != inputType.getRank() + 1 ||
+            !logicalLengthAttr || !hopAttr || !normalizationAttr ||
+            !centerAttr || !padModeAttr || !onesidedAttr ||
+            !spectrumLayoutAttr) {
+          scheduled->emitError(
+              "native STFT adjoint requires complex<f32> cotangents and "
+              "matching f16/bf16/f32 signal/window storage");
+          return signalPassFailure();
+        }
+        int64_t n = logicalLengthAttr.getInt();
+        int64_t windowLength = parameterType.getDimSize(parameterType.getRank() - 1);
+        int64_t hop = hopAttr.getInt();
+        int64_t samples = inputType.getDimSize(axis);
+        int64_t frames = dyType.getDimSize(axis);
+        int64_t bins = dyType.getDimSize(axis + 1);
+        int64_t batch = inputType.getNumElements() / samples;
+        int64_t outer = 1, inner = 1;
+        for (int64_t dim = 0; dim < axis; ++dim)
+          outer *= inputType.getDimSize(dim);
+        for (int64_t dim = axis + 1; dim < inputType.getRank(); ++dim)
+          inner *= inputType.getDimSize(dim);
+        int64_t pad = centerAttr.getValue() ? n / 2 : 0;
+        int64_t framedSamples = std::max(samples + 2 * pad, n);
+        int64_t expectedBins = onesidedAttr.getValue() ? n / 2 + 1 : n;
+        StringRef expectedLayout = onesidedAttr.getValue()
+                                       ? "half_spectrum_nyquist_explicit"
+                                       : "full_complex";
+        bool validPadMode = padModeAttr.getValue() == "constant" ||
+                            padModeAttr.getValue() == "reflect";
+        if (n <= 0 || windowLength <= 0 || windowLength > n || hop <= 0 ||
+            bins != expectedBins || spectrumLayoutAttr.getValue() != expectedLayout ||
+            frames != (framedSamples - n) / hop + 1 || !validPadMode ||
+            (centerAttr.getValue() && padModeAttr.getValue() == "reflect" &&
+             samples <= pad) ||
+            dyType.getNumElements() != batch * frames * bins) {
+          scheduled->emitError(
+              "native STFT adjoint framing disagrees with the bounded policy");
+          return signalPassFailure();
+        }
+        StringRef normalization = normalizationAttr.getValue();
+        double scale = normalization == "forward"
+                           ? 1.0 / n
+                           : normalization == "ortho"
+                                 ? 1.0 / std::sqrt(double(n))
+                                 : 1.0;
+        kernelState.addAttribute("batch", builder.getI64IntegerAttr(batch));
+        kernelState.addAttribute("outer", builder.getI64IntegerAttr(outer));
+        kernelState.addAttribute("inner", builder.getI64IntegerAttr(inner));
+        kernelState.addAttribute("input_length",
+                                 builder.getI64IntegerAttr(samples));
+        kernelState.addAttribute("parameter_length",
+                                 builder.getI64IntegerAttr(windowLength));
+        kernelState.addAttribute("frames", builder.getI64IntegerAttr(frames));
+        kernelState.addAttribute("bins", builder.getI64IntegerAttr(bins));
+        kernelState.addAttribute(
+            "storage",
+            builder.getStringAttr(storageName(inputType.getElementType())));
+        kernelState.addAttribute(
+            "normalization_scale", builder.getF32FloatAttr(scale));
+      } else if (kind == "tessera.istft") {
+        auto inputComplex = dyn_cast<ComplexType>(inputType.getElementType());
+        auto logicalLengthAttr =
+            scheduled->getAttrOfType<IntegerAttr>("logical_length");
+        auto hopAttr = scheduled->getAttrOfType<IntegerAttr>("hop");
+        auto normalizationAttr =
+            scheduled->getAttrOfType<StringAttr>("normalization");
+        auto centerAttr = scheduled->getAttrOfType<BoolAttr>("center");
+        auto outputLengthAttr =
+            scheduled->getAttrOfType<IntegerAttr>("output_length");
+        auto onesidedAttr = scheduled->getAttrOfType<BoolAttr>("onesided");
+        auto spectrumLayoutAttr =
+            scheduled->getAttrOfType<StringAttr>("spectrum_layout");
+        if (!inputComplex || !inputComplex.getElementType().isF32() ||
+            !isRealStorage(parameterType.getElementType()) ||
+            dyType.getElementType() != parameterType.getElementType() ||
+            parameterType.getRank() < 1 ||
+            inputType.getRank() != dyType.getRank() + 1 ||
+            !logicalLengthAttr || !hopAttr || !normalizationAttr ||
+            !centerAttr || !outputLengthAttr || !onesidedAttr ||
+            !spectrumLayoutAttr) {
+          scheduled->emitError(
+              "native ISTFT adjoint requires complex<f32> spectra and "
+              "matching f16/bf16/f32 cotangent/window storage");
+          return signalPassFailure();
+        }
+        int64_t n = logicalLengthAttr.getInt();
+        int64_t windowLength = parameterType.getDimSize(parameterType.getRank() - 1);
+        int64_t hop = hopAttr.getInt();
+        int64_t frameAxis = axis - 1;
+        int64_t frames = inputType.getDimSize(frameAxis);
+        int64_t bins = inputType.getDimSize(axis);
+        int64_t samples = dyType.getDimSize(frameAxis);
+        int64_t batch = dyType.getNumElements() / samples;
+        int64_t outer = 1, inner = 1;
+        for (int64_t dim = 0; dim < axis - 1; ++dim)
+          outer *= inputType.getDimSize(dim);
+        for (int64_t dim = axis + 1; dim < inputType.getRank(); ++dim)
+          inner *= inputType.getDimSize(dim);
+        int64_t rawSamples = (frames - 1) * hop + n;
+        int64_t trim = centerAttr.getValue() ? n / 2 : 0;
+        int64_t available = rawSamples - 2 * trim;
+        int64_t outputLength = outputLengthAttr.getInt();
+        int64_t expectedBins = onesidedAttr.getValue() ? n / 2 + 1 : n;
+        StringRef expectedLayout = onesidedAttr.getValue()
+                                       ? "half_spectrum_nyquist_explicit"
+                                       : "full_complex";
+        if (n <= 0 || windowLength <= 0 || windowLength > n || hop <= 0 ||
+            bins != expectedBins || spectrumLayoutAttr.getValue() != expectedLayout ||
+            samples != outputLength || outputLength <= 0 ||
+            outputLength > available ||
+            inputType.getNumElements() != batch * frames * bins) {
+          scheduled->emitError(
+              "native ISTFT adjoint overlap-add disagrees with the bounded policy");
+          return signalPassFailure();
+        }
+        StringRef normalization = normalizationAttr.getValue();
+        double scale = normalization == "backward"
+                           ? 1.0 / n
+                           : normalization == "ortho"
+                                 ? 1.0 / std::sqrt(double(n))
+                                 : 1.0;
+        kernelState.addAttribute("batch", builder.getI64IntegerAttr(batch));
+        kernelState.addAttribute("outer", builder.getI64IntegerAttr(outer));
+        kernelState.addAttribute("inner", builder.getI64IntegerAttr(inner));
+        kernelState.addAttribute("cotangent_length",
+                                 builder.getI64IntegerAttr(samples));
+        kernelState.addAttribute("raw_length",
+                                 builder.getI64IntegerAttr(rawSamples));
+        kernelState.addAttribute("parameter_length",
+                                 builder.getI64IntegerAttr(windowLength));
+        kernelState.addAttribute("frames", builder.getI64IntegerAttr(frames));
+        kernelState.addAttribute("bins", builder.getI64IntegerAttr(bins));
+        kernelState.addAttribute(
+            "storage",
+            builder.getStringAttr(storageName(parameterType.getElementType())));
+        kernelState.addAttribute(
+            "normalization_scale", builder.getF32FloatAttr(scale));
+      } else {
+        scheduled->emitError(
+            "compound spectral adjoint kind has no native package");
+        return signalPassFailure();
       }
       kernelState.addAttribute("tessera.schedule_hash", hash);
       builder.create(kernelState);
@@ -3706,6 +3938,40 @@ struct ScheduleToTilePass
         if (!requireMatches("normalization", normalizationAttr.getValue()))
           return signalPassFailure();
       }
+      if (auto transformAttr =
+              scheduled->getAttrOfType<IntegerAttr>("transform_length")) {
+        if (!requireMatches("n_fft", Twine(transformAttr.getInt())))
+          return signalPassFailure();
+      }
+      if (auto onesidedAttr = scheduled->getAttrOfType<BoolAttr>("onesided")) {
+        if (!requireMatches("onesided", Twine(onesidedAttr.getValue() ? 1 : 0)))
+          return signalPassFailure();
+      }
+      if (auto broadcastAttr =
+              scheduled->getAttrOfType<StringAttr>("window_broadcast")) {
+        if (!requireMatches("window_broadcast", broadcastAttr.getValue()))
+          return signalPassFailure();
+      }
+      auto numericPolicy =
+          scheduled->getAttrOfType<DictionaryAttr>("numeric_policy");
+      auto numericStorage =
+          numericPolicy ? numericPolicy.getAs<StringAttr>("storage") : nullptr;
+      auto numericAccum =
+          numericPolicy ? numericPolicy.getAs<StringAttr>("accum") : nullptr;
+      auto storage = scheduled->getAttrOfType<StringAttr>("storage");
+      StringRef expectedStorage =
+          storage && storage.getValue() == "f16" ? "fp16" :
+          storage && storage.getValue() == "bf16" ? "bf16" : "fp32";
+      if (!numericStorage || !numericAccum ||
+          numericStorage.getValue() != expectedStorage ||
+          numericAccum.getValue() != "fp32" ||
+          !requireMatches("numeric_storage", numericStorage.getValue()) ||
+          !requireMatches("numeric_accum", numericAccum.getValue())) {
+        scheduled->emitError(
+            "NUMERIC_POLICY_ACCUM_UNREALIZABLE: scheduled spectral program "
+            "requires storage-matched numeric_policy and fp32 accumulation");
+        return signalPassFailure();
+      }
       SmallVector<schedule::ArtifactOp> matchingArtifacts;
       mod.walk([&](schedule::ArtifactOp artifact) {
         if (artifact.getHash() == hash.getValue())
@@ -3763,14 +4029,17 @@ struct ScheduleToTilePass
            {"target", "arch", "kind", "input_shapes", "input_signature",
             "shape_bounds", "template_digest", "shape_policy",
             "storage", "abi_storage", "storage_conversion", "axis_packing",
-            "normalization",
+            "normalization", "numeric_policy",
             "complex_layout", "accumulation", "workspace_policy", "fusion_topology",
-            "mutation_lineage", "native_entry", "child_fft_digests"})
+            "mutation_lineage", "native_entry", "child_fft_digests",
+            "pad_mode", "window_broadcast"})
         kernelState.addAttribute(name, scheduled->getAttr(name));
       for (StringRef name : {"output_shape", "axis", "dct_type", "padding", "crop",
-                             "window_length", "hop", "frames",
-                             "workspace_bytes"})
+                             "transform_length", "window_length", "hop", "frames",
+                             "output_length", "workspace_bytes"})
         kernelState.addAttribute(name, scheduled->getAttr(name));
+      kernelState.addAttribute("center", scheduled->getAttr("center"));
+      kernelState.addAttribute("onesided", scheduled->getAttr("onesided"));
       kernelState.addAttribute(
           "tessera.workgroup_size",
           scheduled->getAttr("workgroup_size"));

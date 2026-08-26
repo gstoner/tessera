@@ -5,7 +5,10 @@ module {
       -> (tensor<8xf32>, tensor<4xf32>, tensor<8xf32>, tensor<8xf32>, tensor<8xf32>) {
     %r = "tile.all_reduce"(%x8) {
       mesh_axis = "dp", tensor_axis = 0 : i64, reduction = "sum",
-      world_size = 2 : i64
+      world_size = 2 : i64, ordinal = 7 : i64,
+      subgroup = array<i64: 0, 1>,
+      reshard_plan_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      region_path = ["main", "then"]
     } : (tensor<8xf32>) -> tensor<8xf32>
     %s = "tile.reduce_scatter"(%x8) {
       mesh_axis = "dp", tensor_axis = 0 : i64, reduction = "sum",
@@ -33,7 +36,11 @@ module {
 // CHECK-DAG: tessera.collective.transport = "runtime_adapter"
 // CHECK: %[[R_FUTURE:.*]] = tessera_collective.all_reduce
 // CHECK-SAME: mesh_axis = "dp"
+// CHECK-SAME: ordinal = 7
 // CHECK-SAME: reduction = "sum"
+// CHECK-SAME: region_path = ["main", "then"]
+// CHECK-SAME: reshard_plan_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+// CHECK-SAME: subgroup = array<i64: 0, 1>
 // CHECK-SAME: tensor_axis = 0
 // CHECK-SAME: world_size = 2
 // CHECK: %[[R:.*]] = tessera_collective.await %[[R_FUTURE]]

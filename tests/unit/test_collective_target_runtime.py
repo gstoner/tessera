@@ -23,10 +23,17 @@ from tessera.compiler.collective_target import (
 )
 from tessera.compiler.pipeline_runtime import (
     OptimizerShardTransport,
+    RankLocalCollectiveTransport,
     execute_pipeline_steps,
     execute_target_collectives,
 )
-from tessera.compiler.tile_ir import TileFunction, TileIRModule, TileOp
+from tessera.compiler.schedule_ir import ScheduleFunction, ScheduleIRModule, ScheduleOp
+from tessera.compiler.tile_ir import (
+    TileFunction,
+    TileIRModule,
+    TileOp,
+    lower_schedule_to_tile_ir,
+)
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -258,7 +265,7 @@ def test_tile_artifact_preserves_lineage_and_executes_distinct_outputs() -> None
         functions=[TileFunction("transport", operations, target="rocm_gfx1151")]
     )
     artifact = lower_tile_collective_artifact(module)
-    assert artifact.to_dict()["schema"] == "tessera.collective.target.v2"
+    assert artifact.to_dict()["schema"] == "tessera.collective.target.v3"
     assert artifact.execution.initiation == "host_collective"
     assert len(artifact.digest) == 64
     assert [row["output"] for row in artifact.records] == [
@@ -281,6 +288,236 @@ def test_tile_artifact_preserves_lineage_and_executes_distinct_outputs() -> None
     np.testing.assert_array_equal(runtime.values("y_rs")[0], np.array([4, 6], np.float32))
     for value in runtime.values("y_ag"):
         np.testing.assert_array_equal(value, np.arange(4, dtype=np.float32))
+
+
+def _mpi_tile_module(
+    communicator_digest: str, *, subgroup: tuple[int, ...] = (0, 1)
+) -> TileIRModule:
+    specs = (
+        ("all_reduce", "x_ar", "y_ar", "sum"),
+        ("reduce_scatter", "x_rs", "y_rs", "sum"),
+        ("all_gather", "x_ag", "y_ag", "none"),
+        ("all_to_all", "x_aa", "y_aa", "none"),
+        ("collective_permute", "x_cp", "y_cp", "none"),
+    )
+    operations = [
+        TileOp(
+            "tile.artifact",
+            {"hash": "1" * 64},
+        )
+    ]
+    for ordinal, (kind, source, result, reduction) in enumerate(specs):
+        attrs: dict[str, object] = {
+            "source": source,
+            "result": result,
+            "ordinal": ordinal,
+            "kind": kind,
+            "mesh_axis": "dp",
+            "tensor_axis": 0,
+            "reduction": reduction,
+            "effect": "collective",
+            "world_size": len(subgroup),
+            "dtype": "f32",
+            "reshard_plan_digest": "a" * 64,
+            "subgroup": list(subgroup),
+            "region_path": ["main"],
+        }
+        if kind == "collective_permute":
+            attrs["source_peers"] = list(subgroup)
+            attrs["target_peers"] = list(reversed(subgroup))
+        if kind == "all_to_all":
+            attrs["matching_rounds"] = [
+                [
+                    [rank, subgroup[(index + offset) % len(subgroup)]]
+                    for index, rank in enumerate(subgroup)
+                ]
+                for offset in range(1, len(subgroup))
+            ]
+        operations.append(
+            TileOp(
+                f"tile.{kind}",
+                attrs,
+                operands=[f"%{source}"],
+                result=result,
+            )
+        )
+    return TileIRModule(
+        functions=[TileFunction("transport", operations, target="cpu")],
+        attrs={
+            "tessera.ir.level": "tile",
+            "target": "cpu",
+            "collective.backend": "mpi",
+            "collective.communicator_digest": communicator_digest,
+        },
+    )
+
+
+def test_mpi_artifact_executes_all_explicit_ssa_on_rank_local_adapter() -> None:
+    communicator_digest = "d" * 64
+    artifact = lower_tile_collective_artifact(
+        _mpi_tile_module(communicator_digest)
+    )
+
+    class FakeRankLocalMPI:
+        backend = "mpi"
+        rank_local = True
+        world_size = 2
+        rank = 0
+        calls: list[tuple[str, tuple[object, ...]]] = []
+
+        def admit_artifact(self, digest, expected):
+            assert digest == artifact.digest
+            assert expected == communicator_digest
+
+        def _run(self, kind, value, kwargs):
+            assert kwargs["_expected_dtype"] == "f32"
+            context = kwargs["_artifact_context"]
+            assert context[0] == artifact.digest
+            self.calls.append((kind, context))
+            value = np.asarray(value)
+            if kind == "all_reduce":
+                return value * 2
+            if kind == "reduce_scatter":
+                return value[: value.shape[0] // 2] * 2
+            if kind == "all_gather":
+                return np.concatenate((value, value))
+            if kind == "collective_permute":
+                return value + 10
+            return value.copy()
+
+        def all_reduce(self, value, **kwargs):
+            return self._run("all_reduce", value, kwargs)
+
+        def reduce_scatter(self, value, **kwargs):
+            return self._run("reduce_scatter", value, kwargs)
+
+        def all_gather(self, value, **kwargs):
+            return self._run("all_gather", value, kwargs)
+
+        def all_to_all(self, value, **kwargs):
+            return self._run("all_to_all", value, kwargs)
+
+        def collective_permute(self, value, **kwargs):
+            return self._run("collective_permute", value, kwargs)
+
+    adapter = FakeRankLocalMPI()
+    runtime = artifact.execute(
+        adapter=adapter,
+        tensors={
+            "x_ar": np.array([1, 2], np.float32),
+            "x_rs": np.arange(4, dtype=np.float32),
+            "x_ag": np.array([3, 4], np.float32),
+            "x_aa": np.arange(4, dtype=np.float32),
+            "x_cp": np.array([5, 6], np.float32),
+        },
+    )
+    assert isinstance(runtime, RankLocalCollectiveTransport)
+    np.testing.assert_array_equal(runtime.value("y_ar"), [2, 4])
+    np.testing.assert_array_equal(runtime.value("y_rs"), [0, 2])
+    np.testing.assert_array_equal(runtime.value("y_ag"), [3, 4, 3, 4])
+    np.testing.assert_array_equal(runtime.value("y_cp"), [15, 16])
+    assert [kind for kind, _ in adapter.calls] == [
+        "all_reduce",
+        "reduce_scatter",
+        "all_gather",
+        "all_to_all",
+        "collective_permute",
+    ]
+    assert artifact.communicator_digest == communicator_digest
+    assert artifact.schedule_artifacts == (
+        {"function": "transport", "hash": "1" * 64},
+    )
+
+
+def test_mpi_artifact_rejects_noncontiguous_collective_order() -> None:
+    module = _mpi_tile_module("d" * 64)
+    module.functions[0].body[2].attrs["ordinal"] = 7
+    with pytest.raises(ValueError, match="contiguous source-order ordinals"):
+        lower_tile_collective_artifact(module)
+
+
+def test_mpi_artifact_digest_binds_subgroup_and_schedule_identity() -> None:
+    communicator_digest = "e" * 64
+    forward = lower_tile_collective_artifact(
+        _mpi_tile_module(communicator_digest, subgroup=(0, 1))
+    )
+    reverse = lower_tile_collective_artifact(
+        _mpi_tile_module(communicator_digest, subgroup=(1, 0))
+    )
+    assert forward.digest != reverse.digest
+    assert forward.records[0]["subgroup"] == [0, 1]
+    assert forward.records[0]["reshard_plan_digest"] == "a" * 64
+
+
+def test_collective_contract_survives_schedule_to_tile() -> None:
+    digest = "f" * 64
+    schedule = ScheduleIRModule(
+        functions=[
+            ScheduleFunction(
+                "transport",
+                [ScheduleOp("schedule.artifact", {"hash": "schedule-bound"})],
+                target="cpu",
+            )
+        ],
+        attrs={
+            "tessera.ir.level": "schedule",
+            "target": "cpu",
+            "collective.backend": "mpi",
+            "collective.communicator_digest": digest,
+        },
+    )
+    tile = lower_schedule_to_tile_ir(schedule)
+    assert tile.attrs["collective.backend"] == "mpi"
+    assert tile.attrs["collective.communicator_digest"] == digest
+    artifact = tile.functions[0].body[0]
+    assert artifact.attrs["schedule_hash"] == "schedule-bound"
+    assert len(artifact.attrs["collective_binding_digest"]) == 64
+    assert len(artifact.attrs["hash"]) == 64
+    assert artifact.attrs["hash"] != artifact.attrs["schedule_hash"]
+
+
+def test_schedule_to_tile_artifact_digest_binds_communicator_and_subgroup() -> None:
+    def lower(communicator: str, subgroup: list[int]) -> str:
+        schedule = ScheduleIRModule(
+            functions=[
+                ScheduleFunction(
+                    "transport",
+                    [
+                        ScheduleOp("schedule.artifact", {"hash": "base"}),
+                        ScheduleOp(
+                            "schedule.collective",
+                            {
+                                "kind": "all_reduce",
+                                "source": "x",
+                                "result": "y",
+                                "ordinal": 0,
+                                "mesh_axis": "dp",
+                                "tensor_axis": 0,
+                                "reduction": "sum",
+                                "effect": "collective",
+                                "world_size": 2,
+                                "subgroup": subgroup,
+                            },
+                            operands=["%x"],
+                            result="y",
+                        ),
+                    ],
+                    target="cpu",
+                )
+            ],
+            attrs={
+                "tessera.ir.level": "schedule",
+                "target": "cpu",
+                "collective.backend": "mpi",
+                "collective.communicator_digest": communicator,
+            },
+        )
+        tile = lower_schedule_to_tile_ir(schedule)
+        return str(tile.functions[0].body[0].attrs["hash"])
+
+    baseline = lower("a" * 64, [0, 1])
+    assert baseline != lower("b" * 64, [0, 1])
+    assert baseline != lower("a" * 64, [1, 0])
 
 
 def test_pipeline_step_submits_each_collective_once() -> None:

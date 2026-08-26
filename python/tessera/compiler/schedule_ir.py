@@ -433,12 +433,26 @@ def lower_graph_to_schedule_ir(
     tile: tuple[int, int, int] = (128, 128, 64),
     target_kind: str = "cpu",
     schedule_config: dict[str, object] | None = None,
+    collective_contract: dict[str, object] | None = None,
 ) -> ScheduleIRModule:
     graph_result = graph_module.verify(target=target_kind)
     if not graph_result.ok:
         raise GraphIRVerificationError(graph_result.format())
+    collective_attrs = dict(collective_contract or {})
+    invalid_collective_attrs = sorted(
+        key for key in collective_attrs if not key.startswith("collective.")
+    )
+    if invalid_collective_attrs:
+        raise ValueError(
+            "collective Schedule contract keys must use the collective.* namespace: "
+            + ", ".join(invalid_collective_attrs)
+        )
     schedule_module = ScheduleIRModule(
-        attrs={"tessera.ir.level": "schedule", "target": target_kind}
+        attrs={
+            "tessera.ir.level": "schedule",
+            "target": target_kind,
+            **collective_attrs,
+        }
     )
     for graph_fn in graph_module.functions:
         body: list[ScheduleOp] = []

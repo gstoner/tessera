@@ -3,10 +3,74 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-25
+last_updated: 2026-08-26
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **shared spectral
+carrier assessed; CUDA implementation remains open.** Schedule→Tile now binds
+the runtime-stride ABI, independent transform/window lengths, and full versus
+one-sided spectrum policy; streaming state has digest-chained lineage. The x86
+numerical packet supplies no SM120 evidence. CUDA still needs its own
+true-stride forward/adjoint package, broader/full transforms, broadcasting,
+streaming package, and exact-device oracle packet. The independent AVX-512 and
+gfx1151 forward/streaming packets and their artifact-bound state certificates
+transfer no SM120 schedule or execution evidence. The later exact-gfx1151
+expanded reverse/VJP packet likewise transfers no CUDA adjoint implementation;
+SM120 retains every architecture-owned reverse row named above.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8B-2026-08-26` — **shared logical-axis
+contract assessed; CUDA implementation remains open.** Centered STFT and
+centered/cropped ISTFT now preserve arbitrary normalized logical axes and
+`outer`/`inner` indexing through Schedule→Tile, while non-C-contiguous storage
+still fails closed. The AVX-512 and exact-gfx1151 packets supply no SM120
+execution evidence; CUDA needs its own architecture-owned forward/adjoint
+package and oracle packet. Full spectrum, broader lengths, broadcasting,
+streaming, and true stride support remain open.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8A-2026-08-26` — **shared policy
+carrier assessed; CUDA implementation remains open.** Center, pad mode, crop,
+and explicit ISTFT length are digest-bound through Schedule→Tile. The AVX-512
+and exact-gfx1151 centered/cropped packets supply no SM120 execution evidence.
+CUDA still needs an architecture-owned forward/adjoint package and exact-device
+oracle packet before any policy row can be promoted.
+
+Cross-backend sync `AD-TSOL-STFT-GFX1151-2026-08-26` — **shared carrier
+assessed; CUDA implementation and evidence remain open.** gfx1151 n=16/n=18
+forward/adjoint numerics and certificates do not transfer to SM120. CUDA still
+needs an architecture-owned STFT/ISTFT package and exact-device oracle packet.
+The structured spectral `numeric_policy` now survives Schedule→Tile, closing
+the generalized carrier ceiling, but SM120 `math_mode` consumption and device
+proof remain NVIDIA-owned Order 3b follow-ups.
+
+Cross-backend sync `E2E-REAL-6F-EXACT-CERT-2026-08-26` — **shared
+runtime-attestation contract landed; seven SM120 family rows remain
+blocking.** x86 and gfx1151 now have target-owned all-family certificate
+packets, but neither result transfers. SM120 must run its own packet covering
+binary loss, class loss, Lion, normalization, regression loss, sequence mixer,
+and spectral backward on exact hardware. A CUDA-mode string without the
+runtime-origin `sm_120` attestation remains `runtime_unattested` and cannot
+close a row.
+
+Cross-backend sync `BOUNDED-GATE-RELAXATION-2026-08-26` — **shared
+control-scan normalization assessed; CUDA physical outcome not applicable.**
+The paired reverse pass now admits the statically bounded symbol-body scan and
+keeps payload/dynamic/malformed forms closed. The f16-accumulate WMMA consumer
+is exact-gfx1151 and transfers no Tensor Core claim. The AVX-512 packed-C2R and
+gfx1151 direct-DFT STFT/ISTFT packages each transfer no CUDA spectral claim.
+The shared
+family-plugin certificate carrier is portable, but the new factored Adafactor
+certificate is x86 evidence, not an SM120 optimizer execution. The bounded MPI slice now consumes all five
+explicit Schedule→Tile collective SSA forms and has exact two-process x86 host
+evidence, including artifact/communicator/subgroup binding. That evidence does
+not transfer to NCCL: process-rank ownership and an sm_120 multi-rank packet
+remain NVIDIA follow-ups; no MPI or mock result satisfies them.
+NVIDIA's duplicated composed-layout materializer was also aligned with the
+shared CuTe rule by retaining the slowest mixed-radix quotient. The lowering
+fixture passes in an isolated hardware-free NVIDIA compiler build on this box,
+but there is no RTX exact-device run, so CUDA numerical parity remains
+follow-up required rather than promoted.
+
 Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; NVIDIA outcome: not applicable — no row claimed.** E5's physical acceptance was scoped to x86 + gfx1151 and executed there. No sm_120 evidence exists or is implied; an NVIDIA row would need its own exact-device replay on NR2 Pro, since no result transfers between architectures.
 
 

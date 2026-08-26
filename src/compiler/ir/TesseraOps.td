@@ -2537,7 +2537,9 @@ class Tessera_SpectralCompoundOp<string mnemonic, string summaryText> : Op<
                        DefaultValuedAttr<BoolAttr, "false">:$center,
                        DefaultValuedAttr<BoolAttr, "true">:$onesided,
                        DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
-                       OptionalAttr<I64Attr>:$output_length);
+                       DefaultValuedAttr<StrAttr, "\"not_applicable\"">:$window_broadcast,
+                       OptionalAttr<I64Attr>:$output_length,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -2565,7 +2567,8 @@ def Tessera_ISTFTJvpOp : Op<Tessera_Dialect, "istft_jvp", [Pure]> {
                        DefaultValuedAttr<BoolAttr, "false">:$center,
                        DefaultValuedAttr<BoolAttr, "true">:$onesided,
                        DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
-                       OptionalAttr<I64Attr>:$output_length);
+                       OptionalAttr<I64Attr>:$output_length,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$tangent);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -2608,7 +2611,9 @@ def Tessera_SpectralBackwardOp : Op<Tessera_Dialect, "spectral_backward", [Pure]
                        DefaultValuedAttr<BoolAttr, "false">:$center,
                        DefaultValuedAttr<BoolAttr, "true">:$onesided,
                        DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
-                       OptionalAttr<I64Attr>:$output_length);
+                       DefaultValuedAttr<StrAttr, "\"not_applicable\"">:$window_broadcast,
+                       OptionalAttr<I64Attr>:$output_length,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs Variadic<TensorType>:$gradients);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;

@@ -11,6 +11,7 @@ See `docs/spec/AUTODIFF_SPEC.md` for the full design.
 from __future__ import annotations
 
 import contextvars
+import inspect
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -683,6 +684,18 @@ def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callab
             # stride to the rule's `bias` slot.
             and (operand_slots[k] == pname or i == k)
         )
+        if claimed and a is None:
+            # Preserve an omitted optional operand when a later keyword tensor
+            # is promoted into the positional operand sequence.  The literal
+            # placeholder is replayed to the rule, receives a ``None``
+            # cotangent, and keeps every later tensor aligned with its declared
+            # slot (for example GEMM residual without bias).
+            forward_args.append(None)
+            array_descs.append(
+                InputDesc(param=None, array_id=id(a), array=None, is_literal=True)
+            )
+            groups.append(None)
+            continue
         if claimed or pname is None:
             # A differentiable scalar operand (`ops.mul(x, -0.5)`), or an op
             # whose binding contract we cannot read — keep the legacy handling.
@@ -737,11 +750,36 @@ def promote_operand_kwargs(
     operand_slots = slots[1:]  # slots[0] is `dout`
     out = list(args)
     remaining = dict(kwargs)
+
+    def has_none_default(name: str) -> bool:
+        try:
+            parameter = inspect.signature(
+                _innermost(original), follow_wrapped=False
+            ).parameters[name]
+        except (KeyError, TypeError, ValueError):
+            return False
+        return parameter.default is None
+
+    def later_operand_exists(start: int) -> bool:
+        for later in range(start, len(operand_slots)):
+            name = operand_slots[later]
+            if name not in remaining:
+                continue
+            value = remaining[name]
+            if value is None or isinstance(value, (bool, str)):
+                continue
+            if _describe(value) is not _NON_ARRAY:
+                return True
+        return False
+
     for k in range(len(args), len(operand_slots)):
         pname = operand_slots[k]
-        if (pname not in remaining
-                or k >= len(fwd_names)
-                or fwd_names[k] != pname):
+        if k >= len(fwd_names) or fwd_names[k] != pname:
+            break
+        if pname not in remaining:
+            if has_none_default(pname) and later_operand_exists(k + 1):
+                out.append(None)
+                continue
             break
         v = remaining[pname]
         if v is None or isinstance(v, (bool, str)):

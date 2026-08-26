@@ -52,13 +52,21 @@ import io
 from dataclasses import dataclass
 from typing import Sequence
 
-__all__ = ["FamilyRow", "collect_rows", "render_dashboard", "render_csv"]
+__all__ = [
+    "FamilyRow", "FamilyTargetRow", "collect_rows", "collect_target_rows",
+    "render_dashboard", "render_csv",
+]
 
 #: Which certification entry point can prove a family under each policy.
 _CERTIFIER = {
     "pure_only": "certify_frontends",
     "zero_dropout_attention": "certify_frontends",
     "non_reexecuting_state_lineage": "certify_frontends_non_reexecuting",
+}
+
+_EXACT_TARGET_PACKETS = {
+    "rocm": "tests/device/rocm/test_native_vjp_execution_certificates.py",
+    "x86": "tests/device/x86/test_native_vjp_execution_certificates.py",
 }
 
 
@@ -72,12 +80,25 @@ class FamilyRow:
     schedule_consumer: str
     tile_consumer: str
     targets: tuple[str, ...]
+    execution_certificate_schema: str = "tessera.native_vjp_execution.v1"
 
     @property
     def blocks_oracle_deletion(self) -> bool:
         """True when this family has no certification path, so the AST oracle
         cannot yet be deleted on its account."""
         return self.certifier == "none"
+
+
+@dataclass(frozen=True)
+class FamilyTargetRow:
+    family: str
+    target: str
+    evidence_status: str
+    evidence_gate: str
+
+    @property
+    def blocks_exact_coverage(self) -> bool:
+        return self.evidence_status != "exact_device_packet"
 
 
 def collect_rows() -> list[FamilyRow]:
@@ -91,9 +112,21 @@ def collect_rows() -> list[FamilyRow]:
             {
                 "ops": set(),
                 "declaration": declaration,
+                "targets": set(),
             },
         )
+        original = entry["declaration"]
+        if (
+            declaration.schedule_consumer != original.schedule_consumer
+            or declaration.tile_consumer != original.tile_consumer
+            or declaration.differential_policy != original.differential_policy
+            or declaration.migration_state != original.migration_state
+        ):
+            raise ValueError(
+                f"native VJP family {declaration.family!r} has inconsistent declarations"
+            )
         entry["ops"].add(op_name)
+        entry["targets"].update(declaration.target_consumers)
 
     rows: list[FamilyRow] = []
     for family, entry in merged.items():
@@ -108,10 +141,31 @@ def collect_rows() -> list[FamilyRow]:
                 certifier=_CERTIFIER.get(policy, "none"),
                 schedule_consumer=declaration.schedule_consumer,
                 tile_consumer=declaration.tile_consumer,
-                targets=tuple(sorted(declaration.target_consumers)),
+                targets=tuple(sorted(entry["targets"])),
             )
         )
     return sorted(rows, key=lambda row: row.family)
+
+
+def collect_target_rows() -> list[FamilyTargetRow]:
+    """One measurable exact-execution obligation per family/target pair."""
+    result: list[FamilyTargetRow] = []
+    for row in collect_rows():
+        for target in row.targets:
+            packet = _EXACT_TARGET_PACKETS.get(target)
+            result.append(
+                FamilyTargetRow(
+                    family=row.family,
+                    target=target,
+                    evidence_status=(
+                        "exact_device_packet"
+                        if packet is not None
+                        else "missing_exact_device_packet"
+                    ),
+                    evidence_gate=packet or "none",
+                )
+            )
+    return sorted(result, key=lambda row: (row.target, row.family))
 
 
 def _counts(rows: Sequence[FamilyRow]) -> dict[str, int]:
@@ -124,6 +178,8 @@ def _counts(rows: Sequence[FamilyRow]) -> dict[str, int]:
 def render_dashboard() -> str:
     rows = collect_rows()
     blocking = [row for row in rows if row.blocks_oracle_deletion]
+    target_rows = collect_target_rows()
+    target_blocking = [row for row in target_rows if row.blocks_exact_coverage]
     out = io.StringIO()
     out.write("# Frontend authority — differential coverage by family\n\n")
     out.write(
@@ -149,22 +205,24 @@ def render_dashboard() -> str:
     )
     out.write(
         "| family | ops | migration state | differential policy | certifier | "
-        "schedule consumer | tile consumer | targets |\n"
+        "execution certificate | schedule consumer | tile consumer | targets |\n"
     )
-    out.write("|---|---|---|---|---|---|---|---|\n")
+    out.write("|---|---|---|---|---|---|---|---|---|\n")
     for row in rows:
         out.write(
             f"| `{row.family}` | {', '.join(f'`{op}`' for op in row.ops)} | "
             f"{row.migration_state} | {row.differential_policy} | "
-            f"`{row.certifier}` | `{row.schedule_consumer}` | "
+            f"`{row.certifier}` | `{row.execution_certificate_schema}` | "
+            f"`{row.schedule_consumer}` | "
             f"`{row.tile_consumer}` | {', '.join(row.targets)} |\n"
         )
     out.write(
         "\n## What this doc does and does not prove\n\n"
-        "It proves that every listed family **declares** an ownership spine and "
-        "a differential policy with a certification path. It does not prove a "
-        "certificate was produced for a particular program: certification runs "
-        "at call time, against concrete arguments. Read this as the set of "
+        "It proves that every listed family **declares** an ownership spine, "
+        "a differential policy, and the content-addressed execution-certificate "
+        "schema recorded after a successful physical launch. It does not prove "
+        "a certificate was produced for a particular program: execution records "
+        "are created at call time against concrete arguments. Read this as the set of "
         "families for which the gate is *evaluable*, and the per-family "
         "execution tests as whether it passed.\n\n"
         "The distinction matters because the failure it guards against is "
@@ -172,6 +230,26 @@ def render_dashboard() -> str:
         "would previously have left no trace anywhere, and the oracle deletion "
         "would have looked safe.\n"
     )
+    out.write(
+        "\n## Exact family/target execution packets\n\n"
+        "A declaration is not execution evidence. Target-owned packets run "
+        "every declared family in one process, validate independent numerical "
+        "oracles, require runtime-origin physical attestations, and compare "
+        "the observed family/target set exactly with the live declarations. "
+        "A test double produces only `runtime_unattested` evidence and cannot "
+        "satisfy these packets.\n\n"
+        f"- declared family/target rows: **{len(target_rows)}**\n"
+        f"- exact-device packet rows: "
+        f"**{len(target_rows) - len(target_blocking)}**\n"
+        f"- blocking rows without a packet: **{len(target_blocking)}**\n\n"
+        "| family | target | evidence status | evidence gate |\n"
+        "|---|---|---|---|\n"
+    )
+    for target_row in target_rows:
+        out.write(
+            f"| `{target_row.family}` | `{target_row.target}` | "
+            f"`{target_row.evidence_status}` | `{target_row.evidence_gate}` |\n"
+        )
     return out.getvalue()
 
 
@@ -180,12 +258,20 @@ def render_csv() -> str:
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow([
         "family", "ops", "migration_state", "differential_policy", "certifier",
-        "schedule_consumer", "tile_consumer", "targets",
+        "execution_certificate_schema",
+        "schedule_consumer", "tile_consumer", "targets", "exact_target_status",
     ])
+    target_rows = collect_target_rows()
     for row in collect_rows():
+        target_status = " ".join(
+            f"{item.target}:{item.evidence_status}"
+            for item in target_rows
+            if item.family == row.family
+        )
         writer.writerow([
             row.family, " ".join(row.ops), row.migration_state,
-            row.differential_policy, row.certifier, row.schedule_consumer,
-            row.tile_consumer, " ".join(row.targets),
+            row.differential_policy, row.certifier,
+            row.execution_certificate_schema, row.schedule_consumer,
+            row.tile_consumer, " ".join(row.targets), target_status,
         ])
     return buffer.getvalue()

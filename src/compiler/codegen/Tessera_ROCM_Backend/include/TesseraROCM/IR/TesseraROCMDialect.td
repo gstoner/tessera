@@ -165,7 +165,8 @@ def ROCM_ReductionAttr
                        "ROCm reduction policy: 'none', 'sum', or 'mean'">;
 
 def ROCM_SpectralBackwardKindAttr
-    : ROCM_EnumStrAttr<["tessera.spectral_filter", "tessera.spectral_conv"],
+    : ROCM_EnumStrAttr<["tessera.spectral_filter", "tessera.spectral_conv",
+                        "tessera.stft", "tessera.istft"],
                        "ROCm compound spectral backward kind">;
 def ROCM_ActivationKindAttr
     : ROCM_EnumStrAttr<["gelu", "silu", "relu"],

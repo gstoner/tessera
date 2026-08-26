@@ -116,6 +116,19 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
     return false;
   }
 
+  // --- explicitly admitted f16-accumulate family (gfx11) ---
+  // The intrinsic reads and writes only the 16-bit register halves selected
+  // by opsel. The generator uses opsel=false and stores indices 0,2,...,14;
+  // the unselected halves remain outside the mathematical result.
+  Type f16 = rewriter.getF16Type();
+  if (isVec(a.getType(), 16, f16) && isVec(b.getType(), 16, f16) &&
+      isVec(c.getType(), 16, f16) && isVec(resTy, 16, f16)) {
+    Operation *real = rewriter.create<ROCDL::wmma_f16_16x16x16_f16>(
+        loc, resTy, a, b, c, /*opsel=*/false);
+    rewriter.replaceOp(op, real->getResults());
+    return true;
+  }
+
   // --- i32-accumulate family (int8 / int4 inputs), signed, non-saturating ---
   if (isVec(c.getType(), 8, i32) && isVec(resTy, 8, i32)) {
     // signA/signB/clamp are immarg attributes (the IU intrinsic class). Signed

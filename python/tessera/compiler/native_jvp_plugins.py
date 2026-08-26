@@ -276,7 +276,9 @@ def _plan_fft(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[i
         input_shape=tuple(int(dim) for dim in value.shape),
         axis=int(source.kwargs.get("axis", -1)),
         n=source.kwargs.get("n", source.kwargs.get("logical_length")),
-        normalization=str(source.kwargs.get("normalization", "backward")),
+        normalization=str(
+            source.kwargs.get("normalization", source.kwargs.get("norm", "backward"))
+        ),
         hermitian_weight=str(source.kwargs.get("hermitian_weight", "none")),
     )
     child = {
@@ -411,6 +413,11 @@ def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
         axis=int(source.kwargs.get("axis", -1)),
         hop=source.kwargs.get("hop"),
         normalization=str(source.kwargs.get("normalization", "backward")),
+        center=bool(source.kwargs.get("center", False)),
+        pad_mode=str(source.kwargs.get("pad_mode", "constant")),
+        output_length=source.kwargs.get(
+            "length", source.kwargs.get("output_length")
+        ),
     )
     operands = ["primal_0", "primal_1"]
     names = operands + [f"tangent_{index}" for index in wrt_indices]

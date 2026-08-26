@@ -237,7 +237,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     import numpy as np
 
     def gemm(
-        A, B, epilogue=None, *, bias=None, residual=None, activation="none"
+        A, B, bias=None, residual=None, *, epilogue=None, activation="none"
     ):
         """Matrix multiply A @ B."""
         if hasattr(A, "_data"):
@@ -272,7 +272,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return out
 
     def matmul(
-        A, B, epilogue=None, *, bias=None, residual=None, activation="none"
+        A, B, bias=None, residual=None, *, epilogue=None, activation="none"
     ):
         return gemm(
             A, B, epilogue=epilogue, bias=bias, residual=residual,
@@ -2882,14 +2882,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             win = win._data
         x = np.asarray(x)
         win = np.asarray(win)
-        if win.ndim != 1:
-            raise ValueError("stft window must be rank-1")
+        if win.ndim < 1:
+            raise ValueError("stft window must have a trailing sample dimension")
         axis_idx = axis if axis >= 0 else x.ndim + axis
         if axis_idx < 0 or axis_idx >= x.ndim:
             raise ValueError(f"stft axis {axis} is invalid for rank {x.ndim}")
         hop = int(hop)
-        fft_length = int(n_fft if n_fft is not None else win.shape[0])
-        if hop <= 0 or fft_length < win.shape[0]:
+        fft_length = int(n_fft if n_fft is not None else win.shape[-1])
+        if hop <= 0 or fft_length < win.shape[-1]:
             raise ValueError("stft requires hop > 0 and n_fft >= window length")
         if pad_mode not in {"constant", "reflect"}:
             raise ValueError("stft pad_mode must be 'constant' or 'reflect'")
@@ -2908,9 +2908,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 + [(0, fft_length - moved.shape[-1])],
                 mode="constant",
             )
-        padded_window = np.zeros(fft_length, dtype=win.dtype)
-        window_offset = (fft_length - win.shape[0]) // 2
-        padded_window[window_offset : window_offset + win.shape[0]] = win
+        batch_shape = moved.shape[:-1]
+        if win.ndim - 1 > len(batch_shape):
+            raise ValueError("stft window batch rank exceeds the signal batch rank")
+        aligned_window_shape = (1,) * (len(batch_shape) - win.ndim + 1) + win.shape
+        try:
+            batch_window = np.broadcast_to(
+                win.reshape(aligned_window_shape), batch_shape + (win.shape[-1],)
+            )
+        except ValueError as exc:
+            raise ValueError("stft window batch dimensions are not broadcastable") from exc
+        padded_window = np.zeros(batch_shape + (fft_length,), dtype=win.dtype)
+        window_offset = (fft_length - win.shape[-1]) // 2
+        padded_window[..., window_offset : window_offset + win.shape[-1]] = batch_window
         # `np.fft.rfft` computes and returns in double, so an f32 signal came
         # back complex128. Compute wide, store at the input's component width
         # -- the same contract `fft`/`rfft` above follow. These three spectral
@@ -2949,8 +2959,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             win = win._data
         xf = np.asarray(xf)
         win = np.asarray(win)
-        if win.ndim != 1:
-            raise ValueError("istft window must be rank-1")
+        if win.ndim < 1:
+            raise ValueError("istft window must have a trailing sample dimension")
         axis_idx = axis if axis >= 0 else xf.ndim + axis
         if axis_idx <= 0 or axis_idx >= xf.ndim:
             raise ValueError("istft frequency axis requires a preceding frame axis")
@@ -2962,12 +2972,22 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         # spectrum broke older callers whose stored spectrum was truncated or
         # padded; those callers remain valid while wider transforms opt in via
         # n_fft=.
-        fft_length = int(n_fft if n_fft is not None else win.shape[0])
-        if fft_length < win.shape[0] or int(hop) <= 0:
+        fft_length = int(n_fft if n_fft is not None else win.shape[-1])
+        if fft_length < win.shape[-1] or int(hop) <= 0:
             raise ValueError("istft requires hop > 0 and n_fft >= window length")
-        padded_window = np.zeros(fft_length, dtype=win.dtype)
-        window_offset = (fft_length - win.shape[0]) // 2
-        padded_window[window_offset : window_offset + win.shape[0]] = win
+        batch_shape = moved.shape[:-2]
+        if win.ndim - 1 > len(batch_shape):
+            raise ValueError("istft window batch rank exceeds the spectrum batch rank")
+        aligned_window_shape = (1,) * (len(batch_shape) - win.ndim + 1) + win.shape
+        try:
+            batch_window = np.broadcast_to(
+                win.reshape(aligned_window_shape), batch_shape + (win.shape[-1],)
+            )
+        except ValueError as exc:
+            raise ValueError("istft window batch dimensions are not broadcastable") from exc
+        padded_window = np.zeros(batch_shape + (fft_length,), dtype=win.dtype)
+        window_offset = (fft_length - win.shape[-1]) // 2
+        padded_window[..., window_offset : window_offset + win.shape[-1]] = batch_window
         out = np.zeros(
             moved.shape[:-2] + ((frame_count - 1) * int(hop) + fft_length,),
             dtype=np.float64,

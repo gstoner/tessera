@@ -3,10 +3,66 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-25
+last_updated: 2026-08-26
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **shared spectral
+carrier assessed; Metal outcome remains not applicable.** The shared artifact
+now binds runtime-stride ABI identity, independent transform/window lengths,
+full versus one-sided spectrum policy, and digest-chained streaming state.
+Apple still has no native spectral Target consumer, so the independent x86 and
+gfx1151 broadcast/streaming execution packets transfer neither a Metal schedule
+nor correctness claim. The exact-gfx1151 expanded reverse/VJP packet also
+transfers no Metal adjoint evidence. Broadcasting and all Metal physical rows
+remain open.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8B-2026-08-26` — **shared logical-axis
+contract assessed; Metal outcome not applicable.** Centered STFT and
+centered/cropped ISTFT now carry arbitrary normalized logical axes plus
+`outer`/`inner` physical indexing through Schedule→Tile, while admission still
+requires C-contiguous storage. Apple has no native spectral Target consumer,
+so the independent AVX-512 and gfx1151 packets transfer neither a Metal
+schedule nor device evidence. True non-contiguous strides, full spectrum,
+broader lengths, broadcasting, and streaming remain open shared policy rows.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8A-2026-08-26` — **shared policy
+carrier assessed; Metal outcome not applicable.** Center, pad mode, crop, and
+explicit ISTFT length now participate in the compound Schedule→Tile identity,
+but Apple still has no native spectral Target consumer. The independent x86
+and gfx1151 numerical packets transfer no Metal schedule or device evidence;
+an Apple package requires its own implementation and exact-device oracle run.
+
+Cross-backend sync `AD-TSOL-STFT-GFX1151-2026-08-26` — **shared carrier
+assessed; Metal outcome not applicable.** The independent gfx1151 n=16/n=18
+STFT/ISTFT implementation and exact-device certificates transfer no Apple
+schedule or evidence. The compound-spectral Schedule→Tile artifact now binds a
+structured storage/fp32-accumulator policy, but Apple has no Target consumer;
+any future Metal row needs its own package and exact-device proof.
+
+Cross-backend sync `E2E-REAL-6F-EXACT-CERT-2026-08-26` — **shared
+family/target gate assessed; Apple normalization remains one blocking row.**
+The x86 and gfx1151 packets provide no Metal evidence. Apple must add and run
+an Apple7 normalization packet whose certificate carries a runtime-origin
+Metal physical attestation; an execution-mode string or mocked launch is
+explicitly insufficient.
+
+Cross-backend sync `BOUNDED-GATE-RELAXATION-2026-08-26` — **shared
+control-scan normalization assessed; Apple physical outcome not applicable.**
+The paired reverse pass now admits only the statically bounded symbol-body
+`control_scan` form by first consuming the canonical SCF lowering; payload,
+dynamic, and malformed forms keep the named refusal. Reduced-precision WMMA is
+gfx1151-only; the AVX-512 packed-C2R and gfx1151 direct-DFT STFT/ISTFT packages
+transfer no Metal claim. The shared execution-certificate carrier changes host
+evidence structure, but Apple has no Adafactor Target consumer and inherits no
+x86 certificate. The
+rank-local MPI transport now consumes all five explicit Schedule→Tile
+collective SSA forms and has two-process x86 host evidence, but no Metal
+launcher consumes it and no Apple transport claim transfers. The
+composed-layout quotient correction is confined to
+duplicated ROCm/CUDA materializers; Apple has no such physical consumer, so it
+is not applicable and no M1 Max kernel or device evidence is implied.
+
 Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; Apple outcome: not applicable — no row claimed.** As with NVIDIA: no M1 Max row was run and none is implied. The keyed-RNG class rests on counter-based purity, which holds on any target, so an Apple row is a matter of running it rather than of new design.
 
 

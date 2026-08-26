@@ -15,6 +15,9 @@ boundary; unsupported target pairs fail closed before package construction.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
+from threading import Lock
 from typing import Any, Callable, Mapping, Sequence
 
 from .._jit_boundary import TesseraJitError
@@ -55,6 +58,200 @@ class NativeVJPPluginDeclaration:
 class NativeVJPResult:
     gradients: tuple[Any, ...]
     execution: Mapping[str, Any]
+
+
+_EXECUTION_SCHEMA = "tessera.native_vjp_execution.v1"
+_EXECUTION_CERTIFICATES: dict[str, dict[str, Mapping[str, Any]]] = {}
+_EXECUTION_CERTIFICATE_LOCK = Lock()
+
+
+def _canonical_digest(value: Mapping[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+    ).hexdigest()
+
+
+def _value_signature(value: Any) -> Mapping[str, Any]:
+    import numpy as np
+
+    array = np.asarray(value)
+    return {
+        "dtype": str(array.dtype),
+        "shape": [int(dim) for dim in array.shape],
+    }
+
+
+def _compose_physical_attestations(
+    attestations: Sequence[Any],
+) -> Mapping[str, Any] | None:
+    if not attestations or any(not isinstance(row, Mapping) for row in attestations):
+        return None
+    rows = [dict(row) for row in attestations]
+    identity = {
+        (row.get("schema"), row.get("target"), row.get("device_arch"),
+         row.get("execution_kind"), row.get("execution_mode"))
+        for row in rows
+    }
+    if len(identity) != 1 or any(len(str(row.get("digest", ""))) != 64 for row in rows):
+        return None
+    schema, target, device_arch, execution_kind, execution_mode = identity.pop()
+    artifact_hash = hashlib.sha256(
+        "|".join(str(row["digest"]) for row in rows).encode()
+    ).hexdigest()
+    body = {
+        "schema": schema,
+        "target": target,
+        "device_arch": device_arch,
+        "execution_kind": execution_kind,
+        "execution_mode": execution_mode,
+        "artifact_hash": artifact_hash,
+    }
+    return {**body, "digest": _canonical_digest(body)}
+
+
+def validate_native_vjp_execution_certificate(
+    certificate: Mapping[str, Any],
+) -> None:
+    body = dict(certificate)
+    actual = str(body.pop("digest", ""))
+    if body.get("schema") != _EXECUTION_SCHEMA or actual != _canonical_digest(body):
+        raise ValueError("native VJP execution certificate has stale identity")
+    if body.get("status") != "executed":
+        raise ValueError("native VJP execution certificate is not successful")
+    if not str(body.get("graph_consumer", "")).startswith("tessera."):
+        raise ValueError("native VJP execution certificate has no Graph consumer")
+    if not str(body.get("schedule_consumer", "")).startswith("schedule."):
+        raise ValueError("native VJP execution certificate has no Schedule consumer")
+    if not str(body.get("tile_consumer", "")).startswith("tile."):
+        raise ValueError("native VJP execution certificate has no Tile consumer")
+    if not body.get("target_consumer") or not body.get("execution_mode"):
+        raise ValueError("native VJP execution certificate has no physical consumer")
+    if not body.get("input_signature") or not body.get("gradient_signature"):
+        raise ValueError("native VJP execution certificate has no tensor signature")
+    attestation = body.get("physical_attestation")
+    if attestation is not None:
+        if not isinstance(attestation, Mapping):
+            raise ValueError("native VJP execution certificate has invalid physical proof")
+        attestation_body = dict(attestation)
+        attestation_digest = str(attestation_body.pop("digest", ""))
+        if (
+            attestation_body.get("schema")
+            != "tessera.runtime_physical_execution.v1"
+            or attestation_digest != _canonical_digest(attestation_body)
+            or attestation_body.get("target") != body.get("target")
+            or attestation_body.get("execution_kind") != body.get("execution_kind")
+            or attestation_body.get("execution_mode") != body.get("execution_mode")
+        ):
+            raise ValueError(
+                "native VJP execution certificate has stale physical identity"
+            )
+    expected_arch = {
+        "x86": "x86_avx512",
+        "rocm": "gfx1151",
+        "nvidia_sm120": "sm_120",
+        "apple_gpu": "apple7",
+    }.get(str(body.get("target", "")))
+    expected_scope = (
+        "exact_device"
+        if isinstance(attestation, Mapping)
+        and attestation.get("device_arch") == expected_arch
+        else "runtime_unattested"
+    )
+    if body.get("evidence_scope") != expected_scope:
+        raise ValueError("native VJP execution certificate has invalid evidence scope")
+    if (
+        body.get("source_reexecution") == "prohibited"
+        and len(str(body.get("frontend_certificate_digest", ""))) != 64
+    ):
+        raise ValueError(
+            "non-reexecuting native VJP certificate lacks frontend identity"
+        )
+
+
+def _record_execution_certificate(
+    *,
+    declaration: NativeVJPPluginDeclaration,
+    source: Any,
+    target: str,
+    ordered_inputs: Sequence[Any],
+    out_cotangents: Any,
+    result: NativeVJPResult,
+    frontend_certificate: Any | None,
+) -> NativeVJPResult:
+    cotangents = (
+        tuple(out_cotangents)
+        if isinstance(out_cotangents, (tuple, list))
+        else (out_cotangents,)
+    )
+    execution = dict(result.execution)
+    attestation = execution.get("physical_attestation")
+    expected_arch = {
+        "x86": "x86_avx512",
+        "rocm": "gfx1151",
+        "nvidia_sm120": "sm_120",
+        "apple_gpu": "apple7",
+    }.get(target)
+    identities = {
+        key: str(execution[key])
+        for key in (
+            "source_graph_ir_digest",
+            "frontend_certificate_digest",
+            "schedule_artifact_hash",
+            "state_lineage_digest",
+            "tile_program_digest",
+            "artifact_hash",
+        )
+        if execution.get(key) is not None
+    }
+    certificate_body = {
+        "schema": _EXECUTION_SCHEMA,
+        "family": declaration.family,
+        "graph_consumer": str(source.op_name),
+        "schedule_consumer": declaration.schedule_consumer,
+        "tile_consumer": declaration.tile_consumer,
+        "target_consumer": declaration.target_consumers[target],
+        "target": target,
+        "execution_kind": str(execution.get("execution_kind", "")),
+        "execution_mode": str(execution.get("execution_mode", "")),
+        "evidence_target": str(execution.get("evidence_target", "")),
+        "evidence_scope": (
+            "exact_device"
+            if isinstance(attestation, Mapping)
+            and attestation.get("device_arch") == expected_arch
+            else "runtime_unattested"
+        ),
+        "physical_attestation": dict(attestation)
+        if isinstance(attestation, Mapping)
+        else None,
+        "proof_mode": str(execution.get("proof_mode", "")),
+        "topology": str(execution.get("topology", "not_applicable")),
+        "algorithm": str(execution.get("algorithm", "not_applicable")),
+        "input_signature": [
+            _value_signature(value) for value in (*ordered_inputs, *cotangents)
+        ],
+        "gradient_signature": [
+            _value_signature(value) for value in result.gradients
+        ],
+        "frontend_certificate_digest": (
+            str(getattr(frontend_certificate, "digest", ""))
+        ),
+        "artifact_identities": identities,
+        "source_reexecution": "prohibited"
+        if declaration.differential_policy == "non_reexecuting_state_lineage"
+        else "policy_permitted",
+        "status": "executed",
+    }
+    digest = _canonical_digest(certificate_body)
+    certificate = {**certificate_body, "digest": digest}
+    validate_native_vjp_execution_certificate(certificate)
+    with _EXECUTION_CERTIFICATE_LOCK:
+        _EXECUTION_CERTIFICATES.setdefault(declaration.family, {})[digest] = certificate
+    execution["execution_certificate_schema"] = _EXECUTION_SCHEMA
+    execution["execution_certificate_digest"] = digest
+    execution["execution_certificate"] = certificate
+    return NativeVJPResult(result.gradients, execution)
 
 
 Executor = Callable[..., NativeVJPResult]
@@ -205,6 +402,7 @@ def _execute_normalization(
             "schedule_consumer": declaration.schedule_consumer,
             "tile_consumer": declaration.tile_consumer,
             "target_consumer": declaration.target_consumers[target],
+            "physical_attestation": result.get("physical_attestation"),
         },
     )
 
@@ -212,6 +410,8 @@ def _execute_normalization(
 @register_native_vjp_plugin(
     "spectral_filter",
     "spectral_conv",
+    "stft",
+    "istft",
     family="spectral_backward",
     schedule_consumer="schedule.spectral_backward",
     tile_consumer="tile.spectral_backward_kernel",
@@ -305,7 +505,9 @@ def _execute_compound_spectral(
             "source_graph_ir_digest": package.source_graph_ir_digest,
             "schedule_artifact_hash": package.schedule_artifact_hash,
             "tile_program_digest": package.tile_program_digest,
+            "algorithm": package.algorithm,
             "frontend_authority": "tracer",
+            "physical_attestation": result.get("physical_attestation"),
         },
     )
 
@@ -428,6 +630,7 @@ def _execute_lion(
                 "artifact_hash": package.artifact_hash,
                 "frontend_authority": "tracer",
                 "proof_mode": "structural_non_reexecuting",
+                "physical_attestation": result.get("physical_attestation"),
             },
         )
 
@@ -489,6 +692,7 @@ def _execute_lion(
             "artifact_hash": package.artifact_hash,
             "frontend_authority": "tracer",
             "proof_mode": "structural_non_reexecuting",
+            "physical_attestation": result.get("physical_attestation"),
         },
     )
 
@@ -575,6 +779,8 @@ def _execute_stateful_package(
             "artifact_hash": package.artifact_hash,
             "frontend_authority": "tracer",
             "proof_mode": "structural_non_reexecuting",
+            "physical_attestation": result.get("physical_attestation"),
+            "topology": str(getattr(package.scheduled, "topology", "not_applicable")),
         },
     )
 
@@ -795,6 +1001,7 @@ def _execute_sequence_mixer(
                 "target_consumer": declaration.target_consumers[target],
                 "frontend_authority": "tracer",
                 "proof_mode": "structural_non_reexecuting",
+                "physical_attestation": result.get("physical_attestation"),
             },
         )
 
@@ -866,7 +1073,7 @@ def _execute_attention(
             source_arg_names=source_arg_names,
             out_cotangent=cotangents[0],
         )
-        gradients = execute_native_attention_vjp_package(
+        gradients, physical_attestation = execute_native_attention_vjp_package(
             package,
             ordered_inputs=ordered_inputs,
             arg_names=arg_names,
@@ -902,6 +1109,7 @@ def _execute_attention(
             "native_image_digest": package.native_image_digest,
             "artifact_hash": package.artifact_hash,
             "frontend_authority": "tracer",
+            "physical_attestation": physical_attestation,
         },
     )
 
@@ -1030,6 +1238,7 @@ def _execute_loss_family(
             "tile_consumer": declaration.tile_consumer,
             "target_consumer": declaration.target_consumers[target],
             "frontend_authority": "tracer",
+            "physical_attestation": launched.get("physical_attestation"),
         },
     )
 
@@ -1141,7 +1350,7 @@ def _execute_rocm_matmul_backward(
     a, b = (np.ascontiguousarray(np.asarray(value)) for value in ordered_inputs)
     dout = np.ascontiguousarray(np.asarray(cotangents[0]))
 
-    def launch_gemm(lhs: Any, rhs: Any) -> Any:
+    def launch_gemm(lhs: Any, rhs: Any) -> tuple[Any, Any]:
         artifact = RuntimeArtifact(
             metadata={
                 "target": "rocm",
@@ -1169,9 +1378,14 @@ def _execute_rocm_matmul_backward(
             raise TesseraJitError(
                 "ROCm composed matmul backward failed: " + str(result.get("reason"))
             )
-        return result["output"]
+        return result["output"], result.get("physical_attestation")
 
-    gradients = (launch_gemm(dout, b.T), launch_gemm(a.T, dout))
+    da, da_attestation = launch_gemm(dout, b.T)
+    db, db_attestation = launch_gemm(a.T, dout)
+    gradients = (da, db)
+    physical_attestation = _compose_physical_attestations(
+        (da_attestation, db_attestation)
+    )
     by_name = dict(zip(arg_names, gradients, strict=True))
     return NativeVJPResult(
         gradients=tuple(by_name[name] for name in wrt_names),
@@ -1188,6 +1402,7 @@ def _execute_rocm_matmul_backward(
             "tile_consumer": declaration.tile_consumer,
             "target_consumer": declaration.target_consumers[target],
             "frontend_authority": "tracer",
+            "physical_attestation": physical_attestation,
         },
     )
 
@@ -1280,6 +1495,7 @@ def _execute_rocm_selective_ssm_backward(
             "tile_consumer": declaration.tile_consumer,
             "target_consumer": declaration.target_consumers[target],
             "frontend_authority": "tracer",
+            "physical_attestation": result.get("physical_attestation"),
         },
     )
 
@@ -1304,7 +1520,7 @@ def execute_native_vjp_family(
     declaration, executor = entry
     if target not in declaration.target_consumers:
         return None
-    return executor(
+    result = executor(
         source=source,
         target=target,
         ordered_inputs=ordered_inputs,
@@ -1316,11 +1532,44 @@ def execute_native_vjp_family(
         source_graph_ir=source_graph_ir,
         frontend_certificate=frontend_certificate,
     )
+    return _record_execution_certificate(
+        declaration=declaration,
+        source=source,
+        target=target,
+        ordered_inputs=ordered_inputs,
+        out_cotangents=out_cotangents,
+        result=result,
+        frontend_certificate=frontend_certificate,
+    )
 
 
 def native_vjp_plugin_declarations() -> Mapping[str, NativeVJPPluginDeclaration]:
     """Return the explicit Graph/Schedule/Tile/Target ownership registry."""
     return {name: declaration for name, (declaration, _) in sorted(_PLUGINS.items())}
+
+
+def native_vjp_execution_certificates() -> Mapping[str, tuple[Mapping[str, Any], ...]]:
+    """Return successful content-addressed executions, grouped by family.
+
+    This process-level registry outlives individual ``JitFn`` objects and each
+    row is directly serializable into an evidence packet.
+    """
+    with _EXECUTION_CERTIFICATE_LOCK:
+        return {
+            family: tuple(records[digest] for digest in sorted(records))
+            for family, records in sorted(_EXECUTION_CERTIFICATES.items())
+        }
+
+
+def native_vjp_exact_execution_coverage() -> frozenset[tuple[str, str]]:
+    """Family/target rows backed by a live physical runtime attestation."""
+    with _EXECUTION_CERTIFICATE_LOCK:
+        return frozenset(
+            (family, str(certificate["target"]))
+            for family, records in _EXECUTION_CERTIFICATES.items()
+            for certificate in records.values()
+            if certificate.get("evidence_scope") == "exact_device"
+        )
 
 
 def native_vjp_plugin_owners() -> Mapping[str, str]:
@@ -1384,7 +1633,10 @@ __all__ = [
     "native_vjp_differential_effect_exemptions",
     "native_vjp_plugin_available",
     "native_vjp_differential_safe",
+    "native_vjp_execution_certificates",
+    "native_vjp_exact_execution_coverage",
     "native_vjp_frontend_proof_policy",
     "native_vjp_plugin_declarations",
     "native_vjp_plugin_owners",
+    "validate_native_vjp_execution_certificate",
 ]

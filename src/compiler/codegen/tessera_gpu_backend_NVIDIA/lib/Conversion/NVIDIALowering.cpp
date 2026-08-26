@@ -4998,10 +4998,19 @@ struct LowerTileToNVIDIAPass
             Value stride = resolve(
                 tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisStride,
                 mode, leafIndex, plan.basisStrides[leafIndex]);
-            Value digit = arith::RemUIOp::create(builder, loc, remaining, shape);
+            // Keep the complete quotient in the slowest mode, matching the
+            // shared layout algebra's affine-outside-shape semantics.  A rem
+            // on the final leaf would silently wrap non-compact tilers.
+            const bool isSlowest = leafIndex + 1 == plan.basisShapes.size();
+            Value digit = isSlowest
+                              ? remaining
+                              : arith::RemUIOp::create(builder, loc, remaining,
+                                                      shape);
             basis = addI64(builder, loc, basis,
                            mulI64(builder, loc, digit, stride));
-            remaining = arith::DivUIOp::create(builder, loc, remaining, shape);
+            if (!isSlowest)
+              remaining =
+                  arith::DivUIOp::create(builder, loc, remaining, shape);
           }
           linear = addI64(builder, loc, linear,
                           mulI64(builder, loc, basis, outerStride));

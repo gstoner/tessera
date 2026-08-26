@@ -8,6 +8,24 @@ import pytest
 import tessera as ts
 
 
+def _assert_exact_rocm_certificate(compiled, family: str) -> None:
+    from tessera.compiler.native_vjp_plugins import (
+        native_vjp_exact_execution_coverage,
+        validate_native_vjp_execution_certificate,
+    )
+
+    certificate = compiled.last_backward_execution["execution_certificate"]
+    validate_native_vjp_execution_certificate(certificate)
+    assert certificate["family"] == family
+    assert certificate["target"] == "rocm"
+    assert certificate["evidence_target"] == "rocm_gfx1151"
+    assert certificate["evidence_scope"] == "exact_device"
+    attestation = certificate["physical_attestation"]
+    assert attestation["schema"] == "tessera.runtime_physical_execution.v1"
+    assert attestation["device_arch"] == "gfx1151"
+    assert (family, "rocm") in native_vjp_exact_execution_coverage()
+
+
 @ts.jit(target="x86", autodiff="reverse", wrt=("logits", "target"))
 def _x86_bce(logits, target):
     return ts.ops.binary_cross_entropy_loss(logits, target, reduction="mean")
@@ -300,6 +318,7 @@ def test_rocm_nesterov_backward_runs_one_gfx1151_launch():
     expected = _momentum_vjp(dp, dv, 0.04, 0.7, True)
     for got, want in zip(actual, expected):
         np.testing.assert_allclose(got, want, atol=2e-6, rtol=2e-6)
+    _assert_exact_rocm_certificate(_rocm_nesterov, "optimizer_vjp")
 
 
 def _adam_vjp(
@@ -388,6 +407,7 @@ def test_rocm_adamw_backward_runs_one_gfx1151_launch():
     assert _rocm_adamw.last_backward_execution["compiler_path"] == (
         "rocm_adam_bwd_compiled"
     )
+    _assert_exact_rocm_certificate(_rocm_adamw, "optimizer_vjp")
 
 
 def test_rocm_adam_backward_shares_exact_explicit_state_abi():
@@ -429,6 +449,7 @@ def test_rocm_adam_backward_shares_exact_explicit_state_abi():
     assert _rocm_adam.last_backward_execution["compiler_path"] == (
         "rocm_adam_bwd_compiled"
     )
+    _assert_exact_rocm_certificate(_rocm_adam, "optimizer_vjp")
 
 
 def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
@@ -467,6 +488,7 @@ def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
     assert _rocm_lion.last_backward_execution["proof_mode"] == (
         "structural_non_reexecuting"
     )
+    _assert_exact_rocm_certificate(_rocm_lion, "lion_vjp")
 
 
 def test_x86_lion_backward_runs_shared_stop_sign_policy_on_avx512():

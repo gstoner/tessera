@@ -5140,9 +5140,28 @@ static LogicalResult verifySpectralCompound(Operation *op, Value x,
   auto parameterTy = dyn_cast<RankedTensorType>(parameter.getType());
   if (!xTy || !parameterTy)
     return success();
-  if ((name == "stft" || name == "istft") && parameterTy.getRank() != 1)
-    return op->emitOpError() << name << " window must be rank-1";
   if ((name == "stft" || name == "istft")) {
+    if (parameterTy.getRank() < 1)
+      return op->emitOpError() << name << " window requires a trailing sample dimension";
+    int64_t normalizedAxis = axis.value_or(-1);
+    if (normalizedAxis < 0) normalizedAxis += xTy.getRank();
+    SmallVector<int64_t> batchShape;
+    for (int64_t dim = 0; dim < xTy.getRank(); ++dim) {
+      if (name == "stft" ? dim != normalizedAxis
+                         : (dim != normalizedAxis && dim != normalizedAxis - 1))
+        batchShape.push_back(xTy.getDimSize(dim));
+    }
+    if (parameterTy.getRank() - 1 > static_cast<int64_t>(batchShape.size()))
+      return op->emitOpError() << name << " window batch rank exceeds the transform batch rank";
+    int64_t leading = static_cast<int64_t>(batchShape.size()) -
+                      (parameterTy.getRank() - 1);
+    for (int64_t dim = 0; dim < parameterTy.getRank() - 1; ++dim) {
+      int64_t windowExtent = parameterTy.getDimSize(dim);
+      int64_t batchExtent = batchShape[leading + dim];
+      if (windowExtent != 1 && windowExtent != batchExtent)
+        return op->emitOpError()
+               << name << " window batch dimensions are not broadcastable";
+    }
     auto hop = op->getAttrOfType<IntegerAttr>("hop");
     if (!hop || hop.getInt() <= 0)
       return op->emitOpError() << name << " requires hop > 0";
@@ -5252,6 +5271,13 @@ LogicalResult SpectralBackwardOp::verify() {
   auto padMode = getPadMode();
   if (padMode != "constant" && padMode != "reflect")
     return emitOpError("requires pad_mode in {constant, reflect}");
+  StringRef windowBroadcast = getWindowBroadcast();
+  if (windowBroadcast != "not_applicable" &&
+      windowBroadcast != "trailing_batch_broadcast_v1")
+    return emitOpError("requires a registered window broadcast contract");
+  if ((getKind() == "tessera.stft" || getKind() == "tessera.istft") !=
+      (windowBroadcast == "trailing_batch_broadcast_v1"))
+    return emitOpError("requires window broadcast identity to match spectral kind");
   if (auto length = (*this)->getAttrOfType<IntegerAttr>("output_length");
       length && length.getInt() < 0)
     return emitOpError("requires output_length >= 0");

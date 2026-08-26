@@ -80,6 +80,10 @@ namespace {
 struct WmmaTypes {
   Type store, load, frag, acc, accElem;
   bool isInt;
+  // gfx11 reduced-precision WMMA returns vector<16xf16>, with the selected
+  // 16-bit half of each VGPR holding the eight logical accumulator elements.
+  // `opsel=false` selects vector indices 0,2,...,14.
+  bool halfAccumulator = false;
   // `pack` is the in-kernel codegen ABI mode (0 = fp passthrough, 1 = int8
   // bitcast->v4i32, 2 = int4 nibble-pack->v2i32) — an emission detail, NOT the
   // storage-pack contract. `packFactor` is the contract: logical values per
@@ -313,9 +317,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     APFloat zAP = cast<FloatAttr>(b.getFloatAttr(T.store, 0.0)).getValue();
     loadZero = b.create<arith::ConstantOp>(
         loc, loadTy, DenseElementsAttr::get(cast<ShapedType>(loadTy), zAP));
+    APFloat accZ =
+        cast<FloatAttr>(b.getFloatAttr(T.accElem, 0.0)).getValue();
     accZero = b.create<arith::ConstantOp>(
-        loc, accTy, DenseElementsAttr::get(cast<ShapedType>(accTy),
-                                           APFloat(0.0f)));
+        loc, accTy,
+        DenseElementsAttr::get(cast<ShapedType>(accTy), accZ));
   }
 
   // lane = threadIdx.x & 15; lhi = threadIdx.x >> 4.
@@ -741,8 +747,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value twoE = sb.create<arith::ConstantIndexOp>(loc, e * 2);
           Value rowOff = sb.create<arith::AddIOp>(loc, twoE, lhi);
           Value r = sb.create<arith::AddIOp>(loc, rowOrigin[mi], rowOff);
-          Value dv =
-              sb.create<vector::ExtractOp>(loc, accF, ArrayRef<int64_t>{e});
+          int64_t accumulatorIndex = T.halfAccumulator ? 2 * e : e;
+          Value dv = sb.create<vector::ExtractOp>(
+              loc, accF, ArrayRef<int64_t>{accumulatorIndex});
           if (biasValue)
             dv = sb.create<arith::AddFOp>(loc, dv, biasValue);
           if (!T.isInt)
@@ -909,9 +916,11 @@ void emitCanonicalLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     fragmentZero = b.create<arith::ConstantOp>(
         loc, T.load,
         DenseElementsAttr::get(cast<ShapedType>(T.load), zero));
+    APFloat accZero =
+        cast<FloatAttr>(b.getFloatAttr(T.accElem, 0.0)).getValue();
     accumulatorZero = b.create<arith::ConstantOp>(
         loc, T.acc,
-        DenseElementsAttr::get(cast<ShapedType>(T.acc), APFloat(0.0f)));
+        DenseElementsAttr::get(cast<ShapedType>(T.acc), accZero));
   }
 
   auto loadSafe = [&](OpBuilder &ib, Value memref, Value logical,
@@ -1009,8 +1018,9 @@ void emitCanonicalLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         /*withElseRegion=*/false);
     OpBuilder::InsertionGuard guard(b);
     b.setInsertionPointToStart(storeIf.thenBlock());
-    Value value =
-        b.create<vector::ExtractOp>(loc, acc, ArrayRef<int64_t>{e});
+    int64_t accumulatorIndex = T.halfAccumulator ? 2 * e : e;
+    Value value = b.create<vector::ExtractOp>(
+        loc, acc, ArrayRef<int64_t>{accumulatorIndex});
     if (value.getType() != outputType)
       value = b.create<arith::TruncFOp>(loc, outputType, value);
     Value index = b.create<arith::AddIOp>(
@@ -1333,22 +1343,48 @@ struct GenerateWMMAGemmKernelPass
       auto v8i32 = VectorType::get({8}, i32Ty);
       auto v8f32 = VectorType::get({8}, f32Ty);
       auto v16i8 = VectorType::get({16}, i8Ty);
-      if (dt == "f16" || dt == "float16") {
+      StringRef declaredAccum;
+      if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy"))
+        if (auto accumAttr = policy.getAs<StringAttr>("accum"))
+          declaredAccum = accumAttr.getValue();
+      const bool requestF16Accumulator =
+          (dt == "f16" || dt == "float16") &&
+          (declaredAccum == "f16" || declaredAccum == "fp16");
+      if (requestF16Accumulator) {
+        auto ack = op->getAttrOfType<StringAttr>(
+            "tessera.rocm.reduced_precision_accumulation");
+        if (!ack || ack.getValue() != "f16_wmma_accuracy_cost_ack_v1") {
+          op->emitError(
+              "ROCM_WMMA_ACCUM_UNSUPPORTED: numeric_policy accum=\"fp16\" "
+              "is an opt-in accuracy class; set "
+              "tessera.rocm.reduced_precision_accumulation"
+              "=\"f16_wmma_accuracy_cost_ack_v1\" to acknowledge the measured "
+              "5212x (K=64) to 7856x (K=4096) relative-error cost");
+          return signalPassFailure();
+        }
+        T = {f16Ty, VectorType::get({16}, f16Ty),
+             VectorType::get({16}, f16Ty), VectorType::get({16}, f16Ty),
+             f16Ty, /*isInt=*/false, /*halfAccumulator=*/true,
+             /*pack=*/0, /*packFactor=*/1};
+      } else if (dt == "f16" || dt == "float16") {
         T = {f16Ty, VectorType::get({16}, f16Ty), VectorType::get({16}, f16Ty),
-             v8f32, f32Ty, /*isInt=*/false, /*pack=*/0, /*packFactor=*/1};
+             v8f32, f32Ty, /*isInt=*/false, /*halfAccumulator=*/false,
+             /*pack=*/0, /*packFactor=*/1};
       } else if (dt == "bf16" || dt == "bfloat16") {
         T = {bf16Ty, VectorType::get({16}, bf16Ty),
              VectorType::get({16}, bf16Ty), v8f32, f32Ty, /*isInt=*/false,
-             /*pack=*/0, /*packFactor=*/1};
+             /*halfAccumulator=*/false, /*pack=*/0, /*packFactor=*/1};
       } else if (dt == "int8" || dt == "i8") {
         T = {i8Ty, v16i8, VectorType::get({4}, i32Ty), v8i32, i32Ty,
-             /*isInt=*/true, /*pack=*/1, /*packFactor=*/1};
+             /*isInt=*/true, /*halfAccumulator=*/false, /*pack=*/1,
+             /*packFactor=*/1};
       } else if (dt == "int4" || dt == "i4") {
         // int4 values supplied in int8 containers (range [-8,7]); the low nibble
         // is the int4 two's-complement. Nibble-packed in-kernel to the iu4 ABI
         // vector<2xi32>; i32 accumulate. (correctness-first — no coalesced load.)
         T = {i8Ty, v16i8, VectorType::get({2}, i32Ty), v8i32, i32Ty,
-             /*isInt=*/true, /*pack=*/2, /*packFactor=*/2};
+             /*isInt=*/true, /*halfAccumulator=*/false, /*pack=*/2,
+             /*packFactor=*/2};
       } else {
         op->emitError("generate-wmma-gemm-kernel: dtype must be f16, bf16, "
                       "int8, or int4 (got '")
@@ -1383,10 +1419,14 @@ struct GenerateWMMAGemmKernelPass
       if (auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy")) {
         if (auto accumAttr = policy.getAs<StringAttr>("accum")) {
           StringRef declared = accumAttr.getValue();
-          StringRef provided = T.isInt ? "int32" : "fp32";
+          StringRef provided =
+              T.isInt ? "int32" : T.halfAccumulator ? "fp16" : "fp32";
           bool matches = declared == provided ||
                          (T.isInt && (declared == "i32" || declared == "int32")) ||
-                         (!T.isInt && (declared == "f32" || declared == "fp32"));
+                         (!T.isInt && !T.halfAccumulator &&
+                          (declared == "f32" || declared == "fp32")) ||
+                         (T.halfAccumulator &&
+                          (declared == "f16" || declared == "fp16"));
           if (!matches) {
             op->emitError(
                   "ROCM_WMMA_ACCUM_UNSUPPORTED: numeric_policy declares "
@@ -1442,6 +1482,12 @@ struct GenerateWMMAGemmKernelPass
         op->emitError("generate-wmma-gemm-kernel: the fused epilogue "
                       "(bias/activation) is float-only; dtype '")
             << dt << "' is integer";
+        return signalPassFailure();
+      }
+      if (T.halfAccumulator && (hasBias || activation != "none")) {
+        op->emitError(
+            "ROCM_WMMA_ACCUM_UNSUPPORTED: the initial f16-accumulate WMMA "
+            "envelope excludes fused bias and activation epilogues");
         return signalPassFailure();
       }
       Type outputTy = T.accElem;
@@ -1523,6 +1569,12 @@ struct GenerateWMMAGemmKernelPass
         return signalPassFailure();
       }
       if (request.canonicalKLoop && canonicalStaging == "lds") {
+        if (T.halfAccumulator) {
+          op->emitError(
+              "ROCM_WMMA_ACCUM_UNSUPPORTED: f16 accumulation is admitted "
+              "only on the measured register-staged gfx1151 path");
+          return signalPassFailure();
+        }
         if (hasBias || activation != "none" || T.pack == 2 || mt != 1 ||
             nt != 1) {
           op->emitError("generate-wmma-gemm-kernel: canonical LDS comparison "
@@ -1579,6 +1631,7 @@ LogicalResult mlir::tessera_rocm::materializeGfx11WmmaGemmPhysicalBody(
   types.accElem = Float32Type::get(context);
   types.acc = VectorType::get({8}, types.accElem);
   types.isInt = false;
+  types.halfAccumulator = false;
   types.pack = 0;
   types.packFactor = 1;
 

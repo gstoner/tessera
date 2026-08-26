@@ -8181,7 +8181,7 @@ def _execute_native_attention_vjp_package(
     *,
     values: Mapping[str, Any],
     out_cotangent: Any,
-) -> tuple[Any, Any, Any]:
+) -> tuple[tuple[Any, Any, Any], Mapping[str, Any] | None]:
     """Consume an E2E-REAL-6C package without receiving source Graph IR."""
     import numpy as np
 
@@ -8231,7 +8231,12 @@ def _execute_native_attention_vjp_package(
         outputs = result.get("outputs")
         if not isinstance(outputs, tuple) or len(outputs) != 3:
             raise RuntimeError("gfx1151 attention VJP program returned an invalid product")
-        return outputs
+        return outputs, _physical_execution_attestation(
+            target="rocm",
+            execution_kind="native_gpu",
+            execution_mode="hip_runtime",
+            artifact_hash=package.artifact_hash,
+        )
 
     if package.target != "x86" or not isinstance(package.native, X86NativePackage):
         raise TypeError("native attention VJP package has a mismatched target image")
@@ -8293,7 +8298,12 @@ def _execute_native_attention_vjp_package(
     )
     if not isinstance(outputs, tuple) or len(outputs) != 3:
         raise RuntimeError("AVX-512 attention VJP package returned an invalid product")
-    return outputs
+    return outputs, _physical_execution_attestation(
+        target="x86",
+        execution_kind="native_cpu",
+        execution_mode="cpu_avx512",
+        artifact_hash=package.artifact_hash,
+    )
 
 
 def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -11095,6 +11105,7 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
     except OSError:
         return None
     c_f32 = ctypes.POINTER(ctypes.c_float)
+    c_i64 = ctypes.POINTER(ctypes.c_int64)
     c_i8 = ctypes.c_void_p
     c_i32 = ctypes.c_void_p
     i64 = ctypes.c_int64
@@ -11283,6 +11294,56 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             c_f32, c_f32, c_f32, c_f32, c_f32,
             i64, i64, i64, i64, ctypes.c_float,
         ],
+        "tessera_x86_avx512_stft_bwd_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, c_f32, c_f32,
+            i64, i64, i64, i64, i64, ctypes.c_float,
+        ],
+        "tessera_x86_avx512_istft_bwd_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, c_f32, c_f32,
+            i64, i64, i64, i64, ctypes.c_float,
+        ],
+        "tessera_x86_avx512_stft_bwd_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_void_p, i64, i64, i64, i64, i64,
+            ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_avx512_istft_bwd_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, c_f32, ctypes.c_void_p, c_f32,
+            ctypes.c_void_p, i64, i64, i64, i64, ctypes.c_int,
+            ctypes.c_float,
+        ],
+        "tessera_x86_avx512_stft_bwd_policy_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_void_p, i64, i64, i64, i64, i64,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+        ],
+        "tessera_x86_avx512_istft_bwd_policy_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, c_f32, ctypes.c_void_p, c_f32,
+            ctypes.c_void_p, i64, i64, i64, i64, ctypes.c_int,
+            ctypes.c_float, ctypes.c_int, i64,
+        ],
+        "tessera_x86_avx512_stft_bwd_policy_strided_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_void_p, i64, i64, i64, i64, i64, i64,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+        ],
+        "tessera_x86_avx512_istft_bwd_policy_strided_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, c_f32, ctypes.c_void_p, c_f32,
+            ctypes.c_void_p, i64, i64, i64, i64, i64, i64, ctypes.c_int,
+            ctypes.c_float, ctypes.c_int, i64,
+        ],
+        "tessera_x86_avx512_stft_bwd_policy_layout_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_void_p, i64, c_i64, c_i64, i64,
+            i64, c_i64, c_i64, i64, c_i64, c_i64, i64, i64, i64, ctypes.c_int,
+            ctypes.c_float, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ],
+        "tessera_x86_avx512_istft_bwd_policy_layout_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, c_f32, ctypes.c_void_p, c_f32,
+            ctypes.c_void_p, i64, c_i64, c_i64, i64, i64, c_i64, c_i64,
+            i64, i64, i64, c_i64, c_i64, i64, i64, i64, ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int,
+        ],
         "tessera_x86_dct_storage": [
             ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
             ctypes.c_int, ctypes.c_int, ctypes.c_float,
@@ -11314,6 +11375,44 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_istft_strided_storage": [
             ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
             i64, i64, i64, i64, ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_stft_policy_strided_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, c_f32, i64, i64,
+            i64, i64, i64, i64, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+            ctypes.c_int,
+        ],
+        "tessera_x86_istft_policy_strided_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
+            i64, i64, i64, i64, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+            i64,
+        ],
+        "tessera_x86_stft_policy_layout_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, c_f32,
+            i64, c_i64, c_i64, i64, i64, i64, i64, i64, i64,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int,
+        ],
+        "tessera_x86_istft_policy_layout_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p,
+            i64, c_i64, c_i64, i64, i64, i64, i64, i64, ctypes.c_int,
+            ctypes.c_float, ctypes.c_int, i64, ctypes.c_int,
+        ],
+        "tessera_x86_stft_policy_broadcast_layout_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, c_f32,
+            i64, c_i64, c_i64, i64, i64, c_i64, c_i64, i64, i64, i64,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int,
+        ],
+        "tessera_x86_streaming_stft_broadcast_layout_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, c_f32, ctypes.c_void_p,
+            i64, c_i64, c_i64, i64, i64, i64, c_i64, c_i64,
+            i64, i64, i64, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+        ],
+        "tessera_x86_istft_policy_broadcast_layout_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p,
+            i64, c_i64, c_i64, i64, i64, c_i64, c_i64, i64, i64,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, i64, ctypes.c_int,
         ],
         "tessera_x86_avx512_spmm_csr_f32": [c_i32, c_i32, c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_sddmm_f32": [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
@@ -11398,6 +11497,16 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_stft_f32",
         "tessera_x86_istft_f32",
         "tessera_x86_istft_jvp_f32",
+        "tessera_x86_avx512_stft_bwd_f32",
+        "tessera_x86_avx512_istft_bwd_f32",
+        "tessera_x86_avx512_stft_bwd_storage",
+        "tessera_x86_avx512_istft_bwd_storage",
+        "tessera_x86_avx512_stft_bwd_policy_storage",
+        "tessera_x86_avx512_istft_bwd_policy_storage",
+        "tessera_x86_avx512_stft_bwd_policy_strided_storage",
+        "tessera_x86_avx512_istft_bwd_policy_strided_storage",
+        "tessera_x86_avx512_stft_bwd_policy_layout_storage",
+        "tessera_x86_avx512_istft_bwd_policy_layout_storage",
         "tessera_x86_dct_storage",
         "tessera_x86_spectral_conv_storage",
         "tessera_x86_stft_storage",
@@ -11406,6 +11515,13 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_spectral_conv_strided_storage",
         "tessera_x86_stft_strided_storage",
         "tessera_x86_istft_strided_storage",
+        "tessera_x86_stft_policy_strided_storage",
+        "tessera_x86_istft_policy_strided_storage",
+        "tessera_x86_stft_policy_layout_storage",
+        "tessera_x86_istft_policy_layout_storage",
+        "tessera_x86_stft_policy_broadcast_layout_storage",
+        "tessera_x86_streaming_stft_broadcast_layout_storage",
+        "tessera_x86_istft_policy_broadcast_layout_storage",
         "tessera_x86_kv_cache_append_f32",
         "tessera_x86_kv_cache_read_f32",
         "tessera_x86_kv_cache_prune_f32",
@@ -14538,7 +14654,7 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
     lib = _load_x86_elementwise()
     if lib is None or not hasattr(lib, "tessera_x86_spectral_composite_package_abi"):
         raise RuntimeError("x86 compound spectral package is unavailable")
-    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v6":
+    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v8":
         raise RuntimeError("x86 compound spectral package ABI mismatch")
     digest = str(contract["schedule_digest"]).encode("ascii")
     output_shape = tuple(int(dim) for dim in contract["output_shape"])
@@ -14557,6 +14673,8 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
                 f"x86 TSOL artifact requires {storage} storage for operand {index}; "
                 f"got {operands[index].dtype}"
             )
+    if op_name == "tessera.istft" and operands[0].dtype != np.complex64:
+        raise ValueError("x86 TSOL ISTFT requires complex64 spectrum storage")
     pointer = ctypes.POINTER(ctypes.c_float)
 
     def ptr(value: Any) -> Any:
@@ -14566,6 +14684,25 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
         return value.ctypes.data_as(ctypes.c_void_p)
 
     storage_code = {"f32": 0, "f16": 1, "bf16": 2}[storage]
+
+    def layout_descriptor(value: Any) -> tuple[Any, Any]:
+        if not value.flags.aligned or any(
+            stride % value.itemsize for stride in value.strides
+        ):
+            raise ValueError("TSOL stride ABI requires element-aligned storage")
+        strides = tuple(int(stride // value.itemsize) for stride in value.strides)
+        span = 1
+        for stride, extent in sorted(
+            (abs(stride), int(extent))
+            for stride, extent in zip(strides, value.shape)
+            if int(extent) > 1
+        ):
+            if stride < span:
+                raise ValueError("TSOL stride ABI rejects overlapping storage")
+            span += (extent - 1) * stride
+        shape_array = (ctypes.c_int64 * value.ndim)(*value.shape)
+        stride_array = (ctypes.c_int64 * value.ndim)(*strides)
+        return shape_array, stride_array
 
     def folded_axis(shape: tuple[int, ...], at: int) -> tuple[int, int, int]:
         return (
@@ -14606,28 +14743,37 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
             outer, inner, fft_n, storage_code,
         )
     elif op_name == "tessera.stft":
-        x = np.ascontiguousarray(operands[0])
-        window = np.ascontiguousarray(operands[1])
+        x = operands[0]
+        window = operands[1]
         output = np.empty(output_shape, np.complex64)
-        outer, samples, inner = folded_axis(tuple(x.shape), axis)
-        rc = lib.tessera_x86_stft_strided_storage(
+        shape_array, stride_array = layout_descriptor(x)
+        window_shape, window_strides = layout_descriptor(window)
+        rc = lib.tessera_x86_stft_policy_broadcast_layout_storage(
             digest, vptr(x), vptr(window), ptr(output),
-            outer, samples, inner, contract["window_length"], contract["hop"],
-            contract["frames"], storage_code,
-            spectral_output_scale(op_name, normalization, int(contract["window_length"])),
+            x.ndim, shape_array, stride_array, axis,
+            window.ndim, window_shape, window_strides,
+            int(contract["transform_length"]),
+            contract["hop"], contract["frames"], storage_code,
+            spectral_output_scale(op_name, normalization, int(contract["transform_length"])),
+            int(bool(contract["center"])),
+            {"constant": 0, "reflect": 1}[str(contract["pad_mode"])],
+            int(bool(contract["onesided"])),
         )
     else:
-        frame_axis = axis - 1
-        x = np.ascontiguousarray(operands[0], np.complex64)
-        window = np.ascontiguousarray(operands[1])
+        x = operands[0]
+        window = operands[1]
         output = np.empty(output_shape, operands[1].dtype)
-        outer = int(np.prod(x.shape[:frame_axis], dtype=np.int64))
-        inner = int(np.prod(x.shape[axis + 1 :], dtype=np.int64))
-        rc = lib.tessera_x86_istft_strided_storage(
+        shape_array, stride_array = layout_descriptor(x)
+        window_shape, window_strides = layout_descriptor(window)
+        rc = lib.tessera_x86_istft_policy_broadcast_layout_storage(
             digest, ptr(x), vptr(window), vptr(output),
-            outer, contract["frames"], x.shape[axis], inner,
-            contract["window_length"], contract["hop"], storage_code,
-            spectral_output_scale(op_name, normalization, int(contract["window_length"])),
+            x.ndim, shape_array, stride_array, axis,
+            window.ndim, window_shape, window_strides,
+            int(contract["transform_length"]),
+            contract["hop"], storage_code,
+            spectral_output_scale(op_name, normalization, int(contract["transform_length"])),
+            int(bool(contract["center"])), int(contract["output_length"]),
+            int(bool(contract["onesided"])),
         )
     if rc != 0:
         raise RuntimeError(f"x86 compound spectral execution failed rc={rc}")
@@ -31240,6 +31386,46 @@ def _launch_native_descriptor(
     }
 
 
+def _physical_execution_attestation(
+    *, target: str, execution_kind: str, execution_mode: str, artifact_hash: str
+) -> dict[str, Any] | None:
+    """Describe the live device that completed a physical runtime launch.
+
+    This is deliberately produced below the compiler/plugin boundary. Test
+    doubles that replace ``runtime.launch`` do not receive an attestation and
+    therefore cannot satisfy an exact-device certificate gate merely by
+    returning the expected execution-mode string.
+    """
+    device_arch: str | None = None
+    expected_arch: str | None = None
+    if target == "x86" and execution_kind == "native_cpu":
+        device_arch = "x86_avx512" if _x86_elementwise_available() else None
+        expected_arch = "x86_avx512"
+    elif target == "rocm" and execution_kind == "native_gpu":
+        device_arch = _rocm_device_name()
+        expected_arch = "gfx1151"
+    elif target == "nvidia_sm120" and execution_kind == "native_gpu":
+        device_arch = _nvidia_device_name()
+        expected_arch = "sm_120"
+    elif target == "apple_gpu" and execution_kind == "native_gpu":
+        device_arch = "apple7" if sys.platform == "darwin" else None
+        expected_arch = "apple7"
+    if device_arch is None or device_arch != expected_arch:
+        return None
+    body = {
+        "schema": "tessera.runtime_physical_execution.v1",
+        "target": target,
+        "device_arch": device_arch,
+        "execution_kind": execution_kind,
+        "execution_mode": execution_mode,
+        "artifact_hash": artifact_hash,
+    }
+    digest = hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return {**body, "digest": digest}
+
+
 def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
     """Launch executable CPU artifacts or return a structured non-success result."""
     global _last_profile
@@ -31303,6 +31489,12 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "execution_kind": exec_kind,
             "execution_mode": row.execution_mode,
         }
+        physical_attestation = _physical_execution_attestation(
+            target=arch,
+            execution_kind=exec_kind,
+            execution_mode=str(row.execution_mode),
+            artifact_hash=artifact.artifact_hash,
+        )
         telemetry = make_event(
             "runtime.launch",
             source="runtime",
@@ -31321,6 +31513,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "execution_kind": exec_kind,
             "execution_mode": row.execution_mode,
             "artifact_hash": artifact.artifact_hash,
+            "physical_attestation": physical_attestation,
             "output": output,
             "telemetry": telemetry,
             "profile": {"cpu_wall_ms": elapsed_ms, "launch_overhead_ms": elapsed_ms},

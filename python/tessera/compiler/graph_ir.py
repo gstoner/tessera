@@ -4142,13 +4142,15 @@ def specialize_module_from_values(
             dtype = {
                 np.dtype(np.float16): "f16",
                 np.dtype(np.float32): "f32",
-                    np.dtype(np.float64): "f64",
-                    np.dtype(np.complex64): "complex64",
-                    np.dtype(np.complex128): "complex128",
-                    np.dtype(np.int32): "i32",
+                np.dtype(np.float64): "f64",
+                np.dtype(np.complex64): "complex64",
+                np.dtype(np.complex128): "complex128",
+                np.dtype(np.int32): "i32",
                 np.dtype(np.int64): "i64",
                 np.dtype(np.bool_): "i1",
             }.get(arr.dtype)
+            if dtype is None and str(arr.dtype) == "bfloat16":
+                dtype = "bf16"
             if dtype is None:
                 raise TypeError(f"unsupported specialization dtype {arr.dtype}")
             arg.ir_type = tensor_ir_type(tuple(int(d) for d in arr.shape), dtype)

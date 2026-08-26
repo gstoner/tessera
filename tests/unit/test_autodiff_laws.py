@@ -1042,7 +1042,7 @@ def test_forward_key_swallow_findings_are_pinned():
 @pytest.mark.parametrize("activation", ("relu", "gelu", "silu"))
 def test_gemm_activation_rules_match_directional_finite_difference(activation):
     from tessera.autodiff.jvp import get_jvp
-    from tessera.autodiff.vjp import get_vjp
+    from tessera.autodiff.vjp import get_vjp, _matmul_activation_derivative
 
     rng = np.random.default_rng(741)
     a = rng.normal(size=(3, 4))
@@ -1074,13 +1074,19 @@ def test_gemm_activation_rules_match_directional_finite_difference(activation):
     np.testing.assert_allclose(tangent, (plus - minus) / (2 * eps),
                                rtol=2e-5, atol=2e-6)
     dout = rng.normal(size=primal.shape)
-    d_a, d_b = vjp(
+    d_a, d_b, d_bias, d_residual = vjp(
         dout, a, b, bias=bias, residual=residual, activation=activation
     )
     np.testing.assert_allclose(
         np.vdot(tangent, dout), np.vdot(da, d_a) + np.vdot(db, d_b),
         rtol=2e-10, atol=2e-10,
     )
+    preactivation = a @ b + bias
+    local_dout = dout * _matmul_activation_derivative(
+        preactivation, activation
+    )
+    np.testing.assert_allclose(d_bias, np.sum(local_dout, axis=0))
+    np.testing.assert_array_equal(d_residual, dout)
 
 
 # ── dashboard determinism ────────────────────────────────────────────────────

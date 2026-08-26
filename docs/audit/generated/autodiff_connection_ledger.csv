@@ -146,7 +146,7 @@ instance_norm,normalization,yes,none,none,,,,,,,,python_reference=python-unit-re
 interpolate,vision,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 inv,linalg_function,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 irfft,spectral,yes,native,native,cpu,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;fwd_cpu_ir_oracle=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint,,
-istft,spectral,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
+istft,spectral,yes,native,native,,,,x86_avx512,x86_avx512,,x86_avx512,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512],native compiler adjoint; native backward executes on x86_avx512 (Phase 4),x86_avx512=save_inputs,x86_avx512=dedicated
 js_divergence,loss,yes,none,none,,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+llvm23+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=save_inputs,nvidia_sm120=dedicated
 kimi_delta_attention,attention,yes,none,none,,,rocm_gfx1151,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",rocm_gfx1151,x86_avx512,python_reference=python-unit-registry;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=clang 23 -mavx512f; x86_64 AVX-512],"native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=save_fp32_state_trajectory;x86_avx512=resident_fp32_state_and_chunk_summaries,rocm_gfx1151=dedicated;x86_avx512=dedicated
 kl_divergence,loss,yes,none,none,,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+llvm23+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=save_inputs,nvidia_sm120=dedicated
@@ -290,7 +290,7 @@ sqrt,elementwise,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 squeeze,tensor_algebra,yes,native,native,,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint,,
 stack,tensor_algebra,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 std,reduction,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
-stft,spectral,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
+stft,spectral,yes,native,native,,,,x86_avx512,x86_avx512,,x86_avx512,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512],native compiler adjoint; native backward executes on x86_avx512 (Phase 4),x86_avx512=save_inputs,x86_avx512=dedicated
 stop_gradient,layout_transform,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
 sub,elementwise,yes,none,native,,,,,,,,python_reference=python-unit-registry;ir_tangent=llvm23-core,,,
 sum,stable_reduction,yes,native,none,,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint (static extent required for mean),,

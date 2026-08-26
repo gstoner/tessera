@@ -165,7 +165,7 @@ _ARCHITECTURE_PROFILES = {
         "x86",
         "zen5-avx512",
         "ready",
-        "tessera.x86.spectral_composite.v6",
+        "tessera.x86.spectral_composite.v8",
         "exact_device_validated",
         "exact Zen 5 package",
     ),
@@ -174,7 +174,7 @@ _ARCHITECTURE_PROFILES = {
         "rocm",
         "gfx1151",
         "ready",
-        "tessera.rocm.spectral_composite.v6",
+        "tessera.rocm.spectral_composite.v7",
         "exact_device_validated",
         "exact gfx1151 package",
     ),
@@ -183,7 +183,7 @@ _ARCHITECTURE_PROFILES = {
         "rocm",
         "gfx1151",
         "ready",
-        "tessera.rocm.spectral_composite.v6",
+        "tessera.rocm.spectral_composite.v7",
         "exact_device_validated",
         "exact gfx1151 package",
     ),
@@ -192,7 +192,7 @@ _ARCHITECTURE_PROFILES = {
         "rocm",
         "gfx1200",
         "fail_closed",
-        "tessera.rocm.spectral_composite.v6",
+        "tessera.rocm.spectral_composite.v7",
         "build_only",
         "architecture-stamped package exists; RDNA 4 schedule and exact-device "
         "evidence are required for execution",
@@ -202,7 +202,7 @@ _ARCHITECTURE_PROFILES = {
         "rocm",
         "gfx1250",
         "fail_closed",
-        "tessera.rocm.spectral_composite.v6",
+        "tessera.rocm.spectral_composite.v7",
         "build_only",
         "architecture-stamped package exists; gfx1250 schedule and exact-device "
         "evidence are required for execution",
@@ -384,9 +384,15 @@ class ScheduledSpectralArtifact:
     storage: str
     padding: tuple[int, int]
     crop: tuple[int, int]
+    transform_length: int
     window_length: int
+    window_broadcast: str
     hop: int
     frames: int
+    center: bool
+    onesided: bool
+    pad_mode: str
+    output_length: int
     normalization: str
     complex_layout: str
     accumulation: str
@@ -422,7 +428,18 @@ class ScheduledSpectralArtifact:
         )
 
     @property
+    def numeric_policy(self) -> dict[str, str]:
+        return {
+            "storage": {"f32": "fp32", "f16": "fp16", "bf16": "bf16"}[
+                self.storage
+            ],
+            "accum": "fp32",
+        }
+
+    @property
     def axis_packing(self) -> str:
+        if self.op_name in {"tessera.stft", "tessera.istft"}:
+            return "native_runtime_stride_descriptor_v1"
         return (
             "none_contiguous"
             if self.axis == len(self.input_shapes[0]) - 1
@@ -444,7 +461,7 @@ class ScheduledSpectralArtifact:
     def _identity_payload(self) -> str:
         output = "x".join(str(dim) for dim in self.output_shape)
         return (
-            f"schema=tessera.scheduled_spectral.v5;op={self.op_name};"
+            f"schema=tessera.scheduled_spectral.v7;op={self.op_name};"
             f"target={self.target};arch={self.architecture};"
             f"inputs={self._input_shapes_text()};output={output};axis={self.axis};"
             f"dct_type={self.dct_type};"
@@ -455,9 +472,17 @@ class ScheduledSpectralArtifact:
             f"shape_bounds={self._shapes_text(self.shape_bounds)};"
             f"template_digest={self.template_digest};"
             f"padding={self.padding[0]},{self.padding[1]};"
-            f"crop={self.crop[0]},{self.crop[1]};window={self.window_length};"
-            f"hop={self.hop};frames={self.frames};normalization={self.normalization};"
-            f"complex_layout={self.complex_layout};accumulation={self.accumulation};"
+            f"crop={self.crop[0]},{self.crop[1]};n_fft={self.transform_length};"
+            f"window={self.window_length};"
+            f"window_broadcast={self.window_broadcast};"
+            f"hop={self.hop};frames={self.frames};center={int(self.center)};"
+            f"onesided={int(self.onesided)};"
+            f"pad_mode={self.pad_mode};output_length={self.output_length};"
+            f"normalization={self.normalization};"
+            f"complex_layout={self.complex_layout};"
+            f"numeric_storage={self.numeric_policy['storage']};"
+            f"numeric_accum={self.numeric_policy['accum']};"
+            f"accumulation={self.accumulation};"
             f"workspace_bytes={self.workspace_bytes};"
             f"workspace_policy={self.workspace_policy};"
             f"fusion_topology={self.fusion_topology};"
@@ -468,7 +493,7 @@ class ScheduledSpectralArtifact:
 
     def _identity(self) -> dict[str, Any]:
         return {
-            "schema": "tessera.scheduled_spectral.v5",
+            "schema": "tessera.scheduled_spectral.v7",
             "op_name": self.op_name,
             "target": self.target,
             "architecture": self.architecture,
@@ -485,11 +510,18 @@ class ScheduledSpectralArtifact:
             "axis_packing": self.axis_packing,
             "padding": list(self.padding),
             "crop": list(self.crop),
+            "transform_length": self.transform_length,
             "window_length": self.window_length,
+            "window_broadcast": self.window_broadcast,
             "hop": self.hop,
             "frames": self.frames,
+            "center": self.center,
+            "onesided": self.onesided,
+            "pad_mode": self.pad_mode,
+            "output_length": self.output_length,
             "normalization": self.normalization,
             "complex_layout": self.complex_layout,
+            "numeric_policy": self.numeric_policy,
             "accumulation": self.accumulation,
             "workspace_bytes": self.workspace_bytes,
             "workspace_policy": self.workspace_policy,
@@ -533,6 +565,8 @@ class ScheduledSpectralArtifact:
             "bounded_runtime_specialization_v1",
         }:
             raise ValueError("TSOL physical package policy is not evidence-backed")
+        if self.numeric_policy["accum"] != "fp32":
+            raise ValueError("TSOL physical package requires f32 accumulation")
         semantic = define_spectral_program_contract(
             op_name=self.op_name,
             input_signature=self.input_signature,
@@ -556,14 +590,12 @@ class ScheduledSpectralArtifact:
             ),
             "tessera.spectral_conv": "packed_rfft_cmul_irfft_single_artifact_v1",
             "tessera.stft": (
-                "frame_window_packed_rfft_single_artifact_v1"
-                if self.window_length % 2 == 0
-                else "frame_window_full_complex_odd_fallback_v1"
+                "frame_window_packed_rfft_single_artifact_v2"
+                if self.onesided else "frame_window_c2c_single_artifact_v1"
             ),
             "tessera.istft": (
-                "packed_irfft_window_ola_single_artifact_v1"
-                if self.window_length % 2 == 0
-                else "full_complex_odd_window_ola_fallback_v1"
+                "packed_irfft_window_ola_single_artifact_v2"
+                if self.onesided else "c2c_ifft_window_ola_single_artifact_v1"
             ),
         }[self.op_name]
         if self.fusion_topology != expected_fusion:
@@ -630,6 +662,11 @@ def lower_scheduled_spectral(
     shape_bounds: tuple[tuple[int, ...], ...] | None = None,
     storage: str = "f32",
     normalization: str = "backward",
+    center: bool = False,
+    pad_mode: str = "constant",
+    output_length: int | None = None,
+    n_fft: int | None = None,
+    onesided: bool = True,
 ) -> ScheduledSpectralArtifact:
     profile = spectral_architecture_profile(target)
     if profile.execution_status != "ready":
@@ -656,12 +693,29 @@ def lower_scheduled_spectral(
     padding = (0, 0)
     crop = (0, 0)
     win = 0
+    fft_n = 0
     stride = 0
     frames = 0
     children: tuple[Mapping[str, Any], ...] = ()
     accumulation = "f32"
     policy = "persistent_artifact_workspace"
     fusion_topology = ""
+    centered = bool(center)
+    selected_pad_mode = str(pad_mode)
+    selected_output_length = -1
+    window_broadcast = "not_applicable"
+    if selected_pad_mode not in {"constant", "reflect"}:
+        raise ValueError("scheduled STFT pad_mode must be constant or reflect")
+    if op_name != "tessera.stft" and selected_pad_mode != "constant":
+        raise ValueError("pad_mode applies only to scheduled STFT")
+    if op_name not in {"tessera.stft", "tessera.istft"} and centered:
+        raise ValueError("center applies only to scheduled STFT/ISTFT")
+    if op_name != "tessera.istft" and output_length is not None:
+        raise ValueError("output_length applies only to scheduled ISTFT")
+    if op_name not in {"tessera.stft", "tessera.istft"} and n_fft is not None:
+        raise ValueError("n_fft applies only to scheduled STFT/ISTFT")
+    if op_name not in {"tessera.stft", "tessera.istft"} and not onesided:
+        raise ValueError("onesided applies only to scheduled STFT/ISTFT")
 
     if op_name == "tessera.spectral_filter":
         fusion_topology = "standalone_complex_multiply_v1"
@@ -753,101 +807,143 @@ def lower_scheduled_spectral(
             else "ts_spectral_conv_plan_hostptr_strided_storage_amd"
         )
     elif op_name == "tessera.stft":
-        if len(shapes) != 2 or len(shapes[1]) != 1:
-            raise ValueError("stft requires a signal and rank-1 window")
-        win = shapes[1][0]
+        if len(shapes) != 2 or len(shapes[1]) < 1:
+            raise ValueError("stft requires a signal and trailing-dimension window")
+        win = shapes[1][-1]
+        fft_n = int(n_fft if n_fft is not None else win)
+        if fft_n < win:
+            raise ValueError("stft requires n_fft >= window length")
         fusion_topology = (
-            "frame_window_packed_rfft_single_artifact_v1"
-            if win % 2 == 0
-            else "frame_window_full_complex_odd_fallback_v1"
+            "frame_window_packed_rfft_single_artifact_v2"
+            if onesided else "frame_window_c2c_single_artifact_v1"
         )
         stride = int(hop or 0)
         samples = shapes[0][normalized_axis]
-        if stride <= 0 or win > samples:
-            raise ValueError("stft requires 0 < hop and window <= signal")
-        frames = (samples - win) // stride + 1
+        if stride <= 0:
+            raise ValueError("stft requires a positive hop")
+        pad = fft_n // 2 if centered else 0
+        if centered and selected_pad_mode == "reflect" and samples <= pad:
+            raise ValueError("centered reflect STFT requires signal length > n_fft/2")
+        framed_samples = max(samples + 2 * pad, fft_n)
+        frames = (framed_samples - fft_n) // stride + 1
+        padding = (pad, pad)
         batch_shape = shapes[0][:normalized_axis] + shapes[0][normalized_axis + 1 :]
+        window_batch = shapes[1][:-1]
+        if len(window_batch) > len(batch_shape):
+            raise ValueError("stft window batch rank exceeds signal batch rank")
+        aligned_window_batch = (1,) * (len(batch_shape) - len(window_batch)) + window_batch
+        if any(w not in {1, b} for w, b in zip(aligned_window_batch, batch_shape)):
+            raise ValueError("stft window batch dimensions are not broadcastable")
+        window_broadcast = "trailing_batch_broadcast_v1"
         batch = math.prod(batch_shape or (1,))
-        children = (_child(compiler_target, "tessera.rfft", (batch * frames, win)),)
+        child_op = "tessera.rfft" if onesided else "tessera.fft"
+        children = (_child(compiler_target, child_op, (batch * frames, fft_n)),)
+        bins = fft_n // 2 + 1 if onesided else fft_n
         output = (
             shapes[0][:normalized_axis]
-            + (frames, win // 2 + 1)
+            + (frames, bins)
             + shapes[0][normalized_axis + 1 :]
         )
         workspace = (
             _packed_workspace_bytes(
-                (4, batch * samples),
-                (4, win),
-                (4, batch * frames * win),
-                (8, batch * frames * (win // 2 + 1)),
+                (4, batch * framed_samples),
+                (4, math.prod(shapes[1])),
+                (4, batch * frames * fft_n),
+                (8, batch * frames * bins),
             )
-            if win % 2 == 0
+            if onesided
             else _packed_workspace_bytes(
-                (4, batch * samples),
-                (4, win),
-                (8, batch * frames * win),
-                (8, batch * frames * win),
-                (8, batch * frames * (win // 2 + 1)),
+                (4, batch * framed_samples),
+                (4, math.prod(shapes[1])),
+                (8, batch * frames * fft_n),
+                (8, batch * frames * fft_n),
+                (8, batch * frames * bins),
             )
         )
         entry = (
-            "tessera_x86_stft_strided_storage"
+            "tessera_x86_stft_policy_broadcast_layout_storage"
             if compiler_target == "x86"
-            else "ts_stft_plan_hostptr_strided_storage_amd"
+            else "ts_stft_plan_hostptr_broadcast_layout_storage_amd"
         )
     else:
-        if len(shapes) != 2 or len(shapes[1]) != 1:
-            raise ValueError("istft requires spectra and a rank-1 window")
-        win = shapes[1][0]
+        if len(shapes) != 2 or len(shapes[1]) < 1:
+            raise ValueError("istft requires spectra and a trailing-dimension window")
+        win = shapes[1][-1]
+        fft_n = int(n_fft if n_fft is not None else win)
+        if fft_n < win:
+            raise ValueError("istft requires n_fft >= window length")
         fusion_topology = (
-            "packed_irfft_window_ola_single_artifact_v1"
-            if win % 2 == 0
-            else "full_complex_odd_window_ola_fallback_v1"
+            "packed_irfft_window_ola_single_artifact_v2"
+            if onesided else "c2c_ifft_window_ola_single_artifact_v1"
         )
         stride = int(hop or 0)
         if normalized_axis <= 0:
             raise ValueError("istft frequency axis requires a preceding frame axis")
         frame_axis = normalized_axis - 1
         frames = shapes[0][frame_axis]
-        if stride <= 0 or shapes[0][normalized_axis] != win // 2 + 1:
+        expected_bins = fft_n // 2 + 1 if onesided else fft_n
+        if stride <= 0 or shapes[0][normalized_axis] != expected_bins:
             raise ValueError("istft spectrum/window/hop contract mismatch")
         batch_shape = tuple(
             dim
             for index, dim in enumerate(shapes[0])
             if index not in {frame_axis, normalized_axis}
         )
+        window_batch = shapes[1][:-1]
+        if len(window_batch) > len(batch_shape):
+            raise ValueError("istft window batch rank exceeds spectrum batch rank")
+        aligned_window_batch = (1,) * (len(batch_shape) - len(window_batch)) + window_batch
+        if any(w not in {1, b} for w, b in zip(aligned_window_batch, batch_shape)):
+            raise ValueError("istft window batch dimensions are not broadcastable")
+        window_broadcast = "trailing_batch_broadcast_v1"
         batch = math.prod(batch_shape or (1,))
         children = (
             _child(
                 compiler_target,
-                "tessera.irfft",
-                (batch * frames, win // 2 + 1),
-                n=win,
+                "tessera.irfft" if onesided else "tessera.ifft",
+                (batch * frames, expected_bins),
+                n=fft_n,
             ),
         )
-        samples = (frames - 1) * stride + win
-        output = shapes[0][:frame_axis] + (samples,) + shapes[0][normalized_axis + 1 :]
+        raw_samples = (frames - 1) * stride + fft_n
+        pad = fft_n // 2 if centered else 0
+        available = raw_samples - 2 * pad
+        if available <= 0:
+            raise ValueError("centered ISTFT has no samples after trimming")
+        selected_output_length = (
+            available if output_length is None else int(output_length)
+        )
+        if selected_output_length <= 0 or selected_output_length > available:
+            raise ValueError(
+                "scheduled ISTFT output_length must crop within the available output"
+            )
+        crop = (pad, raw_samples - pad - selected_output_length)
+        output = (
+            shapes[0][:frame_axis]
+            + (selected_output_length,)
+            + shapes[0][normalized_axis + 1 :]
+        )
         workspace = (
             _packed_workspace_bytes(
-                (4, win),
-                (4, batch * samples),
-                (8, batch * frames * (win // 2 + 1)),
-                (4, batch * frames * win),
+                (4, math.prod(shapes[1])),
+                (4, batch * raw_samples),
+                (8, batch * frames * expected_bins),
+                (4, batch * frames * fft_n),
             )
-            if win % 2 == 0
+            if onesided
             else _packed_workspace_bytes(
-                (4, win),
-                (4, batch * samples),
-                (8, batch * frames * (win // 2 + 1)),
-                (8, batch * frames * win),
-                (8, batch * frames * win),
+                (4, math.prod(shapes[1])),
+                (4, batch * raw_samples),
+                (8, batch * frames * expected_bins),
+                (8, batch * frames * fft_n),
+                (8, batch * frames * fft_n),
             )
         )
         accumulation = "deterministic_f32_ascending_frames"
         entry = (
-            "tessera_x86_istft_strided_storage"
+            "tessera_x86_istft_policy_broadcast_layout_storage"
             if compiler_target == "x86"
-            else "ts_istft_plan_hostptr_strided_storage_amd"
+            else "ts_istft_plan_hostptr_broadcast_layout_storage_amd"
         )
 
     provisional = ScheduledSpectralArtifact(
@@ -866,9 +962,15 @@ def lower_scheduled_spectral(
         storage=semantic_contract.storage,
         padding=padding,
         crop=crop,
+        transform_length=fft_n,
         window_length=win,
+        window_broadcast=window_broadcast,
         hop=stride,
         frames=frames,
+        center=centered,
+        onesided=bool(onesided),
+        pad_mode=selected_pad_mode,
+        output_length=selected_output_length,
         normalization=semantic_contract.normalization,
         complex_layout="interleaved_f32x2",
         accumulation=accumulation,
@@ -940,8 +1042,15 @@ def lower_scheduled_spectral(
         f'storage_conversion = "{provisional.storage_conversion}", '
         f'axis_packing = "{provisional.axis_packing}", '
         f"padding = array<i64: {padding_text}>, crop = array<i64: {crop_text}>, "
-        f"window_length = {win} : i64, hop = {stride} : i64, frames = {frames} : i64, "
+        f"transform_length = {fft_n} : i64, window_length = {win} : i64, "
+        f'window_broadcast = "{window_broadcast}", '
+        f"hop = {stride} : i64, frames = {frames} : i64, "
+        f"center = {str(centered).lower()}, onesided = {str(bool(onesided)).lower()}, "
+        f"pad_mode = \"{selected_pad_mode}\", "
+        f"output_length = {selected_output_length} : i64, "
         f'normalization = "{semantic_contract.normalization}", complex_layout = "interleaved_f32x2", '
+        f'numeric_policy = {{storage = "{provisional.numeric_policy["storage"]}", '
+        f'accum = "{provisional.numeric_policy["accum"]}"}}, '
         f'accumulation = "{accumulation}", workspace_bytes = {workspace} : i64, '
         f'workspace_policy = "{policy}", mutation_lineage = "inputs_immutable_output_fresh_v1", '
         f'fusion_topology = "{fusion_topology}", '
@@ -1022,8 +1131,8 @@ def lower_scheduled_spectral(
 def validate_scheduled_spectral_metadata(
     metadata: Mapping[str, Any], *, input_shapes: Sequence[Sequence[int]]
 ) -> Mapping[str, Any]:
-    if metadata.get("schema") != "tessera.scheduled_spectral.v5":
-        raise ValueError("TSOL package requires tessera.scheduled_spectral.v5 metadata")
+    if metadata.get("schema") != "tessera.scheduled_spectral.v7":
+        raise ValueError("TSOL package requires tessera.scheduled_spectral.v7 metadata")
     shapes = tuple(tuple(int(dim) for dim in shape) for shape in input_shapes)
     declared_shapes = tuple(
         tuple(int(dim) for dim in shape) for shape in metadata.get("input_shapes") or ()
@@ -1056,6 +1165,19 @@ def validate_scheduled_spectral_metadata(
         shape_bounds=semantic.shape_bounds,
         storage=semantic.storage,
         normalization=semantic.normalization,
+        center=bool(metadata.get("center", False)),
+        pad_mode=str(metadata.get("pad_mode", "constant")),
+        output_length=(
+            int(metadata["output_length"])
+            if int(metadata.get("output_length", -1)) >= 0
+            else None
+        ),
+        n_fft=(
+            int(metadata["transform_length"])
+            if str(metadata.get("op_name")) in {"tessera.stft", "tessera.istft"}
+            else None
+        ),
+        onesided=bool(metadata.get("onesided", True)),
     )
     declared_metadata = declared.to_metadata()
     for key, value in declared_metadata.items():
@@ -1076,5 +1198,18 @@ def validate_scheduled_spectral_metadata(
         shape_bounds=semantic.shape_bounds,
         storage=semantic.storage,
         normalization=semantic.normalization,
+        center=bool(metadata.get("center", False)),
+        pad_mode=str(metadata.get("pad_mode", "constant")),
+        output_length=(
+            int(metadata["output_length"])
+            if int(metadata.get("output_length", -1)) >= 0
+            else None
+        ),
+        n_fft=(
+            int(metadata["transform_length"])
+            if str(metadata.get("op_name")) in {"tessera.stft", "tessera.istft"}
+            else None
+        ),
+        onesided=bool(metadata.get("onesided", True)),
     ).to_metadata()
     return expected

@@ -32,6 +32,10 @@ class CollectiveDescriptor:
     dtype: str | None = None
     chunk_bytes: int | None = None
     peer_pairs: tuple[tuple[int, int], ...] = ()
+    ordinal: int = 0
+    subgroup: tuple[int, ...] = ()
+    reshard_plan_digest: str = ""
+    region_path: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.kind not in {"all_reduce", "reduce_scatter", "all_gather", "all_to_all", "collective_permute"}:
@@ -75,6 +79,22 @@ class CollectiveDescriptor:
                 raise ValueError("collective_permute peer is outside world_size")
         elif self.peer_pairs:
             raise ValueError("peer_pairs are valid only for collective_permute")
+        if self.ordinal < 0:
+            raise ValueError("collective ordinal must be non-negative")
+        if self.subgroup and (
+            len(self.subgroup) < 2
+            or len(set(self.subgroup)) != len(self.subgroup)
+            or any(rank < 0 for rank in self.subgroup)
+        ):
+            raise ValueError(
+                "collective subgroup requires distinct non-negative ranks"
+            )
+        if self.world_size is not None and self.subgroup and (
+            self.world_size != len(self.subgroup)
+        ):
+            raise ValueError(
+                "collective subgroup size must equal its declared world_size"
+            )
 
     @classmethod
     def from_target_record(cls, row: Mapping[str, Any]) -> "CollectiveDescriptor":
@@ -113,6 +133,10 @@ class CollectiveDescriptor:
             dtype=None if row.get("dtype") is None else str(row["dtype"]),
             chunk_bytes=(None if row.get("chunk_bytes") is None else int(row["chunk_bytes"])),
             peer_pairs=tuple(zip(source_peers, target_peers)),
+            ordinal=int(row.get("ordinal", 0)),
+            subgroup=tuple(int(rank) for rank in row.get("subgroup", ())),
+            reshard_plan_digest=str(row.get("reshard_plan_digest", "")),
+            region_path=tuple(str(part) for part in row.get("region_path", ())),
         )
 
     @classmethod
@@ -249,6 +273,122 @@ class OptimizerShardTransport:
 
 # The runtime is generic; retain the established name for API compatibility.
 CollectiveTransportRuntime = OptimizerShardTransport
+
+
+class RankLocalCollectiveTransport:
+    """Execute compiler-owned collective SSA with one local tensor per rank."""
+
+    def __init__(
+        self,
+        adapter: Any,
+        tensors: Mapping[str, Any],
+        *,
+        artifact_digest: str,
+    ) -> None:
+        if str(getattr(adapter, "backend", "")) != "mpi" or not bool(
+            getattr(adapter, "rank_local", False)
+        ):
+            raise RuntimeError(
+                "rank-local collective transport requires an MPI rank adapter"
+            )
+        if len(artifact_digest) != 64:
+            raise ValueError("rank-local collective transport requires an artifact digest")
+        self.adapter = adapter
+        self.artifact_digest = artifact_digest
+        self._values = dict(tensors)
+        self._ownership = {name: "rank_local" for name in self._values}
+
+    @property
+    def ownership(self) -> Mapping[str, str]:
+        return dict(self._ownership)
+
+    def value(self, tensor: str) -> Any:
+        return self._values[tensor]
+
+    def values(self, tensor: str) -> Any:
+        """Compatibility spelling; rank-local execution returns one value."""
+        return self.value(tensor)
+
+    def execute(self, descriptor: CollectiveDescriptor) -> None:
+        source_tensor = descriptor.source_tensor or descriptor.tensor
+        result_tensor = descriptor.result_tensor or descriptor.tensor
+        if source_tensor not in self._values:
+            raise KeyError(
+                f"no rank-local runtime value for collective tensor {source_tensor!r}"
+            )
+        parent_world = int(self.adapter.world_size)
+        subgroup = descriptor.subgroup
+        operation_world = len(subgroup) if subgroup else parent_world
+        if descriptor.world_size is not None and descriptor.world_size != operation_world:
+            raise RuntimeError(
+                f"{descriptor.tensor} targets world_size={descriptor.world_size}, "
+                f"but its communicator owns {operation_world} ranks"
+            )
+        selected = self.adapter
+        if subgroup and subgroup != tuple(range(parent_world)):
+            select_subgroup = getattr(self.adapter, "for_subgroup", None)
+            if not callable(select_subgroup):
+                raise RuntimeError("MPI adapter does not implement subgroup communicators")
+            selected = select_subgroup(subgroup)
+            if selected is None:
+                self._values[result_tensor] = self._values[source_tensor]
+                self._ownership[result_tensor] = "outside_subgroup"
+                return
+        context = (
+            self.artifact_digest,
+            descriptor.ordinal,
+            source_tensor,
+            result_tensor,
+            descriptor.reshard_plan_digest,
+            subgroup,
+            descriptor.region_path,
+        )
+        expected_dtype = descriptor.dtype
+        source = self._values[source_tensor]
+        common = {
+            "_artifact_context": context,
+            "_expected_dtype": expected_dtype,
+        }
+        if descriptor.kind == "reduce_scatter":
+            output = selected.reduce_scatter(
+                source, axis=descriptor.axis, op=descriptor.op, **common
+            )
+            ownership = "rank_local"
+        elif descriptor.kind == "all_gather":
+            output = selected.all_gather(source, axis=descriptor.axis, **common)
+            ownership = "replicated"
+        elif descriptor.kind == "all_reduce":
+            output = selected.all_reduce(source, op=descriptor.op, **common)
+            ownership = "replicated"
+        elif descriptor.kind == "all_to_all":
+            output = selected.all_to_all(
+                source,
+                scatter_axis=(
+                    descriptor.axis
+                    if descriptor.scatter_axis is None
+                    else descriptor.scatter_axis
+                ),
+                gather_axis=(
+                    descriptor.axis
+                    if descriptor.gather_axis is None
+                    else descriptor.gather_axis
+                ),
+                **common,
+            )
+            ownership = "rank_local"
+        else:
+            output = selected.collective_permute(
+                source, pairs=descriptor.peer_pairs, **common
+            )
+            ownership = "rank_local"
+        if descriptor.normalize:
+            if descriptor.kind not in {"all_reduce", "reduce_scatter"}:
+                raise RuntimeError(
+                    "normalization is valid only for reducing collectives"
+                )
+            output = output / float(operation_world)
+        self._values[result_tensor] = output
+        self._ownership[result_tensor] = ownership
 
 
 @dataclass(frozen=True)
@@ -435,6 +575,10 @@ def _parse_collectives(row: Mapping[str, Any]) -> tuple[CollectiveDescriptor, ..
             result_tensor=(None if item.get("output") is None else str(item["output"])),
             dtype=None if item.get("dtype") is None else str(item["dtype"]),
             chunk_bytes=(None if item.get("chunk_bytes") is None else int(item["chunk_bytes"])),
+            ordinal=int(item.get("ordinal", 0)),
+            subgroup=tuple(int(rank) for rank in item.get("subgroup", ())),
+            reshard_plan_digest=str(item.get("reshard_plan_digest", "")),
+            region_path=tuple(str(part) for part in item.get("region_path", ())),
         )
         for item in raw
     )
@@ -445,14 +589,25 @@ def execute_target_collectives(
     *,
     adapter: Any,
     tensors: Mapping[str, Iterable[Any]],
-) -> CollectiveTransportRuntime:
+    artifact_digest: str = "unbound",
+) -> CollectiveTransportRuntime | RankLocalCollectiveTransport:
     """Execute ordered portable Target-IR records through one runtime adapter.
 
     Packaging resolves SSA buffers to stable ``tensor`` identities before
     calling this boundary. The same path drives the deterministic in-process
     adapter and native NCCL/RCCL adapters.
     """
-    runtime = CollectiveTransportRuntime(adapter, tensors)
+    rank_local = bool(getattr(adapter, "rank_local", False))
+    if rank_local:
+        runtime: CollectiveTransportRuntime | RankLocalCollectiveTransport = (
+            RankLocalCollectiveTransport(
+                adapter,
+                tensors,
+                artifact_digest=artifact_digest,
+            )
+        )
+    else:
+        runtime = CollectiveTransportRuntime(adapter, tensors)
     for row in records:
         runtime.execute(CollectiveDescriptor.from_target_record(row))
     return runtime
@@ -536,6 +691,7 @@ __all__ = [
     "CollectiveDescriptor",
     "EmittedPipelineStep",
     "OptimizerShardTransport",
+    "RankLocalCollectiveTransport",
     "PipelineRuntimeResult",
     "execute_pipeline_steps",
     "parse_pipeline_steps",

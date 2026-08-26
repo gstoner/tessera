@@ -310,6 +310,69 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
                 ctypes.c_int, ctypes.c_int, ctypes.c_longlong, ctypes.c_int,
                 ctypes.c_int, ctypes.c_int, ctypes.c_float,
             ]
+            if hasattr(lib, "ts_stft_plan_hostptr_policy_strided_storage_amd"):
+                lib.ts_stft_plan_hostptr_policy_strided_storage_amd.restype = ctypes.c_int
+                lib.ts_stft_plan_hostptr_policy_strided_storage_amd.argtypes = [
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_longlong,
+                    ctypes.c_int, ctypes.c_longlong, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+                    ctypes.c_int,
+                ]
+                lib.ts_istft_plan_hostptr_policy_strided_storage_amd.restype = ctypes.c_int
+                lib.ts_istft_plan_hostptr_policy_strided_storage_amd.argtypes = [
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_longlong,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_longlong, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+                    ctypes.c_int,
+                ]
+            if hasattr(lib, "ts_stft_plan_hostptr_broadcast_layout_storage_amd"):
+                i64p = ctypes.POINTER(ctypes.c_int64)
+                lib.ts_stft_plan_hostptr_broadcast_layout_storage_amd.restype = ctypes.c_int
+                lib.ts_stft_plan_hostptr_broadcast_layout_storage_amd.argtypes = [
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_int, i64p, i64p, ctypes.c_int,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int,
+                ]
+                lib.ts_istft_plan_hostptr_broadcast_layout_storage_amd.restype = ctypes.c_int
+                lib.ts_istft_plan_hostptr_broadcast_layout_storage_amd.argtypes = [
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_int, i64p, i64p, ctypes.c_int,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int,
+                ]
+                lib.ts_streaming_stft_hostptr_broadcast_layout_storage_amd.restype = ctypes.c_int
+                lib.ts_streaming_stft_hostptr_broadcast_layout_storage_amd.argtypes = [
+                    ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+                ]
+                lib.ts_stft_backward_hostptr_broadcast_layout_storage_amd.restype = ctypes.c_int
+                lib.ts_stft_backward_hostptr_broadcast_layout_storage_amd.argtypes = [
+                    ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int,
+                    ctypes.c_int, i64p, i64p,
+                    ctypes.c_int, i64p, i64p,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ]
+                lib.ts_istft_backward_hostptr_broadcast_layout_storage_amd.restype = ctypes.c_int
+                lib.ts_istft_backward_hostptr_broadcast_layout_storage_amd.argtypes = [
+                    ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int,
+                    ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, i64p, i64p,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+                    ctypes.c_int, ctypes.c_int,
+                ]
     return lib
 
 
@@ -370,7 +433,7 @@ def _amd_lib() -> ctypes.CDLL | None:
         if (
             hasattr(lib, "ts_spectral_composite_package_abi_amd")
             and lib.ts_spectral_composite_package_abi_amd()
-            == b"tessera.rocm.spectral_composite.v6"
+            == b"tessera.rocm.spectral_composite.v7"
             and hasattr(lib, "ts_spectral_composite_arch_amd")
             and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
         ):
@@ -387,7 +450,7 @@ def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
         lib is not None
         and hasattr(lib, "ts_spectral_composite_package_abi_amd")
         and lib.ts_spectral_composite_package_abi_amd()
-        == b"tessera.rocm.spectral_composite.v6"
+        == b"tessera.rocm.spectral_composite.v7"
         and hasattr(lib, "ts_spectral_composite_arch_amd")
         and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
     )
@@ -630,7 +693,7 @@ def run_rocm_spectral_composite(
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()
-        != b"tessera.rocm.spectral_composite.v6"
+        != b"tessera.rocm.spectral_composite.v7"
     ):
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
     if (
@@ -654,6 +717,16 @@ def run_rocm_spectral_composite(
             int(shape[at]),
             int(np.prod(shape[at + 1 :], dtype=np.int64)),
         )
+    def layout_descriptor(value: np.ndarray) -> tuple[Any, Any]:
+        if any(stride % value.itemsize for stride in value.strides):
+            raise ValueError("ROCm TSOL strides must be element aligned")
+        strides = tuple(int(stride // value.itemsize) for stride in value.strides)
+        if any(stride == 0 and value.shape[dim] > 1
+               for dim, stride in enumerate(strides)):
+            raise ValueError("ROCm TSOL overlapping layouts are unsupported")
+        shape = (ctypes.c_int64 * value.ndim)(*map(int, value.shape))
+        descriptor = (ctypes.c_int64 * value.ndim)(*strides)
+        return shape, descriptor
     expected_real_dtype = {"f32": "float32", "f16": "float16", "bf16": "bfloat16"}[storage]
     real_indices = (
         () if op_name == "tessera.spectral_filter"
@@ -714,39 +787,37 @@ def run_rocm_spectral_composite(
             storage_code,
         )
     elif op_name == "tessera.stft":
-        x = np.ascontiguousarray(values[0])
-        window = np.ascontiguousarray(values[1])
+        x, window = values
         out = np.empty(output_shape, np.complex64)
-        outer, samples, inner = folded_axis(tuple(x.shape), axis)
-        win = int(contract["window_length"])
-        _, plan = _rocm_plan(
-            int(children[0]["physical_length"]), -1,
-            str(children[0]["schedule_digest"]),
-        )
-        rc = lib.ts_stft_plan_hostptr_strided_storage_amd(
-            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), outer,
-            samples, inner, win, int(contract["hop"]),
-            int(contract["frames"]), storage_code,
-            spectral_output_scale(op_name, normalization, win),
+        shape, strides = layout_descriptor(x)
+        window_shape, window_strides = layout_descriptor(window)
+        if not hasattr(lib, "ts_stft_plan_hostptr_broadcast_layout_storage_amd"):
+            raise RuntimeError("ROCm spectral image lacks the layout/broadcast ABI")
+        n_fft = int(contract["transform_length"])
+        rc = lib.ts_stft_plan_hostptr_broadcast_layout_storage_amd(
+            composite_plan, _cptr(x), _cptr(window), _cptr(out), x.ndim,
+            shape, strides, axis, window.ndim, window_shape, window_strides,
+            n_fft, int(contract["hop"]), int(contract["frames"]), storage_code,
+            spectral_output_scale(op_name, normalization, n_fft),
+            int(bool(contract["center"])),
+            {"constant": 0, "reflect": 1}[str(contract["pad_mode"])],
+            int(bool(contract["onesided"])),
         )
     elif op_name == "tessera.istft":
-        frame_axis = axis - 1
-        x = np.ascontiguousarray(values[0], np.complex64)
-        window = np.ascontiguousarray(values[1])
+        x, window = values
         out = np.empty(output_shape, values[1].dtype)
-        outer = int(np.prod(x.shape[:frame_axis], dtype=np.int64))
-        inner = int(np.prod(x.shape[axis + 1 :], dtype=np.int64))
-        win = int(contract["window_length"])
-        _, plan = _rocm_plan(
-            int(children[0]["physical_length"]), 1,
-            str(children[0]["schedule_digest"]),
-        )
-        rc = lib.ts_istft_plan_hostptr_strided_storage_amd(
-            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), outer,
-            int(contract["frames"]), int(x.shape[axis]), inner, win,
-            int(contract["hop"]),
-            storage_code,
-            spectral_output_scale(op_name, normalization, win),
+        shape, strides = layout_descriptor(x)
+        window_shape, window_strides = layout_descriptor(window)
+        if not hasattr(lib, "ts_istft_plan_hostptr_broadcast_layout_storage_amd"):
+            raise RuntimeError("ROCm spectral image lacks the layout/broadcast ABI")
+        n_fft = int(contract["transform_length"])
+        rc = lib.ts_istft_plan_hostptr_broadcast_layout_storage_amd(
+            composite_plan, _cptr(x), _cptr(window), _cptr(out), x.ndim,
+            shape, strides, axis, window.ndim, window_shape, window_strides,
+            n_fft, int(contract["hop"]), storage_code,
+            spectral_output_scale(op_name, normalization, n_fft),
+            int(bool(contract["center"])), int(contract["output_length"]),
+            int(bool(contract["onesided"])),
         )
     else:  # validate_scheduled_spectral_metadata already rejects this.
         raise ValueError(f"unsupported ROCm spectral composite {op_name!r}")

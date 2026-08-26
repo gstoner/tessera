@@ -32,6 +32,11 @@ def _art(rt, op_name, operands, kwargs):
         shape_bounds=kwargs.get("shape_bounds"),
         storage=kwargs.get("storage", "f32"),
         normalization=kwargs.get("normalization", "backward"),
+        center=kwargs.get("center", False),
+        pad_mode=kwargs.get("pad_mode", "constant"),
+        output_length=kwargs.get("length"),
+        n_fft=kwargs.get("n_fft"),
+        onesided=kwargs.get("onesided", True),
     ).to_metadata()
     return rt.RuntimeArtifact(metadata={
         "target": "x86", "compiler_path": "x86_spectral_compiled",
@@ -46,6 +51,72 @@ def _stft_ref(x, win, hop):
     return np.stack(
         [np.fft.rfft(x[..., s:s + wl] * win, axis=-1)
          for s in range(0, max(1, x.shape[-1] - wl + 1), hop)], axis=-2)
+
+
+def _centered_stft_ref(x, win, hop, pad_mode):
+    pad = win.size // 2
+    padded = np.pad(
+        np.asarray(x, np.float32),
+        ((0, 0),) * (np.ndim(x) - 1) + ((pad, pad),),
+        mode=pad_mode,
+    )
+    return _stft_ref(padded, np.asarray(win, np.float32), hop)
+
+
+def _istft_ref(spectrum, win, hop, *, center, length):
+    win = np.asarray(win, np.float32)
+    frames = np.fft.irfft(np.asarray(spectrum), n=win.size, axis=-1).astype(np.float32)
+    raw_length = (frames.shape[-2] - 1) * hop + win.size
+    numerator = np.zeros(frames.shape[:-2] + (raw_length,), np.float32)
+    denominator = np.zeros(raw_length, np.float32)
+    for frame in range(frames.shape[-2]):
+        start = frame * hop
+        numerator[..., start:start + win.size] += frames[..., frame, :] * win
+        denominator[start:start + win.size] += win * win
+    output = np.divide(
+        numerator, denominator, out=np.zeros_like(numerator), where=denominator > 1e-12
+    )
+    trim = win.size // 2 if center else 0
+    return output[..., trim:trim + length]
+
+
+def _general_stft_ref(x, win, hop, *, n_fft, center, onesided):
+    values = np.asarray(x, np.float32)
+    window = np.zeros(n_fft, np.float32)
+    offset = (n_fft - win.size) // 2
+    window[offset:offset + win.size] = np.asarray(win, np.float32)
+    if center:
+        values = np.pad(values, ((0, 0),) * (values.ndim - 1) +
+                        ((n_fft // 2, n_fft // 2),))
+    if values.shape[-1] < n_fft:
+        values = np.pad(values, ((0, 0),) * (values.ndim - 1) +
+                        ((0, n_fft - values.shape[-1]),))
+    transform = np.fft.rfft if onesided else np.fft.fft
+    return np.stack([
+        transform(values[..., start:start + n_fft] * window, axis=-1)
+        for start in range(0, values.shape[-1] - n_fft + 1, hop)
+    ], axis=-2).astype(np.complex64)
+
+
+def _general_istft_ref(spectrum, win, hop, *, n_fft, center, length, onesided):
+    inverse = np.fft.irfft if onesided else np.fft.ifft
+    frames = np.real(inverse(np.asarray(spectrum), n=n_fft, axis=-1)).astype(np.float32)
+    window = np.zeros(n_fft, np.float32)
+    offset = (n_fft - win.size) // 2
+    window[offset:offset + win.size] = np.asarray(win, np.float32)
+    raw_length = (frames.shape[-2] - 1) * hop + n_fft
+    numerator = np.zeros(frames.shape[:-2] + (raw_length,), np.float32)
+    denominator = np.zeros(raw_length, np.float32)
+    for frame in range(frames.shape[-2]):
+        start = frame * hop
+        numerator[..., start:start + n_fft] += frames[..., frame, :] * window
+        denominator[start:start + n_fft] += window * window
+    output = np.divide(
+        numerator, denominator, out=np.zeros_like(numerator),
+        where=denominator > 1e-12,
+    )
+    trim = n_fft // 2 if center else 0
+    return output[..., trim:trim + length]
 
 
 _TOL = dict(atol=2e-3, rtol=2e-3)
@@ -378,3 +449,178 @@ def test_combined_dynamic_axis_reduced_storage_ortho_policy(storage):
         np.asarray(result["output"]).astype(np.float32), reference,
         atol=0.15 if storage == "bf16" else 4e-2, rtol=4e-2,
     )
+
+
+@pytest.mark.parametrize("pad_mode", ["constant", "reflect"])
+@pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
+def test_centered_ragged_stft_and_cropped_istft_native_policy(storage, pad_mode):
+    rt = _rt_or_skip()
+    dtype = np.float32 if storage == "f32" else np.float16
+    if storage == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(801)
+    signal = rng.normal(size=(2, 46)).astype(dtype)
+    window = (np.hanning(18) + 0.25).astype(dtype)
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {
+            "hop": 7, "center": True, "pad_mode": pad_mode, "storage": storage,
+        }),
+        (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    tolerance = {"f32": 3e-3, "f16": 4e-2, "bf16": 2e-1}[storage]
+    np.testing.assert_allclose(
+        stft["output"], _centered_stft_ref(signal, window, 7, pad_mode),
+        atol=tolerance, rtol=tolerance,
+    )
+    spectrum = np.asarray(stft["output"], np.complex64)
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {
+            "hop": 7, "center": True, "length": 40, "storage": storage,
+        }),
+        (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    np.testing.assert_allclose(
+        np.asarray(istft["output"], np.float32),
+        _istft_ref(spectrum, window, 7, center=True, length=40),
+        atol=tolerance, rtol=tolerance,
+    )
+
+
+def test_centered_policy_executes_true_noncontiguous_stride_abi():
+    rt = _rt_or_skip()
+    signal = np.arange(92, dtype=np.float32).reshape(46, 2).T
+    assert not signal.flags.c_contiguous
+    window = np.linspace(0.25, 1.25, 36, dtype=np.float32)[::2]
+    assert not window.flags.c_contiguous
+    artifact = _art(rt, "tessera.stft", (signal, window), {
+        "hop": 7, "center": True, "pad_mode": "constant",
+    })
+    result = rt.launch(artifact, (signal, window))
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_allclose(
+        result["output"], _centered_stft_ref(signal, window, 7, "constant"),
+        **_TOL,
+    )
+
+
+def test_centered_cropped_arbitrary_axis_native_policy():
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(803)
+    signal = rng.normal(size=(2, 46, 3)).astype(np.float32)
+    window = (np.hanning(18) + 0.25).astype(np.float32)
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {
+            "axis": 1, "hop": 7, "center": True, "pad_mode": "reflect",
+        }), (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    moved_signal = np.moveaxis(signal, 1, -1)
+    moved_ref = _centered_stft_ref(moved_signal, window, 7, "reflect")
+    reference = np.moveaxis(moved_ref, (-2, -1), (1, 2))
+    np.testing.assert_allclose(stft["output"], reference, **_TOL)
+    spectrum = np.asarray(stft["output"], np.complex64)
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {
+            "axis": 2, "hop": 7, "center": True, "length": 40,
+        }), (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    moved_spectrum = np.moveaxis(spectrum, (1, 2), (-2, -1))
+    moved_output = _istft_ref(
+        moved_spectrum, window, 7, center=True, length=40
+    )
+    np.testing.assert_allclose(
+        istft["output"], np.moveaxis(moved_output, -1, 1), **_TOL
+    )
+
+
+@pytest.mark.parametrize("onesided", [True, False])
+def test_broader_nfft_short_window_full_spectrum_and_strides(onesided):
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(805 + int(onesided))
+    signal = rng.normal(size=(44, 3, 2)).astype(np.float32).transpose(1, 0, 2)
+    window = (np.hanning(30).astype(np.float32) + 0.2)[::2]
+    assert not signal.flags.c_contiguous and not window.flags.c_contiguous
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {
+            "axis": 1, "hop": 6, "n_fft": 20, "center": True,
+            "onesided": onesided,
+        }), (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    moved = np.moveaxis(signal, 1, -1)
+    reference = _general_stft_ref(
+        moved, window, 6, n_fft=20, center=True, onesided=onesided
+    )
+    reference = np.moveaxis(reference, (-2, -1), (1, 2))
+    np.testing.assert_allclose(stft["output"], reference, atol=4e-3, rtol=4e-3)
+
+    spectral_output = np.asarray(stft["output"], np.complex64)
+    holder = np.empty(spectral_output.shape[:-1] + (2 * spectral_output.shape[-1],),
+                      np.complex64)
+    holder[..., ::2] = spectral_output
+    spectrum = holder[..., ::2]
+    assert not spectrum.flags.c_contiguous
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {
+            "axis": 2, "hop": 6, "n_fft": 20, "center": True,
+            "length": 38, "onesided": onesided,
+        }), (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    moved_spectrum = np.moveaxis(spectrum, (1, 2), (-2, -1))
+    expected = _general_istft_ref(
+        moved_spectrum, window, 6, n_fft=20, center=True, length=38,
+        onesided=onesided,
+    )
+    np.testing.assert_allclose(
+        istft["output"], np.moveaxis(expected, -1, 1), atol=5e-3, rtol=5e-3,
+    )
+
+
+def test_per_batch_window_broadcast_executes_in_native_package():
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(808)
+    signal = rng.standard_normal((2, 48, 3)).astype(np.float32)[:, ::2, :]
+    windows = np.stack((np.hanning(8), np.hamming(8)), axis=0).astype(
+        np.float32
+    )[:, None, :]
+    kwargs = {
+        "axis": 1, "hop": 4, "n_fft": 10, "center": False,
+        "onesided": False,
+    }
+    result = rt.launch(
+        _art(rt, "tessera.stft", (signal, windows), kwargs),
+        (signal, windows),
+    )
+    assert result["ok"] is True, result.get("reason")
+    actual = np.asarray(result["output"])
+    expected = np.empty_like(actual)
+    for batch in range(signal.shape[0]):
+        for channel in range(signal.shape[2]):
+            expected[batch, :, :, channel] = _general_stft_ref(
+                signal[batch, :, channel], windows[batch, 0], 4,
+                n_fft=10, center=False, onesided=False,
+            )
+    np.testing.assert_allclose(actual, expected, **_TOL)
+
+    inverse_kwargs = {
+        "axis": 2, "hop": 4, "n_fft": 10, "center": False,
+        "onesided": False, "length": 22,
+    }
+    inverse = rt.launch(
+        _art(rt, "tessera.istft", (actual, windows), inverse_kwargs),
+        (actual, windows),
+    )
+    assert inverse["ok"] is True, inverse.get("reason")
+    inverse_actual = np.asarray(inverse["output"])
+    inverse_expected = np.empty_like(inverse_actual)
+    for batch in range(signal.shape[0]):
+        for channel in range(signal.shape[2]):
+            inverse_expected[batch, :, channel] = _general_istft_ref(
+                actual[batch, :, :, channel], windows[batch, 0], 4,
+                n_fft=10, center=False, length=22, onesided=False,
+            )
+    np.testing.assert_allclose(inverse_actual, inverse_expected, **_TOL)

@@ -328,19 +328,30 @@ def ROCM_SpectralBackwardOp : TesseraROCM_Op<"spectral_backward"> {
   let summary = "Native content-addressed compound spectral adjoint";
   let description = [{
     Materializes the bounded gfx1151 physical consumer for complex64 spectral
-    filtering or unbroadcast full f32 spectral convolution. Dimensions and
-    normalization are selected before this Target-IR boundary; unsupported
-    compound kinds remain fail-closed.
+    filtering, unbroadcast full f32 spectral convolution, and contiguous
+    final-axis STFT/ISTFT adjoints. Dimensions, storage, and normalization are
+    selected before this Target-IR boundary; unsupported policy remains
+    fail-closed.
   }];
   let arguments = (ins StrAttr:$name,
                        StrAttr:$artifact_hash,
                        ROCM_SpectralBackwardKindAttr:$kind,
                        DefaultValuedAttr<I64Attr, "0">:$elements,
                        DefaultValuedAttr<I64Attr, "0">:$batch,
+                       DefaultValuedAttr<I64Attr, "1">:$outer,
+                       DefaultValuedAttr<I64Attr, "1">:$inner,
                        DefaultValuedAttr<I64Attr, "0">:$cotangent_length,
+                       DefaultValuedAttr<I64Attr, "0">:$raw_length,
                        DefaultValuedAttr<I64Attr, "0">:$input_length,
                        DefaultValuedAttr<I64Attr, "0">:$parameter_length,
-                       DefaultValuedAttr<F32Attr, "1.0">:$normalization_scale);
+                       DefaultValuedAttr<I64Attr, "0">:$frames,
+                       DefaultValuedAttr<I64Attr, "0">:$bins,
+                       DefaultValuedAttr<I64Attr, "0">:$hop,
+                       DefaultValuedAttr<BoolAttr, "false">:$center,
+                       DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
+                       DefaultValuedAttr<I64Attr, "-1">:$output_length,
+                       DefaultValuedAttr<F32Attr, "1.0">:$normalization_scale,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$storage);
   let assemblyFormat = "attr-dict";
 }
 

@@ -69,6 +69,18 @@ module {
 }
 """
 
+_F16_ACCUM_DIRECTIVE = """
+module {
+  "tessera_rocm.wmma_gemm"() {
+    name = "gemm_f16_accum", m = 16 : i64, n = 16 : i64, k = 16 : i64,
+    dtype = "f16", output = "f16", schedule_arch = "gfx1151",
+    numeric_policy = {storage = "fp16", accum = "fp16"},
+    tessera.rocm.reduced_precision_accumulation =
+      "f16_wmma_accuracy_cost_ack_v1"
+  } : () -> ()
+}
+"""
+
 _PORTABLE_TILE_KERNEL = """
 module {
   func.func @gemm(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
@@ -598,6 +610,87 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
     assert orc == 0
     # The compiler-GENERATED GEMM matches the hand-written oracle bit-for-bit.
     assert float(np.max(np.abs(D - Do))) == 0.0, "compiler-generated GEMM != hand-written oracle"
+
+
+def test_f16_accumulate_codegen_executes_against_step_rounded_oracle():
+    """The relaxed gate computes the requested lower-accuracy arithmetic.
+
+    Admission is exact gfx1151 plus the measured-cost acknowledgement.  The
+    oracle rounds a fused multiply-add to f16 after every K step; comparing to
+    an fp32 matmul would prove the wrong computation.
+    """
+    mlir_opt = _need_tools()
+    hip = _hip()
+    if hip is None:
+        pytest.skip("libamdhip64.so not loadable — no ROCm host")
+    generated = subprocess.run(
+        [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel",
+         "--lower-tessera-target-to-rocdl"],
+        input=_F16_ACCUM_DIRECTIVE,
+        capture_output=True,
+        text=True,
+    )
+    assert generated.returncode == 0, generated.stderr
+    assert "rocdl.wmma.f16.16x16x16.f16" in generated.stdout
+    pipeline = (
+        "builtin.module(gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        f"reconcile-unrealized-casts),rocdl-attach-target{{chip={CHIP}}},"
+        "gpu-module-to-binary)"
+    )
+    serialized = subprocess.run(
+        [mlir_opt, f"--pass-pipeline={pipeline}"], input=generated.stdout,
+        capture_output=True, text=True,
+    )
+    assert serialized.returncode == 0, serialized.stderr
+    hsaco = _extract_hsaco(serialized.stdout)
+    rng = np.random.default_rng(20260826)
+    a = (rng.standard_normal((16, 16)) * 0.4).astype(np.float16)
+    b = (rng.standard_normal((16, 16)) * 0.4).astype(np.float16)
+    oracle = np.zeros((16, 16), dtype=np.float16)
+    for k in range(16):
+        for row in range(16):
+            for col in range(16):
+                oracle[row, col] = np.float16(
+                    np.float64(oracle[row, col])
+                    + np.float64(a[row, k]) * np.float64(b[k, col])
+                )
+
+    assert hip.hipInit(0) == 0
+    module, function = ctypes.c_void_p(), ctypes.c_void_p()
+    assert hip.hipModuleLoadData(ctypes.byref(module), hsaco) == 0
+    assert hip.hipModuleGetFunction(
+        ctypes.byref(function), module, b"gemm_f16_accum"
+    ) == 0
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for pointer, nbytes in ((da, a.nbytes), (db, b.nbytes), (dd, oracle.nbytes)):
+        assert hip.hipMalloc(ctypes.byref(pointer), nbytes) == 0
+    hip.hipMemcpy(da, a.ctypes.data_as(ctypes.c_void_p), a.nbytes, 1)
+    hip.hipMemcpy(db, b.ctypes.data_as(ctypes.c_void_p), b.nbytes, 1)
+
+    def descriptor(pointer):
+        return [ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0), ctypes.c_int64(256), ctypes.c_int64(1)]
+
+    args = descriptor(da) + descriptor(db) + descriptor(dd) + [
+        ctypes.c_int64(16), ctypes.c_int64(16), ctypes.c_int64(16)
+    ]
+    argv = (ctypes.c_void_p * len(args))()
+    for index, argument in enumerate(args):
+        argv[index] = ctypes.cast(ctypes.byref(argument), ctypes.c_void_p)
+    launch = hip.hipModuleLaunchKernel
+    launch.argtypes = [ctypes.c_void_p] + [ctypes.c_uint] * 6 + [
+        ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
+    ]
+    assert launch(function, 1, 1, 1, 32, 1, 1, 0, None, argv, None) == 0
+    assert hip.hipDeviceSynchronize() == 0
+    actual = np.empty_like(oracle)
+    hip.hipMemcpy(actual.ctypes.data_as(ctypes.c_void_p), dd, actual.nbytes, 2)
+    for pointer in (da, db, dd):
+        hip.hipFree(pointer)
+    # The instruction uses a hardware reduction tree rather than the oracle's
+    # serial K order.  Both round every accumulation to f16; four binary16 ULPs
+    # bound the observed ordering difference for this deterministic packet.
+    np.testing.assert_allclose(actual, oracle, rtol=4.0e-3, atol=4.0e-3)
 
 
 def test_generate_pass_rejects_non_16_tile():

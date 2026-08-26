@@ -449,6 +449,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         # (The in-place `tessera-autodiff` pass still emits the old code and
         # keeps it.)
         diagnostic_codes=(
+            "AUTODIFF_CONTROL_SCAN_UNSUPPORTED",
             "AUTODIFF_STOCHASTIC_NO_PRODUCT",
             "AUTODIFF_STOCHASTIC_UNKEYED",
             "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",

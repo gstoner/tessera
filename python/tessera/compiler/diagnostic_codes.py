@@ -105,6 +105,26 @@ class DiagnosticCode:
 
 REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
+        code="AUTODIFF_CONTROL_SCAN_UNSUPPORTED",
+        pass_origin="AutodiffPairedPass",
+        severity="error",
+        summary=(
+            "tessera.control_scan is on the gradient path and has no reverse "
+            "rule yet — the fourth control primitive is the only one without."
+        ),
+        fix_hint=(
+            "The mathematics is settled (adjoint of a scan is a scan over "
+            "reversed t, verified against central differences). What is "
+            "missing is the body's paired backward and a residual tape of the "
+            "intermediate carries, so the rule belongs in the paired pass "
+            "beside the scf region handling, not in "
+            "AdjointInterface::buildAdjoint. Until then, restructure the "
+            "recurrence as a counted control_for whose carry is explicit."
+        ),
+        spec="docs/spec/CONTROL_FLOW_CONTRACT.md",
+        sprint="W4-PRODUCT-1",
+    ),
+    DiagnosticCode(
         code="AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
         pass_origin="AutodiffPairedPass",
         severity="error",

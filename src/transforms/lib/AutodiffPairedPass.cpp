@@ -2059,6 +2059,53 @@ private:
         }
       }
     } else {
+      // W4 / queue order 2 — `tessera.control_scan` is the fourth control
+      // primitive and the only one with no reverse rule. The generic message
+      // above is true of it and unhelpful: it says an interface is missing
+      // without saying that the interface is the WRONG HOME for this op.
+      //
+      // The mathematics is settled and was verified against central
+      // differences (max abs error 4.7e-10 on a nonlinear body): for
+      // (c_{t+1}, y_t) = body(c_t, x_t), the reverse recurrence is
+      //
+      //     (cbar_t, xbar_t) = body_vjp(c_t, x_t; cbar_{t+1}, ybar_t)
+      //
+      // run for t = T-1 .. 0 — so **the adjoint of a scan is a scan**, over
+      // reversed t, carrying cbar and consuming (c_t, x_t, ybar_t).
+      //
+      // What blocks it is structural, not mathematical. Building that reverse
+      // scan needs two things `AdjointInterface::buildAdjoint` may not create:
+      // a companion function for the BODY's vjp (`@body__bwd`, which the
+      // paired pass itself generates), and a residual tape of the
+      // intermediate carries c_0..c_{T-1}, which the forward scan does not
+      // stack. buildAdjoint receives only an OpBuilder positioned at the
+      // forward op and is contractually limited to emitting ops. So scan's
+      // reverse rule belongs beside the scf region handling in this pass,
+      // where companion functions and residual policies already live — not on
+      // the op interface. Saying that here is what stops the next reader
+      // implementing it in the wrong place.
+      if (op->getName().getStringRef() == "tessera.control_scan") {
+        // `CODE: ` and not `[CODE] `: the registry's C++ scanner matches an
+        // ALL_CAPS code followed by a colon inside a string literal, so the
+        // bracketed spelling used by this file's UNREGISTERED codes would
+        // leave a registered one invisible to the drift gate.
+        auto diag = op->emitError(
+            "AUTODIFF_CONTROL_SCAN_UNSUPPORTED: tessera.control_scan has no "
+            "reverse rule yet");
+        diag.attachNote()
+            << "The adjoint of a scan is a scan over reversed t, carrying the "
+               "carry cotangent and consuming (carry_t, x_t, ybar_t). It "
+               "needs the body's paired backward and a residual tape of the "
+               "intermediate carries, which the forward scan does not stack — "
+               "so it belongs in this pass beside the scf region handling, "
+               "not in AdjointInterface::buildAdjoint, which may only emit "
+               "ops at the forward site.";
+        diag.attachNote()
+            << "The carry tape is the SAVE/RECOMPUTE/HYBRID choice this pass "
+               "already models for regions: T x |carry| saved, or the forward "
+               "scan replayed.";
+        return mlir::failure();
+      }
       if (op->getNumOperands() > 0) {
         op->emitError() << "[AUTODIFF_OP_NOT_DIFFERENTIABLE] op "
                         << op->getName()

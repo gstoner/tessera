@@ -74,7 +74,7 @@ This section owns what to do with those counts.
 | 4 | **LAYOUT-ALG-1 L4 — physical layout decisions closed 2026-08-24** | L3 factorization/residency and SO-4 proof attachment are implemented. Mixed-radix/static tuple products, SM120 dynamic strided typed+macro routes, gfx1151 bounded-dynamic execution, the four x86 core GEMM index families, and every reachable Apple MSL rank-2 template consume shared authority. Dynamic non-separable tuple codomains remain fail closed. | Existing raster/index outputs remain bit-identical; unresolved layouts fail closed; materialization proof covers alias, capacity, and lifetime; Apple7 canonical and fused-cooperative cohorts pass exact-device; no architecture's schedule is promoted by another architecture's evidence. | Current L1/L3/L5 authority and architecture-owned device proofs. |
 | 5 | **W5.4-RESHARD-1 — executable placement closed 2026-08-24.** | Fixed-point placement now derives exact mesh-sized local result types and inserts explicit reshard SSA at the consumer boundary, including registered `tessera.slice` local shards rather than fake same-shaped collectives. Plan digest, subgroup, matching rounds, and nested region path survive Graph→Schedule→Tile. A deterministic mock-mesh executor consumes that SSA directly. | 13 focused placement tests plus 76 shared Schedule/Tile/collective tests pass. Nondivisible shapes, mesh/subgroup mismatch, unknown placement, and sibling-region escape fail closed. `local_shard`, `all_reduce`, `reduce_scatter`, `all_gather`, `all_to_all`, and `collective_permute` execute numerically with an explicit movement trace. Native transport remains a separate evidence gate. | Orders 2–4. |
 | 6 | **DIST-NATIVE-1 — real multi-rank execution** | Bind explicit reshard/collective SSA to NCCL/RCCL and MPI/OFI/SHMEM launchers, including subgroup communicators and process-rank ownership. Keep ROCm LSA, GIN/RMA, Copy Engine, and gfx1250 DDA as independent advanced gates. | Two-rank then multi-rank numerical packets; deterministic ordering; communicator/topology digest match; fail-closed missing transport; no mock result may satisfy the native gate. | Order 5. |
-| 7 | **AD-TSOL-STFT-BWD-1 — native spectral products** | Add native STFT/ISTFT backward packages on AVX-512 and gfx1151, including signal/window tangents, overlap-add identity, packed-real lineage, and normalization. | Directional and duality properties; aligned/ragged and fp32/fp16/bf16 storage; content-addressed Schedule→Tile→Target lineage; exact-host/device correctness. | Order 1 plugin boundary and existing spectral VJP carriers. |
+| 7 | **AD-TSOL-STFT-BWD-1 — native spectral products** (adjoint contract + implementation strategy established 2026-08-25; kernels open — see the note below the table) | Add native STFT/ISTFT backward packages on AVX-512 and gfx1151, including signal/window tangents, overlap-add identity, packed-real lineage, and normalization. | Directional and duality properties; aligned/ragged and fp32/fp16/bf16 storage; content-addressed Schedule→Tile→Target lineage; exact-host/device correctness. | Order 1 plugin boundary and existing spectral VJP carriers. |
 | 8 | **TSOL-POLICY-PHYS-1 — complete the spectral policy envelope** | Physically adopt centered padding, explicit transform length, one-sided/full spectrum, ISTFT output length, arbitrary axes/strides, broadcasting, and streaming/chunk state on x86 and gfx1151. | Differential oracle for every policy combination; bounded-dynamic legality; workspace/state lineage; no silent fallback to a full-complex or host-composed path. | Order 7. |
 | 9 | **TSOL-SCALE-1 — ND and large transforms** | Add 2D/ND, batched nontrivial-stride, large-transform six-step/Bailey, and large-prime execution behind selector-visible algorithm identities. | Correctness across prime/composite/ragged shapes; plan/twiddle/workspace cache identity; packed-vs-full and library comparisons; retain/promote/reject per architecture. | Order 8 and evidence tooling below. |
 | 10 | **TSOL-SHARD-1 — distributed TSOL contracts** | Close the 18 partial TSOL sharding rows by routing spectral, solver, sparse/segment, and layout families through W5.4 placement and explicit reshard operations. | Registry totality, mock-mesh numerical tests, and no claim of native transport before exact multi-rank proof. | Orders 5–6. |
@@ -290,6 +290,54 @@ not put the rule in the wrong place.
 Not claimed: the compiler rule itself. This slice makes the gap named,
 bounded, fail-closed, and oracle-backed; the paired-pass implementation and
 its device rows are the next block.
+
+**AD-TSOL-STFT-BWD-1: the adjoint contract is settled and the kernels are not
+(2026-08-25).** Measured state before starting:
+
+| | forward | tangent (JVP) | adjoint (VJP) |
+|---|---|---|---|
+| x86 AVX-512 | native (`tessera_x86_stft_f32` / `istft_f32`) | native (`tessera_x86_istft_jvp_f32`) | **none** |
+| gfx1151 | none | none | **none** |
+
+So the asymmetry is forward-yes / tangent-yes / adjoint-no on x86, and nothing
+at all on ROCm — the AMD half is the bigger lift, since it has no forward STFT
+to build beside. Both targets **fail closed** today
+(`tile.spectral_backward_kernel` accepts only `tessera.spectral_conv` and
+`tessera.spectral_filter`), which is correct and was tested on gfx1151 only;
+the x86 refusal now has its fixture too.
+
+Both operators are LINEAR, so the VJP is the adjoint and the contract is
+checkable exactly rather than approximately. Recorded in
+`tests/unit/test_stft_adjoint_contract.py`: the reference VJPs satisfy
+`<STFT(x), Xbar> == <x, STFT^H(Xbar)>` to 0.0 and 4e-16, the COLA overlap-add
+identity holds to 4.4e-16, and the adjoint from first principles reproduces
+the reference to 1.4e-15 —
+
+    STFT^H(Xbar)[n + tH] += w[n] * Re( sum_f Xbar[t,f] * exp(+2i*pi*f*n/N) )
+
+each STORED bin counted once.
+
+**Implementation strategy, decided by measurement: no new FFT kernel is
+needed.** `irfft` reconstructs the Hermitian pair and so counts each interior
+bin twice; halving the interior bins — leaving DC and Nyquist alone, since
+they are self-conjugate — makes `N * irfft` the per-frame adjoint transform,
+verified to 1.4e-15. The same expression without the halving is wrong by
+127%, so that correction is pinned by its own control. The backward is
+therefore bin scaling → inverse real transform → window multiply →
+overlap-add scatter.
+
+**Two shortcuts refuted, so the next implementer does not spend a day on
+them.** Reusing the existing forward ISTFT kernel would have made the package
+nearly free, and it cannot: ISTFT is not `STFT^H` up to any global scale
+(best-fit residual 0.968 for backward/forward/ortho), nor after undoing the
+COLA window-sum division (0.887). The division is pointwise and the windowing
+differs; the adjoint is a different program.
+
+Not claimed: the kernels. Writing the AVX-512 C symbol, the gfx1151 package,
+the `TileToX86Pass`/`TileToROCM` emission, the package builder, plugin
+registration, and the exact-device rows on both boxes is the next block. It
+now starts from a verified contract and a measured strategy instead of a
+derivation.
 ### Architecture expansion after the shared gates
 
 - **ROCm:** gfx1151 owns the first exact-device correctness and calibrated

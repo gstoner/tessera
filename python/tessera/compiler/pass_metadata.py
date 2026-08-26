@@ -584,6 +584,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         # registry by test_diagnostic_codes_are_registered; the pass had no
         # metadata entry before NUMPOL-CARRIER-1, so its codes were unchecked.
         diagnostic_codes=(
+            "NUMERIC_POLICY_ACCUM_UNREALIZABLE",
             "NUMERIC_POLICY_MATH_MODE_NOT_REDUCING",
             "NUMERIC_POLICY_NARROWING_ACCUM",
             "NUMERIC_POLICY_NOT_A_DICTIONARY",

@@ -990,6 +990,24 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="NUMPOL-CARRIER-1",
     ),
     DiagnosticCode(
+        code="NUMERIC_POLICY_ACCUM_UNREALIZABLE",
+        pass_origin="TesseraToLinalgPass",
+        severity="error",
+        summary=(
+            "numeric_policy.accum is more precise than storage but the same "
+            "width, so no cast on this lowering path expresses it."
+        ),
+        fix_hint=(
+            "bf16 storage with an fp16 accumulator is the case: 8 significand "
+            "bits to 11, both 16 bits wide, so arith.extf cannot express it. "
+            "Computing in fp32 instead would deliver precision the program "
+            "did not ask for. Declare an accumulator wider in bits, or drop "
+            "the key."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="NUMPOL-CARRIER-1",
+    ),
+    DiagnosticCode(
         code="NUMERIC_POLICY_MATH_MODE_NOT_REDUCING",
         pass_origin="IRContractLegalityPass",
         severity="error",

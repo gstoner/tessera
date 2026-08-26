@@ -286,7 +286,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,485,295,23,780,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,780 direct test references
+matmul,485,297,23,782,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,782 direct test references
 matrix_power,1,0,0,1,1,fp32,structural_only,unclassified — defaults to structural_only
 max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
@@ -437,7 +437,7 @@ slice,12,0,0,12,0,fp32,directly_tested,12 direct test references
 smooth_l1_loss,9,0,0,9,0,f32,directly_tested,9 direct test references
 soft_top_k,1,0,0,1,1,fp64,directly_tested,"public forward plus exact-k, domain, and FD-VJP tests"
 softcap,11,0,1,11,0,bf16,directly_tested,11 direct test references
-softmax,151,55,31,206,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,206 direct test references
+softmax,151,56,31,207,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,207 direct test references
 softmax_finalize,6,2,1,8,0,,directly_tested,8 direct test references
 softmax_merge,5,2,0,7,0,,directly_tested,7 direct test references
 softmax_safe,7,4,1,11,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,11 direct test references

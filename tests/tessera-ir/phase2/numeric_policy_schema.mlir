@@ -60,7 +60,7 @@ module {
   func.func @modes(%a: tensor<64x64xf32>, %b: tensor<64x64xf32>) -> tensor<64x64xf32> {
     %0 = "tessera.matmul"(%a, %b) {
       numeric_policy = {storage = "fp32", accum = "fp32", math_mode = "tf32",
-                        rounding_mode = "round_to_nearest_even",
+                        rounding = "round_to_nearest_even",
                         softmax = "fp32"}
     } : (tensor<64x64xf32>, tensor<64x64xf32>) -> tensor<64x64xf32>
     return %0 : tensor<64x64xf32>
@@ -68,7 +68,7 @@ module {
 }
 // CHECK-LABEL: func.func @modes
 // CHECK: math_mode = "tf32"
-// CHECK-SAME: rounding_mode = "round_to_nearest_even"
+// CHECK-SAME: rounding = "round_to_nearest_even"
 // CHECK-SAME: softmax = "fp32"
 
 // -----
@@ -83,3 +83,43 @@ module {
   }
 }
 // CHECK-LABEL: func.func @equal
+
+// -----
+
+// ── the FULL canonical policy: quantization and determinism ──
+// PR #631 review. The first version of this schema derived its key set from
+// the policies that appear in fixtures rather than from the normative
+// definition — `NumericPolicy(storage, accum, rounding, scale, quant_axis,
+// deterministic[, math_mode])` in
+// docs/reference/tessera_tensor_attributes.md and
+// python/tessera/compiler/primitive_coverage.py. It therefore invented
+// `rounding_mode` for the canonical `rounding` and omitted `scale`,
+// `quant_axis`, `deterministic` and `scale_layout` outright. Every in-tree
+// fixture passed, because none carries a quantization or determinism policy —
+// and the production legality pipeline would have rejected the first one that
+// did.
+//
+// The value KIND matters for the same reason the key set does: `quant_axis` is
+// an integer, `deterministic` a boolean and `scale_layout` a nested
+// dictionary, so a blanket "every value is a string" rule refuses three
+// canonical fields. Checking the declared kind per key is what makes the
+// wrongly-typed-value rule correct rather than merely strict.
+module {
+  func.func @canonical_quant(%a: tensor<64x64xbf16>, %b: tensor<64x64xbf16>)
+      -> tensor<64x64xf32> {
+    %0 = "tessera.matmul"(%a, %b) {numeric_policy = {
+      storage = "int8", accum = "int32",
+      rounding = "round_to_nearest_even",
+      scale = "per_channel", quant_axis = 1 : i64,
+      deterministic = true, math_mode = "ieee",
+      scale_layout = {granularity = "per_channel"}
+    }} : (tensor<64x64xbf16>, tensor<64x64xbf16>) -> tensor<64x64xf32>
+    return %0 : tensor<64x64xf32>
+  }
+}
+// CHECK-LABEL: func.func @canonical_quant
+// MLIR prints dictionary entries sorted by name, so the checks follow that
+// order rather than the order written above.
+// CHECK: deterministic = true
+// CHECK-SAME: quant_axis = 1 : i64
+// CHECK-SAME: scale_layout = {granularity = "per_channel"}

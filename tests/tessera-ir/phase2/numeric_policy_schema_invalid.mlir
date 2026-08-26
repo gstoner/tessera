@@ -161,3 +161,22 @@ module {
 }
 // CHECK: NUMERIC_POLICY_NOT_A_DICTIONARY
 // CHECK-SAME: got "f32;ortho"
+
+// -----
+
+// ── a canonical key carrying the WRONG KIND ──
+// `quant_axis` is an integer. A string here reads back as absent through the
+// consumer's IntegerAttr lookup — the same null-means-two-things trap as the
+// typo'd key above, one type-system layer down.
+module {
+  func.func @quant_axis_not_an_integer(%a: tensor<64x64xbf16>, %b: tensor<64x64xbf16>)
+      -> tensor<64x64xf32> {
+    // expected-error @+1 {{NUMERIC_POLICY_NON_STRING_VALUE}}
+    %0 = "tessera.matmul"(%a, %b) {numeric_policy = {
+      storage = "int8", accum = "int32", quant_axis = "one"
+    }} : (tensor<64x64xbf16>, tensor<64x64xbf16>) -> tensor<64x64xf32>
+    return %0 : tensor<64x64xf32>
+  }
+}
+// CHECK: NUMERIC_POLICY_NON_STRING_VALUE
+// CHECK-SAME: quant_axis must be an integer

@@ -50,6 +50,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -140,16 +141,64 @@ static const llvm::StringSet<> &wideAccumDtypes() {
 // `numeric_policy.accum` x state dtype. A compiler can only decide that if the
 // policy is well-formed and survives to where the decision is made.
 
-//: Keys a numeric_policy may contain. Unknown keys are refused rather than
-//: ignored: an ignored key is how a typo becomes a silently absent contract.
-static const llvm::StringSet<> &numericPolicyKeys() {
-  static const llvm::StringSet<> kSet = {
-      "storage", "accum", "math_mode", "rounding_mode",
-      // family-specific accumulate stage: the softmax statistics of the
-      // attention family are accumulated separately from the matmul.
-      "softmax",
+//: Keys a numeric_policy may contain, and the attribute kind each carries.
+//:
+//: Taken from the NORMATIVE definition — `NumericPolicy` in
+//: `python/tessera/compiler/primitive_coverage.py` and the row in
+//: `docs/reference/tessera_tensor_attributes.md` that spells it
+//: `NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic[,
+//: math_mode])`. The first version of this checker derived its key set from
+//: the policies that happen to appear in fixtures instead, and so invented
+//: `rounding_mode` for the canonical `rounding` and omitted `scale`,
+//: `quant_axis`, `deterministic`, and `scale_layout` entirely (PR #631
+//: review). Every in-tree fixture passed, because none of them carries a
+//: quantization or determinism policy — but the production legality pipeline
+//: would have rejected the first one that did.
+//:
+//: The value KIND is part of the schema for the same reason the key set is:
+//: `quant_axis` is an integer, `deterministic` a boolean, and `scale_layout` a
+//: nested dictionary, so a blanket "every value is a string" rule refuses
+//: three canonical fields. Checking the declared kind per key is what makes
+//: the earlier NON_STRING_VALUE rule correct rather than merely strict.
+enum class PolicyValueKind { Str, Int, Bool, Dict };
+
+static const llvm::StringMap<PolicyValueKind> &numericPolicySchema() {
+  static const llvm::StringMap<PolicyValueKind> kSchema = {
+      {"storage", PolicyValueKind::Str},
+      {"accum", PolicyValueKind::Str},
+      {"rounding", PolicyValueKind::Str},
+      {"scale", PolicyValueKind::Str},
+      {"quant_axis", PolicyValueKind::Int},
+      {"deterministic", PolicyValueKind::Bool},
+      {"math_mode", PolicyValueKind::Str},
+      {"scale_layout", PolicyValueKind::Dict},
+      // Not in the dataclass, but 12 in-tree fixtures carry it: the attention
+      // family accumulates its softmax statistics separately from the matmul,
+      // so the stage has its own dtype. Listed explicitly rather than tolerated
+      // by a permissive default — that is the whole point of a closed set.
+      {"softmax", PolicyValueKind::Str},
   };
-  return kSet;
+  return kSchema;
+}
+
+static llvm::StringRef policyValueKindName(PolicyValueKind kind) {
+  switch (kind) {
+  case PolicyValueKind::Str: return "a string";
+  case PolicyValueKind::Int: return "an integer";
+  case PolicyValueKind::Bool: return "a boolean";
+  case PolicyValueKind::Dict: return "a dictionary";
+  }
+  return "a value";
+}
+
+static bool policyValueMatches(PolicyValueKind kind, mlir::Attribute value) {
+  switch (kind) {
+  case PolicyValueKind::Str: return llvm::isa<StringAttr>(value);
+  case PolicyValueKind::Int: return llvm::isa<IntegerAttr>(value);
+  case PolicyValueKind::Bool: return llvm::isa<BoolAttr>(value);
+  case PolicyValueKind::Dict: return llvm::isa<DictionaryAttr>(value);
+  }
+  return false;
 }
 
 //: Significand bits INCLUDING the implicit leading one; for integers, the
@@ -251,7 +300,8 @@ struct IRContractLegality
     // missing `storage` is precisely what let a typo'd key through untouched.
     for (NamedAttribute entry : policy) {
       StringRef key = entry.getName().getValue();
-      if (!numericPolicyKeys().contains(key)) {
+      auto declared = numericPolicySchema().find(key);
+      if (declared == numericPolicySchema().end()) {
         auto diag = op->emitOpError(
                         "NUMERIC_POLICY_UNKNOWN_KEY: numeric_policy has key \"")
                     << key << "\", which no Tessera contract defines.";
@@ -259,17 +309,21 @@ struct IRContractLegality
                              "a misspelling becomes a silently ABSENT semantic "
                              "contract (a typo'd `accum` leaves the op with no "
                              "accumulator contract while appearing to state "
-                             "one). Legal keys: storage, accum, math_mode, "
-                             "rounding_mode, softmax. See Decisions #15a/#21a.";
+                             "one). Legal keys: storage, accum, rounding, "
+                             "scale, quant_axis, deterministic, math_mode, "
+                             "scale_layout, softmax — the NumericPolicy fields "
+                             "in docs/reference/tessera_tensor_attributes.md. "
+                             "See Decisions #15a/#21a.";
         return failure();
       }
-      if (!llvm::isa<StringAttr>(entry.getValue()))
+      if (!policyValueMatches(declared->second, entry.getValue()))
         return op->emitOpError(
                    "NUMERIC_POLICY_NON_STRING_VALUE: numeric_policy.")
-               << key
-               << " must be a dtype/mode NAME as a string; a non-string value "
-                  "reads back as absent through StringAttr lookup, so the "
-                  "contract silently disappears.";
+               << key << " must be "
+               << policyValueKindName(declared->second)
+               << "; a wrongly typed value reads back as absent through the "
+                  "consumer's typed lookup, so the contract silently "
+                  "disappears.";
     }
 
     // ── Mode names are semantic keys: state the legal set (#21a) ──
@@ -280,10 +334,10 @@ struct IRContractLegality
                << "\" is not a known math mode (ieee, default, tf32, bf16x3, "
                   "fp16x2).";
     }
-    if (auto rmode = policy.getAs<StringAttr>("rounding_mode")) {
+    if (auto rmode = policy.getAs<StringAttr>("rounding")) {
       if (!knownRoundingModes().contains(rmode.getValue()))
         return op->emitOpError(
-                   "NUMERIC_POLICY_UNKNOWN_ROUNDING_MODE: rounding_mode=\"")
+                   "NUMERIC_POLICY_UNKNOWN_ROUNDING_MODE: rounding=\"")
                << rmode.getValue() << "\" is not a known rounding mode.";
     }
 

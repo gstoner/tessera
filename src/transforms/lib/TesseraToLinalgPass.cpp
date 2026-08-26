@@ -49,6 +49,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringSet.h"
 
 #include <optional>
 
@@ -2397,22 +2398,57 @@ struct AdamBackwardLowering : public RewritePattern {
 // faithful reading of Decision #15a: storage is the dtype of the TENSOR, and
 // the tensor here is the result. So (B).
 //
-// The accumulator path is taken only when the declared accum is strictly wider
-// in bits, which keeps every cast a plain extf/truncf pair. The same-width,
-// more-significand case (bf16 storage, fp16 accum) is refused upstream by
-// IRContractLegalityPass' narrowing rule from the other direction and never
-// reaches here.
+// ── The same-width, more-precise case, and a false claim that was here ──
+//
+// This comment previously asserted that bf16 storage with an fp16 accumulator
+// "is refused upstream by IRContractLegalityPass' narrowing rule ... and never
+// reaches here". That was wrong, and measurably so (PR #631 review): the
+// narrowing rule compares SIGNIFICAND bits, and fp16 has 11 against bf16's 8,
+// so the policy is ACCEPTED — after which this function's width comparison
+// returned null and the whole chain quietly computed in bf16. A declared
+// accumulator was accepted upstream and ignored downstream, which is exactly
+// the silent-default failure this slice exists to remove.
+//
+// The two dtypes are both 16 bits, so `arith.extf` cannot express the cast;
+// there is no widening to perform. Two ways out were available and one is
+// wrong: computing in fp32 instead would deliver 24 significand bits where the
+// program asked for 11 — the same unrequested substitution that is refused on
+// the schedule and ROCm paths, differing only in being generous. So the
+// combination fails closed here with NUMERIC_POLICY_ACCUM_UNREALIZABLE, naming
+// the lane that cannot provide it.
 
 //: The FloatType named by `numeric_policy.accum`, when it is strictly wider
 //: than the tensor's storage element type. Null otherwise — including when no
 //: policy is present, which leaves every existing lowering bit-identical.
-static FloatType wideningAccumulatorType(Operation *op, Type storageElem) {
+//: Significand bits including the implicit leading one — the same notion
+//: IRContractLegalityPass compares, so the two passes cannot disagree about
+//: which accumulator is "more precise".
+static unsigned accumSignificandBits(FloatType type) {
+  return llvm::APFloat::semanticsPrecision(type.getFloatSemantics());
+}
+
+//: Outcome of reading `numeric_policy.accum` against the storage element type.
+enum class AccumRealizability {
+  //: No policy, no accum, or an accumulator no more precise than storage —
+  //: nothing to widen, and the lowering is unchanged.
+  NoWidening,
+  //: Strictly wider in BITS: a plain extf/truncf pair expresses it.
+  Widen,
+  //: More precise but not wider in bits (bf16 storage, fp16 accum). No cast
+  //: expresses it and substituting fp32 would over-deliver precision the
+  //: program did not ask for, so this lane cannot provide it.
+  Unrealizable,
+};
+
+static AccumRealizability
+readAccumulator(Operation *op, Type storageElem, FloatType &widened) {
+  widened = nullptr;
   auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
-  if (!policy) return nullptr;
+  if (!policy) return AccumRealizability::NoWidening;
   auto accum = policy.getAs<StringAttr>("accum");
-  if (!accum) return nullptr;
+  if (!accum) return AccumRealizability::NoWidening;
   auto storageFloat = dyn_cast<FloatType>(storageElem);
-  if (!storageFloat) return nullptr;
+  if (!storageFloat) return AccumRealizability::NoWidening;
   MLIRContext *ctx = op->getContext();
   FloatType accumType =
       llvm::StringSwitch<FloatType>(accum.getValue())
@@ -2421,9 +2457,32 @@ static FloatType wideningAccumulatorType(Operation *op, Type storageElem) {
           .Case("fp16", Float16Type::get(ctx))
           .Case("bf16", BFloat16Type::get(ctx))
           .Default(nullptr);
-  if (!accumType || accumType.getWidth() <= storageFloat.getWidth())
-    return nullptr;
-  return accumType;
+  if (!accumType) return AccumRealizability::NoWidening;
+  if (accumSignificandBits(accumType) <= accumSignificandBits(storageFloat))
+    return AccumRealizability::NoWidening;
+  if (accumType.getWidth() <= storageFloat.getWidth())
+    return AccumRealizability::Unrealizable;
+  widened = accumType;
+  return AccumRealizability::Widen;
+}
+
+//: Emit the refusal for the unrealizable case, in one place so the three
+//: normalization lowerings cannot word it differently.
+static LogicalResult refuseUnrealizableAccum(Operation *op, Type storageElem) {
+  auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+  auto accum = policy ? policy.getAs<StringAttr>("accum") : nullptr;
+  auto diag = op->emitError(
+      "NUMERIC_POLICY_ACCUM_UNREALIZABLE: numeric_policy declares accum=\"");
+  diag << (accum ? accum.getValue() : "") << "\" on storage " << storageElem
+       << ", which is more precise but the same width, so no cast expresses "
+          "it on this lowering path.";
+  diag.attachNote()
+      << "Computing in fp32 instead would deliver more precision than the "
+         "program asked for, at a cost it did not budget — the same "
+         "unrequested substitution refused on the schedule and ROCm paths, "
+         "differing only in being generous. Declare an accumulator that is "
+         "wider in bits, or drop the key.";
+  return failure();
 }
 
 //: Elementwise extf/truncf between two same-shaped tensor types.
@@ -2477,8 +2536,28 @@ struct SoftmaxLowering : public RewritePattern {
     // the declared accumulator; only the result returns to storage. The
     // sum-of-exp is the one that mattered most in measurement — at D=4096 its
     // bf16 form was 59% wrong.
-    if (FloatType accum = wideningAccumulatorType(op, ty.getElementType()))
+    FloatType accum;
+    switch (readAccumulator(op, ty.getElementType(), accum)) {
+    case AccumRealizability::Widen:
       ty = cast<RankedTensorType>(ty.clone(accum));
+      // Record that a policy was actually READ here. The drop declaration
+      // below must not claim `represented_in_type` for a function whose
+      // policies merely disappeared (PR #631 review).
+      if (auto parent = op->getParentOfType<func::FuncOp>())
+        parent->setAttr("tessera.numeric_policy.consumed",
+                        UnitAttr::get(op->getContext()));
+      break;
+    case AccumRealizability::Unrealizable:
+      // Declined silently here: a pattern returning failure() only means "did
+      // not match", so emitting the diagnostic from inside it printed an error
+      // while the TOOL still exited 0 — a caller checking the return code saw
+      // success. The refusal is raised before the rewrite instead, where it
+      // can signal pass failure. (Caught by the fixture: `not tessera-opt`
+      // failed because tessera-opt had succeeded.)
+      return failure();
+    case AccumRealizability::NoWidening:
+      break;
+    }
     Value x = castElementwiseTo(rewriter, loc, ty, op->getOperand(0));
     Value m = emitReduceCore(rewriter, loc, ty, x, axis, "max");
     Value shifted = emitBroadcastBinary(
@@ -2628,8 +2707,28 @@ struct RmsNormLowering : public RewritePattern {
     // NUMPOL-CARRIER-1: run the derived chain in the declared accumulator and
     // truncate only the result. Null when no wider accum is declared, which
     // leaves the emitted IR byte-identical to before.
-    if (FloatType accum = wideningAccumulatorType(op, ty.getElementType()))
+    FloatType accum;
+    switch (readAccumulator(op, ty.getElementType(), accum)) {
+    case AccumRealizability::Widen:
       ty = cast<RankedTensorType>(ty.clone(accum));
+      // Record that a policy was actually READ here. The drop declaration
+      // below must not claim `represented_in_type` for a function whose
+      // policies merely disappeared (PR #631 review).
+      if (auto parent = op->getParentOfType<func::FuncOp>())
+        parent->setAttr("tessera.numeric_policy.consumed",
+                        UnitAttr::get(op->getContext()));
+      break;
+    case AccumRealizability::Unrealizable:
+      // Declined silently here: a pattern returning failure() only means "did
+      // not match", so emitting the diagnostic from inside it printed an error
+      // while the TOOL still exited 0 — a caller checking the return code saw
+      // success. The refusal is raised before the rewrite instead, where it
+      // can signal pass failure. (Caught by the fixture: `not tessera-opt`
+      // failed because tessera-opt had succeeded.)
+      return failure();
+    case AccumRealizability::NoWidening:
+      break;
+    }
     Type elem = ty.getElementType();
     Value x = castElementwiseTo(rewriter, loc, ty, op->getOperand(0));
 
@@ -2680,8 +2779,28 @@ struct LayerNormLowering : public RewritePattern {
     RankedTensorType storageTy = ty;
     // NUMPOL-CARRIER-1: layer_norm reduces TWICE (mean, then variance of the
     // centered value), so it compounds the stagnation rmsnorm shows once.
-    if (FloatType accum = wideningAccumulatorType(op, ty.getElementType()))
+    FloatType accum;
+    switch (readAccumulator(op, ty.getElementType(), accum)) {
+    case AccumRealizability::Widen:
       ty = cast<RankedTensorType>(ty.clone(accum));
+      // Record that a policy was actually READ here. The drop declaration
+      // below must not claim `represented_in_type` for a function whose
+      // policies merely disappeared (PR #631 review).
+      if (auto parent = op->getParentOfType<func::FuncOp>())
+        parent->setAttr("tessera.numeric_policy.consumed",
+                        UnitAttr::get(op->getContext()));
+      break;
+    case AccumRealizability::Unrealizable:
+      // Declined silently here: a pattern returning failure() only means "did
+      // not match", so emitting the diagnostic from inside it printed an error
+      // while the TOOL still exited 0 — a caller checking the return code saw
+      // success. The refusal is raised before the rewrite instead, where it
+      // can signal pass failure. (Caught by the fixture: `not tessera-opt`
+      // failed because tessera-opt had succeeded.)
+      return failure();
+    case AccumRealizability::NoWidening:
+      break;
+    }
     Type elem = ty.getElementType();
     Value x = castElementwiseTo(rewriter, loc, ty, op->getOperand(0));
 
@@ -2902,14 +3021,51 @@ public:
     patterns.add<UnaryActLowering>(ctx, "tessera.tanh", ActKind::Tanh);
     patterns.add<UnaryActLowering>(ctx, "tessera.silu", ActKind::Silu);
     patterns.add<UnaryActLowering>(ctx, "tessera.gelu", ActKind::Gelu);
+    // ── Refuse unrealizable accumulators BEFORE rewriting anything ──
+    //
+    // Raised here rather than inside the patterns because a pattern returning
+    // failure() means only "did not match": the diagnostic printed and the
+    // tool still exited 0. A refusal that does not reach the exit code is not
+    // a refusal.
+    {
+      bool unrealizable = false;
+      getOperation()->walk([&](Operation *op) {
+        StringRef name = op->getName().getStringRef();
+        if (name != "tessera.softmax" && name != "tessera.rmsnorm" &&
+            name != "tessera.layer_norm")
+          return;
+        auto tensorTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+        if (!tensorTy) return;
+        FloatType widened;
+        if (readAccumulator(op, tensorTy.getElementType(), widened) ==
+            AccumRealizability::Unrealizable) {
+          (void)refuseUnrealizableAccum(op, tensorTy.getElementType());
+          unrealizable = true;
+        }
+      });
+      if (unrealizable) {
+        signalPassFailure();
+        return;
+      }
+    }
+
     // Which functions carried a numeric_policy BEFORE the rewrite. Collected
     // first, because after it the evidence is gone — which is precisely the
     // problem Decision #32 exists to name.
     llvm::DenseMap<Operation *, unsigned> policiesBefore;
+    // The KEYS that were present, not just how many policies there were: the
+    // reason recorded below depends on whether this pass consumed everything
+    // the policy said (PR #631 review).
+    llvm::DenseMap<Operation *, llvm::StringSet<>> policyKeysBefore;
     getOperation()->walk([&](Operation *op) {
-      if (op->getAttrOfType<DictionaryAttr>("numeric_policy"))
-        if (auto fn = op->getParentOfType<func::FuncOp>())
-          ++policiesBefore[fn.getOperation()];
+      auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+      if (!policy) return;
+      auto fn = op->getParentOfType<func::FuncOp>();
+      if (!fn) return;
+      ++policiesBefore[fn.getOperation()];
+      auto &keySet = policyKeysBefore[fn.getOperation()];
+      for (NamedAttribute entry : policy)
+        keySet.insert(entry.getName().getValue());
     });
 
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
@@ -2947,8 +3103,37 @@ public:
       // Found by the verifier itself while this pass was being written: the
       // first version declared `represented_in_type` whenever any policy
       // vanished and was rejected for the mixed function.
-      const char *reason =
-          after == 0 ? "represented_in_type" : "re_expressed";
+      //
+      // ── And that was still too generous (PR #631 review) ──
+      //
+      // `represented_in_type` asserts the information SURVIVED, in the target
+      // level's vocabulary. This pass re-expresses exactly one field —
+      // `accum`, as the element type of the emitted reduction — and only in
+      // the three normalization lowerings. A matmul or an activation is
+      // lowered here without reading the policy at all, and even the
+      // normalization path never looks at `math_mode`, `rounding`, `scale`,
+      // `quant_axis` or `deterministic`. Declaring `represented_in_type` for
+      // any of those would tell the verifier the whole policy was carried
+      // while those fields silently vanished — the boundary verifier being
+      // lied to by the pass it exists to check.
+      //
+      // So the honest reason depends on what was actually consumed:
+      // `not_yet_carried:<plan item>` is the mechanism's own escape hatch for
+      // declared debt, and it is the only reason that must name an owner —
+      // which is exactly right for fields this carrier has not reached yet.
+      bool consumed = fn->hasAttr("tessera.numeric_policy.consumed");
+      bool onlyReExpressedFields = true;
+      auto keys = policyKeysBefore.find(fnOp);
+      if (keys != policyKeysBefore.end())
+        for (const auto &key : keys->second)
+          if (key.getKey() != "storage" && key.getKey() != "accum")
+            onlyReExpressedFields = false;
+
+      const char *reason;
+      if (!consumed || !onlyReExpressedFields)
+        reason = "not_yet_carried:NUMPOL-CARRIER-1";
+      else
+        reason = after == 0 ? "represented_in_type" : "re_expressed";
       NamedAttrList dropped(
           fn->getAttrOfType<DictionaryAttr>("tessera.lowering.dropped"));
       dropped.set("numeric_policy", StringAttr::get(ctx, reason));

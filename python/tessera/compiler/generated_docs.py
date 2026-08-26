@@ -279,6 +279,16 @@ def _r_effect_lattice_csv() -> str:
     return effect_audit.render_csv()
 
 
+def _r_frontend_authority() -> str:
+    from . import frontend_authority_audit
+    return frontend_authority_audit.render_dashboard()
+
+
+def _r_frontend_authority_csv() -> str:
+    from . import frontend_authority_audit
+    return frontend_authority_audit.render_csv()
+
+
 def _r_docs_freshness() -> str:
     from . import docs_manifest
     return docs_manifest.render_dashboard()
@@ -582,6 +592,16 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         csv_path=_GEN / "autodiff_law_audit.csv",
         render_csv=_r_autodiff_law_audit_csv,
         also_gate_md=True,
+    ),
+    GeneratedDoc(
+        # E2E-REAL-6F (queue order 1): the AST-oracle deletion gate had no
+        # measurement at all — differential certificates lived in per-JitFn
+        # dicts and died with the instance. A condition nobody can evaluate is
+        # not a gate.
+        "frontend_authority", "specialized",
+        _GEN / "frontend_authority_coverage.md", _r_frontend_authority,
+        csv_path=_GEN / "frontend_authority_coverage.csv",
+        render_csv=_r_frontend_authority_csv,
     ),
     GeneratedDoc(
         "effect_lattice_audit", "specialized", _GEN / "effect_lattice_audit.md",

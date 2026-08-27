@@ -2530,15 +2530,32 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
     },
     **{
         op: {
+            "runtime_symbol": "tessera_nvidia_spectral_package_abi",
+            "dtypes": ("fp32",),
+            "feature_flags": (
+                "cuda", "cufft", "spectral_policy", "true_strides",
+                "window_broadcast", "streaming", "autodiff",
+            ),
+            "shape_envelope": "float32/complex64 DCT-I/II/III/IV and STFT/ISTFT; "
+                "arbitrary logical axis and element strides, n_fft >= window, "
+                "constant/reflect centering, explicit ISTFT crop, one-sided/full "
+                "spectrum, trailing batch-window broadcast, causal streaming",
+            "notes": "tessera.nvidia.spectral_policy.v1 owns device framing, "
+                "cuFFT transforms, scaling, deterministic overlap-add, analytic "
+                "STFT/ISTFT adjoints, and streaming state transitions. Exact SM120 "
+                "oracles include forward/adjoint inner-product identity.",
+        }
+        for op in ("dct", "stft", "istft")
+    },
+    **{
+        op: {
             "runtime_symbol": "tessera_nvidia_fft_package_abi",
             "dtypes": ("fp32",),
             "feature_flags": ("cuda", "cufft", "spectral_composite"),
-            "shape_envelope": "canonical compound spectral float32/complex64 "
-                "envelope with explicit host framing orchestration",
-            "notes": "NVIDIA-owned compound consumer over CUDA FFT/workspace v2; "
-                "exact-device numerical proof on SuperBear.",
+            "shape_envelope": "canonical float32/complex64 convolution/filter envelope",
+            "notes": "NVIDIA-owned convolution/filter consumer over CUDA FFT/workspace v2.",
         }
-        for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")
+        for op in ("spectral_conv", "spectral_filter")
     },
 }
 
@@ -2547,6 +2564,46 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # table above: ``device_verified_jit`` proves a generated binary was launched,
 # while ``device_verified_abi`` additionally proves a packaged runtime symbol.
 _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("unary_math", "fp32_compute", "cuda"),
+            "shape_envelope": "one non-empty tensor; domain restrictions follow IEEE operation semantics",
+            "notes": "Compiler-emitted SM120 solver/general unary carrier with reduced storage and fp32 evaluation.",
+        }
+        for op in ("sqrt", "reciprocal", "exp", "log", "tanh", "sigmoid", "sin", "cos")
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("comparison", "cuda"),
+            "shape_envelope": "two matching-shape, matching-storage non-empty tensors; bool output",
+            "notes": "Compiler-emitted SM120 ordered/unordered IEEE comparison carrier used by digest-bound solver predicate replay.",
+        }
+        for op in ("eq", "ne", "lt", "le", "gt", "ge")
+    },
+    "where": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("predicate_select", "cuda"),
+        "shape_envelope": "matching bool predicate and non-empty matching-storage branch tensors",
+        "notes": "Compiler-emitted SM120 where carrier used by pure-recompute solver predicate replay.",
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("binary_math", "fp32_compute", "cuda"),
+            "shape_envelope": "two matching-shape, matching-storage non-empty tensors",
+            "notes": (
+                "Compiler-emitted SM120 binary arithmetic package. f16/bf16 "
+                "are storage formats with fp32 evaluation; max/min propagate "
+                "NaNs and mod/floor-div use floor-quotient semantics."
+            ),
+        }
+        for op in (
+            "add", "sub", "mul", "div", "pow", "maximum", "minimum",
+            "mod", "floor_div",
+        )
+    },
     "gated_deltanet": {
         "dtypes": ("fp32",),
         "feature_flags": ("recurrent", "autodiff", "compiler_owned_ptx", "cuda"),
@@ -3319,8 +3376,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     },
     **{
         (op, "nvidia_sm120"): "tests/device/nvidia/test_fft_workspace.py"
-        for op in ("fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
-                   "spectral_conv", "spectral_filter")
+        for op in ("fft", "ifft", "rfft", "irfft", "spectral_conv",
+                   "spectral_filter")
+    },
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_spectral_policy.py"
+        for op in ("dct", "stft", "istft")
     },
     ("gated_deltanet", "nvidia_sm120"): "tests/device/nvidia/test_training_autodiff_native.py",
     ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
@@ -3355,6 +3416,20 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{
         (op, "nvidia_sm120"): "tests/device/nvidia/test_reduce.py"
         for op in ("sum", "mean", "max", "min", "amax", "amin")
+    },
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_binary_compiled.py"
+        for op in (
+            "add", "sub", "mul", "div", "pow", "maximum", "minimum",
+            "mod", "floor_div",
+        )
+    },
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_solver_children.py"
+        for op in (
+            "sqrt", "reciprocal", "exp", "log", "tanh", "sigmoid",
+            "sin", "cos", "eq", "ne", "lt", "le", "gt", "ge", "where",
+        )
     },
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit

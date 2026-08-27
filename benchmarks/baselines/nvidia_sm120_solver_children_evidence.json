@@ -1,0 +1,130 @@
+{
+  "accumulation": "f32",
+  "architecture": "sm120",
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "families": [
+    "unary",
+    "reduction",
+    "comparison",
+    "where",
+    "matmul_ieee",
+    "matmul_native_lowp"
+  ],
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "matmul_math_mode": "ieee",
+  "matmul_max_abs_error": 1.9073486328125e-06,
+  "max_abs_error_by_storage_and_case": {
+    "bf16": {
+      "compare_0": 0.0,
+      "compare_1": 0.0,
+      "compare_2": 0.0,
+      "compare_3": 0.0,
+      "compare_4": 0.0,
+      "compare_5": 0.0,
+      "reduce_max": 0.0,
+      "reduce_mean": 0.0,
+      "reduce_min": 0.0,
+      "reduce_sum": 0.0,
+      "unary_0": 0.0,
+      "unary_1": 0.0,
+      "unary_2": 0.0,
+      "unary_3": 0.0,
+      "unary_4": 0.0,
+      "unary_5": 0.0,
+      "unary_6": 0.0,
+      "unary_7": 0.0,
+      "where_0": 0.0,
+      "where_1": 0.0,
+      "where_2": 0.0,
+      "where_3": 0.0,
+      "where_4": 0.0,
+      "where_5": 0.0
+    },
+    "f16": {
+      "compare_0": 0.0,
+      "compare_1": 0.0,
+      "compare_2": 0.0,
+      "compare_3": 0.0,
+      "compare_4": 0.0,
+      "compare_5": 0.0,
+      "reduce_max": 0.0,
+      "reduce_mean": 0.0,
+      "reduce_min": 0.0,
+      "reduce_sum": 0.0,
+      "unary_0": 0.0,
+      "unary_1": 0.0,
+      "unary_2": 0.0,
+      "unary_3": 0.0,
+      "unary_4": 0.0,
+      "unary_5": 0.0,
+      "unary_6": 0.0,
+      "unary_7": 0.0,
+      "where_0": 0.0,
+      "where_1": 0.0,
+      "where_2": 0.0,
+      "where_3": 0.0,
+      "where_4": 0.0,
+      "where_5": 0.0
+    },
+    "f32": {
+      "compare_0": 0.0,
+      "compare_1": 0.0,
+      "compare_2": 0.0,
+      "compare_3": 0.0,
+      "compare_4": 0.0,
+      "compare_5": 0.0,
+      "reduce_max": 0.0,
+      "reduce_mean": 5.960464477539063e-08,
+      "reduce_min": 0.0,
+      "reduce_sum": 1.52587890625e-05,
+      "unary_0": 0.0,
+      "unary_1": 0.0,
+      "unary_2": 9.5367431640625e-07,
+      "unary_3": 1.1920928955078125e-07,
+      "unary_4": 1.1920928955078125e-07,
+      "unary_5": 1.1920928955078125e-07,
+      "unary_6": 5.960464477539063e-08,
+      "unary_7": 5.960464477539063e-08,
+      "where_0": 0.0,
+      "where_1": 0.0,
+      "where_2": 0.0,
+      "where_3": 0.0,
+      "where_4": 0.0,
+      "where_5": 0.0
+    }
+  },
+  "native_lowp_matmul": {
+    "accumulation": "fp32",
+    "math_mode": "ieee",
+    "max_abs_error": {
+      "bf16": 2.86102294921875e-06,
+      "f16": 5.7220458984375e-06
+    },
+    "missing_storage_policy": "fail_closed",
+    "physical_route": "mma.sync",
+    "storage": [
+      "f16",
+      "bf16"
+    ]
+  },
+  "passed": true,
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "solver-child correctness matrix; no selector/performance ratchet"
+  },
+  "schema": "tessera.nvidia.solver_children.evidence.v1",
+  "storage": [
+    "f32",
+    "f16",
+    "bf16"
+  ],
+  "target": "nvidia_sm120",
+  "tessera_opt_sha256": "5d50eb8e51699620c057bf639be23f65932f0fec6ff3e9aaff297438b43a3b3f",
+  "toolchain": "Ubuntu LLVM version 23.1.0",
+  "work_items": [
+    "CUDA-SOLVER-CHILDREN-1",
+    "CUDA-SOLVER-DTYPE-1",
+    "CUDA-SOLVER-LOWP-MATMUL-2"
+  ]
+}

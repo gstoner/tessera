@@ -45,19 +45,10 @@ def test_explicit_tf32_selects_the_tf32_kernel():
     assert store is np.float32
 
 
-def test_absent_math_mode_keeps_todays_behaviour():
-    """Deliberate, and stated rather than assumed.
-
-    Decision #21a says a semantic key must not silently default, and by that
-    reading an absent math_mode on fp32 should fail closed rather than pick
-    TF32. It does not fail closed here, because changing the default would
-    alter every existing fp32 NVIDIA program from a host that cannot execute
-    one — the exact shape of claim the fleet rule forbids. The behaviour is
-    pinned here so the decision is visible and the NR2 Pro follow-up has a
-    fixed baseline to change against.
-    """
-    sym, _ = rt._nvidia_gemm_selection(_f32(), _f32(), None)
-    assert sym.endswith("_tf32")
+def test_absent_math_mode_fails_closed():
+    """FP32 storage cannot silently opt a program into TF32 arithmetic."""
+    with pytest.raises(ValueError, match="NVIDIA_MATH_MODE_UNAVAILABLE"):
+        rt._nvidia_gemm_selection(_f32(), _f32(), None)
 
 
 def test_declaring_ieee_is_refused_rather_than_silently_given_tf32():

@@ -1,0 +1,105 @@
+{
+  "architecture": "sm120",
+  "cases": [
+    {
+      "algorithm": "cg",
+      "artifact_hash": "0e6bcfe77b5bf8dc70fd6724ae88bfd65ee397fd766d74ccd20032ed146b4e4c",
+      "device_elapsed_ms": 1.2824000120162964,
+      "iterations": 8,
+      "numerical": {
+        "matvec_max_abs_error": 3.5762786865234375e-07,
+        "max_abs_returned_residual_error": 3.5762786865234375e-07,
+        "max_abs_solution_error": 8.404254913330078e-06,
+        "oracle": "numpy_float64_dense_solve_plus_explicit_b_minus_ax",
+        "passed": true,
+        "true_residual_limit": 6.345201110839844e-05,
+        "true_residual_norm": 3.869366992148571e-05
+      },
+      "order": 513,
+      "reduction": "deterministic_multi_cta_two_level",
+      "reduction_ctas": 3,
+      "state_residency": "single_cooperative_launch_device_resident",
+      "storage": "f32"
+    },
+    {
+      "algorithm": "gmres",
+      "artifact_hash": "49db2db47263fd5e581f3f741d040fe1022cf18b4eb1c34c096b7d348cc72ec3",
+      "device_elapsed_ms": 0.3699199855327606,
+      "iterations": 6,
+      "numerical": {
+        "matvec_max_abs_error": 4.76837158203125e-07,
+        "max_abs_returned_residual_error": 4.76837158203125e-07,
+        "max_abs_solution_error": 1.2218952178955078e-05,
+        "oracle": "numpy_float64_dense_solve_plus_explicit_b_minus_ax",
+        "passed": true,
+        "true_residual_limit": 0.00010443531799316405,
+        "true_residual_norm": 4.4642671127803624e-05
+      },
+      "order": 513,
+      "reduction": "deterministic_multi_cta_two_level",
+      "reduction_ctas": 3,
+      "state_residency": "single_cooperative_launch_device_resident",
+      "storage": "f32"
+    },
+    {
+      "algorithm": "gmres",
+      "artifact_hash": "97383b0b0b0a2fa5d4dcd968013bb210d65a4f74f96b44ac19014fc3e1c67ad0",
+      "device_elapsed_ms": 0.1913599967956543,
+      "iterations": 4,
+      "numerical": {
+        "matvec_max_abs_error": 4.76837158203125e-07,
+        "max_abs_returned_residual_error": 4.76837158203125e-07,
+        "max_abs_solution_error": 0.0005074143409729004,
+        "oracle": "numpy_float64_dense_solve_plus_explicit_b_minus_ax",
+        "passed": true,
+        "true_residual_limit": 0.007397847747802735,
+        "true_residual_norm": 0.001878010225482285
+      },
+      "order": 257,
+      "reduction": "deterministic_multi_cta_two_level",
+      "reduction_ctas": 2,
+      "state_residency": "single_cooperative_launch_device_resident",
+      "storage": "f16"
+    },
+    {
+      "algorithm": "gmres",
+      "artifact_hash": "dcd82791569b9774e93f04227c35d73f4585517e4b3440e2da1330c0f92158a6",
+      "device_elapsed_ms": 0.16540800034999847,
+      "iterations": 4,
+      "numerical": {
+        "matvec_max_abs_error": 4.76837158203125e-07,
+        "max_abs_returned_residual_error": 4.76837158203125e-07,
+        "max_abs_solution_error": 0.0005111098289489746,
+        "oracle": "numpy_float64_dense_solve_plus_explicit_b_minus_ax",
+        "passed": true,
+        "true_residual_limit": 0.007398634338378907,
+        "true_residual_norm": 0.00189271941781044
+      },
+      "order": 257,
+      "reduction": "deterministic_multi_cta_two_level",
+      "reduction_ctas": 2,
+      "state_residency": "single_cooperative_launch_device_resident",
+      "storage": "bf16"
+    }
+  ],
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "operator": "arbitrary_dense_row_major_v1",
+  "orthogonalization": "twice_modified_gram_schmidt",
+  "passed": true,
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": true,
+    "performance_packet": "benchmarks/baselines/nvidia_sm120_solver_krylov_performance.json"
+  },
+  "schema": "tessera.nvidia.dense_krylov.evidence.v1",
+  "target": "nvidia_sm120",
+  "tessera_opt_sha256": "5d50eb8e51699620c057bf639be23f65932f0fec6ff3e9aaff297438b43a3b3f",
+  "toolchain": "Ubuntu LLVM version 23.1.0",
+  "true_residual_required": true,
+  "work_items": [
+    "CUDA-SOLVER-ARNOLDI-GMRES-2",
+    "CUDA-SOLVER-DENSE-CG-2",
+    "CUDA-SOLVER-MULTI-CTA-2"
+  ]
+}

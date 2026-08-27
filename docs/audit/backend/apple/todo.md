@@ -3,10 +3,73 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-26
+last_updated: 2026-08-27
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **x86-only image
+repair; Metal outcome not applicable.** Canonical CPU-feature admission now
+guards the legacy AVX-512 shared-library loader and the x86 FFT translation
+unit performs no vector work during ELF initialization. This changes no MSL
+producer, Metal runtime ABI, Apple selector, or Apple-device evidence. Apple
+must continue to own its architecture admission independently; neither the
+AVX2 safe-decline result nor the closed 79-case Zen 5 FFT/solver packet
+transfers to Metal.
+
+Cross-backend sync `CUDA-SOLVER-KRYLOV-SCALE-2026-08-27` — **not applicable to
+Metal physical execution.** The additive dense-Krylov contract is explicitly
+owned by `nvidia_sm120`. CUDA cooperative-grid synchronization, deterministic
+CTA partials, SM120 `mma.sync` low-precision matmul, and RTX device/performance
+evidence create no MSL producer, Metal ABI, or Apple-device claim. A Metal
+solver must choose an Apple-owned synchronization/reduction architecture and
+provide independent correctness and performance packets.
+
+Cross-backend sync `CUDA-SOLVER-FAMILY-2026-08-27` — **not applicable to Metal
+physical execution.** Shared residual-product packaging now retains authored
+matmul numeric policy and refuses to substitute GMRES for a declared CG
+contract. NVIDIA added CUDA-owned unary/reduction/predicate/where/IEEE-matmul
+children and a single-launch diagonal-SPD CG package. No MSL producer, Metal
+runtime ABI, Apple selector, or exact-device claim follows; Apple solver/CG
+adoption requires an architecture-owned package and Apple device packet.
+
+Cross-backend sync `CUDA-SOLVER-IFT-PILOT-2026-08-27` — **not applicable to
+Metal physical execution.** The shared diagonal-sqrt and general solver
+contracts gained an explicit SM120 consumer, CUDA binary residual replay, and
+exact CUDA evidence. Apple receives no Metal
+solver implementation, selector, or device claim from that architecture-owned
+package; a future Metal solver must provide its own admission and exact-device
+packet.
+
+Cross-backend sync `CUDA-BINARY-SPECTRAL-JVP-2026-08-27` — **NVIDIA-owned
+physical closure assessed; Metal outcome not applicable.** The compiler-emitted
+CUDA binary family and its spectral filter/convolution tangent accumulation
+change no MSL producer or Apple runtime contract. SM120 f16/bf16 storage and
+RTX numerical evidence transfer no Apple7 claim; Metal spectral adoption still
+requires an architecture-owned package and exact-device proof.
+
+Cross-backend sync `CUDA-SPECTRAL-JVP-NUMPOL-2026-08-26` — **NVIDIA-owned
+closure assessed; Metal outcome not applicable.** The new public JVP child,
+cuFFT Schedule→Tile profile, and f16/bf16 CUDA storage ABIs change no Apple
+Target consumer. Exact SM120 numerics and certificates transfer no Apple7
+claim; a future Metal spectral package still needs architecture-owned
+implementation and exact-device evidence.
+
+Cross-backend sync `CUDA-OPTIMIZER-VJP-2026-08-26` — **shared optimizer plugin
+ownership assessed; Metal follow-up required.** NVIDIA was added as an exact
+owner for the existing state-lineage carrier, but CUDA PTX schedules and
+`sm_120` attestations do not transfer to Metal. Apple still has no registered
+optimizer-VJP or Adafactor-VJP Target consumer; adoption requires an Apple-owned
+package and Apple7 numerical certificates.
+
+Cross-backend sync `TSOL-CUDA-POLICY-V1-2026-08-26` — **NVIDIA-owned physical
+package assessed; Metal outcome not applicable.** The SM120 CUDA ABI and
+logical interleaved-complex transform capability introduce no shared Metal
+schedule or Apple runtime contract. Apple still has no native spectral Target
+consumer, so CUDA device numerics, adjoints, streaming certificates, and
+performance evidence transfer no Apple row.
+The later `CUDA-SPECTRAL-JVP-NUMPOL` assessment above closes the NVIDIA-only
+follow-ups without changing this Metal disposition.
+
 Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **shared spectral
 carrier assessed; Metal outcome remains not applicable.** The shared artifact
 now binds runtime-stride ABI identity, independent transform/window lengths,

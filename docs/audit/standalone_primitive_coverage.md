@@ -210,7 +210,7 @@ Exact-target backend-manifest rows:
 | `apple_gpu` | 199 | `device_verified_abi` 10, `device_verified_jit` 139, `fused` 46, `artifact_only` 2, `reference` 2 |
 | `cpu` | 367 | `reference` 367 |
 | `nvidia_sm100` | 71 | `artifact_only` 41, `planned` 30 |
-| `nvidia_sm120` | 109 | `device_verified_abi` 15, `device_verified_jit` 30, `artifact_only` 34, `planned` 30 |
+| `nvidia_sm120` | 133 | `device_verified_abi` 15, `device_verified_jit` 54, `artifact_only` 34, `planned` 30 |
 | `nvidia_sm80` | 71 | `artifact_only` 41, `planned` 30 |
 | `nvidia_sm90` | 94 | `artifact_only` 41, `planned` 53 |
 | `rocm` | 323 | `device_verified_abi` 3, `device_verified_jit` 316, `planned` 4 |

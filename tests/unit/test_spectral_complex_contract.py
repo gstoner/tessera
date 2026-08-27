@@ -209,16 +209,18 @@ def test_complex_is_declared_only_on_ops_that_carry_it():
 def test_complex_support_follows_whether_the_target_declares_the_op_at_all():
     """A target with no `fft` entry is stating it has no `fft`.
 
-    Synthesising entries for absent ops looked tidier and was a false claim: it
-    made the NVIDIA dashboard assert `fp8_e4m3` and `int8` FFT kernels on
-    sm_90 — nine new `artifact_only` rows for a backend where zero source files
-    mention FFT. Rejecting a complex FFT there is the correct answer.
+    Synthesising entries for absent ops looked tidier and was a false claim.
+    NVIDIA is admitted here only because SM120 now owns an exact cuFFT package;
+    this must not synthesize FFT support for other NVIDIA architectures or
+    unrelated storage dtypes.
     """
     assert supports_op("x86", "tessera.fft", dtype="complex64").supported
     rocm_fft = supports_op("rocm_gfx1151", "tessera.fft", dtype="complex64")
     assert rocm_fft.supported
     assert rocm_fft.runtime_status == "ready"
-    assert not supports_op("nvidia_sm120", "tessera.fft", dtype="complex64").supported
+    nvidia_fft = supports_op("nvidia_sm120", "tessera.fft", dtype="complex64")
+    assert nvidia_fft.supported
+    assert nvidia_fft.runtime_status == "ready"
 
 
 @pytest.mark.parametrize("axis", [-1, 0, 1])

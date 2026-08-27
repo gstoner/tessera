@@ -621,6 +621,21 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                     "tessera.training.loss_adamw",
                 )
             },
+            **_ops(
+                "ready",
+                (
+                    "tessera.fft", "tessera.ifft", "tessera.rfft",
+                    "tessera.irfft", "tessera.dct", "tessera.stft",
+                    "tessera.istft", "tessera.spectral_conv",
+                    "tessera.spectral_filter",
+                ),
+                dtypes=("fp32", "f32"),
+                reason=(
+                    "Exact-device SM120 CUDA 13.3 cuFFT/spectral-policy ABI; "
+                    "complex64 is logical interleaved fp32 storage and is "
+                    "derived only for the transform operations that carry it"
+                ),
+            ),
         },
         supported_dtypes=sm120_supported_storage_dtypes(),
         features=(

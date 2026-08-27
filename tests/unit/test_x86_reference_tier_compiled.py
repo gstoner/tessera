@@ -16,9 +16,12 @@ from tessera.game import (
 )
 from tessera.solvers_ops import tridiagonal_solve
 from tessera.compiler.backend_manifest import manifest_for
+from tessera.compiler.x86_native import X86_AVX512_ARCHITECTURE, host_supports_architecture
 
 
 def _library() -> ctypes.CDLL:
+    if not host_supports_architecture(X86_AVX512_ARCHITECTURE):
+        pytest.skip("x86 physical reference-tier image requires AVX-512 host support")
     candidates = (
         Path(__file__).parents[2] / "build/src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so",
         Path(__file__).parents[2] / "build-x86/src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so",

@@ -248,6 +248,65 @@ def _stream_stft_chunk_rocm(
     return output, next_tail, frames
 
 
+def _stream_stft_chunk_nvidia(
+    values: np.ndarray, window: np.ndarray, policy: StreamingSTFTPolicy,
+    axis: int, tail: np.ndarray | None, artifact_digest: str,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    import ctypes
+    from tessera import runtime
+
+    if values.dtype != np.float32 or window.dtype != np.float32:
+        raise ValueError("SM120 streaming STFT v1 requires float32 storage")
+    lib = runtime._load_nvidia_fft_runtime()
+    if (lib is None or
+            not hasattr(lib, "tessera_nvidia_streaming_stft_broadcast_layout_f32") or
+            lib.tessera_nvidia_spectral_arch() != 120):
+        raise RuntimeError("SM120 streaming STFT physical package is unavailable")
+
+    def descriptor(array: np.ndarray) -> tuple[Any, Any]:
+        if any(stride % array.itemsize for stride in array.strides):
+            raise ValueError("streaming STFT strides must be element aligned")
+        element_strides = tuple(
+            int(stride // array.itemsize) for stride in array.strides
+        )
+        if any(stride == 0 and array.shape[dim] > 1
+               for dim, stride in enumerate(element_strides)):
+            raise ValueError("streaming STFT overlapping layouts are unsupported")
+        return ((ctypes.c_int64 * array.ndim)(*map(int, array.shape)),
+                (ctypes.c_int64 * array.ndim)(*element_strides))
+
+    shape, strides = descriptor(values)
+    window_shape, window_strides = descriptor(window)
+    batch_shape = values.shape[:axis] + values.shape[axis + 1 :]
+    tail_samples = 0 if tail is None else int(tail.shape[-1])
+    if tail is not None and (tail.shape[:-1] != batch_shape or
+                             tail.dtype != values.dtype):
+        raise ValueError("streaming STFT tail ABI does not match the chunk")
+    combined = tail_samples + values.shape[axis]
+    frames = max(0, (combined - policy.n_fft) // policy.hop + 1)
+    bins = policy.n_fft // 2 + 1 if policy.onesided else policy.n_fft
+    output = np.empty(
+        values.shape[:axis] + (frames, bins) + values.shape[axis + 1 :],
+        np.complex64,
+    )
+    next_tail = np.empty(
+        batch_shape + (combined - frames * policy.hop,), dtype=np.float32
+    )
+    empty_tail = np.empty((0,), dtype=np.float32) if tail is None else tail
+    pointer = ctypes.POINTER(ctypes.c_float)
+    rc = lib.tessera_nvidia_streaming_stft_broadcast_layout_f32(
+        artifact_digest.encode("ascii"), values.ctypes.data_as(pointer),
+        empty_tail.ctypes.data_as(pointer), window.ctypes.data_as(pointer),
+        output.view(np.float32).ctypes.data_as(pointer),
+        next_tail.ctypes.data_as(pointer), values.ndim, shape, strides, axis,
+        tail_samples, window.ndim, window_shape, window_strides, policy.n_fft,
+        policy.hop, frames, ctypes.c_float(1.0), int(policy.onesided),
+    )
+    if rc:
+        raise RuntimeError(f"SM120 streaming STFT package failed rc={rc}")
+    return output, next_tail, frames
+
+
 def stream_stft_chunk(
     chunk: Any,
     window: Any,
@@ -273,17 +332,18 @@ def stream_stft_chunk(
         for dim, extent in enumerate(win.shape[:-1])
     ):
         raise ValueError("streaming STFT window batch dimensions do not broadcast")
-    if target not in {"reference", "x86", "rocm"}:
+    if target not in {"reference", "x86", "rocm", "nvidia_sm120"}:
         raise ValueError("streaming STFT target is unsupported")
-    artifact_digest = digest_text(
-        "schema=tessera.streaming_stft_artifact.v1;"
-        f"target={target};arch={('zen5-avx512' if target == 'x86' else 'gfx1151' if target == 'rocm' else 'reference')};"
-        f"policy={policy.digest};window_broadcast=trailing_batch_broadcast_v1;"
-        "state_abi=canonical_batch_tail_v1;accum=fp32"
-    )
     architecture = (
         "zen5-avx512" if target == "x86" else
-        "gfx1151" if target == "rocm" else "reference"
+        "gfx1151" if target == "rocm" else
+        "sm_120" if target == "nvidia_sm120" else "reference"
+    )
+    artifact_digest = digest_text(
+        "schema=tessera.streaming_stft_artifact.v1;"
+        f"target={target};arch={architecture};"
+        f"policy={policy.digest};window_broadcast=trailing_batch_broadcast_v1;"
+        "state_abi=canonical_batch_tail_v1;accum=fp32"
     )
     window_digest = _array_digest(win)
     consumed = 0
@@ -312,6 +372,10 @@ def stream_stft_chunk(
         )
     elif target == "rocm":
         spectra, tail, frame_count = _stream_stft_chunk_rocm(
+            values, win, policy, axis, prior_tail, artifact_digest
+        )
+    elif target == "nvidia_sm120":
+        spectra, tail, frame_count = _stream_stft_chunk_nvidia(
             values, win, policy, axis, prior_tail, artifact_digest
         )
     else:

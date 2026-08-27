@@ -505,6 +505,33 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "JVP, or VJP SSA program composed exclusively from "
                             "native gfx1151 unary/binary packages; static "
                             "shape-preserving f32 and content-addressed",
+    "nvidia_solver_ift_compiled": "SM120 compiler-emitted CUDA diagonal-sqrt "
+                            "residual, matrix-free solve, and parameter IFT "
+                            "product under one content-addressed Schedule-to-Tile contract",
+    "nvidia_general_solver_compiled": "SM120 content-addressed matrix-free "
+                            "solver parent over immutable CUDA residual and "
+                            "solution/parameter JVP/VJP children; restarted "
+                            "GMRES with true-residual checks",
+    "nvidia_solver_graph_compiled": "Compiler-generated residual, JVP, or VJP "
+                            "SSA replay through admitted SM120 CUDA child "
+                            "packages for binary, unary, reduction, predicate/where, "
+                            "and explicit-IEEE matmul products",
+    "nvidia_unary_compiled": "Compiler-emitted SM120 unary solver child for "
+                            "sqrt/reciprocal/exp/log/tanh/sigmoid/sin/cos with "
+                            "f32/f16/bf16 storage and fp32 evaluation",
+    "nvidia_compare_compiled": "Compiler-emitted SM120 comparison solver child "
+                            "for eq/ne/lt/le/gt/ge over f32/f16/bf16 storage",
+    "nvidia_where_compiled": "Compiler-emitted SM120 predicate-select solver "
+                            "child over f32/f16/bf16 branch storage",
+    "nvidia_solver_matmul_compiled": "SM120 solver matmul child: resident "
+                            "scalar IEEE-f32 or native f16/bf16 mma.sync with "
+                            "fp32 accumulation; every route requires explicit policy",
+    "nvidia_krylov_solver_compiled": "Single-launch SM120 positive-diagonal "
+                            "conjugate-gradient package retaining x/r/p/Ap and "
+                            "all scalar reductions in device memory",
+    "nvidia_dense_krylov_compiled": "Single cooperative-grid SM120 dense-operator "
+                            "CG or restarted GMRES package with resident Arnoldi "
+                            "state and deterministic multi-CTA reductions",
     "rocm_jvp_compiled": "gfx1151 content-addressed forward-product package; "
                             "executes compiler-bound primal and tangent child "
                             "Tile packages without returning to Graph IR",
@@ -1105,6 +1132,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "explicit caller-owned device workspace",
     "nvidia_spectral_compiled": "NVIDIA GPU compound DCT/STFT/ISTFT/convolution/"
                             "filter consumers over the canonical CUDA FFT ABI",
+    "nvidia_spectral_jvp_compiled": "Exact-SM120 analytic STFT/ISTFT forward-product "
+                            "package with content-addressed Schedule→Tile lineage",
     "nvidia_sm120_jvp_compiled": "Exact-SM120 content-addressed compiler JVP "
                             "package, including deterministic Philox mask replay",
     "nvidia_sm120_spectral_backward_compiled": "Exact-SM120 compound spectral "
@@ -1173,6 +1202,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "fused int4/int8 per-group dequantization inside grouped GEMM",
     "nvidia_optimizer_compiled": "NVIDIA GPU (consumer Blackwell sm_120) fused "
                             "f32 SGD, momentum, Nesterov, Adam, AdamW, and Lion updates",
+    "nvidia_binary_compiled": "NVIDIA GPU (consumer Blackwell sm_120) compiler-"
+                            "emitted matching-shape binary arithmetic with "
+                            "f32/f16/bf16 storage and fp32 evaluation",
+    "nvidia_sgd_bwd_compiled": "NVIDIA SM120 content-addressed analytic SGD VJP",
+    "nvidia_momentum_bwd_compiled": "NVIDIA SM120 content-addressed Momentum/Nesterov VJP",
+    "nvidia_adam_bwd_compiled": "NVIDIA SM120 content-addressed Adam/AdamW VJP",
+    "nvidia_adafactor_bwd_compiled": "NVIDIA SM120 full/factored Adafactor VJP with deterministic reductions",
     "nvidia_lion_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) compiler-owned "
                             "PTX Lion stop-sign VJP with f32 state",
     "nvidia_norm_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
@@ -3667,13 +3703,28 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_spectral_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_spectral_compiled", runtime_status="success",
-        reason="DCT-II, STFT, ISTFT, spectral convolution, and spectral filter "
-               "consume the canonical CUDA FFT/workspace v2 package; framing, "
-               "windowing, pointwise products, and overlap-add are explicit host "
-               "orchestration around native cuFFT transforms.",
+        reason="DCT-I/II/III/IV and STFT/ISTFT consume the exact-SM120 "
+               "spectral-policy v1 ABI with device framing, cuFFT, deterministic "
+               "overlap-add, arbitrary stride/axis descriptors, broadcasting, and "
+               "streaming; convolution/filter retain their CUDA FFT consumers.",
         execution_mode="cuda_runtime", direction="forward", op_family="spectral",
         device_proof="device_verified_abi", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_fft_workspace.py",
+        proof_build="cuda13.3+cufft+sm120+RTX5070"),
+    ("nvidia_sm120", "nvidia_spectral_jvp_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_spectral_jvp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_spectral_jvp_compiled", runtime_status="success",
+        reason="Analytic STFT/ISTFT/filter/convolution primal+tangent CUDA package "
+               "consumes one digest-bound spectral Schedule→Tile contract. STFT/"
+               "ISTFT execute device framing/cuFFT/normalized overlap-add "
+               "derivatives; bilinear filter/convolution tangent terms use the "
+               "registered SM120 binary-add package. Real storage supports "
+               "f32/f16/bf16 with fp32 accumulation.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="spectral_jvp", device_proof="device_verified_abi",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_spectral_jvp.py",
         proof_build="cuda13.3+cufft+sm120+RTX5070"),
     ("nvidia_sm120", "nvidia_sm120_jvp_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_sm120_jvp_compiled",
@@ -3693,8 +3744,10 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_sm120_spectral_backward_compiled",
         runtime_status="success",
-        reason="Content-addressed spectral filter/convolution VJP; convolution "
-               "gradients consume native CUDA R2C/C2R transforms.",
+        reason="Content-addressed spectral filter/convolution plus analytic "
+               "STFT/ISTFT VJPs. The SM120 policy package owns true-stride and "
+               "broadcast descriptors, full/one-sided spectra, centered padding, "
+               "cropping, and deterministic normalized-overlap-add adjoints.",
         execution_mode="cuda_runtime", direction="backward",
         op_family="spectral_backward", device_proof="device_verified_abi",
         evidence_target="nvidia_sm120",
@@ -3953,6 +4006,166 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_optimizer.py",
         proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_binary_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_binary_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_binary_compiled", runtime_status="success",
+        reason="NVIDIA sm_120 compiler-emitted matching-shape add/sub/mul/div/"
+               "pow/max/min/mod/floor-div CUDA package with f32/f16/bf16 "
+               "storage and fp32 arithmetic. NaN propagation and floor semantics "
+               "are explicit; compound spectral JVP uses its add route.",
+        execution_mode="cuda_runtime", direction="forward", op_family="binary_math",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_binary_compiled.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_solver_ift_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_solver_ift_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_solver_ift_compiled", runtime_status="success",
+        reason="One compiler-emitted SM120 CUDA package executes the "
+               "diagonal-sqrt residual, transposed or forward matrix-free "
+               "solve, and parameter product from a digest-bound "
+               "Schedule-to-Tile artifact.",
+        execution_mode="cuda_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_ift.py",
+        proof_build="cuda13.3+llvm23+sm120", residual_policy="recompute_all",
+        residual_tradeoff="Retains only the converged solution; residual and diagonal Jacobian are recomputed."),
+    ("nvidia_sm120", "nvidia_general_solver_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_general_solver_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_general_solver_compiled", runtime_status="success",
+        reason="A content-addressed matrix-free solver parent invokes immutable "
+               "SM120 residual and solution/parameter JVP/VJP CUDA children "
+               "under restarted GMRES with a true-residual convergence check.",
+        execution_mode="cuda_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_ift.py",
+        proof_build="cuda13.3+sm120", residual_policy="recompute_all"),
+    ("nvidia_sm120", "nvidia_solver_graph_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_solver_graph_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_solver_graph_compiled", runtime_status="success",
+        reason="Compiler-generated residual/JVP/VJP SSA replays through the "
+               "registered SM120 binary, unary, reduction, comparison/where, "
+               "and explicit-IEEE matmul CUDA carriers without re-entering "
+               "Graph IR. Nondifferentiable predicate boundaries, missing "
+               "matmul math_mode, and unsupported dtype transitions fail closed.",
+        execution_mode="cuda_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_ift.py",
+        proof_build="cuda13.3+sm120", residual_policy="recompute_all"),
+    ("nvidia_sm120", "nvidia_unary_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_unary_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_unary_compiled", runtime_status="success",
+        reason="Compiler-emitted CUDA unary residual child covers sqrt, "
+               "reciprocal, exp, log, tanh, sigmoid, sin, and cos with "
+               "f32/f16/bf16 storage and fp32 evaluation.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="unary_math", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_children.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_compare_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_compare_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_compare_compiled", runtime_status="success",
+        reason="Compiler-emitted CUDA comparison child covers eq/ne/lt/le/gt/ge "
+               "with f32/f16/bf16 inputs and bool output.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="comparison", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_children.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_where_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_where_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_where_compiled", runtime_status="success",
+        reason="Compiler-emitted CUDA where child consumes bool predicates and "
+               "matching f32/f16/bf16 branches.",
+        execution_mode="cuda_runtime", direction="forward", op_family="where",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_children.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_solver_matmul_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_solver_matmul_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_solver_matmul_compiled", runtime_status="success",
+        reason="Explicit numeric_policy selects resident scalar IEEE-f32 or "
+               "native f16/bf16 mma.sync with fp32 accumulation; missing or "
+               "contradictory storage/math mode fails before launch and TF32 "
+               "is never selected by default.",
+        execution_mode="cuda_runtime", direction="forward", op_family="matmul",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_children.py",
+        proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_krylov_solver_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_krylov_solver_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_krylov_solver_compiled", runtime_status="success",
+        reason="One CUDA launch executes dedicated CG for a positive diagonal "
+               "SPD operator while retaining solution, residual, direction, "
+               "matvec, dot reductions, and convergence state on device.",
+        execution_mode="cuda_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_krylov.py",
+        proof_build="cuda13.3+sm120", residual_policy="recompute_all"),
+    ("nvidia_sm120", "nvidia_dense_krylov_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_dense_krylov_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_dense_krylov_compiled", runtime_status="success",
+        reason="A cooperative CUDA grid executes dense non-diagonal CG or "
+               "twice-MGS restarted GMRES. Krylov/Arnoldi state remains on "
+               "device, dot/norm reductions span multiple CTAs in a fixed "
+               "order, and only an fp32 true residual can establish convergence.",
+        execution_mode="cuda_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_solver_krylov.py",
+        proof_build="cuda13.3+sm120", residual_policy="recompute_all"),
+    ("nvidia_sm120", "nvidia_sgd_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_sgd_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_sgd_bwd_compiled", runtime_status="success",
+        reason="One digest-bound SM120 PTX launch writes the analytic SGD VJP.",
+        execution_mode="cuda_driver", direction="backward", op_family="sgd",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_optimizer_reverse.py",
+        proof_build="cuda13.3+llvm23+sm120", residual_policy="recompute_all"),
+    ("nvidia_sm120", "nvidia_momentum_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_momentum_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_momentum_bwd_compiled", runtime_status="success",
+        reason="One digest-bound SM120 PTX launch writes Momentum or Nesterov state VJPs.",
+        execution_mode="cuda_driver", direction="backward",
+        op_family="momentum_nesterov", device_proof="device_verified_jit",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_optimizer_reverse.py",
+        proof_build="cuda13.3+llvm23+sm120", residual_policy="none"),
+    ("nvidia_sm120", "nvidia_adam_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_adam_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_adam_bwd_compiled", runtime_status="success",
+        reason="One digest-bound SM120 PTX launch writes Adam or AdamW explicit-state VJPs.",
+        execution_mode="cuda_driver", direction="backward", op_family="adam_adamw",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_optimizer_reverse.py",
+        proof_build="cuda13.3+llvm23+sm120", residual_policy="save_explicit_optimizer_state"),
+    ("nvidia_sm120", "nvidia_adafactor_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_adafactor_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_adafactor_bwd_compiled", runtime_status="success",
+        reason="SM120 PTX executes full or factored Adafactor VJP; factored reductions have one deterministic owner.",
+        execution_mode="cuda_driver", direction="backward", op_family="adafactor",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_optimizer_reverse.py",
+        proof_build="cuda13.3+llvm23+sm120",
+        residual_policy="recompute_optimizer_state"),
     ("nvidia_sm120", "nvidia_lion_bwd_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_lion_bwd_compiled",
         execution_kind="native_gpu", executable=True,

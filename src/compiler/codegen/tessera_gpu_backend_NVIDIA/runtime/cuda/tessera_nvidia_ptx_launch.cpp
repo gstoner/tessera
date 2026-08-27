@@ -1597,6 +1597,56 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
             return false;
         layout.outputs[1] = true;
         work = dims[1];
+    } else if (std::strncmp(
+                   name, "tessera_cuda_training_optvjp_",
+                   std::strlen("tessera_cuda_training_optvjp_")) == 0) {
+        if (ndim != 1) return false;
+        size_t bytes = 0;
+        if (!checkedBytes(dims[0], sizeof(float), bytes)) return false;
+        if (std::strstr(name, "optvjp_sgd_")) {
+            if (nbuf != 5) return false;
+            for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = bytes;
+            layout.outputs[3] = layout.outputs[4] = true;
+        } else if (std::strstr(name, "optvjp_momentum_") ||
+                   std::strstr(name, "optvjp_nesterov_")) {
+            if (nbuf != 8) return false;
+            for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = bytes;
+            layout.outputs[5] = layout.outputs[6] = layout.outputs[7] = true;
+        } else if (std::strstr(name, "optvjp_adam_") ||
+                   std::strstr(name, "optvjp_adamw_")) {
+            if (nbuf != 11) return false;
+            for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = bytes;
+            for (size_t i = 7; i < 11; ++i) layout.outputs[i] = true;
+        } else {
+            return false;
+        }
+        work = dims[0];
+    } else if (std::strncmp(
+                   name, "tessera_cuda_training_adafactorvjp_",
+                   std::strlen("tessera_cuda_training_adafactorvjp_")) == 0) {
+        if (std::strstr(name, "adafactorvjp_full_")) {
+            if (nbuf != 7 || ndim != 1) return false;
+            size_t bytes = 0;
+            if (!checkedBytes(dims[0], sizeof(float), bytes)) return false;
+            for (size_t i = 0; i < nbuf; ++i) layout.sizes[i] = bytes;
+            layout.outputs[4] = layout.outputs[5] = layout.outputs[6] = true;
+            work = dims[0];
+        } else if (std::strstr(name, "adafactorvjp_factored_")) {
+            if (nbuf != 9 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
+                dims[0] > LLONG_MAX / dims[1]) return false;
+            size_t matrix = 0, rows = 0, columns = 0;
+            if (!checkedBytes(dims[0] * dims[1], sizeof(float), matrix) ||
+                !checkedBytes(dims[0], sizeof(float), rows) ||
+                !checkedBytes(dims[1], sizeof(float), columns)) return false;
+            layout.sizes[0] = layout.sizes[1] = layout.sizes[4] =
+                layout.sizes[5] = layout.sizes[6] = matrix;
+            layout.sizes[2] = layout.sizes[7] = rows;
+            layout.sizes[3] = layout.sizes[8] = columns;
+            for (size_t i = 5; i < 9; ++i) layout.outputs[i] = true;
+            work = 1;
+        } else {
+            return false;
+        }
     } else if (std::strncmp(name, "tessera_cuda_training_optimizer_sgd_", 36) == 0) {
         if (nbuf != 3 || ndim != 1) return false;
         size_t bytes = 0;

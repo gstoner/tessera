@@ -34,7 +34,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | `nvidia_sm80` | 72 | 0 | 0 | 0 | 72 | 0 | 443 |
 | `nvidia_sm90` | 104 | 0 | 0 | 2 | 102 | 0 | 411 |
 | `nvidia_sm100` | 72 | 0 | 0 | 0 | 72 | 0 | 443 |
-| `nvidia_sm120` | 110 | 45 | 0 | 0 | 65 | 0 | 405 |
+| `nvidia_sm120` | 134 | 69 | 0 | 0 | 65 | 0 | 381 |
 
 ## Per-category breakdown
 

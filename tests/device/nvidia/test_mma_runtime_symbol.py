@@ -275,7 +275,9 @@ def test_runtime_launch_reaches_every_declared_nvidia_mma_dtype(dt):
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": ["a", "b"], "output_name": "d",
         "ops": [{"op_name": "tessera.matmul", "result": "d",
-                 "operands": ["a", "b"], "kwargs": {}}],
+                 "operands": ["a", "b"],
+                 "kwargs": ({"numeric_policy": {"math_mode": "tf32"}}
+                            if dt == "tf32" else {})}],
     })
     result = rt.launch(artifact, (a, b))
     assert result["ok"] is True, result.get("reason")

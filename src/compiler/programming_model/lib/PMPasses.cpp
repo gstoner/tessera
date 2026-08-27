@@ -713,15 +713,20 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
   bool rocm = schedule.arch.contains("gfx1151");
-  if (!x86 && !rocm) return failure();
-  schedule.radixPolicy = rocm ? "mixed_radix" : "radix2";
-  schedule.algorithm = rocm ? "stockham_autosort" : "cooley_tukey_dit";
-  schedule.residency = rocm ? "persistent_device_plan" : "host_inplace";
+  bool nvidia = schedule.target == "nvidia_sm120" || schedule.arch == "sm120";
+  if (!x86 && !rocm && !nvidia) return failure();
+  schedule.radixPolicy = (rocm || nvidia) ? "mixed_radix" : "radix2";
+  schedule.algorithm = nvidia ? "cufft_plan_many" :
+                       rocm ? "stockham_autosort" : "cooley_tukey_dit";
+  schedule.residency = nvidia ? "explicit_caller_workspace_device_plan" :
+                       rocm ? "persistent_device_plan" : "host_inplace";
   schedule.twiddlePolicy =
+      nvidia ? "cufft_plan_owned" :
       rocm ? "device_sincos_per_butterfly" : "thread_local_cached_f32";
   schedule.kernelFamily =
+      nvidia ? "sm120_cufft_workspace_v2" :
       rocm ? "gfx1151_stockham_bluestein_v6" : "zen5_avx512_fft_v4";
-  schedule.workgroupSize = rocm ? 256 : 1;
+  schedule.workgroupSize = (rocm || nvidia) ? 256 : 1;
   schedule.inputShape.assign(input.getShape().begin(), input.getShape().end());
   schedule.outputShape.assign(output.getShape().begin(), output.getShape().end());
 
@@ -807,7 +812,7 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
       realMode && schedule.length % 2 == 0 ? schedule.length / 2
                                            : schedule.length;
   auto candidateStages = mixedRadixSequence(candidatePhysicalLength);
-  const bool packedReal =
+  const bool packedReal = !nvidia &&
       realMode && schedule.length % 2 == 0 &&
       (rocm || isPowerOfTwo(candidatePhysicalLength) ||
        (candidateStages &&
@@ -815,13 +820,26 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   schedule.physicalLength =
       packedReal ? candidatePhysicalLength : schedule.length;
   schedule.realTransformPolicy =
+      nvidia && realMode ? "native_cufft_r2c_c2r_v1" :
       packedReal ? "packed_even_n2_hermitian_v1"
                  : realMode ? "full_complex_hermitian_fallback"
                             : "not_applicable";
   schedule.hermitianLayout =
       realMode ? "half_spectrum_nyquist_explicit" : "full_complex";
 
-  if (rocm) {
+  if (nvidia) {
+    auto stages = mixedRadixSequence(schedule.physicalLength);
+    if (stages) {
+      schedule.strategy = "mixed_radix";
+      schedule.radixSequence = *stages;
+      schedule.workspaceElems = schedule.physicalLength;
+    } else {
+      schedule.strategy = "bluestein";
+      schedule.bluesteinM = nextPowerOfTwo(2 * schedule.physicalLength - 1);
+      schedule.workspaceElems = schedule.bluesteinM;
+    }
+    schedule.workspacePolicy = "explicit_caller_owned_cufft_workspace";
+  } else if (rocm) {
     auto stages = mixedRadixSequence(schedule.physicalLength);
     if (stages) {
       schedule.strategy = "mixed_radix";
@@ -1996,7 +2014,8 @@ struct GraphToSchedulePass
       if (failed(selected)) {
         op->emitError(
             "E2E-REAL-FFT Graph->Schedule requires a static f32-pair FFT on "
-            "Zen 5 or gfx1151 with an explicit supported spectral contract");
+            "Zen 5, gfx1151, or exact sm120 with an explicit supported "
+            "spectral contract");
         return signalPassFailure();
       }
       std::string digest = fftScheduleDigest(*selected);

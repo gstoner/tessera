@@ -201,10 +201,18 @@ def lower_scheduled_fft(
     normalized_axis = axis if axis >= 0 else len(shape) + axis
     if normalized_axis < 0 or normalized_axis >= len(shape):
         raise ValueError("scheduled FFT axis is out of range")
-    compiler_target = "x86" if target == "x86" else "rocm"
-    if target not in {"x86", "rocm", "rocm_gfx1151"}:
-        raise ValueError("scheduled FFT supports x86 and rocm_gfx1151")
-    architecture = "zen5-avx512" if compiler_target == "x86" else "gfx1151"
+    target_profiles = {
+        "x86": ("x86", "zen5-avx512"),
+        "rocm": ("rocm", "gfx1151"),
+        "rocm_gfx1151": ("rocm", "gfx1151"),
+        "nvidia_sm120": ("nvidia_sm120", "sm120"),
+    }
+    try:
+        compiler_target, architecture = target_profiles[target]
+    except KeyError as error:
+        raise ValueError(
+            "scheduled FFT supports x86, rocm_gfx1151, and nvidia_sm120"
+        ) from error
     mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
     inverse = op_name in {"tessera.ifft", "tessera.irfft"}
     if op_name == "tessera.irfft":
@@ -225,13 +233,16 @@ def lower_scheduled_fft(
         if compiler_target == "x86"
         else None
     )
-    packed_real = real_mode and length % 2 == 0 and (
+    packed_real = compiler_target != "nvidia_sm120" and real_mode and length % 2 == 0 and (
         compiler_target == "rocm"
         or candidate_physical_length & (candidate_physical_length - 1) == 0
         or _prefer_x86_mixed_radix(candidate_physical_length, candidate_x86_radices)
     )
     physical_length = candidate_physical_length if packed_real else length
     real_transform_policy = (
+        "native_cufft_r2c_c2r_v1"
+        if compiler_target == "nvidia_sm120" and real_mode
+        else
         "packed_even_n2_hermitian_v1"
         if packed_real
         else "full_complex_hermitian_fallback"
@@ -264,11 +275,17 @@ def lower_scheduled_fft(
     if compiler_target == "x86" and plan.strategy == "mixed_radix":
         workspace = 2 * physical_length
     algorithm = (
+        "cufft_plan_many"
+        if compiler_target == "nvidia_sm120"
+        else
         "stockham_autosort"
         if compiler_target != "x86" or plan.strategy == "mixed_radix"
         else "cooley_tukey_dit"
     )
     residency = (
+        "explicit_caller_workspace_device_plan"
+        if compiler_target == "nvidia_sm120"
+        else
         "host_thread_local_ping_pong"
         if compiler_target == "x86" and plan.strategy == "mixed_radix"
         else "host_inplace"
@@ -285,6 +302,9 @@ def lower_scheduled_fft(
         else "persistent_device_plan"
     )
     twiddle_policy = (
+        "cufft_plan_owned"
+        if compiler_target == "nvidia_sm120"
+        else
         "thread_local_cached_f32"
         if compiler_target == "x86"
         else "device_sincos_per_butterfly"
@@ -300,6 +320,8 @@ def lower_scheduled_fft(
             if plan.strategy == "bluestein"
             else twiddle_policy
         )
+    elif compiler_target == "nvidia_sm120":
+        workspace_policy = "explicit_caller_owned_cufft_workspace"
     else:
         workspace_policy = (
             "host_temporary_m"
@@ -311,6 +333,8 @@ def lower_scheduled_fft(
     kernel_family = (
         "zen5_avx512_fft_v4"
         if compiler_target == "x86"
+        else "sm120_cufft_workspace_v2"
+        if compiler_target == "nvidia_sm120"
         else "gfx1151_stockham_bluestein_v6"
     )
     input_element = "f32" if op_name == "tessera.rfft" else "complex<f32>"
@@ -399,8 +423,16 @@ def validate_scheduled_fft_metadata(
     target: str,
     input_shape: Sequence[int],
 ) -> Mapping[str, Any]:
-    expected_target = "x86" if target == "x86" else "rocm"
-    expected_architecture = "zen5-avx512" if expected_target == "x86" else "gfx1151"
+    target_profiles = {
+        "x86": ("x86", "zen5-avx512"),
+        "rocm": ("rocm", "gfx1151"),
+        "rocm_gfx1151": ("rocm", "gfx1151"),
+        "nvidia_sm120": ("nvidia_sm120", "sm120"),
+    }
+    try:
+        expected_target, expected_architecture = target_profiles[target]
+    except KeyError as error:
+        raise ValueError("FFT package target identity is unsupported") from error
     if metadata.get("schema") != "tessera.scheduled_fft.v3":
         raise ValueError("FFT package requires tessera.scheduled_fft.v3 metadata")
     if metadata.get("target") != expected_target:

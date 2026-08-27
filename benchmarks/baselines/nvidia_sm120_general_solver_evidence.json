@@ -1,0 +1,87 @@
+{
+  "admitted_child_families": [
+    "binary_math",
+    "unary_math",
+    "reduction",
+    "comparison",
+    "where",
+    "matmul_ieee"
+  ],
+  "architecture": "sm120",
+  "artifact_hash": "94673e3f3d6ac7ab47665b7e9fad52a4778ce3656ad659e105d7bd0a5a2e85df",
+  "child_digests": {
+    "parameter_jvp": "98d0f14524423ea927030f86bde0bebc116c73aca2c7a8cd7ca1854a422915b2",
+    "parameter_vjp": "9bc4df7042bf93694f2c9bdabd80433f8d027c8cff07c487106d15cc6d46213e",
+    "residual": "7e6ad850fbc079bbad988522dbb4aca1c9a08701a6e350236f484c3bcfb53bc5",
+    "solution_jvp": "3395fb927bc006e7ef373cd849ebd5e8750835977ab842e495ca6cad1b083eb7",
+    "solution_vjp": "8d6083705f512f4b7b44bc8b69658a1fb55dcb773a4e13e58cac2ff18f390317"
+  },
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "dtype": "f32",
+  "fail_closed_policies": [
+    "predicate_equality_boundary",
+    "missing_matmul_math_mode",
+    "non_fp32_accumulation",
+    "unsupported_dtype_transition"
+  ],
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "linear_solver": "gmres",
+  "matrix_free": true,
+  "numerical": {
+    "max_abs_error_by_phase": {
+      "linear_solution": 0.0,
+      "parameter_product": 0.0,
+      "residual": 0.0
+    },
+    "oracle": "numpy_affine_identity_ift",
+    "passed": true
+  },
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "host-orchestrated GMRES and CUDA wrapper timing is correctness-only"
+  },
+  "residual_model": "affine_x_minus_theta",
+  "schema": "tessera.general_solver.evidence.v1",
+  "shape": [
+    37
+  ],
+  "target": "nvidia_sm120",
+  "tessera_opt_sha256": "5d50eb8e51699620c057bf639be23f65932f0fec6ff3e9aaff297438b43a3b3f",
+  "timing": {
+    "complete_backward": true,
+    "median_ns": 8466991,
+    "minimum_ns": 8281093,
+    "samples_ns": [
+      8347235,
+      8457076,
+      8360751,
+      8595247,
+      8389276,
+      8342964,
+      8494256,
+      8359195,
+      8466991,
+      9284186,
+      9028110,
+      8535583,
+      8515422,
+      8281093,
+      8848118,
+      8293563,
+      8303185,
+      8501095,
+      8474742,
+      8321859
+    ],
+    "source": "synchronized_host_wall",
+    "warmup": 5
+  },
+  "toolchain": "Ubuntu LLVM version 23.1.0",
+  "true_residual_check": true,
+  "work_items": [
+    "AD-SOLVER-IFT-1",
+    "AD-RESIDUAL-EVAL-1",
+    "CUDA-SOLVER-GENERAL-1"
+  ]
+}

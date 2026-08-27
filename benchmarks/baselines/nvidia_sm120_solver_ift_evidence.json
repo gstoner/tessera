@@ -1,0 +1,76 @@
+{
+  "architecture": "sm120",
+  "artifact_hash": "0cbba990e26a3b1d0017daaebf3c7f52fa68aba4868ad935cf3939e037046873",
+  "device": "NVIDIA GeForce RTX 5070",
+  "dtype": "f32",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "linear_solver": "diagonal_matrix_free_v1",
+  "matrix_materialized": false,
+  "numerical": {
+    "max_abs_error_by_phase": {
+      "linear_solution": 0.0,
+      "parameter_cotangent": 0.0,
+      "residual": 4.7639701961088576e-07
+    },
+    "oracle": "numpy_diagonal_sqrt_ift",
+    "passed": true
+  },
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "CUDA host-wrapper timing is correctness/regression-only"
+  },
+  "residual_model": "diagonal_sqrt_v1",
+  "retained_residual_bytes": 3084,
+  "schema": "tessera.solver_ift.evidence.v1",
+  "shape": [
+    3,
+    257
+  ],
+  "target": "nvidia_sm120",
+  "tessera_opt_sha256": "5d50eb8e51699620c057bf639be23f65932f0fec6ff3e9aaff297438b43a3b3f",
+  "timing": {
+    "complete_backward": true,
+    "median_ns": 998794,
+    "minimum_ns": 953202,
+    "samples_ns": [
+      1043485,
+      993053,
+      1022985,
+      980193,
+      1066999,
+      1055530,
+      975873,
+      971703,
+      1042644,
+      1013434,
+      998794,
+      985683,
+      1157351,
+      1055371,
+      972432,
+      1112826,
+      1022144,
+      974652,
+      997034,
+      971622,
+      1033315,
+      1012114,
+      953202,
+      1001374,
+      963582,
+      974783,
+      1103166,
+      986852,
+      971373,
+      976213
+    ],
+    "source": "synchronized_host_wall",
+    "warmup": 5
+  },
+  "toolchain": "Ubuntu LLVM version 23.1.0",
+  "work_items": [
+    "AD-SOLVER-IFT-1",
+    "AD-RESIDUAL-EVAL-1"
+  ]
+}

@@ -51,9 +51,13 @@ def test_optimizer_plugins_declare_exact_target_owners() -> None:
         assert declaration.schedule_consumer == "schedule.optimizer_vjp"
         assert declaration.tile_consumer == "tile.training_kernel"
         assert declaration.differential_policy == "non_reexecuting_state_lineage"
-        assert set(declaration.target_consumers) == {"x86", "rocm"}
+        assert set(declaration.target_consumers) == {
+            "x86", "rocm", "nvidia_sm120"
+        }
     for name in ("adam", "adamw"):
-        assert set(declarations[name].target_consumers) == {"rocm"}
+        assert set(declarations[name].target_consumers) == {
+            "rocm", "nvidia_sm120"
+        }
 
 
 def test_jitfn_optimizer_compatibility_helpers_are_retired() -> None:

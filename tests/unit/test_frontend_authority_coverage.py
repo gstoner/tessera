@@ -84,7 +84,7 @@ def test_every_family_declares_its_whole_spine(rows):
 
 def test_family_target_union_does_not_drop_variant_specific_owners(rows):
     optimizer = next(row for row in rows if row.family == "optimizer_vjp")
-    assert set(optimizer.targets) == {"rocm", "x86"}
+    assert set(optimizer.targets) == {"nvidia_sm120", "rocm", "x86"}
 
 
 def test_exact_target_packets_cover_local_rows_and_leave_siblings_blocking(rows):

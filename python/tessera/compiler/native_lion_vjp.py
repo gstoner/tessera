@@ -90,7 +90,11 @@ class NativeLionVJPPackage:
         """Serialize the physical package while deliberately omitting Graph IR."""
         self.validate()
         execution_mode = {"x86": "cpu_avx512", "rocm": "hip_runtime", "nvidia_sm120": "cuda_driver"}[self.target]
-        path = f"{self.target}_lion_bwd_compiled"
+        path = {
+            "x86": "x86_lion_bwd_compiled",
+            "rocm": "rocm_lion_bwd_compiled",
+            "nvidia_sm120": "nvidia_lion_bwd_compiled",
+        }[self.target]
         return {
             "target": self.target,
             "compiler_path": path,

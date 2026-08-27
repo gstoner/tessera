@@ -66,7 +66,14 @@ def test_rocm_flash_backward_binds_paired_inputs_to_verified_lane(monkeypatch):
 
     def fake_execute(_package, **kwargs):
         seen["execute"] = kwargs
-        return tuple(np.zeros_like(value, dtype=np.float32) for value in kwargs["ordered_inputs"])
+        gradients = tuple(
+            np.zeros_like(value, dtype=np.float32)
+            for value in kwargs["ordered_inputs"]
+        )
+        # This binding-only test does not execute hardware.  The second return
+        # value still exercises the certificate-aware ABI without fabricating
+        # exact-device evidence.
+        return gradients, None
 
     monkeypatch.setattr(native_attention_vjp, "build_native_attention_vjp_package", fake_build)
     monkeypatch.setattr(native_attention_vjp, "execute_native_attention_vjp_package", fake_execute)
@@ -82,6 +89,7 @@ def test_rocm_flash_backward_binds_paired_inputs_to_verified_lane(monkeypatch):
     assert seen["execute"]["out_cotangent"] is dout
     assert _flash.last_backward_execution["evidence_target"] == "rocm_gfx1151"
     assert _flash.last_backward_execution["implementation"] == "family_plugin"
+    assert _flash.last_backward_execution["physical_attestation"] is None
     assert _flash.last_backward_execution["schedule_consumer"] == (
         "schedule.attention_backward"
     )

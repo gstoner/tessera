@@ -214,7 +214,7 @@ def _matmul_activation_derivative(value, activation):
 
 
 @_vjp("gemm")
-def vjp_gemm(dout, A, B, *, bias=None, residual=None,
+def vjp_gemm(dout, A, B, bias=None, residual=None, *,
              activation="none", **_):
     """C = A @ B  →  dA = dout @ B.T,  dB = A.T @ dout.
 
@@ -230,11 +230,19 @@ def vjp_gemm(dout, A, B, *, bias=None, residual=None,
     dB = np.matmul(np.swapaxes(A, -1, -2), local_dout)
     dA = _sum_to_shape(dA, A.shape)
     dB = _sum_to_shape(dB, B.shape)
-    return (dA, dB)
+    grads: list[np.ndarray | None] = [dA, dB]
+    if bias is not None or residual is not None:
+        grads.append(
+            None if bias is None
+            else _sum_to_shape(local_dout, np.asarray(bias).shape)
+        )
+    if residual is not None:
+        grads.append(_sum_to_shape(np.asarray(dout), np.asarray(residual).shape))
+    return tuple(grads)
 
 
 @_vjp("matmul")
-def vjp_matmul(dout, A, B, *, bias=None, residual=None,
+def vjp_matmul(dout, A, B, bias=None, residual=None, *,
                activation="none", **_):
     return vjp_gemm(
         dout, A, B, bias=bias, residual=residual, activation=activation
@@ -5066,7 +5074,7 @@ def vjp_stft(
     """Exact transpose of framing, windowing, and the selected FFT basis."""
     x_arr = np.asarray(x, dtype=np.float64)
     win = np.ones(int(n_fft or x_arr.shape[axis])) if window is None else np.asarray(window, dtype=np.float64)
-    fft_n = int(n_fft or win.shape[0])
+    fft_n = int(n_fft or win.shape[-1])
     hop_n = int(hop if hop is not None else hop_length if hop_length is not None else fft_n // 4)
     active_norm = normalization or norm
     axis_idx = axis if axis >= 0 else x_arr.ndim + axis
@@ -5081,15 +5089,25 @@ def vjp_stft(
             moved_x,
             [(0, 0)] * (moved_x.ndim - 1) + [(0, fft_n - moved_x.shape[-1])],
         )
-    padded_window = np.zeros(fft_n, dtype=np.float64)
-    window_offset = (fft_n - win.shape[0]) // 2
-    padded_window[window_offset : window_offset + win.shape[0]] = win
+    batch_shape = moved_x.shape[:-1]
+    if win.ndim - 1 > len(batch_shape):
+        raise ValueError("STFT VJP window batch rank exceeds signal batch rank")
+    aligned_shape = (1,) * (len(batch_shape) - win.ndim + 1) + win.shape
+    try:
+        batch_window = np.broadcast_to(
+            win.reshape(aligned_shape), batch_shape + (win.shape[-1],)
+        )
+    except ValueError as exc:
+        raise ValueError("STFT VJP window batch dimensions are not broadcastable") from exc
+    padded_window = np.zeros(batch_shape + (fft_n,), dtype=np.float64)
+    window_offset = (fft_n - win.shape[-1]) // 2
+    padded_window[..., window_offset : window_offset + win.shape[-1]] = batch_window
 
     frame_axis = axis_idx
     freq_axis = axis_idx + 1
     moved_do = np.moveaxis(np.asarray(dout), (frame_axis, freq_axis), (-2, -1))
     grad_moved = np.zeros_like(moved_x)
-    dwindow = np.zeros(fft_n, dtype=np.float64)
+    dwindow = np.zeros_like(padded_window)
     for frame_index in range(moved_do.shape[-2]):
         spectral_grad = moved_do[..., frame_index, :]
         if onesided:
@@ -5109,10 +5127,7 @@ def vjp_stft(
         start = frame_index * hop_n
         segment = moved_x[..., start : start + fft_n]
         grad_moved[..., start : start + fft_n] += frame_grad * padded_window
-        dwindow += np.sum(
-            frame_grad * segment,
-            axis=tuple(range(frame_grad.ndim - 1)),
-        )
+        dwindow += frame_grad * segment
     if center:
         width = fft_n // 2
         centered_length = original_length + 2 * width
@@ -5131,7 +5146,12 @@ def vjp_stft(
             grad_moved = grad_moved[..., width : width + original_length]
     grad_moved = grad_moved[..., :original_length]
     dx = np.moveaxis(grad_moved, -1, axis_idx)
-    dw = dwindow[window_offset : window_offset + win.shape[0]]
+    dw = dwindow[..., window_offset : window_offset + win.shape[-1]]
+    padded_shape = (1,) * (dw.ndim - win.ndim) + win.shape
+    for dim, extent in enumerate(padded_shape[:-1]):
+        if extent == 1 and dw.shape[dim] != 1:
+            dw = dw.sum(axis=dim, keepdims=True)
+    dw = dw.reshape(win.shape)
     return (dx, None if window is None else dw)
 
 
@@ -5160,12 +5180,22 @@ def vjp_istft(
     frame_axis = axis_idx - 1
     moved_X = np.moveaxis(X_arr, (frame_axis, axis_idx), (-2, -1))
     win = np.ones(int(n_fft or 2 * (moved_X.shape[-1] - 1))) if window is None else np.asarray(window, dtype=np.float64)
-    fft_n = int(n_fft or win.shape[0])
+    fft_n = int(n_fft or win.shape[-1])
     hop_n = int(hop if hop is not None else hop_length if hop_length is not None else fft_n // 4)
     active_norm = normalization or norm
-    padded_window = np.zeros(fft_n, dtype=np.float64)
-    window_offset = (fft_n - win.shape[0]) // 2
-    padded_window[window_offset : window_offset + win.shape[0]] = win
+    batch_shape = moved_X.shape[:-2]
+    if win.ndim - 1 > len(batch_shape):
+        raise ValueError("ISTFT VJP window batch rank exceeds spectrum batch rank")
+    aligned_shape = (1,) * (len(batch_shape) - win.ndim + 1) + win.shape
+    try:
+        batch_window = np.broadcast_to(
+            win.reshape(aligned_shape), batch_shape + (win.shape[-1],)
+        )
+    except ValueError as exc:
+        raise ValueError("ISTFT VJP window batch dimensions are not broadcastable") from exc
+    padded_window = np.zeros(batch_shape + (fft_n,), dtype=np.float64)
+    window_offset = (fft_n - win.shape[-1]) // 2
+    padded_window[..., window_offset : window_offset + win.shape[-1]] = batch_window
     raw_length = (moved_X.shape[-2] - 1) * hop_n + fft_n
     raw = np.zeros(moved_X.shape[:-2] + (raw_length,), dtype=np.float64)
     weight = np.zeros_like(raw)
@@ -5191,7 +5221,7 @@ def vjp_istft(
     draw = untrimmed / denom
     dweight = np.where(weight > 1e-12, -untrimmed * raw / (denom * denom), 0.0)
     dX = np.zeros_like(moved_X, dtype=np.complex128)
-    dwindow = np.zeros(fft_n, dtype=np.float64)
+    dwindow = np.zeros_like(padded_window)
     for frame_index, frame in enumerate(frame_values):
         start = frame_index * hop_n
         local_draw = draw[..., start : start + fft_n]
@@ -5211,12 +5241,14 @@ def vjp_istft(
                 norm=active_norm,
             )
         dX[..., frame_index, :] = spectrum_grad
-        dwindow += np.sum(
-            local_draw * frame + 2.0 * local_dweight * padded_window,
-            axis=tuple(range(local_draw.ndim - 1)),
-        )
+        dwindow += local_draw * frame + 2.0 * local_dweight * padded_window
     restored_dX = np.moveaxis(dX, (-2, -1), (frame_axis, axis_idx))
-    dw = dwindow[window_offset : window_offset + win.shape[0]]
+    dw = dwindow[..., window_offset : window_offset + win.shape[-1]]
+    padded_shape = (1,) * (dw.ndim - win.ndim) + win.shape
+    for dim, extent in enumerate(padded_shape[:-1]):
+        if extent == 1 and dw.shape[dim] != 1:
+            dw = dw.sum(axis=dim, keepdims=True)
+    dw = dw.reshape(win.shape)
     return (restored_dX, None if window is None else dw)
 
 
@@ -5382,14 +5414,23 @@ def vjp_cholesky(dout, A, **_):
 
 
 @_vjp("qr")
-def vjp_qr(dout, A, **_):
+def vjp_qr(dout, A, *, _output_index=None, **_):
     """A = Q · R. Reference handles square-A with full-rank R."""
     A_arr = np.asarray(A, dtype=np.float64)
     Q, R = np.linalg.qr(A_arr)
     check_factor_rank(np.diag(R), op="qr", factor="R")
     if isinstance(dout, tuple) and len(dout) == 2:
         dQ, dR = (np.asarray(t, dtype=np.float64) for t in dout)
+    elif _output_index == 1:
+        dQ = np.zeros_like(Q)
+        dR = np.asarray(dout, dtype=np.float64)
+    elif _output_index == 0:
+        dQ = np.asarray(dout, dtype=np.float64)
+        dR = np.zeros_like(R)
     else:
+        # Backward-compatible direct-rule convention: a lone cotangent means
+        # Q. Tape calls always carry `_output_index`, including square QR where
+        # Q and R have indistinguishable shapes.
         dQ = np.asarray(dout, dtype=np.float64)
         dR = np.zeros_like(R)
     M = R @ dR.T - dQ.T @ Q

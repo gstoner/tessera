@@ -163,3 +163,54 @@ def test_keyword_spelled_operand_is_recorded_as_operand():
     t.backward(loss)
     _np.testing.assert_array_equal(t.cotangent[id(y)], x)
     _np.testing.assert_array_equal(t.cotangent[id(x)], y)
+
+
+def test_fused_gemm_bias_and_residual_are_real_tape_operands():
+    A = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    B = np.array([[0.5, -1.0], [2.0, 0.25]], dtype=np.float64)
+    bias = np.array([0.2, -0.4], dtype=np.float64)
+    residual = np.arange(4, dtype=np.float64).reshape(2, 2)
+
+    dbias = ts.autodiff.grad(
+        lambda b: ops.reduce(ops.gemm(A, B, bias=b), op="sum")
+    )(bias)
+    dresidual = ts.autodiff.grad(
+        lambda r: ops.reduce(ops.gemm(A, B, residual=r), op="sum")
+    )(residual)
+    np.testing.assert_array_equal(dbias, np.array([2.0, 2.0]))
+    np.testing.assert_array_equal(dresidual, np.ones_like(residual))
+
+
+def test_fused_gemm_bias_and_residual_jvps_are_not_dropped():
+    A = np.eye(2, dtype=np.float64)
+    B = np.array([[2.0, -1.0], [0.5, 3.0]], dtype=np.float64)
+    bias = np.array([0.1, -0.2], dtype=np.float64)
+    residual = np.zeros((2, 2), dtype=np.float64)
+
+    _, dbias = ts.autodiff.jvp(
+        lambda b: ops.gemm(A, B, bias=b),
+        (bias,), (np.ones_like(bias),),
+    )
+    _, dresidual = ts.autodiff.jvp(
+        lambda r: ops.gemm(A, B, residual=r),
+        (residual,), (np.ones_like(residual),),
+    )
+    np.testing.assert_array_equal(dbias, np.ones((2, 2)))
+    np.testing.assert_array_equal(dresidual, np.ones((2, 2)))
+
+
+def test_qr_r_component_tape_gradient_uses_r_cotangent_route():
+    A = np.array(
+        [[2.0, -0.5, 0.3], [0.4, 1.7, -0.2], [0.1, 0.6, 1.4]],
+        dtype=np.float64,
+    )
+
+    def squared_r_norm(matrix):
+        _, R = ops.qr(matrix)
+        return ops.reduce(ops.mul(R, R), op="sum")
+
+    # ||R||_F^2 == ||A||_F^2 for QR, hence the exact gradient is 2A.
+    np.testing.assert_allclose(
+        ts.autodiff.grad(squared_r_norm)(A), 2.0 * A,
+        rtol=1.0e-10, atol=1.0e-10,
+    )

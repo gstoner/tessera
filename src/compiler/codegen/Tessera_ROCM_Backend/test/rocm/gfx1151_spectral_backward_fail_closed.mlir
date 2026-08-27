@@ -10,6 +10,7 @@ module {
       logical_length = 8 : i64, normalization = "backward",
       spectrum_layout = "full_complex", center = false, onesided = true,
       pad_mode = "constant",
+      window_broadcast = "trailing_batch_broadcast_v1",
       input_count = 3 : i64, output_count = 2 : i64,
       input_signature = "tensor<8xcomplex<f32>>,tensor<8xcomplex<f32>>,tensor<8xcomplex<f32>>",
       output_signature = "tensor<8xcomplex<f32>>,tensor<8xcomplex<f32>>",
@@ -20,4 +21,4 @@ module {
   }
 }
 
-// CHECK: error: compound spectral adjoint kind has no gfx1151 native package
+// CHECK: error: native ROCm STFT/ISTFT adjoint requires the bounded centered/uncentered onesided contiguous policy and explicit fp32 accumulation

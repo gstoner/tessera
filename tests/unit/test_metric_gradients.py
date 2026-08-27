@@ -143,6 +143,12 @@ def test_sphere_retraction_at_zero_is_the_identity() -> None:
     np.testing.assert_allclose(Sphere().retract(x, np.zeros(2)), x)
 
 
+@pytest.mark.parametrize("bad", [np.zeros(3), np.array([2.0, 0.0, 0.0])])
+def test_sphere_rejects_points_outside_its_domain(bad) -> None:
+    with pytest.raises(ValueError, match="E_METRIC_CONTRACT.*\\|\\|x\\|\\|=1"):
+        Sphere().project_tangent(bad, np.ones_like(bad))
+
+
 # ── the orthogonal group: Q^T dQ is antisymmetric (§13.2) ───────────────────
 def _orthogonal(n: int = 3) -> np.ndarray:
     Q, _ = np.linalg.qr(np.random.default_rng(0).standard_normal((n, n)))
@@ -177,6 +183,14 @@ def test_orthogonal_retraction_returns_to_the_group() -> None:
 def test_orthogonal_retraction_at_zero_is_the_identity() -> None:
     Q = _orthogonal()
     np.testing.assert_allclose(Orthogonal().retract(Q, np.zeros((3, 3))), Q, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "bad", [np.ones((2, 3)), np.array([[1.0, 1.0], [0.0, 1.0]])]
+)
+def test_orthogonal_rejects_points_outside_its_domain(bad) -> None:
+    with pytest.raises(ValueError, match="E_METRIC_CONTRACT"):
+        Orthogonal().project_tangent(bad, np.ones_like(bad))
 
 
 # ── the sphere gradient of x^T A x /2, worked in the notes (§13.1.2) ────────

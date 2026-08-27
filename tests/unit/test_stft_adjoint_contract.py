@@ -1,21 +1,23 @@
 """AD-TSOL-STFT-BWD-1 (integrated-plan queue order 7) — the STFT/ISTFT adjoint
-contract, established before the native kernels are written.
+contract and the mathematical oracle for the bounded native kernels.
 
 The row asks for native STFT/ISTFT backward packages on AVX-512 and gfx1151.
-Measured state 2026-08-25:
+Initial measured state on 2026-08-25:
 
   x86     forward `tessera_x86_stft_f32` / `tessera_x86_istft_f32` execute
           natively, and there is even a native ISTFT **JVP**
-          (`tessera_x86_istft_jvp_f32`) — but no backward symbol.
+          (`tessera_x86_istft_jvp_f32`) — but no backward symbol at that point.
   gfx1151 no STFT/ISTFT at all. `tile.spectral_backward_kernel` accepts
           `tessera.spectral_conv` and `tessera.spectral_filter` and refuses
           `tessera.stft` with "compound spectral adjoint kind has no gfx1151
           native package" (`gfx1151_spectral_backward_fail_closed.mlir`).
           Correct today, and a bigger lift than the x86 half.
 
-So the asymmetry is forward-yes / tangent-yes / adjoint-no. Both operators are
-LINEAR, so the VJP is the adjoint — and that makes the contract checkable
-exactly rather than approximately, which is what this file does.
+The bounded AVX-512 backward symbols landed on 2026-08-26 for contiguous,
+uncentered, onesided f32/complex64 with explicit hop and ``n_fft == window``;
+the broader x86 envelopes and independent gfx1151 package remain open. Both
+operators are LINEAR, so the VJP is the adjoint — and that makes the contract
+checkable exactly rather than approximately, which is what this file does.
 
 ── The adjoint ──
 

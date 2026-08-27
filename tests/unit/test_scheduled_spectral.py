@@ -42,10 +42,11 @@ def test_compound_contract_binds_physical_and_child_identity(
     metadata = artifact.to_metadata()
     validate_scheduled_spectral_metadata(metadata, input_shapes=shapes)
 
-    assert metadata["schema"] == "tessera.scheduled_spectral.v5"
+    assert metadata["schema"] == "tessera.scheduled_spectral.v7"
     assert metadata["dct_type"] == (2 if op_name == "tessera.dct" else 0)
     assert metadata["shape_policy"] == "exact_runtime_specialization_v1"
     assert metadata["storage"] == "f32"
+    assert metadata["numeric_policy"] == {"storage": "fp32", "accum": "fp32"}
     assert metadata["abi_storage"] == "f32"
     assert metadata["storage_conversion"] == "native_f32"
     assert metadata["architecture"] == "gfx1151"
@@ -77,6 +78,85 @@ def test_compound_contract_rejects_tampering():
 
 @_needs_opt
 @pytest.mark.parametrize("target", ["x86", "rocm"])
+def test_centered_and_cropped_policy_is_shape_explicit_and_digest_bound(target):
+    centered = lower_scheduled_spectral(
+        target=target, op_name="tessera.stft",
+        input_shapes=((2, 46), (18,)), hop=7, center=True,
+        pad_mode="reflect",
+    ).to_metadata()
+    assert centered["output_shape"] == [2, 7, 10]
+    assert centered["padding"] == [9, 9]
+    assert centered["center"] is True
+    assert centered["pad_mode"] == "reflect"
+    assert centered["native_entry"].endswith("broadcast_layout_storage_amd") == (
+        target == "rocm"
+    )
+
+    cropped = lower_scheduled_spectral(
+        target=target, op_name="tessera.istft",
+        input_shapes=((2, 7, 10), (18,)), hop=7, center=True,
+        output_length=40,
+    ).to_metadata()
+    assert cropped["output_shape"] == [2, 40]
+    assert cropped["crop"] == [9, 11]
+    assert cropped["output_length"] == 40
+
+    for field, value in (("center", False), ("pad_mode", "constant")):
+        tampered = copy.deepcopy(centered)
+        tampered[field] = value
+        with pytest.raises(ValueError, match="contract mismatch"):
+            validate_scheduled_spectral_metadata(
+                tampered, input_shapes=((2, 46), (18,))
+            )
+    tampered = copy.deepcopy(cropped)
+    tampered["output_length"] = 39
+    with pytest.raises(ValueError):
+        validate_scheduled_spectral_metadata(
+            tampered, input_shapes=((2, 7, 10), (18,))
+        )
+
+
+@_needs_opt
+def test_order8_policy_broadens_lengths_but_keeps_invalid_cases_closed():
+    broader = lower_scheduled_spectral(
+        target="rocm", op_name="tessera.stft",
+        input_shapes=((64,), (15,)), hop=5, center=True, n_fft=20,
+    ).to_metadata()
+    assert broader["transform_length"] == 20
+    assert broader["window_length"] == 15
+    assert broader["output_shape"] == [13, 11]
+    with pytest.raises(ValueError, match="signal length"):
+        lower_scheduled_spectral(
+            target="x86", op_name="tessera.stft",
+            input_shapes=((8,), (8,)), hop=4, n_fft=16, center=True,
+            pad_mode="reflect",
+        )
+    with pytest.raises(ValueError, match="n_fft >= window"):
+        lower_scheduled_spectral(
+            target="x86", op_name="tessera.stft",
+            input_shapes=((32,), (18,)), hop=4, n_fft=16,
+        )
+    with pytest.raises(ValueError, match="crop within"):
+        lower_scheduled_spectral(
+            target="rocm", op_name="tessera.istft",
+            input_shapes=((7, 10), (18,)), hop=7, center=True,
+            output_length=43,
+        )
+    arbitrary_axis = lower_scheduled_spectral(
+        target="x86", op_name="tessera.stft",
+        input_shapes=((46, 2), (18,)), axis=0, hop=7, center=True,
+    ).to_metadata()
+    assert arbitrary_axis["output_shape"] == [7, 10, 2]
+    tampered = copy.deepcopy(arbitrary_axis)
+    tampered["axis"] = 1
+    with pytest.raises(ValueError):
+        validate_scheduled_spectral_metadata(
+            tampered, input_shapes=((46, 2), (18,))
+        )
+
+
+@_needs_opt
+@pytest.mark.parametrize("target", ["x86", "rocm"])
 def test_even_real_composites_bind_n2_children_and_fusion_topology(target):
     convolution = lower_scheduled_spectral(
         target=target,
@@ -102,13 +182,13 @@ def test_even_real_composites_bind_n2_children_and_fusion_topology(target):
         hop=8,
     ).to_metadata()
     assert stft["fusion_topology"] == (
-        "frame_window_packed_rfft_single_artifact_v1"
+        "frame_window_packed_rfft_single_artifact_v2"
     )
     assert stft["child_ffts"][0]["physical_length"] == 16
 
 
 @_needs_opt
-def test_odd_window_fallback_is_explicit_and_hashed():
+def test_odd_transform_uses_versioned_real_transform_and_is_hashed():
     artifact = lower_scheduled_spectral(
         target="rocm",
         op_name="tessera.stft",
@@ -116,7 +196,7 @@ def test_odd_window_fallback_is_explicit_and_hashed():
         hop=6,
     ).to_metadata()
     assert artifact["fusion_topology"] == (
-        "frame_window_full_complex_odd_fallback_v1"
+        "frame_window_packed_rfft_single_artifact_v2"
     )
     assert artifact["child_ffts"][0]["physical_length"] == 17
     tampered = copy.deepcopy(artifact)
@@ -131,7 +211,7 @@ def test_odd_window_fallback_is_explicit_and_hashed():
 def test_compound_contract_fails_closed_without_architecture_evidence(target):
     profile = spectral_architecture_profile(target)
     assert profile.execution_status == "fail_closed"
-    assert profile.native_package_abi == "tessera.rocm.spectral_composite.v6"
+    assert profile.native_package_abi == "tessera.rocm.spectral_composite.v7"
     assert profile.package_status == "build_only"
     with pytest.raises(ValueError, match="fails closed"):
         lower_scheduled_spectral(
@@ -332,6 +412,10 @@ def test_reduced_storage_artifact_exposes_truthful_f32_abi_boundary():
     assert artifact["storage_conversion"] == (
         "native_package_cast_f32_accumulate_cast_output_v1"
     )
+    assert artifact["numeric_policy"] == {"storage": "fp16", "accum": "fp32"}
+    assert 'numeric_policy = {accum = "fp32", storage = "fp16"}' in artifact[
+        "tile_ir"
+    ]
 
 
 @_needs_opt

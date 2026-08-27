@@ -34,6 +34,11 @@ def _art(rt, op_name, operands, kwargs):
         shape_bounds=kwargs.get("shape_bounds"),
         storage=kwargs.get("storage", "f32"),
         normalization=kwargs.get("normalization", "backward"),
+        center=kwargs.get("center", False),
+        pad_mode=kwargs.get("pad_mode", "constant"),
+        output_length=kwargs.get("length"),
+        n_fft=kwargs.get("n_fft"),
+        onesided=kwargs.get("onesided", True),
     ).to_metadata()
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_spectral_compiled",
@@ -48,6 +53,33 @@ def _stft_ref(x, win, hop):
     return np.stack(
         [np.fft.rfft(x[..., s:s + wl] * win, axis=-1)
          for s in range(0, max(1, x.shape[-1] - wl + 1), hop)], axis=-2)
+
+
+def _centered_stft_ref(x, win, hop, pad_mode):
+    pad = win.size // 2
+    padded = np.pad(
+        np.asarray(x, np.float32),
+        ((0, 0),) * (np.ndim(x) - 1) + ((pad, pad),),
+        mode=pad_mode,
+    )
+    return _stft_ref(padded, np.asarray(win, np.float32), hop)
+
+
+def _istft_ref(spectrum, win, hop, *, center, length):
+    win = np.asarray(win, np.float32)
+    frames = np.fft.irfft(np.asarray(spectrum), n=win.size, axis=-1).astype(np.float32)
+    raw_length = (frames.shape[-2] - 1) * hop + win.size
+    numerator = np.zeros(frames.shape[:-2] + (raw_length,), np.float32)
+    denominator = np.zeros(raw_length, np.float32)
+    for frame in range(frames.shape[-2]):
+        start = frame * hop
+        numerator[..., start:start + win.size] += frames[..., frame, :] * win
+        denominator[start:start + win.size] += win * win
+    output = np.divide(
+        numerator, denominator, out=np.zeros_like(numerator), where=denominator > 1e-12
+    )
+    trim = win.size // 2 if center else 0
+    return output[..., trim:trim + length]
 
 
 _TOL = dict(atol=1e-2, rtol=1e-2)
@@ -160,7 +192,7 @@ def test_composite_workspace_plan_is_reused_by_artifact_digest():
     contract = artifact.metadata["scheduled_spectral"]
     lib = candidates._amd_composite_lib()
     assert lib is not None
-    assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v6"
+    assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v7"
     assert lib.ts_spectral_composite_arch_amd() == b"gfx1151"
 
     first = candidates._rocm_composite_plan(contract, lib)
@@ -397,4 +429,135 @@ def test_combined_dynamic_axis_reduced_storage_ortho_policy(storage):
     np.testing.assert_allclose(
         np.asarray(result["output"]).astype(np.float32), reference,
         atol=0.15 if storage == "bf16" else 5e-2, rtol=5e-2,
+    )
+
+
+@pytest.mark.parametrize("pad_mode", ["constant", "reflect"])
+@pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
+def test_centered_ragged_stft_and_cropped_istft_native_policy(storage, pad_mode):
+    rt = _rocm_or_skip()
+    dtype = np.float32 if storage == "f32" else np.float16
+    if storage == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(802)
+    signal = rng.normal(size=(2, 46)).astype(dtype)
+    window = (np.hanning(18) + 0.25).astype(dtype)
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {
+            "hop": 7, "center": True, "pad_mode": pad_mode, "storage": storage,
+        }),
+        (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    tolerance = {"f32": 1e-2, "f16": 5e-2, "bf16": 2.5e-1}[storage]
+    np.testing.assert_allclose(
+        stft["output"], _centered_stft_ref(signal, window, 7, pad_mode),
+        atol=tolerance, rtol=tolerance,
+    )
+    spectrum = np.asarray(stft["output"], np.complex64)
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {
+            "hop": 7, "center": True, "length": 40, "storage": storage,
+        }),
+        (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    np.testing.assert_allclose(
+        np.asarray(istft["output"], np.float32),
+        _istft_ref(spectrum, window, 7, center=True, length=40),
+        atol=tolerance, rtol=tolerance,
+    )
+
+
+def test_centered_policy_executes_noncontiguous_runtime_storage():
+    rt = _rocm_or_skip()
+    signal = np.arange(92, dtype=np.float32).reshape(46, 2).T
+    assert not signal.flags.c_contiguous
+    window = np.ones(18, np.float32)
+    artifact = _art(rt, "tessera.stft", (signal, window), {
+        "hop": 7, "center": True, "pad_mode": "constant",
+    })
+    result = rt.launch(artifact, (signal, window))
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_allclose(
+        result["output"], _centered_stft_ref(signal, window, 7, "constant"),
+        **_TOL,
+    )
+
+
+def test_centered_cropped_arbitrary_axis_native_policy():
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(804)
+    signal = rng.normal(size=(2, 46, 3)).astype(np.float32)
+    window = (np.hanning(18) + 0.25).astype(np.float32)
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {
+            "axis": 1, "hop": 7, "center": True, "pad_mode": "reflect",
+        }), (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    moved_signal = np.moveaxis(signal, 1, -1)
+    moved_ref = _centered_stft_ref(moved_signal, window, 7, "reflect")
+    reference = np.moveaxis(moved_ref, (-2, -1), (1, 2))
+    np.testing.assert_allclose(stft["output"], reference, **_TOL)
+    spectrum = np.asarray(stft["output"], np.complex64)
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {
+            "axis": 2, "hop": 7, "center": True, "length": 40,
+        }), (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    moved_spectrum = np.moveaxis(spectrum, (1, 2), (-2, -1))
+    moved_output = _istft_ref(
+        moved_spectrum, window, 7, center=True, length=40
+    )
+    np.testing.assert_allclose(
+        istft["output"], np.moveaxis(moved_output, -1, 1), **_TOL
+    )
+
+
+@pytest.mark.parametrize("onesided", [True, False])
+def test_gfx1151_true_stride_broader_full_spectrum_and_broadcast(onesided):
+    from tests.unit.test_x86_spectral_compiled import (
+        _general_istft_ref, _general_stft_ref,
+    )
+
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(809 + int(onesided))
+    signal = rng.standard_normal((2, 48, 3)).astype(np.float32)[:, ::2, :]
+    window = np.stack((np.hanning(8), np.hamming(8)), axis=0).astype(
+        np.float32
+    )[:, None, :]
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {
+            "axis": 1, "hop": 4, "n_fft": 10, "onesided": onesided,
+        }), (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    actual = np.asarray(stft["output"])
+    expected = np.empty_like(actual)
+    for batch in range(2):
+        for channel in range(3):
+            expected[batch, :, :, channel] = _general_stft_ref(
+                signal[batch, :, channel], window[batch, 0], 4,
+                n_fft=10, center=False, onesided=onesided,
+            )
+    np.testing.assert_allclose(actual, expected, atol=8e-4, rtol=8e-4)
+
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (actual, window), {
+            "axis": 2, "hop": 4, "n_fft": 10, "onesided": onesided,
+            "length": 22,
+        }), (actual, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    expected_inverse = np.empty((2, 22, 3), np.float32)
+    for batch in range(2):
+        for channel in range(3):
+            expected_inverse[batch, :, channel] = _general_istft_ref(
+                actual[batch, :, :, channel], window[batch, 0], 4,
+                n_fft=10, center=False, length=22, onesided=onesided,
+            )
+    np.testing.assert_allclose(
+        istft["output"], expected_inverse, atol=1e-3, rtol=1e-3,
     )

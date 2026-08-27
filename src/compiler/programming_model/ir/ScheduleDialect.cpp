@@ -285,7 +285,8 @@ LogicalResult SpectralProgramOp::verify() {
   if (getOutputShape().empty() ||
       llvm::any_of(getOutputShape(), [](int64_t dim) { return dim <= 0; }) ||
       getAxisAttr().getInt() < 0 || getPadding().size() != 2 ||
-      getCrop().size() != 2 || getWindowLengthAttr().getInt() < 0 ||
+      getCrop().size() != 2 || getTransformLengthAttr().getInt() < 0 ||
+      getWindowLengthAttr().getInt() < 0 ||
       getHopAttr().getInt() < 0 || getFramesAttr().getInt() < 0 ||
       getWorkspaceBytesAttr().getInt() <= 0 || getWorkgroupSize() <= 0)
     return emitOpError("requires complete positive shape, launch, and workspace policy");
@@ -301,14 +302,21 @@ LogicalResult SpectralProgramOp::verify() {
        getStorageConversion() !=
            "native_package_cast_f32_accumulate_cast_output_v1") ||
       (getAxisPacking() != "none_contiguous" &&
-       getAxisPacking() != "native_package_host_pack_v1") ||
+       getAxisPacking() != "native_package_host_pack_v1" &&
+       getAxisPacking() != "native_runtime_stride_descriptor_v1") ||
       getWorkspacePolicy() != "persistent_artifact_workspace" ||
       getFusionTopology().empty() ||
       getMutationLineage() != "inputs_immutable_output_fresh_v1" ||
       getNativeEntry().empty() || getInputShapes().empty() ||
+      (getWindowBroadcast() != "not_applicable" &&
+       getWindowBroadcast() != "trailing_batch_broadcast_v1") ||
       getInputSignature().empty() || getShapeBounds().empty() ||
       getTemplateDigest().size() != 64)
     return emitOpError("requires the canonical spectral numeric/workspace/lineage policy");
+  if ((getKind() == "tessera.stft" || getKind() == "tessera.istft") &&
+      (getTransformLengthAttr().getInt() < getWindowLengthAttr().getInt() ||
+       getTransformLengthAttr().getInt() <= 0))
+    return emitOpError("STFT/ISTFT requires transform_length >= window_length > 0");
   auto dctType = (*this)->getAttrOfType<IntegerAttr>("dct_type");
   const bool directDct = getKind() == "tessera.dct" && dctType &&
                          dctType.getInt() != 2;
@@ -340,6 +348,12 @@ LogicalResult SpectralBackwardOp::verify() {
     return emitOpError("requires a supported normalization");
   if (getPadMode() != "constant" && getPadMode() != "reflect")
     return emitOpError("requires pad_mode in {constant, reflect}");
+  if (getWindowBroadcast() != "not_applicable" &&
+      getWindowBroadcast() != "trailing_batch_broadcast_v1")
+    return emitOpError("requires a registered window broadcast contract");
+  if ((getKind() == "tessera.stft" || getKind() == "tessera.istft") !=
+      (getWindowBroadcast() == "trailing_batch_broadcast_v1"))
+    return emitOpError("requires window broadcast identity to match spectral kind");
   if (auto length = (*this)->getAttrOfType<IntegerAttr>("output_length");
       length && length.getInt() < 0)
     return emitOpError("requires output_length >= 0");

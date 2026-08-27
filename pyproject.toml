@@ -57,6 +57,12 @@ dev = [
 gpu = [
     "nvidia-ml-py3>=7.352.0"
 ]
+# Rank-local process transport.  The MPI implementation itself remains a host
+# responsibility; CI/developer hosts without a system MPI may use the
+# self-contained ``mpi4py-mpich`` wheel documented by the two-rank packet.
+mpi = [
+    "mpi4py>=3.1.5"
+]
 # Reference vocabularies (Decision #23) — torch / transformers are NOT runtime
 # dependencies; they are only numerical oracles for the test + benchmark suites
 # (e.g. flash-attention-vs-torch parity) and the optional NVIDIA GPU smoke. Install

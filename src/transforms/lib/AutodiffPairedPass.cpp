@@ -43,6 +43,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/ADT/DenseMap.h"
@@ -56,6 +57,7 @@
 #include "Tessera/AdjointInterface.h.inc"
 #include "Tessera/LinearTransposeInterface.h.inc"
 #include "Tessera/Transforms/GraphDataflow.h"
+#include "Tessera/Transforms/Passes.h"
 #include "Tessera/Transforms/LoopBodyYield.h"
 #include "Tessera/Transforms/RegionAdjointInterface.h"
 #include "Tessera/Transforms/SemanticEffects.h"
@@ -1438,6 +1440,33 @@ public:
 
   void runOnOperation() override {
     auto module = getOperation();
+    // A bounded symbol-body control_scan already has a proven lowering to one
+    // scf.for whose body is inlined and whose stacked stream uses exact tensor
+    // slice transposes. Run that normalization as part of paired reverse mode
+    // when a reverse-marked function needs it, so callers do not have to know
+    // a pass-order workaround. Payload, dynamic, and malformed forms remain
+    // unlowered and reach the named fail-closed diagnostic below.
+    bool needsStructuredScan = false;
+    module.walk([&](mlir::func::FuncOp fn) {
+      auto marker = fn->getAttrOfType<mlir::StringAttr>(kAutodiffMarker);
+      if (!marker || marker.getValue() != "reverse" ||
+          fn->hasAttr("tessera.autodiff.role"))
+        return;
+      fn.walk([&](mlir::Operation *op) {
+        needsStructuredScan |=
+            op->getName().getStringRef() == "tessera.control_scan";
+      });
+    });
+    if (needsStructuredScan) {
+      mlir::OpPassManager normalization("builtin.module");
+      normalization.addPass(createLowerControlFlowToSCFPass());
+      if (mlir::failed(runPipeline(normalization, module))) {
+        module.emitError(
+            "AUTODIFF_CONTROL_SCAN_UNSUPPORTED: bounded control_scan "
+            "normalization failed before paired reverse mode");
+        return signalPassFailure();
+      }
+    }
     llvm::SmallVector<mlir::func::FuncOp> targets;
     module.walk([&](mlir::func::FuncOp fn) {
       auto marker = fn->getAttrOfType<mlir::StringAttr>(kAutodiffMarker);
@@ -2090,8 +2119,8 @@ private:
         // bracketed spelling used by this file's UNREGISTERED codes would
         // leave a registered one invisible to the drift gate.
         auto diag = op->emitError(
-            "AUTODIFF_CONTROL_SCAN_UNSUPPORTED: tessera.control_scan has no "
-            "reverse rule yet");
+            "AUTODIFF_CONTROL_SCAN_UNSUPPORTED: unnormalized "
+            "tessera.control_scan is outside the bounded reverse envelope");
         diag.attachNote()
             << "The adjoint of a scan is a scan over reversed t, carrying the "
                "carry cotangent and consuming (carry_t, x_t, ybar_t). It "

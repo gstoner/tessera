@@ -9,6 +9,7 @@ are not part of the compiler-owned Tile contract.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
@@ -350,11 +351,75 @@ def lower_schedule_to_tile_ir(schedule_module: ScheduleIRModule, *, target_kind:
     schedule_result = schedule_module.verify()
     if not schedule_result.ok:
         raise ScheduleIRVerificationError(schedule_result.format())
-    tile_module = TileIRModule(attrs={"tessera.ir.level": "tile", "target": target_kind})
+    collective_attrs = {
+        key: value
+        for key, value in schedule_module.attrs.items()
+        if key.startswith("collective.")
+    }
+    tile_module = TileIRModule(
+        attrs={
+            "tessera.ir.level": "tile",
+            "target": target_kind,
+            **collective_attrs,
+        }
+    )
     for schedule_fn in schedule_module.functions:
         body = _lower_schedule_ops(schedule_fn.body)
+        communicator_digest = collective_attrs.get(
+            "collective.communicator_digest"
+        )
+        if communicator_digest is not None:
+            collective_identity = [
+                {
+                    "ordinal": int(op.attrs.get("ordinal", ordinal)),
+                    "subgroup": list(op.attrs.get("subgroup", ())),
+                    "mesh_axis": str(op.attrs.get("mesh_axis", "default")),
+                }
+                for ordinal, op in enumerate(_walk_schedule_ops(schedule_fn.body))
+                if op.op_name == "schedule.collective"
+            ]
+            binding_payload = {
+                "schema": "tessera.schedule_tile.collective_binding.v1",
+                "backend": str(collective_attrs.get("collective.backend", "portable")),
+                "communicator_digest": str(communicator_digest),
+                "collectives": collective_identity,
+            }
+            binding_digest = hashlib.sha256(
+                json.dumps(
+                    binding_payload, sort_keys=True, separators=(",", ":")
+                ).encode()
+            ).hexdigest()
+            for op in _walk_tile_ops(body):
+                if op.op_name != "tile.artifact":
+                    continue
+                schedule_hash = str(op.attrs.get("hash", ""))
+                op.attrs["schedule_hash"] = schedule_hash
+                op.attrs["collective_binding_digest"] = binding_digest
+                op.attrs["hash"] = hashlib.sha256(
+                    json.dumps(
+                        {
+                            "schema": "tessera.schedule_tile.artifact.v1",
+                            "schedule_hash": schedule_hash,
+                            "collective_binding_digest": binding_digest,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest()
         tile_module.functions.append(TileFunction(schedule_fn.name, body=body, target=target_kind))
     return tile_module
+
+
+def _walk_schedule_ops(ops: Iterable[ScheduleOp]) -> Iterable[ScheduleOp]:
+    for op in ops:
+        yield op
+        yield from _walk_schedule_ops(op.body)
+
+
+def _walk_tile_ops(ops: Iterable[TileOp]) -> Iterable[TileOp]:
+    for op in ops:
+        yield op
+        yield from _walk_tile_ops(op.body)
 
 
 def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:

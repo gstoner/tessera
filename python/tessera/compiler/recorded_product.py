@@ -327,7 +327,10 @@ def verify_region_products(
 def region_digest(products: Sequence[RecordedProduct]) -> str:
     """One content address for a region's whole recorded frame."""
     return _digest(
-        [item.canonical_payload() for item in sorted(products, key=lambda p: p.op)]
+        [
+            item.canonical_payload()
+            for item in sorted(products, key=lambda p: (p.op, p.occurrence_id))
+        ]
     )
 
 

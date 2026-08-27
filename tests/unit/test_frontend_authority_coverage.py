@@ -77,6 +77,29 @@ def test_every_family_declares_its_whole_spine(rows):
         assert row.tile_consumer.startswith("tile."), row
         assert row.targets, f"{row.family} declares no target consumer"
         assert row.ops, f"{row.family} owns no Graph op"
+        assert row.execution_certificate_schema == (
+            "tessera.native_vjp_execution.v1"
+        )
+
+
+def test_family_target_union_does_not_drop_variant_specific_owners(rows):
+    optimizer = next(row for row in rows if row.family == "optimizer_vjp")
+    assert set(optimizer.targets) == {"rocm", "x86"}
+
+
+def test_exact_target_packets_cover_local_rows_and_leave_siblings_blocking(rows):
+    from pathlib import Path
+
+    target_rows = audit.collect_target_rows()
+    declared = {(row.family, target) for row in rows for target in row.targets}
+    assert {(row.family, row.target) for row in target_rows} == declared
+    exact = {row.target for row in target_rows if not row.blocks_exact_coverage}
+    blocking = {row.target for row in target_rows if row.blocks_exact_coverage}
+    assert exact == {"rocm", "x86"}
+    assert blocking == {"apple_gpu", "nvidia_sm120"}
+    for row in target_rows:
+        if not row.blocks_exact_coverage:
+            assert Path(row.evidence_gate).is_file()
 
 
 def test_the_dashboard_reports_what_the_registry_holds(rows):

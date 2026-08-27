@@ -26,10 +26,10 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - forward JVP IR **oracle-verified on CPU**: **12** (fft, ifft, irfft, layer_norm, matmul, mul, reduce, rfft, rmsnorm, sigmoid, softmax, tanh)
 - backward IR **oracle-verified on CPU** (interpreted): **36** (add, amax, amin, broadcast, dct, expand, fft, flatten, gelu, huber_loss, ifft, irfft, layer_norm, mae_loss, matmul, max, mean, min, mse_loss, mul, permute, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, squeeze, sum, tanh, transpose, unsqueeze, view)
 - backward `target_lowered` on any exact target: **32**
-- backward `runtime_bound` (native) on any target: **32**
-- backward `oracle_proven` (native) on any target: **32**
+- backward `runtime_bound` (native) on any target: **34**
+- backward `oracle_proven` (native) on any target: **34**
 - backward `device_verified_jit` on any exact target: **32**
-- backward `device_verified_abi` on any exact target: **22**
+- backward `device_verified_abi` on any exact target: **24**
 
 > **Headline:** the Python reference/oracle is broad, a handful of ops have a native IR adjoint, several more only *look* differentiable in IR but actually call back into Python. The `matmul`/`tanh`/`sigmoid` backward **IR is oracle-verified on CPU** (Phase 3). **Phase 4 A1–A4 have landed native backward proof, alias/composition identity, and per-target residual policy**. The leaders listed below are derived from the exact-target proof columns; no family or architecture is hard-coded into this headline. Remaining families are Phase 4/5 work.
 
@@ -42,6 +42,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - `gated_deltanet` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
 - `gqa_attention` — device_verified_jit: nvidia_sm120,rocm_gfx1151; device_verified_abi: x86_avx512
 - `huber_loss` — device_verified_jit: nvidia_sm120,rocm_gfx1151; device_verified_abi: x86_avx512
+- `istft` — device_verified_abi: x86_avx512
 - `js_divergence` — device_verified_jit: nvidia_sm120
 - `kimi_delta_attention` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
 - `kl_divergence` — device_verified_jit: nvidia_sm120
@@ -66,6 +67,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - `smooth_l1_loss` — device_verified_jit: nvidia_sm120,rocm_gfx1151; device_verified_abi: x86_avx512
 - `spectral_conv` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
 - `spectral_filter` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
+- `stft` — device_verified_abi: x86_avx512
 - `tanh` — device_verified_jit: cpu_x86_64
 
 ## Ledger
@@ -219,7 +221,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `interpolate` | vision | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `inv` | linalg_function | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `irfft` | spectral | yes | native | native | cpu | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; fwd_cpu_ir_oracle=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
-| `istft` | spectral | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
+| `istft` | spectral | yes | native | native | — | — | — | x86_avx512 | x86_avx512 | — | x86_avx512 | x86_avx512=save_inputs | x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on x86_avx512 (Phase 4) |
 | `js_divergence` | loss | yes | none | none | — | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=save_inputs | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+llvm23+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
 | `kimi_delta_attention` | attention | yes | none | none | — | — | rocm_gfx1151 | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | rocm_gfx1151 | x86_avx512 | rocm_gfx1151=save_fp32_state_trajectory; x86_avx512=resident_fp32_state_and_chunk_summaries | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=clang 23 -mavx512f; x86_64 AVX-512] | native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
 | `kl_divergence` | loss | yes | none | none | — | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=save_inputs | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+llvm23+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
@@ -363,7 +365,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `squeeze` | tensor_algebra | yes | native | native | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `stack` | tensor_algebra | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `std` | reduction | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `stft` | spectral | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
+| `stft` | spectral | yes | native | native | — | — | — | x86_avx512 | x86_avx512 | — | x86_avx512 | x86_avx512=save_inputs | x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on x86_avx512 (Phase 4) |
 | `stop_gradient` | layout_transform | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `sub` | elementwise | yes | none | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_tangent=llvm23-core |  |
 | `sum` | stable_reduction | yes | native | none | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint (static extent required for mean) |

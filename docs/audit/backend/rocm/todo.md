@@ -1,11 +1,104 @@
 ---
-last_updated: 2026-08-25
+last_updated: 2026-08-26
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **gfx1151
+true-stride, broader/full-spectrum, broadcast, reverse, and physical streaming
+rows are exact-device proven.** Schedule→Tile binds a native runtime-stride descriptor, independent
+transform/window lengths, and one-sided versus full-complex layout. The
+target-neutral streaming state chains policy, window, tail, counters, physical
+artifact, and parent-state digests. The gfx1151 v7 package owns descriptor
+gather/scatter and device direct-DFT/OLA for true-stride, `n_fft >= window`,
+one-sided/full, and per-batch broadcast forward/inverse. Its physical streaming
+entry consumes prior tail and strided chunks and emits the next state without
+host NumPy composition. Exact Radeon 8060S/gfx1151 packets pass independently
+for both spectrum layouts and x86 evidence was not transferred. The reverse
+carrier now admits arbitrary-axis descriptor layouts, `n_fft >= window`, and
+one-sided/full spectra; the promoted gfx1151 package gathers/scatters those
+layouts, performs direct device reverse arithmetic, and reduces broadcast
+window cotangents to their exact declared shape. The independent Python VJP
+matches both STFT and ISTFT for a strided `(2,24,3)` signal, `(2,1,8)` window,
+`n_fft=10`, and full spectrum, while the STFT signal adjoint also satisfies the
+native forward inner-product identity. Runtime attestation names gfx1151.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8B-2026-08-26` — **Order 8b exact-device
+parity validated on gfx1151.** The centered/cropped n=16/n=18 forward and
+stored-bin adjoint packages now execute arbitrary normalized logical axes on
+C-contiguous tensors. Schedule→Tile carries `outer`/`inner`; generated gfx1151
+loads/stores map `(outer, frame/bin or sample, inner)` without host transpose
+or host-composed fallback. A nontrivial `(outer, inner)=(2,3)` packet matches
+independent NumPy forward and Python VJP oracles for f32/f16/bf16, and f32
+satisfies the native forward/adjoint identity with runtime-origin gfx1151
+attestation. Non-contiguous views still fail closed and are not claimed as
+stride support. Full spectrum, broader lengths, broadcasting, true strides,
+and streaming/chunk state remain open; no x86 evidence was transferred.
+
+Cross-backend sync `TSOL-POLICY-PHYS-1-8A-2026-08-26` — **Order 8a exact-device
+parity validated on gfx1151.** Architecture-owned forward and direct stored-bin
+reverse kernels now implement centered constant/reflect STFT padding and
+centered or explicitly cropped ISTFT output for n=16/n=18 contiguous batched
+final-axis packages. f32/f16/bf16 storage retains the explicit two-byte ABI and
+f32 accumulation. Exact-device results match independent NumPy forward and
+Python VJP oracles, and centered-reflect STFT passes the native
+forward/adjoint identity. Runtime physical attestation remains gfx1151-owned;
+no x86 result was used as an oracle. Full-spectrum, broader transform lengths,
+broadcasting, streaming/chunk state, and expanded stride policy remain open.
+
+Cross-backend sync `AD-TSOL-STFT-GFX1151-2026-08-26` — **Order 7's bounded
+gfx1151 architecture row is exact-device closed.** Native STFT/ISTFT forward
+and direct stored-bin adjoint packages execute contiguous batched final-axis
+n=16 and mixed-radix n=18 with f32/complex64 plus explicit f16/bf16 two-byte
+storage and fp32 accumulation. The reverse kernel is independent of the x86
+packed-C2R path and the ROCm forward FFT; it matches the independent Python
+VJP and the native forward/adjoint pair satisfies the inner-product identity.
+Runtime-origin certificates attest gfx1151 and bind source, Schedule, Tile,
+algorithm, numeric policy, dtype, shape, and image identities. Unsupported
+length/policy/layout/dtype/shape or altered identity fails before launch.
+`NUMPOL-CARRIER-1` also carries the storage/fp32-accumulator dictionary through
+the forward spectral Schedule→Tile artifact. Broader lengths, full spectrum,
+broadcasting, true strides, and streaming remain Order 8; no sibling evidence
+is inferred.
+
+Cross-backend sync `E2E-REAL-6F-EXACT-CERT-2026-08-26` — **all 13 declared
+ROCm native-VJP families exact-device certified on gfx1151.** A single
+target-owned packet executes every family in one process, validates its
+independent numerical oracle, requires a runtime-origin physical attestation,
+and compares observed `(family, rocm)` rows exactly with the live plugin
+registry. Optimizer coverage includes SGD, Momentum, Nesterov, Adam, AdamW,
+Lion, and both full/factored Adafactor topologies; sequence mixer and selective
+SSM close the prior public-plugin gaps. Replacing `runtime.launch` with a test
+double yields `runtime_unattested` and cannot satisfy the packet. This is
+WSL-visible Radeon 8060S/gfx1151 correctness evidence, not bare-metal timing,
+and transfers no SM120, Apple, gfx1200, or gfx1250 claim.
+
+Cross-backend sync `BOUNDED-GATE-RELAXATION-2026-08-26` — **gfx1151
+f16-accumulate WMMA admitted under an explicit measured-cost acknowledgement;
+exact-device parity validated.** `numeric_policy.accum="fp16"` now selects the
+real `v16f16` accumulator ABI and ROCDL f16 WMMA intrinsic only for exact
+gfx1151 when the artifact carries
+`f16_wmma_accuracy_cost_ack_v1`. Missing acknowledgement retains
+`ROCM_WMMA_ACCUM_UNSUPPORTED` and names the measured 5212x–7856x relative-error
+cost; fused bias/activation and the LDS route remain outside the envelope. A
+compiler-generated kernel serialized to HSACO and executed on the WSL-visible
+gfx1151 within four binary16 ULPs of the step-rounded oracle. The shared
+bounded `control_scan` reverse is parity validated at IR level. AVX-512 owns
+its packed-C2R STFT adjoint independently; the gfx1151 row is closed by the
+separate direct-DFT package recorded above. The shared
+certificate carrier applies to ROCm, but the new factored Adafactor certificate
+is x86 evidence; gfx1151 now owns its separately executed row. The bounded MPI slice now consumes all
+five explicit Schedule→Tile collective SSA forms and passes its two-process
+x86 host packet with communicator/subgroup/artifact identity bound. This does
+not supply RCCL or gfx1151 multi-rank evidence; RCCL process ownership remains
+open. The same review
+corrected ROCm composed-layout materialization to retain the slowest
+mixed-radix quotient, matching the shared CuTe algebra instead of wrapping at
+the declared extent; the nonzero A-row/B-column WMMA fixture now passes its
+exact gfx1151 NumPy oracle.
+
 Cross-backend sync `W4-EFFECTS-1-E5-2026-08-25` — **one physical family carrying an admissible effect, end to end; ROCm outcome: **parity VALIDATED, exact-device (gfx1151)**.** The keyed Philox RNG family executes its recorded product on the WSL-visible Radeon 8060S through `rocm_rng_compiled` with `execution_kind=native_gpu` asserted exactly, so the row cannot pass by falling through to a CPU lane. Replay from the product alone is BIT-IDENTICAL on device, a changed counter changes the draw (non-vacuous), and the same product matches the x86 result and the algorithm reference bit-for-bit. Correctness only — no timing is claimed on WSL, and the collective class's native-RCCL evidence remains separately open under the E4 key.
 
 

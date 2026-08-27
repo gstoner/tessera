@@ -15,8 +15,18 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import tessera as ts
 from tessera.autodiff.vjp import vjp_selective_ssm
 from tessera.compiler import execution_matrix as em
+
+
+@ts.jit(
+    target="rocm",
+    autodiff="reverse",
+    wrt=("x", "A", "B", "C", "delta"),
+)
+def _rocm_selective_ssm(x, A, B, C, delta):
+    return ts.ops.selective_ssm(x, A, B, C, delta)
 
 
 def test_execution_matrix_has_rocm_ssm_bwd_row():
@@ -98,3 +108,44 @@ def test_launch_rocm_ssm_bwd_matches_vjp(n, a_1d, gated):
                           (dx, dA, dB, dC, dd), ref):
         np.testing.assert_allclose(np.asarray(g, np.float64), r, rtol=0,
                                    atol=5e-3, err_msg=f"{name} mismatch")
+
+
+def test_public_selective_ssm_records_exact_gfx1151_certificate() -> None:
+    _ssm_or_skip()
+    from tessera.compiler.native_vjp_plugins import (
+        native_vjp_exact_execution_coverage,
+        validate_native_vjp_execution_certificate,
+    )
+
+    rng = np.random.default_rng(20260901)
+    batch, steps, channels, state_size = 1, 5, 3, 7
+    x = rng.normal(size=(batch, steps, channels)).astype(np.float32)
+    A = -np.abs(rng.normal(size=(channels, state_size))).astype(np.float32)
+    B = rng.normal(size=(batch, steps, state_size)).astype(np.float32)
+    C = rng.normal(size=(batch, steps, state_size)).astype(np.float32)
+    delta = rng.uniform(0.01, 0.15, size=x.shape).astype(np.float32)
+    dy = rng.normal(size=x.shape).astype(np.float32)
+    actual = _rocm_selective_ssm.native_backward(
+        x, A, B, C, delta, out_cotangents=dy
+    )
+    expected = vjp_selective_ssm(
+        dy.astype(np.float64),
+        x.astype(np.float64),
+        A.astype(np.float64),
+        B.astype(np.float64),
+        C.astype(np.float64),
+        delta.astype(np.float64),
+    )
+    for value, reference in zip(actual, expected, strict=True):
+        np.testing.assert_allclose(value, reference, rtol=0, atol=5e-3)
+    certificate = _rocm_selective_ssm.last_backward_execution[
+        "execution_certificate"
+    ]
+    validate_native_vjp_execution_certificate(certificate)
+    assert certificate["family"] == "selective_ssm_backward"
+    assert certificate["evidence_scope"] == "exact_device"
+    assert certificate["physical_attestation"]["device_arch"] == "gfx1151"
+    assert (
+        "selective_ssm_backward",
+        "rocm",
+    ) in native_vjp_exact_execution_coverage()

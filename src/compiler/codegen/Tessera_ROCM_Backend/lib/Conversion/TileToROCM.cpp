@@ -2194,11 +2194,22 @@ struct LowerTileToROCMPass
             Value stride = resolve(
                 tessera::tile::ComposedLayoutDynamicLeaf::Kind::BasisStride,
                 mode, leafIndex, plan.basisStrides[leafIndex]);
-            Value digit = arith::RemUIOp::create(builder, loc, remaining, shape);
+            // CuTe layouts are affine beyond their declared shape.  Mirror
+            // layout::logicalToPhysical by retaining the entire quotient in
+            // the slowest basis mode; applying rem/div to every leaf wraps
+            // coordinates at the declared extent (for example column 16 back
+            // to column 0 in a [16]-basis map).
+            const bool isSlowest = leafIndex + 1 == plan.basisShapes.size();
+            Value digit = isSlowest
+                              ? remaining
+                              : arith::RemUIOp::create(builder, loc, remaining,
+                                                      shape);
             basis = arith::AddIOp::create(
                 builder, loc, basis,
                 arith::MulIOp::create(builder, loc, digit, stride));
-            remaining = arith::DivUIOp::create(builder, loc, remaining, shape);
+            if (!isSlowest)
+              remaining =
+                  arith::DivUIOp::create(builder, loc, remaining, shape);
           }
           linear = arith::AddIOp::create(
               builder, loc, linear,
@@ -2501,10 +2512,49 @@ struct LowerTileToROCMPass
           return;
         }
         if (kind.getValue() != "tessera.spectral_filter" &&
-            kind.getValue() != "tessera.spectral_conv") {
+            kind.getValue() != "tessera.spectral_conv" &&
+            kind.getValue() != "tessera.stft" &&
+            kind.getValue() != "tessera.istft") {
           op->emitError("compound spectral adjoint kind has no gfx1151 native package");
           signalPassFailure();
           return;
+        }
+        if (kind.getValue() == "tessera.stft" ||
+            kind.getValue() == "tessera.istft") {
+          auto center = op->getAttrOfType<BoolAttr>("center");
+          auto onesided = op->getAttrOfType<BoolAttr>("onesided");
+          auto padMode = op->getAttrOfType<StringAttr>("pad_mode");
+          auto logicalLength =
+              op->getAttrOfType<IntegerAttr>("logical_length");
+          auto hop = op->getAttrOfType<IntegerAttr>("hop");
+          auto storage = op->getAttrOfType<StringAttr>("storage");
+          auto numericPolicy =
+              op->getAttrOfType<DictionaryAttr>("numeric_policy");
+          auto numericAccum = numericPolicy
+                                  ? numericPolicy.getAs<StringAttr>("accum")
+                                  : StringAttr();
+          auto numericStorage = numericPolicy
+                                    ? numericPolicy.getAs<StringAttr>("storage")
+                                    : StringAttr();
+          StringRef expectedStorage =
+              storage && storage.getValue() == "f16"
+                  ? "fp16"
+                  : storage && storage.getValue() == "bf16" ? "bf16" : "fp32";
+          bool validPadMode = padMode &&
+                              (padMode.getValue() == "constant" ||
+                               padMode.getValue() == "reflect");
+          if (!center || !onesided || !validPadMode ||
+              !logicalLength ||
+              logicalLength.getInt() <= 0 || !hop || hop.getInt() <= 0 ||
+              !storage || !numericAccum || !numericStorage ||
+              numericAccum.getValue() != "fp32" ||
+              numericStorage.getValue() != expectedStorage) {
+            op->emitError(
+                "native ROCm STFT/ISTFT adjoint requires the bounded "
+                "centered/uncentered onesided contiguous policy and explicit fp32 accumulation");
+            signalPassFailure();
+            return;
+          }
         }
         Operation *symbolOwner = op->getParentOp();
         while (symbolOwner &&
@@ -2523,8 +2573,10 @@ struct LowerTileToROCMPass
         state.addAttribute("name", symbol);
         state.addAttribute("artifact_hash", hash);
         state.addAttribute("kind", kind);
-        for (StringRef attr : {"elements", "batch", "cotangent_length",
-                               "input_length", "parameter_length"})
+        for (StringRef attr : {"elements", "batch", "outer", "inner", "cotangent_length",
+                               "raw_length",
+                               "input_length", "parameter_length", "frames",
+                               "bins", "hop", "output_length", "logical_length"})
           state.addAttribute(
               attr, op->getAttr(attr)
                         ? op->getAttr(attr)
@@ -2534,6 +2586,15 @@ struct LowerTileToROCMPass
             op->getAttr("normalization_scale")
                 ? op->getAttr("normalization_scale")
                 : builder.getF32FloatAttr(1.0));
+        state.addAttribute(
+            "storage", op->getAttr("storage")
+                           ? op->getAttr("storage")
+                           : builder.getStringAttr("f32"));
+        state.addAttribute("center", op->getAttr("center"));
+        state.addAttribute("onesided", op->getAttr("onesided"));
+        state.addAttribute("pad_mode", op->getAttr("pad_mode"));
+        if (Attribute policy = op->getAttr("numeric_policy"))
+          state.addAttribute("numeric_policy", policy);
         builder.create(state);
         op->erase();
         continue;

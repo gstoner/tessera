@@ -12,24 +12,66 @@ Rows are derived from the `register_native_vjp_plugin` declarations, so a family
 - `zero_dropout_attention`: 1 → certified by `certify_frontends`
 - **families with no certification path: 0**
 
-| family | ops | migration state | differential policy | certifier | schedule consumer | tile consumer | targets |
-|---|---|---|---|---|---|---|---|
-| `adafactor_vjp` | `adafactor` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `schedule.adafactor_vjp` | `tile.training_kernel` | rocm, x86 |
-| `attention_backward` | `flash_attn`, `gqa_attention`, `mqa_attention` | canonical_composite | zero_dropout_attention | `certify_frontends` | `schedule.attention_backward` | `tile.attention_backward_kernel` | rocm, x86 |
-| `binary_loss_backward` | `binary_cross_entropy_loss`, `loss.binary_cross_entropy` | canonical_composite | pure_only | `certify_frontends` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
-| `class_loss_backward` | `cross_entropy_loss`, `label_smoothed_cross_entropy`, `loss.cross_entropy` | canonical_composite | pure_only | `certify_frontends` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
-| `distribution_loss_backward` | `js_divergence`, `kl_divergence`, `loss.js_divergence`, `loss.kl_divergence` | canonical_composite | pure_only | `certify_frontends` | `schedule.loss_backward` | `tile.loss_backward_kernel` | rocm |
-| `lion_vjp` | `lion` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `schedule.lion_vjp` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
-| `matmul_backward` | `matmul` | canonical_composite | pure_only | `certify_frontends` | `schedule.matmul_backward` | `tile.matmul` | rocm |
-| `normalization` | `layer_norm`, `rmsnorm`, `rmsnorm_safe` | canonical_composite | pure_only | `certify_frontends` | `schedule.native_vjp_program` | `tile.native_vjp_program` | apple_gpu, nvidia_sm120, rocm, x86 |
-| `optimizer_vjp` | `adam`, `adamw`, `momentum`, `nesterov`, `sgd` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `schedule.optimizer_vjp` | `tile.training_kernel` | rocm |
-| `regression_loss_backward` | `huber_loss`, `loss.huber`, `loss.mae`, `loss.mse`, `loss.smooth_l1`, `mae_loss`, `mse_loss`, `smooth_l1_loss` | canonical_composite | pure_only | `certify_frontends` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
-| `selective_ssm_backward` | `selective_ssm` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `schedule.sequence_mixer_backward` | `tile.training_kernel` | rocm |
-| `sequence_mixer_backward` | `gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `schedule.sequence_mixer_backward` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
-| `spectral_backward` | `spectral_conv`, `spectral_filter` | canonical_composite | pure_only | `certify_frontends` | `schedule.spectral_backward` | `tile.spectral_backward_kernel` | nvidia_sm120, rocm, x86 |
+| family | ops | migration state | differential policy | certifier | execution certificate | schedule consumer | tile consumer | targets |
+|---|---|---|---|---|---|---|---|---|
+| `adafactor_vjp` | `adafactor` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.adafactor_vjp` | `tile.training_kernel` | rocm, x86 |
+| `attention_backward` | `flash_attn`, `gqa_attention`, `mqa_attention` | canonical_composite | zero_dropout_attention | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.attention_backward` | `tile.attention_backward_kernel` | rocm, x86 |
+| `binary_loss_backward` | `binary_cross_entropy_loss`, `loss.binary_cross_entropy` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
+| `class_loss_backward` | `cross_entropy_loss`, `label_smoothed_cross_entropy`, `loss.cross_entropy` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
+| `distribution_loss_backward` | `js_divergence`, `kl_divergence`, `loss.js_divergence`, `loss.kl_divergence` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | rocm |
+| `lion_vjp` | `lion` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.lion_vjp` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
+| `matmul_backward` | `matmul` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.matmul_backward` | `tile.matmul` | rocm |
+| `normalization` | `layer_norm`, `rmsnorm`, `rmsnorm_safe` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.native_vjp_program` | `tile.native_vjp_program` | apple_gpu, nvidia_sm120, rocm, x86 |
+| `optimizer_vjp` | `adam`, `adamw`, `momentum`, `nesterov`, `sgd` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.optimizer_vjp` | `tile.training_kernel` | rocm, x86 |
+| `regression_loss_backward` | `huber_loss`, `loss.huber`, `loss.mae`, `loss.mse`, `loss.smooth_l1`, `mae_loss`, `mse_loss`, `smooth_l1_loss` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
+| `selective_ssm_backward` | `selective_ssm` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.sequence_mixer_backward` | `tile.training_kernel` | rocm |
+| `sequence_mixer_backward` | `gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.sequence_mixer_backward` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
+| `spectral_backward` | `istft`, `spectral_conv`, `spectral_filter`, `stft` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.spectral_backward` | `tile.spectral_backward_kernel` | nvidia_sm120, rocm, x86 |
 
 ## What this doc does and does not prove
 
-It proves that every listed family **declares** an ownership spine and a differential policy with a certification path. It does not prove a certificate was produced for a particular program: certification runs at call time, against concrete arguments. Read this as the set of families for which the gate is *evaluable*, and the per-family execution tests as whether it passed.
+It proves that every listed family **declares** an ownership spine, a differential policy, and the content-addressed execution-certificate schema recorded after a successful physical launch. It does not prove a certificate was produced for a particular program: execution records are created at call time against concrete arguments. Read this as the set of families for which the gate is *evaluable*, and the per-family execution tests as whether it passed.
 
 The distinction matters because the failure it guards against is specific: a family migrated to the tracer with no declared policy would previously have left no trace anywhere, and the oracle deletion would have looked safe.
+
+## Exact family/target execution packets
+
+A declaration is not execution evidence. Target-owned packets run every declared family in one process, validate independent numerical oracles, require runtime-origin physical attestations, and compare the observed family/target set exactly with the live declarations. A test double produces only `runtime_unattested` evidence and cannot satisfy these packets.
+
+- declared family/target rows: **31**
+- exact-device packet rows: **23**
+- blocking rows without a packet: **8**
+
+| family | target | evidence status | evidence gate |
+|---|---|---|---|
+| `normalization` | `apple_gpu` | `missing_exact_device_packet` | `none` |
+| `binary_loss_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `class_loss_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `lion_vjp` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `normalization` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `regression_loss_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `sequence_mixer_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `spectral_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
+| `adafactor_vjp` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `attention_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `binary_loss_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `class_loss_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `distribution_loss_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `lion_vjp` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `matmul_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `normalization` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `optimizer_vjp` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `regression_loss_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `selective_ssm_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `sequence_mixer_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `spectral_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
+| `adafactor_vjp` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `attention_backward` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `binary_loss_backward` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `class_loss_backward` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `lion_vjp` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `normalization` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `optimizer_vjp` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `regression_loss_backward` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `sequence_mixer_backward` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |
+| `spectral_backward` | `x86` | `exact_device_packet` | `tests/device/x86/test_native_vjp_execution_certificates.py` |

@@ -185,11 +185,18 @@ def Schedule_SpectralProgramOp : Op<ScheduleDialect, "spectral_program", [Pure]>
                        StrAttr:$axis_packing,
                        DenseI64ArrayAttr:$padding,
                        DenseI64ArrayAttr:$crop,
+                       I64Attr:$transform_length,
                        I64Attr:$window_length,
+                       StrAttr:$window_broadcast,
                        I64Attr:$hop,
                        I64Attr:$frames,
+                       BoolAttr:$center,
+                       BoolAttr:$onesided,
+                       StrAttr:$pad_mode,
+                       I64Attr:$output_length,
                        StrAttr:$normalization,
                        StrAttr:$complex_layout,
+                       DictionaryAttr:$numeric_policy,
                        StrAttr:$accumulation,
                        I64Attr:$workspace_bytes,
                        StrAttr:$workspace_policy,
@@ -218,10 +225,12 @@ def Schedule_SpectralBackwardOp : Op<ScheduleDialect, "spectral_backward", [Pure
                        BoolAttr:$center,
                        BoolAttr:$onesided,
                        StrAttr:$pad_mode,
+                       StrAttr:$window_broadcast,
                        OptionalAttr<I64Attr>:$output_length,
                        StrAttr:$input_signature,
                        StrAttr:$output_signature,
-                       StrAttr:$mutation_lineage);
+                       StrAttr:$mutation_lineage,
+                       OptionalAttr<DictionaryAttr>:$numeric_policy);
   let results = (outs Variadic<AnyType>:$gradients);
   let assemblyFormat = "$subjects attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;

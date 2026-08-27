@@ -77,7 +77,7 @@ class CollectiveExecutionContract:
     source_revision: str = "unbound"
 
     def __post_init__(self) -> None:
-        if self.backend not in {"portable", "nccl", "rccl", "metal"}:
+        if self.backend not in {"portable", "mpi", "nccl", "rccl", "metal"}:
             raise ValueError(f"unknown collective backend {self.backend!r}")
         if self.initiation not in _INITIATION_MODES:
             raise ValueError(f"unknown collective initiation {self.initiation!r}")

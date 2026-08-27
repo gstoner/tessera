@@ -30,26 +30,22 @@ func.func @gfx1151_tuple_codomain_composed_layout_linear_base(%c: i64) -> (i64, 
 }
 
 // CHECK-LABEL: func.func @gfx1151_composed_layout_linear_base
-// CHECK: arith.remui %arg1
+// CHECK-NOT: arith.remui
+// CHECK-NOT: arith.divui
 // CHECK: arith.muli {{.*}}, %c16_i64
 // CHECK: tile.view %arg0, {{.*}}, %arg1, %arg2
 // CHECK-NOT: tile.materialize_composed_layout
 // CHECK-LABEL: func.func @gfx1151_dynamic_nested_composed_layout_linear_base
-// CHECK: arith.remui %arg1
+// CHECK-NOT: arith.remui
+// CHECK-NOT: arith.divui
 // CHECK: arith.muli {{.*}}, %arg4
 // CHECK: tile.view %arg0, {{.*}}, %arg1, %arg2, %arg3, %arg3, %arg4
 // CHECK-NOT: tile.materialize_composed_layout
 // CHECK-LABEL: func.func @gfx1151_tuple_basis_composed_layout_linear_base
 // CHECK: arith.remui
 // CHECK: arith.divui
-// CHECK: arith.remui
-// CHECK: arith.divui
 // CHECK-NOT: tile.materialize_composed_layout
 // CHECK-LABEL: func.func @gfx1151_tuple_codomain_composed_layout_linear_base
-// CHECK: arith.remui
-// CHECK: arith.divui
-// CHECK: arith.remui
-// CHECK: arith.divui
 // CHECK: arith.remui
 // CHECK: arith.divui
 // CHECK: arith.remui

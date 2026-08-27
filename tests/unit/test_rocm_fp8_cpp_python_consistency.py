@@ -46,11 +46,12 @@ _ALL_ARCHES = [
 
 
 def _run(arch_str: str, mlir_ty: str) -> subprocess.CompletedProcess[str]:
+    tensor_ty = f"tensor<16x16x{mlir_ty}>"
     src = (
         "module {\n"
-        f"  func.func @k(%a: {mlir_ty}, %b: {mlir_ty}) -> {mlir_ty} {{\n"
-        f'    %m = "tile.mma"(%a, %b) : ({mlir_ty}, {mlir_ty}) -> {mlir_ty}\n'
-        f"    return %m : {mlir_ty}\n"
+        f"  func.func @k(%a: {tensor_ty}, %b: {tensor_ty}) -> {tensor_ty} {{\n"
+        f'    %m = "tile.mma"(%a, %b) : ({tensor_ty}, {tensor_ty}) -> {tensor_ty}\n'
+        f"    return %m : {tensor_ty}\n"
         "  }\n}\n"
     )
     return subprocess.run(

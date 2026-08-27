@@ -31,25 +31,21 @@ func.func @nvidia_tuple_codomain_composed_layout_proof(%c: i64) -> (i64, i64) {
 }
 
 // CHECK-LABEL: func.func @nvidia_composed_layout_proof
-// CHECK: arith.remui %arg1
+// CHECK-NOT: arith.remui
+// CHECK-NOT: arith.divui
 // CHECK: arith.muli {{.*}}, %c16_i64
 // CHECK: tile.view %arg0, {{.*}}, %arg1, %arg2
 // CHECK-LABEL: func.func @nvidia_dynamic_nested_composed_layout_proof
-// CHECK: arith.remui %arg1
+// CHECK-NOT: arith.remui
+// CHECK-NOT: arith.divui
 // CHECK: arith.muli {{.*}}, %arg4
 // CHECK: tile.view %arg0, {{.*}}, %arg1, %arg2, %arg3, %arg3, %arg4
 // CHECK-NOT: tile.materialize_composed_layout
 // CHECK-LABEL: func.func @nvidia_tuple_basis_composed_layout_proof
 // CHECK: arith.remui
 // CHECK: arith.divui
-// CHECK: arith.remui
-// CHECK: arith.divui
 // CHECK-NOT: tile.materialize_composed_layout
 // CHECK-LABEL: func.func @nvidia_tuple_codomain_composed_layout_proof
-// CHECK: arith.remui
-// CHECK: arith.divui
-// CHECK: arith.remui
-// CHECK: arith.divui
 // CHECK: arith.remui
 // CHECK: arith.divui
 // CHECK: arith.remui

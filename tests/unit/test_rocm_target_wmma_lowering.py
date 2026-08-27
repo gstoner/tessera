@@ -130,3 +130,20 @@ func.func @w(%a: f16, %b: f16, %c: f16) -> f16 {
     assert result.returncode != 0
     assert "requires typed hardware fragment vectors" in result.stderr
     assert "wmma.contract" not in result.stdout
+
+
+def test_f16_accumulator_fragments_lower_to_real_opsel_intrinsic():
+    _need_opt()
+    src = '''
+llvm.func @w(%a: vector<16xf16>, %b: vector<16xf16>,
+             %c: vector<16xf16>) -> vector<16xf16> {
+  %d = "tessera_rocm.wmma"(%a, %b, %c)
+       : (vector<16xf16>, vector<16xf16>, vector<16xf16>) -> vector<16xf16>
+  llvm.return %d : vector<16xf16>
+}
+'''
+    rocdl = _lower(src)
+    assert "rocdl.wmma.f16.16x16x16.f16" in rocdl
+    # MLIR elides the default-valued false attribute.  An explicit true would
+    # select the high accumulator half and violate this storage contract.
+    assert "opsel = true" not in rocdl

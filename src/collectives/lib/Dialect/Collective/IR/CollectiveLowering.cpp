@@ -93,6 +93,15 @@ struct LowerTileCollectivesPass
         dispatchState.addAttribute("dtype", dtype);
       if (Attribute chunkBytes = op->getAttr("chunk_bytes"))
         dispatchState.addAttribute("chunk_bytes", chunkBytes);
+      // These attributes are part of the compiler-owned transport identity,
+      // not runtime hints. Preserve them into Target IR so rank-local MPI can
+      // admit the exact SSA order/subgroup and the artifact digest changes if
+      // any Schedule/reshard identity changes.
+      for (StringRef attrName : {
+               "ordinal", "subgroup", "reshard_plan_digest", "region_path",
+               "matching_rounds", "scatter_axis", "gather_axis"})
+        if (Attribute attr = op->getAttr(attrName))
+          dispatchState.addAttribute(attrName, attr);
       dispatchState.addAttribute("tessera.collective.abi",
                                  builder.getStringAttr("v1"));
       dispatchState.addAttribute("tessera.collective.source",

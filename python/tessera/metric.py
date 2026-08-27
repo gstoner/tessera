@@ -188,13 +188,41 @@ class Sphere:
     def sharp(self, covector):
         return np.asarray(covector, dtype=np.float64)
 
+    @staticmethod
+    def _point(x, *, operation: str) -> np.ndarray:
+        point = np.asarray(x, dtype=np.float64)
+        norm = float(np.linalg.norm(point))
+        if not np.all(np.isfinite(point)) or not np.isfinite(norm):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Sphere.{operation} requires a "
+                "finite point on the unit sphere."
+            )
+        if not np.isclose(norm, 1.0, rtol=1.0e-10, atol=1.0e-12):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Sphere.{operation} requires "
+                f"||x||=1; got ||x||={norm:.17g}."
+            )
+        return point
+
     def project_tangent(self, x, v):
-        x = np.asarray(x, dtype=np.float64)
+        x = self._point(x, operation="project_tangent")
         v = np.asarray(v, dtype=np.float64)
-        return v - x * float(np.sum(x * v)) / float(np.sum(x * x))
+        if v.shape != x.shape or not np.all(np.isfinite(v)):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Sphere.project_tangent requires "
+                "a finite tangent candidate with the same shape as x."
+            )
+        return v - x * float(np.sum(x * v))
 
     def retract(self, x, v):
-        moved = np.asarray(x, dtype=np.float64) + np.asarray(v, dtype=np.float64)
+        point = self._point(x, operation="retract")
+        tangent = np.asarray(v, dtype=np.float64)
+        if tangent.shape != point.shape or not np.all(np.isfinite(tangent)):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Sphere.retract requires a finite "
+                "step with the same shape as x."
+            )
+        moved = point + tangent
         nrm = float(np.linalg.norm(moved))
         if nrm == 0.0:
             raise ValueError(
@@ -223,14 +251,44 @@ class Orthogonal:
     def sharp(self, covector):
         return np.asarray(covector, dtype=np.float64)
 
-    def project_tangent(self, x, v):
+    @staticmethod
+    def _point(x, *, operation: str) -> np.ndarray:
         Q = np.asarray(x, dtype=np.float64)
+        if Q.ndim != 2 or Q.shape[0] != Q.shape[1]:
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Orthogonal.{operation} requires "
+                f"a square rank-2 point; got shape {Q.shape}."
+            )
+        identity = np.eye(Q.shape[0], dtype=np.float64)
+        if not np.all(np.isfinite(Q)) or not np.allclose(
+            Q.T @ Q, identity, rtol=1.0e-10, atol=1.0e-12
+        ):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Orthogonal.{operation} requires "
+                "Q.T @ Q == I at the supplied point."
+            )
+        return Q
+
+    def project_tangent(self, x, v):
+        Q = self._point(x, operation="project_tangent")
         V = np.asarray(v, dtype=np.float64)
+        if V.shape != Q.shape or not np.all(np.isfinite(V)):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Orthogonal.project_tangent "
+                "requires a finite tangent candidate with the same shape as Q."
+            )
         M = Q.T @ V
         return Q @ (0.5 * (M - M.T))
 
     def retract(self, x, v):
-        moved = np.asarray(x, dtype=np.float64) + np.asarray(v, dtype=np.float64)
+        Q0 = self._point(x, operation="retract")
+        tangent = np.asarray(v, dtype=np.float64)
+        if tangent.shape != Q0.shape or not np.all(np.isfinite(tangent)):
+            raise ValueError(
+                f"{_METRIC_DIAGNOSTIC_CODE}: Orthogonal.retract requires a "
+                "finite step with the same shape as Q."
+            )
+        moved = Q0 + tangent
         Q, R = np.linalg.qr(moved)
         # numpy's QR leaves the sign of each column free; pinning it to a
         # positive diagonal makes `retract(x, 0) == x` , which is what makes

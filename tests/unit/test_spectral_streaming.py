@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from dataclasses import replace
 
 import tessera
 from tessera.autodiff.jvp import get_jvp
@@ -39,6 +40,75 @@ def test_chunked_stft_matches_monolithic_strided_policy(axis):
     assert state.policy_digest == policy.digest
     assert state.samples_consumed == 23
     assert state.frames_emitted == expected.shape[axis_index]
+    assert len(state.state_digest) == 64
+    assert len(state.parent_state_digest) == 64
+
+
+def test_streaming_state_lineage_rejects_tail_counter_window_and_parent_drift():
+    signal = np.arange(17, dtype=np.float32)
+    window = np.hanning(6).astype(np.float32)
+    policy = StreamingSTFTPolicy(
+        axis=-1, n_fft=8, window_length=6, hop=4, max_chunk_samples=9
+    )
+    _, state = stream_stft_chunk(signal[:9], window, policy)
+
+    altered_tail = state.tail.copy()
+    altered_tail[0] += 1
+    for altered, message in (
+        (replace(state, tail=altered_tail), "tail was altered"),
+        (replace(state, samples_consumed=10), "lineage digest mismatch"),
+        (replace(state, parent_state_digest="0" * 64), "lineage digest mismatch"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            stream_stft_chunk(signal[9:], window, policy, altered)
+
+    changed_window = window.copy()
+    changed_window[2] += 0.25
+    with pytest.raises(ValueError, match="window changed"):
+        stream_stft_chunk(signal[9:], changed_window, policy, state)
+
+
+@pytest.mark.parametrize("onesided", [True, False])
+@pytest.mark.parametrize("target", ["x86", "rocm"])
+def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, target):
+    from tessera import runtime
+
+    if target == "x86" and not runtime._x86_elementwise_available():
+        pytest.skip("x86 spectral physical package is unavailable")
+    if target == "rocm" and not runtime._rocm_wmma_runtime_available():
+        pytest.skip("gfx1151 spectral physical package is unavailable")
+    rng = np.random.default_rng(812 + int(onesided))
+    signal = rng.standard_normal((2, 46, 3)).astype(np.float32)[:, ::2, :]
+    window = np.stack((np.hanning(6), np.hamming(6)), axis=0).astype(
+        np.float32
+    )[:, None, :]
+    policy = StreamingSTFTPolicy(
+        axis=1, n_fft=8, window_length=6, hop=4, onesided=onesided,
+        max_chunk_samples=9,
+    )
+    pieces = np.split(signal, [7, 16], axis=1)
+    state = None
+    outputs = []
+    for piece in pieces:
+        output, state = stream_stft_chunk(
+            piece, window, policy, state, target=target
+        )
+        outputs.append(output)
+    actual = np.concatenate(outputs, axis=1)
+    expected = tessera.ops.stft(
+        signal, window, axis=1, n_fft=8, hop=4, center=False,
+        onesided=onesided,
+    )
+    np.testing.assert_allclose(actual, expected, atol=3e-5, rtol=3e-5)
+    assert state is not None and len(state.artifact_digest) == 64
+    assert state.execution_certificate["origin"] == "runtime"
+    assert state.execution_certificate["architecture_identity"] == (
+        "zen5-avx512" if target == "x86" else "gfx1151"
+    )
+    with pytest.raises(ValueError, match="different physical artifact"):
+        stream_stft_chunk(
+            signal[:, :1, :], window, policy, state, target="reference"
+        )
 
 
 def test_streaming_centered_policy_fails_closed_without_lookahead():
@@ -74,6 +144,50 @@ def test_stft_istft_extended_policy_round_trip_and_length():
     )
     assert restored.shape == signal.shape
     np.testing.assert_allclose(restored, signal, atol=2e-4, rtol=2e-4)
+
+
+def test_per_batch_window_broadcast_matches_independent_channel_oracle_and_vjp():
+    from tessera.autodiff.vjp import get_vjp
+
+    rng = np.random.default_rng(811)
+    signal = rng.standard_normal((2, 24, 3)).astype(np.float32)
+    window = np.stack(
+        [np.hanning(8), np.hamming(8)], axis=0
+    ).astype(np.float32)[:, None, :]
+    actual = tessera.ops.stft(
+        signal, window, hop=4, axis=1, n_fft=8, onesided=False
+    )
+    expected = np.empty_like(actual)
+    for batch in range(2):
+        for channel in range(3):
+            expected[batch, :, :, channel] = tessera.ops.stft(
+                signal[batch, :, channel], window[batch, 0], hop=4,
+                n_fft=8, onesided=False,
+            )
+    np.testing.assert_allclose(actual, expected, atol=2e-5, rtol=2e-5)
+
+    dy = (rng.standard_normal(actual.shape) +
+          1j * rng.standard_normal(actual.shape)).astype(np.complex64)
+    dx, dw = get_vjp("stft")(
+        dy, signal, window, hop=4, axis=1, n_fft=8, onesided=False
+    )
+    expected_dx = np.empty_like(dx)
+    expected_dw = np.zeros_like(window, dtype=np.float64)
+    for batch in range(2):
+        for channel in range(3):
+            local_dx, local_dw = get_vjp("stft")(
+                dy[batch, :, :, channel], signal[batch, :, channel],
+                window[batch, 0], hop=4, n_fft=8, onesided=False,
+            )
+            expected_dx[batch, :, channel] = local_dx
+            expected_dw[batch, 0] += local_dw
+    np.testing.assert_allclose(dx, expected_dx, atol=3e-5, rtol=3e-5)
+    np.testing.assert_allclose(dw, expected_dw, atol=3e-5, rtol=3e-5)
+
+    restored = tessera.ops.istft(
+        actual, window, hop=4, axis=2, n_fft=8, onesided=False, length=24
+    )
+    assert restored.shape == signal.shape
 
 
 @pytest.mark.parametrize("dct_type", [1, 2, 3, 4])

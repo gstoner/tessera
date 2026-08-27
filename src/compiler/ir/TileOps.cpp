@@ -1517,7 +1517,9 @@ LogicalResult SpectralProgramKernelOp::verify() {
        requiredString("storage_conversion") !=
            "native_package_cast_f32_accumulate_cast_output_v1") ||
       (requiredString("axis_packing") != "none_contiguous" &&
-       requiredString("axis_packing") != "native_package_host_pack_v1") ||
+       requiredString("axis_packing") != "native_package_host_pack_v1" &&
+       requiredString("axis_packing") !=
+           "native_runtime_stride_descriptor_v1") ||
       (requiredString("normalization") != "backward" &&
        requiredString("normalization") != "forward" &&
        requiredString("normalization") != "ortho") ||
@@ -1528,6 +1530,19 @@ LogicalResult SpectralProgramKernelOp::verify() {
           "inputs_immutable_output_fresh_v1" ||
       requiredString("native_entry").empty())
     return emitOpError("requires complete spectral package policy");
+  if (kind.getValue() == "tessera.stft" ||
+      kind.getValue() == "tessera.istft") {
+    auto transform = getOperation()->getAttrOfType<IntegerAttr>("transform_length");
+    auto window = getOperation()->getAttrOfType<IntegerAttr>("window_length");
+    auto onesided = getOperation()->getAttrOfType<BoolAttr>("onesided");
+    auto windowBroadcast =
+        getOperation()->getAttrOfType<StringAttr>("window_broadcast");
+    if (!transform || !window || !onesided || transform.getInt() <= 0 ||
+        window.getInt() <= 0 || transform.getInt() < window.getInt() ||
+        !windowBroadcast ||
+        windowBroadcast.getValue() != "trailing_batch_broadcast_v1")
+      return emitOpError("requires transform/window length and spectrum policy");
+  }
   return success();
 }
 
@@ -1554,7 +1569,10 @@ LogicalResult SpectralBackwardKernelOp::verify() {
        requiredString("pad_mode") != "reflect") ||
       requiredString("output_signature").empty() ||
       requiredString("mutation_lineage") !=
-          "inputs_immutable_outputs_fresh_v1")
+          "inputs_immutable_outputs_fresh_v1" ||
+      ((requiredString("kind") == "tessera.stft" ||
+        requiredString("kind") == "tessera.istft") &&
+       requiredString("window_broadcast") != "trailing_batch_broadcast_v1"))
     return emitOpError("requires kind, output signature, and mutation lineage");
   return success();
 }

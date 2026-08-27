@@ -246,8 +246,20 @@ def _matmul_activation_derivative(value, activation):
 @_jvp("gemm")
 def jvp_gemm(primals, tangents, *, bias=None, residual=None,
              activation="none", **_):
-    A, B = primals
-    dA, dB = tangents
+    if len(primals) not in (2, 3, 4):
+        raise ValueError("gemm JVP requires A, B, and at most bias/residual")
+    A, B = primals[:2]
+    dA, dB = tangents[:2]
+    if len(primals) >= 3:
+        bias = primals[2]
+        dbias = tangents[2]
+    else:
+        dbias = None
+    if len(primals) == 4:
+        residual = primals[3]
+        dresidual = tangents[3]
+    else:
+        dresidual = None
     preactivation = np.matmul(A, B)
     if bias is not None:
         preactivation = preactivation + np.asarray(bias)
@@ -255,9 +267,14 @@ def jvp_gemm(primals, tangents, *, bias=None, residual=None,
     if residual is not None:
         primal_out = primal_out + np.asarray(residual)
     # d(A@B) = dA @ B + A @ dB
-    tangent_out = (
-        np.matmul(dA, B) + np.matmul(A, dB)
-    ) * _matmul_activation_derivative(preactivation, activation)
+    dpreactivation = np.matmul(dA, B) + np.matmul(A, dB)
+    if dbias is not None:
+        dpreactivation = dpreactivation + np.asarray(dbias)
+    tangent_out = dpreactivation * _matmul_activation_derivative(
+        preactivation, activation
+    )
+    if dresidual is not None:
+        tangent_out = tangent_out + np.asarray(dresidual)
     return primal_out, tangent_out
 
 
@@ -3039,7 +3056,7 @@ def jvp_cholesky(primals, tangents, **_):
 
 
 @_jvp("qr")
-def jvp_qr(primals, tangents, **_):
+def jvp_qr(primals, tangents, *, _output_index=None, **_):
     """A = Q R. Reference handles full-rank A (square or tall).
 
     With ``M = Qᵀ dA R⁻¹``, uniqueness of the decomposition ``M = QᵀdQ +

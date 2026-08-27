@@ -115,6 +115,11 @@ static llvm::SmallVector<mlir::Value> buildCompoundSpectralAdjoint(
     state.addAttribute("onesided", builder.getBoolAttr(true));
   if (!state.attributes.get("pad_mode"))
     state.addAttribute("pad_mode", builder.getStringAttr("constant"));
+  state.addAttribute(
+      "window_broadcast",
+      builder.getStringAttr(kind == "tessera.stft" || kind == "tessera.istft"
+                                ? "trailing_batch_broadcast_v1"
+                                : "not_applicable"));
   mlir::Operation *backward = builder.create(state);
   return llvm::SmallVector<mlir::Value>(backward->getResults());
 }

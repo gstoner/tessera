@@ -12,13 +12,14 @@ from .pipeline_runtime import (
     CollectiveTransportRuntime,
     OneSidedDescriptor,
     OneSidedTransportRuntime,
+    RankLocalCollectiveTransport,
     execute_one_sided_target_records,
     execute_target_collectives,
 )
 from .tile_ir import TILE_COLLECTIVE_OPS, TILE_METADATA_OPS, TileIRModule, TileOp
 
 
-_SCHEMA = "tessera.collective.target.v2"
+_SCHEMA = "tessera.collective.target.v3"
 _PRODUCT_SCHEMA = "tessera.collective.product.v1"
 
 
@@ -36,19 +37,36 @@ class CollectiveTargetArtifact:
     records: tuple[Mapping[str, Any], ...]
     execution: CollectiveExecutionContract
     digest: str
+    communicator_digest: str = "unbound"
+    schedule_artifacts: tuple[Mapping[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema": _SCHEMA,
             "target": self.target,
             "digest": self.digest,
+            "communicator_digest": self.communicator_digest,
+            "schedule_artifacts": [dict(row) for row in self.schedule_artifacts],
             "execution": self.execution.to_dict(),
             "collectives": [dict(row) for row in self.records],
         }
 
     def execute(
         self, *, adapter: Any, tensors: Mapping[str, Iterable[Any]]
-    ) -> CollectiveTransportRuntime | OneSidedTransportRuntime:
+    ) -> CollectiveTransportRuntime | RankLocalCollectiveTransport | OneSidedTransportRuntime:
+        if self.execution.backend == "mpi":
+            if str(getattr(adapter, "backend", "")) != "mpi" or not bool(
+                getattr(adapter, "rank_local", False)
+            ):
+                raise RuntimeError(
+                    "MPI collective artifact requires a rank-local MPI adapter"
+                )
+            admit_artifact = getattr(adapter, "admit_artifact", None)
+            if not callable(admit_artifact):
+                raise RuntimeError(
+                    "MPI rank adapter does not implement artifact admission"
+                )
+            admit_artifact(self.digest, self.communicator_digest)
         if self.execution.initiation != "host_collective":
             snapshot_query = getattr(adapter, "communicator_capability_snapshot", None)
             if not callable(snapshot_query):
@@ -92,7 +110,12 @@ class CollectiveTargetArtifact:
                     raise RuntimeError("gfx1250 DDA artifact requires selector evidence")
                 if str(evidence_query()) != self.execution.selector_evidence_digest:
                     raise RuntimeError("gfx1250 DDA selector evidence digest mismatch")
-        return execute_target_collectives(self.records, adapter=adapter, tensors=tensors)
+        return execute_target_collectives(
+            self.records,
+            adapter=adapter,
+            tensors=tensors,
+            artifact_digest=self.digest,
+        )
 
 
 @dataclass(frozen=True)
@@ -185,6 +208,8 @@ def package_one_sided_target_artifact(
     payload = {
         "schema": _SCHEMA,
         "target": target,
+        "communicator_digest": "unbound",
+        "schedule_artifacts": [],
         "execution": execution.to_dict(),
         "collectives": normalized,
     }
@@ -214,8 +239,55 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
         backend_version=str(module.attrs.get("collective.backend_version", "unbound")),
         source_revision=str(module.attrs.get("collective.source_revision", "unbound")),
     )
+    communicator_digest = str(
+        module.attrs.get("collective.communicator_digest", "unbound")
+    )
+    if execution.backend == "mpi" and (
+        len(communicator_digest) != 64
+        or any(char not in "0123456789abcdef" for char in communicator_digest)
+    ):
+        raise ValueError(
+            "MPI collective artifact requires a 64-hex communicator digest"
+        )
+    schedule_artifacts = tuple(
+        {
+            "function": function.name,
+            "hash": str(op.attrs.get("hash", "")),
+            **(
+                {"schedule_hash": str(op.attrs["schedule_hash"])}
+                if op.attrs.get("schedule_hash") is not None
+                else {}
+            ),
+            **(
+                {
+                    "collective_binding_digest": str(
+                        op.attrs["collective_binding_digest"]
+                    )
+                }
+                if op.attrs.get("collective_binding_digest") is not None
+                else {}
+            ),
+        }
+        for function in module.functions
+        for op in _walk(function.body)
+        if op.op_name == "tile.artifact"
+    )
+    if execution.backend == "mpi" and (
+        not schedule_artifacts
+        or any(
+            len(str(row["hash"])) != 64
+            or any(
+                char not in "0123456789abcdef" for char in str(row["hash"])
+            )
+            for row in schedule_artifacts
+        )
+    ):
+        raise ValueError(
+            "MPI collective artifact requires a 64-hex Schedule→Tile artifact identity"
+        )
     records: list[dict[str, Any]] = []
     for function in module.functions:
+        function_ordinals: list[int] = []
         for op in _walk(function.body):
             if op.op_name in TILE_METADATA_OPS:
                 continue
@@ -227,17 +299,25 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
             if not source or not result:
                 raise ValueError(f"{op.op_name} requires stable input/output identities")
             reduction = str(op.attrs.get("reduction", "none"))
+            ordinal = int(op.attrs.get("ordinal", len(function_ordinals)))
+            function_ordinals.append(ordinal)
             records.append(
                 {
                     "op": f"tessera_collective.{kind}",
                     "function": function.name,
-                    "ordinal": int(op.attrs.get("ordinal", len(records))),
+                    "ordinal": ordinal,
                     "tensor": result,
                     "input": source,
                     "output": result,
                     "mesh_axis": str(op.attrs["mesh_axis"]),
                     "tensor_axis": int(op.attrs["tensor_axis"]),
                     "reduction": reduction,
+                    "reshard_plan_digest": str(
+                        op.attrs.get("reshard_plan_digest", "")
+                    ),
+                    "subgroup": list(op.attrs.get("subgroup", ())),
+                    "region_path": list(op.attrs.get("region_path", ())),
+                    "matching_rounds": list(op.attrs.get("matching_rounds", ())),
                     **({"world_size": int(op.attrs["world_size"])} if op.attrs.get("world_size") is not None else {}),
                     **({"dtype": str(op.attrs["dtype"])} if op.attrs.get("dtype") is not None else {}),
                     **(
@@ -261,16 +341,32 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
                     ),
                 }
             )
+        if execution.backend == "mpi" and function_ordinals != list(
+            range(len(function_ordinals))
+        ):
+            raise ValueError(
+                "MPI collective artifact requires contiguous source-order "
+                f"ordinals within function {function.name!r}"
+            )
     if not records:
         raise ValueError("Tile module contains no collective transport")
     payload = {
         "schema": _SCHEMA,
         "target": target,
+        "communicator_digest": communicator_digest,
+        "schedule_artifacts": schedule_artifacts,
         "execution": execution.to_dict(),
         "collectives": records,
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    return CollectiveTargetArtifact(target, tuple(records), execution, digest)
+    return CollectiveTargetArtifact(
+        target,
+        tuple(records),
+        execution,
+        digest,
+        communicator_digest,
+        schedule_artifacts,
+    )
 
 
 __all__ = [

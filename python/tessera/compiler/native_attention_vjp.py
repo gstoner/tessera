@@ -246,7 +246,7 @@ def execute_native_attention_vjp_package(
     ordered_inputs: Sequence[Any],
     arg_names: Sequence[str],
     out_cotangent: Any,
-) -> tuple[Any, Any, Any]:
+) -> tuple[tuple[Any, Any, Any], Mapping[str, Any] | None]:
     """Hand the already-built package to the runtime without Graph re-entry."""
 
     from tessera.runtime import _execute_native_attention_vjp_package

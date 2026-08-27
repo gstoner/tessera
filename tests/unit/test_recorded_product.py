@@ -249,6 +249,14 @@ def test_digest_is_stable_and_order_independent_at_region_level():
     assert region_digest([rng, mutation]) != region_digest([rng, mutation, coll])
 
 
+def test_region_digest_is_order_independent_for_repeated_op_names():
+    first = _rng(occurrence_id="bb0.op0")
+    second = _rng(
+        occurrence_id="bb0.op7", key={"seed": 7, "path": ("dropout", 1)}
+    )
+    assert region_digest([first, second]) == region_digest([second, first])
+
+
 def test_mlir_attr_carries_the_digest_and_escapes_its_payload():
     attr = _collective().to_mlir_attr()
     assert f'tessera.recorded_product.digest = "{_collective().digest}"' in attr

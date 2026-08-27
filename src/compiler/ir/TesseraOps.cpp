@@ -5158,7 +5158,9 @@ static LogicalResult verifySpectralCompound(Operation *op, Value x,
     for (int64_t dim = 0; dim < parameterTy.getRank() - 1; ++dim) {
       int64_t windowExtent = parameterTy.getDimSize(dim);
       int64_t batchExtent = batchShape[leading + dim];
-      if (windowExtent != 1 && windowExtent != batchExtent)
+      if (!ShapedType::isDynamic(windowExtent) &&
+          !ShapedType::isDynamic(batchExtent) && windowExtent != 1 &&
+          windowExtent != batchExtent)
         return op->emitOpError()
                << name << " window batch dimensions are not broadcastable";
     }

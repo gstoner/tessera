@@ -287,6 +287,7 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
         )
     records: list[dict[str, Any]] = []
     for function in module.functions:
+        function_ordinals: list[int] = []
         for op in _walk(function.body):
             if op.op_name in TILE_METADATA_OPS:
                 continue
@@ -298,11 +299,13 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
             if not source or not result:
                 raise ValueError(f"{op.op_name} requires stable input/output identities")
             reduction = str(op.attrs.get("reduction", "none"))
+            ordinal = int(op.attrs.get("ordinal", len(function_ordinals)))
+            function_ordinals.append(ordinal)
             records.append(
                 {
                     "op": f"tessera_collective.{kind}",
                     "function": function.name,
-                    "ordinal": int(op.attrs.get("ordinal", len(records))),
+                    "ordinal": ordinal,
                     "tensor": result,
                     "input": source,
                     "output": result,
@@ -338,14 +341,15 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
                     ),
                 }
             )
+        if execution.backend == "mpi" and function_ordinals != list(
+            range(len(function_ordinals))
+        ):
+            raise ValueError(
+                "MPI collective artifact requires contiguous source-order "
+                f"ordinals within function {function.name!r}"
+            )
     if not records:
         raise ValueError("Tile module contains no collective transport")
-    if execution.backend == "mpi":
-        ordinals = [int(record["ordinal"]) for record in records]
-        if ordinals != list(range(len(records))):
-            raise ValueError(
-                "MPI collective artifact requires contiguous source-order ordinals"
-            )
     payload = {
         "schema": _SCHEMA,
         "target": target,

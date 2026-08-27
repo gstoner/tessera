@@ -1813,8 +1813,9 @@ extern "C" int tessera_x86_streaming_stft_broadcast_layout_storage(
         for (int64_t bin = 0; bin < bins; ++bin) {
           double real = 0.0, imag = 0.0;
           for (int64_t local = 0; local < fftN; ++local) {
-            const double value = sample(row, frame * hop + local) *
-                                 windows[row * fftN + local];
+            const double value =
+                double(sample(row, frame * hop + local)) *
+                double(windows[row * fftN + local]);
             const double angle = kTwoPi * double(bin * local) / double(fftN);
             real += value * std::cos(angle);
             imag -= value * std::sin(angle);

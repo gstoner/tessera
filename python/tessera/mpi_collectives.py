@@ -11,6 +11,7 @@ never a mock fallback.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -71,12 +72,11 @@ class MPIRankAdapter:
         mpi_module: Any
         if _mpi is None:
             try:
-                from mpi4py import MPI
+                mpi_module = importlib.import_module("mpi4py.MPI")
             except (ImportError, OSError) as exc:
                 raise RuntimeError(
                     "MPI rank transport requires a loadable mpi4py/MPI runtime"
                 ) from exc
-            mpi_module = MPI
         else:
             mpi_module = _mpi
         self._mpi = mpi_module

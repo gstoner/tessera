@@ -2551,7 +2551,7 @@ struct LowerTileToROCMPass
               numericStorage.getValue() != expectedStorage) {
             op->emitError(
                 "native ROCm STFT/ISTFT adjoint requires the bounded "
-                "bounded centered/uncentered onesided contiguous policy and explicit fp32 accumulation");
+                "centered/uncentered onesided contiguous policy and explicit fp32 accumulation");
             signalPassFailure();
             return;
           }

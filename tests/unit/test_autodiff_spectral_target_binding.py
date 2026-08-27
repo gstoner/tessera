@@ -375,6 +375,7 @@ def test_native_spectral_backward_fails_closed_outside_physical_envelope() -> No
 
 
 def test_native_istft_backward_supports_odd_direct_dft_envelope() -> None:
+    _require_x86_package()
     from tessera.autodiff import vjp
 
     spectrum = np.ones((5, 8), dtype=np.complex64)

@@ -436,6 +436,24 @@ def test_mpi_artifact_rejects_noncontiguous_collective_order() -> None:
         lower_tile_collective_artifact(module)
 
 
+def test_mpi_artifact_validates_collective_ordinals_per_function() -> None:
+    module = _mpi_tile_module("d" * 64)
+    second = _mpi_tile_module("d" * 64).functions[0]
+    module.functions.append(
+        TileFunction("transport_aux", second.body, target=second.target)
+    )
+
+    artifact = lower_tile_collective_artifact(module)
+
+    assert [record["function"] for record in artifact.records] == (
+        ["transport"] * 5 + ["transport_aux"] * 5
+    )
+    assert [record["ordinal"] for record in artifact.records] == [
+        0, 1, 2, 3, 4,
+        0, 1, 2, 3, 4,
+    ]
+
+
 def test_mpi_artifact_digest_binds_subgroup_and_schedule_identity() -> None:
     communicator_digest = "e" * 64
     forward = lower_tile_collective_artifact(

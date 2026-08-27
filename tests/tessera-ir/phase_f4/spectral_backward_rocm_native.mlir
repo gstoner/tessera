@@ -31,6 +31,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       kind = "tessera.stft", axis = 1 : i64,
       logical_length = 18 : i64, hop = 7 : i64,
       center = true, onesided = true, pad_mode = "reflect",
+      window_broadcast = "trailing_batch_broadcast_v1",
       normalization = "backward",
       spectrum_layout = "half_spectrum_nyquist_explicit"
     } : (tensor<2x7x10x3xcomplex<f32>>, tensor<2x46x3xf32>, tensor<18xf32>) ->
@@ -57,7 +58,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       kind = "tessera.istft", axis = 2 : i64,
       logical_length = 18 : i64, hop = 7 : i64,
       output_length = 40 : i64, center = true, onesided = true,
-      pad_mode = "constant", normalization = "backward",
+      pad_mode = "constant",
+      window_broadcast = "trailing_batch_broadcast_v1",
+      normalization = "backward",
       spectrum_layout = "half_spectrum_nyquist_explicit"
     } : (tensor<2x40x3xf32>, tensor<2x7x10x3xcomplex<f32>>, tensor<18xf32>) ->
         (tensor<2x7x10x3xcomplex<f32>>, tensor<18xf32>)
@@ -82,6 +85,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       kind = "tessera.stft", axis = -1 : i64,
       logical_length = 18 : i64, hop = 7 : i64,
       center = true, onesided = true, pad_mode = "reflect",
+      window_broadcast = "trailing_batch_broadcast_v1",
       normalization = "backward",
       spectrum_layout = "half_spectrum_nyquist_explicit"
     } : (tensor<2x7x10xcomplex<f32>>, tensor<2x46xf32>, tensor<18xf32>) ->
@@ -109,7 +113,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       kind = "tessera.istft", axis = -1 : i64,
       logical_length = 18 : i64, hop = 7 : i64,
       output_length = 40 : i64, center = true, onesided = true,
-      pad_mode = "constant", normalization = "backward",
+      pad_mode = "constant",
+      window_broadcast = "trailing_batch_broadcast_v1",
+      normalization = "backward",
       spectrum_layout = "half_spectrum_nyquist_explicit"
     } : (tensor<2x40xf32>, tensor<2x7x10xcomplex<f32>>, tensor<18xf32>) ->
         (tensor<2x7x10xcomplex<f32>>, tensor<18xf32>)
@@ -135,6 +141,7 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       kind = "tessera.stft", axis = -1 : i64,
       logical_length = 18 : i64, hop = 7 : i64,
       center = false, onesided = true, pad_mode = "constant",
+      window_broadcast = "trailing_batch_broadcast_v1",
       normalization = "backward",
       spectrum_layout = "half_spectrum_nyquist_explicit",
       numeric_policy = {storage = "fp16", accum = "fp32"}
@@ -163,7 +170,9 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
       kind = "tessera.istft", axis = -1 : i64,
       logical_length = 18 : i64, hop = 7 : i64,
       output_length = 46 : i64, center = false, onesided = true,
-      pad_mode = "constant", normalization = "backward",
+      pad_mode = "constant",
+      window_broadcast = "trailing_batch_broadcast_v1",
+      normalization = "backward",
       spectrum_layout = "half_spectrum_nyquist_explicit",
       numeric_policy = {storage = "bf16", accum = "fp32"}
     } : (tensor<3x46xbf16>, tensor<3x5x10xcomplex<f32>>, tensor<18xbf16>) ->

@@ -288,6 +288,12 @@ def _plan_fft(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[i
         **_execution(target, execution_mode),
         "compiler_path": f"{compiler_prefix}_fft_compiled",
         "arg_names": ["x"],
+        "ops": [{
+            "op_name": source.op_name,
+            "result": source.result,
+            "operands": ["x"],
+            "kwargs": dict(source.kwargs),
+        }],
         "scheduled_fft": scheduled.to_metadata(),
     }
     return NativeJVPFamilyPlan("spectral", (
@@ -419,6 +425,7 @@ def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
         raise ValueError(f"native {bare} JVP requires two operands")
     if bare == "istft" and not set(wrt_indices).issubset({0, 1}):
         raise ValueError("native ISTFT JVP has only spectrum and window operands")
+    storage: str | None
     if bare == "spectral_filter":
         if any(str(value.dtype) != "complex64" for value in primal_inputs):
             raise ValueError(

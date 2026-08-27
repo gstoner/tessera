@@ -967,7 +967,7 @@ def execute_nvidia_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequen
                 "ortho": 1.0 / math.sqrt(n),
             }[str(contract["normalization"])]
             rc = lib.tessera_nvidia_stft_backward_broadcast_layout_storage(
-                digest, dy.view(np.float32).ctypes.data_as(pointer),
+                digest, dy.ctypes.data_as(pointer),
                 ctypes.c_void_p(x.ctypes.data),
                 ctypes.c_void_p(parameter.ctypes.data),
                 ctypes.c_void_p(dx.ctypes.data),
@@ -993,9 +993,9 @@ def execute_nvidia_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequen
             }[str(contract["normalization"])]
             rc = lib.tessera_nvidia_istft_backward_broadcast_layout_storage(
                 digest, ctypes.c_void_p(dy.ctypes.data),
-                x.view(np.float32).ctypes.data_as(pointer),
+                x.ctypes.data_as(pointer),
                 ctypes.c_void_p(parameter.ctypes.data),
-                dx.view(np.float32).ctypes.data_as(pointer),
+                dx.ctypes.data_as(pointer),
                 ctypes.c_void_p(dparameter.ctypes.data), dy.ndim, dy_shape,
                 dy_strides, dy_axis, x.ndim, x_shape, x_strides, frame_axis,
                 axis, parameter.ndim, window_shape, window_strides, n,

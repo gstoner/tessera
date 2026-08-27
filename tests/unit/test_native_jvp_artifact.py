@@ -187,6 +187,31 @@ def test_jvp_plugin_produces_digest_bound_plan_outside_jitfn():
     assert all(len(step["child_digest"]) == 64 for step in plan.steps)
 
 
+@pytest.mark.parametrize("kind", ("fft", "ifft", "rfft", "irfft"))
+def test_sm120_fft_jvp_children_bind_runtime_operation_metadata(kind: str):
+    input_dtype = "float32" if kind == "rfft" else "complex64"
+    value = np.ones(
+        (2, 9 if kind == "irfft" else 16), dtype=np.dtype(input_dtype)
+    )
+    kwargs = {"axis": -1, "n": 16, "norm": "ortho"}
+    source = IROp(
+        result="out", op_name=f"tessera.{kind}", operands=["%x"],
+        operand_types=["tensor<2x16xf32>"], result_type="tensor<2x16xf32>",
+        kwargs=kwargs,
+    )
+    plan = plan_native_jvp_family(
+        source=source, primal_inputs=(value,), wrt_indices=(0,),
+        target="nvidia_sm120", architecture="sm120",
+        execution_mode="cuda_driver",
+    )
+    child = plan.steps[0]["child_metadata"]
+    assert child["compiler_path"] == "nvidia_fft_compiled"
+    assert child["ops"] == [{
+        "op_name": f"tessera.{kind}", "result": "out",
+        "operands": ["x"], "kwargs": kwargs,
+    }]
+
+
 def test_normalization_plugin_emits_typed_composite_without_graph_metadata():
     source = IROp(
         result="out", op_name="tessera.layer_norm",

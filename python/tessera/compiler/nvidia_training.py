@@ -795,6 +795,7 @@ def _optimizer_backward_source(
     step: int,
 ) -> tuple[str, tuple[str, ...]]:
     """Correctness-first analytic VJPs for the shared explicit-state ABI."""
+    names: tuple[str, ...]
     if kind == "sgd":
         names = ("param", "grad", "dparam_out", "dparam", "dgrad")
         signature = (
@@ -1594,7 +1595,10 @@ def package_optimizer_backward(
         repr((kind, sorted(values.items()))).encode()
     ).hexdigest()[:8]
     entry = f"tessera_cuda_training_optvjp_{kind}_f32_{digest}"
-    source, names = _optimizer_backward_source(entry, kind=kind, **values)
+    source, names = _optimizer_backward_source(
+        entry, kind=kind, lr=lr, momentum=momentum, beta1=beta1,
+        beta2=beta2, epsilon=epsilon, weight_decay=weight_decay, step=step,
+    )
     return _package(
         contract=f"tile.training.optimizer_vjp.{kind}.f32",
         source=source, entry=entry, abi_id=SM120_OPTIMIZER_BWD_ABIS[kind],
@@ -1615,6 +1619,8 @@ def package_adafactor_backward(
         repr((topology, sorted(values.items()))).encode()
     ).hexdigest()[:8]
     entry = f"tessera_cuda_training_adafactorvjp_{topology}_f32_{digest}"
+    names: tuple[str, ...]
+    scalars: tuple[str, ...]
     if topology == "full":
         source = _adafactor_full_backward_source(entry, **values)
         names = (

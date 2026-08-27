@@ -164,6 +164,43 @@ def test_stft_istft_vjp_matches_independent_reference(kind):
 
 
 @pytest.mark.parametrize("kind", ("stft", "istft"))
+def test_spectral_vjp_preserves_noncontiguous_last_complex_axis(kind):
+    from tessera.autodiff import vjp
+
+    _require_fft()
+    rng = np.random.default_rng(125 if kind == "stft" else 126)
+    window = (0.25 + np.hanning(16)).astype(np.float32)
+    if kind == "stft":
+        primal = rng.standard_normal(56).astype(np.float32)
+        dy_storage = np.empty((6, 18), np.complex64)
+        dy = dy_storage[:, ::2]
+        dy[...] = (
+            rng.standard_normal(dy.shape) + 1j * rng.standard_normal(dy.shape)
+        ).astype(np.complex64)
+        actual = _stft.native_backward(primal, window, out_cotangents=dy)
+        expected = vjp._VJPS["stft"](
+            dy, primal, window, axis=-1, n_fft=16, hop=8,
+            center=False, onesided=True, norm="backward",
+        )
+    else:
+        primal_storage = np.empty((6, 18), np.complex64)
+        primal = primal_storage[:, ::2]
+        primal[...] = (
+            rng.standard_normal(primal.shape)
+            + 1j * rng.standard_normal(primal.shape)
+        ).astype(np.complex64)
+        dy = rng.standard_normal(56).astype(np.float32)
+        actual = _istft.native_backward(primal, window, out_cotangents=dy)
+        expected = vjp._VJPS["istft"](
+            dy, primal, window, axis=-1, n_fft=16, hop=8,
+            center=False, onesided=True, length=56, norm="backward",
+        )
+    assert not (dy if kind == "stft" else primal).flags.c_contiguous
+    np.testing.assert_allclose(actual[0], expected[0], rtol=6e-5, atol=6e-5)
+    np.testing.assert_allclose(actual[1], expected[1], rtol=6e-5, atol=6e-5)
+
+
+@pytest.mark.parametrize("kind", ("stft", "istft"))
 def test_generalized_full_spectrum_broadcast_strided_vjp(kind):
     from tessera.autodiff import vjp
 

@@ -2988,8 +2988,8 @@ def _submit_nvidia_sm120_native(
         reduction = str(descriptor.provenance.get("reduction", "none"))
         expected_dy = (n,) if reduction == "none" else (1,)
         for index, value in enumerate(raw):
-            expected = expected_dy if index == 2 else (n,)
-            if tuple(value.shape) != expected:
+            expected_shape = expected_dy if index == 2 else (n,)
+            if tuple(value.shape) != expected_shape:
                 raise RuntimeError("SM120 fused training shapes disagree with descriptor scalar N")
         output = tuple(raw[4:6]) if descriptor.abi_id in SM120_FUSED_LOSS_SGD_ABIS.values() else tuple(raw[6:10])
     elif descriptor.abi_id in attention_backward_abis:
@@ -19898,7 +19898,10 @@ def _execute_nvidia_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> A
             if int(signal.shape[axis]) != expected_bins:
                 raise ValueError("NVIDIA ISTFT spectrum does not match n_fft")
             raw_samples = (frames - 1) * hop + nfft
-            available = raw_samples - (nfft if center else 0)
+            # Centering pads each side by floor(n_fft / 2).  For odd transform
+            # lengths that total is n_fft - 1, not n_fft; keep runtime bounds
+            # identical to the scheduled contract and native crop.
+            available = raw_samples - (2 * (nfft // 2) if center else 0)
             requested = kwargs.get("output_length", kwargs.get("length"))
             output_samples = available if requested is None else int(requested)
             if output_samples <= 0 or output_samples > available:

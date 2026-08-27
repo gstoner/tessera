@@ -42,6 +42,11 @@ def _spectral_conv_product(x, kernel):
     return tessera.ops.spectral_conv(x, kernel, axis=-1, norm="backward")
 
 
+@tessera.jit(target="nvidia_sm120", autodiff="jvp", wrt=("x",))
+def _fft_product(x):
+    return tessera.ops.fft(x, axis=-1, norm="ortho")
+
+
 @tessera.jit(target="nvidia_sm120", autodiff="reverse", wrt=("x", "window"))
 def _stft_reverse(x, window):
     return tessera.ops.stft(
@@ -66,6 +71,25 @@ def _require_sm120() -> None:
     lib = runtime._load_nvidia_fft_runtime()
     if lib is None or lib.tessera_nvidia_spectral_arch() != 120:
         pytest.skip("exact SM120 CUDA spectral package is unavailable")
+
+
+def test_public_fft_jvp_reaches_cuda_with_bound_operation_metadata():
+    _require_sm120()
+    rng = np.random.default_rng(1206)
+    x = (rng.normal(size=(2, 16)) + 1j * rng.normal(size=(2, 16))).astype(
+        np.complex64
+    )
+    dx = (rng.normal(size=x.shape) + 1j * rng.normal(size=x.shape)).astype(
+        np.complex64
+    )
+    primal, tangent = _fft_product.native_jvp(x, tangents=(dx,))
+    np.testing.assert_allclose(
+        primal, np.fft.fft(x, axis=-1, norm="ortho"), rtol=3e-5, atol=3e-5
+    )
+    np.testing.assert_allclose(
+        tangent, np.fft.fft(dx, axis=-1, norm="ortho"), rtol=3e-5, atol=3e-5
+    )
+    assert _fft_product.last_jvp_execution["family"] == "spectral"
 
 
 def _dct_reference(x: np.ndarray, dct_type: int, normalization: str) -> np.ndarray:

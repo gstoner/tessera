@@ -1663,7 +1663,7 @@ def run_solver_ift_f32(parameter: Any, solution: Any, product: Any) -> tuple[Any
     rc = fn(*(_ptr(value) for value in (*arrays, *outputs)), arrays[0].size)
     if rc != 1:
         raise RuntimeError(f"NVIDIA solver IFT CUDA launch failed with status {rc}")
-    return outputs
+    return outputs[0], outputs[1], outputs[2]
 
 
 def _synthesize_solver_children_cuda() -> str:
@@ -1994,7 +1994,7 @@ def run_solver_diagonal_cg(
     }
     if not info["converged"]:
         raise RuntimeError(f"NVIDIA diagonal CG did not converge: {info}")
-    return (*states, info)
+    return states[0], states[1], states[2], states[3], info
 
 
 def _synthesize_local_collective_cuda() -> str:

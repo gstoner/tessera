@@ -222,6 +222,40 @@ def test_onesided_forward_and_inverse_normalization(normalization):
     )
 
 
+def test_centered_odd_istft_uses_two_sided_floor_padding_length():
+    from tessera import runtime
+    from tessera.compiler.scheduled_spectral import lower_scheduled_spectral
+
+    rng = np.random.default_rng(1215)
+    signal = rng.standard_normal((2, 31)).astype(np.float32)
+    window = (0.3 + np.hanning(15)).astype(np.float32)
+    kwargs = {
+        "axis": -1, "n_fft": 15, "hop": 5, "center": True,
+        "pad_mode": "constant", "onesided": True,
+        "normalization": "ortho",
+    }
+    spectrum = _launch("tessera.stft", (signal, window), kwargs)
+    contract = lower_scheduled_spectral(
+        target="nvidia_sm120", op_name="tessera.istft",
+        input_shapes=(spectrum.shape, window.shape), axis=-1, n_fft=15,
+        hop=5, center=True, onesided=True, normalization="ortho",
+    ).to_metadata()
+    assert contract["output_length"] == 31
+    result = runtime.launch(runtime.RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_spectral_compiled",
+        "executable": True, "arg_names": ["spectrum", "window"],
+        "scheduled_spectral": contract,
+    }), (spectrum, window))
+    assert result["ok"] is True, result.get("reason")
+    actual = np.asarray(result["output"])
+    expected = _istft_reference(
+        spectrum, window, axis=2, nfft=15, hop=5, center=True,
+        length=31, onesided=True, normalization="ortho",
+    )
+    assert actual.shape == (2, 31)
+    np.testing.assert_allclose(actual, expected, rtol=6e-5, atol=6e-5)
+
+
 def test_full_spectrum_arbitrary_axis_true_strides_reflect_and_broadcast():
     rng = np.random.default_rng(5070)
     signal_storage = rng.standard_normal((2, 92, 3)).astype(np.float32)

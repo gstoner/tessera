@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -62,6 +63,76 @@ def test_x86_avx512_host_architecture_admits_complete_feature_set(
         "builtins.open", lambda *args, **kwargs: io.StringIO(f"flags : {features}\n")
     )
     assert host_supports_architecture(X86_AVX512_ARCHITECTURE)
+
+
+def test_x86_elementwise_loader_rejects_before_dlopen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(rt, "_x86_elementwise_loaded", False)
+    monkeypatch.setattr(rt, "_x86_elementwise_runtime", None)
+
+    def reject(architecture: str) -> bool:
+        assert architecture == X86_AVX512_ARCHITECTURE
+        return False
+
+    monkeypatch.setattr(
+        "tessera.compiler.x86_native.host_supports_architecture",
+        reject,
+    )
+
+    def unexpected_dlopen(path: str) -> None:
+        pytest.fail(f"incompatible x86 image reached dlopen: {path}")
+
+    monkeypatch.setattr(rt.ctypes, "CDLL", unexpected_dlopen)
+    assert rt._load_x86_elementwise() is None
+    assert rt._x86_elementwise_loaded
+
+
+def test_x86_elementwise_loader_admits_complete_feature_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StubSymbol:
+        argtypes: list[object] | None = None
+        restype: object | None = None
+
+    class StubLibrary:
+        def __init__(self) -> None:
+            self.symbols: dict[str, StubSymbol] = {}
+
+        def __getattr__(self, name: str) -> StubSymbol:
+            return self.symbols.setdefault(name, StubSymbol())
+
+    admitted: list[str] = []
+    library = StubLibrary()
+    monkeypatch.setattr(rt, "_x86_elementwise_loaded", False)
+    monkeypatch.setattr(rt, "_x86_elementwise_runtime", None)
+
+    def admit(architecture: str) -> bool:
+        admitted.append(architecture)
+        return True
+
+    monkeypatch.setattr(
+        "tessera.compiler.x86_native.host_supports_architecture",
+        admit,
+    )
+    monkeypatch.setattr(
+        rt, "_x86_elementwise_lib_path", lambda: Path("/admitted/x86-image.so")
+    )
+    monkeypatch.setattr(rt.ctypes, "CDLL", lambda path: library)
+
+    assert rt._load_x86_elementwise() is library
+    assert admitted == [X86_AVX512_ARCHITECTURE]
+
+
+def test_x86_fft_permutation_tables_are_constant_initialized() -> None:
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp"
+    ).read_text(encoding="utf-8")
+    assert "const __m512i kEven" not in source
+    assert "const __m512i kOdd" not in source
+    assert "alignas(64) constexpr int32_t kEvenIndices[16]" in source
+    assert "alignas(64) constexpr int32_t kInterleaveHighIndices[16]" in source
 
 
 def _softmax_module(shape: tuple[int, ...] = (3, 17)) -> GraphIRModule:

@@ -234,7 +234,11 @@ def build_adafactor_vjp_state_contract(
         "phase": "backward",
         "topology": topology,
         "target": target,
-        "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
+        "architecture": {
+            "x86": "zen5-avx512",
+            "rocm_gfx1151": "gfx1151",
+            "nvidia_sm120": "sm_120",
+        }[target],
         "numeric": numeric,
         "inputs": inputs,
         "outputs": outputs,
@@ -323,7 +327,11 @@ def build_optimizer_vjp_state_contract(
         "optimizer": optimizer,
         "phase": "backward",
         "target": target,
-        "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
+        "architecture": {
+            "x86": "zen5-avx512",
+            "rocm_gfx1151": "gfx1151",
+            "nvidia_sm120": "sm_120",
+        }[target],
         "numeric": numeric,
         "inputs": inputs,
         "outputs": outputs,
@@ -335,6 +343,17 @@ def build_optimizer_vjp_state_contract(
         },
     }
     return {**body, "artifact_hash": _digest(body)}
+
+
+def validate_optimizer_vjp_state_contract(
+    contract: Mapping[str, Any], *, target: str, optimizer: str,
+    shape: Sequence[int], kwargs: Mapping[str, Any],
+) -> None:
+    expected = build_optimizer_vjp_state_contract(
+        target=target, optimizer=optimizer, shape=shape, kwargs=kwargs
+    )
+    if dict(contract) != expected:
+        raise ValueError("optimizer VJP state/buffer lineage contract is stale")
 
 
 @dataclass(frozen=True)
@@ -397,11 +416,14 @@ def lower_scheduled_optimizer_vjp(
     payload = _payload({k: v for k, v in contract.items() if k != "artifact_hash"})
     numeric, mutation = contract["numeric"], contract["mutation"]
     architecture = str(contract["architecture"])
-    compiler_target = "x86" if target == "x86" else "rocm"
+    compiler_target = {
+        "x86": "x86", "rocm_gfx1151": "rocm",
+        "nvidia_sm120": "nvidia_sm120",
+    }[target]
     writes = ", ".join(map(str, range(len(output_names))))
     schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
   func.func @tessera_optimizer_vjp({args}) -> ({result_types}) {{
-    %grads:{len(output_names)} = schedule.optimizer_vjp {operands} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", optimizer = "{optimizer}", learning_rate = {numeric["lr"]:.9e} : f32, beta1 = {numeric["beta1"]:.9e} : f32, beta2 = {numeric["beta2"]:.9e} : f32, epsilon = {numeric["eps"]:.9e} : f32, momentum = {numeric["momentum"]:.9e} : f32, weight_decay = {numeric["weight_decay"]:.9e} : f32, step = {numeric["step"]} : i64, nesterov = {str(numeric["nesterov"]).lower()}, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {writes}>, workgroup_size = {256 if target == "rocm_gfx1151" else 1} : i64}} : {input_types} -> {result_types}
+    %grads:{len(output_names)} = schedule.optimizer_vjp {operands} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", optimizer = "{optimizer}", learning_rate = {numeric["lr"]:.9e} : f32, beta1 = {numeric["beta1"]:.9e} : f32, beta2 = {numeric["beta2"]:.9e} : f32, epsilon = {numeric["eps"]:.9e} : f32, momentum = {numeric["momentum"]:.9e} : f32, weight_decay = {numeric["weight_decay"]:.9e} : f32, step = {numeric["step"]} : i64, nesterov = {str(numeric["nesterov"]).lower()}, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {writes}>, workgroup_size = {256 if target != "x86" else 1} : i64}} : {input_types} -> {result_types}
     schedule.artifact {{hash = "{digest}", arch = "{architecture}", shape_key = "family=optimizer_vjp;optimizer={optimizer};shape={'x'.join(map(str, dims))};storage=f32", numeric_policy = "f32;functional_no_alias"}}
     return {", ".join(f"%grads#{i}" for i in range(len(output_names)))} : {result_types}
   }}
@@ -510,7 +532,10 @@ def lower_scheduled_lion_vjp(
     numeric = contract["numeric"]
     mutation = contract["mutation"]
     architecture = str(contract["architecture"])
-    compiler_target = "x86" if target == "x86" else "rocm"
+    compiler_target = {
+        "x86": "x86", "rocm_gfx1151": "rocm",
+        "nvidia_sm120": "nvidia_sm120",
+    }[target]
     args = ", ".join(
         f"%{name}: {tensor_type}"
         for name in ("p", "g", "m", "dparam_out", "dmoment_out")
@@ -688,11 +713,14 @@ def lower_scheduled_adafactor_vjp(
     numeric = contract["numeric"]
     mutation = contract["mutation"]
     architecture = str(contract["architecture"])
-    compiler_target = "x86" if target == "x86" else "rocm"
+    compiler_target = {
+        "x86": "x86", "rocm_gfx1151": "rocm",
+        "nvidia_sm120": "nvidia_sm120",
+    }[target]
     write_order = ", ".join(map(str, range(len(output_shapes))))
     schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
   func.func @tessera_adafactor_vjp({args}) -> ({", ".join(output_types)}) {{
-    %grads:{len(output_types)} = schedule.adafactor_vjp {inputs} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", topology = "{topology}", learning_rate = {float(numeric["lr"]):.9e} : f32, beta2 = {float(numeric["beta2"]):.9e} : f32, epsilon = {float(numeric["eps"]):.9e} : f32, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {write_order}>, workgroup_size = {256 if target == "rocm_gfx1151" else 1} : i64}} : {", ".join(input_types)} -> {", ".join(output_types)}
+    %grads:{len(output_types)} = schedule.adafactor_vjp {inputs} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", topology = "{topology}", learning_rate = {float(numeric["lr"]):.9e} : f32, beta2 = {float(numeric["beta2"]):.9e} : f32, epsilon = {float(numeric["eps"]):.9e} : f32, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {write_order}>, workgroup_size = {256 if target != "x86" else 1} : i64}} : {", ".join(input_types)} -> {", ".join(output_types)}
     schedule.artifact {{hash = "{digest}", arch = "{architecture}", shape_key = "family=adafactor_vjp;topology={topology};shape={'x'.join(map(str, shape))};storage=f32", numeric_policy = "f32;functional_no_alias"}}
     return {", ".join(f"%grads#{index}" for index in range(len(output_types)))} : {", ".join(output_types)}
   }}
@@ -1046,5 +1074,6 @@ __all__ = [
     "validate_scheduled_optimizer_vjp_metadata",
     "validate_scheduled_sequence_mixer_backward_metadata",
     "validate_lion_vjp_state_contract",
+    "validate_optimizer_vjp_state_contract",
     "validate_sequence_mixer_backward_state_contract",
 ]

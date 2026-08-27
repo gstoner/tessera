@@ -1,0 +1,77 @@
+{
+  "accumulation": "f32",
+  "algorithm": "cg",
+  "architecture": "sm120",
+  "artifact_hash": "3d5e91b91527adb1c952b71dc904bdef2b1e52992ef2767ff486e19d8c97c50c",
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "device_state": [
+    "solution",
+    "residual",
+    "direction",
+    "matvec",
+    "dot_reductions",
+    "convergence"
+  ],
+  "final_state_norms": {
+    "direction": 1.7041583078025724e-06,
+    "matvec": 3.2321433991455706e-06,
+    "residual": 6.096286710999266e-07
+  },
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "iterations": 17,
+  "numerical": {
+    "max_abs_equation_error": 3.5762786865234375e-07,
+    "max_abs_solution_error": 3.5762786865234375e-07,
+    "oracle": "numpy_positive_diagonal_solve",
+    "passed": true,
+    "reported_residual_norm": 6.096286710999266e-07
+  },
+  "operator": "positive_diagonal_spd_v1",
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "single-launch correctness packet; no comparative performance ratchet"
+  },
+  "schema": "tessera.nvidia.krylov.evidence.v1",
+  "shape": [
+    257
+  ],
+  "state_residency": "single_launch_device_resident",
+  "storage": "f32",
+  "target": "nvidia_sm120",
+  "tessera_opt_sha256": "5d50eb8e51699620c057bf639be23f65932f0fec6ff3e9aaff297438b43a3b3f",
+  "timing": {
+    "complete_solve": true,
+    "median_ns": 1106609,
+    "minimum_ns": 1025659,
+    "samples_ns": [
+      1099978,
+      1093098,
+      1106609,
+      1314101,
+      1098279,
+      1116078,
+      1221600,
+      1095119,
+      1074418,
+      1152820,
+      1060808,
+      1120659,
+      1300131,
+      1133589,
+      1106257,
+      1089048,
+      1025659,
+      1216240,
+      1135049,
+      1059817
+    ],
+    "source": "synchronized_host_wall",
+    "warmup": 5
+  },
+  "toolchain": "Ubuntu LLVM version 23.1.0",
+  "work_items": [
+    "CUDA-SOLVER-KRYLOV-1",
+    "CUDA-SOLVER-CG-1"
+  ]
+}

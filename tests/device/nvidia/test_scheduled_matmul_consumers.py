@@ -36,6 +36,6 @@ test_sm120_macro_cta_bf16_exact_device = pytest.mark.hardware_nvidia(
 )
 test_sm120_bounded_dynamic_strided_matmul_exact_device = (
     pytest.mark.hardware_nvidia(
-        _shared._sm120_bounded_dynamic_strided_matmul_exact_device
+        _shared.test_sm120_bounded_dynamic_strided_matmul_exact_device
     )
 )

@@ -1,8 +1,8 @@
 """Executable content-addressed implicit-function differentiation packages.
 
 The shared ``tessera_solver`` dialect owns the general IFT semantics.  This
-module binds one deliberately narrow physical family to that chain so x86 and
-ROCm can establish numerical and performance evidence without treating an
+module binds one deliberately narrow physical family to that chain so x86,
+ROCm, and NVIDIA can establish numerical evidence without treating an
 arbitrary Python residual callback as compiler IR.
 """
 
@@ -31,6 +31,8 @@ _GENERAL_CHILD_ROLES = (
 )
 
 _RESIDUAL_PROGRAM_SCHEMA = "tessera.solver.residual_program.v1"
+_NVIDIA_KRYLOV_SCHEMA = "tessera.nvidia.krylov.v1"
+_NVIDIA_DENSE_KRYLOV_SCHEMA = "tessera.nvidia.krylov.dense.v2"
 _RESIDUAL_BINARY_OPS = frozenset({
     "tessera.add", "tessera.sub", "tessera.mul", "tessera.div",
 })
@@ -291,10 +293,7 @@ def _residual_op(builder: _ResidualProgramBuilder, op: IROp,
     if op.op_name in _RESIDUAL_UNARY_OPS and len(operands) == 1:
         return builder.emit(op.op_name, *operands)
     if op.op_name in _RESIDUAL_MATMUL_OPS and len(operands) == 2:
-        return builder.emit(
-            "tessera.matmul", *operands,
-            storage=_matmul_storage(op), accumulation="f32",
-        )
+        return builder.emit("tessera.matmul", *operands, **_matmul_product_kwargs(op))
     if op.op_name in _RESIDUAL_COMPARE_OPS and len(operands) == 2:
         if op.kwargs:
             raise ValueError("automatic residual packaging rejects comparison attributes")
@@ -343,9 +342,32 @@ def _matmul_storage(op: IROp) -> str:
     return "f32"
 
 
+def _matmul_product_kwargs(op: IROp) -> dict[str, Any]:
+    allowed = {"storage", "accumulation", "numeric_policy", "math_mode"}
+    unknown = set(op.kwargs) - allowed
+    if unknown:
+        raise ValueError(
+            f"automatic residual packaging rejects matmul attributes {unknown}"
+        )
+    accumulation = str(op.kwargs.get("accumulation", "f32"))
+    if accumulation not in {"f32", "fp32"}:
+        raise ValueError("automatic residual matmul requires f32 accumulation")
+    result: dict[str, Any] = {
+        "storage": _matmul_storage(op), "accumulation": "f32",
+    }
+    policy = op.kwargs.get("numeric_policy")
+    if policy is not None:
+        if not isinstance(policy, dict):
+            raise ValueError("automatic residual matmul numeric_policy must be a dictionary")
+        result["numeric_policy"] = copy.deepcopy(policy)
+    elif op.kwargs.get("math_mode") is not None:
+        result["numeric_policy"] = {"math_mode": str(op.kwargs["math_mode"])}
+    return result
+
+
 def _product_kwargs(op: IROp) -> dict[str, Any]:
     if op.op_name in _RESIDUAL_MATMUL_OPS:
-        return {"storage": _matmul_storage(op), "accumulation": "f32"}
+        return _matmul_product_kwargs(op)
     return dict(op.kwargs)
 
 
@@ -610,16 +632,21 @@ def _residual_source(tensor_type: str) -> str:
 def build_solver_ift_contract(
     *, target: str, shape: Sequence[int], product_mode: str = "vjp"
 ) -> dict[str, Any]:
-    if target not in {"x86", "rocm_gfx1151"}:
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
         raise ValueError(
-            "solver IFT physical packages support x86 and rocm_gfx1151; unmeasured architectures fail closed"
+            "solver IFT physical packages support x86, rocm_gfx1151, and "
+            "nvidia_sm120; unmeasured architectures fail closed"
         )
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
         raise ValueError("solver IFT requires a positive static shape")
     if product_mode not in {"jvp", "vjp"}:
         raise ValueError("solver IFT product_mode must be jvp or vjp")
-    architecture = "avx512" if target == "x86" else "gfx1151"
+    architecture = {
+        "x86": "avx512",
+        "rocm_gfx1151": "gfx1151",
+        "nvidia_sm120": "sm120",
+    }[target]
     tensor_type = "tensor<" + "x".join(map(str, normalized)) + "xf32>"
     residual_identity = {
         "model": _RESIDUAL_MODEL,
@@ -671,8 +698,11 @@ def build_general_solver_product_contract(
     Graph product digests and may promote ``artifact_only`` only after its own
     executable and exact-device evidence land.
     """
-    if target not in {"x86", "rocm_gfx1151"}:
-        raise ValueError("general solver products support x86 and rocm_gfx1151 contracts")
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+        raise ValueError(
+            "general solver products support x86, rocm_gfx1151, and "
+            "nvidia_sm120 contracts"
+        )
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
         raise ValueError("general solver products require a positive static shape")
@@ -687,7 +717,11 @@ def build_general_solver_product_contract(
     }
     if any(not text.strip() for text in texts.values()):
         raise ValueError("general solver products require residual, JVP, and VJP IR")
-    architecture = "zen5_avx512" if target == "x86" else "gfx1151"
+    architecture = {
+        "x86": "zen5_avx512",
+        "rocm_gfx1151": "gfx1151",
+        "nvidia_sm120": "sm120",
+    }[target]
     body: dict[str, Any] = {
         "schema": _GENERAL_PRODUCT_SCHEMA,
         "target": target,
@@ -740,7 +774,11 @@ def build_physical_general_solver_contract(
     if max_iterations <= 0 or restart <= 0 or restart > max_iterations:
         raise ValueError("physical general solver requires 0 < restart <= max_iterations")
     child_records: dict[str, Any] = {}
-    expected_target = "x86" if target == "x86" else "rocm"
+    expected_target = {
+        "x86": "x86",
+        "rocm_gfx1151": "rocm",
+        "nvidia_sm120": "nvidia_sm120",
+    }[target]
     for role in _GENERAL_CHILD_ROLES:
         child = dict(children[role])
         metadata = dict(child.get("metadata") or {})
@@ -785,10 +823,15 @@ class PhysicalGeneralSolverArtifact:
         return str(self.contract["artifact_hash"])
 
     def runtime_metadata(self) -> dict[str, Any]:
-        runtime_target = "x86" if self.target == "x86" else "rocm"
+        runtime_target = {
+            "x86": "x86",
+            "rocm_gfx1151": "rocm",
+            "nvidia_sm120": "nvidia_sm120",
+        }[self.target]
+        compiler_prefix = "nvidia" if self.target == "nvidia_sm120" else runtime_target
         return {
             "target": runtime_target,
-            "compiler_path": f"{runtime_target}_general_solver_compiled",
+            "compiler_path": f"{compiler_prefix}_general_solver_compiled",
             "executable": True,
             "execution_kind": "native_cpu" if self.target == "x86" else "native_gpu",
             "arg_names": ["parameter", "solution", "product"],
@@ -831,8 +874,11 @@ def compile_physical_general_solver_from_graph(
     bodies are differentiated from SSA dataflow. Data-dependent regions and
     unsupported dtype/layout transitions fail closed.
     """
-    if target not in {"x86", "rocm_gfx1151"}:
-        raise ValueError("automatic residual packaging supports x86 and rocm_gfx1151")
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+        raise ValueError(
+            "automatic residual packaging supports x86, rocm_gfx1151, and "
+            "nvidia_sm120"
+        )
     if len(module.functions) != 1:
         raise ValueError("automatic residual packaging requires exactly one Graph function")
     verification = module.verify()
@@ -886,7 +932,12 @@ def compile_physical_general_solver_from_graph(
     solution_name = function.args[solution_arg].name.removeprefix("%")
     output = function.return_values[0].removeprefix("%")
     operations, output = _flatten_bounded_regions(function.body, output)
-    runtime_target = "x86" if target == "x86" else "rocm"
+    runtime_target = {
+        "x86": "x86",
+        "rocm_gfx1151": "rocm",
+        "nvidia_sm120": "nvidia_sm120",
+    }[target]
+    compiler_prefix = "nvidia" if target == "nvidia_sm120" else runtime_target
     execution_kind = "native_cpu" if target == "x86" else "native_gpu"
     programs: dict[str, dict[str, Any]] = {}
     children: dict[str, dict[str, Any]] = {}
@@ -900,7 +951,7 @@ def compile_physical_general_solver_from_graph(
         children[role] = {
             "metadata": {
                 "target": runtime_target,
-                "compiler_path": f"{runtime_target}_solver_graph_compiled",
+                "compiler_path": f"{compiler_prefix}_solver_graph_compiled",
                 "executable": True,
                 "execution_kind": execution_kind,
                 "arg_names": arg_names,
@@ -964,11 +1015,17 @@ class ScheduledSolverIFTArtifact:
 
     def runtime_metadata(self) -> dict[str, Any]:
         """Return the exact physical contract consumed by a native runtime."""
+        runtime_target = {
+            "x86": "x86",
+            "rocm_gfx1151": "rocm",
+            "nvidia_sm120": "nvidia_sm120",
+        }[self.target]
+        compiler_prefix = "nvidia" if self.target == "nvidia_sm120" else runtime_target
         return {
-            "target": "x86" if self.target == "x86" else "rocm",
-            "compiler_path": ("x86_solver_ift_compiled" if self.target == "x86" else "rocm_solver_ift_compiled"),
+            "target": runtime_target,
+            "compiler_path": f"{compiler_prefix}_solver_ift_compiled",
             "executable": True,
-            "execution_kind": ("native_cpu" if self.target == "x86" else "native_gpu"),
+            "execution_kind": "native_cpu" if self.target == "x86" else "native_gpu",
             "arg_names": ["parameter", "solution", "cotangent"],
             "scheduled_solver_ift": self.contract,
         }
@@ -1034,7 +1091,11 @@ def lower_scheduled_solver_ift(
     body = {key: value for key, value in contract.items() if key != "artifact_hash"}
     payload = _canonical_json(body)
     architecture = str(contract["architecture"])
-    compiler_target = "x86" if target == "x86" else "rocm"
+    compiler_target = {
+        "x86": "x86",
+        "rocm_gfx1151": "rocm",
+        "nvidia_sm120": "nvidia",
+    }[target]
     workgroup = int(contract["workgroup_size"])
     transpose = "true" if product_mode == "vjp" else "false"
     schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
@@ -1067,14 +1128,188 @@ def diagonal_sqrt_ift_reference(parameter: Any, solution: Any, cotangent: Any) -
     return residual, linear_solution, linear_solution.copy()
 
 
+def build_nvidia_krylov_contract(
+    *, shape: Sequence[int], storage: str = "f32", algorithm: str = "cg",
+    tolerance: float = 1.0e-6, max_iterations: int = 128,
+) -> dict[str, Any]:
+    """Build the bounded single-launch SM120 Krylov contract.
+
+    The first physical envelope is a positive diagonal SPD operator. All
+    evolving vectors and scalar reductions remain in device memory for the
+    complete solve; only the immutable diagonal/RHS and final state cross the
+    host boundary.
+    """
+    normalized = tuple(int(dim) for dim in shape)
+    if not normalized or any(dim <= 0 for dim in normalized):
+        raise ValueError("NVIDIA Krylov requires a positive static shape")
+    if storage not in {"f32", "f16", "bf16"}:
+        raise ValueError("NVIDIA Krylov storage must be f32, f16, or bf16")
+    if algorithm != "cg":
+        raise ValueError("NVIDIA device-resident Krylov v1 admits dedicated CG only")
+    if not (0.0 < float(tolerance) < 1.0):
+        raise ValueError("NVIDIA Krylov tolerance must be in (0, 1)")
+    if int(max_iterations) <= 0:
+        raise ValueError("NVIDIA Krylov max_iterations must be positive")
+    body = {
+        "schema": _NVIDIA_KRYLOV_SCHEMA,
+        "target": "nvidia_sm120",
+        "architecture": "sm120",
+        "shape": list(normalized),
+        "operator": "positive_diagonal_spd_v1",
+        "algorithm": algorithm,
+        "storage": storage,
+        "accumulation": "f32",
+        "state": ["solution", "residual", "direction", "matvec"],
+        "state_residency": "single_launch_device_resident",
+        "true_residual_check": True,
+        "tolerance": float(tolerance),
+        "max_iterations": int(max_iterations),
+        "workgroup_size": 256,
+        "performance_eligible": False,
+    }
+    return {**body, "artifact_hash": _digest(body)}
+
+
+@dataclass(frozen=True)
+class NvidiaKrylovArtifact:
+    shape: tuple[int, ...]
+    contract: dict[str, Any]
+
+    @property
+    def artifact_hash(self) -> str:
+        return str(self.contract["artifact_hash"])
+
+    def runtime_metadata(self) -> dict[str, Any]:
+        return {
+            "target": "nvidia_sm120",
+            "compiler_path": "nvidia_krylov_solver_compiled",
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "arg_names": ["diagonal", "rhs"],
+            "nvidia_krylov": self.contract,
+        }
+
+
+def package_nvidia_krylov_solver(
+    *, shape: Sequence[int], storage: str = "f32", algorithm: str = "cg",
+    tolerance: float = 1.0e-6, max_iterations: int = 128,
+) -> NvidiaKrylovArtifact:
+    contract = build_nvidia_krylov_contract(
+        shape=shape, storage=storage, algorithm=algorithm,
+        tolerance=tolerance, max_iterations=max_iterations,
+    )
+    return NvidiaKrylovArtifact(
+        shape=tuple(int(dim) for dim in shape), contract=contract
+    )
+
+
+def build_nvidia_dense_krylov_contract(
+    *, order: int, storage: str = "f32", algorithm: str = "gmres",
+    tolerance: float = 1.0e-6, max_iterations: int = 128,
+    restart: int = 16, reduction_ctas: int = 0,
+) -> dict[str, Any]:
+    """Build the cooperative-grid dense-operator Krylov contract.
+
+    ``algorithm="cg"`` is admitted only under an authored SPD promise.  The
+    CUDA kernel checks positive curvature at every iteration and fails closed
+    when that promise is violated.  ``gmres`` carries no symmetry promise and
+    uses twice-modified Gram-Schmidt plus a true-residual acceptance check.
+    """
+    n = int(order)
+    if n <= 0 or n > 8192:
+        raise ValueError("NVIDIA dense Krylov order must be in 1..8192")
+    if storage not in {"f32", "f16", "bf16"}:
+        raise ValueError("NVIDIA dense Krylov storage must be f32, f16, or bf16")
+    if algorithm not in {"cg", "gmres"}:
+        raise ValueError("NVIDIA dense Krylov algorithm must be cg or gmres")
+    if not (0.0 < float(tolerance) < 1.0):
+        raise ValueError("NVIDIA dense Krylov tolerance must be in (0, 1)")
+    if int(max_iterations) <= 0:
+        raise ValueError("NVIDIA dense Krylov max_iterations must be positive")
+    if int(restart) <= 0 or int(restart) > 32:
+        raise ValueError("NVIDIA dense Krylov restart must be in 1..32")
+    if int(reduction_ctas) < 0:
+        raise ValueError("NVIDIA dense Krylov reduction_ctas cannot be negative")
+    body = {
+        "schema": _NVIDIA_DENSE_KRYLOV_SCHEMA,
+        "target": "nvidia_sm120",
+        "architecture": "sm120",
+        "operator": "arbitrary_dense_row_major_v1",
+        "operator_shape": [n, n],
+        "rhs_shape": [n],
+        "operator_assumption": "symmetric_positive_definite" if algorithm == "cg" else "general_nonsingular",
+        "algorithm": algorithm,
+        "numeric_policy": {
+            "storage": storage,
+            "accum": "fp32",
+            "matvec_math": "storage_quantized_fp32_fma",
+            "residual_check": "fp32_true_residual",
+        },
+        "state": [
+            "solution", "residual", "matvec", "basis", "hessenberg",
+            "givens", "dot_partials", "convergence",
+        ],
+        "state_residency": "single_cooperative_launch_device_resident",
+        "reduction": "deterministic_multi_cta_two_level",
+        "requested_reduction_ctas": int(reduction_ctas),
+        "true_residual_check": True,
+        "orthogonalization": "twice_modified_gram_schmidt" if algorithm == "gmres" else "not_applicable",
+        "tolerance": float(tolerance),
+        "max_iterations": int(max_iterations),
+        "restart": int(restart),
+        "workgroup_size": 256,
+        "performance_eligible": True,
+    }
+    return {**body, "artifact_hash": _digest(body)}
+
+
+@dataclass(frozen=True)
+class NvidiaDenseKrylovArtifact:
+    order: int
+    contract: dict[str, Any]
+
+    @property
+    def artifact_hash(self) -> str:
+        return str(self.contract["artifact_hash"])
+
+    def runtime_metadata(self) -> dict[str, Any]:
+        return {
+            "target": "nvidia_sm120",
+            "compiler_path": "nvidia_dense_krylov_compiled",
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "arg_names": ["operator", "rhs"],
+            "nvidia_dense_krylov": self.contract,
+        }
+
+
+def package_nvidia_dense_krylov_solver(
+    *, order: int, storage: str = "f32", algorithm: str = "gmres",
+    tolerance: float = 1.0e-6, max_iterations: int = 128,
+    restart: int = 16, reduction_ctas: int = 0,
+) -> NvidiaDenseKrylovArtifact:
+    contract = build_nvidia_dense_krylov_contract(
+        order=order, storage=storage, algorithm=algorithm,
+        tolerance=tolerance, max_iterations=max_iterations, restart=restart,
+        reduction_ctas=reduction_ctas,
+    )
+    return NvidiaDenseKrylovArtifact(order=int(order), contract=contract)
+
+
 __all__ = [
     "ScheduledSolverIFTArtifact",
     "PhysicalGeneralSolverArtifact",
+    "NvidiaKrylovArtifact",
+    "NvidiaDenseKrylovArtifact",
     "build_solver_ift_contract",
     "build_general_solver_product_contract",
     "build_physical_general_solver_contract",
     "compile_physical_general_solver_from_graph",
     "diagonal_sqrt_ift_reference",
+    "build_nvidia_krylov_contract",
+    "build_nvidia_dense_krylov_contract",
     "lower_scheduled_solver_ift",
     "package_physical_general_solver",
+    "package_nvidia_krylov_solver",
+    "package_nvidia_dense_krylov_solver",
 ]

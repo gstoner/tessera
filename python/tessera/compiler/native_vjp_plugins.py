@@ -657,7 +657,11 @@ def _execute_lion(
         )
     except (RuntimeError, TypeError, ValueError) as exc:
         raise TesseraJitError(str(exc)) from exc
-    execution_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+    execution_mode = {
+        "x86": "cpu_avx512",
+        "rocm": "hip_runtime",
+        "nvidia_sm120": "cuda_driver",
+    }[target]
     if not result.get("ok") or result.get("execution_mode") != execution_mode:
         raise TesseraJitError(
             f"verified {target} Lion backward launch failed: "
@@ -676,7 +680,11 @@ def _execute_lion(
             "compiler_path": f"{target}_lion_bwd_compiled",
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
             "execution_mode": execution_mode,
-            "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
+            "evidence_target": {
+                "x86": "x86_avx512",
+                "rocm": "rocm_gfx1151",
+                "nvidia_sm120": "nvidia_sm120",
+            }[target],
             "implementation": "family_plugin",
             "residual_policy": "none",
             "family": declaration.family,
@@ -744,7 +752,11 @@ def _execute_stateful_package(
         )
     except (RuntimeError, TypeError, ValueError) as exc:
         raise TesseraJitError(str(exc)) from exc
-    execution_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+    execution_mode = {
+        "x86": "cpu_avx512",
+        "rocm": "hip_runtime",
+        "nvidia_sm120": "cuda_driver",
+    }[target]
     if not result.get("ok") or result.get("execution_mode") != execution_mode:
         raise TesseraJitError(
             f"verified {target} {declaration.family} launch failed: "
@@ -763,7 +775,11 @@ def _execute_stateful_package(
             "compiler_path": package.compiler_path,
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
             "execution_mode": execution_mode,
-            "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
+            "evidence_target": {
+                "x86": "x86_avx512",
+                "rocm": "rocm_gfx1151",
+                "nvidia_sm120": "nvidia_sm120",
+            }[target],
             "implementation": "family_plugin",
             "residual_policy": residual_policy,
             "family": declaration.family,
@@ -793,6 +809,7 @@ def _execute_stateful_package(
     target_consumers={
         "x86": "x86.avx512_sgd_backward",
         "rocm": "rocm.gfx1151_sgd_backward",
+        "nvidia_sm120": "nvidia.sm120_sgd_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
 )
@@ -804,6 +821,7 @@ def _execute_stateful_package(
     target_consumers={
         "x86": "x86.avx512_momentum_backward",
         "rocm": "rocm.gfx1151_momentum_backward",
+        "nvidia_sm120": "nvidia.sm120_momentum_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
 )
@@ -812,7 +830,10 @@ def _execute_stateful_package(
     family="optimizer_vjp",
     schedule_consumer="schedule.optimizer_vjp",
     tile_consumer="tile.training_kernel",
-    target_consumers={"rocm": "rocm.gfx1151_adam_backward"},
+    target_consumers={
+        "rocm": "rocm.gfx1151_adam_backward",
+        "nvidia_sm120": "nvidia.sm120_adam_backward",
+    },
     differential_policy="non_reexecuting_state_lineage",
 )
 def _execute_optimizer_vjp(
@@ -843,6 +864,7 @@ def _execute_optimizer_vjp(
     target_consumers={
         "x86": "x86.avx512_adafactor_backward",
         "rocm": "rocm.gfx1151_adafactor_backward",
+        "nvidia_sm120": "nvidia.sm120_adafactor_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
 )

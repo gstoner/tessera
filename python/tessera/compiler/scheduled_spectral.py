@@ -207,6 +207,15 @@ _ARCHITECTURE_PROFILES = {
         "architecture-stamped package exists; gfx1250 schedule and exact-device "
         "evidence are required for execution",
     ),
+    "nvidia_sm120": SpectralArchitectureProfile(
+        "nvidia_sm120",
+        "nvidia_sm120",
+        "sm120",
+        "ready",
+        "tessera.nvidia.spectral_policy.v1",
+        "exact_device_validated",
+        "exact SM120 CUDA policy package",
+    ),
 }
 
 
@@ -540,8 +549,11 @@ class ScheduledSpectralArtifact:
         if (self.target, self.architecture) not in {
             ("rocm", "gfx1151"),
             ("x86", "zen5-avx512"),
+            ("nvidia_sm120", "sm120"),
         }:
-            raise ValueError("TSOL package requires exact gfx1151 or Zen 5 AVX-512")
+            raise ValueError(
+                "TSOL package requires exact gfx1151, Zen 5 AVX-512, or SM120"
+            )
         semantic_digest = digest_text(self._identity_payload())
         if self.schedule_object.get("object_id") != f"spectral:{semantic_digest}":
             raise ValueError("TSOL Schedule Object semantic identity mismatch")
@@ -727,6 +739,8 @@ def lower_scheduled_spectral(
         entry = (
             "tessera_x86_spectral_filter_f32"
             if compiler_target == "x86"
+            else "tessera_nvidia_spectral_filter_f32"
+            if compiler_target == "nvidia_sm120"
             else "ts_spectral_filter_plan_hostptr_amd"
         )
     elif op_name == "tessera.dct":
@@ -759,6 +773,8 @@ def lower_scheduled_spectral(
         entry = (
             "tessera_x86_dct_strided_storage"
             if compiler_target == "x86"
+            else "tessera_nvidia_dct_policy_layout_storage"
+            if compiler_target == "nvidia_sm120"
             else "ts_dct_plan_hostptr_strided_storage_amd"
         )
     elif op_name == "tessera.spectral_conv":
@@ -804,6 +820,8 @@ def lower_scheduled_spectral(
         entry = (
             "tessera_x86_spectral_conv_strided_storage"
             if compiler_target == "x86"
+            else "tessera_nvidia_spectral_conv_f32"
+            if compiler_target == "nvidia_sm120"
             else "ts_spectral_conv_plan_hostptr_strided_storage_amd"
         )
     elif op_name == "tessera.stft":
@@ -863,6 +881,8 @@ def lower_scheduled_spectral(
         entry = (
             "tessera_x86_stft_policy_broadcast_layout_storage"
             if compiler_target == "x86"
+            else "tessera_nvidia_stft_policy_broadcast_layout_storage"
+            if compiler_target == "nvidia_sm120"
             else "ts_stft_plan_hostptr_broadcast_layout_storage_amd"
         )
     else:
@@ -943,6 +963,8 @@ def lower_scheduled_spectral(
         entry = (
             "tessera_x86_istft_policy_broadcast_layout_storage"
             if compiler_target == "x86"
+            else "tessera_nvidia_istft_policy_broadcast_layout_storage"
+            if compiler_target == "nvidia_sm120"
             else "ts_istft_plan_hostptr_broadcast_layout_storage_amd"
         )
 

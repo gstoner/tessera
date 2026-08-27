@@ -637,6 +637,23 @@ def test_physical_general_solver_contract_binds_all_native_children() -> None:
         )
 
 
+def test_general_solver_never_substitutes_gmres_for_declared_cg() -> None:
+    from tessera import runtime as rt
+
+    package = package_physical_general_solver(
+        target="x86", shape=(4,), residual_graph_ir="R=x-theta",
+        residual_jvp_ir="dR=dx-dtheta", residual_vjp_ir="R^T products",
+        product_mode="vjp", children=_affine_general_children("x86"),
+        linear_solver="cg", tolerance=1.0e-6, max_iterations=8, restart=4,
+    )
+    value = np.ones(4, dtype=np.float32)
+    with pytest.raises(ValueError, match="CG requires the target-owned SPD"):
+        rt._execute_x86_physical_general_solver(
+            rt.RuntimeArtifact(metadata=package.runtime_metadata()),
+            (value, value, value),
+        )
+
+
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
 def test_physical_general_solver_executes_native_matrix_free_children(target: str) -> None:
     from tessera import runtime as rt
@@ -672,7 +689,7 @@ def test_physical_general_solver_executes_native_matrix_free_children(target: st
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "nvidia_sm120"])
 def test_solver_forward_product_consumes_residual_jvp(target: str) -> None:
     artifact = lower_scheduled_solver_ift(
         target=target, shape=(17,), product_mode="jvp"
@@ -683,7 +700,7 @@ def test_solver_forward_product_consumes_residual_jvp(target: str) -> None:
     assert "transpose = false" in artifact.schedule_ir
 
 
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "nvidia_sm120"])
 def test_solver_forward_product_executes_parameter_tangent(target: str) -> None:
     from tessera import runtime as rt
 
@@ -695,6 +712,8 @@ def test_solver_forward_product_executes_parameter_tangent(target: str) -> None:
         rt._rocm_chip() != "gfx1151" or not rt._rocm_wmma_runtime_available()
     ):
         pytest.skip("exact gfx1151 runtime unavailable")
+    if target == "nvidia_sm120":
+        pytest.skip("exact SM120 execution lives in the NVIDIA device packet")
     parameter = np.linspace(0.5, 8.5, 257, dtype=np.float32)
     solution = np.sqrt(parameter).astype(np.float32)
     dparameter = np.linspace(-1.0, 1.0, 257, dtype=np.float32)
@@ -714,7 +733,7 @@ def test_solver_forward_product_executes_parameter_tangent(target: str) -> None:
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
-@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "nvidia_sm120"])
 def test_solver_ift_consumes_shared_chain_into_one_tile_artifact(target: str) -> None:
     artifact = lower_scheduled_solver_ift(target=target, shape=(64,))
     artifact.validate()

@@ -37,6 +37,18 @@ def _tool_version(path: Path) -> str:
     return result.stdout.splitlines()[0]
 
 
+def _device_name(target: str) -> str:
+    if target == "x86":
+        return _cpu_model()
+    if target == "rocm_gfx1151":
+        return rt._rocm_chip()
+    result = subprocess.run(
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+        capture_output=True, check=True, text=True,
+    )
+    return result.stdout.splitlines()[0].strip()
+
+
 def run(target: str, shape: tuple[int, ...], warmup: int, samples: int) -> dict:
     tool = find_tessera_opt()
     if tool is None:
@@ -71,7 +83,7 @@ def run(target: str, shape: tuple[int, ...], warmup: int, samples: int) -> dict:
         "work_items": ["AD-SOLVER-IFT-1", "AD-RESIDUAL-EVAL-1"],
         "target": target,
         "architecture": scheduled.architecture,
-        "device": _cpu_model() if target == "x86" else rt._rocm_chip(),
+        "device": _device_name(target),
         "host": platform.platform(),
         "toolchain": _tool_version(tool),
         "tessera_opt_sha256": _sha256(tool),
@@ -105,7 +117,11 @@ def run(target: str, shape: tuple[int, ...], warmup: int, samples: int) -> dict:
             "reason": (
                 "native AVX-512 synchronized host timing"
                 if target == "x86"
-                else "WSL HIP host-wall timing is regression-only"
+                else (
+                    "WSL HIP host-wall timing is regression-only"
+                    if target == "rocm_gfx1151"
+                    else "CUDA host-wrapper timing is correctness/regression-only"
+                )
             ),
         },
     }
@@ -113,7 +129,10 @@ def run(target: str, shape: tuple[int, ...], warmup: int, samples: int) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", choices=("x86", "rocm_gfx1151"), required=True)
+    parser.add_argument(
+        "--target", choices=("x86", "rocm_gfx1151", "nvidia_sm120"),
+        required=True,
+    )
     parser.add_argument("--shape", default="3x257")
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--samples", type=int, default=30)

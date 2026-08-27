@@ -288,5 +288,13 @@ def test_nvidia_spectral_consumers_route_through_native_fft(op_name, monkeypatch
     else:
         expected = (operands[0] * operands[1]).astype(np.complex64)
     np.testing.assert_allclose(actual, expected, rtol=4e-5, atol=4e-5)
-    if op_name != "tessera.spectral_filter":
+    if op_name in {"tessera.dct", "tessera.stft", "tessera.istft"}:
+        # These two composites are now one target-owned CUDA policy package;
+        # they must not reconstruct framing/OLA through the Python FFT helper.
+        assert not calls
+        _, lib = _runtime_or_skip()
+        assert lib.tessera_nvidia_spectral_package_abi() == (
+            b"tessera.nvidia.spectral_policy.v1")
+        assert lib.tessera_nvidia_spectral_arch() == 120
+    elif op_name != "tessera.spectral_filter":
         assert calls

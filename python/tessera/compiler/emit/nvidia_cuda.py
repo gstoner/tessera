@@ -108,6 +108,9 @@ _DEQUANT_GROUPED_ENTRY = "tessera_nvidia_dequant_grouped_gemm_f32"
 _OPTIMIZER_ENTRY = "tessera_nvidia_optimizer_f32"
 _LOCAL_COLLECTIVE_ENTRY = "tessera_nvidia_local_collective_f32"
 _FPQUANT_ENTRY = "tessera_nvidia_fpquant_f32"
+_BINARY_ENTRY = "tessera_nvidia_binary"
+_SOLVER_IFT_ENTRY = "tessera_nvidia_solver_ift_f32"
+_SOLVER_CHILD_ENTRY = "tessera_nvidia_solver_unary"
 _REAL_TAG = "nvidia_cuda"
 #: Max head dim (Dv) the one-thread-per-query flash kernel holds in its per-thread
 #: online-softmax accumulator; larger Dv declines to the reference.
@@ -245,6 +248,9 @@ _dequant_artifact: str | None = None
 _optimizer_artifact: str | None = None
 _local_collective_artifact: str | None = None
 _fpquant_artifact: str | None = None
+_binary_artifact: str | None = None
+_solver_ift_artifact: str | None = None
+_solver_child_artifact: str | None = None
 
 
 def _synthesize_flash_fwd_cuda() -> str:
@@ -1338,13 +1344,19 @@ _reduce_artifact: dict[str, str] = {}
 
 def _synthesize_reduce_cuda(dtype: str = "f32") -> str:
     """CUDA source for f32-accumulating reductions over each flattened row."""
-    if dtype not in {"f32", "f16"}:
+    if dtype not in {"f32", "f16", "bf16"}:
         raise ValueError(f"unsupported NVIDIA reduction dtype {dtype!r}")
-    ctype = "float" if dtype == "f32" else "__half"
-    load = "x[r*K+j]" if dtype == "f32" else "__half2float(x[r*K+j])"
+    ctype = {"f32": "float", "f16": "__half", "bf16": "__nv_bfloat16"}[dtype]
+    load = {
+        "f32": "x[r*K+j]",
+        "f16": "__half2float(x[r*K+j])",
+        "bf16": "__bfloat162float(x[r*K+j])",
+    }[dtype]
     preamble = "#include <cuda_runtime.h>\n#include <math.h>\n#include <float.h>\n"
     if dtype == "f16":
         preamble += "#include <cuda_fp16.h>\n"
+    elif dtype == "bf16":
+        preamble += "#include <cuda_bf16.h>\n"
     return (
         preamble +
         "#define TSR_RD_BLOCK 256\n"
@@ -1380,9 +1392,20 @@ def run_row_reduce(x2d: Any, kind: str) -> Any:
     if code is None:
         raise ValueError(f"unknown NVIDIA reduction kind {kind!r}")
     xa = np.asarray(x2d)
-    if xa.dtype not in (np.float32, np.float16):
-        raise ValueError(f"NVIDIA row reduction supports f32/f16 storage; got {xa.dtype}")
-    dtype = "f32" if xa.dtype == np.float32 else "f16"
+    bf16 = None
+    try:
+        import ml_dtypes
+        bf16 = np.dtype(ml_dtypes.bfloat16)
+    except ImportError:
+        pass
+    if xa.dtype == np.float32:
+        dtype = "f32"
+    elif xa.dtype == np.float16:
+        dtype = "f16"
+    elif bf16 is not None and xa.dtype == bf16:
+        dtype = "bf16"
+    else:
+        raise ValueError(f"NVIDIA row reduction supports f32/f16/bf16 storage; got {xa.dtype}")
     xf = np.ascontiguousarray(xa)
     if xf.ndim != 2 or xf.shape[0] <= 0 or xf.shape[1] <= 0:
         raise ValueError("NVIDIA row reduction requires a non-empty [M, K] input")
@@ -1450,6 +1473,528 @@ def run_fpquant_f32(x: Any, max_normal: float, mantissa_bits: int,
     out=np.empty_like(x);fn=getattr(_load_lib(_fpquant_artifact),_FPQUANT_ENTRY);fn.restype=ctypes.c_int;fn.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_long,ctypes.c_float,ctypes.c_int,ctypes.c_int]
     if fn(_ptr(scaled),_ptr(out),x.size,max_normal,mantissa_bits,min_exp)!=1:raise RuntimeError("NVIDIA fpquant launch failed")
     return (out*np.float32(scale)).astype(np.float32)
+
+
+def _synthesize_binary_cuda() -> str:
+    """Matching-shape CUDA binary arithmetic with explicit storage policy.
+
+    All arithmetic is evaluated in fp32. f16/bf16 are storage formats only,
+    matching the ROCm binary-family policy and the spectral JVP accumulator.
+    """
+    return r'''#include <cuda_runtime.h>
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
+#include <math.h>
+
+template <typename T> __device__ float tsr_load(const T *x, long i);
+template <> __device__ float tsr_load<float>(const float *x, long i) { return x[i]; }
+template <> __device__ float tsr_load<__half>(const __half *x, long i) { return __half2float(x[i]); }
+template <> __device__ float tsr_load<__nv_bfloat16>(const __nv_bfloat16 *x, long i) { return __bfloat162float(x[i]); }
+
+template <typename T> __device__ void tsr_store(T *x, long i, float v);
+template <> __device__ void tsr_store<float>(float *x, long i, float v) { x[i] = v; }
+template <> __device__ void tsr_store<__half>(__half *x, long i, float v) { x[i] = __float2half_rn(v); }
+template <> __device__ void tsr_store<__nv_bfloat16>(__nv_bfloat16 *x, long i, float v) { x[i] = __float2bfloat16_rn(v); }
+
+__device__ float tsr_binary_value(float a, float b, int kind) {
+  if (kind == 0) return a - b;
+  if (kind == 1) return a / b;
+  if (kind == 2) return powf(a, b);
+  if (kind == 3) return (isnan(a) || isnan(b)) ? NAN : fmaxf(a, b);
+  if (kind == 4) return (isnan(a) || isnan(b)) ? NAN : fminf(a, b);
+  if (kind == 5) return a + b;
+  if (kind == 6) return a * b;
+  if (kind == 7) { float q = floorf(a / b); return a - q * b; }
+  return floorf(a / b);
+}
+
+template <typename T>
+__global__ void tsr_binary_kernel(const T *a, const T *b, T *o, long n, int kind) {
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) tsr_store(o, i, tsr_binary_value(tsr_load(a, i), tsr_load(b, i), kind));
+}
+
+extern "C" int tessera_nvidia_binary(const void *ha, const void *hb, void *ho,
+                                      long n, int kind, int storage) {
+  if (!ha || !hb || !ho || n <= 0 || kind < 0 || kind > 8 ||
+      storage < 0 || storage > 2) return 2;
+  size_t bytes = (size_t)n * (storage == 0 ? 4 : 2);
+  void *a = nullptr, *b = nullptr, *o = nullptr;
+  int result = 3;
+  if (cudaMalloc(&a, bytes) != cudaSuccess ||
+      cudaMalloc(&b, bytes) != cudaSuccess ||
+      cudaMalloc(&o, bytes) != cudaSuccess) goto cleanup;
+  if (cudaMemcpy(a, ha, bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(b, hb, bytes, cudaMemcpyHostToDevice) != cudaSuccess) goto cleanup;
+  if (storage == 0)
+    tsr_binary_kernel<<<(n + 255) / 256, 256>>>((const float *)a, (const float *)b, (float *)o, n, kind);
+  else if (storage == 1)
+    tsr_binary_kernel<<<(n + 255) / 256, 256>>>((const __half *)a, (const __half *)b, (__half *)o, n, kind);
+  else
+    tsr_binary_kernel<<<(n + 255) / 256, 256>>>((const __nv_bfloat16 *)a, (const __nv_bfloat16 *)b, (__nv_bfloat16 *)o, n, kind);
+  if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess ||
+      cudaMemcpy(ho, o, bytes, cudaMemcpyDeviceToHost) != cudaSuccess) goto cleanup;
+  result = 1;
+cleanup:
+  if (a) cudaFree(a);
+  if (b) cudaFree(b);
+  if (o) cudaFree(o);
+  return result;
+}
+'''
+
+
+def run_binary_arithmetic(a: Any, b: Any, kind: int) -> Any:
+    """Execute one matching-shape f32/f16/bf16 CUDA binary operation."""
+    import numpy as np
+
+    aa = np.ascontiguousarray(a)
+    bb = np.ascontiguousarray(b)
+    if aa.shape != bb.shape or aa.dtype != bb.dtype:
+        raise ValueError("NVIDIA binary operands require matching shape and dtype")
+    bf16 = None
+    try:
+        import ml_dtypes
+        bf16 = np.dtype(ml_dtypes.bfloat16)
+    except ImportError:
+        pass
+    if aa.dtype == np.float32:
+        storage = 0
+    elif aa.dtype == np.float16:
+        storage = 1
+    elif bf16 is not None and aa.dtype == bf16:
+        storage = 2
+    else:
+        raise ValueError(f"NVIDIA binary arithmetic handles f32/f16/bf16; got {aa.dtype}")
+    if not aa.size:
+        return np.array(aa, copy=True)
+    if kind < 0 or kind > 8:
+        raise ValueError(f"unknown NVIDIA binary arithmetic kind {kind}")
+    global _binary_artifact
+    if _binary_artifact is None:
+        _binary_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_binary_cuda(), entry=_BINARY_ENTRY, lang=_LANG,
+            spec=SpecPolicy.DYNAMIC, shape_key=("binary-f32-accum",)))
+    out = np.empty_like(aa)
+    fn = getattr(_load_lib(_binary_artifact), _BINARY_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long, ctypes.c_int, ctypes.c_int]
+    if fn(_ptr(aa), _ptr(bb), _ptr(out), aa.size, kind, storage) != 1:
+        raise RuntimeError("NVIDIA binary CUDA launch failed")
+    return out
+
+
+def _synthesize_solver_ift_cuda() -> str:
+    """SM120 diagonal-sqrt residual, matrix-free solve, and IFT product."""
+    return r'''#include <cuda_runtime.h>
+
+__global__ void tessera_solver_ift_kernel(
+    const float *theta, const float *solution, const float *product,
+    float *residual, float *linear_solution, float *parameter_product, long n) {
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float x = solution[i];
+  float solved = product[i] / (2.0f * x);
+  residual[i] = x * x - theta[i];
+  linear_solution[i] = solved;
+  parameter_product[i] = solved;
+}
+
+extern "C" int tessera_nvidia_solver_ift_f32(
+    const float *htheta, const float *hsolution, const float *hproduct,
+    float *hresidual, float *hlinear, float *hparameter, long n) {
+  if (!htheta || !hsolution || !hproduct || !hresidual || !hlinear ||
+      !hparameter || n <= 0) return 2;
+  size_t bytes = (size_t)n * sizeof(float);
+  float *theta = nullptr, *solution = nullptr, *product = nullptr;
+  float *residual = nullptr, *linear = nullptr, *parameter = nullptr;
+  int result = 3;
+  if (cudaMalloc(&theta, bytes) != cudaSuccess ||
+      cudaMalloc(&solution, bytes) != cudaSuccess ||
+      cudaMalloc(&product, bytes) != cudaSuccess ||
+      cudaMalloc(&residual, bytes) != cudaSuccess ||
+      cudaMalloc(&linear, bytes) != cudaSuccess ||
+      cudaMalloc(&parameter, bytes) != cudaSuccess) goto cleanup;
+  if (cudaMemcpy(theta, htheta, bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(solution, hsolution, bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(product, hproduct, bytes, cudaMemcpyHostToDevice) != cudaSuccess)
+    goto cleanup;
+  tessera_solver_ift_kernel<<<(n + 255) / 256, 256>>>(
+      theta, solution, product, residual, linear, parameter, n);
+  if (cudaGetLastError() != cudaSuccess ||
+      cudaDeviceSynchronize() != cudaSuccess ||
+      cudaMemcpy(hresidual, residual, bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(hlinear, linear, bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(hparameter, parameter, bytes, cudaMemcpyDeviceToHost) != cudaSuccess)
+    goto cleanup;
+  result = 1;
+cleanup:
+  if (theta) cudaFree(theta);
+  if (solution) cudaFree(solution);
+  if (product) cudaFree(product);
+  if (residual) cudaFree(residual);
+  if (linear) cudaFree(linear);
+  if (parameter) cudaFree(parameter);
+  return result;
+}
+'''
+
+
+def run_solver_ift_f32(parameter: Any, solution: Any, product: Any) -> tuple[Any, Any, Any]:
+    """Execute the content-addressed diagonal-sqrt IFT phases on CUDA."""
+    import numpy as np
+
+    arrays = tuple(np.ascontiguousarray(value) for value in (parameter, solution, product))
+    if any(value.dtype != np.float32 for value in arrays):
+        raise ValueError("NVIDIA solver IFT requires f32 operands")
+    if any(value.shape != arrays[0].shape for value in arrays[1:]) or not arrays[0].size:
+        raise ValueError("NVIDIA solver IFT requires matching non-empty shapes")
+    global _solver_ift_artifact
+    if _solver_ift_artifact is None:
+        _solver_ift_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_solver_ift_cuda(), entry=_SOLVER_IFT_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=("solver-ift-diagonal-sqrt-f32",),
+        ))
+    outputs = tuple(np.empty_like(arrays[0]) for _ in range(3))
+    fn = getattr(_load_lib(_solver_ift_artifact), _SOLVER_IFT_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 6 + [ctypes.c_long]
+    rc = fn(*(_ptr(value) for value in (*arrays, *outputs)), arrays[0].size)
+    if rc != 1:
+        raise RuntimeError(f"NVIDIA solver IFT CUDA launch failed with status {rc}")
+    return outputs
+
+
+def _synthesize_solver_children_cuda() -> str:
+    """Typed solver residual children plus one-block resident diagonal CG."""
+    return r'''#include <cuda_runtime.h>
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
+#include <math.h>
+
+template <typename T> __device__ float tsr_sload(const T *x, long i);
+template <> __device__ float tsr_sload<float>(const float *x, long i) { return x[i]; }
+template <> __device__ float tsr_sload<__half>(const __half *x, long i) { return __half2float(x[i]); }
+template <> __device__ float tsr_sload<__nv_bfloat16>(const __nv_bfloat16 *x, long i) { return __bfloat162float(x[i]); }
+template <typename T> __device__ void tsr_sstore(T *x, long i, float v);
+template <> __device__ void tsr_sstore<float>(float *x, long i, float v) { x[i] = v; }
+template <> __device__ void tsr_sstore<__half>(__half *x, long i, float v) { x[i] = __float2half_rn(v); }
+template <> __device__ void tsr_sstore<__nv_bfloat16>(__nv_bfloat16 *x, long i, float v) { x[i] = __float2bfloat16_rn(v); }
+
+__device__ float tsr_unary(float x, int kind) {
+  if (kind == 0) return sqrtf(x);
+  if (kind == 1) return 1.0f / x;
+  if (kind == 2) return expf(x);
+  if (kind == 3) return logf(x);
+  if (kind == 4) return tanhf(x);
+  if (kind == 5) return 1.0f / (1.0f + expf(-x));
+  if (kind == 6) return sinf(x);
+  return cosf(x);
+}
+template <typename T> __global__ void tsr_unary_kernel(const T *x, T *o, long n, int kind) {
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) tsr_sstore(o, i, tsr_unary(tsr_sload(x, i), kind));
+}
+template <typename T> __global__ void tsr_compare_kernel(
+    const T *a, const T *b, unsigned char *o, long n, int kind) {
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float x = tsr_sload(a, i), y = tsr_sload(b, i);
+  bool v = kind == 0 ? x == y : kind == 1 ? x != y : kind == 2 ? x < y :
+           kind == 3 ? x <= y : kind == 4 ? x > y : x >= y;
+  o[i] = (unsigned char)v;
+}
+template <typename T> __global__ void tsr_where_kernel(
+    const unsigned char *p, const T *a, const T *b, T *o, long n) {
+  long i = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) tsr_sstore(o, i, p[i] ? tsr_sload(a, i) : tsr_sload(b, i));
+}
+
+template <typename T>
+int tsr_unary_host(const void *hx, void *ho, long n, int kind) {
+  size_t bytes = (size_t)n * sizeof(T); T *x = nullptr, *o = nullptr; int rc = 3;
+  if (cudaMalloc(&x, bytes) != cudaSuccess || cudaMalloc(&o, bytes) != cudaSuccess) goto done;
+  if (cudaMemcpy(x, hx, bytes, cudaMemcpyHostToDevice) != cudaSuccess) goto done;
+  tsr_unary_kernel<<<(n + 255) / 256, 256>>>(x, o, n, kind);
+  if (cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
+      cudaMemcpy(ho, o, bytes, cudaMemcpyDeviceToHost) == cudaSuccess) rc = 1;
+done: if (x) cudaFree(x); if (o) cudaFree(o); return rc;
+}
+template <typename T>
+int tsr_compare_host(const void *ha, const void *hb, void *ho, long n, int kind) {
+  size_t bytes = (size_t)n * sizeof(T); T *a = nullptr, *b = nullptr;
+  unsigned char *o = nullptr; int rc = 3;
+  if (cudaMalloc(&a, bytes) != cudaSuccess || cudaMalloc(&b, bytes) != cudaSuccess ||
+      cudaMalloc(&o, (size_t)n) != cudaSuccess) goto done;
+  if (cudaMemcpy(a, ha, bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(b, hb, bytes, cudaMemcpyHostToDevice) != cudaSuccess) goto done;
+  tsr_compare_kernel<<<(n + 255) / 256, 256>>>(a, b, o, n, kind);
+  if (cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
+      cudaMemcpy(ho, o, (size_t)n, cudaMemcpyDeviceToHost) == cudaSuccess) rc = 1;
+done: if (a) cudaFree(a); if (b) cudaFree(b); if (o) cudaFree(o); return rc;
+}
+template <typename T>
+int tsr_where_host(const void *hp, const void *ha, const void *hb, void *ho, long n) {
+  size_t bytes = (size_t)n * sizeof(T); unsigned char *p = nullptr;
+  T *a = nullptr, *b = nullptr, *o = nullptr; int rc = 3;
+  if (cudaMalloc(&p, (size_t)n) != cudaSuccess || cudaMalloc(&a, bytes) != cudaSuccess ||
+      cudaMalloc(&b, bytes) != cudaSuccess || cudaMalloc(&o, bytes) != cudaSuccess) goto done;
+  if (cudaMemcpy(p, hp, (size_t)n, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(a, ha, bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(b, hb, bytes, cudaMemcpyHostToDevice) != cudaSuccess) goto done;
+  tsr_where_kernel<<<(n + 255) / 256, 256>>>(p, a, b, o, n);
+  if (cudaGetLastError() == cudaSuccess && cudaDeviceSynchronize() == cudaSuccess &&
+      cudaMemcpy(ho, o, bytes, cudaMemcpyDeviceToHost) == cudaSuccess) rc = 1;
+done: if (p) cudaFree(p); if (a) cudaFree(a); if (b) cudaFree(b); if (o) cudaFree(o); return rc;
+}
+
+extern "C" int tessera_nvidia_solver_unary(
+    const void *x, void *o, long n, int kind, int storage) {
+  if (!x || !o || n <= 0 || kind < 0 || kind > 7 || storage < 0 || storage > 2) return 2;
+  if (storage == 0) return tsr_unary_host<float>(x, o, n, kind);
+  if (storage == 1) return tsr_unary_host<__half>(x, o, n, kind);
+  return tsr_unary_host<__nv_bfloat16>(x, o, n, kind);
+}
+extern "C" int tessera_nvidia_solver_compare(
+    const void *a, const void *b, void *o, long n, int kind, int storage) {
+  if (!a || !b || !o || n <= 0 || kind < 0 || kind > 5 || storage < 0 || storage > 2) return 2;
+  if (storage == 0) return tsr_compare_host<float>(a, b, o, n, kind);
+  if (storage == 1) return tsr_compare_host<__half>(a, b, o, n, kind);
+  return tsr_compare_host<__nv_bfloat16>(a, b, o, n, kind);
+}
+extern "C" int tessera_nvidia_solver_where(
+    const void *p, const void *a, const void *b, void *o, long n, int storage) {
+  if (!p || !a || !b || !o || n <= 0 || storage < 0 || storage > 2) return 2;
+  if (storage == 0) return tsr_where_host<float>(p, a, b, o, n);
+  if (storage == 1) return tsr_where_host<__half>(p, a, b, o, n);
+  return tsr_where_host<__nv_bfloat16>(p, a, b, o, n);
+}
+
+__device__ float tsr_block_sum(float value) {
+  __shared__ float values[256]; int t = threadIdx.x; values[t] = value;
+  __syncthreads();
+  for (int stride = 128; stride; stride >>= 1) {
+    if (t < stride) values[t] += values[t + stride];
+    __syncthreads();
+  }
+  return values[0];
+}
+template <typename T> __global__ void tsr_diagonal_cg_kernel(
+    const T *diagonal, const T *rhs, float *x, float *r, float *p, float *ap,
+    long n, float tolerance, int max_iterations, int *iterations,
+    int *status, float *residual_norm) {
+  int t = threadIdx.x;
+  float local_rhs = 0.0f;
+  for (long i = t; i < n; i += blockDim.x) {
+    float b = tsr_sload(rhs, i); x[i] = 0.0f; r[i] = b; p[i] = b; ap[i] = 0.0f;
+    local_rhs += b * b;
+  }
+  float rhs_sq = tsr_block_sum(local_rhs);
+  __shared__ float rs_old, alpha, beta, threshold;
+  __shared__ int done;
+  if (t == 0) {
+    rs_old = rhs_sq; threshold = tolerance * fmaxf(1.0f, sqrtf(rhs_sq));
+    done = sqrtf(rhs_sq) <= threshold; *iterations = 0; *status = done ? 1 : 0;
+    *residual_norm = sqrtf(rhs_sq);
+  }
+  __syncthreads();
+  for (int iteration = 0; iteration < max_iterations && !done; ++iteration) {
+    float local_pap = 0.0f;
+    for (long i = t; i < n; i += blockDim.x) {
+      float value = tsr_sload(diagonal, i) * p[i]; ap[i] = value;
+      local_pap += p[i] * value;
+    }
+    float pap = tsr_block_sum(local_pap);
+    if (t == 0) {
+      if (!(pap > 0.0f) || !isfinite(pap)) { done = 1; *status = 2; }
+      else alpha = rs_old / pap;
+    }
+    __syncthreads(); if (done) break;
+    float local_new = 0.0f;
+    for (long i = t; i < n; i += blockDim.x) {
+      x[i] += alpha * p[i]; r[i] -= alpha * ap[i]; local_new += r[i] * r[i];
+    }
+    float rs_new = tsr_block_sum(local_new);
+    if (t == 0) {
+      *iterations = iteration + 1; *residual_norm = sqrtf(rs_new);
+      if (*residual_norm <= threshold) { done = 1; *status = 1; }
+      else { beta = rs_new / rs_old; rs_old = rs_new; }
+    }
+    __syncthreads();
+    if (!done) for (long i = t; i < n; i += blockDim.x) p[i] = r[i] + beta * p[i];
+    __syncthreads();
+  }
+  if (t == 0 && !done) *status = 3;
+}
+template <typename T>
+int tsr_cg_host(const void *hd, const void *hb, float *hx, float *hr, float *hp,
+                float *hap, long n, float tol, int maxit, int *iters,
+                int *status, float *norm) {
+  size_t input_bytes = (size_t)n * sizeof(T), state_bytes = (size_t)n * sizeof(float);
+  T *d = nullptr, *b = nullptr; float *x = nullptr, *r = nullptr, *p = nullptr, *ap = nullptr;
+  int *di = nullptr, *ds = nullptr; float *dn = nullptr; int rc = 3;
+  if (cudaMalloc(&d, input_bytes) != cudaSuccess || cudaMalloc(&b, input_bytes) != cudaSuccess ||
+      cudaMalloc(&x, state_bytes) != cudaSuccess || cudaMalloc(&r, state_bytes) != cudaSuccess ||
+      cudaMalloc(&p, state_bytes) != cudaSuccess || cudaMalloc(&ap, state_bytes) != cudaSuccess ||
+      cudaMalloc(&di, sizeof(int)) != cudaSuccess || cudaMalloc(&ds, sizeof(int)) != cudaSuccess ||
+      cudaMalloc(&dn, sizeof(float)) != cudaSuccess) goto done;
+  if (cudaMemcpy(d, hd, input_bytes, cudaMemcpyHostToDevice) != cudaSuccess ||
+      cudaMemcpy(b, hb, input_bytes, cudaMemcpyHostToDevice) != cudaSuccess) goto done;
+  tsr_diagonal_cg_kernel<<<1, 256>>>(d, b, x, r, p, ap, n, tol, maxit, di, ds, dn);
+  if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess) goto done;
+  if (cudaMemcpy(hx, x, state_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(hr, r, state_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(hp, p, state_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(hap, ap, state_bytes, cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(iters, di, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(status, ds, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess ||
+      cudaMemcpy(norm, dn, sizeof(float), cudaMemcpyDeviceToHost) != cudaSuccess) goto done;
+  rc = 1;
+done:
+  if (d) cudaFree(d); if (b) cudaFree(b); if (x) cudaFree(x); if (r) cudaFree(r);
+  if (p) cudaFree(p); if (ap) cudaFree(ap); if (di) cudaFree(di); if (ds) cudaFree(ds);
+  if (dn) cudaFree(dn); return rc;
+}
+extern "C" int tessera_nvidia_solver_diagonal_cg(
+    const void *diagonal, const void *rhs, float *x, float *r, float *p, float *ap,
+    long n, float tolerance, int max_iterations, int storage, int *iterations,
+    int *status, float *residual_norm) {
+  if (!diagonal || !rhs || !x || !r || !p || !ap || !iterations || !status ||
+      !residual_norm || n <= 0 || tolerance <= 0.0f || max_iterations <= 0 ||
+      storage < 0 || storage > 2) return 2;
+  if (storage == 0) return tsr_cg_host<float>(diagonal, rhs, x, r, p, ap, n, tolerance, max_iterations, iterations, status, residual_norm);
+  if (storage == 1) return tsr_cg_host<__half>(diagonal, rhs, x, r, p, ap, n, tolerance, max_iterations, iterations, status, residual_norm);
+  return tsr_cg_host<__nv_bfloat16>(diagonal, rhs, x, r, p, ap, n, tolerance, max_iterations, iterations, status, residual_norm);
+}
+'''
+
+
+def _solver_storage(array: Any) -> tuple[Any, int]:
+    import numpy as np
+
+    value = np.ascontiguousarray(array)
+    if value.dtype == np.float32:
+        return value, 0
+    if value.dtype == np.float16:
+        return value, 1
+    try:
+        import ml_dtypes
+        if value.dtype == np.dtype(ml_dtypes.bfloat16):
+            return value, 2
+    except ImportError:
+        pass
+    raise ValueError(f"NVIDIA solver child supports f32/f16/bf16 storage; got {value.dtype}")
+
+
+def _solver_child_lib() -> Any:
+    global _solver_child_artifact
+    if _solver_child_artifact is None:
+        _solver_child_artifact = _nvidia_cuda_compile_fn(KernelSource(
+            source=_synthesize_solver_children_cuda(), entry=_SOLVER_CHILD_ENTRY,
+            lang=_LANG, spec=SpecPolicy.DYNAMIC,
+            shape_key=("solver-children-cg-v1",),
+        ))
+    return _load_lib(_solver_child_artifact)
+
+
+def run_solver_unary(x: Any, kind: int) -> Any:
+    import numpy as np
+
+    value, storage = _solver_storage(x)
+    if not value.size or kind < 0 or kind > 7:
+        raise ValueError("NVIDIA solver unary requires non-empty storage and a known kind")
+    out = np.empty_like(value)
+    fn = _solver_child_lib().tessera_nvidia_solver_unary
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 2 + [ctypes.c_long, ctypes.c_int, ctypes.c_int]
+    if fn(_ptr(value), _ptr(out), value.size, kind, storage) != 1:
+        raise RuntimeError("NVIDIA solver unary CUDA launch failed")
+    return out
+
+
+def run_solver_compare(a: Any, b: Any, kind: int) -> Any:
+    import numpy as np
+
+    aa, storage = _solver_storage(a); bb, other = _solver_storage(b)
+    if aa.shape != bb.shape or aa.dtype != bb.dtype or storage != other or not aa.size:
+        raise ValueError("NVIDIA solver comparison requires matching non-empty storage")
+    out = np.empty(aa.shape, dtype=np.bool_)
+    fn = _solver_child_lib().tessera_nvidia_solver_compare
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_long, ctypes.c_int, ctypes.c_int]
+    if fn(_ptr(aa), _ptr(bb), _ptr(out), aa.size, kind, storage) != 1:
+        raise RuntimeError("NVIDIA solver comparison CUDA launch failed")
+    return out
+
+
+def run_solver_where(predicate: Any, a: Any, b: Any) -> Any:
+    import numpy as np
+
+    pred = np.ascontiguousarray(predicate, dtype=np.bool_)
+    aa, storage = _solver_storage(a); bb, other = _solver_storage(b)
+    if pred.shape != aa.shape or aa.shape != bb.shape or aa.dtype != bb.dtype or storage != other or not aa.size:
+        raise ValueError("NVIDIA solver where requires matching non-empty shapes/storage")
+    out = np.empty_like(aa)
+    fn = _solver_child_lib().tessera_nvidia_solver_where
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_long, ctypes.c_int]
+    if fn(_ptr(pred), _ptr(aa), _ptr(bb), _ptr(out), aa.size, storage) != 1:
+        raise RuntimeError("NVIDIA solver where CUDA launch failed")
+    return out
+
+
+def run_solver_matmul_ieee_f32(a: Any, b: Any) -> Any:
+    """IEEE-f32 scalar CUDA matmul; never silently substitutes TF32."""
+    import numpy as np
+
+    aa = np.ascontiguousarray(a, dtype=np.float32)
+    bb = np.ascontiguousarray(b, dtype=np.float32)
+    if aa.ndim != 2 or bb.ndim != 2 or aa.shape[1] != bb.shape[0] or not aa.size or not bb.size:
+        raise ValueError("NVIDIA solver matmul requires compatible non-empty rank-2 inputs")
+    with NvidiaDeviceSession() as session:
+        da, db = session.upload(aa), session.upload(bb)
+        out = session.empty((aa.shape[0], bb.shape[1]), np.float32)
+        _resident_matmul_f32(session, da, db, out)
+        return out.numpy()
+
+
+def run_solver_diagonal_cg(
+    diagonal: Any, rhs: Any, *, tolerance: float, max_iterations: int,
+) -> tuple[Any, Any, Any, Any, dict[str, Any]]:
+    """Single-launch CG with all evolving vectors retained in CUDA memory."""
+    import numpy as np
+
+    diag, storage = _solver_storage(diagonal); b, other = _solver_storage(rhs)
+    if diag.shape != b.shape or diag.dtype != b.dtype or storage != other or not diag.size:
+        raise ValueError("NVIDIA diagonal CG requires matching non-empty storage")
+    diag_f32 = np.asarray(diag, dtype=np.float32)
+    if not np.all(np.isfinite(diag_f32)) or np.any(diag_f32 <= 0):
+        raise ValueError("NVIDIA diagonal CG requires a finite positive diagonal")
+    if not np.isfinite(tolerance) or tolerance <= 0 or max_iterations <= 0:
+        raise ValueError("NVIDIA diagonal CG requires positive tolerance/iterations")
+    states = tuple(np.empty(diag.shape, dtype=np.float32) for _ in range(4))
+    iterations, status, residual_norm = ctypes.c_int(), ctypes.c_int(), ctypes.c_float()
+    fn = _solver_child_lib().tessera_nvidia_solver_diagonal_cg
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 6 + [ctypes.c_long, ctypes.c_float,
+        ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_float)]
+    rc = fn(_ptr(diag), _ptr(b), *(_ptr(value) for value in states), diag.size,
+            float(tolerance), int(max_iterations), storage,
+            ctypes.byref(iterations), ctypes.byref(status), ctypes.byref(residual_norm))
+    if rc != 1:
+        raise RuntimeError(f"NVIDIA diagonal CG CUDA launch failed with status {rc}")
+    info = {
+        "algorithm": "cg", "iterations": int(iterations.value),
+        "status": int(status.value), "converged": status.value == 1,
+        "residual_norm": float(residual_norm.value),
+        "state_residency": "single_launch_device_resident",
+        "storage": ("f32", "f16", "bf16")[storage], "accumulation": "f32",
+    }
+    if not info["converged"]:
+        raise RuntimeError(f"NVIDIA diagonal CG did not converge: {info}")
+    return (*states, info)
 
 
 def _synthesize_local_collective_cuda() -> str:

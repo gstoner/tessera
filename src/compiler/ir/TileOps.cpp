@@ -1436,6 +1436,7 @@ LogicalResult FFTKernelOp::verify() {
     return emitOpError("requires explicit mode, strategy, and radix policy");
   if ((realPolicy != "not_applicable" &&
        realPolicy != "packed_even_n2_hermitian_v1" &&
+       realPolicy != "native_cufft_r2c_c2r_v1" &&
        realPolicy != "full_complex_hermitian_fallback") ||
       (hermitianLayout != "full_complex" &&
        hermitianLayout != "half_spectrum_nyquist_explicit") ||

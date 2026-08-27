@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-26
+last_updated: 2026-08-27
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,77 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **load safety and
+post-change Zen 5 numerical closure complete.** The monolithic
+AVX-512 image no longer constructs four `__m512i` FFT permutation vectors at
+ELF load time: their bit-identical lane maps are constant-initialized scalar
+tables and are loaded only inside admitted AVX-512 entry points. The legacy
+runtime loader now consults the canonical complete-feature authority before
+`ctypes.CDLL`, matching content-addressed native-image admission. On the local
+AVX2 Threadripper the rebuilt image has no FFT translation-unit initializer,
+direct `dlopen` returns normally, runtime admission declines the image, and the
+formerly crashing solver test collection completes without SIGILL. A clean
+Ryzen AI Max+ 395 native rebuild produced digest
+`5aee2d5a98c7abc899c765436a7b505c53b9c544f60d92da07697b0c7dab287c`;
+its symbol audit has no FFT static initializer, direct `dlopen` succeeds, and
+the pinned-image packet passes all 41 FFT plus 38 solver cases (79/79). This is
+exact post-change evidence, not a corollary from the prior image or source lane
+maps.
+
+Cross-backend sync `CUDA-SOLVER-KRYLOV-SCALE-2026-08-27` — **NVIDIA-owned
+physical expansion; AVX-512 execution unchanged.** The additive shared
+packager contract is target-locked to `nvidia_sm120`; cooperative CUDA grids,
+resident Arnoldi state, CTA reductions, and native f16/bf16 `mma.sync` matmul
+have no x86 runtime or ISA consumer. Existing host matrix-free solver evidence
+does not inherit the dense CUDA performance result, and CUDA evidence does not
+promote an AVX-512 CG/GMRES row. A future x86 resident solver requires its own
+threading/reduction schedule, numerical packet, and performance ratchet.
+
+Cross-backend sync `CUDA-SOLVER-FAMILY-2026-08-27` — **NVIDIA-owned physical
+expansion; AVX-512 execution unchanged.** Shared residual-product packaging
+now retains authored matmul numeric policy, and a generic `linear_solver="cg"`
+contract no longer silently executes GMRES. CUDA's unary/reduction/predicate/
+where/IEEE-matmul children and single-launch diagonal-SPD CG state are not x86
+evidence and change no host ABI, AVX-512 kernel, or performance row. A future
+x86 CG promotion requires an x86-owned package and runnable host evidence.
+
+Cross-backend sync `CUDA-SOLVER-IFT-PILOT-2026-08-27` — **NVIDIA-owned
+physical corollary; AVX-512 solver evidence unchanged.** The shared
+diagonal-sqrt and general solver contracts gained explicit SM120 admission,
+CUDA binary residual replay, and architecture-owned CUDA packages. No x86 ABI, AVX-512 kernel, selector, or
+performance row changed, and the CUDA packet is not evidence for the x86
+general solver.
+
+Cross-backend sync `CUDA-BINARY-SPECTRAL-JVP-2026-08-27` — **NVIDIA-owned
+physical closure assessed; AVX-512 parity unchanged.** The new SM120 binary
+package and CUDA spectral tangent accumulator change no x86 ABI or schedule.
+x86 retains its independently proven binary arithmetic and compound spectral
+JVP routes; CUDA device numerics and reduced-storage evidence transfer no host
+claim.
+
+Cross-backend sync `CUDA-SPECTRAL-JVP-NUMPOL-2026-08-26` — **CUDA closure
+assessed; AVX-512 parity remains independent.** NVIDIA's public digest-bound
+JVP child, cuFFT Schedule→Tile profile, and f16/bf16 CUDA ABIs change no x86
+kernel or schedule. Existing AVX-512 spectral evidence remains authoritative;
+no SM120 result is counted as host proof.
+
+Cross-backend sync `CUDA-OPTIMIZER-VJP-2026-08-26` — **shared plugin/lineage
+carrier updated; x86 disposition unchanged.** NVIDIA is now an exact owner for
+the shared optimizer and Adafactor reverse families. AVX-512 retains its own
+SGD, Momentum/Nesterov, and full/factored Adafactor packages; Adam/AdamW remain
+explicitly fail closed on x86 because no physical reverse consumer exists.
+CUDA PTX and `sm_120` certificates transfer no host evidence.
+
+Cross-backend sync `TSOL-CUDA-POLICY-V1-2026-08-26` — **NVIDIA-owned physical
+package assessed; AVX-512 parity remains independently validated.** The CUDA
+spectral ABI and SM120 logical-complex capability row do not alter the x86 v8
+ABI, schedules, dtype policy, or host certificates. The CUDA host cannot load
+or execute this workspace's AVX-512 entry points, so no x86 numerical rerun or
+evidence is claimed here; after `X86-AVX512-IMAGE-ADMISSION` it safely declines
+the image before `dlopen` instead of taking an illegal instruction. The
+existing target-owned packet remains the x86 proof. CUDA JVP/Schedule admission was subsequently closed under
+`CUDA-SPECTRAL-JVP-NUMPOL` without changing the x86 row.
+
 Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **Order 8c–8g
 AVX-512 bounded package landed and is independently host-proven.** The v8 x86
 package consumes rank/shape/element-stride descriptors without Python

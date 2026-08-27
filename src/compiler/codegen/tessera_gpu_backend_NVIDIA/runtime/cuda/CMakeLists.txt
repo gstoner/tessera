@@ -127,7 +127,9 @@ if(TESSERA_ENABLE_CUDA)
     CUDA_STANDARD 17
     CUDA_STANDARD_REQUIRED ON)
 
-  add_library(tessera_nvidia_fft SHARED tessera_nvidia_fft.cu)
+  add_library(tessera_nvidia_fft SHARED
+    tessera_nvidia_fft.cu
+    tessera_nvidia_spectral.cu)
   target_link_libraries(tessera_nvidia_fft PUBLIC CUDA::cudart CUDA::cufft)
   set_target_properties(tessera_nvidia_fft PROPERTIES
     CUDA_ARCHITECTURES 120

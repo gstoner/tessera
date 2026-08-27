@@ -88,7 +88,7 @@ def test_stateful_plugins_declare_complete_owned_spines() -> None:
     assert adafactor.schedule_consumer == "schedule.adafactor_vjp"
     assert adafactor.tile_consumer == "tile.training_kernel"
     assert adafactor.differential_policy == "non_reexecuting_state_lineage"
-    assert set(adafactor.target_consumers) == {"x86", "rocm"}
+    assert set(adafactor.target_consumers) == {"x86", "rocm", "nvidia_sm120"}
     for name in (
         "gated_deltanet",
         "kimi_delta_attention",

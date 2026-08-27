@@ -70,6 +70,8 @@ def _algorithm_identity(
     if kind == "tessera.stft":
         if target == "rocm":
             return "direct_stored_bin_gfx1151_v1"
+        if target == "nvidia_sm120":
+            return "direct_stored_bin_sm120_v1"
         return (
             "packed_c2r_stored_bin_v1"
             if logical_length % 2 == 0
@@ -78,6 +80,8 @@ def _algorithm_identity(
     if kind == "tessera.istft":
         if target == "rocm":
             return "normalized_overlap_add_direct_dft_gfx1151_v1"
+        if target == "nvidia_sm120":
+            return "normalized_overlap_add_direct_dft_sm120_v1"
         return "normalized_overlap_add_r2c_v1"
     return "native_direct_v1"
 
@@ -218,10 +222,12 @@ def build_native_spectral_vjp_package(
     bare = source.op_name.removeprefix("tessera.")
     if bare not in {"spectral_filter", "spectral_conv", "stft", "istft"}:
         raise ValueError(f"unsupported compound spectral VJP {bare!r}")
-    if bare in {"stft", "istft"} and target not in {"x86", "rocm"}:
+    if bare in {"stft", "istft"} and target not in {
+        "x86", "rocm", "nvidia_sm120"
+    }:
         raise ValueError(
             f"native {bare.upper()} VJP is admitted only on x86 AVX-512 "
-            "or exact gfx1151"
+            "or an exact GPU spectral policy package"
         )
     if target not in {"x86", "rocm", "nvidia_sm120"}:
         raise ValueError(f"native compound spectral VJP has no {target!r} package")
@@ -901,8 +907,108 @@ def execute_nvidia_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequen
     if not isinstance(contract, Mapping):
         raise ValueError("NVIDIA spectral VJP executor requires a package contract")
     validate_native_spectral_vjp_contract(contract)
-    dy, x, parameter = (np.ascontiguousarray(np.asarray(value)) for value in args)
-    if contract["kind"] == "tessera.spectral_filter":
+    values = [np.asarray(value) for value in args]
+    dy, x, parameter = values
+    kind = str(contract["kind"])
+    if kind in {"tessera.stft", "tessera.istft"}:
+        lib = runtime._load_nvidia_fft_runtime()
+        if (lib is None or
+                lib.tessera_nvidia_spectral_package_abi() !=
+                b"tessera.nvidia.spectral_policy.v1" or
+                lib.tessera_nvidia_spectral_arch() != 120):
+            raise RuntimeError("exact SM120 spectral reverse package is unavailable")
+
+        def descriptor(value: Any) -> tuple[Any, Any]:
+            if any(stride % value.itemsize for stride in value.strides):
+                raise ValueError("NVIDIA spectral VJP strides must be element aligned")
+            strides = tuple(int(stride // value.itemsize) for stride in value.strides)
+            if any(stride == 0 and value.shape[dim] > 1
+                   for dim, stride in enumerate(strides)):
+                raise ValueError("NVIDIA spectral VJP overlapping layouts are unsupported")
+            return ((ctypes.c_int64 * value.ndim)(*map(int, value.shape)),
+                    (ctypes.c_int64 * value.ndim)(*strides))
+
+        storage_name = str(contract["numeric_policy"]["storage"])
+        storage_dtype_name = {
+            "fp32": "float32",
+            "fp16": "float16",
+            "bf16": "bfloat16",
+        }[storage_name]
+        storage_code = {"fp32": 0, "fp16": 1, "bf16": 2}[storage_name]
+        if kind == "tessera.stft":
+            valid_storage = (
+                str(x.dtype) == storage_dtype_name
+                and str(parameter.dtype) == storage_dtype_name
+                and dy.dtype == np.dtype(np.complex64)
+            )
+        else:
+            valid_storage = (
+                x.dtype == np.dtype(np.complex64)
+                and str(parameter.dtype) == storage_dtype_name
+                and str(dy.dtype) == storage_dtype_name
+            )
+        if not valid_storage:
+            raise ValueError(
+                "NVIDIA spectral VJP operands disagree with the scheduled numeric policy"
+            )
+        dx = np.empty_like(x, order="C")
+        dparameter = np.empty_like(parameter, order="C")
+        pointer = ctypes.POINTER(ctypes.c_float)
+        digest = str(contract["schedule_artifact_hash"]).encode("ascii")
+        window_shape, window_strides = descriptor(parameter)
+        n = int(contract["logical_length"])
+        if kind == "tessera.stft":
+            axis = int(contract["axis"]) % x.ndim
+            x_shape, x_strides = descriptor(x)
+            dy_shape, dy_strides = descriptor(dy)
+            forward_scale = {
+                "backward": 1.0,
+                "forward": 1.0 / n,
+                "ortho": 1.0 / math.sqrt(n),
+            }[str(contract["normalization"])]
+            rc = lib.tessera_nvidia_stft_backward_broadcast_layout_storage(
+                digest, dy.view(np.float32).ctypes.data_as(pointer),
+                ctypes.c_void_p(x.ctypes.data),
+                ctypes.c_void_p(parameter.ctypes.data),
+                ctypes.c_void_p(dx.ctypes.data),
+                ctypes.c_void_p(dparameter.ctypes.data),
+                x.ndim, x_shape, x_strides, axis, dy.ndim, dy_shape,
+                dy_strides, parameter.ndim, window_shape, window_strides,
+                n, int(contract["hop"]), storage_code,
+                ctypes.c_float(forward_scale),
+                int(bool(contract["center"])),
+                {"constant": 0, "reflect": 1}[str(contract["pad_mode"])],
+                int(bool(contract["onesided"])),
+            )
+        else:
+            axis = int(contract["axis"]) % x.ndim
+            frame_axis = axis - 1
+            dy_axis = frame_axis
+            dy_shape, dy_strides = descriptor(dy)
+            x_shape, x_strides = descriptor(x)
+            inverse_scale = {
+                "backward": 1.0 / n,
+                "forward": 1.0,
+                "ortho": 1.0 / math.sqrt(n),
+            }[str(contract["normalization"])]
+            rc = lib.tessera_nvidia_istft_backward_broadcast_layout_storage(
+                digest, ctypes.c_void_p(dy.ctypes.data),
+                x.view(np.float32).ctypes.data_as(pointer),
+                ctypes.c_void_p(parameter.ctypes.data),
+                dx.view(np.float32).ctypes.data_as(pointer),
+                ctypes.c_void_p(dparameter.ctypes.data), dy.ndim, dy_shape,
+                dy_strides, dy_axis, x.ndim, x_shape, x_strides, frame_axis,
+                axis, parameter.ndim, window_shape, window_strides, n,
+                int(contract["hop"]), storage_code,
+                ctypes.c_float(inverse_scale),
+                int(bool(contract["center"])),
+                int(bool(contract["onesided"])),
+            )
+        if rc:
+            raise RuntimeError(f"SM120 spectral reverse package failed rc={rc}")
+        return dx, dparameter
+    dy, x, parameter = (np.ascontiguousarray(value) for value in values)
+    if kind == "tessera.spectral_filter":
         return ((dy * np.conj(parameter)).astype(np.complex64),
                 (dy * np.conj(x)).astype(np.complex64))
 

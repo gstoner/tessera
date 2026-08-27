@@ -3,10 +3,145 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-26
+last_updated: 2026-08-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **shared runtime
+load safety repaired; CUDA execution unchanged.** The AVX2 Threadripper that
+hosts the RTX 5070 Ti now rejects Tessera's monolithic AVX-512 CPU image through
+the canonical complete-feature authority before `ctypes.CDLL`; the image itself
+also performs no AVX-512 work in ELF initialization. This prevents unrelated
+CUDA/solver collections from dying with SIGILL while preserving fail-closed
+x86 execution. No PTX, cubin, SM120 selector, CUDA numeric policy, or RTX
+certificate changes or inherits evidence from this host-side x86 repair.
+The independently rebuilt Zen 5 image passes its complete 79-case FFT/solver
+packet; that CPU evidence likewise transfers no SM120 execution claim.
+
+Cross-backend sync `CUDA-SOLVER-KRYLOV-SCALE-2026-08-27` — **arbitrary dense
+operator Arnoldi/GMRES, non-diagonal CG, explicit low-precision solver matmul,
+and multi-CTA performance ratchets exact-SM120 closed.** A content-addressed
+dense-operator v2 package represents any finite-dimensional linear map as a
+row-major matrix and launches one cooperative CUDA grid for the complete
+solve. Restarted GMRES retains its basis, Hessenberg matrix, Givens rotations,
+work vectors, dot partials, and convergence state on device; twice-modified
+Gram-Schmidt limits loss of orthogonality and an fp32 recomputed `b-Ax`, never
+the Givens estimate alone, establishes convergence. The CG route admits an
+authored SPD promise, checks positive curvature on device, periodically
+replaces the recursive residual with the true residual, and rejects indefinite
+operators. Dot and norm reductions use deterministic two-level CTA partials
+with a cooperative grid barrier; the exact RTX 5070 packet exercises 2-3 CTAs
+and f32/f16/bf16 storage. The live performance packet covers orders 513, 1025,
+and 2049, scales reduction geometry 3->5->9 CTAs, and ratchets both complete
+host calls and CUDA-event kernel time. Separately, solver residual matmul now
+requires `{storage=f16|bf16, accum=fp32, math_mode=ieee}` before selecting the
+native SM120 `mma.sync` route; missing or contradictory storage fails closed,
+while f32 retains the scalar IEEE route and never substitutes TF32. Krylov
+matrix-vector products intentionally convert their declared storage to fp32
+FMA; the tensor-core claim belongs only to the registered rank-2 matmul child.
+Open boundaries are compiler-fused matrix-free child callbacks, sparse/
+structured operator encodings, preconditioners, and NCU-guided matvec tuning;
+none is implied by the dense package.
+
+Cross-backend sync `CUDA-SOLVER-FAMILY-2026-08-27` — **typed residual children,
+broader storage policy, and dedicated device-resident CG exact-SM120 closed.**
+Compiler-emitted CUDA children now execute sqrt/reciprocal/exp/log/tanh/
+sigmoid/sin/cos, sum/mean/max/min, eq/ne/lt/le/gt/ge, predicate `where`, and
+rank-2 matmul products. Matmul uses the resident scalar IEEE-f32 route only
+when the residual product preserves an explicit `math_mode="ieee"`; missing
+mode or non-fp32 accumulation fails closed and never selects TF32. Residual,
+JVP, and VJP SSA replay consumes all of these target-owned children, including
+pure predicate recomputation and exact reduction duals. f16/bf16 storage is
+admitted with explicit package-boundary widening and fp32 Krylov arithmetic;
+leaf unary/comparison/where/reduction and the dedicated CG input ABI also
+execute true two-byte storage. A distinct content-addressed positive-diagonal
+SPD CG package retains solution, residual, direction, matvec, dot reductions,
+and convergence state in device memory for one complete CUDA launch. The
+f32 packet converges in 17 iterations with max solution/equation error below
+`3.6e-7`; f16/bf16 device oracles also pass. General residual GMRES remains
+host-orchestrated, and device-resident arbitrary-operator Arnoldi/GMRES,
+multi-CTA reductions, non-diagonal CG operators, and performance promotion
+remain open.
+
+Cross-backend sync `CUDA-SOLVER-IFT-PILOT-2026-08-27` — **diagonal-sqrt and
+the first general matrix-free CUDA solver envelope exact-SM120 closed.**
+The shared content-addressed IFT contract now admits `nvidia_sm120`/`sm120`
+and preserves its residual, matrix-free solve, JVP/VJP mode, and parameter
+product lineage into one Tile artifact. An NVIDIA-owned compiler-emitted CUDA
+package executes all three phases on the RTX 5070 under CUDA 13.3. The
+reproducible 30-sample packet records a maximum absolute error below `4.8e-7`,
+complete-backward timing, stale-lineage rejection, and correctness-only
+promotion. Compiler-generated affine residual/JVP/VJP SSA now replays through
+the registered CUDA binary carrier, and a digest-bound parent executes
+restarted GMRES with true-residual checks. Its separate 20-sample packet has
+zero numerical error for both product directions and binds all five child
+digests. This is a binary-f32 envelope: unary, reduction, comparison/where,
+matmul, fully device-resident Krylov state, CG-specific execution, and broader
+dtype policy remain open and fail closed.
+
+Cross-backend sync `CUDA-BINARY-SPECTRAL-JVP-2026-08-27` — **compound spectral
+JVP dispatch hole and the first general CUDA binary-math family exact-device
+closed.** The public compound plugin previously declared NVIDIA ownership for
+`spectral_filter` and `spectral_conv`, but two active tangents selected the
+ROCm binary executor while carrying an NVIDIA artifact. `nvidia_binary_compiled`
+now owns matching-shape add/sub/mul/div/pow/max/min/mod/floor-div with
+f32/f16/bf16 storage and fp32 evaluation; NaN propagation, signed-zero min/max,
+and floor-quotient semantics are explicit. Filter and convolution JVP tangent
+terms consume that CUDA add route, while logical complex64 filter storage is
+recorded as interleaved fp32. Exact RTX 5070 CC 12.0 / CUDA 13.3 execution
+passes the full binary dtype matrix, public filter/convolution bilinear laws,
+and public f16/bf16 STFT JVP oracles. Unsupported shape, dtype, operation, or
+target still fails before launch. This is correctness closure, not a selector
+or performance promotion.
+
+Cross-backend sync `CUDA-SPECTRAL-JVP-NUMPOL-2026-08-26` — **remaining SM120
+spectral admission and numeric-policy rows exact-device closed.** Public
+`native_jvp` now constructs a content-addressed STFT/ISTFT child whose Graph,
+Schedule, Tile, and CUDA identities are distinct and digest-bound. Production
+Schedule→Tile admits the `nvidia_sm120`/`sm120` cuFFT policy rather than routing
+through a sibling profile. f16/bf16 DCT, STFT, ISTFT, JVP, and VJP storage use
+explicit two-byte ABIs with fp32 framing, cuFFT accumulation, overlap-add, and
+window-gradient reduction. The RTX 5070 Ti packet passes 8/8 independent
+forward, centered-difference, low-precision parity, and JVP/VJP adjoint checks;
+unsupported or stale policy still fails closed. This closes the three
+follow-ups in `TSOL-CUDA-POLICY-V1` below without transferring ROCm/x86/Metal
+evidence.
+
+Cross-backend sync `CUDA-OPTIMIZER-VJP-2026-08-26` — **SM120 optimizer reverse
+execution exact-device closed for the ordered package.** The shared
+non-reexecuting state-lineage carrier now admits NVIDIA as a physical owner and
+stamps `nvidia_sm120`/`sm_120` through Schedule→Tile. CUDA-owned PTX packages
+execute SGD, Momentum, Nesterov, Adam, AdamW, and full/factored Adafactor;
+factored reductions have one deterministic owner and every output is a fresh
+no-alias write. The RTX 5070 Ti packet passes all seven numerical variants and
+requires runtime-origin `sm_120` attestations in content-addressed execution
+certificates. This is correctness-first f32 execution, not a performance
+promotion or a transfer of gfx1151/AVX-512 schedules.
+The consolidated all-family packet now observes exact equality for all nine
+registered NVIDIA VJP families, including `optimizer_vjp` and
+`adafactor_vjp`; omitting either new family fails the packet.
+
+Cross-backend sync `TSOL-CUDA-POLICY-V1-2026-08-26` — **SM120 f32 physical
+forward, inverse, reverse, DCT, and streaming rows exact-device proven.** The
+new `tessera.nvidia.spectral_policy.v1` ABI owns DCT-I/II/III/IV, STFT/ISTFT
+device framing, cuFFT execution, normalization, deterministic overlap-add,
+analytic signal/spectrum and broadcast-window adjoints, and causal streaming
+state transitions. Exact RTX 5070/SM120 packets cover arbitrary axes, true
+element strides, `n_fft >= window`, centered constant/reflect padding,
+explicit inverse cropping, one-sided/full spectra, trailing batch-window
+broadcast, all FFT normalization modes, DCT types, streaming artifact/parent
+lineage, independent forward/VJP oracles, and the native forward/adjoint
+inner-product law. NVIDIA transform capability now records complex64 as
+logical interleaved-fp32 storage instead of rejecting the shipped ISTFT Graph
+path. At this synchronization point the public content-addressed JVP child,
+Schedule→Tile admission, and f16/bf16 storage were still open; the later
+`CUDA-SPECTRAL-JVP-NUMPOL` row above closes them with exact-device evidence.
+This synchronization supersedes the CUDA-physical-open clauses in
+`TSOL-POLICY-PHYS-1-8C8G`, `TSOL-POLICY-PHYS-1-8B`,
+`TSOL-POLICY-PHYS-1-8A`, and `AD-TSOL-STFT-GFX1151` below; those entries remain
+as the history of the shared carrier landing; their subsequent closure is
+recorded by the newer synchronization key.
+
 Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **shared spectral
 carrier assessed; CUDA implementation remains open.** Schedule→Tile now binds
 the runtime-stride ABI, independent transform/window lengths, and full versus
@@ -43,14 +178,15 @@ The structured spectral `numeric_policy` now survives Schedule→Tile, closing
 the generalized carrier ceiling, but SM120 `math_mode` consumption and device
 proof remain NVIDIA-owned Order 3b follow-ups.
 
-Cross-backend sync `E2E-REAL-6F-EXACT-CERT-2026-08-26` — **shared
-runtime-attestation contract landed; seven SM120 family rows remain
-blocking.** x86 and gfx1151 now have target-owned all-family certificate
-packets, but neither result transfers. SM120 must run its own packet covering
-binary loss, class loss, Lion, normalization, regression loss, sequence mixer,
-and spectral backward on exact hardware. A CUDA-mode string without the
-runtime-origin `sm_120` attestation remains `runtime_unattested` and cannot
-close a row.
+Cross-backend sync `E2E-REAL-6F-EXACT-CERT-2026-08-26` — **initial seven-family
+SM120 certificate packet exact-device closed, subsequently expanded to nine
+under `CUDA-OPTIMIZER-VJP`.** The target-owned single-process
+packet executes binary loss, class loss, Lion, normalization, regression loss,
+sequence mixer, and spectral backward on the RTX 5070 and requires
+runtime-origin `sm_120` attestations plus exact family-set equality. The
+spectral row now also exercises STFT and ISTFT analytic adjoints. A CUDA-mode
+string without that attestation remains `runtime_unattested` and cannot close
+a row; no x86 or gfx1151 result was transferred.
 
 Cross-backend sync `BOUNDED-GATE-RELAXATION-2026-08-26` — **shared
 control-scan normalization assessed; CUDA physical outcome not applicable.**

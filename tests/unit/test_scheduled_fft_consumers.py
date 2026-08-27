@@ -176,5 +176,5 @@ def test_unmeasured_rdna4_fft_profiles_fail_closed(architecture):
 }}
 '''
 
-    with pytest.raises(RuntimeError, match="Zen 5 or gfx1151"):
+    with pytest.raises(RuntimeError, match="Zen 5, gfx1151, or exact sm120"):
         run_tessera_opt(tool, source, "--tessera-graph-to-schedule")

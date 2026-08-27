@@ -69,7 +69,7 @@ def test_streaming_state_lineage_rejects_tail_counter_window_and_parent_drift():
 
 
 @pytest.mark.parametrize("onesided", [True, False])
-@pytest.mark.parametrize("target", ["x86", "rocm"])
+@pytest.mark.parametrize("target", ["x86", "rocm", "nvidia_sm120"])
 def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, target):
     from tessera import runtime
 
@@ -77,6 +77,10 @@ def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, tar
         pytest.skip("x86 spectral physical package is unavailable")
     if target == "rocm" and not runtime._rocm_wmma_runtime_available():
         pytest.skip("gfx1151 spectral physical package is unavailable")
+    if target == "nvidia_sm120":
+        lib = runtime._load_nvidia_fft_runtime()
+        if lib is None or lib.tessera_nvidia_spectral_arch() != 120:
+            pytest.skip("SM120 spectral physical package is unavailable")
     rng = np.random.default_rng(812 + int(onesided))
     signal = rng.standard_normal((2, 46, 3)).astype(np.float32)[:, ::2, :]
     window = np.stack((np.hanning(6), np.hamming(6)), axis=0).astype(
@@ -103,7 +107,8 @@ def test_physical_streaming_broadcast_strides_and_artifact_lineage(onesided, tar
     assert state is not None and len(state.artifact_digest) == 64
     assert state.execution_certificate["origin"] == "runtime"
     assert state.execution_certificate["architecture_identity"] == (
-        "zen5-avx512" if target == "x86" else "gfx1151"
+        "zen5-avx512" if target == "x86" else
+        "gfx1151" if target == "rocm" else "sm_120"
     )
     with pytest.raises(ValueError, match="different physical artifact"):
         stream_stft_chunk(

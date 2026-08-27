@@ -2204,6 +2204,15 @@ def _nvidia_gemm_selection(
         # There is no IEEE-fp32 tensor-core instruction on any NVIDIA part, so
         # an explicit ieee request cannot be honoured here and must say so
         # instead of returning tf32 numbers under an fp32 label.
+        if math_mode is None:
+            raise ValueError(
+                "NVIDIA_MATH_MODE_UNAVAILABLE: fp32 storage requires an "
+                "explicit numeric_policy math_mode; the shipped tensor-core "
+                "lane provides TF32 arithmetic and must not select it "
+                "silently. Declare math_mode=\"tf32\" to accept reduced "
+                "operand precision, or route this matmul to an IEEE-fp32 "
+                "implementation."
+            )
         if math_mode in ("ieee",):
             raise ValueError(
                 "NVIDIA_MATH_MODE_UNAVAILABLE: numeric_policy declares "
@@ -2215,7 +2224,7 @@ def _nvidia_gemm_selection(
                 'Declare math_mode="tf32" to accept it, or route this matmul '
                 "to a non-tensor-core path."
             )
-        if math_mode not in (None, "tf32", "default"):
+        if math_mode not in ("tf32", "default"):
             raise ValueError(
                 "NVIDIA_MATH_MODE_UNAVAILABLE: numeric_policy declares "
                 f"math_mode={math_mode!r} on fp32 storage; the shipped "
@@ -2692,6 +2701,7 @@ def _submit_nvidia_sm120_native(
     )
     from tessera.compiler.nvidia_training import (
         SM120_ADAM_ABIS,
+        SM120_ADAFACTOR_BWD_ABIS,
         SM120_BROADCAST_REDUCE_ABIS,
         SM120_CLASS_BWD_ABIS,
         SM120_DELTANET_BWD_ABIS,
@@ -2702,6 +2712,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOMENTUM_ABIS,
         SM120_NORM_BWD_ABIS,
         SM120_SGD_ABIS,
+        SM120_OPTIMIZER_BWD_ABIS,
         SM120_TRAINING_ABIS,
     )
     from tessera.compiler.nvidia_dynamic_smem import (
@@ -2900,6 +2911,38 @@ def _submit_nvidia_sm120_native(
         if tuple(input_value.shape) != (input_n,) or tuple(output_value.shape) != (output_n,):
             raise RuntimeError("SM120 broadcast-gradient shapes disagree with descriptor scalars")
         output = output_value
+    elif descriptor.abi_id in SM120_OPTIMIZER_BWD_ABIS.values():
+        dimensions = (int(cast(int, scalars["N"])),)
+        n = dimensions[0]
+        if any(tuple(value.shape) != (n,) for value in raw):
+            raise RuntimeError("SM120 optimizer-VJP shapes disagree with descriptor scalar N")
+        kind = str(descriptor.provenance.get("kind", ""))
+        output = (
+            tuple(raw[3:5]) if kind == "sgd"
+            else tuple(raw[5:8]) if kind in {"momentum", "nesterov"}
+            else tuple(raw[7:11])
+        )
+    elif descriptor.abi_id in SM120_ADAFACTOR_BWD_ABIS.values():
+        topology = str(descriptor.provenance.get("topology", ""))
+        if topology == "full":
+            dimensions = (int(cast(int, scalars["N"])),)
+            n = dimensions[0]
+            if any(tuple(value.shape) != (n,) for value in raw):
+                raise RuntimeError("SM120 full Adafactor-VJP shapes disagree with N")
+            output = tuple(raw[4:7])
+        else:
+            dimensions = tuple(
+                int(cast(int, scalars[name])) for name in ("Rows", "Columns")
+            )
+            rows, columns = dimensions
+            matrix = rows * columns
+            expected = (
+                (matrix,), (matrix,), (rows,), (columns,), (matrix,),
+                (matrix,), (matrix,), (rows,), (columns,),
+            )
+            if any(tuple(value.shape) != shape for value, shape in zip(raw, expected)):
+                raise RuntimeError("SM120 factored Adafactor-VJP shapes disagree with Rows/Columns")
+            output = tuple(raw[5:9])
     elif descriptor.abi_id in {
         *SM120_SGD_ABIS.values(),
         *SM120_MOMENTUM_ABIS.values(),
@@ -9356,8 +9399,12 @@ def _execute_nvidia_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any
     if not names:
         raise ValueError("reduction requires one operand")
     x = _as_numpy(_bind_launch_args(args, list(metadata.get("arg_names") or []))[names[0]])
-    if x.dtype not in (np.float32, np.float16):
-        raise ValueError(f"nvidia reduction lane handles f32/f16 storage; got {x.dtype}")
+    bf16 = _bfloat16_dtype()
+    if x.dtype not in tuple(
+        dtype for dtype in (np.dtype(np.float32), np.dtype(np.float16), bf16)
+        if dtype is not None
+    ):
+        raise ValueError(f"nvidia reduction lane handles f32/f16/bf16 storage; got {x.dtype}")
     if x.ndim < 1:
         raise ValueError("reduction operand must have rank >= 1")
     kw = op.get("kwargs") or {}
@@ -9383,6 +9430,127 @@ def _execute_nvidia_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any
         else:
             out = np.expand_dims(out, axis_i)
     return out
+
+
+_NVIDIA_SOLVER_UNARY_OPS = {
+    "tessera.sqrt": 0, "tessera.reciprocal": 1, "tessera.exp": 2,
+    "tessera.log": 3, "tessera.tanh": 4, "tessera.sigmoid": 5,
+    "tessera.sin": 6, "tessera.cos": 7,
+}
+_NVIDIA_SOLVER_COMPARE_OPS = {
+    "tessera.equal": 0, "tessera.not_equal": 1, "tessera.less": 2,
+    "tessera.less_equal": 3, "tessera.greater": 4,
+    "tessera.greater_equal": 5,
+}
+
+
+def _execute_nvidia_compiled_unary(artifact: RuntimeArtifact, args: Any) -> Any:
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if name not in _NVIDIA_SOLVER_UNARY_OPS:
+        raise ValueError("nvidia unary executor requires one admitted solver unary op")
+    operand_names = [str(value) for value in ops[0].get("operands") or []]
+    if len(operand_names) != 1:
+        raise ValueError("nvidia unary executor requires one operand")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    from .compiler.emit.nvidia_cuda import run_solver_unary
+    return run_solver_unary(
+        _as_numpy(values[operand_names[0]]), _NVIDIA_SOLVER_UNARY_OPS[name]
+    )
+
+
+def _execute_nvidia_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if name not in _NVIDIA_SOLVER_COMPARE_OPS:
+        raise ValueError("nvidia comparison executor requires one admitted comparison op")
+    operand_names = [str(value) for value in ops[0].get("operands") or []]
+    if len(operand_names) != 2:
+        raise ValueError("nvidia comparison executor requires two operands")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    from .compiler.emit.nvidia_cuda import run_solver_compare
+    return run_solver_compare(
+        _as_numpy(values[operand_names[0]]),
+        _as_numpy(values[operand_names[1]]),
+        _NVIDIA_SOLVER_COMPARE_OPS[name],
+    )
+
+
+def _execute_nvidia_compiled_where(artifact: RuntimeArtifact, args: Any) -> Any:
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if str(op.get("op_name", "")) != "tessera.where":
+        raise ValueError("nvidia where executor requires one tessera.where op")
+    operand_names = [str(value) for value in op.get("operands") or []]
+    if len(operand_names) != 3:
+        raise ValueError("nvidia where executor requires predicate/then/else")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    from .compiler.emit.nvidia_cuda import run_solver_where
+    return run_solver_where(
+        _as_numpy(values[operand_names[0]]),
+        _as_numpy(values[operand_names[1]]),
+        _as_numpy(values[operand_names[2]]),
+    )
+
+
+def _execute_nvidia_solver_matmul(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if str(op.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
+        raise ValueError("nvidia solver matmul requires one matmul/gemm op")
+    operand_names = [str(value) for value in op.get("operands") or []]
+    if len(operand_names) != 2:
+        raise ValueError("nvidia solver matmul requires two operands")
+    policy = dict((op.get("kwargs") or {}).get("numeric_policy") or {})
+    if policy.get("math_mode") != "ieee" or policy.get("accum") not in {"fp32", "f32"}:
+        raise ValueError(
+            "NVIDIA_MATH_MODE_UNAVAILABLE: solver matmul requires explicit "
+            "numeric_policy math_mode='ieee' and fp32 accumulation"
+        )
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.dtype != b.dtype:
+        raise ValueError("NVIDIA solver matmul requires matching operand storage")
+    storage = {
+        "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+    }.get(str(a.dtype), str(a.dtype))
+    declared_storage = str(policy.get("storage", ""))
+    allowed_storage = {storage, {"f32": "fp32"}.get(storage, storage)}
+    if storage in {"f16", "bf16"} and declared_storage not in allowed_storage:
+        raise ValueError(
+            "NVIDIA solver matmul numeric_policy.storage must explicitly "
+            f"match its operands; got {declared_storage!r} for {storage}"
+        )
+    if storage == "f32" and declared_storage and declared_storage not in allowed_storage:
+        raise ValueError("NVIDIA solver matmul numeric_policy.storage contradicts f32 operands")
+    if storage in {"f16", "bf16"}:
+        # f16/bf16 are native mma.sync operand formats on sm_120.  The shipped
+        # kernel retains f32 accumulation; `math_mode="ieee"` means no hidden
+        # TF32-style reduction beyond the declared storage rounding.
+        lowp = RuntimeArtifact(metadata={
+            "target": "nvidia_sm120",
+            "compiler_path": "nvidia_mma",
+            "arg_names": ["a", "b"],
+            "ops": [{
+                "op_name": "tessera.matmul", "result": "out",
+                "operands": ["a", "b"],
+                "kwargs": {"numeric_policy": policy},
+            }],
+        })
+        return np.asarray(_execute_nvidia_mma_artifact(lowp, (a, b)), dtype=np.float32)
+    if storage != "f32":
+        raise ValueError("NVIDIA solver matmul supports f32/f16/bf16 storage")
+    from .compiler.emit.nvidia_cuda import run_solver_matmul_ieee_f32
+    return run_solver_matmul_ieee_f32(
+        a, b,
+    )
 
 
 def _execute_nvidia_control_flow_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -9778,6 +9946,179 @@ def _execute_nvidia_lion_backward(artifact: RuntimeArtifact, args: Any) -> Any:
     return tuple(value.reshape(param.shape) for value in result)
 
 
+def _execute_nvidia_optimizer_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Launch one content-addressed SM120 optimizer VJP image."""
+    import numpy as np
+    from .compiler.native_stateful_vjp import (
+        validate_native_stateful_vjp_runtime_metadata,
+    )
+    from .compiler.stateful_training import (
+        validate_optimizer_vjp_state_contract,
+        validate_scheduled_optimizer_vjp_metadata,
+    )
+
+    metadata = artifact.metadata or {}
+    validate_native_stateful_vjp_runtime_metadata(metadata)
+    package_contract = dict(metadata["native_stateful_vjp_package"])
+    kind = str(package_contract["graph_consumer"]).removeprefix("tessera.")
+    if kind not in {"sgd", "momentum", "nesterov", "adam", "adamw"}:
+        raise ValueError("NVIDIA optimizer VJP package has an unsupported family")
+    names = list(metadata.get("arg_names") or [])
+    values = _bind_launch_args(args, names)
+    operands = [str(name) for name in package_contract["argument_names"]]
+    cotangents = [str(name) for name in package_contract["cotangent_names"]]
+    arrays = {
+        name: np.ascontiguousarray(_as_numpy(values[name]), np.float32)
+        for name in (*operands, *cotangents)
+    }
+    shape = arrays[operands[0]].shape
+    if not shape or any(value.shape != shape for value in arrays.values()):
+        raise ValueError("NVIDIA optimizer VJP tensors must share one positive shape")
+    state_contract = metadata["state_contract"]
+    numeric = dict(state_contract["numeric"])
+    validate_optimizer_vjp_state_contract(
+        state_contract, target="nvidia_sm120", optimizer=kind,
+        shape=shape, kwargs=numeric,
+    )
+    validate_scheduled_optimizer_vjp_metadata(
+        metadata["scheduled_training"], target="nvidia_sm120", shape=shape,
+        optimizer=kind, state_contract=state_contract,
+    )
+    from .compiler.nvidia_training import package_optimizer_backward
+
+    package = package_optimizer_backward(
+        kind=kind,
+        lr=float(numeric["lr"]),
+        momentum=float(numeric["momentum"]),
+        beta1=float(numeric["beta1"]),
+        beta2=float(numeric["beta2"]),
+        epsilon=float(numeric["eps"]),
+        weight_decay=float(numeric["weight_decay"]),
+        step=int(numeric["step"]),
+    )
+    flat = {name: value.reshape(-1) for name, value in arrays.items()}
+    if kind == "sgd":
+        buffers = {
+            "param": flat[operands[0]], "grad": flat[operands[1]],
+            "dparam_out": flat[cotangents[0]],
+            "dparam": np.empty(flat[operands[0]].size, np.float32),
+            "dgrad": np.empty(flat[operands[0]].size, np.float32),
+        }
+    elif kind in {"momentum", "nesterov"}:
+        buffers = {
+            "param": flat[operands[0]], "grad": flat[operands[1]],
+            "velocity": flat[operands[2]],
+            "dparam_out": flat[cotangents[0]],
+            "dvelocity_out": flat[cotangents[1]],
+            "dparam": np.empty(flat[operands[0]].size, np.float32),
+            "dgrad": np.empty(flat[operands[0]].size, np.float32),
+            "dvelocity": np.empty(flat[operands[0]].size, np.float32),
+        }
+    else:
+        buffers = {
+            "param": flat[operands[0]], "grad": flat[operands[1]],
+            "moment1": flat[operands[2]], "moment2": flat[operands[3]],
+            "dparam_out": flat[cotangents[0]],
+            "dmoment1_out": flat[cotangents[1]],
+            "dmoment2_out": flat[cotangents[2]],
+            "dparam": np.empty(flat[operands[0]].size, np.float32),
+            "dgrad": np.empty(flat[operands[0]].size, np.float32),
+            "dmoment1": np.empty(flat[operands[0]].size, np.float32),
+            "dmoment2": np.empty(flat[operands[0]].size, np.float32),
+        }
+    result = _submit_nvidia_sm120_native(
+        package.image, package.descriptor, buffers,
+        {"N": flat[operands[0]].size}, None,
+    )
+    return tuple(value.reshape(shape) for value in result)
+
+
+def _execute_nvidia_adafactor_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Launch full or factored analytic Adafactor VJP on exact SM120."""
+    import numpy as np
+    from .compiler.native_stateful_vjp import (
+        validate_native_stateful_vjp_runtime_metadata,
+    )
+    from .compiler.stateful_training import (
+        validate_adafactor_vjp_state_contract,
+        validate_scheduled_adafactor_vjp_metadata,
+    )
+
+    metadata = artifact.metadata or {}
+    validate_native_stateful_vjp_runtime_metadata(metadata)
+    contract = dict(metadata["native_stateful_vjp_package"])
+    operands = [str(name) for name in contract["argument_names"]]
+    cotangents = [str(name) for name in contract["cotangent_names"]]
+    if len(cotangents) != 1 or len(operands) not in {3, 4}:
+        raise ValueError("NVIDIA Adafactor VJP package ABI is stale")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    arrays = {
+        name: np.ascontiguousarray(_as_numpy(values[name]), np.float32)
+        for name in (*operands, *cotangents)
+    }
+    parameter_shape = arrays[operands[0]].shape
+    topology = "factored" if len(operands) == 4 else "full"
+    state_contract = metadata["state_contract"]
+    numeric = dict(state_contract["numeric"])
+    validate_adafactor_vjp_state_contract(
+        state_contract, target="nvidia_sm120", parameter_shape=parameter_shape,
+        topology=topology, kwargs=numeric,
+    )
+    validate_scheduled_adafactor_vjp_metadata(
+        metadata["scheduled_training"], target="nvidia_sm120",
+        parameter_shape=parameter_shape, topology=topology,
+        state_contract=state_contract,
+    )
+    if arrays[operands[1]].shape != parameter_shape or arrays[cotangents[0]].shape != parameter_shape:
+        raise ValueError("NVIDIA Adafactor parameter, gradient, and cotangent shapes differ")
+    from .compiler.nvidia_training import package_adafactor_backward
+
+    package = package_adafactor_backward(
+        topology=topology, lr=float(numeric["lr"]),
+        beta2=float(numeric["beta2"]), epsilon=float(numeric["eps"]),
+    )
+    count = int(arrays[operands[0]].size)
+    buffers = {
+        "param": arrays[operands[0]].reshape(-1),
+        "grad": arrays[operands[1]].reshape(-1),
+        "state0": arrays[operands[2]].reshape(-1),
+        "dparam_out": arrays[cotangents[0]].reshape(-1),
+        "dparam": np.empty(count, np.float32),
+        "dgrad": np.empty(count, np.float32),
+        "dstate0": np.empty(arrays[operands[2]].size, np.float32),
+    }
+    if topology == "full":
+        if arrays[operands[2]].shape != parameter_shape or len(parameter_shape) >= 2:
+            raise ValueError("NVIDIA full Adafactor VJP requires rank-0/1 matching state")
+        dimensions = {"N": count}
+    else:
+        rows, columns = int(np.prod(parameter_shape[:-1])), int(parameter_shape[-1])
+        if (
+            arrays[operands[2]].size != rows
+            or arrays[operands[3]].shape != (columns,)
+            or len(parameter_shape) < 2
+        ):
+            raise ValueError("NVIDIA factored Adafactor row/column state shapes differ")
+        buffers.update(
+            state1=arrays[operands[3]].reshape(-1),
+            dstate1=np.empty(columns, np.float32),
+        )
+        dimensions = {"Rows": rows, "Columns": columns}
+    result = _submit_nvidia_sm120_native(
+        package.image, package.descriptor, buffers, dimensions, None,
+    )
+    output_shapes = (
+        (parameter_shape, parameter_shape, parameter_shape)
+        if topology == "full"
+        else (parameter_shape, parameter_shape, parameter_shape[:-1], (parameter_shape[-1],))
+    )
+    return tuple(value.reshape(shape) for value, shape in zip(result, output_shapes))
+
+
 def _execute_nvidia_deltanet_backward(artifact: RuntimeArtifact, args: Any) -> Any:
     """Run the bounded affine SM120 causal DeltaNet VJP package."""
     import numpy as np
@@ -10079,6 +10420,57 @@ def _execute_nvidia_training_fused(artifact: RuntimeArtifact, args: Any) -> Any:
         )
     result = _submit_nvidia_sm120_native(package.image, package.descriptor, launch_arrays, {"N": n}, None)
     return tuple(value.reshape(shape) for value in result)
+
+
+_NVIDIA_BINARY_OPS = {
+    "tessera.sub": 0,
+    "tessera.subtract": 0,
+    "tessera.div": 1,
+    "tessera.divide": 1,
+    "tessera.pow": 2,
+    "tessera.power": 2,
+    "tessera.maximum": 3,
+    "tessera.minimum": 4,
+    "tessera.add": 5,
+    "tessera.mul": 6,
+    "tessera.multiply": 6,
+    "tessera.mod": 7,
+    "tessera.floor_div": 8,
+    "tessera.floor_divide": 8,
+}
+
+
+def _execute_nvidia_compiled_binary(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Compiler-emitted matching-shape SM120 binary arithmetic package."""
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    op_name = str(op.get("op_name", ""))
+    if op_name not in _NVIDIA_BINARY_OPS:
+        raise ValueError(
+            "nvidia_binary_compiled executor handles exactly one of "
+            f"{tuple(_NVIDIA_BINARY_OPS)}; got {[item.get('op_name') for item in ops]!r}"
+        )
+    operand_names = [str(name) for name in op.get("operands", [])]
+    if len(operand_names) != 2:
+        raise ValueError("NVIDIA binary arithmetic requires exactly two operands")
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.shape != b.shape:
+        raise ValueError(
+            f"NVIDIA binary arithmetic requires matching shapes; got {a.shape} and {b.shape}"
+        )
+    if a.dtype != b.dtype:
+        raise ValueError(
+            f"NVIDIA binary arithmetic requires matching dtypes; got {a.dtype} and {b.dtype}"
+        )
+    from .compiler.emit.nvidia_cuda import run_binary_arithmetic
+
+    return run_binary_arithmetic(a, b, _NVIDIA_BINARY_OPS[op_name])
 
 
 def _execute_nvidia_local_collective(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -11091,12 +11483,21 @@ def _x86_elementwise_lib_path() -> Optional[Path]:
 
 def _load_x86_elementwise() -> ctypes.CDLL | None:
     """Load libtessera_x86_elementwise.so once, binding the C-ABI signatures.
-    Returns None (never raises) when the lib is absent — the caller treats that
-    as "no x86 compiled lane on this host" and the executor skips clean."""
+    Returns None when the image is absent or its complete architecture feature
+    set is not executable on this host.  Admission precedes ``ctypes.CDLL`` so
+    an incompatible ELF constructor can never turn a capability query into
+    SIGILL; callers treat None as "no x86 compiled lane" and skip cleanly."""
     global _x86_elementwise_runtime, _x86_elementwise_loaded
     if _x86_elementwise_loaded:
         return _x86_elementwise_runtime
     _x86_elementwise_loaded = True
+    from tessera.compiler.x86_native import (
+        X86_AVX512_ARCHITECTURE,
+        host_supports_architecture,
+    )
+
+    if not host_supports_architecture(X86_AVX512_ARCHITECTURE):
+        return None
     path = _x86_elementwise_lib_path()
     if path is None:
         return None
@@ -12411,7 +12812,10 @@ def _execute_compiled_spectral_jvp(
 ) -> tuple[Any, Any]:
     """Execute a bilinear/fixed-parameter compound spectral product."""
     import numpy as np
-    from .compiler.scheduled_spectral import spectral_output_scale
+    from .compiler.scheduled_spectral import (
+        spectral_output_scale,
+        validate_scheduled_spectral_metadata,
+    )
 
     metadata = artifact.metadata or {}
     names = [str(name) for name in metadata.get("arg_names", [])]
@@ -12425,17 +12829,116 @@ def _execute_compiled_spectral_jvp(
     primals = [_as_numpy(values[name]) for name in primal_names]
     spectral_fn = (
         _execute_x86_compiled_spectral if target == "x86"
+        else _execute_nvidia_compiled_spectral if target == "nvidia_sm120"
         else _execute_rocm_compiled_spectral
     )
+    compiler_prefix = "nvidia" if target == "nvidia_sm120" else target
 
     def spectral(operands: list[Any]) -> Any:
         child = {
             "target": target,
-            "compiler_path": f"{target}_spectral_compiled",
+            "compiler_path": f"{compiler_prefix}_spectral_compiled",
             "arg_names": [f"operand_{index}" for index in range(len(operands))],
             "scheduled_spectral": contract,
         }
         return spectral_fn(RuntimeArtifact(metadata=child), tuple(operands))
+
+    if target == "nvidia_sm120" and op_name in {"tessera.stft", "tessera.istft"}:
+        lib = _load_nvidia_fft_runtime()
+        symbol_name = (
+            "tessera_nvidia_stft_jvp_broadcast_layout_storage"
+            if op_name == "tessera.stft"
+            else "tessera_nvidia_istft_jvp_broadcast_layout_storage"
+        )
+        if (lib is None or not hasattr(lib, symbol_name) or
+                lib.tessera_nvidia_spectral_arch() != 120):
+            raise RuntimeError("native NVIDIA spectral JVP requires exact sm_120")
+        contract = validate_scheduled_spectral_metadata(
+            contract, input_shapes=[np.asarray(value).shape for value in primals]
+        )
+        storage = str(contract["storage"])
+        storage_code = {"f32": 0, "f16": 1, "bf16": 2}[storage]
+        expected_real = {"f32": "float32", "f16": "float16",
+                         "bf16": "bfloat16"}[storage]
+        axis = int(contract["axis"])
+        nfft = int(contract["transform_length"])
+        hop = int(contract["hop"])
+        center = int(bool(contract["center"]))
+        onesided = int(bool(contract["onesided"]))
+        digest = str(contract["schedule_digest"]).encode("ascii")
+        pointer = ctypes.POINTER(ctypes.c_float)
+
+        def void_pointer(value: Any | None) -> Any:
+            return None if value is None else value.ctypes.data_as(ctypes.c_void_p)
+
+        if op_name == "tessera.stft":
+            signal = np.ascontiguousarray(primals[0])
+            window = np.ascontiguousarray(primals[1])
+            if str(signal.dtype) != expected_real or str(window.dtype) != expected_real:
+                raise ValueError("NVIDIA STFT JVP storage disagrees with its Tile policy")
+            dsignal = (np.ascontiguousarray(_as_numpy(values["tangent_0"]))
+                       if 0 in wrt else None)
+            dwindow = (np.ascontiguousarray(_as_numpy(values["tangent_1"]))
+                       if 1 in wrt else None)
+            shape = (ctypes.c_int64 * signal.ndim)(*signal.shape)
+            strides = (ctypes.c_int64 * signal.ndim)(
+                *(stride // signal.itemsize for stride in signal.strides)
+            )
+            window_shape = (ctypes.c_int64 * window.ndim)(*window.shape)
+            window_strides = (ctypes.c_int64 * window.ndim)(
+                *(stride // window.itemsize for stride in window.strides)
+            )
+            output_shape = tuple(int(dim) for dim in contract["output_shape"])
+            primal = np.empty(output_shape, np.complex64)
+            tangent = np.empty(output_shape, np.complex64)
+            rc = lib.tessera_nvidia_stft_jvp_broadcast_layout_storage(
+                digest, void_pointer(signal), void_pointer(window),
+                void_pointer(dsignal), void_pointer(dwindow),
+                primal.view(np.float32).ctypes.data_as(pointer),
+                tangent.view(np.float32).ctypes.data_as(pointer), signal.ndim,
+                shape, strides, axis, window.ndim, window_shape, window_strides,
+                nfft, hop, int(contract["frames"]), storage_code,
+                ctypes.c_float(spectral_output_scale(
+                    op_name, str(contract["normalization"]), nfft
+                )), center, {"constant": 0, "reflect": 1}[str(contract["pad_mode"])],
+                onesided,
+            )
+        else:
+            spectrum = np.ascontiguousarray(primals[0], np.complex64)
+            window = np.ascontiguousarray(primals[1])
+            if str(window.dtype) != expected_real:
+                raise ValueError("NVIDIA ISTFT JVP storage disagrees with its Tile policy")
+            dspectrum = (np.ascontiguousarray(
+                _as_numpy(values["tangent_0"]), np.complex64
+            ) if 0 in wrt else None)
+            dwindow = (np.ascontiguousarray(_as_numpy(values["tangent_1"]))
+                       if 1 in wrt else None)
+            shape = (ctypes.c_int64 * spectrum.ndim)(*spectrum.shape)
+            strides = (ctypes.c_int64 * spectrum.ndim)(
+                *(stride // spectrum.itemsize for stride in spectrum.strides)
+            )
+            window_shape = (ctypes.c_int64 * window.ndim)(*window.shape)
+            window_strides = (ctypes.c_int64 * window.ndim)(
+                *(stride // window.itemsize for stride in window.strides)
+            )
+            output_shape = tuple(int(dim) for dim in contract["output_shape"])
+            primal = np.empty(output_shape, window.dtype)
+            tangent = np.empty(output_shape, window.dtype)
+            rc = lib.tessera_nvidia_istft_jvp_broadcast_layout_storage(
+                digest, spectrum.view(np.float32).ctypes.data_as(pointer),
+                void_pointer(window),
+                (None if dspectrum is None else
+                 dspectrum.view(np.float32).ctypes.data_as(pointer)),
+                void_pointer(dwindow), void_pointer(primal), void_pointer(tangent),
+                spectrum.ndim, shape, strides, axis, window.ndim, window_shape,
+                window_strides, nfft, hop, storage_code,
+                ctypes.c_float(spectral_output_scale(
+                    op_name, str(contract["normalization"]), nfft
+                )), center, int(contract["output_length"]), onesided,
+            )
+        if rc != 0:
+            raise RuntimeError(f"NVIDIA spectral JVP package failed rc={rc}")
+        return primal, tangent
 
     if op_name == "tessera.istft" and 1 in wrt:
         axis = int(contract["axis"])
@@ -12499,6 +13002,7 @@ def _execute_compiled_spectral_jvp(
     tangent_accumulator: Any = terms[0]
     binary_fn = (
         _execute_x86_compiled_binary if target == "x86"
+        else _execute_nvidia_compiled_binary if target == "nvidia_sm120"
         else _execute_rocm_compiled_binary
     )
     for term in terms[1:]:
@@ -12508,9 +13012,10 @@ def _execute_compiled_spectral_jvp(
         if complex_output:
             lhs = lhs.view(np.float32).reshape(lhs.shape + (2,))
             rhs = rhs.view(np.float32).reshape(rhs.shape + (2,))
+        compiler_prefix = "nvidia" if target == "nvidia_sm120" else target
         child = RuntimeArtifact(metadata={
             "target": target,
-            "compiler_path": f"{target}_binary_compiled",
+            "compiler_path": f"{compiler_prefix}_binary_compiled",
             "arg_names": ["a", "b"],
             "ops": [{"op_name": "tessera.add", "result": "o",
                      "operands": ["a", "b"], "kwargs": {}}],
@@ -12531,6 +13036,12 @@ def _execute_x86_compiled_spectral_jvp(artifact: RuntimeArtifact, args: Any) -> 
 
 def _execute_rocm_compiled_spectral_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_compiled_spectral_jvp(artifact, args, target="rocm")
+
+
+def _execute_nvidia_compiled_spectral_jvp(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    return _execute_compiled_spectral_jvp(artifact, args, target="nvidia_sm120")
 
 
 def _execute_native_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -18929,6 +19440,104 @@ def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
                            ctypes.POINTER(ctypes.c_float), ctypes.c_void_p,
                            ctypes.c_size_t]
         symbol.restype = ctypes.c_int
+    if hasattr(lib, "tessera_nvidia_spectral_package_abi"):
+        lib.tessera_nvidia_spectral_package_abi.argtypes = []
+        lib.tessera_nvidia_spectral_package_abi.restype = ctypes.c_char_p
+        lib.tessera_nvidia_spectral_arch.argtypes = []
+        lib.tessera_nvidia_spectral_arch.restype = ctypes.c_int
+        i64p = ctypes.POINTER(ctypes.c_int64)
+        f32p = ctypes.POINTER(ctypes.c_float)
+        voidp = ctypes.c_void_p
+        lib.tessera_nvidia_dct_policy_layout_f32.argtypes = [
+            ctypes.c_char_p, f32p, f32p, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float,
+        ]
+        lib.tessera_nvidia_dct_policy_layout_f32.restype = ctypes.c_int
+        lib.tessera_nvidia_dct_policy_layout_storage.argtypes = [
+            ctypes.c_char_p, voidp, voidp, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+        ]
+        lib.tessera_nvidia_dct_policy_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_stft_policy_broadcast_layout_f32.argtypes = [
+            ctypes.c_char_p, f32p, f32p, f32p, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, i64p, i64p, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_stft_policy_broadcast_layout_f32.restype = ctypes.c_int
+        lib.tessera_nvidia_stft_policy_broadcast_layout_storage.argtypes = [
+            ctypes.c_char_p, voidp, voidp, f32p, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, i64p, i64p, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_stft_policy_broadcast_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_stft_jvp_broadcast_layout_storage.argtypes = [
+            ctypes.c_char_p, voidp, voidp, voidp, voidp, f32p, f32p,
+            ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_float, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_stft_jvp_broadcast_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_istft_policy_broadcast_layout_f32.argtypes = [
+            ctypes.c_char_p, f32p, f32p, f32p, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, i64p, i64p, ctypes.c_int,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int,
+        ]
+        lib.tessera_nvidia_istft_policy_broadcast_layout_f32.restype = ctypes.c_int
+        lib.tessera_nvidia_istft_policy_broadcast_layout_storage.argtypes = [
+            ctypes.c_char_p, f32p, voidp, voidp, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, i64p, i64p, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_istft_policy_broadcast_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_istft_jvp_broadcast_layout_storage.argtypes = [
+            ctypes.c_char_p, f32p, voidp, f32p, voidp, voidp, voidp,
+            ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_istft_jvp_broadcast_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_stft_backward_broadcast_layout_f32.argtypes = [
+            ctypes.c_char_p, f32p, f32p, f32p, f32p, f32p, ctypes.c_int,
+            i64p, i64p, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+            ctypes.c_float, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_stft_backward_broadcast_layout_f32.restype = ctypes.c_int
+        lib.tessera_nvidia_stft_backward_broadcast_layout_storage.argtypes = [
+            ctypes.c_char_p, f32p, voidp, voidp, voidp, voidp, ctypes.c_int,
+            i64p, i64p, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, i64p, i64p, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_float, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int,
+        ]
+        lib.tessera_nvidia_stft_backward_broadcast_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_istft_backward_broadcast_layout_f32.argtypes = [
+            ctypes.c_char_p, f32p, f32p, f32p, f32p, f32p, ctypes.c_int,
+            i64p, i64p, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int,
+            ctypes.c_int,
+        ]
+        lib.tessera_nvidia_istft_backward_broadcast_layout_f32.restype = ctypes.c_int
+        lib.tessera_nvidia_istft_backward_broadcast_layout_storage.argtypes = [
+            ctypes.c_char_p, voidp, f32p, voidp, f32p, voidp, ctypes.c_int,
+            i64p, i64p, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        lib.tessera_nvidia_istft_backward_broadcast_layout_storage.restype = ctypes.c_int
+        lib.tessera_nvidia_streaming_stft_broadcast_layout_f32.argtypes = [
+            ctypes.c_char_p, f32p, f32p, f32p, f32p, f32p, ctypes.c_int,
+            i64p, i64p, ctypes.c_int, ctypes.c_int, ctypes.c_int, i64p, i64p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ctypes.c_int,
+        ]
+        lib.tessera_nvidia_streaming_stft_broadcast_layout_f32.restype = ctypes.c_int
     if lib.tessera_nvidia_fft_package_abi() != b"tessera.nvidia.cuda_fft_workspace.v2":
         return None
     _nvidia_fft_runtime = lib
@@ -19107,8 +19716,12 @@ def _nvidia_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
 
 
 def _execute_nvidia_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
-    """CUDA spectral composites with framing orchestration over native cuFFT."""
+    """CUDA spectral composites, including target-owned STFT/ISTFT policy."""
     import numpy as np
+    from .compiler.scheduled_spectral import (
+        spectral_output_scale,
+        validate_scheduled_spectral_metadata,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -19116,6 +19729,9 @@ def _execute_nvidia_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> A
     operands = [np.asarray(_as_numpy(values[name])) for name in arg_names]
     contract = metadata.get("scheduled_spectral")
     if isinstance(contract, dict):
+        contract = validate_scheduled_spectral_metadata(
+            contract, input_shapes=[value.shape for value in operands]
+        )
         op_name = str(contract.get("op_name", ""))
         kwargs = dict(contract)
     else:
@@ -19126,6 +19742,183 @@ def _execute_nvidia_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> A
         kwargs = dict(ops[0].get("kwargs") or {})
     if op_name not in _SPECTRAL_COMPOSITE_OPS:
         raise ValueError(f"unsupported NVIDIA spectral consumer {op_name!r}")
+    if op_name == "tessera.dct":
+        lib = _load_nvidia_fft_runtime()
+        if (lib is None or
+                not hasattr(lib, "tessera_nvidia_dct_policy_layout_storage")):
+            raise RuntimeError("NVIDIA DCT policy package is unavailable")
+        if (lib.tessera_nvidia_spectral_package_abi() !=
+                b"tessera.nvidia.spectral_policy.v1" or
+                lib.tessera_nvidia_spectral_arch() != 120):
+            raise RuntimeError("NVIDIA DCT policy requires exact sm_120")
+        value = operands[0]
+        storage = str(kwargs.get("storage") or {
+            "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+        }.get(str(value.dtype), ""))
+        expected_dtype = {"f32": "float32", "f16": "float16",
+                          "bf16": "bfloat16"}.get(storage)
+        if expected_dtype is None or str(value.dtype) != expected_dtype:
+            raise ValueError(
+                f"NVIDIA DCT policy requires declared {storage!r} storage; "
+                f"got {value.dtype}"
+            )
+        axis = int(kwargs.get("axis", -1))
+        if axis < 0:
+            axis += value.ndim
+        if axis < 0 or axis >= value.ndim:
+            raise ValueError("NVIDIA DCT axis is out of range")
+        dct_type = int(kwargs.get("dct_type") or kwargs.get("type", 2))
+        if dct_type not in {1, 2, 3, 4}:
+            raise ValueError("NVIDIA DCT type must be I, II, III, or IV")
+        if any(stride % value.itemsize for stride in value.strides):
+            raise ValueError("NVIDIA DCT strides must be element aligned")
+        element_strides = tuple(
+            int(stride // value.itemsize) for stride in value.strides
+        )
+        if any(stride == 0 and int(value.shape[dim]) > 1
+               for dim, stride in enumerate(element_strides)):
+            raise ValueError("NVIDIA DCT overlapping layouts are unsupported")
+        shape = (ctypes.c_int64 * value.ndim)(*map(int, value.shape))
+        strides = (ctypes.c_int64 * value.ndim)(*element_strides)
+        output = np.empty(value.shape, value.dtype)
+        digest_value = kwargs.get("schedule_digest")
+        digest = (str(digest_value).encode("ascii")
+                  if digest_value is not None else None)
+        normalization = str(
+            kwargs.get("normalization") or kwargs.get("norm", "backward")
+        )
+        length = int(value.shape[axis])
+        scale_length = 2 * (length - 1) if dct_type == 1 else 2 * length
+        scale = spectral_output_scale(op_name, normalization, scale_length)
+        rc = lib.tessera_nvidia_dct_policy_layout_storage(
+            digest, value.ctypes.data_as(ctypes.c_void_p),
+            output.ctypes.data_as(ctypes.c_void_p), value.ndim, shape, strides,
+            axis, dct_type, {"f32": 0, "f16": 1, "bf16": 2}[storage],
+            ctypes.c_float(scale),
+        )
+        if rc != 0:
+            raise RuntimeError(f"NVIDIA DCT policy execution failed rc={rc}")
+        return output
+    if op_name in {"tessera.stft", "tessera.istft"}:
+        lib = _load_nvidia_fft_runtime()
+        required = (
+            "tessera_nvidia_spectral_package_abi",
+            "tessera_nvidia_stft_policy_broadcast_layout_storage",
+            "tessera_nvidia_istft_policy_broadcast_layout_storage",
+        )
+        if lib is None or any(not hasattr(lib, name) for name in required):
+            raise RuntimeError("NVIDIA STFT/ISTFT policy package is unavailable")
+        if (lib.tessera_nvidia_spectral_package_abi() !=
+                b"tessera.nvidia.spectral_policy.v1"):
+            raise RuntimeError("NVIDIA spectral policy package ABI mismatch")
+        if lib.tessera_nvidia_spectral_arch() != 120:
+            raise RuntimeError("NVIDIA spectral policy requires exact sm_120")
+
+        def layout_descriptor(value: Any) -> tuple[Any, Any]:
+            if any(stride % value.itemsize for stride in value.strides):
+                raise ValueError("NVIDIA spectral strides must be element aligned")
+            strides = tuple(int(stride // value.itemsize) for stride in value.strides)
+            if any(stride == 0 and int(value.shape[dim]) > 1
+                   for dim, stride in enumerate(strides)):
+                raise ValueError("NVIDIA spectral overlapping layouts are unsupported")
+            shape = (ctypes.c_int64 * value.ndim)(*map(int, value.shape))
+            descriptor = (ctypes.c_int64 * value.ndim)(*strides)
+            return shape, descriptor
+
+        signal = operands[0]
+        window = operands[1]
+        storage = str(kwargs.get("storage") or {
+            "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+        }.get(str(window.dtype if op_name == "tessera.istft" else signal.dtype), ""))
+        expected_real_dtype = {"f32": "float32", "f16": "float16",
+                               "bf16": "bfloat16"}.get(storage)
+        signal_dtype_ok = (
+            signal.dtype == np.complex64 if op_name == "tessera.istft"
+            else str(signal.dtype) == expected_real_dtype
+        )
+        if not signal_dtype_ok or str(window.dtype) != expected_real_dtype:
+            raise ValueError(
+                f"NVIDIA spectral policy requires {storage} real storage and "
+                "complex64 ISTFT spectra"
+            )
+        axis = int(kwargs.get("axis", -1))
+        if axis < 0:
+            axis += signal.ndim
+        if axis < 0 or axis >= signal.ndim:
+            raise ValueError("NVIDIA spectral axis is out of range")
+        normalization = str(
+            kwargs.get("normalization") or kwargs.get("norm", "backward")
+        )
+        nfft = int(kwargs.get("transform_length") or kwargs.get("n_fft") or
+                   window.shape[-1])
+        hop = int(kwargs.get("hop", 0))
+        center = bool(kwargs.get("center", False))
+        onesided = bool(kwargs.get("onesided", True))
+        if nfft <= 0 or hop <= 0 or nfft < int(window.shape[-1]):
+            raise ValueError("NVIDIA spectral n_fft/window/hop contract mismatch")
+        shape, strides = layout_descriptor(signal)
+        window_shape, window_strides = layout_descriptor(window)
+        digest_value = kwargs.get("schedule_digest")
+        digest = (str(digest_value).encode("ascii")
+                  if digest_value is not None else None)
+        pointer = ctypes.POINTER(ctypes.c_float)
+        signal_pointer = signal.ctypes.data_as(pointer)
+        window_pointer = window.ctypes.data_as(ctypes.c_void_p)
+        storage_code = {"f32": 0, "f16": 1, "bf16": 2}[storage]
+        scale = spectral_output_scale(op_name, normalization, nfft)
+        if op_name == "tessera.stft":
+            samples = int(signal.shape[axis])
+            pad = nfft // 2 if center else 0
+            framed_samples = max(samples + 2 * pad, nfft)
+            frames = int(kwargs.get("frames") or
+                         ((framed_samples - nfft) // hop + 1))
+            bins = nfft // 2 + 1 if onesided else nfft
+            output_shape = (tuple(signal.shape[:axis]) + (frames, bins) +
+                            tuple(signal.shape[axis + 1:]))
+            declared_output = kwargs.get("output_shape")
+            if declared_output is not None and tuple(declared_output) != output_shape:
+                raise ValueError("NVIDIA STFT output shape disagrees with policy")
+            output = np.empty(output_shape, np.complex64)
+            pad_mode = str(kwargs.get("pad_mode", "constant"))
+            if pad_mode not in {"constant", "reflect"}:
+                raise ValueError("NVIDIA STFT pad_mode must be constant or reflect")
+            rc = lib.tessera_nvidia_stft_policy_broadcast_layout_storage(
+                digest, signal.ctypes.data_as(ctypes.c_void_p), window_pointer,
+                output.view(np.float32).ctypes.data_as(pointer), signal.ndim,
+                shape, strides, axis, window.ndim, window_shape, window_strides,
+                nfft, hop, frames, storage_code, ctypes.c_float(scale), int(center),
+                {"constant": 0, "reflect": 1}[pad_mode], int(onesided),
+            )
+        else:
+            if axis <= 0:
+                raise ValueError("NVIDIA ISTFT frequency axis requires a frame axis")
+            frame_axis = axis - 1
+            frames = int(signal.shape[frame_axis])
+            expected_bins = nfft // 2 + 1 if onesided else nfft
+            if int(signal.shape[axis]) != expected_bins:
+                raise ValueError("NVIDIA ISTFT spectrum does not match n_fft")
+            raw_samples = (frames - 1) * hop + nfft
+            available = raw_samples - (nfft if center else 0)
+            requested = kwargs.get("output_length", kwargs.get("length"))
+            output_samples = available if requested is None else int(requested)
+            if output_samples <= 0 or output_samples > available:
+                raise ValueError("NVIDIA ISTFT output length exceeds available samples")
+            output_shape = (tuple(signal.shape[:frame_axis]) + (output_samples,) +
+                            tuple(signal.shape[axis + 1:]))
+            declared_output = kwargs.get("output_shape")
+            if declared_output is not None and tuple(declared_output) != output_shape:
+                raise ValueError("NVIDIA ISTFT output shape disagrees with policy")
+            output = np.empty(output_shape, window.dtype)
+            rc = lib.tessera_nvidia_istft_policy_broadcast_layout_storage(
+                digest, signal_pointer, window_pointer,
+                output.ctypes.data_as(ctypes.c_void_p), signal.ndim, shape, strides,
+                axis, window.ndim, window_shape, window_strides, nfft, hop,
+                storage_code, ctypes.c_float(scale), int(center), output_samples,
+                int(onesided),
+            )
+        if rc != 0:
+            raise RuntimeError(f"NVIDIA spectral policy execution failed rc={rc}")
+        return output
     return _spectral_composite(op_name, operands, kwargs, _nvidia_fftexec, np)
 
 
@@ -30282,9 +31075,13 @@ def _solver_ift_inputs(artifact: RuntimeArtifact, args: Any) -> tuple[Any, Any, 
         raise ValueError("solver IFT operands must have identical shapes")
     contract = dict(metadata.get("scheduled_solver_ift") or {})
     runtime_target = metadata.get("target")
-    if runtime_target not in {"x86", "rocm"}:
+    if runtime_target not in {"x86", "rocm", "nvidia_sm120"}:
         raise ValueError(f"solver IFT runtime rejects target {runtime_target!r}")
-    target = "x86" if runtime_target == "x86" else "rocm_gfx1151"
+    target = {
+        "x86": "x86",
+        "rocm": "rocm_gfx1151",
+        "nvidia_sm120": "nvidia_sm120",
+    }[runtime_target]
     product_mode = str(contract.get("product_mode", "vjp"))
     expected = build_solver_ift_contract(
         target=target, shape=arrays[0].shape, product_mode=product_mode
@@ -30314,6 +31111,86 @@ def _execute_x86_solver_ift(artifact: RuntimeArtifact, args: Any) -> Any:
         ctypes.c_int64(n),
     )
     return tuple(value.reshape(parameter.shape) for value in outputs)
+
+
+def _execute_nvidia_solver_ift(artifact: RuntimeArtifact, args: Any) -> Any:
+    parameter, solution, product, _ = _solver_ift_inputs(artifact, args)
+    from .compiler.emit.nvidia_cuda import run_solver_ift_f32
+
+    return run_solver_ift_f32(parameter, solution, product)
+
+
+def _execute_nvidia_krylov_solver(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    from .compiler.implicit_solver import build_nvidia_krylov_contract
+    from .compiler.emit.nvidia_cuda import run_solver_diagonal_cg
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    if names != ["diagonal", "rhs"]:
+        raise ValueError("NVIDIA Krylov requires diagonal/rhs argument order")
+    values = _bind_launch_args(args, names)
+    diagonal = np.asarray(values["diagonal"])
+    rhs = np.asarray(values["rhs"])
+    if diagonal.shape != rhs.shape or diagonal.dtype != rhs.dtype:
+        raise ValueError("NVIDIA Krylov operands must have matching shape/storage")
+    dtype_name = {
+        "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+    }.get(str(diagonal.dtype), str(diagonal.dtype))
+    contract = dict(metadata.get("nvidia_krylov") or {})
+    expected = build_nvidia_krylov_contract(
+        shape=diagonal.shape, storage=dtype_name,
+        algorithm=str(contract.get("algorithm", "")),
+        tolerance=float(contract.get("tolerance", 0.0)),
+        max_iterations=int(contract.get("max_iterations", 0)),
+    )
+    if contract != expected:
+        raise ValueError("NVIDIA Krylov rejected stale physical lineage")
+    return run_solver_diagonal_cg(
+        diagonal, rhs, tolerance=float(contract["tolerance"]),
+        max_iterations=int(contract["max_iterations"]),
+    )
+
+
+def _execute_nvidia_dense_krylov_solver(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    from .compiler.implicit_solver import build_nvidia_dense_krylov_contract
+    from .compiler.emit.nvidia_solver_krylov import run_dense_krylov
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    if names != ["operator", "rhs"]:
+        raise ValueError("NVIDIA dense Krylov requires operator/rhs argument order")
+    values = _bind_launch_args(args, names)
+    operator = np.asarray(values["operator"])
+    rhs = np.asarray(values["rhs"])
+    if operator.ndim != 2 or operator.shape[0] != operator.shape[1] or rhs.shape != (operator.shape[0],):
+        raise ValueError("NVIDIA dense Krylov requires operator[n,n] and rhs[n]")
+    if operator.dtype != rhs.dtype:
+        raise ValueError("NVIDIA dense Krylov operator/RHS storage must match")
+    dtype_name = {
+        "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+    }.get(str(operator.dtype), str(operator.dtype))
+    contract = dict(metadata.get("nvidia_dense_krylov") or {})
+    expected = build_nvidia_dense_krylov_contract(
+        order=operator.shape[0], storage=dtype_name,
+        algorithm=str(contract.get("algorithm", "")),
+        tolerance=float(contract.get("tolerance", 0.0)),
+        max_iterations=int(contract.get("max_iterations", 0)),
+        restart=int(contract.get("restart", 0)),
+        reduction_ctas=int(contract.get("requested_reduction_ctas", -1)),
+    )
+    if contract != expected:
+        raise ValueError("NVIDIA dense Krylov rejected stale physical lineage")
+    return run_dense_krylov(
+        operator, rhs, algorithm=str(contract["algorithm"]),
+        tolerance=float(contract["tolerance"]),
+        max_iterations=int(contract["max_iterations"]),
+        restart=int(contract["restart"]),
+        reduction_ctas=int(contract["requested_reduction_ctas"]),
+    )
 
 
 def _execute_x86_es_low_rank(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -30524,10 +31401,14 @@ def _execute_solver_residual_program(
                 raise ValueError(
                     "solver predicate derivative is undefined at an equality boundary"
                 )
-            executor = (
-                _execute_x86_compiled_compare if target == "x86"
-                else _execute_rocm_compiled_compare
-            )
+            if target == "x86":
+                executor = _execute_x86_compiled_compare
+            elif target == "rocm":
+                executor = _execute_rocm_compiled_compare
+            elif target == "nvidia_sm120":
+                executor = _execute_nvidia_compiled_compare
+            else:
+                raise ValueError(f"solver comparison rejects target {target!r}")
             child = RuntimeArtifact(metadata={
                 "target": target,
                 "compiler_path": f"{target}_compare_compiled",
@@ -30554,10 +31435,14 @@ def _execute_solver_residual_program(
                 np.ascontiguousarray(np.broadcast_to(value, common_shape), dtype=np.float32)
                 for value in operands[1:]
             )
-            executor = (
-                _execute_x86_compiled_where if target == "x86"
-                else _execute_rocm_compiled_where
-            )
+            if target == "x86":
+                executor = _execute_x86_compiled_where
+            elif target == "rocm":
+                executor = _execute_rocm_compiled_where
+            elif target == "nvidia_sm120":
+                executor = _execute_nvidia_compiled_where
+            else:
+                raise ValueError(f"solver where rejects target {target!r}")
             child = RuntimeArtifact(metadata={
                 "target": target,
                 "compiler_path": f"{target}_where_compiled",
@@ -30642,7 +31527,7 @@ def _execute_solver_residual_program(
                     np.ascontiguousarray(value, dtype=np.float32) for value in operands
                 )
                 result = _x86_gemm_2d(*physical_operands)
-            else:
+            elif target == "rocm":
                 # gfx1151 has no f32 WMMA. Preserve the Graph storage contract
                 # through every primal/product matmul instead of accidentally
                 # feeding widened solver values to the reduced-precision ABI.
@@ -30659,15 +31544,32 @@ def _execute_solver_residual_program(
                     np.ascontiguousarray(value, dtype=storage_dtype) for value in operands
                 )
                 result = _rocm_wmma_gemm_2d(*physical_operands)
+            elif target == "nvidia_sm120":
+                child = RuntimeArtifact(metadata={
+                    "target": target,
+                    "compiler_path": "nvidia_solver_matmul_compiled",
+                    "arg_names": ["a0", "a1"],
+                    "ops": [{
+                        "op_name": op_name, "result": "out",
+                        "operands": ["a0", "a1"], "kwargs": kwargs,
+                    }],
+                })
+                result = _execute_nvidia_solver_matmul(child, operands)
+            else:
+                raise ValueError(f"solver matmul rejects target {target!r}")
             values[step_id] = np.ascontiguousarray(result, dtype=np.float32)
             continue
         if op_name in {"tessera.sum", "tessera.mean"}:
             if len(operands) != 1:
                 raise ValueError("solver reduction requires one operand")
-            executor = (
-                _execute_x86_compiled_reduce if target == "x86"
-                else _execute_rocm_compiled_reduce
-            )
+            if target == "x86":
+                executor = _execute_x86_compiled_reduce
+            elif target == "rocm":
+                executor = _execute_rocm_compiled_reduce
+            elif target == "nvidia_sm120":
+                executor = _execute_nvidia_compiled_reduce
+            else:
+                raise ValueError(f"solver reduction rejects target {target!r}")
             child = RuntimeArtifact(metadata={
                 "target": target,
                 "compiler_path": f"{target}_reduce_compiled",
@@ -30690,11 +31592,17 @@ def _execute_solver_residual_program(
                 np.ascontiguousarray(np.broadcast_to(value, common_shape), dtype=np.float32)
                 for value in operands
             )
-            executor = (
-                _execute_x86_compiled_binary if target == "x86"
-                else _execute_rocm_compiled_binary
-            )
-            compiler_path = f"{target}_binary_compiled"
+            if target == "x86":
+                executor = _execute_x86_compiled_binary
+                compiler_path = "x86_binary_compiled"
+            elif target == "rocm":
+                executor = _execute_rocm_compiled_binary
+                compiler_path = "rocm_binary_compiled"
+            elif target == "nvidia_sm120":
+                executor = _execute_nvidia_compiled_binary
+                compiler_path = "nvidia_binary_compiled"
+            else:
+                raise ValueError(f"solver residual rejects target {target!r}")
         elif len(operands) == 1 and target == "x86":
             if op_name in _X86_UNARY_OPS:
                 executor = _execute_x86_compiled_unary
@@ -30709,6 +31617,13 @@ def _execute_solver_residual_program(
                 raise ValueError(f"ROCm solver residual has no native unary lane for {op_name}")
             executor = _execute_rocm_compiled_unary
             compiler_path = "rocm_unary_compiled"
+        elif len(operands) == 1 and target == "nvidia_sm120":
+            if op_name not in _NVIDIA_SOLVER_UNARY_OPS:
+                raise ValueError(
+                    f"NVIDIA solver residual has no admitted unary lane for {op_name}"
+                )
+            executor = _execute_nvidia_compiled_unary
+            compiler_path = "nvidia_unary_compiled"
         else:
             raise ValueError("solver residual child supports unary and binary operations")
         child = RuntimeArtifact(metadata={
@@ -30737,6 +31652,10 @@ def _execute_rocm_solver_residual_program(artifact: RuntimeArtifact, args: Any) 
     return _execute_solver_residual_program(artifact, args, target="rocm")
 
 
+def _execute_nvidia_solver_residual_program(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_solver_residual_program(artifact, args, target="nvidia_sm120")
+
+
 def _execute_physical_general_solver(
     artifact: RuntimeArtifact, args: Any, *, target: str
 ) -> Any:
@@ -30761,6 +31680,11 @@ def _execute_physical_general_solver(
     contract = dict(metadata.get("physical_general_solver") or {})
     if contract.get("schema") != "tessera.solver_product.physical.v1":
         raise ValueError("general solver rejected an unknown physical schema")
+    if contract.get("linear_solver") != "gmres":
+        raise ValueError(
+            "general solver parent admits GMRES only; CG requires the "
+            "target-owned SPD Krylov package"
+        )
 
     def digest_of(value: Any) -> str:
         return hashlib.sha256(
@@ -30771,7 +31695,11 @@ def _execute_physical_general_solver(
     body = {key: value for key, value in contract.items() if key != "artifact_hash"}
     if digest_of(body) != contract.get("artifact_hash"):
         raise ValueError("general solver rejected stale parent lineage")
-    expected_target = "x86" if target == "x86" else "rocm_gfx1151"
+    expected_target = {
+        "x86": "x86",
+        "rocm": "rocm_gfx1151",
+        "nvidia_sm120": "nvidia_sm120",
+    }[target]
     if contract.get("target") != expected_target:
         raise ValueError("general solver target lineage mismatch")
     value_contract = dict(contract.get("value_contract") or {})
@@ -30908,6 +31836,10 @@ def _execute_rocm_physical_general_solver(artifact: RuntimeArtifact, args: Any) 
     return _execute_physical_general_solver(artifact, args, target="rocm")
 
 
+def _execute_nvidia_physical_general_solver(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_physical_general_solver(artifact, args, target="nvidia_sm120")
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -30962,6 +31894,15 @@ def _executor_table():
         "nvidia_moe_transport_compiled": _execute_nvidia_moe_transport,
         "nvidia_dequant_gemm_compiled": _execute_nvidia_dequant_gemm,
         "nvidia_optimizer_compiled": _execute_nvidia_optimizer,
+        "nvidia_binary_compiled": _execute_nvidia_compiled_binary,
+        "nvidia_unary_compiled": _execute_nvidia_compiled_unary,
+        "nvidia_compare_compiled": _execute_nvidia_compiled_compare,
+        "nvidia_where_compiled": _execute_nvidia_compiled_where,
+        "nvidia_solver_matmul_compiled": _execute_nvidia_solver_matmul,
+        "nvidia_sgd_bwd_compiled": _execute_nvidia_optimizer_backward,
+        "nvidia_momentum_bwd_compiled": _execute_nvidia_optimizer_backward,
+        "nvidia_adam_bwd_compiled": _execute_nvidia_optimizer_backward,
+        "nvidia_adafactor_bwd_compiled": _execute_nvidia_adafactor_backward,
         "nvidia_lion_bwd_compiled": _execute_nvidia_lion_backward,
         "nvidia_norm_bwd_compiled": _execute_nvidia_training_norm_backward,
         "nvidia_regression_loss_bwd_compiled": _execute_nvidia_training_loss_backward,
@@ -30974,6 +31915,12 @@ def _executor_table():
         "nvidia_rng_compiled": _execute_nvidia_compiled_rng,
         "nvidia_fft_compiled": _execute_nvidia_compiled_fft,
         "nvidia_spectral_compiled": _execute_nvidia_compiled_spectral,
+        "nvidia_spectral_jvp_compiled": _execute_nvidia_compiled_spectral_jvp,
+        "nvidia_solver_ift_compiled": _execute_nvidia_solver_ift,
+        "nvidia_krylov_solver_compiled": _execute_nvidia_krylov_solver,
+        "nvidia_dense_krylov_compiled": _execute_nvidia_dense_krylov_solver,
+        "nvidia_general_solver_compiled": _execute_nvidia_physical_general_solver,
+        "nvidia_solver_graph_compiled": _execute_nvidia_solver_residual_program,
         "nvidia_sm120_jvp_compiled": _execute_native_jvp,
         "nvidia_sm120_spectral_backward_compiled": _execute_nvidia_compiled_spectral_backward,
         "nvidia_flash_attn_compiled": _execute_nvidia_flash_attn_compiled,

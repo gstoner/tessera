@@ -101,6 +101,32 @@ SM120_LION_BWD_ABIS = {
     )
     for storage in _STORAGE_DTYPES
 }
+SM120_OPTIMIZER_BWD_ABIS = {
+    kind: _training_abi(
+        f"optimizer.{kind}_backward",
+        {
+            "sgd": "param_grad_dparam_out_dparam_dgrad_n",
+            "momentum": "param_grad_velocity_dparam_out_dvelocity_out_dparam_dgrad_dvelocity_n",
+            "nesterov": "param_grad_velocity_dparam_out_dvelocity_out_dparam_dgrad_dvelocity_n",
+            "adam": "param_grad_m1_m2_dparam_out_dm1_out_dm2_out_dparam_dgrad_dm1_dm2_n",
+            "adamw": "param_grad_m1_m2_dparam_out_dm1_out_dm2_out_dparam_dgrad_dm1_dm2_n",
+        }[kind],
+        "f32",
+    )
+    for kind in ("sgd", "momentum", "nesterov", "adam", "adamw")
+}
+SM120_ADAFACTOR_BWD_ABIS = {
+    "full": _training_abi(
+        "optimizer.adafactor_backward",
+        "param_grad_state_dparam_out_dparam_dgrad_dstate_n",
+        "f32",
+    ),
+    "factored": _training_abi(
+        "optimizer.adafactor_backward",
+        "param_grad_row_col_dparam_out_dparam_dgrad_drow_dcol_rows_cols",
+        "f32",
+    ),
+}
 SM120_DELTANET_BWD_ABIS = {
     "f32_v1": _training_abi(
         "deltanet_backward", "q_k_v_do_dq_dk_dv_b_h_s_dqk_dv", "f32"
@@ -155,6 +181,10 @@ _ABI_STORAGE = {
     )
     for storage, abi in family.items()
 }
+_ABI_STORAGE.update(
+    {abi: "f32" for abi in (*SM120_OPTIMIZER_BWD_ABIS.values(),
+                             *SM120_ADAFACTOR_BWD_ABIS.values())}
+)
 SM120_TRAINING_ABIS = tuple(_ABI_STORAGE)
 
 _LOSS_KINDS = {
@@ -752,6 +782,231 @@ extern "C" __global__ void {entry}(
     )
 
 
+def _optimizer_backward_source(
+    entry: str,
+    *,
+    kind: str,
+    lr: float,
+    momentum: float,
+    beta1: float,
+    beta2: float,
+    epsilon: float,
+    weight_decay: float,
+    step: int,
+) -> tuple[str, tuple[str, ...]]:
+    """Correctness-first analytic VJPs for the shared explicit-state ABI."""
+    if kind == "sgd":
+        names = ("param", "grad", "dparam_out", "dparam", "dgrad")
+        signature = (
+            "const float* param, const float* grad, const float* dparam_out, "
+            "float* dparam, float* dgrad"
+        )
+        body = (
+            "volatile float retained = param[i] + grad[i]; (void)retained; "
+            "dparam[i] = dparam_out[i]; "
+            f"dgrad[i] = -{_f32(lr)} * dparam_out[i];"
+        )
+    elif kind in {"momentum", "nesterov"}:
+        names = (
+            "param", "grad", "velocity", "dparam_out", "dvelocity_out",
+            "dparam", "dgrad", "dvelocity",
+        )
+        signature = (
+            "const float* param, const float* grad, const float* velocity, "
+            "const float* dparam_out, const float* dvelocity_out, "
+            "float* dparam, float* dgrad, float* dvelocity"
+        )
+        factor = 1.0 + momentum if kind == "nesterov" else 1.0
+        velocity_factor = momentum if kind == "nesterov" else 1.0
+        body = (
+            "volatile float retained = param[i] + grad[i] + velocity[i]; "
+            "(void)retained; float from_param = "
+            f"-{_f32(lr)} * dparam_out[i]; "
+            "dparam[i] = dparam_out[i]; "
+            f"dgrad[i] = {_f32(factor)} * from_param + dvelocity_out[i]; "
+            f"dvelocity[i] = {_f32(momentum)} * "
+            f"({_f32(velocity_factor)} * from_param + dvelocity_out[i]);"
+        )
+    else:
+        if kind not in {"adam", "adamw"} or step < 1:
+            raise ValueError(f"unsupported CUDA optimizer VJP kind {kind!r}")
+        names = (
+            "param", "grad", "moment1", "moment2", "dparam_out",
+            "dmoment1_out", "dmoment2_out", "dparam", "dgrad",
+            "dmoment1", "dmoment2",
+        )
+        signature = (
+            "const float* param, const float* grad, const float* moment1, "
+            "const float* moment2, const float* dparam_out, "
+            "const float* dmoment1_out, const float* dmoment2_out, "
+            "float* dparam, float* dgrad, float* dmoment1, float* dmoment2"
+        )
+        correction1 = 1.0 - beta1**step
+        correction2 = 1.0 - beta2**step
+        decay = weight_decay if kind == "adamw" else 0.0
+        body = (
+            "float g = grad[i]; "
+            f"float m_new = {_f32(beta1)} * moment1[i] + {_f32(1.0 - beta1)} * g; "
+            f"float v_new = {_f32(beta2)} * moment2[i] + {_f32(1.0 - beta2)} * g * g; "
+            f"float normalized_v = v_new / {_f32(correction2)}; "
+            "float root = sqrtf(normalized_v); "
+            f"float denom = root + {_f32(epsilon)}; "
+            f"float dm_new = dmoment1_out[i] + dparam_out[i] * "
+            f"(-{_f32(lr / correction1)}) / denom; "
+            f"float droot = normalized_v > 0.0f ? 0.5f / ({_f32(correction2)} * root) : 0.0f; "
+            f"float dv_new = dmoment2_out[i] + dparam_out[i] * {_f32(lr)} * "
+            f"(m_new / {_f32(correction1)}) * droot / (denom * denom); "
+            f"dparam[i] = dparam_out[i] * {_f32(1.0 - lr * decay)}; "
+            f"dgrad[i] = {_f32(1.0 - beta1)} * dm_new + "
+            f"2.0f * {_f32(1.0 - beta2)} * g * dv_new; "
+            f"dmoment1[i] = {_f32(beta1)} * dm_new; "
+            f"dmoment2[i] = {_f32(beta2)} * dv_new; "
+            "volatile float retained = param[i]; (void)retained;"
+        )
+    return (
+        _header()
+        + f'''extern "C" __global__ void {entry}({signature}, int64_t n) {{
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  {body}
+}}
+''',
+        names,
+    )
+
+
+def _adafactor_full_backward_source(
+    entry: str, *, lr: float, beta2: float, epsilon: float
+) -> str:
+    return _header() + f'''extern "C" __global__ void {entry}(
+    const float* param, const float* grad, const float* state,
+    const float* dparam_out, float* dparam, float* dgrad, float* dstate,
+    int64_t n) {{
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  float g = grad[i];
+  float moment = {_f32(beta2)} * state[i] + {_f32(1.0 - beta2)} * g * g;
+  float safe = (isnan(moment) || moment > {_f32(epsilon)}) ? moment : {_f32(epsilon)};
+  float root = sqrtf(safe), denom = root + {_f32(epsilon)};
+  float dm = moment > {_f32(epsilon)}
+      ? {_f32(lr)} * dparam_out[i] * g /
+        (2.0f * fmaxf(root, 1.0e-30f) * denom * denom)
+      : 0.0f;
+  volatile float retained = param[i]; (void)retained;
+  dparam[i] = dparam_out[i];
+  dgrad[i] = -{_f32(lr)} * dparam_out[i] / denom
+           + 2.0f * {_f32(1.0 - beta2)} * g * dm;
+  dstate[i] = {_f32(beta2)} * dm;
+}}
+'''
+
+
+def _adafactor_factored_backward_source(
+    entry: str, *, lr: float, beta2: float, epsilon: float
+) -> str:
+    """One deterministic launch; thread zero owns every ordered reduction."""
+    return _header() + f'''
+__device__ __forceinline__ float adafactor_row(
+    const float* g, const float* old_row, int64_t r,
+    int64_t rows, int64_t cols) {{
+  float total = 0.0f;
+  for (int64_t c = 0; c < cols; ++c) {{ float v = g[r * cols + c]; total += v * v; }}
+  return {_f32(beta2)} * old_row[r] + {_f32(1.0 - beta2)} * total / (float)cols;
+}}
+__device__ __forceinline__ float adafactor_col(
+    const float* g, const float* old_col, int64_t c,
+    int64_t rows, int64_t cols) {{
+  float total = 0.0f;
+  for (int64_t r = 0; r < rows; ++r) {{ float v = g[r * cols + c]; total += v * v; }}
+  return {_f32(beta2)} * old_col[c] + {_f32(1.0 - beta2)} * total / (float)rows;
+}}
+__device__ __forceinline__ float adafactor_floor(float value, float floor) {{
+  return (isnan(value) || value > floor) ? value : floor;
+}}
+extern "C" __global__ void {entry}(
+    const float* param, const float* grad, const float* old_row,
+    const float* old_col, const float* dparam_out, float* dparam,
+    float* dgrad, float* d_old_row, float* d_old_col,
+    int64_t rows, int64_t cols) {{
+  if (blockIdx.x != 0 || threadIdx.x != 0) return;
+  volatile float retained = param[0]; (void)retained;
+  float mean = 0.0f;
+  for (int64_t r = 0; r < rows; ++r)
+    mean += adafactor_row(grad, old_row, r, rows, cols);
+  mean /= (float)rows;
+  float safe_mean = adafactor_floor(mean, {_f32(epsilon)});
+  float dmean = 0.0f;
+  for (int64_t r = 0; r < rows; ++r) {{
+    float safe_row = adafactor_floor(
+        adafactor_row(grad, old_row, r, rows, cols), {_f32(epsilon)});
+    for (int64_t c = 0; c < cols; ++c) {{
+      int64_t i = r * cols + c;
+      float safe_col = adafactor_floor(
+          adafactor_col(grad, old_col, c, rows, cols), {_f32(epsilon)});
+      float scale = safe_row * safe_col / safe_mean;
+      float root = sqrtf(scale), denom = root + {_f32(epsilon)};
+      float ds = {_f32(lr)} * dparam_out[i] * grad[i] /
+          (2.0f * adafactor_floor(root, 1.0e-30f) * denom * denom);
+      dmean -= ds * safe_row * safe_col / (safe_mean * safe_mean);
+    }}
+  }}
+  for (int64_t r = 0; r < rows; ++r) {{
+    float row = adafactor_row(grad, old_row, r, rows, cols);
+    float drow = 0.0f;
+    float safe_row = adafactor_floor(row, {_f32(epsilon)});
+    for (int64_t c = 0; c < cols; ++c) {{
+      int64_t i = r * cols + c;
+      float safe_col = adafactor_floor(
+          adafactor_col(grad, old_col, c, rows, cols), {_f32(epsilon)});
+      float root = sqrtf(safe_row * safe_col / safe_mean);
+      float denom = root + {_f32(epsilon)};
+      float ds = {_f32(lr)} * dparam_out[i] * grad[i] /
+          (2.0f * adafactor_floor(root, 1.0e-30f) * denom * denom);
+      drow += ds * safe_col / safe_mean;
+    }}
+    if (row <= {_f32(epsilon)}) drow = 0.0f;
+    else if (mean > {_f32(epsilon)}) drow += dmean / (float)rows;
+    d_old_row[r] = drow;
+  }}
+  for (int64_t c = 0; c < cols; ++c) {{
+    float col = adafactor_col(grad, old_col, c, rows, cols);
+    float dcol = 0.0f;
+    float safe_col = adafactor_floor(col, {_f32(epsilon)});
+    for (int64_t r = 0; r < rows; ++r) {{
+      int64_t i = r * cols + c;
+      float safe_row = adafactor_floor(
+          adafactor_row(grad, old_row, r, rows, cols), {_f32(epsilon)});
+      float root = sqrtf(safe_row * safe_col / safe_mean);
+      float denom = root + {_f32(epsilon)};
+      float ds = {_f32(lr)} * dparam_out[i] * grad[i] /
+          (2.0f * adafactor_floor(root, 1.0e-30f) * denom * denom);
+      dcol += ds * safe_row / safe_mean;
+    }}
+    if (col <= {_f32(epsilon)}) dcol = 0.0f;
+    d_old_col[c] = dcol;
+  }}
+  for (int64_t r = 0; r < rows; ++r) {{
+    float row = adafactor_row(grad, old_row, r, rows, cols);
+    float safe_row = adafactor_floor(row, {_f32(epsilon)});
+    float drow = d_old_row[r];
+    for (int64_t c = 0; c < cols; ++c) {{
+      int64_t i = r * cols + c;
+      float col = adafactor_col(grad, old_col, c, rows, cols);
+      float safe_col = adafactor_floor(col, {_f32(epsilon)});
+      float denom = sqrtf(safe_row * safe_col / safe_mean) + {_f32(epsilon)};
+      float dcol = d_old_col[c];
+      dparam[i] = dparam_out[i];
+      dgrad[i] = -{_f32(lr)} * dparam_out[i] / denom
+          + 2.0f * {_f32(1.0 - beta2)} * grad[i]
+            * (drow / (float)cols + dcol / (float)rows);
+    }}
+  }}
+  for (int64_t r = 0; r < rows; ++r) d_old_row[r] *= {_f32(beta2)};
+  for (int64_t c = 0; c < cols; ++c) d_old_col[c] *= {_f32(beta2)};
+}}
+'''
+
+
 def _deltanet_backward_source(entry: str) -> str:
     """Bounded, correctness-first CUDA VJP for affine DeltaNet variants.
 
@@ -1022,6 +1277,11 @@ def _package(
         "dparam",
         "dgrad",
         "dmoment",
+        "dvelocity",
+        "dmoment1",
+        "dmoment2",
+        "dstate0",
+        "dstate1",
         "dq", "dk", "dv", "dgate", "ddecay",
     }
 
@@ -1049,6 +1309,13 @@ def _package(
         "dparam",
         "dgrad",
         "dmoment",
+        "dvelocity",
+        "dmoment1",
+        "dmoment2",
+        "state0",
+        "state1",
+        "dstate0",
+        "dstate1",
     }
 
     def buffer_dtype(name: str) -> tuple[str, int]:
@@ -1314,6 +1581,63 @@ def package_lion_backward(
     )
 
 
+def package_optimizer_backward(
+    *, kind: str, lr: float, momentum: float = 0.0, beta1: float = 0.9,
+    beta2: float = 0.999, epsilon: float = 1.0e-8,
+    weight_decay: float = 0.0, step: int = 1,
+) -> NVIDIATrainingPackage:
+    values = {
+        "lr": lr, "momentum": momentum, "beta1": beta1, "beta2": beta2,
+        "epsilon": epsilon, "weight_decay": weight_decay, "step": step,
+    }
+    digest = hashlib.sha256(
+        repr((kind, sorted(values.items()))).encode()
+    ).hexdigest()[:8]
+    entry = f"tessera_cuda_training_optvjp_{kind}_f32_{digest}"
+    source, names = _optimizer_backward_source(entry, kind=kind, **values)
+    return _package(
+        contract=f"tile.training.optimizer_vjp.{kind}.f32",
+        source=source, entry=entry, abi_id=SM120_OPTIMIZER_BWD_ABIS[kind],
+        buffer_names=names, scalar_names=("N",),
+        provenance={"family": "optimizer_vjp", "kind": kind, **values},
+        storage="f32",
+    )
+
+
+def package_adafactor_backward(
+    *, topology: str, lr: float = 1.0e-3, beta2: float = 0.999,
+    epsilon: float = 1.0e-30,
+) -> NVIDIATrainingPackage:
+    if topology not in {"full", "factored"}:
+        raise ValueError("CUDA Adafactor VJP topology must be full or factored")
+    values = {"lr": lr, "beta2": beta2, "epsilon": epsilon}
+    digest = hashlib.sha256(
+        repr((topology, sorted(values.items()))).encode()
+    ).hexdigest()[:8]
+    entry = f"tessera_cuda_training_adafactorvjp_{topology}_f32_{digest}"
+    if topology == "full":
+        source = _adafactor_full_backward_source(entry, **values)
+        names = (
+            "param", "grad", "state0", "dparam_out", "dparam", "dgrad",
+            "dstate0",
+        )
+        scalars = ("N",)
+    else:
+        source = _adafactor_factored_backward_source(entry, **values)
+        names = (
+            "param", "grad", "state0", "state1", "dparam_out", "dparam",
+            "dgrad", "dstate0", "dstate1",
+        )
+        scalars = ("Rows", "Columns")
+    return _package(
+        contract=f"tile.training.adafactor_vjp.{topology}.f32",
+        source=source, entry=entry, abi_id=SM120_ADAFACTOR_BWD_ABIS[topology],
+        buffer_names=names, scalar_names=scalars,
+        provenance={"family": "adafactor_vjp", "topology": topology, **values},
+        storage="f32",
+    )
+
+
 def package_deltanet_backward() -> NVIDIATrainingPackage:
     """Build the versioned SM120 four-stage DeltaNet package envelope."""
     entry = "tessera_cuda_training_deltanet_backward_f32_v2"
@@ -1424,8 +1748,10 @@ __all__ = [
     "package_broadcast_gradient",
     "package_class_backward",
     "package_fused_loss_optimizer",
+    "package_adafactor_backward",
     "package_loss_backward",
     "package_lion_backward",
+    "package_optimizer_backward",
     "package_deltanet_backward",
     "package_norm_backward",
     "package_optimizer",

@@ -1,11 +1,83 @@
 ---
-last_updated: 2026-08-26
+last_updated: 2026-08-27
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **shared host
+loader assessed and exact CPU proof closed; gfx1151 execution unchanged.** The repair removes AVX-512
+instructions from an x86 ELF constructor and adds canonical CPU-feature
+admission before the legacy x86 `ctypes.CDLL` boundary. It changes no HIP
+kernel, HSACO, gfx1151 selector, ROCm dtype policy, or AMD device claim. The
+Ryzen AI Max+ 395/gfx1151 host is the intended independent AVX-512 execution
+machine; its native post-change x86 image digest
+`5aee2d5a98c7abc899c765436a7b505c53b9c544f60d92da07697b0c7dab287c`
+has no FFT static initializer, loads directly, and passes the 38-test solver
+packet plus all 41 FFT numerical cases. That CPU result transfers no gfx1151
+device claim.
+
+Cross-backend sync `CUDA-SOLVER-KRYLOV-SCALE-2026-08-27` — **NVIDIA-owned
+physical expansion; gfx1151 solver execution unchanged.** The shared Python
+solver packager gained an explicitly NVIDIA-targeted dense Krylov contract,
+but its cooperative CUDA grid, two-level CTA reduction, SM120 `mma.sync`
+low-precision matmul route, and RTX correctness/performance packets transfer
+no HIP schedule or gfx1151 evidence. The contract does not alter ROCm's
+existing matrix-free GMRES/CG semantics. Any ROCm resident Krylov promotion
+requires an architecture-owned HIP launch/synchronization design and exact
+gfx1151 packet; CUDA cooperative-launch feasibility is not a corollary for an
+AMD workgroup/grid synchronization mechanism.
+
+Cross-backend sync `CUDA-SOLVER-FAMILY-2026-08-27` — **NVIDIA-owned physical
+expansion; gfx1151 execution unchanged.** Shared residual-product packaging now
+preserves an authored matmul numeric policy instead of dropping `math_mode`,
+and the generic solver parent refuses to execute a `linear_solver="cg"`
+contract through GMRES. CUDA gained target-owned unary/reduction/predicate/
+where/IEEE-matmul children plus a single-launch diagonal-SPD CG package. No
+HIP kernel, gfx1151 schedule, dtype policy, or device evidence changed or
+transferred; ROCm retains its independently proven general solver and must use
+an AMD-owned CG package for any future physical CG row.
+
+Cross-backend sync `CUDA-SOLVER-IFT-PILOT-2026-08-27` — **NVIDIA-owned
+physical corollary; gfx1151 solver evidence unchanged.** The shared
+diagonal-sqrt and general solver contracts gained explicit SM120 admission,
+CUDA binary residual replay, and CUDA-owned evidence packets. No gfx1151 schedule, HIP kernel, selector, or
+performance claim changed or transferred. ROCm's general residual replay and
+iterative solver packages remain independently evidenced.
+
+Cross-backend sync `CUDA-BINARY-SPECTRAL-JVP-2026-08-27` — **NVIDIA-owned
+physical closure assessed; ROCm parity unchanged.** CUDA gained its own
+f32/f16/bf16 binary arithmetic package and compound filter/convolution JVP now
+uses that target-owned add route. The operation spellings and fp32-evaluation
+policy match the existing gfx1151 binary family, but CUDA source, SM120
+schedules, and RTX certificates transfer no HSACO or AMD evidence. The ROCm
+executor and exact-device rows are unchanged.
+
+Cross-backend sync `CUDA-SPECTRAL-JVP-NUMPOL-2026-08-26` — **CUDA closure
+assessed; gfx1151 parity remains independently validated.** NVIDIA's public
+content-addressed JVP child, cuFFT Schedule→Tile profile, and f16/bf16 CUDA ABIs
+change no HIP symbol or AMD schedule. ROCm retains its independently executed
+gfx1151 spectral package and certificates; no SM120 result promotes or replaces
+an AMD row.
+
+Cross-backend sync `CUDA-OPTIMIZER-VJP-2026-08-26` — **shared plugin/lineage
+carrier updated; gfx1151 parity retained.** NVIDIA is now a declared physical
+owner for SGD, Momentum/Nesterov, Adam/AdamW, and full/factored Adafactor VJPs.
+The state transition and functional no-alias ABI are unchanged. ROCm keeps its
+compiler-generated HIP packages and exact gfx1151 certificates; CUDA PTX,
+deterministic thread ownership, and `sm_120` attestations transfer no AMD
+schedule or evidence.
+
+Cross-backend sync `TSOL-CUDA-POLICY-V1-2026-08-26` — **NVIDIA-owned physical
+package assessed; gfx1151 parity remains independently validated.** The CUDA
+ABI and SM120 capability promotion change no HIP symbol, schedule, storage
+policy, or gfx1151 evidence. ROCm retains its v7 f16/bf16/f32 forward/reverse
+and streaming package and exact-device certificates; no CUDA result was used
+to promote or replace an AMD row. CUDA JVP and Schedule→Tile were subsequently
+closed under `CUDA-SPECTRAL-JVP-NUMPOL`; that closure transfers no ROCm
+obligation.
+
 Cross-backend sync `TSOL-POLICY-PHYS-1-8C8G-2026-08-26` — **gfx1151
 true-stride, broader/full-spectrum, broadcast, reverse, and physical streaming
 rows are exact-device proven.** Schedule→Tile binds a native runtime-stride descriptor, independent

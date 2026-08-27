@@ -207,27 +207,53 @@ const SixStepPlan& six_step_plan(int64_t n, bool inverse) {
     return *inserted.first->second;
 }
 
-// deinterleave 8 complex (16 floats) -> (re[8] in lo lanes, im[8] in lo lanes)
-const __m512i kEven = []{ return _mm512_setr_epi32(0,2,4,6,8,10,12,14,
-                                                   16,18,20,22,24,26,28,30); }();
-const __m512i kOdd  = []{ return _mm512_setr_epi32(1,3,5,7,9,11,13,15,
-                                                   17,19,21,23,25,27,29,31); }();
-const __m512i kIntLo = []{ return _mm512_setr_epi32(0,16,1,17,2,18,3,19,
-                                                    4,20,5,21,6,22,7,23); }();
-const __m512i kIntHi = []{ return _mm512_setr_epi32(8,24,9,25,10,26,11,27,
-                                                    12,28,13,29,14,30,15,31); }();
+// Keep permutation data as scalar constant-initialized storage.  Namespace-
+// scope __m512i lambdas execute AVX-512 instructions from the ELF constructor
+// before runtime host admission can reject this image, which makes merely
+// dlopen-ing it SIGILL on an AVX2 host.  These loads execute only after entry
+// into an admitted AVX-512 kernel and preserve the exact lane maps.
+alignas(64) constexpr int32_t kEvenIndices[16] = {
+    0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
+};
+alignas(64) constexpr int32_t kOddIndices[16] = {
+    1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31,
+};
+alignas(64) constexpr int32_t kInterleaveLowIndices[16] = {
+    0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23,
+};
+alignas(64) constexpr int32_t kInterleaveHighIndices[16] = {
+    8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31,
+};
+
+inline __m512i even_indices() {
+    return _mm512_load_si512(static_cast<const void*>(kEvenIndices));
+}
+
+inline __m512i odd_indices() {
+    return _mm512_load_si512(static_cast<const void*>(kOddIndices));
+}
+
+inline __m512i interleave_low_indices() {
+    return _mm512_load_si512(static_cast<const void*>(kInterleaveLowIndices));
+}
+
+inline __m512i interleave_high_indices() {
+    return _mm512_load_si512(static_cast<const void*>(kInterleaveHighIndices));
+}
 
 inline void load_complex16(const float* source, __m512& real, __m512& imag) {
     const __m512 low = _mm512_loadu_ps(source);
     const __m512 high = _mm512_loadu_ps(source + 16);
-    real = _mm512_permutex2var_ps(low, kEven, high);
-    imag = _mm512_permutex2var_ps(low, kOdd, high);
+    real = _mm512_permutex2var_ps(low, even_indices(), high);
+    imag = _mm512_permutex2var_ps(low, odd_indices(), high);
 }
 
 inline void store_complex16(float* destination, __m512 real, __m512 imag) {
-    _mm512_storeu_ps(destination, _mm512_permutex2var_ps(real, kIntLo, imag));
+    _mm512_storeu_ps(
+        destination,
+        _mm512_permutex2var_ps(real, interleave_low_indices(), imag));
     _mm512_storeu_ps(destination + 16,
-                     _mm512_permutex2var_ps(real, kIntHi, imag));
+                     _mm512_permutex2var_ps(real, interleave_high_indices(), imag));
 }
 
 template <int Radix>
@@ -343,15 +369,17 @@ extern "C" void tessera_x86_fft_c2c_f32(float* data, int64_t batch, int64_t n,
         float* permuted = permutation_workspace.data();
         int64_t i = 0;
         const __m512i one = _mm512_set1_epi32(1);
+        const __m512i interleave_low = interleave_low_indices();
+        const __m512i interleave_high = interleave_high_indices();
         for (; i + 16 <= n; i += 16) {
             const __m512i offsets = _mm512_loadu_si512(
                 static_cast<const void*>(plan.gather_offsets.data() + i));
             const __m512 re = _mm512_i32gather_ps(offsets, x, 4);
             const __m512 im = _mm512_i32gather_ps(_mm512_add_epi32(offsets, one), x, 4);
             _mm512_storeu_ps(permuted + 2 * i,
-                             _mm512_permutex2var_ps(re, kIntLo, im));
+                             _mm512_permutex2var_ps(re, interleave_low, im));
             _mm512_storeu_ps(permuted + 2 * i + 16,
-                             _mm512_permutex2var_ps(re, kIntHi, im));
+                             _mm512_permutex2var_ps(re, interleave_high, im));
         }
         for (; i < n; ++i) {
             const int32_t offset = plan.gather_offsets[static_cast<size_t>(i)];
@@ -366,6 +394,8 @@ extern "C" void tessera_x86_fft_c2c_f32(float* data, int64_t batch, int64_t n,
             const int64_t half = stage.half;
             const float* str = stage.twiddle_re.data();
             const float* sti = stage.twiddle_im.data();
+            const __m512i even = even_indices();
+            const __m512i odd = odd_indices();
             for (int64_t base = 0; base < n; base += len) {
                 float* lo = x + 2 * base;             // a[base + k]
                 float* hi = x + 2 * (base + half);    // a[base + half + k]
@@ -377,10 +407,10 @@ extern "C" void tessera_x86_fft_c2c_f32(float* data, int64_t batch, int64_t n,
                     __m512 ahi = _mm512_loadu_ps(lo + 2 * k + 16);
                     __m512 blo = _mm512_loadu_ps(hi + 2 * k);
                     __m512 bhi = _mm512_loadu_ps(hi + 2 * k + 16);
-                    __m512 ar = _mm512_permutex2var_ps(alo, kEven, ahi);
-                    __m512 ai = _mm512_permutex2var_ps(alo, kOdd, ahi);
-                    __m512 br = _mm512_permutex2var_ps(blo, kEven, bhi);
-                    __m512 bi = _mm512_permutex2var_ps(blo, kOdd, bhi);
+                    __m512 ar = _mm512_permutex2var_ps(alo, even, ahi);
+                    __m512 ai = _mm512_permutex2var_ps(alo, odd, ahi);
+                    __m512 br = _mm512_permutex2var_ps(blo, even, bhi);
+                    __m512 bi = _mm512_permutex2var_ps(blo, odd, bhi);
                     __m512 tr = _mm512_loadu_ps(str + k);   // already deinterleaved
                     __m512 ti = _mm512_loadu_ps(sti + k);
                     // v = tw * b : vr = br*tr - bi*ti ; vi = br*ti + bi*tr
@@ -388,10 +418,18 @@ extern "C" void tessera_x86_fft_c2c_f32(float* data, int64_t batch, int64_t n,
                     __m512 vi = _mm512_fmadd_ps(br, ti, _mm512_mul_ps(bi, tr));
                     __m512 or0 = _mm512_add_ps(ar, vr), oi0 = _mm512_add_ps(ai, vi);
                     __m512 or1 = _mm512_sub_ps(ar, vr), oi1 = _mm512_sub_ps(ai, vi);
-                    _mm512_storeu_ps(lo + 2 * k, _mm512_permutex2var_ps(or0, kIntLo, oi0));
-                    _mm512_storeu_ps(lo + 2 * k + 16, _mm512_permutex2var_ps(or0, kIntHi, oi0));
-                    _mm512_storeu_ps(hi + 2 * k, _mm512_permutex2var_ps(or1, kIntLo, oi1));
-                    _mm512_storeu_ps(hi + 2 * k + 16, _mm512_permutex2var_ps(or1, kIntHi, oi1));
+                    _mm512_storeu_ps(
+                        lo + 2 * k,
+                        _mm512_permutex2var_ps(or0, interleave_low, oi0));
+                    _mm512_storeu_ps(
+                        lo + 2 * k + 16,
+                        _mm512_permutex2var_ps(or0, interleave_high, oi0));
+                    _mm512_storeu_ps(
+                        hi + 2 * k,
+                        _mm512_permutex2var_ps(or1, interleave_low, oi1));
+                    _mm512_storeu_ps(
+                        hi + 2 * k + 16,
+                        _mm512_permutex2var_ps(or1, interleave_high, oi1));
                 }
                 for (; k < half; ++k) {        // scalar tail (early stages)
                     float ar = lo[2 * k], ai = lo[2 * k + 1];

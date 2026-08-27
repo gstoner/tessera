@@ -261,7 +261,8 @@ def _plan_reduce(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tupl
 @register_native_jvp_plugin(
     "fft", "ifft", "rfft", "irfft", family="spectral",
     schedule_consumer="schedule.fft", tile_consumer="tile.fft_kernel",
-    target_consumers={"x86": "x86.avx512_fft", "rocm": "rocm.gfx1151_fft"},
+    target_consumers={"x86": "x86.avx512_fft", "rocm": "rocm.gfx1151_fft",
+                      "nvidia_sm120": "nvidia.sm120_cufft_workspace"},
 )
 def _plan_fft(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[int, ...],
               target: str, execution_mode: str, **_: Any) -> NativeJVPFamilyPlan:
@@ -271,7 +272,8 @@ def _plan_fft(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[i
 
     value = primal_inputs[0]
     scheduled = lower_scheduled_fft(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target=(target if target == "nvidia_sm120" else
+                "x86" if target == "x86" else "rocm_gfx1151"),
         op_name=source.op_name,
         input_shape=tuple(int(dim) for dim in value.shape),
         axis=int(source.kwargs.get("axis", -1)),
@@ -281,9 +283,10 @@ def _plan_fft(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[i
         ),
         hermitian_weight=str(source.kwargs.get("hermitian_weight", "none")),
     )
+    compiler_prefix = "nvidia" if target == "nvidia_sm120" else target
     child = {
         **_execution(target, execution_mode),
-        "compiler_path": f"{target}_fft_compiled",
+        "compiler_path": f"{compiler_prefix}_fft_compiled",
         "arg_names": ["x"],
         "scheduled_fft": scheduled.to_metadata(),
     }
@@ -296,7 +299,8 @@ def _plan_fft(*, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[i
 @register_native_jvp_plugin(
     "dct", family="spectral_dct", schedule_consumer="schedule.spectral_program",
     tile_consumer="tile.spectral_program_kernel",
-    target_consumers={"x86": "x86.avx512_dct", "rocm": "rocm.gfx1151_dct"},
+    target_consumers={"x86": "x86.avx512_dct", "rocm": "rocm.gfx1151_dct",
+                      "nvidia_sm120": "nvidia.sm120_spectral_policy"},
 )
 def _plan_dct(*, source: Any, primal_inputs: Sequence[Any],
               wrt_indices: tuple[int, ...], target: str,
@@ -306,19 +310,27 @@ def _plan_dct(*, source: Any, primal_inputs: Sequence[Any],
     from .scheduled_spectral import lower_scheduled_spectral
 
     value = primal_inputs[0]
+    storage = {
+        "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+    }.get(str(value.dtype))
+    if storage is None:
+        raise ValueError(f"native DCT JVP has unsupported storage {value.dtype}")
     scheduled = lower_scheduled_spectral(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target=(target if target == "nvidia_sm120" else
+                "x86" if target == "x86" else "rocm_gfx1151"),
         op_name="tessera.dct",
         input_shapes=(tuple(int(dim) for dim in value.shape),),
         axis=int(source.kwargs.get("axis", -1)),
         dct_type=int(source.kwargs.get("type", 2)),
+        storage=storage,
         normalization=str(
             source.kwargs.get("normalization", source.kwargs.get("norm", "backward"))
         ),
     )
+    compiler_prefix = "nvidia" if target == "nvidia_sm120" else target
     child = {
         **_execution(target, execution_mode),
-        "compiler_path": f"{target}_spectral_compiled",
+        "compiler_path": f"{compiler_prefix}_spectral_compiled",
         "arg_names": ["x"],
         "scheduled_spectral": scheduled.to_metadata(),
     }
@@ -394,7 +406,8 @@ def _plan_normalization(*, source: Any, primal_inputs: Sequence[Any],
     family="spectral_compound",
     schedule_consumer="schedule.spectral_program",
     tile_consumer="tile.spectral_program_kernel",
-    target_consumers={"x86": "x86.avx512_spectral", "rocm": "rocm.gfx1151_spectral"},
+    target_consumers={"x86": "x86.avx512_spectral", "rocm": "rocm.gfx1151_spectral",
+                      "nvidia_sm120": "nvidia.sm120_spectral_policy"},
 )
 def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
                             wrt_indices: tuple[int, ...], target: str,
@@ -406,24 +419,50 @@ def _plan_compound_spectral(*, source: Any, primal_inputs: Sequence[Any],
         raise ValueError(f"native {bare} JVP requires two operands")
     if bare == "istft" and not set(wrt_indices).issubset({0, 1}):
         raise ValueError("native ISTFT JVP has only spectrum and window operands")
+    if bare == "spectral_filter":
+        if any(str(value.dtype) != "complex64" for value in primal_inputs):
+            raise ValueError(
+                "native spectral_filter JVP requires two complex64 operands"
+            )
+        # complex64 is the logical interleaved-fp32 policy. It is not a
+        # separate physical storage dtype in the scheduled spectral carrier.
+        storage = "f32"
+        real_operand = primal_inputs[0]
+    else:
+        real_operand = primal_inputs[1] if bare == "istft" else primal_inputs[0]
+        storage = {
+            "float32": "f32", "float16": "f16", "bfloat16": "bf16",
+        }.get(str(real_operand.dtype))
+    if storage is None:
+        raise ValueError(f"native {bare} JVP has unsupported real storage {real_operand.dtype}")
     scheduled = lower_scheduled_spectral(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target=(target if target == "nvidia_sm120" else
+                "x86" if target == "x86" else "rocm_gfx1151"),
         op_name=source.op_name,
         input_shapes=tuple(tuple(int(dim) for dim in value.shape) for value in primal_inputs),
         axis=int(source.kwargs.get("axis", -1)),
-        hop=source.kwargs.get("hop"),
-        normalization=str(source.kwargs.get("normalization", "backward")),
+        hop=source.kwargs.get("hop", source.kwargs.get("hop_length")),
+        normalization=str(source.kwargs.get(
+            "normalization", source.kwargs.get("norm", "backward")
+        )),
+        storage=storage,
         center=bool(source.kwargs.get("center", False)),
         pad_mode=str(source.kwargs.get("pad_mode", "constant")),
         output_length=source.kwargs.get(
             "length", source.kwargs.get("output_length")
         ),
+        n_fft=(
+            source.kwargs.get("n_fft", source.kwargs.get("logical_length"))
+            if bare in {"stft", "istft"} else None
+        ),
+        onesided=bool(source.kwargs.get("onesided", True)),
     )
     operands = ["primal_0", "primal_1"]
     names = operands + [f"tangent_{index}" for index in wrt_indices]
+    compiler_prefix = "nvidia" if target == "nvidia_sm120" else target
     child = {
         **_execution(target, execution_mode),
-        "compiler_path": f"{target}_spectral_jvp_compiled",
+        "compiler_path": f"{compiler_prefix}_spectral_jvp_compiled",
         "autodiff_phase": "forward",
         "arg_names": names,
         "primal_names": operands,

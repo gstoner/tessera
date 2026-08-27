@@ -203,7 +203,7 @@ def build_native_adafactor_vjp_package(
         argument_names=tuple(str(name) for name in arg_names),
         cotangent_names=("dy",),
         output_names=tuple(f"d_{name}" for name in arg_names),
-        compiler_path=f"{target}_adafactor_bwd_compiled",
+        compiler_path=f"{'nvidia' if target == 'nvidia_sm120' else target}_adafactor_bwd_compiled",
     )
     package.validate()
     return package
@@ -251,8 +251,9 @@ def build_native_optimizer_vjp_package(
         argument_names=tuple(str(name) for name in arg_names),
         cotangent_names=cotangent_names,
         output_names=tuple(f"d_{name}" for name in arg_names),
-        compiler_path=("rocm_adam_bwd_compiled" if optimizer in {"adam", "adamw"}
-                       else f"{target}_{'momentum' if optimizer in {'momentum', 'nesterov'} else 'sgd'}_bwd_compiled"),
+        compiler_path=(
+            f"{'nvidia' if target == 'nvidia_sm120' else target}_{'adam' if optimizer in {'adam', 'adamw'} else 'momentum' if optimizer in {'momentum', 'nesterov'} else 'sgd'}_bwd_compiled"
+        ),
     )
     package.validate()
     return package

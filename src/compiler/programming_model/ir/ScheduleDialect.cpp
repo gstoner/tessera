@@ -249,7 +249,8 @@ LogicalResult FFTOp::verify() {
       (!realMode && hermitianLayout.getValue() != "full_complex"))
     return emitOpError("Hermitian layout does not match FFT mode");
   if ((getAlgorithm() != "stockham_autosort" &&
-       getAlgorithm() != "cooley_tukey_dit") ||
+       getAlgorithm() != "cooley_tukey_dit" &&
+       getAlgorithm() != "cufft_plan_many") ||
       getWorkspacePolicy().empty() || getResidency().empty() ||
       getTwiddlePolicy().empty() || getWorkspaceElemsAttr().getInt() < 0 ||
       getTwiddleLayout() != "interleaved_f32" ||
@@ -269,10 +270,12 @@ LogicalResult SpectralProgramOp::verify() {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
       }))
     return emitOpError("requires a lowercase SHA-256 artifact_hash");
-  if (getTarget() != "x86" && getTarget() != "rocm")
-    return emitOpError("target must be x86 or rocm");
+  if (getTarget() != "x86" && getTarget() != "rocm" &&
+      getTarget() != "nvidia_sm120")
+    return emitOpError("target must be x86, rocm, or nvidia_sm120");
   if ((getTarget() == "x86" && getArch() != "zen5-avx512") ||
-      (getTarget() == "rocm" && getArch() != "gfx1151"))
+      (getTarget() == "rocm" && getArch() != "gfx1151") ||
+      (getTarget() == "nvidia_sm120" && getArch() != "sm120"))
     return emitOpError("architecture must match the exact target profile");
   if (getKind() != "tessera.spectral_filter" && getKind() != "tessera.dct" &&
       getKind() != "tessera.spectral_conv" && getKind() != "tessera.stft" &&
@@ -527,7 +530,8 @@ LogicalResult OptimizerVJPOp::verify() {
       }))
     return emitOpError("requires a lowercase SHA-256 artifact_hash");
   if (getLineagePayload().empty() ||
-      (getArch() != "zen5-avx512" && getArch() != "gfx1151"))
+      (getArch() != "zen5-avx512" && getArch() != "gfx1151" &&
+       getArch() != "sm_120"))
     return emitOpError("requires lineage and a promoted architecture identity");
   for (const APFloat &value : {getLearningRate(), getBeta1(), getBeta2(),
                                getEpsilon(), getMomentum(), getWeightDecay()})
@@ -568,8 +572,10 @@ LogicalResult SolverIFTOp::verify() {
     return emitOpError("requires a lowercase SHA-256 artifact_hash");
   if (getLineagePayload().empty() || getResidualDigest().size() != 64)
     return emitOpError("requires lineage payload and residual digest");
-  if (getArch() != "avx512" && getArch() != "gfx1151")
-    return emitOpError("physical IFT is promoted only for avx512 and gfx1151");
+  if (getArch() != "avx512" && getArch() != "gfx1151" &&
+      getArch() != "sm120")
+    return emitOpError(
+        "physical IFT is promoted only for avx512, gfx1151, and sm120");
   if (getResidualModel() != "diagonal_sqrt_v1" ||
       getLinearSolver() != "diagonal_matrix_free_v1" ||
       getWrt() != "parameter" || getAdjointScale().convertToDouble() != -1.0)

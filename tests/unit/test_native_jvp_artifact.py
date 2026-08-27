@@ -188,7 +188,18 @@ def test_jvp_plugin_produces_digest_bound_plan_outside_jitfn():
 
 
 @pytest.mark.parametrize("kind", ("fft", "ifft", "rfft", "irfft"))
-def test_sm120_fft_jvp_children_bind_runtime_operation_metadata(kind: str):
+def test_sm120_fft_jvp_children_bind_runtime_operation_metadata(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+):
+    class ScheduledFFTStub:
+        @staticmethod
+        def to_metadata() -> dict[str, str]:
+            return {"schema": "test.scheduled_fft"}
+
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_fft.lower_scheduled_fft",
+        lambda **_: ScheduledFFTStub(),
+    )
     input_dtype = "float32" if kind == "rfft" else "complex64"
     value = np.ones(
         (2, 9 if kind == "irfft" else 16), dtype=np.dtype(input_dtype)

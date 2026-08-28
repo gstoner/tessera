@@ -6,6 +6,19 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **follow-up
+required; ROCm is the owning lane, no device claim yet.** The IKF-1 plan
+(`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`, PR #634) proposes a
+shared intra-kernel measurement contract: indexed per-instance slots keyed by
+schedule coordinates incl. wave-in-role, a constant-rate-clock-only rule, and
+an `instr_level` guard keeping instrumented runs out of arbiter selection.
+gfx1151 owns the first two device phases: IKF-P0 (clock-validation packet —
+`wall_clock64` monotonicity, cross-CU ping-pong, read-cost distribution;
+extends `tprof_rocm_timing`; **gates all IR work**) and IKF-P3
+(`wall_clock64`-pair slot lowering on the compiled WMMA GEMM lane, perturbation
+gate at L2, `check-tessera-rocm` run locally). Plan-only today: no HIP kernel,
+selector, or gfx1151 evidence changes in PR #634.
+
 Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **shared host
 loader assessed and exact CPU proof closed; gfx1151 execution unchanged.** The repair removes AVX-512
 instructions from an x86 ELF constructor and adds canonical CPU-feature

@@ -7,6 +7,20 @@ last_updated: 2026-08-27
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **follow-up
+required at IKF-P6; Apple execution unchanged, and the clock primitive is
+unverified.** The IKF-1 intra-kernel measurement plan
+(`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`, PR #634) is proven
+first on ROCm gfx1151. Two Apple-specific gates before any P6 scoping:
+(1) an in-kernel constant-rate timestamp primitive readable from MSL is
+**not established** — ground it in the on-machine SDK headers per Decision
+#27 before writing a lowering or a "blocked" verdict (encoder-boundary
+counter sample buffers are not a per-instance in-kernel clock); (2) the
+lowering must cross the Python-synthesizer/MLIR seam, since the executing
+Apple GPU lane is runtime-delegated — IKF instrumentation of synthesized MSL
+lands in `emit/apple_msl.py` territory, not in the MLIR passes alone. No
+gfx1151 evidence transfers.
+
 Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **x86-only image
 repair; Metal outcome not applicable.** Canonical CPU-feature admission now
 guards the legacy AVX-512 shared-library loader and the x86 FFT translation

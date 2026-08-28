@@ -38,10 +38,15 @@ surface.
 ## Re-indexed live tree
 
 The 2026-08-17 re-index found **33 live Markdown documents** in this directory
-and **11 archived documents**. The live set has one index, one narrative theme,
-16 scoped or integrated plans, and 15 references. Six plans are `landing` and
-ten are `open`; no live plan currently satisfies the lifecycle rule for moving
-to `archive/`.
+and **11 archived documents**. The live set had one index, one narrative theme,
+16 scoped or integrated plans, and 15 references. Six plans were `landing` and
+ten were `open`; no live plan satisfied the lifecycle rule for moving to
+`archive/`. **These counts are as of the re-index date and have drifted**
+(a 2026-08-27 spot-check found 38 top-level documents and 20 carrying
+`plan_state`, so plans have landed since without this paragraph being
+updated); trust the tables below for membership and the files' own
+frontmatter for state, and recount at the next re-index. Added since:
+`INTRA_KERNEL_FEEDBACK_PLAN.md` (2026-08-27).
 
 | Class | Count | What it may decide |
 |---|---:|---|
@@ -170,6 +175,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | W4-EFFECTS-1: operation-owned recorded products that let keyed RNG, recorded-state mutation, and ordered collectives enter a differentiated region without weakening the fail-closed gate. States the admissibility criterion (reproducibility + confinement), the per-class verdicts including why I/O stays closed, and five delivery slices. Global order defers to `INTEGRATED_COMPILER_PLAN.md` queue order 2. |
 | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | FORGE (arXiv:2606.22932) assessment and the residency-aware epilogue-fusion track it opens: locality lattice, static materialization proof, `matmul → optimizer` fusion, fail-closed clipping/routing keys, and the precision-realizability oracle. Numeric contract in `tests/unit/test_fused_wgrad_optimizer_contract.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | Coalition-lattice / equilibrium operator family: subset zeta/Möbius butterfly, semivalues, differentiable equilibria, regret/CFR dynamics, and the numerically verified oracle set (`research/game_theory/`). Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
+| [`INTRA_KERNEL_FEEDBACK_PLAN.md`](INTRA_KERNEL_FEEDBACK_PLAN.md) | IKF-1: intra-kernel measurement as compiler training data (assessment of CUTLASS IKET, 2026-08-27). Per-instance indexed-slot records keyed by schedule coordinates, constant-clock contract with fail-closed validity rules, offline stall classification + realized critical path, cost-model coefficient fitting with roofline prior bands and paired-instance statistics, the explain-vs-decide (`instr_level`) arbiter guard, and delivery phases IKF-P0..P6 (ROCm gfx1151 first). Global order defers to `INTEGRATED_COMPILER_PLAN.md`; not yet bound to a queue entry (plan §13). |
 | [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis and backend-lift details. |
 | [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) | PDE-operator semantics, symbol classification, discrete-stability certificates, and the stencil/halo contract queue. |
 | [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md) | Geometry/implicit-differentiation consumer and acceptance workload. |

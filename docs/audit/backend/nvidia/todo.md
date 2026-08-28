@@ -7,6 +7,18 @@ last_updated: 2026-08-27
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **follow-up
+required at IKF-P6; SM120 execution unchanged.** The IKF-1 intra-kernel
+measurement plan (`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`,
+PR #634) defines a shared artifact schema, Tile IR trace ops, and a runtime
+buffer contract, proven first on ROCm gfx1151. The NVIDIA lowering (planned
+P6) maps the constant-rate clock rule to `%globaltimer`; the slot index's
+wave-in-role coordinate must be re-derived from SM120's own role structure
+(no wgmma/tcgen05 — consumer-Blackwell schedules differ from the sm90 plans
+the key was designed against). No gfx1151 timing or schedule evidence
+transfers; promotion requires an exact-SM120 clock-validation packet
+mirroring IKF-P0 before any NVIDIA lowering lands.
+
 Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **shared runtime
 load safety repaired; CUDA execution unchanged.** The AVX2 Threadripper that
 hosts the RTX 5070 Ti now rejects Tessera's monolithic AVX-512 CPU image through

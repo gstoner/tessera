@@ -8,6 +8,19 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **deferred with
+reason; AVX-512 execution unchanged.** The IKF-1 intra-kernel measurement
+plan (`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`, PR #634) targets
+GPU-style pipelined kernels first (ROCm gfx1151). On x86, intra-kernel
+visibility is already owned by the TPROF-X86 lanes (independent
+host/raw/TSC/perf clocks, permission- and multiplex-aware `perf_event_open`,
+ASLR-safe IBS symbol correlation) with claim-disciplined artifacts.
+Indexed-slot instrumentation of tiled CPU kernels is coherent in principle —
+invariant TSC via `rdtscp` is the constant-rate clock analog — but has no
+consumer until a measured need appears; adopting it without one would violate
+Decision #29. Revisit when a CPU cost-model coefficient needs per-region
+labels that perf/IBS sampling cannot provide.
+
 Cross-backend sync `X86-AVX512-IMAGE-ADMISSION-2026-08-27` — **load safety and
 post-change Zen 5 numerical closure complete.** The monolithic
 AVX-512 image no longer constructs four `__m512i` FFT permutation vectors at

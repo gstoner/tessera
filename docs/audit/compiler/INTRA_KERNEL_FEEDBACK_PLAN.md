@@ -69,8 +69,16 @@ is a view over that record, never the record.
   `(device, target, op, bucket, dtype, timing)` with a region axis and an
   `instr_level` field, rather than inventing a parallel taxonomy.
 - **C2 — index by schedule coordinates, attribute hardware coordinates.**
-  The index is `(role, stage, tile-coord, iteration-stride-index)` — the
-  coordinates the schedule is written in and the levers the tuner turns.
+  The index is `(role, wave-in-role, stage, tile-coord,
+  iteration-stride-index)` — the coordinates the schedule is written in and
+  the levers the tuner turns. `wave-in-role` is required for uniqueness, not
+  decoration: a role is a *group* (`wave_specialization.py::
+  sm90_attention_plan` places one producer and **four** consumer waves in the
+  same role), so a key without it has four writers per slot and the
+  write-once guarantee of §3 is false. Single-writer election per role group
+  was considered and rejected: intra-role imbalance is signal, and per-wave
+  slots are what make it visible. Waves-per-role is compile-time known, so
+  the size formula stays closed-form.
   Physical placement (CU/SE/SM ids) is an attribute for the imbalance lens,
   not the key. This is the inverse of IKET's `locationTable`-primary schema,
   and it is what makes cross-run aggregation portable across vendors.
@@ -109,10 +117,11 @@ instance owns a pre-addressed fixed-size slot, written exactly once.**
 Sub-events within an instance accumulate in registers and flush in the single
 store at instance end.
 
-- The instance space `(region, tile-coord, iteration-stride-index)` is
-  enumerable **statically from launch geometry + loop bounds** — which CuTe
-  DSL cannot do and Tessera can. Buffer size is closed-form at compile/launch
-  time: `bytes = Σ_r instances(r) × slot_bytes`.
+- The instance space `(region, wave-in-role, tile-coord,
+  iteration-stride-index)` is enumerable **statically from launch geometry +
+  loop bounds + the schedule's waves-per-role** — which CuTe DSL cannot do
+  and Tessera can. Buffer size is closed-form at compile/launch time:
+  `bytes = Σ_r waves(r) × instances(r) × slot_bytes`.
 - This deletes IKET's worst hazards: no two-pass sizing run, no
   illegal-memory-access when per-warp event counts drift between passes, no
   append atomics, no contention — and slot *i* means the same instance in
@@ -122,11 +131,25 @@ store at instance end.
   sentinel-init the buffer; host validates written-slot count and detects
   double-writes. A colliding index corrupts silently; the validator makes it
   fail closed **in reporting**.
-- Slot contents: start/end timestamps on the global clock (§4), stall-cycle
-  and stall-count accumulators, validity/flag bits (preemption-suspect,
-  sub-threshold). u64 pairs first; u32-delta-vs-wave-base compression is a
-  recorded later optimization (wrap ≈ 40 s of kernel time at a 100 MHz clock
-  — flag, don't assume).
+- Slot contents are **level-dependent, and the level determines which §5
+  analyses the capture can feed** (register accumulation destroys individual
+  endpoints, so an aggregate can never be joined after the fact):
+  - **L2 slots** (phase instances): start/end timestamps on the global clock
+    (§4) plus *aggregate* stall-cycle and stall-count accumulators. A phase
+    contains many waits and publishes; L2 keeps only their sums, so L2
+    supports aggregate stall *fraction* per phase — it cannot support the §5
+    producer-attribution join or the realized critical path.
+  - **L3 slots** (dependency-edge instances): regions one-to-one with the
+    events §5 joins — each consumer wait interval `[w₀,w₁]` is its own
+    instance, and each producer **publish is a recorded endpoint** (a
+    publish-timestamp field on the producer's iteration instance, or its own
+    instance for multi-publish iterations). §5's stall classification and
+    realized critical path are **L3 analyses by definition**; the stride/
+    window restriction above keeps them affordable.
+  - All levels: validity/flag bits (preemption-suspect, sub-threshold). u64
+    pairs first; u32-delta-vs-wave-base compression is a recorded later
+    optimization (wrap ≈ 40 s of kernel time at a 100 MHz clock — flag,
+    don't assume).
 
 **Instrumentation levels.** L0 none · L1 kernel boundary (provider-owned,
 unperturbed) · L2 phase-level per-instance (default when profiling is on) ·
@@ -170,6 +193,12 @@ volume, is why it is opt-in. The compiler computes the size formula and
    flaggable, not subtractable.
 
 ## 5. Offline analysis — stall classification and critical path
+
+**Input requirement: these analyses consume L3 records** — slots whose
+regions are one-to-one with wait intervals and publish endpoints (§3). An L2
+capture supports only per-phase aggregate stall fractions; it cannot name the
+producer, and a critical-path claim from L2 data is refused, not
+approximated.
 
 Per-instance endpoints make stall classification an **offline join**, not
 in-kernel logic. Consumer instance records wait interval [w₀,w₁]; the matching
@@ -283,9 +312,24 @@ restriction (§3, as index restriction).
 | **IKF-P1** | Artifact schema `tessera.profiler_intra_kernel.v1` (slot layout, `instr_level`, validity flags, decision provenance) + host math library (f64 stats, paired diff, perturbation gate, min-subtraction calibration) | any (host-independent; say which) | Unit tests incl. the §4/§6 numerical edge cases on synthetic traces |
 | **IKF-P2** | Region contract in the compiler: identity from `fusion_core` region classes + Schedule IR roles/stages; typed trace ops at Tile IR; strip-pass **on by default**; static size formula + budget diagnostic | Mac or Strix | Each ODS op names its consumer (Decision #29); **negative lit fixture: default pipeline emits nothing** (`CHECK-NOT`, Decision #10a) |
 | **IKF-P3** | ROCm lowering (`wall_clock64` pairs → indexed slot stores) + runtime buffer alloc/memset/readback; L2 on the compiled WMMA GEMM lane | Strix Halo | Perturbation gate passes at L2; slot validator clean; `check-tessera-rocm` run locally |
-| **IKF-P4** | Offline analysis: realized critical path, stall join with async bounds, paired regression diff; first β fit for `FusionCost` with roofline prior band | Strix (capture) + any (analysis) | β in prior band across ≥ 3 shape buckets |
+| **IKF-P4** | Offline analysis: realized critical path, stall join with async bounds (requires a strided **L3** capture per §3/§5 — L2 aggregates cannot feed the join), paired regression diff; first β fit for `FusionCost` with roofline prior band | Strix (capture) + any (analysis) | β in prior band across ≥ 3 shape buckets; join runs only on records whose level admits it |
 | **IKF-P5** | Feedback: fitted coefficients as **versioned, device-keyed measured overrides** (analytic defaults remain the fallback — a box without a corpus is never worse than today); `MeasureCache` level-guard; `why` surface | — | Drift test: an override without provenance (device, level, fit version) is rejected |
 | **IKF-P6** | Later: Apple lane (forces the Python-synthesizer / MLIR seam the Apple audit names), NVIDIA `%globaltimer`, regime segmentation (prologue/steady/drain), L3 sampling policy | per hardware | per-lane exact-device proof; no parity claims transfer |
+
+**Cross-backend synchronization key: `IKF-INTRA-KERNEL-CONTRACT-2026-08-27`.**
+This plan proposes a shared artifact schema, Tile IR trace ops, and a runtime
+buffer contract, so per `AGENTS.md` all four architecture queues carry a
+disposition under that key: **ROCm** follow-up required (owning lane, P0/P3);
+**NVIDIA** follow-up required at P6 (`%globaltimer` lowering; sm_120 role
+structure differs — no gfx1151 evidence transfers); **Apple** follow-up
+required at P6 (the lowering must cross the Python-synthesizer/MLIR seam, and
+an in-kernel constant-rate timestamp primitive is **unverified** on Metal —
+ground it in SDK headers per Decision #27 before scoping); **x86** deferred
+with reason (CPU intra-kernel visibility is already owned by the TPROF-X86
+rdtscp/perf/IBS lanes; indexed-slot instrumentation of tiled CPU kernels —
+invariant TSC as the constant-rate clock — waits on a measured need). No
+device claim is made for any backend by this plan; each promotion needs that
+backend's exact-device packet.
 
 Ordering rationale: P0 first because every downstream claim rests on the
 clock assumption; P1 before P2/P3 so the schema is fixed by the math

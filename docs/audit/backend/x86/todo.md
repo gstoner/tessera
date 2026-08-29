@@ -8,6 +8,20 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; AVX-512 execution unchanged.****
+The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
+tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
+now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
+record moved in the same change, because leaving it at 24.04 pointed this
+project's own instructions at a bootstrap command that exits immediately.
+
+Measured on the migrated box (`Princess-Luna`): Ubuntu 26.04.1, LLVM/MLIR
+23.1.0 (assertions OFF), ROCm 10 series (HIP 7.15), repo at
+`~/programming/tessera`, ssh on the default port.
+*x86 outcome.* The x86 backend shares this box, so the same migration
+applies. Native AVX-512 kernels build and the full `lit` suite is 425/425 there
+post-migration, so nothing in the x86 lane depends on the 24.04 baseline.
+
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **action
 required: two lowering P0s landed and a new host-architecture build gate needs
 confirmation on a real x86 host.**

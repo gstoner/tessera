@@ -56,13 +56,15 @@ the C++ compiler (`tessera-opt` and friends) additionally needs a matched
 ### macOS (Homebrew) — Apple backend
 
 LLVM/MLIR 23.1, ninja, cmake, and the Python tooling come from Homebrew (no venv).
-Until Homebrew publishes a stable LLVM 23.1 formula, use the HEAD build and
-verify the installed major and minor explicitly:
+Homebrew's **stable** `llvm` formula is 23.1.0, so install it directly — do NOT
+use `--HEAD`, which tracks LLVM's development branch and will report a major or
+minor that the matched-toolchain check in `CMakeLists.txt` rejects. Verify the
+installed major and minor explicitly:
 
 ```bash
 brew update
 brew install ninja cmake lit
-brew install llvm --HEAD             # use `brew reinstall llvm --HEAD` if needed
+brew install llvm                    # stable formula: 23.1.0 (keg-only)
 LLVM_PREFIX="$(brew --prefix llvm)"
 "$LLVM_PREFIX/bin/llvm-config" --version
 "$LLVM_PREFIX/bin/mlir-opt" --version

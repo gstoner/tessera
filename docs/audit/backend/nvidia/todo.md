@@ -7,6 +7,24 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **not applicable to SM120; the CUDA host is already on 26.04.****
+The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
+tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
+now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
+record moved in the same change, because leaving it at 24.04 pointed this
+project's own instructions at a bootstrap command that exits immediately.
+
+Measured on the migrated box (`Princess-Luna`): Ubuntu 26.04.1, LLVM/MLIR
+23.1.0 (assertions OFF), ROCm 10 series (HIP 7.15), repo at
+`~/programming/tessera`, ssh on the default port.
+*NVIDIA outcome.* No NVIDIA impact. The CUDA host (The-Super-Bear) was
+already Ubuntu 26.04 with LLVM/MLIR 23.1.0, so the tightened pin and the new
+`setup_ubuntu.sh` gate match it as-is; the branch built and ran there with
+`TESSERA_ENABLE_CUDA=ON` (unit failure set identical to main, `lit` 429/429).
+Unrelated pre-existing snag worth carrying: `TESSERA_ENABLE_CUDA=ON` fails to
+configure because `examples/advanced/power_retention/src/extension` has no
+CMakeLists.txt — use `-DTESSERA_BUILD_EXAMPLES=OFF` until that is repaired.
+
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **no NVIDIA P0
 in this batch; foundation actions apply, and four sm_120-gated lanes plus one
 confirmed CUDA-emitter P1 are owed by this box.**

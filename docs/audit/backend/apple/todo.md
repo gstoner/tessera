@@ -7,6 +7,23 @@ last_updated: 2026-08-29
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **not applicable to Apple execution, but the macOS install line changed.****
+The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
+tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
+now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
+record moved in the same change, because leaving it at 24.04 pointed this
+project's own instructions at a bootstrap command that exits immediately.
+
+Measured on the migrated box (`Princess-Luna`): Ubuntu 26.04.1, LLVM/MLIR
+23.1.0 (assertions OFF), ROCm 10 series (HIP 7.15), repo at
+`~/programming/tessera`, ssh on the default port.
+*Apple outcome.* The Ubuntu baseline does not touch this lane, but the same
+change corrects the macOS instructions, which matters here: `GETTING_STARTED.md`
+told users to `brew install llvm --HEAD`, and HEAD tracks LLVM's development
+branch — under the new 23.1.x pin that aborts configure. Homebrew's **stable**
+`llvm` formula is 23.1.0 (verified: `brew info` reports stable 23.1.0, and it is
+what this Mac runs), so the stable formula is now what the doc installs.
+
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **this box is
 the one the foundation moved on; done here, and it is where the review's
 verification was performed.**

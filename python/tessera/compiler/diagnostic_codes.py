@@ -2838,6 +2838,25 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="C4 (TIRx)",
     ),
     DiagnosticCode(
+        code="REMAT_PLAN_CLONE_BOUND",
+        pass_origin="ActivationRematerializationPass",
+        severity="warning",
+        summary=(
+            "A budget-selected recompute plan projected more clones than the "
+            "clone-expansion bound allows, so selections were dropped to fit. "
+            "Recompute along a producer chain costs the whole prefix, not each "
+            "op alone, so an unbounded plan can be quadratic in chain depth."
+        ),
+        fix_hint=(
+            "Raise --max-clone-expansion if the code-size growth is acceptable, "
+            "or loosen the memory budget so fewer activations are selected. "
+            "Explicit tessera.recompute markers are authoritative and are never "
+            "trimmed by this bound."
+        ),
+        spec="docs/spec/AUTODIFF_SPEC.md §Phase F2",
+        sprint="REMAT-CLONE-BOUND-2026-08-29",
+    ),
+    DiagnosticCode(
         code="REMAT_EFFECTFUL",
         pass_origin="ActivationRematerializationPass",
         severity="error",

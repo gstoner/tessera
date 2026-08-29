@@ -221,6 +221,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "REMAT_EFFECTFUL",
             "REMAT_MODEL_BUDGET_INVALID",
             "REMAT_NON_CLONABLE",
+            "REMAT_PLAN_CLONE_BOUND",
         ),
         pass_kind="transform",
         sprint="CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24",

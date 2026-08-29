@@ -6,7 +6,7 @@ adafactor,24,0,0,24,0,fp32 fp64,directly_tested,24 direct test references
 adam,22,5,1,27,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,27 direct test references
 adamw,16,5,0,21,0,fp32 fp64,directly_tested,21 direct test references
 adaptive_pool,7,0,0,7,0,fp32,directly_tested,7 direct test references
-add,157,56,11,213,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,213 direct test references
+add,157,68,11,225,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,225 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,7,0,0,7,0,bf16 f16 f32 fp32 int32,directly_tested,7 direct test references
 all_gather,6,0,0,6,0,fp32,directly_tested,6 direct test references
@@ -209,7 +209,7 @@ gated_attention,8,0,1,8,0,,directly_tested,8 direct test references
 gated_deltanet,34,4,3,38,0,f32 fp64,directly_tested,38 direct test references
 gather,17,0,0,17,0,f32 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 int64 nvfp4,directly_tested,17 direct test references
 ge,5,0,0,5,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32 int64 int8,directly_tested,5 direct test references
-gelu,58,38,1,96,0,bf16 f16 f32 f64 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,96 direct test references
+gelu,58,50,1,108,0,bf16 f16 f32 f64 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,108 direct test references
 gemm,92,2,8,94,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 int64 nvfp4,directly_tested,94 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,16,0,3,16,0,,directly_tested,16 direct test references

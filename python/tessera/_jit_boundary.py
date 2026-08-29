@@ -32,6 +32,31 @@ from typing import Any, Sequence
 import numpy as np
 
 _TESSERA_OPT_PATH: Any = "unset"
+_OPT_RUNS_CACHE: dict[str, bool] = {}
+
+
+def _opt_runs(path: str) -> bool:
+    """Whether this driver binary actually starts.
+
+    Existence and the executable bit are not the question. A build tree left by
+    a previous toolchain keeps its executables, and they die in the dynamic
+    loader before ``main`` when the LLVM they link is no longer installed
+    (``Library not loaded: @rpath/libLLVM.<ver>.dylib``). A preference order
+    that only tests existence will then pick the dead tree over a live one and
+    every lowering fails with a missing-dylib message. Cached: this is on the
+    compile path.
+    """
+    cached = _OPT_RUNS_CACHE.get(path)
+    if cached is None:
+        import subprocess
+        try:
+            cached = subprocess.run(
+                [path, "--version"], capture_output=True,
+                check=False, timeout=60).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            cached = False
+        _OPT_RUNS_CACHE[path] = cached
+    return cached
 
 
 def _find_tessera_opt():
@@ -46,10 +71,14 @@ def _find_tessera_opt():
         return _TESSERA_OPT_PATH
     import shutil
 
-    cands = []
+    # An exported selector is final — silently substituting a different binary
+    # than the one a developer named is how a "passing" run proves nothing.
     for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
-        if env := os.environ.get(name):
-            cands.append(env)
+        if (env := os.environ.get(name)) and os.path.exists(env):
+            _TESSERA_OPT_PATH = env
+            return _TESSERA_OPT_PATH
+
+    cands = []
     root = _repo_root()
     if sys.platform == "darwin":
         cands.append(os.path.join(root, "build-apple/tools/tessera-opt/tessera-opt"))
@@ -57,7 +86,9 @@ def _find_tessera_opt():
     which = shutil.which("tessera-opt")
     if which:
         cands.append(which)
-    _TESSERA_OPT_PATH = next((p for p in cands if p and os.path.exists(p)), None)
+
+    _TESSERA_OPT_PATH = next(
+        (p for p in cands if p and os.path.exists(p) and _opt_runs(p)), None)
     return _TESSERA_OPT_PATH
 
 

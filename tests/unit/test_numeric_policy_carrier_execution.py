@@ -53,9 +53,17 @@ def _toolchain_or_skip() -> None:
         pytest.skip(f"native toolchain unavailable: {', '.join(missing)}")
 
 
+# `llvm.emit_c_interface` makes MLIR emit a `_mlir_ciface_<name>` wrapper whose
+# ABI is explicit — result and argument are passed as POINTERS to memref
+# descriptors. Without it the lowered function returns a 56-byte descriptor by
+# value, and the calling convention for that is target-specific: x86-64 passes
+# the hidden return slot as the first integer argument, AArch64 passes it in
+# x8. Hand-rolling the x86-64 form (a leading result pointer) reads a garbage
+# x8 on Apple Silicon and faults.
 _KERNELS = """
 module {{
-  func.func @{name}(%x: tensor<1x{n}xbf16>) -> tensor<1x{n}xf32> {{
+  func.func @{name}(%x: tensor<1x{n}xbf16>) -> tensor<1x{n}xf32>
+      attributes {{llvm.emit_c_interface}} {{
     %s = "tessera.softmax"(%x) {{axis = 1 : i64{policy}}}
       : (tensor<1x{n}xbf16>) -> tensor<1x{n}xbf16>
     %e = tensor.empty() : tensor<1x{n}xf32>
@@ -108,13 +116,16 @@ def _build(tmp: Path, name: str, policy: str) -> ctypes.CDLL:
 
 
 def _run(lib: ctypes.CDLL, name: str, x: np.ndarray) -> np.ndarray:
-    fn = getattr(lib, name)
+    # Call the `_mlir_ciface_` wrapper: both result and argument are pointers
+    # to memref descriptors, so the call is target-independent.
+    fn = getattr(lib, f"_mlir_ciface_{name}")
     fn.restype = None
-    fn.argtypes = [ctypes.POINTER(_Memref2D), ctypes.c_void_p, ctypes.c_void_p,
-                   *([ctypes.c_longlong] * 5)]
-    out = _Memref2D()
+    fn.argtypes = [ctypes.POINTER(_Memref2D), ctypes.POINTER(_Memref2D)]
     ptr = x.ctypes.data_as(ctypes.c_void_p)
-    fn(ctypes.byref(out), ptr, ptr, 0, 1, N, N, 1)
+    arg = _Memref2D(ptr, ptr, 0, (ctypes.c_longlong * 2)(1, N),
+                    (ctypes.c_longlong * 2)(N, 1))
+    out = _Memref2D()
+    fn(ctypes.byref(out), ctypes.byref(arg))
     buf = (ctypes.c_float * N).from_address(out.align)
     return np.frombuffer(bytearray(buf), dtype=np.float32).copy()
 

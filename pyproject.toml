@@ -294,3 +294,15 @@ module = [
     "jinja2.*",
 ]
 ignore_missing_imports = true
+# `ignore_missing_imports` only covers packages with NO stubs. numpy (and
+# scipy) ship inline stubs, so mypy still parses them — and a stub written for
+# a newer interpreter than `python_version` is a hard parse error that stops
+# the run before any Tessera file is checked (numpy >= 2.2 uses PEP 695 `type`
+# statements, which need 3.12). Skipping the import keeps the 3.10 target
+# honest and makes the ratchet independent of whichever numpy a given box has
+# installed — the fleet spans three, and a brew upgrade re-pins it at will.
+# These modules are already declared untyped above, so no signal is lost.
+# `follow_imports_for_stubs` is the half that makes this bite: without it,
+# `follow_imports` is ignored for .pyi files, which is exactly what numpy ships.
+follow_imports = "skip"
+follow_imports_for_stubs = true

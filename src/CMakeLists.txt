@@ -56,8 +56,25 @@ else()
   message(STATUS "Skipping Neighbors dialect for hardware-free target artifact build")
 endif()
 
+# Native x86 kernels only. These are real AVX-512/AMX intrinsics
+# (`immintrin.h`), so they cannot compile for a non-x86 host — but the
+# hardware-free Target IR dialect added above can, and is all the x86 lit
+# fixtures need. Skipping just this half lets an arm64 host build
+# `tessera-opt` with `TESSERA_BUILD_X86_BACKEND=ON` and run those fixtures,
+# instead of failing the whole `ninja` and leaving them unevaluated.
+#
+# That matters beyond convenience: Decision #19's standing lesson is that a
+# host WITH the ISA cannot falsify a host-portability claim. The arm64 Mac is
+# the only machine in the fleet without AVX-512, so it is the only one whose
+# green result on those fixtures means anything.
 if(TESSERA_BUILD_X86_BACKEND)
-  add_subdirectory(compiler/codegen/tessera_x86_backend)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$")
+    add_subdirectory(compiler/codegen/tessera_x86_backend)
+  else()
+    message(STATUS
+      "x86 native kernels skipped on ${CMAKE_SYSTEM_PROCESSOR} "
+      "(hardware-free tessera_x86 Target IR dialect still built)")
+  endif()
 endif()
 if(TESSERA_BUILD_NVIDIA_BACKEND)
   add_subdirectory(compiler/codegen/tessera_gpu_backend_NVIDIA)

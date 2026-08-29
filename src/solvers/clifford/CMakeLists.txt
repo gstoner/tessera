@@ -109,8 +109,21 @@ target_link_libraries(ts-clifford-opt PRIVATE
 # ------------------------------------------------------------------
 # Lit tests.
 # ------------------------------------------------------------------
-set(LLVM_LIT ${LLVM_TOOLS_BINARY_DIR}/llvm-lit)
+# `llvm-lit` ships with an LLVM *build tree*, not with every distribution —
+# Homebrew's llvm keg has none, which silently made this target fail with
+# "No such file or directory". Fall back to a standalone `lit` (brew/pip) the
+# way the other lit targets in this repo already do.
+find_program(TESSERA_LIT_EXECUTABLE
+    NAMES llvm-lit lit.py lit
+    HINTS ${LLVM_TOOLS_BINARY_DIR}
+)
+if(TESSERA_LIT_EXECUTABLE)
+  set(LLVM_LIT ${TESSERA_LIT_EXECUTABLE})
+else()
+  set(LLVM_LIT ${LLVM_TOOLS_BINARY_DIR}/llvm-lit)
+endif()
 add_custom_target(check-clifford
-    COMMAND ${LLVM_LIT} -v ${CMAKE_CURRENT_SOURCE_DIR}/test
+    COMMAND ${CMAKE_COMMAND} -E env "BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+            ${LLVM_LIT} -v ${CMAKE_CURRENT_SOURCE_DIR}/test
     DEPENDS ts-clifford-opt
 )

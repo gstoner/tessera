@@ -27,8 +27,29 @@ def test_darwin_prefers_configured_build_apple_artifacts(monkeypatch):
         jb.os.path, "exists", lambda path: str(path).startswith("/repo/"))
     monkeypatch.setattr("shutil.which", lambda name: None)
     monkeypatch.setattr(jb, "_TESSERA_OPT_PATH", "unset")
+    # Both trees hold a driver that starts, so the darwin preference decides.
+    monkeypatch.setattr(jb, "_opt_runs", lambda path: True)
     assert jb._find_tessera_opt() == \
         "/repo/build-apple/tools/tessera-opt/tessera-opt"
+
+
+def test_darwin_skips_a_build_apple_driver_that_cannot_start(monkeypatch):
+    """The preference is for the Apple tree, not for a dead binary. A tree left
+    behind by an uninstalled toolchain still has an executable file; picking it
+    made every lowering fail in dyld instead of falling through to the build
+    that works."""
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
+    monkeypatch.setattr(jb.sys, "platform", "darwin")
+    monkeypatch.setattr(jb, "_repo_root", lambda: "/repo")
+    monkeypatch.setattr(
+        jb.os.path, "exists", lambda path: str(path).startswith("/repo/"))
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    monkeypatch.setattr(jb, "_TESSERA_OPT_PATH", "unset")
+    monkeypatch.setattr(
+        jb, "_opt_runs", lambda path: "/build-apple/" not in path)
+    assert jb._find_tessera_opt() == \
+        "/repo/build/tools/tessera-opt/tessera-opt"
 
 
 def test_jit_load_error_is_fail_closed_and_actionable(monkeypatch):

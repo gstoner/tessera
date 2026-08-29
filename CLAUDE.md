@@ -319,6 +319,19 @@ Per-phase deliverables and the open-work priority queue live in
     trusting a "does not reproduce" result. Detail:
     `docs/audit/backend/apple/todo.md` `APPLE-VECTORIZE-1`.
 
+    **Updated 2026-08-28 — the fleet now has ZERO assertions-enabled LLVMs.**
+    The Mac moved to Homebrew's production `llvm` keg 23.1.0
+    (`--assertion-mode OFF`), and the manual assertions-ON
+    `/opt/homebrew/llvm-23.1.0-rc1` prefix was removed by owner decision
+    (production release preferred over the pre-release build). The standing
+    lesson above is unchanged — it just has no resident falsifier anymore: an
+    MLIR promise/contract claim can currently be falsified on **no** fleet box,
+    so treat every "does not reproduce" for that class as provisional until
+    checked against an assertions build. To get one back, build upstream
+    `release/23.x` with `-DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_RTTI=ON`
+    (recipe preserved in `docs/audit/backend/apple/todo.md` §"dedicated
+    LLVM/MLIR 23 prefix").
+
     **Separately, still open: `TileToX86Pass` loads `tessera_x86` from inside
     `runOnOperation()`** (`src/transforms/lib/TileToX86Pass.cpp:1045`, a by-name
     `getOrLoadDialect` used to avoid linking the optional backend). MLIR forbids
@@ -535,7 +548,7 @@ mypy python/tessera/                            # type check (ratchet baseline: 
 # MLIR lit tests (requires tessera-opt built). `python3 -m lit` does NOT work —
 # lit is a package, not a runnable module. Use the console script, and put the
 # matched LLVM bin on PATH or every fixture fails with `FileCheck: not found`.
-export PATH=/opt/homebrew/llvm-23.1.0-rc1/bin:$PATH
+export PATH=/opt/homebrew/opt/llvm/bin:$PATH
 lit tests/tessera-ir/ -v
 lit tests/tessera-ir/phase8/ -q                 # one phase
 
@@ -624,8 +637,17 @@ under WSL2. `bash scripts/setup_ubuntu.sh` provisions matched LLVM/MLIR 23 from
 for `FileCheck` before running lit. TheRock ROCm **7.14** lives under
 `/opt/rocm/core` (→ `/opt/rocm-7.2.4/core-7.14`) —
 `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON
--DCMAKE_PREFIX_PATH=/opt/rocm/core`. The venv caps `numpy<2.2` (numpy ≥2.2 stubs
-break the `python_version=3.10` mypy ratchet).
+-DCMAKE_PREFIX_PATH=/opt/rocm/core`. **The `numpy<2.2` venv cap is no longer
+required** (lifted 2026-08-28): numpy ≥2.2 ships PEP 695 `type` statements in
+its stubs, which `python_version=3.10` cannot parse — that used to abort the
+whole mypy run before any Tessera file was checked. The mypy overrides in
+`pyproject.toml` now skip numpy/scipy stubs outright
+(`follow_imports = "skip"` **plus** `follow_imports_for_stubs = true`; the
+first alone is ignored for `.pyi` files). The 3.10 target is unchanged and the
+ratchet is version-independent, so the fleet's three different numpy versions
+all typecheck identically. Corollary: `np.ndarray` is an Any-valued *name*
+under this config, so `X = np.ndarray` is a variable, not a type alias — annotate
+with an explicit `TypeAlias` (see `stdlib/attn_res.py`).
 
 Two WSL specifics that bite: the GPU node is **`/dev/dxg`, not `/dev/kfd`** — do
 not test for `/dev/kfd` to decide whether ROCm can execute here; and `rocminfo`
@@ -648,13 +670,16 @@ lint / typecheck / lit / unit-test is on Homebrew under `/opt/homebrew/bin/`:
 `/opt/homebrew/lib/python3.14/site-packages/`. `torch` is not installed there
 either.
 
-**LLVM/MLIR 23 is a manual install at `/opt/homebrew/llvm-23.1.0-rc1/`**
-(`llvm-config --version` → `23.1.0git`). There is **no `llvm@23` Homebrew
-formula** on that machine — `brew install llvm@23` does not produce
-`/opt/homebrew/opt/llvm@23/`, and Homebrew's own `llvm` keg is 22.1.8, which the
-build rejects. Point CMake at
-`/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/{llvm,mlir}`, and put
-`/opt/homebrew/llvm-23.1.0-rc1/bin` on `PATH` for `FileCheck` before running lit.
+**LLVM/MLIR 23 is Homebrew's `llvm` keg (canonical since 2026-08-28).**
+`brew`'s `llvm` formula is now the production 23.1.0 release and ships MLIR;
+point CMake at `/opt/homebrew/opt/llvm/lib/cmake/{llvm,mlir}`, and put
+`/opt/homebrew/opt/llvm/bin` on `PATH` for `FileCheck` before running lit. It
+is keg-only, so nothing is on `PATH` by default. **It is an NDEBUG build**
+(`llvm-config --assertion-mode` → OFF) — see the Decision #19 update: no fleet
+box can currently falsify MLIR promise/contract claims. The old manual
+assertions-ON install at `/opt/homebrew/llvm-23.1.0-rc1/` (pre-release
+`23.1.0git`) was removed 2026-08-28; the recipe to rebuild an assertions
+toolchain when needed is preserved in `docs/audit/backend/apple/todo.md`.
 
 See `docs/GETTING_STARTED.md` for the full cross-platform matrix.
 
@@ -686,11 +711,20 @@ ninja -C build tessera-opt
 ./build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/ga_ebm_graph_ops.mlir \
   --allow-unregistered-dialect | FileCheck tests/tessera-ir/phase8/ga_ebm_graph_ops.mlir
 
-# Mac (Apple backend only) — LLVM/MLIR 23 lives under Homebrew there
+# Mac — LLVM/MLIR 23 lives under Homebrew there. `TESSERA_BUILD_X86_BACKEND=ON`
+# is safe here as of 2026-08-28 and is worth enabling: `src/CMakeLists.txt`
+# builds the hardware-free `tessera_x86` Target IR dialect but skips the native
+# AVX-512/AMX kernel subdirectory on a non-x86 host (they are `immintrin.h`
+# intrinsics and cannot compile for arm64). Without the toggle the 11 phase2
+# x86 fixtures fail as "tessera_x86 Target IR is unavailable"; with it the lit
+# suite is 425/425. Per Decision #19's standing lesson this Mac — the only
+# fleet host WITHOUT AVX-512 — is the only one whose green result on those
+# fixtures is evidence of host portability.
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir \
-  -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON
+  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
+  -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON \
+  -DTESSERA_BUILD_X86_BACKEND=ON
 
 # Other backend toggles (additive)
 cmake .. -DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda   # CUDA

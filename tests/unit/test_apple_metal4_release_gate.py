@@ -39,7 +39,7 @@ def test_metal4_gate_is_local_and_never_registers_a_github_runner() -> None:
 def test_metal4_gate_owns_fresh_llvm23_correctness_and_paired_performance() -> None:
     text = GATE.read_text(encoding="utf-8")
     for phrase in (
-        "/opt/homebrew/llvm-23.1.0-rc1",
+        "/opt/homebrew/opt/llvm",
         "python3 -m venv",
         "tessera-opt tessera-translate-mlir tessera_jit TesseraAppleRuntime",
         "capture_apple_metal4_environment.py",
@@ -129,8 +129,8 @@ def _write_bundle(path: Path) -> None:
         encoding="utf-8",
     )
     (path / "apple-cmake-cache.txt").write_text(
-        "LLVM_DIR:PATH=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm\n"
-        "MLIR_DIR:UNINITIALIZED=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir\n"
+        "LLVM_DIR:PATH=/opt/homebrew/opt/llvm/lib/cmake/llvm\n"
+        "MLIR_DIR:UNINITIALIZED=/opt/homebrew/opt/llvm/lib/cmake/mlir\n"
         "TESSERA_BUILD_APPLE_BACKEND:BOOL=ON\n",
         encoding="utf-8",
     )

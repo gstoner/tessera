@@ -19,7 +19,7 @@ if [ "$#" -ne 0 ]; then
   exit 2
 fi
 
-LLVM23_PREFIX="${TESSERA_LLVM23_PREFIX:-/opt/homebrew/llvm-23.1.0-rc1}"
+LLVM23_PREFIX="${TESSERA_LLVM23_PREFIX:-/opt/homebrew/opt/llvm}"
 RUN_ID="${TESSERA_APPLE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD)}"
 RUN_ROOT="${TESSERA_APPLE_RUN_ROOT:-/private/tmp/tessera-apple-metal4-$RUN_ID}"
 REPORT_DIR="${TESSERA_APPLE_REPORT_DIR:-$ROOT/artifacts/apple-release/$RUN_ID/metal4}"

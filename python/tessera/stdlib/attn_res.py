@@ -9,13 +9,18 @@ intra-block partial-sum recurrence.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
 
 from tessera import ops
 
-Array = np.ndarray
+# numpy is declared untyped for the type-check ratchet (see the mypy overrides
+# in pyproject.toml), so `np.ndarray` resolves to an Any-valued *name* rather
+# than a type — assigning it produces a variable, not a type alias, and every
+# annotation below would be rejected. Spell the alias explicitly so it stays a
+# valid annotation whatever numpy's stubs do.
+Array: TypeAlias = Any
 Sublayer = Callable[[Array], Any]
 Norm = Callable[[Array], Any]
 

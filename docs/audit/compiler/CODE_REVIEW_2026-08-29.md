@@ -38,11 +38,11 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 **What is wrong:** vjp_group_norm reshapes the per-channel weight (size C) to grouped.shape (size N*C*prod(spatial)) via w.reshape(grouped.shape), which raises ValueError for any real input, so every backward through an affine GroupNorm crashes.
 
-**Evidence:** Reproduced: x shape (2,4,3,3), num_groups=2, weight shape (4,) -> _VJPS['group_norm'](dout,x,2,w) raises 'ValueError: cannot reshape array of size 4 into shape (2,2,2,3,3)'. Affine weight is the default in nn.GroupNorm-style usage; the only non-crashing case is N==1 with no spatial dims.
+**Evidence:** Reproduced: x shape (2,4,3,3), num_groups=2, weight shape (4,) -> the _VJPS entry for 'group_norm', called with (dout, x, 2, w), raises 'ValueError: cannot reshape array of size 4 into shape (2,2,2,3,3)'. Affine weight is the default in nn.GroupNorm-style usage; the only non-crashing case is N==1 with no spatial dims.
 
 **Fix:** Reshape the weight to (1, num_groups, C//num_groups, *[1]*n_spatial) and let broadcasting apply it: do_grouped = do.reshape(grouped.shape) * w.reshape(1, num_groups, c//num_groups, *([1]*(x_arr.ndim-2))).
 
-**Independently verified:** Reproduced on current source: _VJPS['group_norm'](dout, x(2,4,3,3), 2, w(4,)) raises ValueError('cannot reshape array of size 4 into shape (2,2,2,3,3)') at vjp.py:3741. The forward (nn/functional.py group_norm) applies a per-channel weight, so the path is reachable; no guard prevents it.
+**Independently verified:** Reproduced on current source: the _VJPS entry for 'group_norm', called with (dout, x of shape (2,4,3,3), 2, w of shape (4,)), raises ValueError('cannot reshape array of size 4 into shape (2,2,2,3,3)') at vjp.py:3741. The forward (nn/functional.py group_norm) applies a per-channel weight, so the path is reachable; no guard prevents it.
 
 ### `python/tessera/autodiff/tape.py:271` — Aliased op output doubles all upstream gradients
 

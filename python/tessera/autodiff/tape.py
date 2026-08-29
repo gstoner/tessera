@@ -368,7 +368,15 @@ def record_custom_vjp_call(
     forward_args: list[Any] = []
     array_descs: list[InputDesc] = []
     for arg, desc in zip(args, descs_full):
-        if desc is _NON_ARRAY:
+        # `_describe` turns a python int/float into a *literal* descriptor whose
+        # `.array` is a float64 0-d array — a convenience for ops like
+        # `ops.minimum(x, 1.2)`, where the literal really is a numeric operand.
+        # It is wrong here: this function's contract is that non-array
+        # positionals reach `forward` unchanged and are not recorded, and a
+        # python int is exactly that. Passing the coerced form turned an
+        # `axis=1` argument into np.float64(1.0), so both `forward` and the
+        # rule raised on any callable that indexes with it.
+        if desc is _NON_ARRAY or desc.is_literal:
             forward_args.append(arg)
         else:
             forward_args.append(desc.array)

@@ -217,3 +217,51 @@ def test_kl_divergence_is_finite_when_p_has_zero_probability_entries():
     p = np.exp(p_log)
     expected = float(np.sum(np.where(p > 0, p * (p_log - np.log(q)), 0.0)))
     assert value == pytest.approx(expected)
+
+
+# ── transform / tape plumbing ──────────────────────────────────────────────
+
+def test_jacrev_refuses_an_output_its_tape_never_produced():
+    """The structural-resolution branch conflated 'fn returned a constant' with
+    'fn's tail ran in raw numpy on top of taped ops'. In the second case the
+    gradient path is real but unreachable, and returning the pre-zeroed buffer
+    reported a zero Jacobian for a function that is not constant."""
+    from tessera import ops
+    from tessera.autodiff import jacrev
+    from tessera.autodiff.tape import TesseraAutodiffError
+
+    # Still provable, still resolved structurally.
+    np.testing.assert_allclose(jacrev(lambda x: x)(np.array([1.0, 2.0])), np.eye(2))
+    np.testing.assert_allclose(
+        jacrev(lambda x: ops.mul(x, 2.0))(np.array([1.0, 2.0])), 2.0 * np.eye(2))
+
+    with pytest.raises(TesseraAutodiffError, match="outside the tape"):
+        jacrev(lambda x: np.tanh(ops.matmul(x, np.eye(3))))(np.array([0.1, 0.2, 0.3]))
+
+
+def test_record_custom_vjp_call_passes_scalar_positionals_through():
+    """`_describe` coerces a python int to a float64 0-d array so ordinary ops
+    can treat it as a numeric operand. That is wrong for this entry point, whose
+    contract is that non-array positionals reach `forward` unchanged: an
+    `axis=1` argument arrived as np.float64(1.0) and numpy refused to index
+    with it."""
+    from tessera.autodiff.tape import record_custom_vjp_call, tape
+
+    x = np.array([[1.0, 2.0], [3.0, 4.0]])
+
+    def forward(a, axis):
+        return np.sum(a, axis=axis)
+
+    def rule(dout, a):  # only ARRAY inputs are recorded, per the contract
+        return (np.broadcast_to(np.expand_dims(dout, 1), a.shape).copy(),)
+
+    # Works with no tape active...
+    np.testing.assert_allclose(
+        record_custom_vjp_call("mysum", forward, rule, x, 1), [3.0, 7.0])
+
+    # ...and identically inside one, with the gradient flowing.
+    with tape() as t:
+        out = record_custom_vjp_call("mysum", forward, rule, x, 1)
+        np.testing.assert_allclose(out, [3.0, 7.0])
+        t.backward(out, cotangent=np.ones(2))
+    np.testing.assert_allclose(t.cotangent[id(x)], np.ones((2, 2)))

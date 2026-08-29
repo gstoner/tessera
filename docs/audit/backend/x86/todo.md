@@ -8,6 +8,25 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `DEVICE-PROOF-DELIVERED-2026-08-29` — **the native
+half this queue owed is DONE.**
+
+Run on Princess-Luna (Zen 5, AVX-512, Ubuntu 26.04.1, LLVM/MLIR 23.1.0), from a
+clean worktree at `f65f9b3b` configured with `TESSERA_BUILD_X86_BACKEND=ON` —
+i.e. with the native AVX-512/AMX kernels actually compiled, which arm64 cannot
+do.
+
+**`lit tests/tessera-ir/` is 425/425.** That closes the open question on the two
+x86 P0s from PR #635 (f16 refused rather than decoded as bf16; `fused_epilogue`
+refusing rather than dropping the activation). Both are *refusals*, so the risk
+was never that they fail — it was that they narrow a configuration which
+previously lowered AND executed correctly. On the host that builds the real
+kernels, nothing regressed.
+
+Also confirmed here: the `CMAKE_SYSTEM_PROCESSOR` gate added for arm64 still
+selects the native kernels on an x86 host — the build compiled them and no
+"x86 native kernels skipped" line appeared.
+
 Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **follow-up required on the native half.****
 PR #638 changes four SHARED contracts, so each backend records its own
 outcome rather than letting the queues drift:

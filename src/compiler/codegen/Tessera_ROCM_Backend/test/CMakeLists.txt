@@ -4,9 +4,24 @@ set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 # polluted/empty ``LLVM_EXTERNAL_LIT`` cache entry (which an earlier configure
 # could have left as an empty STRING, defeating the historic re-search).
 if(NOT LLVM_EXTERNAL_LIT)
-  find_program(TESSERA_LIT NAMES llvm-lit lit.py lit)
+  # Search the project venv too. `lit` is commonly installed ONLY there (it is
+  # in `.venv/bin` on the Strix Halo box, absent from the system path), and a
+  # non-interactive configure does not activate it — so the bare find_program
+  # silently found nothing and this whole suite reported "skipping" while the
+  # build exited 0. That matters more here than elsewhere: CI does not run this
+  # suite at all, so it is the ROCm backend's ONLY automated fixture coverage,
+  # and a silent skip means it is not covered anywhere.
+  find_program(TESSERA_LIT
+    NAMES llvm-lit lit.py lit
+    HINTS "${CMAKE_SOURCE_DIR}/.venv/bin" "$ENV{VIRTUAL_ENV}/bin"
+  )
   if(TESSERA_LIT)
     set(LLVM_EXTERNAL_LIT "${TESSERA_LIT}")
+  else()
+    message(WARNING
+      "check-tessera-rocm will SKIP: no lit runner found. This suite is the "
+      "ROCm backend's only automated fixture coverage and CI does not run it. "
+      "Install lit, or pass -DTESSERA_LIT=/path/to/lit.")
   endif()
 endif()
 

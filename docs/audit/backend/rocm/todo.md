@@ -6,6 +6,39 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `DEVICE-PROOF-DELIVERED-2026-08-29` — **the P0 device
+proof this queue owed is DONE; the paired performance claim is WITHDRAWN.**
+
+Run on Princess-Luna (gfx1151, Ubuntu 26.04.1, ROCm 10, LLVM/MLIR 23.1.0
+assertions OFF), from a clean worktree at `f65f9b3b`, ROCm + x86 + HIP all
+configured.
+
+*Correctness — delivered.* The paged-attention barrier fix
+(`rocm_hip.py::_synthesize_paged_attention_direct_hip`, PR #635 P0) now has its
+exact-device evidence: 25 trials at P=4/L=16/HQ=8/HKV=4/D=64/Q=8/T=64
+(decode-shaped, 8 independent wave32s — the worst case for the race) give a max
+absolute error of **5.5e-07** against a numpy reference and a run-to-run spread
+of **exactly 0**. 0.056 ms/rep. The lane is correct on hardware.
+
+*Performance — the `expf` hoist buys nothing here, contrary to the finding.*
+The review recorded the per-output-dimension `expf` recomputation as a real
+cost. Measured at T=1024, D=128 — where the hoist removes **128x** the
+transcendental calls (131072 -> 1024 per row) — the two forms are
+indistinguishable: 0.866 vs 0.866 ms/rep, **1.00x, stable across three repeats**,
+with bit-identical outputs. The kernel is bound by the `v[d]` loads, not by the
+transcendental units, which have throughput to spare. Keep the hoist (it is
+strictly less work and provably identical output) but **do not carry a speedup
+claim for it**. A device measurement was the only thing that could have
+established this.
+
+*`check-tessera-rocm`: 66 passed, 2 unsupported, 0 failed* — and it had been
+SILENTLY SKIPPING. `find_program(TESSERA_LIT ...)` missed the runner because
+`lit` exists only in the project venv on this box and a non-interactive
+configure does not activate it, so the target printed "skipping" and the build
+exited 0. Since CI does not run this suite, that skip meant the ROCm backend had
+**no** automated fixture coverage anywhere. The search now includes the venv and
+warns loudly when no runner is found.
+
 Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; gfx1151 execution unchanged.****
 PR #638 changes four SHARED contracts, so each backend records its own
 outcome rather than letting the queues drift:

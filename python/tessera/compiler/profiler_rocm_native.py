@@ -244,13 +244,55 @@ def normalize_rocprofv3_json(payload: Mapping[str, Any]) -> list[dict[str, Any]]
     return rows
 
 
+def _snapshot_files(directory: Path) -> dict[Path, tuple[int, int]]:
+    """``(mtime_ns, size)`` for every file under ``directory``, for later diffing."""
+    snapshot: dict[Path, tuple[int, int]] = {}
+    try:
+        for path in directory.rglob("*"):
+            if path.is_file():
+                stat = path.stat()
+                snapshot[path] = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return {}
+    return snapshot
+
+
+def _files_written_since(
+    directory: Path, before: Mapping[Path, tuple[int, int]],
+) -> list[Path]:
+    """Files the traced run created or rewrote.
+
+    A state diff, deliberately, rather than ``st_mtime_ns >= time.time_ns()``
+    sampled before the run. Those are two different clocks: on Linux an inode
+    timestamp comes from the COARSE clock (``ktime_get_coarse_real_ts64``, one
+    scheduler tick of granularity) while ``time.time_ns()`` reads the fine
+    clock, so a file written microseconds after the reference can carry an
+    mtime that rounds BELOW it. Every such file was then filtered out, no
+    dispatch records were parsed, and a capture that actually succeeded
+    reported ``blocked`` — the faster the traced application, the likelier the
+    miss.
+    """
+    written: list[Path] = []
+    for path in sorted(directory.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if before.get(path) != (stat.st_mtime_ns, stat.st_size):
+            written.append(path)
+    return written
+
+
 def _load_native_json(
-    directory: Path, *, modified_after_ns: int | None = None,
+    directory: Path, *, written: Sequence[Path] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     documents: list[dict[str, Any]] = []
     rows: list[dict[str, Any]] = []
+    allowed = None if written is None else set(written)
     for path in sorted(directory.rglob("*.json")):
-        if modified_after_ns is not None and path.stat().st_mtime_ns < modified_after_ns:
+        if allowed is not None and path not in allowed:
             continue
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -337,6 +379,7 @@ def collect_rocprofv3(request: ROCmCaptureRequest) -> dict[str, Any]:
     capabilities = probe_rocm_native_capabilities(rocprofv3=request.rocprofv3)
     command = build_rocprofv3_command(request)
     request.output_directory.mkdir(parents=True, exist_ok=True)
+    before_files = _snapshot_files(request.output_directory)
     started_ns = time.time_ns()
     returncode: int | None = None
     stdout = ""
@@ -367,7 +410,8 @@ def collect_rocprofv3(request: ROCmCaptureRequest) -> dict[str, Any]:
             blocked_reason = "ROCPROFILER_EXEC_FAILED"
     ended_ns = time.time_ns()
     documents, rows = _load_native_json(
-        request.output_directory, modified_after_ns=started_ns,
+        request.output_directory,
+        written=_files_written_since(request.output_directory, before_files),
     )
     proof = _proof_from_rows(rows)
     collected = returncode == 0 and proof["dispatch_activity_seen"]
@@ -436,6 +480,7 @@ def collect_rtg_tracer(
         "RTG_PROFILE": "1",
         "RTG_PROFILE_COPY": "0",
     })
+    before_files = _snapshot_files(output_directory)
     started_ns = time.time_ns()
     returncode: int | None = None
     stdout = ""
@@ -461,10 +506,7 @@ def collect_rtg_tracer(
             stderr = str(exc)
             reason = "RTG_EXEC_FAILED"
     ended_ns = time.time_ns()
-    files = [
-        path for path in sorted(output_directory.rglob("*"))
-        if path.is_file() and path.stat().st_mtime_ns >= started_ns
-    ]
+    files = _files_written_since(output_directory, before_files)
     trace_json: Path | None = None
     converter_returncode: int | None = None
     converter_error: str | None = None

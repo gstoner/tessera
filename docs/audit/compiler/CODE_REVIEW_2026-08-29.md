@@ -301,6 +301,21 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 ### `python/tessera/optim.py:427` — Adafactor missing second-moment bias correction
 
+> **Deferred 2026-08-29 — needs an ABI change, not a one-line fix.** The
+> finding is correct and the tree reference is easy to correct, but Adafactor
+> has **three** implementations that a test deliberately keeps in agreement:
+> `optim.adafactor` (tree), the analytic VJP/JVP in `autodiff/`, and the flat
+> `ts.ops.adafactor(params, grads, row, col)` op — and the flat form, which is
+> what the native x86/ROCm kernels bind to, **carries no step counter in its
+> signature**, so it cannot compute `1 - beta2**t` at all. Correcting only the
+> reachable halves makes the Python reference disagree with the certified
+> native path, which is the exact defect shape reported for `nesterov` above.
+> Fixing this properly means threading a step operand through the flat op and
+> its native kernels, and re-proving them on ROCm/x86 hardware. Attempted and
+> reverted; `test_flat_adafactor_full_and_factored_match_tree_reference` is the
+> gate that catches a partial fix.
+
+
 *Losses, optimizers, RL, nn.functional · math*
 
 **What is wrong:** adafactor uses a fixed beta2=0.999 EMA for the factored/full second moment with no bias correction and no decay schedule, so early-step updates are inflated by 1/sqrt(1-beta2^t). The state dict tracks 'step' but the update math never uses it; real Adafactor (Shazeer & Stern) uses the beta2_t = 1 - t^-0.8 schedule (or an explicit 1-beta2^t correction) precisely to avoid this.

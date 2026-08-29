@@ -27,7 +27,7 @@ import numpy as np
 
 from .grad import _wrap_as_parameter
 from .jvp import jvp
-from .tape import tape
+from .tape import TesseraAutodiffError, tape
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +220,26 @@ def jacrev(
             # tape-produced no matter what `fn` did. Reusing one tape removed
             # that accidental shield.
             if not any(entry.output_id == id(out) for entry in t.entries):
+                # Only two situations make a zero/identity Jacobian provable:
+                # `fn` returned one of its own arguments, or it recorded nothing
+                # at all (a genuine constant). If the tape DID record ops and
+                # the returned object is neither, then `fn`'s tail ran in raw
+                # numpy on top of taped values — the gradient path is real but
+                # unreachable from here, and returning zeros would report "this
+                # function is constant" about a function that is not. Fail
+                # closed instead.
+                if t.entries and not any(
+                    _returns_this_parameter(out, p) for p, _, _ in jacobians
+                ):
+                    raise TesseraAutodiffError(
+                        "jacrev cannot resolve the Jacobian: the function "
+                        "recorded tessera.ops.* calls but returned a value that "
+                        "no recorded op produced, so its tail math ran outside "
+                        "the tape (e.g. `np.tanh(ops.matmul(...))`). Returning "
+                        "zeros here would claim the function is constant. "
+                        "Express the tail through tessera.ops.* so it is "
+                        "recorded, or differentiate the taped output directly."
+                    )
                 for p, jac_buf, ai_shape in jacobians:
                     if _returns_this_parameter(out, p):
                         # d(x)/d(x) = I, laid out as out_shape + in_shape.

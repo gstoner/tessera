@@ -557,8 +557,20 @@ def polynomial_lr(step: int, *, init_value: float, end_value: float, decay_steps
 
 
 def inverse_sqrt_lr(step: int, *, init_value: float, warmup_steps: int = 1) -> float:
+    """Inverse-square-root decay with a linear warmup, peaking at ``init_value``.
+
+    The previous form returned ``init_value * sqrt(warmup)/sqrt(step)`` for
+    every step, which is *larger* than ``init_value`` for the whole warmup —
+    the opposite of warming up, and 63x the nominal peak on step 1 at the usual
+    warmup_steps=4000. The rate now ramps linearly to ``init_value`` at
+    ``warmup_steps`` and decays as sqrt(warmup/step) after it, so the schedule
+    is continuous at the boundary and ``init_value`` is its maximum.
+    """
     step = max(1, int(step))
-    return float(init_value * math.sqrt(max(1, warmup_steps)) / math.sqrt(step))
+    warmup = max(1, int(warmup_steps))
+    if step < warmup:
+        return float(init_value * step / warmup)
+    return float(init_value * math.sqrt(warmup) / math.sqrt(step))
 
 
 def cyclical_lr(
@@ -586,12 +598,31 @@ def chained_schedule(*schedules: Callable[[int], float]) -> Callable[[int], tupl
 
 
 def clip_grad_norm(grads: Tree, max_norm: float, norm_type: float = 2.0) -> tuple[Tree, float]:
+    """Scale `grads` so their `norm_type` norm is at most `max_norm`.
+
+    `norm_type` selects semantics, so it fails closed on a value this cannot
+    compute rather than silently substituting the L2 norm (Decision #21a) —
+    which previously made `norm_type=1.0` clip by, and report, the L2 norm.
+    """
     if norm_type == float("inf"):
         max_abs = {"value": 0.0}
         tree_map(lambda g: _update_max_abs(g, max_abs), grads)
         total = max_abs["value"]
-    else:
+    elif float(norm_type) == 2.0:
         total = tree_l2_norm(grads)
+    elif float(norm_type) > 0.0:
+        p = float(norm_type)
+        acc = {"value": 0.0}
+
+        def _accumulate(g):
+            acc["value"] += float(np.sum(np.abs(_asarray(g), dtype=np.float64) ** p))
+            return g
+
+        tree_map(_accumulate, grads)
+        total = float(acc["value"] ** (1.0 / p))
+    else:
+        raise ValueError(
+            f"clip_grad_norm norm_type must be positive or inf; got {norm_type!r}")
     scale = min(1.0, float(max_norm) / (total + 1e-12))
     return tree_map(lambda g: _asarray(g) * scale, grads), total
 

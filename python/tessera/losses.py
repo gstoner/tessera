@@ -201,17 +201,36 @@ def load_balance_loss(router_probs, *, assignment=None, reduction: str = "mean")
     return _reduce(np.asarray(aux), reduction)
 
 
-def focal_loss(logits, targets, gamma: float = 2.0, alpha: float | None = None, reduction: str = "mean"):
+def focal_loss(logits, targets, gamma: float = 2.0, alpha: float | None = None,
+               reduction: str = "mean", *, ignore_index: int = -100):
+    """Focal loss over integer class targets.
+
+    Targets are range-checked and ``ignore_index`` is honoured, matching
+    :func:`cross_entropy_loss` in this module. Previously the class index was
+    fancy-indexed unchecked, so numpy's negative-index wraparound silently
+    turned the -100 padding convention into "the 100th class from the end" and
+    averaged that probability into the loss.
+    """
     logits = _asarray(logits).astype(np.float64, copy=False)
     targets = _asarray(targets)
     probs = np.exp(_log_softmax(logits, axis=-1))
     flat_probs = probs.reshape(-1, probs.shape[-1])
     idx = targets.reshape(-1).astype(np.int64)
-    pt = flat_probs[np.arange(idx.size), idx].reshape(targets.shape)
-    loss = -((1.0 - pt) ** gamma) * np.log(np.maximum(pt, 1e-12))
+    valid = idx != int(ignore_index)
+    if np.any(valid & ((idx < 0) | (idx >= flat_probs.shape[-1]))):
+        raise ValueError("target class index out of range")
+    safe_idx = np.where(valid, idx, 0)
+    pt = flat_probs[np.arange(idx.size), safe_idx]
+    loss_flat = -((1.0 - pt) ** gamma) * np.log(np.maximum(pt, 1e-12))
+    # Ignored positions contribute nothing — neither to the sum nor to the
+    # mean's denominator.
+    loss_flat = np.where(valid, loss_flat, 0.0)
     if alpha is not None:
-        loss = float(alpha) * loss
-    return _reduce(loss, reduction)
+        loss_flat = float(alpha) * loss_flat
+    if reduction == "mean":
+        denom = float(np.count_nonzero(valid))
+        return np.float64(loss_flat.sum() / denom) if denom else np.float64(0.0)
+    return _reduce(loss_flat.reshape(targets.shape), reduction)
 
 
 def label_smoothed_cross_entropy(
@@ -239,7 +258,18 @@ def kl_divergence(
     if not np.isfinite(epsilon) or epsilon <= 0.0:
         raise ValueError("epsilon must be finite and greater than zero")
     p = np.exp(p_log)
-    loss = p * (p_log - np.log(np.maximum(q, float(epsilon))))
+    # A zero-probability entry has p_log = -inf, and 0 * (-inf) is NaN, which
+    # then poisons the whole reduction. Its true contribution is
+    # lim_{p->0} p*log(p/q) = 0, so drop those terms explicitly. -inf reaches
+    # here routinely: log_softmax over masked logits (distillation,
+    # constrained decoding) produces it by construction.
+    support = p > 0.0
+    finite_log_p = np.where(support, p_log, 0.0)  # never multiply 0 by -inf
+    loss = np.where(
+        support,
+        p * (finite_log_p - np.log(np.maximum(q, float(epsilon)))),
+        0.0,
+    )
     return _reduce(np.sum(loss, axis=int(axis)), reduction)
 
 

@@ -214,6 +214,53 @@ def test_hmc_sample_validates_inputs() -> None:
                        step_size=0.1, n_leapfrog=0, n_samples=1)
 
 
+class _CountingTarget:
+    """Counts calls into the user's energy network, the EBM sampler hot cost."""
+
+    def __init__(self) -> None:
+        self.energy = 0
+        self.grad = 0
+
+    def energy_fn(self, y: np.ndarray) -> float:
+        self.energy += 1
+        return _gauss_energy(y)
+
+    def grad_fn(self, y: np.ndarray) -> np.ndarray:
+        self.grad += 1
+        return _gauss_grad(y)
+
+
+@pytest.mark.parametrize("eta,any_accepted", [(0.05, True), (5.0, False)])
+def test_mala_evaluates_each_chain_state_once(eta, any_accepted) -> None:
+    """Whichever of (y, y_prop) survives a step was evaluated in that step, so
+    the next step must not call energy_fn / grad_fn for it again. ``steps + 1``
+    is the floor: one evaluation per visited state plus the initial one."""
+    steps = 5 + 10  # burn_in + n_samples * thin
+    target = _CountingTarget()
+    _, _, info = rng.mala_sample(
+        RNGKey.from_seed(7), init=np.zeros(4, dtype=np.float64),
+        energy_fn=target.energy_fn, grad_fn=target.grad_fn,
+        eta=eta, n_samples=10, burn_in=5, thin=1,
+    )
+    assert target.energy == steps + 1
+    assert target.grad == steps + 1
+    assert (info["accept_rate"] > 0.0) is any_accepted
+
+
+def test_hmc_evaluates_each_chain_position_once() -> None:
+    """H0 reuses E(q) from the step that accepted q. The leapfrog gradients are
+    genuine work at a new position and stay uncached."""
+    steps, n_leapfrog = 5 + 10, 3
+    target = _CountingTarget()
+    rng.hmc_sample(
+        RNGKey.from_seed(7), init=np.zeros(4, dtype=np.float64),
+        energy_fn=target.energy_fn, grad_fn=target.grad_fn,
+        step_size=0.1, n_leapfrog=n_leapfrog, n_samples=10, burn_in=5, thin=1,
+    )
+    assert target.energy == steps + 1
+    assert target.grad == steps * (n_leapfrog + 1)
+
+
 def test_hmc_sample_with_custom_mass() -> None:
     """Diagonal mass matrix produces a different stationary covariance
     only in momentum space — q-marginal should still be standard Gaussian."""

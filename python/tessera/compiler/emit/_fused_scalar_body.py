@@ -83,7 +83,7 @@ def row_compute_body(
     matmul + prologue(A) + epilogue chain + optional residual + optional row
     reduction. Shared verbatim by the x86 C function and the ROCm HIP kernel."""
     prologue = "".join(
-        f"                {pointwise_snippet(op, 'a')}\n" for op in region.prologue
+        f"            {pointwise_snippet(op, 'a')}\n" for op in region.prologue
     )
     epi_lines = []
     for op in region.epilogue:
@@ -98,12 +98,39 @@ def row_compute_body(
                  if region.reduction else "")
     a_index = "(long)m*K + k" if a_layout == "row_major" else "(long)k*M + m"
     b_index = "(long)k*N + n" if b_layout == "row_major" else "(long)n*K + k"
+    if region.prologue:
+        # k-outer: the prologue value depends only on (m, k), so with n outermost
+        # it would be evaluated N times per A element — transcendental work the C
+        # compiler cannot hoist, because the redundancy spans the outer loop and
+        # neither A nor `row` is `restrict` (stores to row[] may alias A). k
+        # outermost evaluates it once per element; the per-output accumulation
+        # order over k is unchanged (ascending), so the sum is the same sequence
+        # of additions as the n-outer form.
+        post = ""
+        if epilogue or residual:
+            post = (
+                "        for (int n = 0; n < N; ++n) {\n"
+                "            float v = row[n];\n"
+                f"{epilogue}\n"
+                f"{residual}"
+                "            row[n] = v;\n"
+                "        }\n"
+            )
+        return (
+            "        for (int n = 0; n < N; ++n) row[n] = 0.0f;\n"
+            "        for (int k = 0; k < K; ++k) {\n"
+            f"            float a = A[{a_index}];\n"
+            f"{prologue}"
+            f"            for (int n = 0; n < N; ++n) row[n] += a * B[{b_index}];\n"
+            "        }\n"
+            f"{post}"
+            f"{reduction}"
+        )
     return (
         "        for (int n = 0; n < N; ++n) {\n"
         "            float v = 0.0f;\n"
         "            for (int k = 0; k < K; ++k) {\n"
         f"                float a = A[{a_index}];\n"
-        f"{prologue}"
         f"                v += a * B[{b_index}];\n"
         "            }\n"
         f"{epilogue}\n"

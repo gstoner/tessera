@@ -913,7 +913,11 @@ def jvp_log_cosh_loss(primals, tangents, *, reduction="mean", **_):
     pred, target = primals
     dpred, dtarget = tangents
     err = pred - target
-    loss = err + np.log1p(np.exp(-2.0 * err)) - np.log(2.0)
+    # Same |e| form the eager loss uses: on the raw error exp(-2e) overflows to
+    # inf for e < -354.9, so the primal this rule returns would diverge from
+    # losses.log_cosh_loss on exactly the inputs the eager path was fixed for.
+    # The tangent is odd in e and stays on the signed error.
+    loss = np.abs(err) + np.log1p(np.exp(-2.0 * np.abs(err))) - np.log(2.0)
     return _reduce_loss(loss, np.tanh(err) * (dpred - dtarget), reduction)
 
 

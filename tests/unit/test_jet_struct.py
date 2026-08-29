@@ -331,6 +331,33 @@ def test_flash_attn_jet_carries_attn_bias():
     np.testing.assert_allclose(c[0], ref, atol=1e-13)
 
 
+@pytest.mark.parametrize("block_size", [1, 2, 3])
+def test_flash_attn_jet_survives_a_leading_padding_mask(block_size):
+    """A row masked only in its LEADING key blocks (ordinary left padding)
+    is finite in the canonical forward. The online recurrence used to shift
+    by a running max of −inf, and −inf − (−inf) = NaN contaminated ℓ and o
+    for every later block through the alpha rescale — a unilateral
+    divergence from `ops.flash_attn`, reachable through the documented
+    attn_bias substrate (2026-08-29 review, P2)."""
+    rng = np.random.default_rng(23)
+    W = TruncatedJet(2)
+    Q = rng.standard_normal((1, 4, 3))
+    K = rng.standard_normal((1, 4, 3))
+    V = rng.standard_normal((1, 4, 3))
+    dQ = rng.standard_normal(Q.shape)
+    bias = np.zeros((1, 4, 4))
+    bias[0, 1, 0:2] = -np.inf
+
+    c = J.jet_flash_attn(
+        W, J.jet_lift(W, Q, dQ), J.jet_const(W, K), J.jet_const(W, V),
+        attn_bias=bias, block_size=block_size,
+    )
+    ref = np.asarray(ops.flash_attn(Q, K, V, attn_bias=bias))
+    assert np.all(np.isfinite(ref)), "the canonical forward is finite here"
+    assert np.all(np.isfinite(c[0])) and np.all(np.isfinite(c[1]))
+    np.testing.assert_allclose(c[0], ref, atol=1e-13)
+
+
 # ── 2. Law 4, structured: jet ≡ k-nested duals on the diagonal seed ──────────
 
 

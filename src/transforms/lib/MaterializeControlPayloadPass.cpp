@@ -39,6 +39,8 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
+#include <string>
 
 using namespace mlir;
 
@@ -167,11 +169,41 @@ struct MaterializeControlPayload
     return true;
   }
 
+  // Two control ops may legally name one body symbol. emitOpList rewrites the
+  // stub in place, so the second materialization would replace the first op's
+  // body and both would then execute the second payload — the same hazard the
+  // intra-op thenStub == elseStub guard exists for, across the worklist.
+  // Identical payloads are harmless (the body is already correct); a differing
+  // one is refused so the payload survives for the guard.
+  llvm::DenseMap<Operation *, std::string> materializedStubs;
+
+  static std::string planFingerprint(ArrayRef<Type> argTys,
+                                     ArrayRef<PlannedOp> plan, int32_t outId,
+                                     Type resultTy) {
+    std::string out;
+    llvm::raw_string_ostream os(out);
+    for (Type t : argTys)
+      os << t << ',';
+    os << '|' << outId << '|' << resultTy << '|';
+    for (const PlannedOp &p : plan)
+      os << p.name << ':' << p.a << ':' << p.b << ':' << p.iattr << ':' << p.eps
+         << ':' << p.resTy << ':' << p.resultId << ';';
+    return out;
+  }
+
+  bool stubAvailable(func::FuncOp stub, StringRef fingerprint) {
+    auto found = materializedStubs.find(stub.getOperation());
+    return found == materializedStubs.end() || found->second == fingerprint;
+  }
+
   // Phase 2: materialize `stub` as (argTys) -> resultTy and emit the validated
   // plan. `idToArg` maps a pre-bound tensor-id to its materialized arg index.
   void emitOpList(func::FuncOp stub, ArrayRef<Type> argTys,
                   const llvm::DenseMap<int32_t, int> &idToArg,
                   ArrayRef<PlannedOp> plan, int32_t outId, Type resultTy) {
+    std::string fingerprint = planFingerprint(argTys, plan, outId, resultTy);
+    if (!materializedStubs.insert({stub.getOperation(), fingerprint}).second)
+      return;  // already holds this exact body
     OpBuilder b(stub);
     stub.setType(b.getFunctionType(argTys, {resultTy}));
     stub.getBody().getBlocks().clear();
@@ -255,6 +287,13 @@ struct MaterializeControlPayload
       return false;
     SmallVector<Type> argTys(op->getOperandTypes().begin(),
                              op->getOperandTypes().end());
+    if (!stubAvailable(stub, planFingerprint(argTys, plan, outId, carryTy))) {
+      op->emitError("CONTROL_PAYLOAD_STUB_CONFLICT: body symbol '")
+          << stub.getSymName()
+          << "' was already materialized from a different payload";
+      signalPassFailure();
+      return false;
+    }
     emitOpList(stub, argTys, idToArg, plan, outId, carryTy);
     for (StringRef k : {"body_opcodes", "body_in0", "body_in1", "body_iattr",
                         "body_fattr", "body_out_id"})
@@ -330,6 +369,16 @@ struct MaterializeControlPayload
                         elsePlan, eOutTy))
       return false;
 
+    if (!stubAvailable(thenStub,
+                       planFingerprint(argTys, thenPlan, tOut, resultTy)) ||
+        !stubAvailable(elseStub,
+                       planFingerprint(argTys, elsePlan, eOut, resultTy))) {
+      op->emitError(
+          "CONTROL_PAYLOAD_STUB_CONFLICT: a branch symbol was already "
+          "materialized from a different payload");
+      signalPassFailure();
+      return false;
+    }
     emitOpList(thenStub, argTys, idToArg, thenPlan, tOut, resultTy);
     emitOpList(elseStub, argTys, idToArg, elsePlan, eOut, resultTy);
     for (StringRef k : {"then_opcodes", "then_in0", "then_in1", "then_iattr",
@@ -397,6 +446,16 @@ struct MaterializeControlPayload
                         cOut, seedTypes, base, Type(), condPlan, condOutTy))
       return false;
 
+    if (!stubAvailable(bodyStub,
+                       planFingerprint(argTys, bodyPlan, bOut, carryTy)) ||
+        !stubAvailable(condStub,
+                       planFingerprint(argTys, condPlan, cOut, condOutTy))) {
+      op->emitError(
+          "CONTROL_PAYLOAD_STUB_CONFLICT: a body or condition symbol was "
+          "already materialized from a different payload");
+      signalPassFailure();
+      return false;
+    }
     emitOpList(bodyStub, argTys, idToArg, bodyPlan, bOut, carryTy);
     emitOpList(condStub, argTys, idToArg, condPlan, cOut, condOutTy);
     for (StringRef k : {"body_opcodes", "body_in0", "body_in1", "body_iattr",

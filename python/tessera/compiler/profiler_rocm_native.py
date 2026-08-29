@@ -244,8 +244,17 @@ def normalize_rocprofv3_json(payload: Mapping[str, Any]) -> list[dict[str, Any]]
     return rows
 
 
-def _snapshot_files(directory: Path) -> dict[Path, tuple[int, int]]:
-    """``(mtime_ns, size)`` for every file under ``directory``, for later diffing."""
+def _snapshot_files(directory: Path) -> dict[Path, tuple[int, int]] | None:
+    """``(mtime_ns, size)`` for every file under ``directory``, for later diffing.
+
+    ``None`` — not ``{}`` — when the walk could not be completed. An empty
+    baseline and a missing baseline lead to opposite conclusions: against the
+    former every pre-existing file looks freshly written, so traces left by an
+    earlier run would be parsed as this run's evidence and the capture would
+    report ``collected`` on someone else's data. The callers refuse the capture
+    instead (Decision #21a — this is a semantic key, and the file's contract is
+    that a blocked capture carries a named reason).
+    """
     snapshot: dict[Path, tuple[int, int]] = {}
     try:
         for path in directory.rglob("*"):
@@ -253,12 +262,12 @@ def _snapshot_files(directory: Path) -> dict[Path, tuple[int, int]]:
                 stat = path.stat()
                 snapshot[path] = (stat.st_mtime_ns, stat.st_size)
     except OSError:
-        return {}
+        return None
     return snapshot
 
 
 def _files_written_since(
-    directory: Path, before: Mapping[Path, tuple[int, int]],
+    directory: Path, before: Mapping[Path, tuple[int, int]] | None,
 ) -> list[Path]:
     """Files the traced run created or rewrote.
 
@@ -271,7 +280,12 @@ def _files_written_since(
     dispatch records were parsed, and a capture that actually succeeded
     reported ``blocked`` — the faster the traced application, the likelier the
     miss.
+
+    With no baseline (``before is None``) nothing can be attributed to this
+    run, so nothing is claimed.
     """
+    if before is None:
+        return []
     written: list[Path] = []
     for path in sorted(directory.rglob("*")):
         if not path.is_file():
@@ -386,7 +400,9 @@ def collect_rocprofv3(request: ROCmCaptureRequest) -> dict[str, Any]:
     stderr = ""
     timed_out = False
     blocked_reason: str | None = None
-    if not capabilities["rocprofiler_native_interface"]:
+    if before_files is None:
+        blocked_reason = "ROCPROFILER_OUTPUT_BASELINE_UNREADABLE"
+    elif not capabilities["rocprofiler_native_interface"]:
         blocked_reason = "ROCPROFILER_DEVICE_INTERFACE_UNAVAILABLE"
     else:
         try:
@@ -487,7 +503,9 @@ def collect_rtg_tracer(
     stderr = ""
     timed_out = False
     reason: str | None = None
-    if not capabilities["rtg_library_available"]:
+    if before_files is None:
+        reason = "RTG_OUTPUT_BASELINE_UNREADABLE"
+    elif not capabilities["rtg_library_available"]:
         reason = "RTG_LIBRARY_UNAVAILABLE"
     else:
         try:

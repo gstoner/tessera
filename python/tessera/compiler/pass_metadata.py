@@ -242,6 +242,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         preserved_attrs=("tessera.effect",),
         diagnostic_codes=(
             "ADJOINT_COLLECTIVE_COTANGENT_ARITY",
+            "ADJOINT_COLLECTIVE_COTANGENT_SLOT_COUNT",
             "ADJOINT_COLLECTIVE_MULTIPLE_RETURNS",
             "ADJOINT_COLLECTIVE_NO_RETURN",
         ),
@@ -806,8 +807,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.arg_dim_names",
         ),
         diagnostic_codes=(
+            "SYMDIM_BINDING_MALFORMED",
             "SYMDIM_BINDING_VIOLATION",
             "SYMDIM_CALL_ARG_MISMATCH",
+            "SYMDIM_DIM_SIZES_MALFORMED",
             "SYMDIM_FLOW_INCONSISTENCY",
             "SYMDIM_IF_BRANCH_MISMATCH",
             "SYMDIM_LOOP_YIELD_MISMATCH",

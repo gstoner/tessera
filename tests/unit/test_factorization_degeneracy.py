@@ -351,6 +351,17 @@ def test_ill_conditioned_but_defined_spectrum_warns_and_returns() -> None:
     assert np.all(np.isfinite(grad))
 
 
+def test_ill_conditioned_eigenspectrum_warns_and_returns() -> None:
+    """`eigh_coupling` claims 'same declared policy, same three thresholds' as
+    `svd_coupling`, but only the refusal band was wired: a gap above n*eps and
+    below sqrt(eps) returned a coupling of order 1/gap in silence — the exact
+    half-digits case the module exists to flag (2026-08-29 review, P2)."""
+    S = np.diag([1.0, 1.0 + 1e-10, 5.0])
+    with pytest.warns(deg.TesseraDegeneracyWarning, match="eigenvalues"):
+        (grad,) = _VJPS["eigh"](np.ones(3), S)
+    assert np.all(np.isfinite(grad))
+
+
 def test_well_separated_spectrum_is_silent() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")           # any warning fails the test

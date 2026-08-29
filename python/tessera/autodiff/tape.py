@@ -607,7 +607,7 @@ def _describe(arg: Any):
 # Keyed by `id(fn)`, and the value keeps a strong reference to `fn` itself:
 # without it a collected temporary (a `custom_rule` lambda) could free its id
 # for reuse and hand the next function a stale signature.
-_FORWARD_SIG_CACHE: dict[int, tuple[Callable, list[str] | None]] = {}
+_FORWARD_SIG_CACHE: dict[int, tuple[Callable, list[str] | None, dict[str, Any]]] = {}
 
 
 def _innermost(fn: Callable) -> Callable:
@@ -627,20 +627,27 @@ def _innermost(fn: Callable) -> Callable:
         fn = inner
 
 
-def _positional_params(fn: Callable) -> list[str] | None:
-    """Positional parameter names of `fn`, or None if it takes `*args`/is opaque."""
-    import inspect
+def _signature_facts(fn: Callable) -> tuple[list[str] | None, dict[str, Any]]:
+    """Positional parameter names of `fn` and its per-parameter defaults.
 
+    One parse per callable, for every question the recording paths ask of a
+    signature: `inspect.signature` costs microseconds that a taped call pays
+    again on every iteration of a training loop, with an identical answer.
+    The entry holds a strong reference to `fn` so the `id()` key cannot be
+    reused by a later object.
+    """
     key = id(fn)
     cached = _FORWARD_SIG_CACHE.get(key)
     if cached is not None:
-        return cached[1]
+        return cached[1], cached[2]
+    defaults: dict[str, Any] = {}
     try:
         sig = inspect.signature(_innermost(fn), follow_wrapped=False)
     except (TypeError, ValueError):
         names = None
     else:
         params = list(sig.parameters.values())
+        defaults = {p.name: p.default for p in params}
         if any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params):
             names = None  # `*args` — no stable name for a positional slot
         else:
@@ -650,8 +657,13 @@ def _positional_params(fn: Callable) -> list[str] | None:
                 if p.kind
                 in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             ]
-    _FORWARD_SIG_CACHE[key] = (fn, names)
-    return names
+    _FORWARD_SIG_CACHE[key] = (fn, names, defaults)
+    return names, defaults
+
+
+def _positional_params(fn: Callable) -> list[str] | None:
+    """Positional parameter names of `fn`, or None if it takes `*args`/is opaque."""
+    return _signature_facts(fn)[0]
 
 
 def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callable | None):
@@ -762,7 +774,7 @@ def promote_operand_kwargs(
     if not kwargs or rule_fn is None:
         return args, kwargs
     slots = _positional_params(rule_fn)
-    fwd_names = _positional_params(original)
+    fwd_names, fwd_defaults = _signature_facts(original)
     if not slots or fwd_names is None:
         return args, kwargs
     operand_slots = slots[1:]  # slots[0] is `dout`
@@ -770,13 +782,7 @@ def promote_operand_kwargs(
     remaining = dict(kwargs)
 
     def has_none_default(name: str) -> bool:
-        try:
-            parameter = inspect.signature(
-                _innermost(original), follow_wrapped=False
-            ).parameters[name]
-        except (KeyError, TypeError, ValueError):
-            return False
-        return parameter.default is None
+        return fwd_defaults.get(name, inspect.Parameter.empty) is None
 
     def later_operand_exists(start: int) -> bool:
         for later in range(start, len(operand_slots)):

@@ -95,6 +95,14 @@ register_op_kind(OP_SPECTRAL_FFT, _verify_fft)
 # --- compile cache (build the shipped kernel into a dlopen-able .so once) ----
 _libs: dict[str, ctypes.CDLL | None] = {}
 
+#: Verdict of the AMD device probe in ``RocmStockhamFFTCandidate.available``,
+#: keyed by the library handle itself (identity hashing, and the strong
+#: reference keeps the key valid). The probe is a real device transform
+#: (measured at 0.371 ms per call on gfx1151) and ``available()`` is called once
+#: per arbitration — per composed STFT frame — while its answer cannot change
+#: within a process.
+_amd_probe: dict[Any, bool] = {}
+
 
 def _compile(key: str, argv: list[str], out: str) -> ctypes.CDLL | None:
     if key in _libs:
@@ -110,12 +118,25 @@ def _compile(key: str, argv: list[str], out: str) -> ctypes.CDLL | None:
     return lib
 
 
+def _build_dir(prefix: str) -> str:
+    """Scratch directory for one compile, removed at interpreter exit.
+
+    Only ever called on a cache MISS: `_compile` serves every later call from
+    `_libs`, so a directory made before that check would be abandoned empty on
+    every call for the life of the process."""
+    d = tempfile.mkdtemp(prefix=prefix)
+    atexit.register(shutil.rmtree, d, True)
+    return d
+
+
 def _cpu_lib() -> ctypes.CDLL | None:
+    if "cpu" in _libs:
+        return _libs["cpu"]
     cxx = os.environ.get("CXX", "c++")
     if not shutil.which(cxx) or not _CPU_SRC.exists():
         _libs["cpu"] = _libs.get("cpu")
         return _libs.get("cpu")
-    d = tempfile.mkdtemp(prefix="tessera_spectral_cpu_")
+    d = _build_dir("tessera_spectral_cpu_")
     so = os.path.join(d, "libspectral_cpu.so")
     lib = _compile("cpu", [cxx, "-O2", "-std=c++17", "-shared", "-fPIC",
                           str(_CPU_SRC), "-o", so], so)
@@ -476,10 +497,13 @@ def _amd_composite_lib() -> ctypes.CDLL | None:
 
 def _amd_source_lib() -> ctypes.CDLL | None:
     """Development candidate: compile the source hook, never canonical runtime."""
+    if "amd_source" in _libs:
+        cached = _libs["amd_source"]
+        return _configure_amd_lib(cached) if cached is not None else None
     if not shutil.which("hipcc") or not _AMD_SRC.exists():
         return _libs.get("amd_source")
     arch = os.environ.get("TESSERA_ROCM_ARCH", "gfx1151")
-    d = tempfile.mkdtemp(prefix="tessera_spectral_amd_")
+    d = _build_dir("tessera_spectral_amd_")
     so = os.path.join(d, "libspectral_amd.so")
     lib = _compile("amd_source", ["hipcc", f"--offload-arch={arch}", "-O3",
                                    "-std=c++17", "-shared", "-fPIC",
@@ -943,13 +967,17 @@ class RocmStockhamFFTCandidate(Candidate):
         lib = _amd_candidate_lib()
         if lib is None or not hasattr(lib, "ts_fft_stockham_amd_hostptr"):
             return False
+        cached = _amd_probe.get(lib)
+        if cached is not None:
+            return cached
         try:
             x = np.ones(4, np.complex64)
             out = np.empty(4, np.complex64)
-            rc = lib.ts_fft_stockham_amd_hostptr(_cptr(x), _cptr(out), 4, -1)
-            return rc == 0
+            ok = lib.ts_fft_stockham_amd_hostptr(_cptr(x), _cptr(out), 4, -1) == 0
         except Exception:
-            return False
+            ok = False
+        _amd_probe[lib] = ok
+        return ok
 
     def run(self, region: SpectralFFTRegion, x: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
@@ -1101,16 +1129,31 @@ class SpectralSTFTRegion:
 
     def __init__(self, n: int, win: int, hop: int):
         self.n, self.win, self.hop = int(n), int(win), int(hop)
+        # A signal shorter than one window has no whole frame. The region is
+        # refused at construction rather than at use: `frames` would otherwise
+        # advertise one frame while `reference` multiplied an n-sample slice by
+        # the length-win window and raised a broadcast error out of every
+        # caller's decline-to-reference handler. `tessera.ops.stft` zero-pads
+        # instead; a padded region is a different plan (the pad length is a
+        # shape parameter) and must be built as one, not inferred here.
+        if self.win < 1 or self.hop < 1:
+            raise ValueError(
+                "STFT region requires win >= 1 and hop >= 1, got "
+                f"win={self.win}, hop={self.hop}")
+        if self.n < self.win:
+            raise ValueError(
+                f"STFT region requires n >= win (no whole frame): n={self.n}, "
+                f"win={self.win}; pad the signal to at least win samples")
 
     @property
     def frames(self) -> int:
-        return max(1, (self.n - self.win) // self.hop + 1)
+        return (self.n - self.win) // self.hop + 1
 
     def reference(self, x: np.ndarray, win: np.ndarray) -> np.ndarray:
         x = np.asarray(x, np.float32)
         w = np.asarray(win, np.float32)
         out = [np.fft.rfft(x[s:s + self.win] * w)
-               for s in range(0, max(1, self.n - self.win + 1), self.hop)]
+               for s in range(0, self.n - self.win + 1, self.hop)]
         return np.stack(out, axis=-2).astype(np.complex64)
 
     def probe_input(self, seed: int):
@@ -1335,7 +1378,7 @@ class STFTCandidate(_ComposedSpectralCandidate):
             rfft = RFFTCandidate()
             rfft.target = self.target
             frames, lane_seen = [], None
-            for start in range(0, max(1, region.n - region.win + 1), region.hop):
+            for start in range(0, region.n - region.win + 1, region.hop):
                 out, lane = rfft.run(inner, sig[start:start + region.win] * w)
                 if lane == "reference":
                     return region.reference(x, win), "reference"

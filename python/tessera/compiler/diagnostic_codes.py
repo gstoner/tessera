@@ -1962,6 +1962,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="P1-REVIEW-2026-08-29",
     ),
     DiagnosticCode(
+        code="ADJOINT_COLLECTIVE_COTANGENT_SLOT_COUNT",
+        pass_origin="AdjointCollectiveInsertionPass",
+        severity="error",
+        summary=(
+            "`tessera.autodiff.arg_cotangents` has a different number of "
+            "entries than the function has arguments, so indexing it by "
+            "argument number would read past the array."
+        ),
+        fix_hint=(
+            "Re-run AutodiffPass, which writes exactly one slot per argument. "
+            "A hand-written or drifted attribute must carry an entry — empty "
+            "string for an unpopulated slot — for every argument."
+        ),
+        spec="docs/spec/AUTODIFF_SPEC.md",
+        sprint="P2-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
         code="SYMDIM_MATMUL_CONTRACT_VIOLATION",
         pass_origin="SymbolicDimEqualityPass",
         severity="error",
@@ -1976,6 +1993,71 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         ),
         spec="docs/spec/SHAPE_SYSTEM.md §11.2",
         sprint="V5",
+    ),
+    DiagnosticCode(
+        code="AUTODIFF_WHILE_DYNAMIC_STATE",
+        pass_origin="AutodiffPairedPass",
+        severity="error",
+        summary=(
+            "A saved `scf.while` carries differentiable state with a dynamic "
+            "extent. The residual tape is sized from the loop init, so an "
+            "extent that changes across iterations would write out of bounds."
+        ),
+        fix_hint=(
+            "Give the state a static shape, or declare a shape envelope for "
+            "the slot the way the generic_for residual path requires."
+        ),
+        spec="docs/spec/AUTODIFF_SPEC.md",
+        sprint="P2-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
+        code="CONTROL_PAYLOAD_STUB_CONFLICT",
+        pass_origin="MaterializeControlPayloadPass",
+        severity="error",
+        summary=(
+            "Two control-flow ops name the same body/branch symbol but carry "
+            "different op-list payloads, so materializing the second would "
+            "overwrite the body the first one already emitted."
+        ),
+        fix_hint=(
+            "Give each control op its own body symbol. Identical payloads may "
+            "share one symbol; differing ones cannot, because the stub holds a "
+            "single body."
+        ),
+        spec="docs/spec/CONTROL_FLOW.md",
+        sprint="P2-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
+        code="SYMDIM_BINDING_MALFORMED",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary=(
+            "A `tessera.dim_bindings` entry is not a string, or does not "
+            "parse as a binding equation."
+        ),
+        fix_hint=(
+            "Fix the binding text. A dropped entry disables exactly the "
+            "equation it was written to verify, so a malformed binding is an "
+            "error rather than a skip."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md",
+        sprint="P2-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
+        code="SYMDIM_DIM_SIZES_MALFORMED",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary=(
+            "A `tessera.dim_sizes` symbol maps to something other than an "
+            "integer attribute."
+        ),
+        fix_hint=(
+            "Give every symbol an integer size. A non-integer value was "
+            "previously dropped, silently removing that symbol's witness from "
+            "every binding check."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md",
+        sprint="P2-REVIEW-2026-08-29",
     ),
     DiagnosticCode(
         code="SYMDIM_PRESBURGER_MALFORMED",

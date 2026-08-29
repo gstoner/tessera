@@ -181,6 +181,31 @@ def _np_dtype(dtype: str | np.dtype) -> np.dtype:
     return np.dtype(dtype)
 
 
+def _restore_half_open(out: np.ndarray, low: float, high: float) -> np.ndarray:
+    """Re-establish ``[low, high)`` after the float64 → target-dtype downcast.
+
+    The cast rounds to nearest, so a draw within half an ulp of ``high`` lands
+    exactly on ``high`` — probability 2⁻¹² per element in fp16, 2⁻²⁵ in fp32 —
+    and one just above ``low`` can land below it. Consumers that assume the
+    documented half-open interval (``log(1 - u)`` in an inverse-CDF or dropout
+    mask) get ``-inf`` from the first case.
+    """
+    if out.dtype.kind != "f":
+        return out
+    scalar = out.dtype.type
+    lo = scalar(low)
+    if lo < low:
+        lo = np.nextafter(lo, scalar(np.inf))
+    hi = scalar(high)
+    if hi >= high:
+        hi = np.nextafter(hi, scalar(-np.inf))
+    if hi < lo:
+        raise ValueError(
+            f"uniform: [{low}, {high}) contains no value representable in "
+            f"{out.dtype.name}")
+    return np.clip(out, lo, hi)
+
+
 def uniform(
     key: RNGKey,
     shape: int | Sequence[int] = (),
@@ -194,7 +219,7 @@ def uniform(
         raise ValueError(f"uniform requires high > low, got low={low} high={high}")
     rng = key._generator()
     out = rng.uniform(low=low, high=high, size=_shape_tuple(shape))
-    return np.asarray(out, dtype=_np_dtype(dtype))
+    return _restore_half_open(np.asarray(out, dtype=_np_dtype(dtype)), low, high)
 
 
 def normal(
@@ -213,6 +238,75 @@ def normal(
     return np.asarray(out, dtype=_np_dtype(dtype))
 
 
+#: Retained mass below which `truncated_normal` leaves plain rejection for the
+#: tail sampler. At 5 % plain rejection costs ~20 proposals per accepted draw.
+_TRUNCATED_NORMAL_PLAIN_MASS = 0.05
+
+#: Round cap for the tail sampler. Its acceptance rate over the whole domain it
+#: is selected for bottoms out near 0.48 (measured; worst at a≈1.75, b≈2.07), so
+#: this cap is unreachable in practice — it exists so that a pathological
+#: interval reports instead of hanging.
+_TRUNCATED_NORMAL_MAX_ROUNDS = 10_000
+
+
+def _standard_normal_mass(a: float, b: float) -> float:
+    """Φ(b) − Φ(a), written to avoid cancellation in either tail."""
+    root2 = _math.sqrt(2.0)
+    if a >= 0.0:
+        return 0.5 * (_math.erfc(a / root2) - _math.erfc(b / root2))
+    if b <= 0.0:
+        return 0.5 * (_math.erfc(-b / root2) - _math.erfc(-a / root2))
+    return 0.5 * (_math.erf(b / root2) + _math.erf(-a / root2))
+
+
+def _truncated_standard_normal(
+    rng: np.random.Generator, n: int, a: float, b: float
+) -> np.ndarray:
+    """``n`` iid N(0,1) draws conditioned on ``[a, b]``, tail-safe.
+
+    Both schemes are exact — they differ only in acceptance rate, so the
+    selection rule below is a performance choice and cannot bias the result.
+
+      * *Exponential tilt* (Robert 1995): propose ``z = a + Exp(λ)`` with the
+        optimal ``λ = (a + √(a²+4))/2`` and accept with ``exp(−(z−λ)²/2)``. The
+        proposal ignores ``b``, so it is used only when ``b`` truncates little
+        of the exponential — otherwise the discarded ``z > b`` tail dominates.
+      * *Uniform* on ``[a, b]``, accepted with the density ratio against its
+        maximum. Acceptance → 1 as the interval narrows, which is exactly the
+        case the exponential scheme handles badly.
+    """
+    if n == 0:
+        return np.empty(0, dtype=np.float64)
+    flip = b <= 0.0
+    if flip:
+        a, b = -b, -a
+    lam = (a + _math.sqrt(a * a + 4.0)) / 2.0 if a > 0.0 else 0.0
+    use_exponential = a > 0.0 and -_math.expm1(-lam * (b - a)) >= 0.5
+    peak = a if a > 0.0 else 0.0
+    out = np.empty(n, dtype=np.float64)
+    filled = 0
+    for _ in range(_TRUNCATED_NORMAL_MAX_ROUNDS):
+        if filled >= n:
+            break
+        m = n - filled
+        if use_exponential:
+            z = a + rng.exponential(size=m) / lam
+            keep = (z <= b) & (rng.random(m) <= np.exp(-0.5 * (z - lam) ** 2))
+        else:
+            z = rng.uniform(a, b, size=m)
+            keep = rng.random(m) <= np.exp(-0.5 * (z * z - peak * peak))
+        accepted = z[keep][: n - filled]
+        out[filled : filled + accepted.size] = accepted
+        filled += accepted.size
+    if filled < n:
+        raise ValueError(
+            f"truncated_normal: rejection sampling on the standardized "
+            f"interval [{a}, {b}] did not converge in "
+            f"{_TRUNCATED_NORMAL_MAX_ROUNDS} rounds"
+        )
+    return -out if flip else out
+
+
 def truncated_normal(
     key: RNGKey,
     shape: int | Sequence[int] = (),
@@ -225,26 +319,48 @@ def truncated_normal(
 ) -> np.ndarray:
     """Truncated normal — samples outside [lower, upper] are resampled.
 
-    Implementation: rejection-sample from `normal` until every entry lies
-    in the allowed interval. For default ±2σ the rejection rate is ~5%
-    so this is bounded-time in expectation.
+    Two exact schemes, selected on the retained mass Φ(b)−Φ(a) of the
+    standardized interval ``[a, b] = [(lower−mean)/std, (upper−mean)/std]``:
+
+      * mass ≥ 5 %: rejection-sample from `normal`, as before.
+      * mass < 5 %: :func:`_truncated_standard_normal`, whose acceptance rate
+        does not depend on how far into the tail the interval sits.
+
+    Plain rejection alone is not bounded-time on a legal interval: for
+    ``lower=6, upper=7`` the acceptance probability is ~9.9e-10, so filling
+    1000 entries needs ~1e12 draws.
     """
     if upper <= lower:
         raise ValueError(
             f"truncated_normal requires upper > lower, got lower={lower} upper={upper}"
         )
-    rng = key._generator()
+    if std < 0:
+        raise ValueError(f"truncated_normal requires std >= 0, got std={std}")
     target_shape = _shape_tuple(shape)
-    out = np.empty(target_shape, dtype=np.float64)
-    out_flat = out.reshape(-1)
-    n = out_flat.size
-    filled = 0
-    while filled < n:
-        chunk = rng.standard_normal(size=n - filled) * std + mean
-        keep = chunk[(chunk >= lower) & (chunk <= upper)]
-        take = min(keep.size, n - filled)
-        out_flat[filled : filled + take] = keep[:take]
-        filled += take
+    if std == 0:
+        if not lower <= mean <= upper:
+            raise ValueError(
+                f"truncated_normal with std=0 is the point mass at mean={mean}, "
+                f"which lies outside [{lower}, {upper}]"
+            )
+        return np.full(target_shape, mean, dtype=_np_dtype(dtype))
+    rng = key._generator()
+    a = (lower - mean) / std
+    b = (upper - mean) / std
+    n = int(np.prod(target_shape, dtype=np.int64)) if target_shape else 1
+    if _standard_normal_mass(a, b) >= _TRUNCATED_NORMAL_PLAIN_MASS:
+        out = np.empty(target_shape, dtype=np.float64)
+        out_flat = out.reshape(-1)
+        filled = 0
+        while filled < n:
+            chunk = rng.standard_normal(size=n - filled) * std + mean
+            keep = chunk[(chunk >= lower) & (chunk <= upper)]
+            take = min(keep.size, n - filled)
+            out_flat[filled : filled + take] = keep[:take]
+            filled += take
+    else:
+        z = _truncated_standard_normal(rng, n, a, b)
+        out = (z * std + mean).reshape(target_shape)
     return np.asarray(out.reshape(target_shape), dtype=_np_dtype(dtype))
 
 
@@ -552,14 +668,29 @@ def mala_sample(
     noise_scale = _math.sqrt(2.0 * eta * temperature)
     var_proposal = 2.0 * eta * temperature
 
+    # E(y) and ∇E(y) for the state the chain currently holds. Whichever of
+    # (y, y_prop) survives a step was fully evaluated in that step, so the next
+    # step never needs to call the user's energy network again for it. Keyed on
+    # identity, which is exact here: _collect_chain threads y_next through
+    # unchanged, so the rejected branch is the same object.
+    cached: dict[str, Any] = {"y": None, "energy": 0.0, "grad": None}
+
+    def _energy_and_grad(y: np.ndarray) -> _Tuple[float, np.ndarray]:
+        if cached["y"] is not y:
+            cached["y"] = y
+            cached["energy"] = float(energy_fn(y))
+            cached["grad"] = np.asarray(grad_fn(y)).astype(y.dtype, copy=False)
+        return float(cached["energy"]), cached["grad"]
+
     def step_fn(y: np.ndarray, k: "RNGKey") -> _Tuple[np.ndarray, "RNGKey", dict]:
-        grad_y = np.asarray(grad_fn(y)).astype(y.dtype, copy=False)
+        energy_y, grad_y = _energy_and_grad(y)
         prop_key, accept_key, next_key = k.split(3)
         noise = normal(prop_key, shape=y.shape, dtype=str(y.dtype))
         y_prop = y - eta * grad_y + noise_scale * noise.astype(y.dtype, copy=False)
         grad_y_prop = np.asarray(grad_fn(y_prop)).astype(y.dtype, copy=False)
+        energy_prop = float(energy_fn(y_prop))
         # Log MH ratio.
-        d_energy = float(energy_fn(y)) - float(energy_fn(y_prop))
+        d_energy = energy_y - energy_prop
         diff_fwd = y_prop - y + eta * grad_y
         diff_back = y - y_prop + eta * grad_y_prop
         log_q_ratio = (
@@ -568,6 +699,10 @@ def mala_sample(
         log_alpha = d_energy / temperature + log_q_ratio
         u = uniform(accept_key, shape=(), dtype=str(y.dtype))
         accept = _math.log(max(float(u), 1e-30)) < log_alpha
+        if accept:
+            cached["y"] = y_prop
+            cached["energy"] = energy_prop
+            cached["grad"] = grad_y_prop
         y_next = y_prop if accept else y
         return y_next, next_key, {"accept": bool(accept)}
 
@@ -637,19 +772,35 @@ def hmc_sample(
     mass_inv = (1.0 / mass_arr).astype(init_arr.dtype, copy=False)
     sqrt_mass = np.sqrt(mass_arr).astype(init_arr.dtype, copy=False)
 
+    # E(q) for the position the chain currently holds; q_next is always one of
+    # the two points whose energy this step already evaluated. Identity-keyed
+    # for the same reason as in `mala_sample`. The leapfrog gradient calls are
+    # genuine work and are not cached.
+    cached: dict[str, Any] = {"q": None, "energy": 0.0}
+
+    def _energy(q: np.ndarray) -> float:
+        if cached["q"] is not q:
+            cached["q"] = q
+            cached["energy"] = float(energy_fn(q))
+        return float(cached["energy"])
+
     def step_fn(q: np.ndarray, k: "RNGKey") -> _Tuple[np.ndarray, "RNGKey", dict]:
         p_key, accept_key, next_key = k.split(3)
         p = sqrt_mass * normal(p_key, shape=q.shape, dtype=str(q.dtype)).astype(
             q.dtype, copy=False
         )
-        H0 = float(energy_fn(q)) + 0.5 * float(np.sum(mass_inv * p * p))
+        H0 = _energy(q) + 0.5 * float(np.sum(mass_inv * p * p))
         q_new, p_new = _hmc_leapfrog(
             q, p, grad_fn, step_size, n_leapfrog, mass_inv
         )
-        H1 = float(energy_fn(q_new)) + 0.5 * float(np.sum(mass_inv * p_new * p_new))
+        energy_new = float(energy_fn(q_new))
+        H1 = energy_new + 0.5 * float(np.sum(mass_inv * p_new * p_new))
         u = uniform(accept_key, shape=(), dtype=str(q.dtype))
         log_alpha = H0 - H1
         accept = _math.log(max(float(u), 1e-30)) < log_alpha
+        if accept:
+            cached["q"] = q_new
+            cached["energy"] = energy_new
         q_next = q_new if accept else q
         return q_next, next_key, {"accept": bool(accept)}
 

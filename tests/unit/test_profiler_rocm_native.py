@@ -223,3 +223,102 @@ def test_capture_survives_a_filesystem_timestamp_behind_the_wall_clock(
     )
     assert artifact["status"] == "collected", artifact.get("reason")
     assert artifact["proof"]["dispatch_activity_seen"] is True
+
+
+def _fail_the_first_walk(monkeypatch) -> None:
+    """Make the next `rglob` list part of the tree and then fail.
+
+    The realistic shape of the defect: a file rotated or cleaned away by
+    another process between listing and `stat`, or a permission error partway
+    through. Patched at `rglob` rather than `stat` because whether `is_file()`
+    routes through `Path.stat` changed between CPython 3.12 and 3.14.
+    """
+    real_rglob = Path.rglob
+    remaining = {"failures": 1}
+
+    def flaky_rglob(self, pattern, *args, **kwargs):
+        entries = list(real_rglob(self, pattern, *args, **kwargs))
+        if remaining["failures"]:
+            remaining["failures"] -= 1
+            yield from entries[:1]
+            raise PermissionError(13, "Permission denied", str(self))
+        yield from entries
+
+    monkeypatch.setattr(Path, "rglob", flaky_rglob)
+
+
+def test_snapshot_of_an_incomplete_walk_is_not_an_empty_directory(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from tessera.compiler.profiler_rocm_native import _snapshot_files
+
+    (tmp_path / "a.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "b.json").write_text("{}", encoding="utf-8")
+    assert _snapshot_files(tmp_path) is not None
+    assert _snapshot_files(tmp_path / "empty").keys() == set()
+
+    _fail_the_first_walk(monkeypatch)
+    assert _snapshot_files(tmp_path) is None
+
+
+def test_unreadable_baseline_blocks_instead_of_claiming_stale_traces(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A baseline that could not be established must not read as "the output
+    directory was empty" — against an empty baseline every trace left by an
+    earlier run looks freshly written, and the capture would report `collected`
+    on someone else's evidence.
+    """
+    monkeypatch.setattr(
+        "tessera.compiler.profiler_rocm_native.probe_rocm_native_capabilities",
+        lambda **_: {"rocprofiler_native_interface": True},
+    )
+    stale = tmp_path / "results.json"
+    stale.write_text(json.dumps(_official_like_payload()), encoding="utf-8")
+    (tmp_path / "other.json").write_text("{}", encoding="utf-8")
+    launched: list[tuple] = []
+
+    def run(command, **kwargs):
+        launched.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("tessera.compiler.profiler_rocm_native.subprocess.run", run)
+    _fail_the_first_walk(monkeypatch)
+    artifact = collect_rocprofv3(ROCmCaptureRequest(
+        application=("./kernel",), output_directory=tmp_path,
+    ))
+    assert artifact["status"] == "blocked"
+    assert artifact["reason"] == "ROCPROFILER_OUTPUT_BASELINE_UNREADABLE"
+    assert launched == []
+    assert artifact["process"]["returncode"] is None
+    assert artifact["proof"]["dispatch_activity_seen"] is False
+    assert artifact["provider_trace"]["record_count"] == 0
+    validate_rocm_native_capture(artifact)
+
+
+def test_rtg_unreadable_baseline_blocks_with_a_named_reason(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    library = tmp_path / "rtg_tracer.so"
+    library.write_bytes(b"test")
+    output = tmp_path / "trace"
+    output.mkdir()
+    (output / "stale.txt").write_text(
+        "HSA: pid:123 tid:7 dispatch queue:0xabc agent:1 signal:9 "
+        "name:'tessera_gemm' start:1000 stop:9000 id:4\n",
+        encoding="utf-8",
+    )
+
+    def run(command, **kwargs):  # pragma: no cover - must never be reached
+        raise AssertionError("the traced application must not be launched")
+
+    monkeypatch.setattr("tessera.compiler.profiler_rocm_native.subprocess.run", run)
+    _fail_the_first_walk(monkeypatch)
+    artifact = collect_rtg_tracer(
+        application=("./application",), output_directory=output,
+        rtg_library=library,
+    )
+    assert artifact["status"] == "blocked"
+    assert artifact["reason"] == "RTG_OUTPUT_BASELINE_UNREADABLE"
+    assert artifact["dispatch_records"] == []
+    validate_rocm_native_capture(artifact)

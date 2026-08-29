@@ -17,6 +17,10 @@ Limitations of this v1 (numpy-tape) implementation:
 * Only single-output functions are supported. ``fn`` must return a single
   numpy array — tuple outputs would require multi-output cotangents on the tape,
   which the v1 tape doesn't yet support.
+* ``fn`` must be **pure in its recorded inputs**: backward differentiates the
+  recomputed trace, so stateful randomness or a parameter mutated between the
+  two passes yields a gradient belonging to neither execution. The recomputed
+  output is compared against the recorded one and a mismatch raises.
 * Parameter gradients flow correctly through the buffer-id registry.
 * Non-Parameter input cotangents flow through the outer tape via the
   rematerialize entry's VJP.
@@ -36,6 +40,36 @@ from .tape import (
     _describe,
     _to_forward_arg,
 )
+
+
+def _check_recomputed(forward_out: np.ndarray, recomputed) -> None:
+    """Refuse a recomputation that did not reproduce the forward pass.
+
+    Checkpointing differentiates the *recomputed* trace, so it is only the
+    gradient of the realized forward when ``fn`` is pure in its recorded
+    inputs. Stateful randomness (an unseeded dropout mask) or a parameter
+    mutated between forward and backward breaks that, and the gradients then
+    correspond to neither execution — the silent wrong answer this check
+    exists to convert into a diagnostic (#21a).
+    """
+    recomputed_arr = np.asarray(recomputed)
+    if recomputed_arr.shape == np.shape(forward_out):
+        # `equal_nan` only where NaN is representable — numpy rejects it for
+        # integer and object arrays.
+        inexact = (np.issubdtype(recomputed_arr.dtype, np.inexact)
+                   and np.issubdtype(np.asarray(forward_out).dtype, np.inexact))
+        if np.array_equal(recomputed_arr, forward_out, equal_nan=inexact):
+            return
+    raise TesseraAutodiffError(
+        "rematerialize: re-running fn on backward did not reproduce the "
+        "forward output, so the recomputed intermediates being "
+        "differentiated are not the ones the forward pass used and the "
+        "gradient would belong to neither. `rematerialize` requires fn to "
+        "be a pure function of its recorded inputs — draw randomness from "
+        "an explicit key (`tessera.ops.dropout(..., seed=...)`) rather than "
+        "process state, and do not mutate a Parameter between the forward "
+        "and backward passes."
+    )
 
 
 def rematerialize(fn: Callable) -> Callable:
@@ -82,6 +116,7 @@ def rematerialize(fn: Callable) -> Callable:
                 # describes them with their proper provenance.
                 sub_forward = tuple(_to_forward_arg(a) for a in kept_args)
                 sub_out = fn(*sub_forward, **kwargs)
+                _check_recomputed(out, sub_out)
                 sub_t.backward(sub_out, cotangent=dout)
             # Map cotangents back to input order — the outer tape only sees
             # array-like inputs, so non-array positional args don't get a slot.

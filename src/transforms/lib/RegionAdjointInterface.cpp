@@ -375,6 +375,79 @@ static LogicalResult buildForAdjoint(
                   rankedStateType.getDimSize(dim))
             return failure();
         Value checkpointState = forOp.getInitArgs()[stateIndex];
+        // Under a dense interior checkpoint set (1..trip-1, which is what the
+        // "save" policy always produces) the chain below reduces to arithmetic:
+        // the largest checkpoint <= ordinal is exactly ordinal - 1. Emitting
+        // one dynamic-offset slice instead of a per-slot select chain turns
+        // O(trip) emitted IR and O(trip) whole-tensor selects per backward
+        // iteration into O(1).
+        bool denseInterior = !checkpointIndices.empty();
+        for (auto [slot, checkpoint] :
+             llvm::enumerate(checkpointIndices.asArrayRef()))
+          denseInterior &= checkpoint == static_cast<int64_t>(slot) + 1;
+
+        // Decide the one way this path can fail before building any of it, so a
+        // refusal does not leave a half-emitted select behind.
+        if (denseInterior && rankedStateType && !shapeTape)
+          for (int64_t dim : rankedStateType.getShape())
+            if (ShapedType::isDynamic(dim))
+              return failure();
+
+        if (denseInterior) {
+          Value one = arith::ConstantIndexOp::create(builder, loc, 1);
+          Value available = arith::CmpIOp::create(
+              builder, loc, arith::CmpIPredicate::uge, ordinal, one);
+          auto selectState = scf::IfOp::create(
+              builder, loc, TypeRange{stateType}, available, true);
+          {
+            OpBuilder::InsertionGuard stateGuard(builder);
+            builder.setInsertionPointToStart(selectState.thenBlock());
+            // The chain this replaces stopped at its last slot for an ordinal
+            // past the final checkpoint; clamp so the slice cannot run off the
+            // tape if an ordinal ever exceeds the checkpoint count.
+            Value lastSlot = arith::ConstantIndexOp::create(
+                builder, loc,
+                static_cast<int64_t>(checkpointIndices.size()) - 1);
+            Value slotIndex = arith::MinUIOp::create(
+                builder, loc,
+                arith::SubIOp::create(builder, loc, ordinal, one), lastSlot);
+            Value retained;
+            if (rankedStateType) {
+              SmallVector<OpFoldResult> offsets{OpFoldResult(slotIndex)};
+              SmallVector<OpFoldResult> sizes{builder.getIndexAttr(1)};
+              SmallVector<OpFoldResult> strides(rankedStateType.getRank() + 1,
+                                                builder.getIndexAttr(1));
+              for (auto [dimIndex, dim] :
+                   llvm::enumerate(rankedStateType.getShape())) {
+                offsets.push_back(builder.getIndexAttr(0));
+                if (ShapedType::isDynamic(dim)) {
+                  Value dimIndexValue = arith::ConstantIndexOp::create(
+                      builder, loc, dimIndex);
+                  sizes.push_back(OpFoldResult(tensor::ExtractOp::create(
+                      builder, loc, shapeTape,
+                      ValueRange{slotIndex, dimIndexValue})));
+                } else {
+                  sizes.push_back(OpFoldResult(builder.getIndexAttr(dim)));
+                }
+              }
+              retained = tensor::ExtractSliceOp::create(
+                  builder, loc, rankedStateType,
+                  explicitResiduals[tapeOrdinal], offsets, sizes, strides);
+            } else {
+              retained = tensor::ExtractOp::create(
+                  builder, loc, explicitResiduals[tapeOrdinal], slotIndex);
+            }
+            scf::YieldOp::create(builder, loc, retained);
+          }
+          {
+            OpBuilder::InsertionGuard stateGuard(builder);
+            builder.setInsertionPointToStart(selectState.elseBlock());
+            scf::YieldOp::create(builder, loc, checkpointState);
+          }
+          primalValues[stateIndex] = selectState.getResult(0);
+          continue;
+        }
+
         for (auto [slot, checkpoint] :
              llvm::enumerate(checkpointIndices.asArrayRef())) {
           Value checkpointValue = arith::ConstantIndexOp::create(

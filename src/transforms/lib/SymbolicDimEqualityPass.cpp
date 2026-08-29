@@ -50,6 +50,8 @@
 //   SYMDIM_RESHAPE_VIOLATION
 //   SYMDIM_TRANSPOSE_VIOLATION
 //   SYMDIM_MATMUL_CONTRACT_VIOLATION
+//   SYMDIM_BINDING_MALFORMED
+//   SYMDIM_DIM_SIZES_MALFORMED
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -197,6 +199,50 @@ static SmallVector<Binding, 4> readBindings(func::FuncOp fn) {
         out.push_back(*parsed);
   }
   return out;
+}
+
+static bool transposedAttr(Operation *op, StringRef name) {
+  auto attr = op->getAttrOfType<BoolAttr>(name);
+  return attr && attr.getValue();
+}
+
+// readDimSizes and readBindings are best-effort readers: they skip what they
+// cannot interpret. That is the wrong default for a verifier — a typo in a
+// binding string disables exactly the equation it was written to check while
+// the pass still reports success — so the well-formedness of both attributes is
+// decided here, once, and fails closed. Out-of-scope grammar (constants,
+// subtraction, parentheses) still parses; it resolves to unknown symbols and is
+// skipped later, so only genuinely malformed entries reach these errors.
+static LogicalResult checkDimAttrsWellFormed(func::FuncOp fn) {
+  bool sawMalformed = false;
+  if (auto dict = fn->getAttrOfType<DictionaryAttr>("tessera.dim_sizes")) {
+    for (NamedAttribute named : dict.getValue()) {
+      if (!isa<IntegerAttr>(named.getValue())) {
+        fn.emitOpError("SYMDIM_DIM_SIZES_MALFORMED: symbol '")
+            << named.getName().strref()
+            << "' must map to an integer attribute";
+        sawMalformed = true;
+      }
+    }
+  }
+  if (auto arr = fn->getAttrOfType<ArrayAttr>("tessera.dim_bindings")) {
+    for (Attribute a : arr) {
+      auto s = dyn_cast<StringAttr>(a);
+      if (!s) {
+        fn.emitOpError(
+            "SYMDIM_BINDING_MALFORMED: every tessera.dim_bindings entry must "
+            "be a string");
+        sawMalformed = true;
+        continue;
+      }
+      if (!parseBinding(s.getValue())) {
+        fn.emitOpError("SYMDIM_BINDING_MALFORMED: cannot parse binding '")
+            << s.getValue() << "'";
+        sawMalformed = true;
+      }
+    }
+  }
+  return failure(sawMalformed);
 }
 
 // W4.2 (2026-08-12): consume a typed coefficient-vector carrier instead of
@@ -568,11 +614,12 @@ struct SymbolicDimEquality
     auto rhs = readDimNames(op, "tessera.dim_names_rhs");
     if (!lhs || !rhs) return success();
     if (lhs->empty() || rhs->empty()) return success();
-    // For non-transposed matmul, the contracting dim is lhs.back()
-    // and rhs.front().  Transposed variants (`transposeA`/`transposeB`)
-    // shift these positions; V1 reads the canonical orientation.
-    const std::string &kL = lhs->back();
-    const std::string &kR = rhs->front();
+    // transposeA stores A as KxM and transposeB stores B as NxK, moving the
+    // contracting position to the other end of that operand's name list.
+    const std::string &kL = transposedAttr(op, "transposeA") ? lhs->front()
+                                                             : lhs->back();
+    const std::string &kR = transposedAttr(op, "transposeB") ? rhs->back()
+                                                             : rhs->front();
     if (kL != kR) {
       op->emitOpError(
           "SYMDIM_MATMUL_CONTRACT_VIOLATION: lhs contracts on '")
@@ -733,11 +780,19 @@ struct SymbolicDimEquality
         failed = true;
       if (mlir::failed(crossCheck(op, "tessera.dim_names_rhs", rhsIt->second)))
         failed = true;
+      // The result keeps every lhs name except the contracting one, then the
+      // rhs's non-contracting name. Which end each of those sits on depends on
+      // transposeA/transposeB, so reading a fixed position mislabels the
+      // result and cascades into a downstream flow mismatch.
+      bool transA = transposedAttr(op, "transposeA");
+      bool transB = transposedAttr(op, "transposeB");
       DimNameList out;
-      for (size_t i = 0; i + 1 < lhsIt->second.size(); ++i)
-        out.push_back(lhsIt->second[i]);
+      const DimNameList &lhsNames = lhsIt->second;
+      for (size_t i = 0; i < lhsNames.size(); ++i)
+        if (i != (transA ? 0 : lhsNames.size() - 1))
+          out.push_back(lhsNames[i]);
       if (!rhsIt->second.empty())
-        out.push_back(rhsIt->second.back());
+        out.push_back(transB ? rhsIt->second.front() : rhsIt->second.back());
       valueDims[op->getResult(0)] = out;
 
     } else if (name == "tessera.reshape") {
@@ -1005,6 +1060,8 @@ struct SymbolicDimEquality
     getOperation().walk([&](func::FuncOp fn) {
       auto sizes = readDimSizes(fn);
       auto bindings = readBindings(fn);
+      if (failed(checkDimAttrsWellFormed(fn)))
+        anyFailure = true;
       if (failed(checkTypedPresburger(fn)))
         anyFailure = true;
       if (failed(checkNonlinearShapeGuards(fn)))

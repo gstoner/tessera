@@ -1105,7 +1105,8 @@ def verify_synthesized_matmul(region: "MatmulRegion", *, seed: int = 0,
         verdict = True
     else:
         verdict = bool(np.allclose(out, region.reference(A, B),
-                                   atol=_effective_atol(r, atol)))
+                                   atol=_effective_atol(r, atol),
+                                   rtol=_effective_rtol(r)))
     _VERIFY_CACHE[key] = verdict
     return verdict
 
@@ -1179,6 +1180,7 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
         else:
             verdict = bool(np.allclose(out, region.reference(*probes),
                                        atol=_effective_atol(r, atol),
+                                       rtol=_effective_rtol(r),
                                        equal_nan=True))
     _VERIFY_CACHE[key] = verdict
     return verdict

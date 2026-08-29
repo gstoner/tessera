@@ -6,6 +6,42 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
+passes changed; only the Mac's fixture set could be run.**
+The P2 code-review batch touched passes every backend lowers through:
+`TesseraToLinalgPass` (rejection checks moved before IR creation),
+`SymbolicDimEqualityPass` (transposeA/B in the contract + flow rules, and
+malformed `dim_bindings`/`dim_sizes` now fail closed),
+`AdjointCollectiveInsertionPass` (cotangent-array bounds),
+`AutodiffPairedPass` (dynamic while state refused; erase re-checks use_empty),
+`RegionAdjointInterface` (O(1) dense-checkpoint slot),
+`ActivationRematerializationPass` (difference-array peak),
+`WarpSpecLegalityPass` (transitive staged-data provenance),
+`TileBufferArenaPass` (non-scalar element types),
+`IRContractLegalityPass` (narrowing-accum restricted to same-domain pairs),
+`MaterializeControlPayloadPass` (shared body-stub conflict),
+`InsertRecomputePass` (real live-set), `LegalizeSpaceTime` + the CPU stencil
+hook (orders 6 and 8 implemented; unimplemented orders refused), and
+`AsyncPrefetch` (memory-write dependence).
+Evidence produced: `lit tests/tessera-ir/` **437 discovered, 396 passed, 41
+unsupported, 0 failed** on the Mac (M1 Max, brew LLVM/MLIR 23.1.0, assertions
+OFF), plus per-finding reproductions with controls. **Not evidence for this
+backend's own fixtures.**
+
+*What this queue must run.* `ninja -C build check-tessera-rocm` — the 66-test
+suite no PR check runs, and the one that caught the rank-4 dropout regression
+above. `WarpSpecLegalityPass` is the highest-risk change here: it now chases
+staged-data provenance through intervening ops, so an mma reading a copy behind
+a cast or slice is newly flagged. That is the intended fix, but it can only
+turn into a false positive on fixtures this host owns. Also owed from the same
+batch: the rewritten fused HIP wrapper (all 10 `hipMalloc`/`hipMemcpy` calls
+now status-checked, rc 2 = allocation, rc 3 = transfer/launch, single
+`cleanup:` label) needs a live `rocm_hip` fused-region run and ideally an
+induced-OOM check that a failed transfer declines to the reference rather than
+returning garbage; the k-outer prologue body in the HIP lane; and the memoized
+ROCm FFT availability probe (measured here at 0.371 ms/call, ~1.45 s per long
+STFT) needs its effect on composed STFT dispatch confirmed.
+
 Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; execution unchanged, one setup trap recorded.**
 The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
 tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`

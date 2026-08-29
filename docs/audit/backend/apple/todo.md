@@ -7,6 +7,34 @@ last_updated: 2026-08-29
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
+passes changed; only the Mac's fixture set could be run.**
+The P2 code-review batch touched passes every backend lowers through:
+`TesseraToLinalgPass` (rejection checks moved before IR creation),
+`SymbolicDimEqualityPass` (transposeA/B in the contract + flow rules, and
+malformed `dim_bindings`/`dim_sizes` now fail closed),
+`AdjointCollectiveInsertionPass` (cotangent-array bounds),
+`AutodiffPairedPass` (dynamic while state refused; erase re-checks use_empty),
+`RegionAdjointInterface` (O(1) dense-checkpoint slot),
+`ActivationRematerializationPass` (difference-array peak),
+`WarpSpecLegalityPass` (transitive staged-data provenance),
+`TileBufferArenaPass` (non-scalar element types),
+`IRContractLegalityPass` (narrowing-accum restricted to same-domain pairs),
+`MaterializeControlPayloadPass` (shared body-stub conflict),
+`InsertRecomputePass` (real live-set), `LegalizeSpaceTime` + the CPU stencil
+hook (orders 6 and 8 implemented; unimplemented orders refused), and
+`AsyncPrefetch` (memory-write dependence).
+Evidence produced: `lit tests/tessera-ir/` **437 discovered, 396 passed, 41
+unsupported, 0 failed** on the Mac (M1 Max, brew LLVM/MLIR 23.1.0, assertions
+OFF), plus per-finding reproductions with controls. **Not evidence for this
+backend's own fixtures.**
+
+*What this queue must run.* Nothing Apple-specific changed, but the Apple lane
+lowers through every pass listed above, and the Mac is where the 437-test
+fixture evidence came from. The one Apple-adjacent item is that this batch's
+`lit` run is the only fixture evidence for all four backends' shared passes —
+treat it as necessary, not sufficient, for the other three.
+
 Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **not applicable to Apple execution, but the macOS install line changed.**
 The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
 tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`

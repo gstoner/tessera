@@ -54,6 +54,11 @@ static int64_t staticByteSize(Value v) {
   auto mr = dyn_cast<MemRefType>(v.getType());
   if (!mr || !mr.hasStaticShape())
     return -1;
+  // getIntOrFloatBitWidth asserts on anything else, so a vector/complex/index
+  // element type must reach the unplaceable-group path the same way an unknown
+  // static size does — not take the pass down.
+  if (!mr.getElementType().isIntOrFloat())
+    return -1;
   int64_t elems = 1;
   for (int64_t d : mr.getShape())
     elems *= d;
@@ -68,7 +73,7 @@ static int64_t staticByteSize(Value v) {
 // the typed access is misaligned. Scalar alignment = element byte width.
 static int64_t elementAlign(Value v) {
   auto mr = dyn_cast<MemRefType>(v.getType());
-  if (!mr)
+  if (!mr || !mr.getElementType().isIntOrFloat())
     return 1;
   int64_t bits = mr.getElementType().getIntOrFloatBitWidth();
   return bits > 0 ? (bits + 7) / 8 : 1;
@@ -238,6 +243,14 @@ struct TileBufferArena
       Operation *insertionPoint, OpBuilder &b) {
     if (!func || func.empty() || allocs.empty() || !insertionPoint)
       return;
+    // byteSize below needs a scalar element width. Decide that for every member
+    // before any IR is built, so an unsupported element type leaves the cohort
+    // unplaced instead of aborting midway through a partly-emitted arena.
+    for (Operation *op : allocs) {
+      auto type = dyn_cast<MemRefType>(op->getOperand(0).getType());
+      if (!type || !type.getElementType().isIntOrFloat())
+        return;
+    }
     Location loc = insertionPoint->getLoc();
     b.setInsertionPoint(insertionPoint);
     Value zero = arith::ConstantIndexOp::create(b, loc, 0);

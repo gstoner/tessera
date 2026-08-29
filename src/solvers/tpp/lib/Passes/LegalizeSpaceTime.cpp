@@ -95,6 +95,18 @@ struct LegalizeSpaceTime
           failed = true;
           return;
         }
+        // Bound the order to the tap sets the target hooks actually implement.
+        // An accepted-but-unimplemented order used to reach the CPU hook and
+        // come back computed at a lower accuracy, which a convergence study
+        // then blames on the model rather than the compiler.
+        int64_t orderValue = order.getInt();
+        if (orderValue != 2 && orderValue != 4 && orderValue != 6 &&
+            orderValue != 8) {
+          op->emitError("tpp: stencil 'order' ")
+              << orderValue << " is not implemented (expected 2, 4, 6, or 8)";
+          failed = true;
+          return;
+        }
 
         auto spacing = op->getAttrOfType<ArrayAttr>("spacing");
         if (!spacing) {

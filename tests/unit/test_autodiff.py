@@ -72,6 +72,42 @@ class TestVJPGemm:
         numerical = _numerical_grad(fn, A.copy())
         _jacobian_close(analytic, numerical)
 
+    def test_plain_matmul_backward_does_exactly_two_gemms(self, monkeypatch):
+        """`activation='none'` differentiates the identity, so the rule used
+        to compute the preactivation A@B — a third full GEMM on the hottest
+        backward in the tape — only to multiply dout by an array of ones
+        (2026-08-29 review, P2). The activation paths still need it."""
+        from tessera.autodiff import vjp as vjp_mod
+
+        A = np.random.randn(6, 5)
+        B = np.random.randn(5, 4)
+        dout = np.random.randn(6, 4)
+        bias = np.random.randn(4)
+
+        counted = []
+        real_matmul = np.matmul
+
+        def counting(*args, **kwargs):
+            counted.append(1)
+            return real_matmul(*args, **kwargs)
+
+        monkeypatch.setattr(vjp_mod.np, "matmul", counting)
+        vjp_mod.vjp_gemm(dout, A, B, bias=bias)
+        plain = len(counted)
+        counted.clear()
+        vjp_mod.vjp_gemm(dout, A, B, bias=bias, activation="relu")
+        activated = len(counted)
+        monkeypatch.undo()
+
+        assert plain == 2, f"dA and dB only; got {plain} matmuls"
+        assert activated == 3, "the activation derivative needs the preactivation"
+
+        # Unchanged answers: the guard is a skip, not a different rule.
+        dA, dB, d_bias = vjp_mod.vjp_gemm(dout, A, B, bias=bias)
+        np.testing.assert_allclose(dA, dout @ B.T)
+        np.testing.assert_allclose(dB, A.T @ dout)
+        np.testing.assert_allclose(d_bias, dout.sum(axis=0))
+
 
 class TestVJPElementwise:
     def test_add_broadcast(self):

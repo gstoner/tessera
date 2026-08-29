@@ -399,3 +399,37 @@ def test_a_late_registered_fft_lane_gains_the_composed_ops():
         assert candidates_for("late_probe_backend", op), (
             f"a late FFT lane did not bring {op} with it"
         )
+
+
+# ── a signal shorter than one window is refused, not crashed through ─────────
+
+
+def test_stft_region_refuses_a_signal_shorter_than_one_window():
+    """`frames` used to advertise one frame while `reference` multiplied an
+    n-sample slice by the length-win window, so the ValueError escaped through
+    `STFTCandidate.run`'s decline-to-reference handler (which calls the same
+    reference) and the Decision #21 contract became a crash. The shipped
+    `tessera.ops.stft` zero-pads instead; a padded region is a different plan,
+    so this one fails closed at construction rather than inventing semantics."""
+    with pytest.raises(ValueError, match="n >= win"):
+        SC.SpectralSTFTRegion(32, 64, 16)
+
+
+@pytest.mark.parametrize("win,hop", [(0, 16), (64, 0), (-4, 16)])
+def test_stft_region_refuses_a_degenerate_window_or_hop(win, hop):
+    with pytest.raises(ValueError, match="win >= 1 and hop >= 1"):
+        SC.SpectralSTFTRegion(256, win, hop)
+
+
+def test_stft_frames_and_reference_agree_at_the_boundary():
+    # n == win is the smallest legal region: exactly one frame, and the frame
+    # count the property reports is the count the reference produces.
+    region = SC.SpectralSTFTRegion(64, 64, 16)
+    x = np.random.default_rng(0).standard_normal(64).astype(np.float32)
+    w = np.hanning(64).astype(np.float32)
+    assert region.frames == 1
+    assert region.reference(x, w).shape[-2] == region.frames
+    wide = SC.SpectralSTFTRegion(256, 64, 32)
+    assert wide.reference(
+        np.random.default_rng(1).standard_normal(256).astype(np.float32),
+        w).shape[-2] == wide.frames

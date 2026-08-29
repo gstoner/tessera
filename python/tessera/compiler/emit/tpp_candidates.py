@@ -132,7 +132,7 @@ def _cpu_lib() -> ctypes.CDLL | None:
                 [cxx, "-O2", "-std=c++17", "-shared", "-fPIC", str(_CPU_SRC),
                  "-o", so], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             lib = ctypes.CDLL(so)
-            lib.ts_stencil_grad_cpu.restype = None
+            lib.ts_stencil_grad_cpu.restype = ctypes.c_int
             lib.ts_stencil_grad_cpu.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
                 ctypes.c_int, ctypes.c_int, ctypes.c_float]
@@ -144,6 +144,10 @@ def _cpu_lib() -> ctypes.CDLL | None:
 
 def _cptr(a: np.ndarray) -> ctypes.c_void_p:
     return a.ctypes.data_as(ctypes.c_void_p)
+
+
+class TesseraStencilHookError(RuntimeError):
+    """The CPU stencil hook rejected its arguments or the requested order."""
 
 
 # --- candidate ---------------------------------------------------------------
@@ -167,10 +171,21 @@ class CpuStencilGradCandidate(Candidate):
         try:
             fin = np.ascontiguousarray(f, np.float32)
             out = np.empty((region.nx, region.ny), np.float32)
-            lib.ts_stencil_grad_cpu(_cptr(fin), _cptr(out), region.nx,
-                                    region.ny, region.axis, region.order,
-                                    region.spacing[region.axis])
+            status = lib.ts_stencil_grad_cpu(
+                _cptr(fin), _cptr(out), region.nx, region.ny, region.axis,
+                region.order, region.spacing[region.axis])
+            if status != 0:
+                # The hook refuses an order it does not implement rather than
+                # returning a lower-order answer under the requested order's
+                # name, so a non-zero status must not be smoothed over.
+                raise TesseraStencilHookError(
+                    f"ts_stencil_grad_cpu refused order={region.order} "
+                    f"axis={region.axis} nx={region.nx} ny={region.ny} "
+                    f"(status {status})"
+                )
             return out, "cpu_stencil_grad"
+        except TesseraStencilHookError:
+            raise
         except Exception:
             return region.reference(f), "reference"
 

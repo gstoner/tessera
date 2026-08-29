@@ -533,26 +533,31 @@ struct MatmulLowering : public RewritePattern {
         !outTy.hasStaticShape())
       return rewriter.notifyMatchFailure(op, "static shapes required");
 
-    Location loc = op->getLoc();
-    // transposeA: A stored KxM; transposeB: B stored NxK. Materialize the
-    // transpose, then a plain matmul. (The op verifier already checked the
-    // post-transpose contracting dims agree.)
-    Value lhs = op->getOperand(0), rhs = op->getOperand(1);
-    if (attrIsSetTrue(op, "transposeA"))
-      lhs = emitTranspose2d(rewriter, loc, lhs);
-    if (attrIsSetTrue(op, "transposeB"))
-      rhs = emitTranspose2d(rewriter, loc, rhs);
-    auto lhsTy = cast<RankedTensorType>(lhs.getType());
-    auto rhsTy = cast<RankedTensorType>(rhs.getType());
+    // transposeA: A stored KxM; transposeB: B stored NxK. Every rejection below
+    // must be decided from the types alone: a pattern that creates IR and then
+    // returns failure leaves those ops behind (the greedy driver does not roll
+    // a failed pattern back) and keeps re-running on the changed IR, so the
+    // whole pass aborts without converging.
+    bool transA = attrIsSetTrue(op, "transposeA");
+    bool transB = attrIsSetTrue(op, "transposeB");
 
-    int64_t M = lhsTy.getDimSize(0), K = lhsTy.getDimSize(1);
-    int64_t K2 = rhsTy.getDimSize(0), N = rhsTy.getDimSize(1);
+    int64_t M = lhsTy0.getDimSize(transA ? 1 : 0);
+    int64_t K = lhsTy0.getDimSize(transA ? 0 : 1);
+    int64_t K2 = rhsTy0.getDimSize(transB ? 1 : 0);
+    int64_t N = rhsTy0.getDimSize(transB ? 0 : 1);
     if (K != K2 || outTy.getDimSize(0) != M || outTy.getDimSize(1) != N)
       return rewriter.notifyMatchFailure(op, "matmul shape mismatch");
 
     Type elem = outTy.getElementType();
     if (!isa<FloatType>(elem))
       return rewriter.notifyMatchFailure(op, "Phase 1 matmul is float-only");
+
+    Location loc = op->getLoc();
+    Value lhs = op->getOperand(0), rhs = op->getOperand(1);
+    if (transA)
+      lhs = emitTranspose2d(rewriter, loc, lhs);
+    if (transB)
+      rhs = emitTranspose2d(rewriter, loc, rhs);
 
     // ABI §12.5 / numeric policy: low-precision storage matmul accumulates in
     // f32. For bf16/f16 we run linalg.matmul into an f32 init (the named op

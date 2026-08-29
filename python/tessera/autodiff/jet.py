@@ -327,7 +327,14 @@ def jet_flash_attn(
         # first block (empty prefix) — exactly the right annihilation.
         with np.errstate(invalid="ignore"):
             alpha = np.where(np.isneginf(m_run), 0.0, np.exp(m_run - m_new))
-        p = jet_map(W, "exp", _shift_order0(scores, m_new))
+        # A row whose scores are all −inf in this block (an attn_bias padding
+        # mask) has m_new = −inf, and −inf − (−inf) is NaN, which then
+        # contaminates ℓ and o for every later block through the alpha
+        # rescale. Shifting by 0 instead leaves the score at −inf, so
+        # exp gives the 0 weight the mask asks for and a row masked only in
+        # its leading blocks stays finite — matching `ops.flash_attn`.
+        shift = np.where(np.isneginf(m_new), 0.0, m_new)
+        p = jet_map(W, "exp", _shift_order0(scores, shift))
         ell = [alpha * c for c in ell]
         ell = jet_add(W, ell, jet_sum(W, p, axis=-1, keepdims=True))
         out = [alpha * c for c in out]

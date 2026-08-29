@@ -111,6 +111,21 @@ def test_operators_fail_closed_at_the_edges():
         ).T
 
 
+def test_complex_actions_are_refused_rather_than_truncated():
+    """`matvec` coerced both its input and its action's result to float64, so
+    a complex map returned its real part and numpy said only `ComplexWarning`:
+    `v ↦ i·v` applied to [1+1j, 2] gave [0, 0] instead of [-1+1j, 2j]. The type
+    is real-valued, so this is a fail-closed path (2026-08-29 review, P2)."""
+    imag = OperatorTangent.from_matvec_pair(
+        lambda v: 1j * np.asarray(v), None, in_shape=(2,), out_shape=(2,),
+    )
+    with pytest.raises(TesseraOperatorError, match="complex input"):
+        imag(np.array([1 + 1j, 2 + 0j]))
+    # A real input whose ACTION is complex is refused at the output too.
+    with pytest.raises(TesseraOperatorError, match="complex action"):
+        imag(np.array([1.0, 2.0]))
+
+
 def test_solvers_consume_operators_directly():
     """Solve-consumption (§3.5): CG and GMRES accept the operator where
     they accepted a bare closure — including a transposed solve."""

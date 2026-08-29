@@ -451,28 +451,33 @@ public:
       }
 
       int64_t budgetBytes = *effectiveBudgetBytes;
-      auto estimatedPeak = [&](llvm::ArrayRef<RematCandidate> active) {
-        int64_t peak = 0;
-        for (int64_t point = 0;
-             point < static_cast<int64_t>(ordered.size()); ++point) {
-          int64_t live = 0;
-          for (const RematCandidate &candidate : active)
-            if (candidate.begin <= point && point <= candidate.end) {
-              if (candidate.bytes >
-                  std::numeric_limits<int64_t>::max() - live)
-                live = std::numeric_limits<int64_t>::max();
-              else
-                live += candidate.bytes;
-            }
+      // Liveness intervals over dense ordinals, held as a difference array:
+      // each candidate contributes +bytes at `begin` and -bytes after `end`, so
+      // the peak is one prefix-sum sweep and removing a candidate is two
+      // updates. Re-summing every interval at every point instead made this
+      // loop O(removals x points x candidates) — measured at ~19s for a 2000-op
+      // function and minutes at 5000.
+      llvm::SmallVector<__int128> delta(ordered.size() + 1, 0);
+      auto applyInterval = [&](const RematCandidate &candidate, int sign) {
+        delta[candidate.begin] += static_cast<__int128>(sign) * candidate.bytes;
+        delta[candidate.end + 1] -= static_cast<__int128>(sign) * candidate.bytes;
+      };
+      for (const RematCandidate &candidate : candidates)
+        applyInterval(candidate, 1);
+      auto estimatedPeak = [&]() {
+        __int128 live = 0, peak = 0;
+        for (size_t point = 0; point < ordered.size(); ++point) {
+          live += delta[point];
           peak = std::max(peak, live);
         }
-        return peak;
+        return static_cast<int64_t>(
+            std::min<__int128>(peak, std::numeric_limits<int64_t>::max()));
       };
       llvm::SmallVector<RematCandidate> active(candidates);
       llvm::SmallVector<mlir::Operation *> selected;
-      int64_t peakBefore = estimatedPeak(active);
+      int64_t peakBefore = estimatedPeak();
       int64_t selectedCost = 0;
-      while (!active.empty() && estimatedPeak(active) > budgetBytes) {
+      while (!active.empty() && estimatedPeak() > budgetBytes) {
         auto best = std::max_element(
             active.begin(), active.end(),
             [](const RematCandidate &lhs, const RematCandidate &rhs) {
@@ -496,6 +501,7 @@ public:
           selectedCost = std::numeric_limits<int64_t>::max();
         else
           selectedCost += best->recomputeCost;
+        applyInterval(*best, -1);
         active.erase(best);
       }
       func->setAttr(kPeakBeforeAttr,
@@ -504,7 +510,7 @@ public:
       func->setAttr(kPeakAfterAttr,
                     mlir::IntegerAttr::get(
                         mlir::IntegerType::get(&getContext(), 64),
-                        estimatedPeak(active)));
+                        estimatedPeak()));
       func->setAttr(kSelectedCostAttr,
                     mlir::IntegerAttr::get(
                         mlir::IntegerType::get(&getContext(), 64),

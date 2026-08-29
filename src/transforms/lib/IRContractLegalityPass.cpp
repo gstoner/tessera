@@ -414,24 +414,43 @@ struct IRContractLegality
                << "\".";
           return failure();
         }
-        if (accumBits < storageBits) {
+        // The comparison below is only meaningful within one domain:
+        // numericPolicyMantissaBits returns significand bits for a float and
+        // representable width for an integer, so int16-into-fp16 (a routine
+        // dequantized-weight policy, declared legal three lines up) reads as
+        // 16 > 11 and was refused. The measurement quoted in the note is a
+        // float-into-float result and does not transfer to dequantization,
+        // where the storage bits are integer codes rather than running-sum
+        // precision.
+        if (accumBits < storageBits && storageIsFloat == accumIsFloat) {
           auto diag = op->emitOpError(
               "NUMERIC_POLICY_NARROWING_ACCUM: numeric_policy declares storage "
               "\"");
           diag << storage << "\" (" << storageBits
-               << " significand bits) accumulating into \"" << accum << "\" ("
-               << accumBits << " bits), which is NARROWER.";
-          diag.attachNote()
-              << "This is refused rather than warned because no program wants "
-                 "it: at the same dtype-bit budget, spending the bits on the "
-                 "accumulator instead is 25.8x more accurate (measured, "
-                 "K=4096 dot product vs an fp64 reference), and the result "
-                 "under the narrow accumulator is BIT-IDENTICAL to also "
-                 "narrowing the storage — so the wider storage is "
-                 "unobservable and buys only memory traffic. Either widen "
-                 "accum to at least \"" << storage
-              << "\", or narrow storage to \"" << accum
-              << "\" and keep the bandwidth.";
+               << (storageIsFloat ? " significand bits" : " bits")
+               << ") accumulating into \"" << accum << "\" (" << accumBits
+               << " bits), which is NARROWER.";
+          // The dominance measurement below was taken on float/float pairs.
+          // Quoting it on an int/int policy would assert a number nobody
+          // measured, so that case gets the structural argument only.
+          if (storageIsFloat)
+            diag.attachNote()
+                << "This is refused rather than warned because no program "
+                   "wants it: at the same dtype-bit budget, spending the bits "
+                   "on the accumulator instead is 25.8x more accurate "
+                   "(measured, K=4096 dot product vs an fp64 reference), and "
+                   "the result under the narrow accumulator is BIT-IDENTICAL "
+                   "to also narrowing the storage — so the wider storage is "
+                   "unobservable and buys only memory traffic. Either widen "
+                   "accum to at least \"" << storage
+                << "\", or narrow storage to \"" << accum
+                << "\" and keep the bandwidth.";
+          else
+            diag.attachNote()
+                << "An accumulator narrower than the storage it sums cannot "
+                   "represent every value it loads, so the wider storage buys "
+                   "only memory traffic. Either widen accum to at least \""
+                << storage << "\", or narrow storage to \"" << accum << "\".";
           return failure();
         }
       }

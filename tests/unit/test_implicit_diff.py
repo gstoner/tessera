@@ -67,6 +67,45 @@ def test_gmres_fails_closed_on_arnoldi_breakdown():
         gmres_solve(lambda v: np.zeros_like(v), np.ones(3), maxiter=3)
 
 
+# ── the convergence criterion is relative, so a solve is scale-invariant ─────
+
+
+@pytest.mark.parametrize("solve", [cg_solve, gmres_solve])
+@pytest.mark.parametrize("magnitude", [1e-9, 1e-12])
+def test_solvers_do_not_return_zero_for_a_small_right_hand_side(solve, magnitude):
+    """A cotangent smaller than `tol` is not a solved system. The absolute
+    residual floor `tol * max(1, ||b||)` made x = 0 pass the initial check
+    for every ||b|| <= tol and reported it converged — a 100% relative error
+    on the routine late-training case (2026-08-29 review, P2)."""
+    rng = np.random.default_rng(5)
+    M = rng.standard_normal((5, 5))
+    A = M @ M.T + 5 * np.eye(5)  # SPD, so both solvers apply
+    b = rng.standard_normal(5)
+    b = b / np.linalg.norm(b) * magnitude
+
+    x = np.asarray(solve(lambda v: A @ v, b))
+    truth = np.linalg.solve(A, b)
+    assert np.linalg.norm(x - truth) <= 1e-6 * np.linalg.norm(truth)
+
+
+@pytest.mark.parametrize("solve", [cg_solve, gmres_solve])
+def test_solves_are_scale_invariant_in_the_right_hand_side(solve):
+    """A_inv is linear, so scaling b must scale the answer exactly."""
+    rng = np.random.default_rng(6)
+    M = rng.standard_normal((4, 4))
+    A = M @ M.T + 4 * np.eye(4)
+    b = rng.standard_normal(4)
+
+    unit = np.asarray(solve(lambda v: A @ v, b))
+    tiny = np.asarray(solve(lambda v: A @ v, 1e-9 * b))
+    np.testing.assert_allclose(tiny, 1e-9 * unit, rtol=1e-6)
+
+
+def test_zero_right_hand_side_still_returns_the_zero_solution():
+    assert np.all(cg_solve(lambda v: 2.0 * v, np.zeros(3)) == 0.0)
+    assert np.all(gmres_solve(lambda v: 2.0 * v, np.zeros(3)) == 0.0)
+
+
 # ── inverse-Hessian vector product ───────────────────────────────────────────
 
 
@@ -114,6 +153,26 @@ def test_root_jvp_matches_vjp_duality():
     t = root_jvp(F, xstar, (theta,), (v,))
     # dx* = (∂x*/∂θ) v = v / (2√θ)
     np.testing.assert_allclose(t, v / (2 * xstar), atol=1e-5)
+
+
+@pytest.mark.parametrize("magnitude", [1.0, 1e3, 1e6])
+def test_root_jvp_is_linear_in_an_unnormalized_tangent(magnitude):
+    """`_partial_jacobian_matvecs` finite-differences along `eps * v` with a
+    fixed step, so its truncation error grows as (eps*||v||)^2 — it stopped
+    being a linear map for a large tangent and made GMRES break down on a
+    solvable system. Scaling the step by ||v||_inf restores exactness
+    (2026-08-29 review, P2)."""
+    theta = np.array([4.0, 9.0])
+    xstar = np.sqrt(theta)
+
+    def F(x, th):
+        return x * x + np.sin(x) - th - np.sin(np.sqrt(th))
+
+    v = np.array([1.0, -0.5]) * magnitude
+    t = np.asarray(root_jvp(F, xstar, (theta,), (v,)))
+    # dF/dth = -(1 + cos(sqrt(th)) / (2 sqrt(th))), dF/dx = 2x + cos(x).
+    expected = v * (1.0 + np.cos(xstar) / (2 * xstar)) / (2 * xstar + np.cos(xstar))
+    np.testing.assert_allclose(t, expected, rtol=1e-5)
 
 
 def test_general_root_products_expose_matrix_free_solver_work() -> None:

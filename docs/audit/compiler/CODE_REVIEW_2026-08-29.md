@@ -2,18 +2,31 @@
 title: Full Code Review — 2026-08-29 (logic · mathematical correctness · algorithms · performance)
 last_updated: 2026-08-29
 scope: Python numeric core (autodiff · RNG/quantization · losses/optimizers · fusion + four backend emitters) · MLIR passes (linalg lowering · autodiff · tiling · analysis · legality · solver dialects)
-status: 102 findings confirmed by an independent refutation pass; the nine P0 rows are fixed, the P1/P2/P3 rows are an open follow-up queue
+status: 102 findings confirmed by an independent refutation pass; P0, P1 and P2 are closed, P3 is the remaining open queue
 audit_role: snapshot
 ---
 
 # Tessera full code review — logic, mathematical correctness, algorithms, performance
 
-> **Status.** The nine P0 rows are **fixed** (see the per-backend todos for the
-> device proofs still owed on ROCm/x86/NVIDIA — a source-level fix is not a
-> device claim). The 36 P1 and 41 P2/P3 rows below are the open follow-up
-> queue. Route work through
+> **Status.** P0 (9 rows), P1 (36 rows) and P2 (42 rows) are **closed**; the 16
+> P3 rows are the remaining open queue. Route work through
 > [`README.md`](README.md)'s authority chain; the generated dashboards in
 > `../generated/` remain the primary status evidence (Decision #26).
+>
+> **A source-level fix is not a device claim.** Every batch was written and
+> tested on hosts that do not have all four targets, so the per-backend todos
+> carry what each queue still owes. Read those before treating a row here as
+> proven on your hardware.
+>
+> | Severity | Closed in | Outcome |
+> |---|---|---|
+> | P0 · 9 | PR #635 | all 9 fixed |
+> | P1 · 36 | PRs #636, #637, #638 | 31 fixed; 2 deferred with recorded ABI reasoning (Adafactor bias correction, rank-4 dropout per-instance seed); 3 left open as performance/scope items |
+> | P2 · 42 | this batch | 39 fixed; 3 needed no change — two had already been fixed by the P0 batch and the review quoted the pre-fix body, one (`AutodiffPass.cpp:199`) was closed by the P0 seed-type fix |
+>
+> The three P2 rows that needed no change are worth keeping visible rather than
+> deleting: they are the cost of reviewing a moving tree, and each was
+> established by re-running the finding's own reproduction, not by assuming.
 >
 > Findings were produced by review agents and each was then re-checked by an
 > independent agent instructed to refute it; only what survived is listed as
@@ -604,7 +617,39 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 **Independently verified:** InsertRecomputePass.cpp:51-60. With no tessera.effect attribute the function returns true whenever the op has zero regions and its name lacks the substrings alloc/store/dealloc — so func.call, a collective, an IO op, and any tessera.rng.* op are 'pure' and get tessera_sr.recompute_hint="recomputable" at line 124-127. The header comment ('Ops with side effects are never recomputable') and the inline comment ('conservatively assumed pure') both assert the opposite of what the code does. Nothing forces EffectAnnotationPass to run first: the pass declares no dependency, and its own fixture src/solvers/scaling_resilience/tests/sr/checkpoint.mlir runs `tessera-opt -tessera-insert-recompute` standalone, so absence of the attribute is the normal case. This is precisely the Decision #10a pattern (eligibility marking without a gating analysis) and the Decision #30 fail-open scar. Severity caveat: I grepped for a consumer of tessera_sr.recompute_hint and found none on the MLIR side (only python/tessera/compiler/checkpoint.py, an independent annotator), so the wrong-gradient outcome is latent rather than currently live — but per Decision #29/#10a an eligibility mark that a downstream pass will believe is the defect.
 
 
-## P2 — real but minor (42)
+## P2 — real but minor (42) — CLOSED 2026-08-29
+
+> 39 fixed in one batch; 3 needed no change. The three are, with the evidence
+> that settled each:
+>
+> * **`vjp.py:3756` instance/group-norm affine grads** — already fixed by the P0
+>   batch (`5a0a56ed` added `_affine_param_grads`). Re-checked against a
+>   float64 finite-difference reference: `dW = [-1.4762, 0.4863, -0.1934,
+>   3.8271]` vs FD `[-1.4760, 0.4864, -0.1936, 3.8270]`.
+> * **`rocm_hip.py:282` paged attention expf** — the cooperative normalize pass
+>   the finding asks for landed in the same P0 commit; the review quoted the
+>   pre-fix kernel body. The residual sub-claim about page-table resolution
+>   does not hold at production shapes (blockDim 256, head dim <= 256 means one
+>   `d` iteration per thread).
+> * **`AutodiffPass.cpp:199` f32 loss seed** — closed by the P0 fix, which
+>   builds the seed from `lossValue.getType()`.
+>
+> Two findings surfaced work outside their own row and were routed rather than
+> folded in silently: `jvp_log_cosh_loss` carried the same overflow the eager
+> loss was fixed for (returned `inf` where the loss returned 399.3), and
+> `vjp_cross_entropy_loss` swallowed `label_smoothing`, `ignore_index` and
+> `axis` in `**_` — its gradient was 0.15 away from the finite-difference
+> answer under smoothing. Both are fixed here and pinned against central
+> differences of the eager loss.
+>
+> One finding was **escalated**: `ActivationRematerializationPass`'s peak scan
+> is fixed (59.2s -> 15.0s at N=2000, and 14.6s -> 0.6s at a looser budget on
+> the Mac), but profiling showed the peak scan was not the dominant cost. The
+> pass emits a *quadratic number of operations* for a deep recompute chain —
+> a 4,001-op function expanded to 2,001,002 ops — because its cost model prices
+> only each op's own recompute, not the transitive prefix it drags along. That
+> is filed as separate work, not silently folded into this batch.
+
 
 ### `python/tessera/compiler/profiler_rocm_native.py:255` — pre-run snapshot fails OPEN on a partial read
 

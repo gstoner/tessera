@@ -7,6 +7,43 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
+passes changed; only the Mac's fixture set could be run.**
+The P2 code-review batch touched passes every backend lowers through:
+`TesseraToLinalgPass` (rejection checks moved before IR creation),
+`SymbolicDimEqualityPass` (transposeA/B in the contract + flow rules, and
+malformed `dim_bindings`/`dim_sizes` now fail closed),
+`AdjointCollectiveInsertionPass` (cotangent-array bounds),
+`AutodiffPairedPass` (dynamic while state refused; erase re-checks use_empty),
+`RegionAdjointInterface` (O(1) dense-checkpoint slot),
+`ActivationRematerializationPass` (difference-array peak),
+`WarpSpecLegalityPass` (transitive staged-data provenance),
+`TileBufferArenaPass` (non-scalar element types),
+`IRContractLegalityPass` (narrowing-accum restricted to same-domain pairs),
+`MaterializeControlPayloadPass` (shared body-stub conflict),
+`InsertRecomputePass` (real live-set), `LegalizeSpaceTime` + the CPU stencil
+hook (orders 6 and 8 implemented; unimplemented orders refused), and
+`AsyncPrefetch` (memory-write dependence).
+Evidence produced: `lit tests/tessera-ir/` **437 discovered, 396 passed, 41
+unsupported, 0 failed** on the Mac (M1 Max, brew LLVM/MLIR 23.1.0, assertions
+OFF), plus per-finding reproductions with controls. **Not evidence for this
+backend's own fixtures.**
+
+*What this queue must run on sm_120.* The split-route flash backward gained a
+`tsr_flash_bwd_stats` kernel so per-`(b,qh,m)` softmax statistics are computed
+once instead of once per KV split; `tsr_flash_bwd_dq` was restructured n-outer
+into a `aq[D]` accumulator. Host-executed through a launch-emulation shim the
+split route now matches the untouched atomic route to <=1.9e-7 across causal /
+sliding-window / bias / logit-cap, with a negative control at 2.8e-2 — but no
+line of it has run on a GPU. **Re-measure
+`measure_flash_attention_backward_device`**: the route arbiter was choosing
+between these two routes using the inflated split number. Also owed: the
+decayed `run_linear_attention_variant{,_backward}` F4 tolerance under the new
+Horner recurrence (forward folds decay into the accumulator, keeping the
+summation ascending; backward uses a descending running product because the
+factor feeds per-key atomics), and one `run_optimizer_f32` call per valid kind
+to confirm the new `kind<0||kind>5` rc-2 guard left the happy path alone.
+
 Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **not applicable to SM120; the CUDA host is already on 26.04.**
 The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
 tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`

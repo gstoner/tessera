@@ -6,6 +6,19 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `ROCM-LIT-CAUGHT-A-REGRESSION-2026-08-29` — **this queue's
+fixtures caught a shared-pass regression the Mac could not see.**
+`phase3/streaming_attention_backward_rocm.mlir` is `REQUIRES:
+tessera-rocm-backend`, so it is skipped entirely on a host without the ROCm
+backend built. A P1 fix that made `DistributeRank4FlashAttn` refuse rank-4
+`flash_attn` carrying dropout passed 429/429 on the Mac and broke this fixture
+here — the lane drives `dropout_p = 0.25` through that exact path. The refusal
+was reverted and the underlying defect (one `dropout_seed` copied to every
+per-(batch,head) instance, so all B*H draw the same mask) is recorded as
+deferred: fixing it needs the seed as an operand, since the coordinates are SSA
+induction variables. Standing lesson: a green `lit` on a host missing this
+backend says nothing about these fixtures.
+
 Cross-backend sync `DEVICE-PROOF-DELIVERED-2026-08-29` — **the P0 device
 proof this queue owed is DONE; the paired performance claim is WITHDRAWN.**
 

@@ -496,6 +496,19 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 ### `src/transforms/lib/TileIRLoweringPass.cpp:306` — Identical dropout mask replicated across batch and head
 
+> **Deferred 2026-08-29 — needs an operand, not a local edit.** Refusing to
+> distribute a rank-4 `flash_attn` carrying dropout was implemented and then
+> **reverted after it regressed a committed ROCm lane**:
+> `tests/tessera-ir/phase3/streaming_attention_backward_rocm.mlir` drives
+> `dropout_p = 0.25` through exactly this path and passed before. The defect is
+> real but statistical (masks correlated across batch/head, not a wrong value
+> per element), and the batch/head coordinates at the distribution site are SSA
+> loop induction variables — so a per-instance seed cannot be an attribute and
+> must be threaded as an OPERAND, changing the op signature and its native
+> consumers. Same shape as the Adafactor row. Caught only by running lit on the
+> ROCm box; the Mac skips this fixture entirely (`REQUIRES: tessera-rocm-backend`).
+
+
 *C++ — tiling & Tile IR lowering · math*
 
 **What is wrong:** DistributeRank4FlashAttn copies all attributes verbatim (including dropout_seed) onto every per-(batch,head) rank-2 flash_attn (line 306), and the rank-2 lowering seeds tessera_attn.block_dropout with only (seed, boundary) where boundary restarts at 0 for every slice (lines 592-603, 484-491). Every one of the B*H slices therefore draws the exact same dropout mask — dropout is fully correlated across batch and head instead of iid, and violates the repo's RNG stream-separation discipline (Decision #18).

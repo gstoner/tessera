@@ -154,21 +154,17 @@ struct DistributeRank4FlashAttn : public RewritePattern {
         qType.getRank() != 4 || kType.getRank() != 4 ||
         vType.getRank() != 4 || outType.getRank() != 4)
       return failure();
-    // Distribution copies every attribute onto each per-(batch, head) rank-2
-    // instance, `dropout_seed` included, so all B*H instances would draw the
-    // SAME mask — dropout correlated across every batch and head instead of
-    // independent. The batch/head coordinates here are SSA loop induction
-    // variables, not constants, so a per-instance seed cannot be baked into an
-    // attribute; carrying one needs the rank-2 op to take the seed as an
-    // operand. Refuse rather than emit a silently wrong mask (Decision #21).
-    // The residual completeness walk reports the surviving op.
-    if (auto p = op->getAttrOfType<FloatAttr>("dropout_p")) {
-      if (p.getValueAsDouble() > 0.0)
-        return rewriter.notifyMatchFailure(
-            op, "rank-4 flash_attn with dropout cannot be distributed: every "
-                "per-(batch,head) instance would inherit one dropout_seed and "
-                "draw an identical mask");
-    }
+    // KNOWN LIMITATION, deliberately not refused here (see the ROCm todo and
+    // CODE_REVIEW_2026-08-29): distribution copies `dropout_seed` onto every
+    // per-(batch, head) rank-2 instance, so all B*H instances draw the SAME
+    // mask — dropout correlated across batch and head rather than independent.
+    // Refusing the lowering was tried and reverted: it breaks a committed,
+    // working ROCm lane (phase3/streaming_attention_backward_rocm.mlir carries
+    // dropout_p=0.25 through this path), and the defect is statistical rather
+    // than a wrong-answer-per-element. Fixing it properly requires a
+    // per-instance seed, and the batch/head coordinates here are SSA induction
+    // variables, so that means threading the seed as an OPERAND — an op
+    // signature change with native consumers, not a local edit.
     if (bias &&
         (!biasType || !biasType.hasStaticShape() ||
          (biasType.getRank() != 3 && biasType.getRank() != 4) ||

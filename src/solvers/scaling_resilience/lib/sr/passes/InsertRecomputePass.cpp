@@ -4,9 +4,14 @@
 // live-tensor memory footprint, and inserts a tessera_sr.checkpoint whenever
 // the live-set size exceeds --memory-budget-mb.
 //
-// Only "pure" ops (tessera.effect = "pure" or no effect attr) between two
-// checkpoints are tagged with tessera_sr.recompute_hint = true.  Ops with
-// side effects are never recomputable.
+// Only "pure" ops between two checkpoints are tagged with
+// tessera_sr.recompute_hint = true.  Purity is either declared
+// (tessera.effect = "pure"/"read") or DERIVED from MLIR's effect machinery —
+// an op with no effect attribute is recomputable only if it is provably
+// memory-effect-free.  "No attribute" does not mean pure: an RNG draw
+// recomputed in the backward pass returns different values than the forward
+// saw.  Ops with side effects, and ops whose effects cannot be established,
+// are never recomputable.
 //
 // Output attrs:
 //   tessera_sr.checkpoint       — UnitAttr on the boundary op
@@ -23,6 +28,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include <cstdint>
 #include <numeric>
@@ -48,15 +54,23 @@ static int64_t estimateTensorBytes(Type ty) {
 }
 
 /// True if an op is side-effect-free (eligible for recomputation).
+///
+/// Purity is DERIVED, never assumed (Decision #30). The previous fallback
+/// described itself as conservative while doing the opposite: an op with no
+/// effect attribute was treated as pure unless its *name* happened to contain
+/// "alloc", "store", or "dealloc". A `tessera.rng.uniform` or a
+/// `func.call @dropout_mask` passes all three substring tests, so it was marked
+/// recomputable — and a backward pass that honours the hint re-runs it, drawing
+/// different randomness than the forward saw and producing a wrong gradient
+/// with nothing to indicate it.
+///
+/// Unprovable is now unsafe: without an explicit attribute the op must be known
+/// effect-free to MLIR's own effect machinery, which reports false for anything
+/// it cannot see through (including unregistered ops and opaque calls).
 static bool isPureOp(Operation *op) {
   if (auto effect = op->getAttrOfType<StringAttr>("tessera.effect"))
     return effect.getValue() == "pure" || effect.getValue() == "read";
-  // Ops without an effect attr are conservatively assumed pure if they have
-  // no regions and no memory operands.
-  return op->getNumRegions() == 0 &&
-         !op->getName().getStringRef().contains("alloc") &&
-         !op->getName().getStringRef().contains("store") &&
-         !op->getName().getStringRef().contains("dealloc");
+  return op->getNumRegions() == 0 && isMemoryEffectFree(op);
 }
 
 struct InsertRecomputePass

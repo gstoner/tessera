@@ -898,7 +898,12 @@ struct SymbolicDimEquality
                       "state's dim-names";
           failed = true;
         }
-        if (expectedNames[i])
+        // A while's RESULT count is what the condition forwards, which need not
+        // equal its init/yield count: `scf.while (%a = %x, %b = %y) : (T, T) ->
+        // T` yields two values to feed the next iteration but produces one
+        // result. Indexing results by the yield position walked off the end of
+        // a perfectly valid loop.
+        if (expectedNames[i] && i < whileOp.getNumResults())
           valueDims[whileOp.getResult(i)] = *expectedNames[i];
       }
 

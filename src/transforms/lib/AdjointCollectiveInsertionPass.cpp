@@ -136,9 +136,33 @@ public:
 
     // Locate the function's terminator and the cotangent SSA values it
     // returns (appended by AutodiffPass after the original results).
-    auto returnOp = mlir::dyn_cast<mlir::func::ReturnOp>(
-        func.getBody().front().getTerminator());
-    if (!returnOp) return;
+    // Search every block, not just the first. A function whose control flow
+    // has been lowered keeps its `func.return` in a later block, and looking
+    // only at `front()` found nothing and returned silently — dropping the
+    // gradient collectives entirely from a function that is marked for reverse
+    // autodiff AND carries weight sharding, i.e. one that definitely needs
+    // them. A wrong distributed gradient with no diagnostic.
+    mlir::func::ReturnOp returnOp;
+    for (mlir::Block &block : func.getBody()) {
+      auto ret = mlir::dyn_cast_or_null<mlir::func::ReturnOp>(
+          block.getTerminator());
+      if (!ret)
+        continue;
+      if (returnOp) {
+        func.emitError(
+            "ADJOINT_COLLECTIVE_MULTIPLE_RETURNS: cannot place gradient "
+            "collectives in a sharded reverse-mode function with more than "
+            "one func.return");
+        return signalPassFailure();
+      }
+      returnOp = ret;
+    }
+    if (!returnOp) {
+      func.emitError(
+          "ADJOINT_COLLECTIVE_NO_RETURN: sharded reverse-mode function has no "
+          "func.return to place gradient collectives before");
+      return signalPassFailure();
+    }
 
     // Original-result count = full result count - number of populated
     // cotangent slots in the array attr.
@@ -152,9 +176,14 @@ public:
     int origResultCount =
         static_cast<int>(returnOp.getNumOperands()) - populatedCotans;
     if (origResultCount < 0) {
-      // The array attr is out of sync with the actual return rewrite;
-      // defensive bail-out keeps the IR valid.
-      return;
+      // The cotangent array attr claims more populated slots than the return
+      // has operands, so the two disagree about the rewrite AutodiffPass
+      // performed. Bailing out silently left the function without its gradient
+      // collectives; say so instead.
+      func.emitError(
+          "ADJOINT_COLLECTIVE_COTANGENT_ARITY: tessera.autodiff.arg_cotangents "
+          "declares more populated cotangents than func.return has operands");
+      return signalPassFailure();
     }
 
     mlir::OpBuilder builder(&getContext());

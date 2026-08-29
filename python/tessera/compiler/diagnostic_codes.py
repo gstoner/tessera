@@ -1912,6 +1912,56 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="V3c",
     ),
     DiagnosticCode(
+        code="ADJOINT_COLLECTIVE_NO_RETURN",
+        pass_origin="AdjointCollectiveInsertionPass",
+        severity="error",
+        summary=(
+            "A reverse-mode function carrying weight sharding has no "
+            "`func.return`, so there is no point at which to place its "
+            "gradient collectives."
+        ),
+        fix_hint=(
+            "Ensure the differentiated function terminates in `func.return`. "
+            "The pass previously returned silently here, dropping the gradient "
+            "collectives from a function that needs them."
+        ),
+        spec="docs/spec/AUTODIFF_SPEC.md",
+        sprint="P1-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
+        code="ADJOINT_COLLECTIVE_MULTIPLE_RETURNS",
+        pass_origin="AdjointCollectiveInsertionPass",
+        severity="error",
+        summary=(
+            "A reverse-mode function carrying weight sharding has more than "
+            "one `func.return`, so the placement of its gradient collectives "
+            "is ambiguous."
+        ),
+        fix_hint=(
+            "Structurize the function to a single exit before running the "
+            "pass, or insert the collectives per-exit explicitly."
+        ),
+        spec="docs/spec/AUTODIFF_SPEC.md",
+        sprint="P1-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
+        code="ADJOINT_COLLECTIVE_COTANGENT_ARITY",
+        pass_origin="AdjointCollectiveInsertionPass",
+        severity="error",
+        summary=(
+            "`tessera.autodiff.arg_cotangents` declares more populated "
+            "cotangent slots than the function's `func.return` has operands, "
+            "so the attribute and the return rewrite disagree."
+        ),
+        fix_hint=(
+            "Re-run AutodiffPass so the cotangent array matches the rewritten "
+            "return, rather than letting the collective insertion bail out and "
+            "leave the function without its gradient collectives."
+        ),
+        spec="docs/spec/AUTODIFF_SPEC.md",
+        sprint="P1-REVIEW-2026-08-29",
+    ),
+    DiagnosticCode(
         code="SYMDIM_MATMUL_CONTRACT_VIOLATION",
         pass_origin="SymbolicDimEqualityPass",
         severity="error",

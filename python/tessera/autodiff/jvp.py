@@ -2554,9 +2554,24 @@ def jvp_prod(primals, tangents, *, axis=None, keepdims=False, **_):
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
     p = np.prod(x, axis=axis, keepdims=True)
-    safe = np.where(x == 0, 1.0, x)
-    # d/dx_i prod(x) along axis = prod(x) / x_i; tangent = sum_i (prod/x_i) dx_i
-    tan = np.sum((p / safe) * dx, axis=axis, keepdims=keepdims)
+    zeros = x == 0
+    safe = np.where(zeros, 1.0, x)
+    # d/dx_i prod(x) = prod of the OTHER elements. The ratio form prod/x_i is
+    # only valid where nothing in the slice is zero: with a single zero the
+    # whole product is 0, so every ratio term vanishes and the tangent came out
+    # 0 — but the derivative with respect to that zero element is exactly the
+    # product of the others, which is generally non-zero. Split by zero count:
+    #   0 zeros  -> ratio form
+    #   1 zero   -> product of the non-zeros, at the zero's position only
+    #   2+ zeros -> every partial derivative is 0
+    n_zero = zeros.sum(axis=axis, keepdims=True)
+    prod_nonzero = np.prod(safe, axis=axis, keepdims=True)
+    deriv = np.where(
+        n_zero == 0,
+        p / safe,
+        np.where(zeros & (n_zero == 1), prod_nonzero, 0.0),
+    )
+    tan = np.sum(deriv * dx, axis=axis, keepdims=keepdims)
     primal = np.prod(x, axis=axis, keepdims=keepdims)
     return primal, tan
 
@@ -2568,9 +2583,13 @@ def jvp_amax(primals, tangents, *, axis=None, keepdims=False, **_):
     m = np.max(x, axis=axis, keepdims=True)
     mask = (x == m).astype(np.float64)
     counts = mask.sum(axis=axis, keepdims=True)
-    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(
-        counts.squeeze() if not keepdims and axis is not None else counts, 1.0
-    )
+    # Squeeze only the REDUCED axis. A bare `counts.squeeze()` drops every
+    # size-1 axis, so an input carrying an unrelated singleton dimension (e.g.
+    # (3,1,5) reduced over axis 2) left counts as (3,) against a (3,1)
+    # numerator and broadcast to (3,3). `axis=None` still squeezes all, which
+    # is right there because every axis was reduced.
+    denom = counts if keepdims else np.squeeze(counts, axis=axis)
+    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(denom, 1.0)
     return np.max(x, axis=axis, keepdims=keepdims), tan
 
 
@@ -2581,9 +2600,13 @@ def jvp_amin(primals, tangents, *, axis=None, keepdims=False, **_):
     m = np.min(x, axis=axis, keepdims=True)
     mask = (x == m).astype(np.float64)
     counts = mask.sum(axis=axis, keepdims=True)
-    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(
-        counts.squeeze() if not keepdims and axis is not None else counts, 1.0
-    )
+    # Squeeze only the REDUCED axis. A bare `counts.squeeze()` drops every
+    # size-1 axis, so an input carrying an unrelated singleton dimension (e.g.
+    # (3,1,5) reduced over axis 2) left counts as (3,) against a (3,1)
+    # numerator and broadcast to (3,3). `axis=None` still squeezes all, which
+    # is right there because every axis was reduced.
+    denom = counts if keepdims else np.squeeze(counts, axis=axis)
+    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(denom, 1.0)
     return np.min(x, axis=axis, keepdims=keepdims), tan
 
 
@@ -3280,10 +3303,21 @@ def jvp_chunk(primals, tangents, *, chunks=None, axis=0, **_):
 def jvp_pad(primals, tangents, *, pad_width=None, mode="constant", constant_values=0, **_):
     (x,) = primals
     (dx,) = tangents
+    # numpy rejects `constant_values` for every mode except 'constant', so
+    # passing it unconditionally raised for reflect/edge/symmetric/wrap — all
+    # of which the canonical forward (`ops.pad`) accepts and guards the same
+    # way. The tangent takes the same mode: for 'constant' the padding is a
+    # constant and contributes no tangent, and for the copy modes the tangent
+    # is copied exactly as the primal is.
+    if mode == "constant":
+        return (
+            np.pad(np.asarray(x), pad_width, mode=mode,
+                   constant_values=constant_values),
+            np.pad(np.asarray(dx), pad_width, mode=mode, constant_values=0),
+        )
     return (
-        np.pad(np.asarray(x), pad_width, mode=mode, constant_values=constant_values),
-        # constant_values is dropped on the tangent (padding contributes 0).
-        np.pad(np.asarray(dx), pad_width, mode=mode, constant_values=0),
+        np.pad(np.asarray(x), pad_width, mode=mode),
+        np.pad(np.asarray(dx), pad_width, mode=mode),
     )
 
 

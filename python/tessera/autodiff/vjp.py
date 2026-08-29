@@ -410,11 +410,36 @@ def vjp_pad(dout, x, *, pad_width=None, mode="constant", constant_values=0, **_)
             normalized.append((item, item))
         else:
             normalized.append((int(item[0]), int(item[1])))
-    slices = tuple(
-        slice(before, np.asarray(dout).shape[axis] - after if after else None)
-        for axis, (before, after) in enumerate(normalized)
-    )
-    return (np.asarray(dout)[slices].reshape(np.asarray(x).shape),)
+    do = np.asarray(dout)
+    x_arr = np.asarray(x)
+    if mode == "constant":
+        # Padded entries are a constant, independent of x: the adjoint is the
+        # interior slice and the padded cotangent is genuinely discarded.
+        slices = tuple(
+            slice(before, do.shape[axis] - after if after else None)
+            for axis, (before, after) in enumerate(normalized)
+        )
+        return (do[slices].reshape(x_arr.shape),)
+
+    # Every other supported mode COPIES input elements into the padding, so
+    # their cotangent must be scatter-added back to the element each copy came
+    # from — slicing it away silently loses that mass. Padding an index map
+    # with the same mode reproduces the forward's exact source mapping, so the
+    # adjoint is one `np.add.at` over it and stays correct for any gather mode
+    # (edge/reflect/symmetric/wrap) without hand-deriving each index formula.
+    if mode not in ("edge", "reflect", "symmetric", "wrap"):
+        from .tape import TesseraAutodiffError  # local import — avoids cycle
+        raise TesseraAutodiffError(
+            f"pad mode {mode!r} has no adjoint: its padding is a statistic of "
+            f"the input (or is uninitialized), not a copy of it, so the "
+            f"cotangent cannot be scattered back. Supported: constant, edge, "
+            f"reflect, symmetric, wrap."
+        )
+    source = np.pad(np.arange(x_arr.size).reshape(x_arr.shape),
+                    pad_width, mode=mode)
+    grad = np.zeros(x_arr.size, dtype=np.result_type(do.dtype, np.float32))
+    np.add.at(grad, source.ravel(), do.ravel())
+    return (grad.reshape(x_arr.shape),)
 
 
 @_vjp("tile")
@@ -1348,7 +1373,7 @@ def vjp_linear_attn_state(
 
 @_vjp("flash_attn")
 def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
-                   dropout_p=0.0, attn_bias=None, **_):
+                   dropout_p=0.0, seed=None, attn_bias=None, **_):
     """Adjoint of standard scaled-dot-product attention (numpy reference path).
 
     Forward: ``S = scale * QK^T (+ attn_bias);  P = softmax(S);  O = PV``.
@@ -1372,10 +1397,18 @@ def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
     attention dropout should set ``deterministic=True, seed=...`` so the mask
     is reproducible.
     """
-    if dropout_p > 0.0:
-        # No deterministic mask available → conservative: assume mask is all-ones.
-        # Users training with dropout should provide a seed.
-        pass
+    if dropout_p > 0.0 and seed is None:
+        # Without a seed the forward drew from a fresh default_rng, so the mask
+        # it applied cannot be reconstructed here. Differentiating the
+        # no-dropout function instead would return a silently wrong gradient,
+        # so fail closed — the same contract vjp_dropout already enforces.
+        from .tape import TesseraAutodiffError  # local import — avoids cycle
+        raise TesseraAutodiffError(
+            "flash_attn is not differentiable with dropout_p > 0 and no seed: "
+            "the forward's mask is unreproducible, so the adjoint would "
+            "silently differentiate the dropout-free function. Pass "
+            "seed=... (with deterministic=True) to make the mask replayable."
+        )
 
     bias_pos = bias_positional[0] if bias_positional else None
     bias = bias_pos if bias_pos is not None else attn_bias
@@ -1395,10 +1428,23 @@ def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
     e = np.exp(S - S.max(axis=-1, keepdims=True))
     P = e / e.sum(axis=-1, keepdims=True)
 
-    # dV = P^T @ dO
-    dV = np.matmul(np.swapaxes(P, -1, -2), dout)
-    # dP = dO @ V^T
+    # Replay the forward's dropout mask. The forward applies
+    # `W = P * keep / (1 - p)` and then `O = W @ V`, so the scaled mask is a
+    # plain elementwise factor on the softmax output: it multiplies the weights
+    # used for dV and multiplies dP before the softmax backward. Drawing from
+    # `default_rng(seed).binomial` in the same order reproduces `keep` exactly.
+    drop = None
+    if dropout_p > 0.0:
+        rng = np.random.default_rng(seed)
+        drop = rng.binomial(1, 1.0 - dropout_p, P.shape) / (1.0 - dropout_p)
+    W = P if drop is None else P * drop
+
+    # dV = W^T @ dO
+    dV = np.matmul(np.swapaxes(W, -1, -2), dout)
+    # dP = (dO @ V^T) through the mask
     dP = np.matmul(dout, np.swapaxes(V, -1, -2))
+    if drop is not None:
+        dP = dP * drop
     # dS through softmax: dS = (dP - sum(dP * P, -1, keepdims)) * P
     dS = (dP - (dP * P).sum(axis=-1, keepdims=True)) * P
     if causal:
@@ -1789,7 +1835,13 @@ def _analytic_delta_attention_vjp(
             denom = 1.0 + norm
             projection = np.sum(ddelta * update, axis=(-2, -1), keepdims=True)
             dupdate = ddelta / denom
-            safe_norm = np.maximum(norm, 1.0)
+            # For delta = u/(1+n) with n = ||u||, the pullback's projection term
+            # is u*(ddelta·u)/(n*(1+n)^2) — the divisor is n itself. Clamping it
+            # up to 1 under-scaled the term by a factor of n for every
+            # ||u|| < 1, i.e. across the whole small-update regime. The
+            # np.where below already handles n == 0, so the guard here only
+            # needs to keep the division finite.
+            safe_norm = np.where(norm > 0.0, norm, 1.0)
             norm_term = update * projection / (safe_norm * denom * denom)
             dupdate -= np.where(norm > 0.0, norm_term, 0.0)
         else:
@@ -4403,14 +4455,18 @@ def vjp_nesterov(dout, params, grads, state=None, *, lr, momentum=0.9, **_):
     Chain rule:
       d_params  = dout
       d_grads   = -lr * dout * (1 + momentum)            (grads enters look_ahead twice)
-      d_velocity= -lr * momentum * (1 + momentum) * dout
-                  ── new_velocity flows into look_ahead through momentum
+      d_velocity= -lr * momentum**2 * dout
+                  ── velocity reaches look_ahead only through new_velocity,
+                     picking up one factor of momentum at each step:
+                     new_velocity = m*v + g, look_ahead = g + m*new_velocity,
+                     so d(look_ahead)/dv = m*m, not m*(1+m). The (1+m) form
+                     belongs to d_grads, where g really does enter twice.
     """
     do = np.asarray(dout, dtype=np.float64)
     m = float(momentum)
     d_params = do
     d_grads = -float(lr) * do * (1.0 + m)
-    d_velocity = -float(lr) * m * (1.0 + m) * do
+    d_velocity = -float(lr) * m * m * do
     d_state = {"velocity": d_velocity}
     return (d_params, d_grads, d_state)
 

@@ -188,7 +188,7 @@ factorized_matmul,12,0,1,12,0,fp32,directly_tested,12 direct test references
 factorized_pos_emb,12,0,1,12,0,fp16,directly_tested,12 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,38,4,1,42,0,f32 fp32 fp64 int32 int64 int8,directly_tested,42 direct test references
-flash_attn,142,79,10,221,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,221 direct test references
+flash_attn,143,79,11,222,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,222 direct test references
 flatten,7,5,0,12,0,,directly_tested,12 direct test references
 flip,7,0,0,7,0,,directly_tested,7 direct test references
 floor,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
@@ -337,7 +337,7 @@ online_softmax,8,0,1,8,0,,directly_tested,8 direct test references
 online_softmax_state,10,0,0,10,0,fp16,directly_tested,10 direct test references
 optax_style_chain,0,0,0,0,1,,structural_only,category default for 'grad_transform'
 pack,7,0,0,7,0,fp16,directly_tested,7 direct test references
-pad,9,0,0,9,0,,directly_tested,9 direct test references
+pad,10,0,1,10,0,,directly_tested,10 direct test references
 partial_state_load,0,0,0,0,1,,structural_only,category default for 'serialization'
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
 patchify,10,0,1,10,0,fp16,directly_tested,10 direct test references

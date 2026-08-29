@@ -33,7 +33,13 @@ func.func @every_value_dies_immediately(%a: tensor<512x512xf32>)
 // Genuinely concurrent liveness must still trigger: four 1 MiB activations are
 // all held until the reduction consumes them, so the peak really does exceed
 // the budget. Without this the fix above would just be a disabled pass.
-// CHECK: tessera_sr.num_checkpoints = 1
+//
+// Two checkpoints, not one: a checkpoint resets the counter, which forgives
+// every value defined before it, so those values must not be subtracted again
+// when their last use passes later. Releasing them a second time would remove
+// bytes belonging to POST-checkpoint values and let liveness run past the
+// budget unchecked — this fixture read 1 while that double-release was present.
+// CHECK: tessera_sr.num_checkpoints = 2
 // CHECK: @values_held_live_still_checkpoint
 func.func @values_held_live_still_checkpoint(%a: tensor<512x512xf32>)
     -> tensor<512x512xf32> {

@@ -124,7 +124,13 @@ struct InsertRecomputePass
       int64_t nextOrdinal = 0;
       fn.walk([&](Operation *op) { ordinal[op] = nextOrdinal++; });
 
-      llvm::DenseMap<int64_t, int64_t> freedAt;
+      // Each entry keeps the defining ordinal alongside the bytes: a
+      // checkpoint reset drops every pre-checkpoint value from the counter,
+      // so a pre-checkpoint value dying later must NOT be subtracted again —
+      // that would remove bytes belonging to post-checkpoint values and let
+      // subsequent liveness exceed the budget without another checkpoint.
+      llvm::DenseMap<int64_t, llvm::SmallVector<std::pair<int64_t, int64_t>, 2>>
+          freedAt;
       for (auto &[op, defOrdinal] : ordinal) {
         for (Value v : op->getResults()) {
           int64_t lastUse = defOrdinal;
@@ -138,16 +144,21 @@ struct InsertRecomputePass
             lastUse = std::max(lastUse, found->second);
           }
           if (!escapes)
-            freedAt[lastUse] += estimateTensorBytes(v.getType());
+            freedAt[lastUse].push_back(
+                {defOrdinal, estimateTensorBytes(v.getType())});
         }
       }
 
+      int64_t lastCkptOrdinal = -1;
       fn.walk([&](Operation *op) {
         int64_t thisOrdinal = ordinal.lookup(op);
         auto releaseDeadValues = [&] {
           auto freed = freedAt.find(thisOrdinal);
-          if (freed != freedAt.end())
-            liveBytes = std::max<int64_t>(0, liveBytes - freed->second);
+          if (freed == freedAt.end())
+            return;
+          for (auto [defOrdinal, bytes] : freed->second)
+            if (defOrdinal > lastCkptOrdinal)
+              liveBytes = std::max<int64_t>(0, liveBytes - bytes);
         };
 
         // Skip non-compute ops — but a non-compute op can still be the last
@@ -167,6 +178,7 @@ struct InsertRecomputePass
           op->setAttr("tessera_sr.checkpoint_id",
                       IntegerAttr::get(IntegerType::get(ctx, 64), ckptId++));
           liveBytes = 0;
+          lastCkptOrdinal = thisOrdinal;
           lastCkptId = ckptId - 1;
           return;
         }
@@ -178,6 +190,7 @@ struct InsertRecomputePass
           op->setAttr("tessera_sr.checkpoint_id",
                       IntegerAttr::get(IntegerType::get(ctx, 64), ckptId++));
           liveBytes = 0;
+          lastCkptOrdinal = thisOrdinal;
           lastCkptId = ckptId - 1;
           return;
         }

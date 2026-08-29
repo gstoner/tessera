@@ -6,6 +6,24 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; execution unchanged, one setup trap recorded.**
+The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
+tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
+now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
+record moved in the same change, because leaving it at 24.04 pointed this
+project's own instructions at a bootstrap command that exits immediately.
+
+Measured on the migrated box (`Princess-Luna`): Ubuntu 26.04.1, LLVM/MLIR
+23.1.0 (assertions OFF), ROCm 10 series (HIP 7.15), repo at
+`~/programming/tessera`, ssh on the default port.
+*ROCm outcome.* This queue's own host is the one that moved. gfx1151
+execution is unchanged — the branch was built and run here after the migration
+(unit 16659 passed with a failure set identical to main's, `lit` 429/429,
+`check-tessera-rocm` 66/2/0). Two environment facts now in `CLAUDE.md`:
+`/opt/rocm` and `/opt/rocm/core` both exist post-migration and either serves as
+`CMAKE_PREFIX_PATH`; and `lit` is venv-only here, so a non-interactive
+configure misses it and `check-tessera-rocm` silently skips unless
+`-DTESSERA_LIT=` is passed.
 Cross-backend sync `ROCM-LIT-CAUGHT-A-REGRESSION-2026-08-29` — **this queue's
 fixtures caught a shared-pass regression the Mac could not see.**
 `phase3/streaming_attention_backward_rocm.mlir` is `REQUIRES:
@@ -52,7 +70,7 @@ exited 0. Since CI does not run this suite, that skip meant the ROCm backend had
 **no** automated fixture coverage anywhere. The search now includes the venv and
 warns loudly when no runner is found.
 
-Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; gfx1151 execution unchanged.****
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; gfx1151 execution unchanged.**
 PR #638 changes four SHARED contracts, so each backend records its own
 outcome rather than letting the queues drift:
 1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`

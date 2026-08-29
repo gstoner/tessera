@@ -487,7 +487,7 @@ specifically — they are irreversible, or they make a claim someone else acts o
 
   | Need | Box |
   |---|---|
-  | ROCm / gfx1151, x86 AVX-512 | Strix Halo, Ubuntu 24.04 under **WSL2** |
+  | ROCm / gfx1151, x86 AVX-512 | Strix Halo (`Princess-Luna`), Ubuntu 26.04 under **WSL2** |
   | CUDA / sm_120 | **NR2 Pro** (RTX 5070 Ti, Linux) |
   | Metal / Apple CPU + GPU | **Mac** M1 Max |
 
@@ -627,17 +627,32 @@ gate live together. The Mac is retained for Apple-backend work, which cannot be
 retargeted. Fleet routing per work item:
 [`INTEGRATED_COMPILER_PLAN.md`](docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md) §6a.
 
-### Primary — Ubuntu 24.04 on Strix Halo (x86 + AMD ROCm)
+### Primary — Ubuntu 26.04 on Strix Halo (x86 + AMD ROCm)
 
-`AMD RYZEN AI MAX+ 395 w/ Radeon 8060S`, 32 threads, 62 GB RAM, Ubuntu 24.04.4
-under WSL2. `bash scripts/setup_ubuntu.sh` provisions matched LLVM/MLIR 23 from
-**apt.llvm.org**, the base build deps, and a project-local `.venv` — then
-`source .venv/bin/activate` and `export PYTHONPATH=python`. CMake LLVM lives at
-`/usr/lib/llvm-23/lib/cmake/{llvm,mlir}`; put `/usr/lib/llvm-23/bin` on `PATH`
-for `FileCheck` before running lit. TheRock ROCm **7.14** lives under
-`/opt/rocm/core` (→ `/opt/rocm-7.2.4/core-7.14`) —
+**Migrated to Ubuntu 26.04 LTS 2026-08-29** (was 24.04). `setup_ubuntu.sh` now
+*fails* on any other release, so this record and that script must move together
+— the earlier mismatch pointed this host at a bootstrap command that exits
+immediately.
+
+`AMD RYZEN AI MAX+ 395 w/ Radeon 8060S`, hostname **`Princess-Luna`**, 32
+threads, Ubuntu **26.04.1 LTS** under WSL2, reached as
+`ssh gstoner@192.168.1.157` (**default port 22**). Repo lives at
+**`~/programming/tessera`**. `bash scripts/setup_ubuntu.sh` provisions matched
+LLVM/MLIR **23.1** from **apt.llvm.org**, the base build deps, and a
+project-local `.venv` — then `source .venv/bin/activate` and
+`export PYTHONPATH=python`. CMake LLVM lives at
+`/usr/lib/llvm-23/lib/cmake/{llvm,mlir}` (measured 23.1.0, `--assertion-mode`
+**OFF**); put `/usr/lib/llvm-23/bin` on `PATH` for `FileCheck` before running
+lit. ROCm is now the **ROCm 10 series** (`hipcc --version` reports HIP
+**7.15**); `/opt/rocm` and `/opt/rocm/core` both exist and either works as
+`CMAKE_PREFIX_PATH` —
 `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON
--DCMAKE_PREFIX_PATH=/opt/rocm/core`. **The `numpy<2.2` venv cap is no longer
+-DCMAKE_PREFIX_PATH=/opt/rocm`.
+
+**`lit` is venv-only on this box**, so a non-interactive configure does not see
+it and `check-tessera-rocm` printed "skipping" while exiting 0 — leaving the
+ROCm backend's only automated fixture coverage silently unrun. Pass
+`-DTESSERA_LIT=$PWD/.venv/bin/lit` if configuring outside the venv. **The `numpy<2.2` venv cap is no longer
 required** (lifted 2026-08-28): numpy ≥2.2 ships PEP 695 `type` statements in
 its stubs, which `python_version=3.10` cannot parse — that used to abort the
 whole mypy run before any Tessera file was checked. The mypy overrides in

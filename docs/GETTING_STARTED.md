@@ -48,21 +48,23 @@ print(tessera.__version__)
 
 ## Developer Environment & Building the Compiler
 
-Tessera builds on **macOS (Apple backend)** and **Ubuntu 24.04 (x86/ROCm
+Tessera builds on **macOS (Apple backend)** and **Ubuntu 26.04 LTS (x86/ROCm
 backend)** from one source tree. The Python flow needs only the lean deps above;
 the C++ compiler (`tessera-opt` and friends) additionally needs a matched
-**LLVM/MLIR 23** toolchain.
+**LLVM/MLIR 23.1.x** toolchain.
 
 ### macOS (Homebrew) — Apple backend
 
-LLVM/MLIR 23, ninja, cmake, and the Python tooling come from Homebrew (no venv).
-Until Homebrew publishes a stable LLVM 23 formula, use the HEAD build and verify
-the installed major explicitly:
+LLVM/MLIR 23.1, ninja, cmake, and the Python tooling come from Homebrew (no venv).
+Homebrew's **stable** `llvm` formula is 23.1.0, so install it directly — do NOT
+use `--HEAD`, which tracks LLVM's development branch and will report a major or
+minor that the matched-toolchain check in `CMakeLists.txt` rejects. Verify the
+installed major and minor explicitly:
 
 ```bash
 brew update
 brew install ninja cmake lit
-brew install llvm --HEAD             # use `brew reinstall llvm --HEAD` if needed
+brew install llvm                    # stable formula: 23.1.0 (keg-only)
 LLVM_PREFIX="$(brew --prefix llvm)"
 "$LLVM_PREFIX/bin/llvm-config" --version
 "$LLVM_PREFIX/bin/mlir-opt" --version
@@ -75,15 +77,16 @@ cmake -S . -B build -G Ninja \
 ninja -C build tessera-opt
 ```
 
-### Ubuntu 24.04 — x86 + TheRock ROCm 7.14 backend
+### Ubuntu 26.04 LTS — x86 + TheRock ROCm 7.14 backend
 
-One script provisions LLVM/MLIR 23 from apt.llvm.org, the base build deps, and
-a project-local `.venv`. It needs `sudo` for
-the apt steps and is idempotent:
+One script provisions matched LLVM/MLIR 23.1 from apt.llvm.org, the base build
+deps, and a project-local `.venv`. It needs `sudo` for the apt steps and is
+idempotent:
 
 ```bash
 bash scripts/setup_ubuntu.sh
 source .venv/bin/activate
+source scripts/_rocm_env.sh
 ```
 
 Then configure + build the compiler with the ROCm Target IR backend (ROCm

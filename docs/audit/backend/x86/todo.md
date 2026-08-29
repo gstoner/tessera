@@ -8,6 +8,19 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; AVX-512 execution unchanged.**
+The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
+tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
+now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
+record moved in the same change, because leaving it at 24.04 pointed this
+project's own instructions at a bootstrap command that exits immediately.
+
+Measured on the migrated box (`Princess-Luna`): Ubuntu 26.04.1, LLVM/MLIR
+23.1.0 (assertions OFF), ROCm 10 series (HIP 7.15), repo at
+`~/programming/tessera`, ssh on the default port.
+*x86 outcome.* The x86 backend shares this box, so the same migration
+applies. Native AVX-512 kernels build and the full `lit` suite is 425/425 there
+post-migration, so nothing in the x86 lane depends on the 24.04 baseline.
 Cross-backend sync `DEVICE-PROOF-DELIVERED-2026-08-29` — **the native
 half this queue owed is DONE.**
 
@@ -27,7 +40,7 @@ Also confirmed here: the `CMAKE_SYSTEM_PROCESSOR` gate added for arm64 still
 selects the native kernels on an x86 host — the build compiled them and no
 "x86 native kernels skipped" line appeared.
 
-Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **follow-up required on the native half.****
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **follow-up required on the native half.**
 PR #638 changes four SHARED contracts, so each backend records its own
 outcome rather than letting the queues drift:
 1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`

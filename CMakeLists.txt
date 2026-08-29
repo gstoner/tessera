@@ -107,20 +107,43 @@ endif()
 # --------------------------------------------------------------------------
 # LLVM / MLIR
 # --------------------------------------------------------------------------
-# Tessera has one compiler backbone: LLVM/MLIR 23. We match without a package
-# version constraint so every 23.x patch release works, then reject every
-# other major and any mixed-major installation below.
+# Tessera has one compiler backbone: matched LLVM/MLIR 23.1. Accept any 23.1
+# patch release, but reject other major/minor versions and mixed installations.
 find_package(LLVM REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
 
-if(NOT LLVM_VERSION_MAJOR EQUAL 23)
+if(NOT LLVM_VERSION_MAJOR EQUAL 23 OR NOT LLVM_VERSION_MINOR EQUAL 1)
   message(FATAL_ERROR
-    "Tessera requires LLVM 23.x exactly; found ${LLVM_PACKAGE_VERSION}")
+    "Tessera requires LLVM 23.1.x exactly; found ${LLVM_PACKAGE_VERSION}")
 endif()
 
-if(NOT DEFINED MLIR_VERSION_MAJOR OR NOT MLIR_VERSION_MAJOR EQUAL 23)
+if(NOT DEFINED MLIR_VERSION_MAJOR OR NOT DEFINED MLIR_VERSION_MINOR OR
+   NOT MLIR_VERSION_MAJOR EQUAL 23 OR NOT MLIR_VERSION_MINOR EQUAL 1)
   message(FATAL_ERROR
-    "Tessera requires MLIR 23.x exactly; found ${MLIR_PACKAGE_VERSION}")
+    "Tessera requires MLIR 23.1.x exactly; found "
+    "${MLIR_VERSION_MAJOR}.${MLIR_VERSION_MINOR}")
+endif()
+
+# Matched-install check. Compare the MAJOR.MINOR pair, not the package-version
+# strings: MLIRConfig.cmake does not set `MLIR_PACKAGE_VERSION` on the
+# apt.llvm.org packages (measured on Ubuntu 26.04 / LLVM 23.1.0 — it comes back
+# empty while MLIR_VERSION_MAJOR/MINOR are 23/1), so a
+# `LLVM_PACKAGE_VERSION VERSION_EQUAL MLIR_PACKAGE_VERSION` test compares
+# "23.1.0" against "" and fails on every correctly matched install.
+if(NOT LLVM_VERSION_MAJOR EQUAL MLIR_VERSION_MAJOR OR
+   NOT LLVM_VERSION_MINOR EQUAL MLIR_VERSION_MINOR)
+  message(FATAL_ERROR
+    "Tessera requires matched LLVM/MLIR packages; found LLVM "
+    "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR} and MLIR "
+    "${MLIR_VERSION_MAJOR}.${MLIR_VERSION_MINOR}")
+endif()
+
+# When MLIR does publish a full package version, hold it to the patch level too.
+if(MLIR_PACKAGE_VERSION AND
+   NOT LLVM_PACKAGE_VERSION VERSION_EQUAL MLIR_PACKAGE_VERSION)
+  message(FATAL_ERROR
+    "Tessera requires matched LLVM/MLIR packages; found LLVM ${LLVM_PACKAGE_VERSION} "
+    "and MLIR ${MLIR_PACKAGE_VERSION}")
 endif()
 
 # Pull in MLIR cmake helpers (TableGen, AddMLIR, …) — required by sub-components

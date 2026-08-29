@@ -28,8 +28,34 @@ def _symmetric_scale(x: np.ndarray, qmax: int) -> np.float32:
     return np.float32(max_abs / qmax)
 
 
-def quantize_int8(x: Any, scale: float | None = None, zero_point: int = 0, *, symmetric: bool = True):
-    """Quantize to int8 values and return ``(q, scale, zero_point)``."""
+def _affine_qparams(x: np.ndarray, qmin: int, qmax: int,
+                    scale: float | None) -> tuple[np.float32, int]:
+    """Scale and zero-point for asymmetric (affine) quantization ``q = x/s + zp``.
+
+    The represented range is widened to include 0 before the scale is taken.
+    Without that, a tensor whose values are all one side of zero — the exact
+    case asymmetric mode exists for, e.g. a ReLU output — derives a zero-point
+    outside ``[qmin, qmax]``; clipping it then silently saturates the data
+    rather than shifting it into range.
+    """
+    if x.size:
+        lo = min(float(x.min()), 0.0)
+        hi = max(float(x.max()), 0.0)
+    else:
+        lo = hi = 0.0
+    s = np.float32(scale) if scale is not None else np.float32((hi - lo) / float(qmax - qmin))
+    if float(s) == 0.0:
+        s = np.float32(1.0)
+    zp = int(np.clip(round(qmin - lo / float(s)), qmin, qmax))
+    return s, zp
+
+
+def quantize_int8(x: Any, scale: float | None = None, zero_point: int | None = None, *, symmetric: bool = True):
+    """Quantize to int8 values and return ``(q, scale, zero_point)``.
+
+    In asymmetric mode an omitted ``zero_point`` is derived from the data
+    alongside the scale; pass one explicitly to pin it.
+    """
     x_arr = _asarray(x).astype(np.float32, copy=False)
     if symmetric:
         # Local `s: np.float32` so mypy doesn't have to reconcile the
@@ -37,29 +63,31 @@ def quantize_int8(x: Any, scale: float | None = None, zero_point: int = 0, *, sy
         s = _symmetric_scale(x_arr, 127) if scale is None else np.float32(scale)
         q = np.round(x_arr / s).clip(-127, 127).astype(np.int8)
         return q, np.float32(s), 0
-    s = np.float32(scale if scale is not None else ((x_arr.max() - x_arr.min()) / 255.0 if x_arr.size else 1.0))
-    if float(s) == 0.0:
-        s = np.float32(1.0)
-    q = np.round(x_arr / s + zero_point).clip(-128, 127).astype(np.int8)
-    return q, s, int(zero_point)
+    s, derived_zp = _affine_qparams(x_arr, -128, 127, scale)
+    zp = derived_zp if zero_point is None else int(zero_point)
+    q = np.round(x_arr / s + zp).clip(-128, 127).astype(np.int8)
+    return q, s, zp
 
 
 def dequantize_int8(q: Any, scale: float, zero_point: int = 0) -> np.ndarray:
     return (_asarray(q).astype(np.float32) - float(zero_point)) * np.float32(scale)
 
 
-def quantize_int4(x: Any, scale: float | None = None, zero_point: int = 0, *, symmetric: bool = True):
-    """Quantize to signed int4 values stored in int8 containers."""
+def quantize_int4(x: Any, scale: float | None = None, zero_point: int | None = None, *, symmetric: bool = True):
+    """Quantize to signed int4 values stored in int8 containers.
+
+    In asymmetric mode an omitted ``zero_point`` is derived from the data
+    alongside the scale; pass one explicitly to pin it.
+    """
     x_arr = _asarray(x).astype(np.float32, copy=False)
     if symmetric:
         s = _symmetric_scale(x_arr, 7) if scale is None else np.float32(scale)
         q = np.round(x_arr / s).clip(-7, 7).astype(np.int8)
         return q, np.float32(s), 0
-    s = np.float32(scale if scale is not None else ((x_arr.max() - x_arr.min()) / 15.0 if x_arr.size else 1.0))
-    if float(s) == 0.0:
-        s = np.float32(1.0)
-    q = np.round(x_arr / s + zero_point).clip(-8, 7).astype(np.int8)
-    return q, s, int(zero_point)
+    s, derived_zp = _affine_qparams(x_arr, -8, 7, scale)
+    zp = derived_zp if zero_point is None else int(zero_point)
+    q = np.round(x_arr / s + zp).clip(-8, 7).astype(np.int8)
+    return q, s, zp
 
 
 def dequantize_int4(q: Any, scale: float, zero_point: int = 0) -> np.ndarray:
@@ -69,7 +97,7 @@ def dequantize_int4(q: Any, scale: float, zero_point: int = 0) -> np.ndarray:
     return (q_arr - float(zero_point)) * np.float32(scale)
 
 
-def fake_quantize(x: Any, num_bits: int = 8, scale: float | None = None, zero_point: int = 0, *, symmetric: bool = True) -> np.ndarray:
+def fake_quantize(x: Any, num_bits: int = 8, scale: float | None = None, zero_point: int | None = None, *, symmetric: bool = True) -> np.ndarray:
     """Quantize then dequantize, preserving the original floating output dtype."""
     if num_bits == 8:
         q, s, zp = quantize_int8(x, scale=scale, zero_point=zero_point, symmetric=symmetric)
@@ -106,11 +134,11 @@ class CalibrationObserver:
             return np.float32(max_abs / qmax if max_abs else 1.0), 0
         qmin = -(2 ** (num_bits - 1))
         qmax = (2 ** (num_bits - 1)) - 1
-        scale = (self.max_val - self.min_val) / float(qmax - qmin)
-        if scale == 0.0:
-            return np.float32(1.0), 0
-        zp = int(np.clip(round(qmin - self.min_val / scale), qmin, qmax))
-        return np.float32(scale), zp
+        # Same range-includes-zero rule as the quantize_* entry points, so an
+        # observer calibrated on one-sided data (post-ReLU activations) yields a
+        # zero-point inside [qmin, qmax] instead of one that clips.
+        observed = np.array([self.min_val, self.max_val], dtype=np.float32)
+        return _affine_qparams(observed, qmin, qmax, None)
 
 
 def calibration_observer() -> CalibrationObserver:

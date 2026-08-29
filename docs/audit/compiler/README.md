@@ -73,6 +73,11 @@ The complete file-by-file catalog is below. Its practical summary is:
 - The four backend `todo.md` files own promotion on Apple, NVIDIA, ROCm, and
   x86. A shared contract can land host-free; exact-device evidence cannot move
   between architectures.
+- [`CODE_REVIEW_2026-08-29.md`](CODE_REVIEW_2026-08-29.md) holds the 102
+  verified findings from the 2026-08-29 review of the Python numeric core and
+  the MLIR passes, each with a reproduction. Its nine P0 rows are fixed; the
+  P1/P2/P3 rows are an open follow-up queue and are **findings, not a
+  schedule** — the integrated plan still orders cross-domain work.
 
 ## Central plan at a glance
 

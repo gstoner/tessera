@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-27
+last_updated: 2026-08-29
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,64 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **action
+required: two lowering P0s landed and a new host-architecture build gate needs
+confirmation on a real x86 host.**
+
+*Foundation (all backends).* The LLVM/MLIR major pin is unchanged at **23**;
+the Mac moved from a manual pre-release `23.1.0git` prefix to Homebrew's
+production `llvm` keg **23.1.0** (the old prefix is deleted). This box stays on
+apt.llvm.org `/usr/lib/llvm-23`. **No fleet box has an assertions-enabled LLVM
+any more** — which matters here specifically: the open `TileToX86Pass`
+in-pass `getOrLoadDialect` item below is an assertions-only hard error and is
+now invisible on *every* machine, so its "does not reproduce" status is
+provisional (Decision #19). Python/deps: the `numpy<2.2` venv cap **can be
+dropped** — `pyproject.toml` now skips numpy/scipy stubs
+(`follow_imports = "skip"` **plus** `follow_imports_for_stubs = true`), keeping
+`python_version = "3.10"` while making the mypy ratchet independent of the
+installed numpy. Also: `check-{clifford,ebm,spectral}` no longer hardcode
+`llvm-lit`, and driver discovery now requires a candidate binary to **start**,
+not merely exist (a tree from an uninstalled toolchain otherwise wins).
+
+*The build gate that needs this box to confirm it.* `src/CMakeLists.txt` now
+adds the native `tessera_x86_backend` kernel subdirectory only when
+`CMAKE_SYSTEM_PROCESSOR` matches `x86_64|AMD64|amd64|i[3-6]86`; the
+hardware-free `tessera_x86` Target IR dialect (a separate subdirectory) is
+always built. On arm64 this makes `ninja -C build` complete with
+`TESSERA_BUILD_X86_BACKEND=ON` and takes `lit tests/tessera-ir/` from **414/425
+to 425/425** — the 11 phase2 x86 fixtures now run on the one fleet host
+*without* AVX-512, which per Decision #19's standing lesson is the only host
+whose green result on them is evidence of portability. **Confirm on this box
+that the regex still selects the kernels**: a gate that silently skipped them
+here would disable the AVX-512 kernel build on the only machine that has the
+ISA. Check `cmake` prints no "x86 native kernels skipped" line, and that
+`build/src/compiler/codegen/tessera_x86_backend/` still produces its library.
+
+*The two P0s this box owns.* Both in `src/transforms/lib/TileToX86Pass.cpp`,
+both previously **silent wrong answers**, now fail closed via a completeness
+walk after pattern application (an `emitError` inside a pattern that returns
+`failure()` prints but does not fail the pass — the driver exited 0):
+1. **f16 routed to the bf16 kernel.** The patterns accepted `isF16()` but
+   called `tessera_x86_{amx,avx512}_gemm_bf16`, whose ABI carries no dtype
+   selector and whose kernel decodes each `uint16` as bf16. f16 `1.0`
+   (`0x3C00`) is read as bf16 `≈0.0117` — every element wrong, with all IR
+   types self-consistent so no verifier objected. Now rejected with a named
+   diagnostic; operand element types must also match.
+2. **`fused_epilogue` dropped the activation.** The epilogue was emitted only
+   inside `if (hasBias)` and only for a static bias, and RELU was mapped to
+   `tessera_x86_epilogue_bias_fp32`, which applies **no activation**
+   (`kernels/epilogue.cpp`). Unsupported configurations replaced the op with
+   the bare GEMM result. Now diagnosed and refused (Decision #21).
+   Only `none` and `gelu` have kernels; adding a RELU kernel would widen what
+   lowers and is the natural follow-up.
+
+Verified so far by lit on arm64 only
+(`tests/tessera-ir/phase2/x86_dtype_and_epilogue_fail_closed.mlir`, plus the
+existing 11 fixtures). **This box owes the native half**: `ninja -C build` with
+the kernels actually compiled, `lit tests/tessera-ir/`, and the AVX-512 device
+lane, to confirm the guards did not narrow a configuration that previously
+lowered and executed correctly.
+
 Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **deferred with
 reason; AVX-512 execution unchanged.** The IKF-1 intra-kernel measurement
 plan (`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`, PR #634) targets

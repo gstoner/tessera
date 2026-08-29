@@ -128,7 +128,7 @@ def _tree_numeric_vjp(fn, dout, tree, *, eps: float = 1e-5):
             # against future tree containers that subclass both.  mypy
             # statically knows it's unreachable today, but the guard
             # stays.
-            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):  # type: ignore[unreachable]
+            if isinstance(value, (bool, str, int, np.integer)) and not isinstance(value, np.ndarray):
                 out[key] = None
                 continue
 
@@ -3725,6 +3725,15 @@ def _normalize_grad(x, grad_y, axes, eps):
     return grad_x
 
 
+def _affine_param_grads(do, x_hat, ndim):
+    """Cotangents for a per-channel (weight, bias) applied as y = x_hat*w + b.
+
+    Both reduce over every axis except the channel axis 1, which is what the
+    forward broadcasts over (nn/functional.py group_norm/instance_norm)."""
+    axes = (0,) + tuple(range(2, ndim))
+    return (do * x_hat).sum(axis=axes), do.sum(axis=axes)
+
+
 @_vjp("group_norm")
 def vjp_group_norm(dout, x, num_groups, weight=None, bias=None,
                    *, eps=1e-5, **_):
@@ -3732,15 +3741,33 @@ def vjp_group_norm(dout, x, num_groups, weight=None, bias=None,
     do = np.asarray(dout).astype(np.float32, copy=False)
     n, c = x_arr.shape[:2]
     grouped = x_arr.reshape(n, num_groups, c // num_groups, *x_arr.shape[2:])
-    do_grouped = do.reshape(grouped.shape)
     reduce_axes = tuple(range(2, grouped.ndim))
+    n_spatial = x_arr.ndim - 2
+
+    d_weight = d_bias = None
+    if weight is not None or bias is not None:
+        # x_hat is the normalized value the affine pair was applied to.
+        mean = grouped.mean(axis=reduce_axes, keepdims=True)
+        var = grouped.var(axis=reduce_axes, keepdims=True)
+        x_hat = ((grouped - mean) / np.sqrt(var + eps)).reshape(x_arr.shape)
+        d_weight, d_bias = _affine_param_grads(do, x_hat, x_arr.ndim)
+        if weight is None:
+            d_weight = None
+        if bias is None:
+            d_bias = None
 
     # If a weight was applied in forward, strip it before the inner backward.
+    # The per-channel weight broadcasts across the grouped layout's split
+    # channel axes (G, C//G) — reshaping it to the full grouped shape would
+    # need C == N*C*prod(spatial) and raises for every real input.
     if weight is not None:
-        w = np.asarray(weight).reshape(1, c, *([1] * (x_arr.ndim - 2)))
-        do_grouped = do.reshape(grouped.shape) * w.reshape(grouped.shape)
+        w = np.asarray(weight).reshape(
+            1, num_groups, c // num_groups, *([1] * n_spatial))
+        do_grouped = do.reshape(grouped.shape) * w
+    else:
+        do_grouped = do.reshape(grouped.shape)
     grad_x = _normalize_grad(grouped, do_grouped, reduce_axes, eps).reshape(x_arr.shape)
-    return (grad_x, None, None, None)  # weight/bias grads not yet wired.
+    return (grad_x, None, d_weight, d_bias)
 
 
 @_vjp("instance_norm")
@@ -3748,12 +3775,24 @@ def vjp_instance_norm(dout, x, weight=None, bias=None, *, eps=1e-5, **_):
     x_arr = np.asarray(x).astype(np.float32, copy=False)
     do = np.asarray(dout).astype(np.float32, copy=False)
     reduce_axes = tuple(range(2, x_arr.ndim))
+
+    d_weight = d_bias = None
+    if weight is not None or bias is not None:
+        mean = x_arr.mean(axis=reduce_axes, keepdims=True)
+        var = x_arr.var(axis=reduce_axes, keepdims=True)
+        x_hat = (x_arr - mean) / np.sqrt(var + eps)
+        d_weight, d_bias = _affine_param_grads(do, x_hat, x_arr.ndim)
+        if weight is None:
+            d_weight = None
+        if bias is None:
+            d_bias = None
+
     if weight is not None:
         c = x_arr.shape[1]
         w = np.asarray(weight).reshape(1, c, *([1] * (x_arr.ndim - 2)))
         do = do * w
     grad_x = _normalize_grad(x_arr, do, reduce_axes, eps)
-    return (grad_x, None, None)
+    return (grad_x, d_weight, d_bias)
 
 
 # ── S7 layers ───────────────────────────────────────────────────────────────

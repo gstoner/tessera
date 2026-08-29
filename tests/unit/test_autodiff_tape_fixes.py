@@ -214,3 +214,39 @@ def test_qr_r_component_tape_gradient_uses_r_cotangent_route():
         ts.autodiff.grad(squared_r_norm)(A), 2.0 * A,
         rtol=1.0e-10, atol=1.0e-10,
     )
+
+
+# ── Aliased op output: the entry's adjoint is consumed, not re-accumulated ───
+
+def test_identity_returning_op_does_not_double_upstream_gradients():
+    """`ops.clamp(y)` with no bounds returns `y` itself, so the clamp tape entry
+    shares its output_id with its input's array_id. Reading the adjoint and then
+    accumulating the passthrough cotangent into that same key used to double
+    every gradient upstream of the alias."""
+    x = np.array([1.0, 2.0])
+
+    def with_alias(v):
+        return ops.reduce(ops.clamp(ops.mul(v, 2.0)), op="sum")
+
+    def without_alias(v):
+        return ops.reduce(ops.mul(v, 2.0), op="sum")
+
+    expected = np.array([2.0, 2.0])
+    np.testing.assert_allclose(ts.autodiff.grad(with_alias)(x), expected)
+    # The alias must not change the answer.
+    np.testing.assert_allclose(
+        ts.autodiff.grad(with_alias)(x), ts.autodiff.grad(without_alias)(x)
+    )
+
+
+def test_aliased_output_still_accumulates_real_fan_out():
+    """Consuming the adjoint must not drop a genuine second use of the value:
+    `y` feeds both the alias and the addition, so both paths must contribute."""
+    x = np.array([1.0, 2.0])
+
+    def fan_out(v):
+        y = ops.mul(v, 2.0)
+        return ops.reduce(ops.add(y, ops.clamp(y)), op="sum")
+
+    # d/dv sum(y + y) with y = 2v  ->  4 per element.
+    np.testing.assert_allclose(ts.autodiff.grad(fan_out)(x), np.array([4.0, 4.0]))

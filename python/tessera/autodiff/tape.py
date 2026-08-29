@@ -202,6 +202,16 @@ class Tape:
             dout = cotan.get(entry.output_id)
             if dout is None:
                 continue  # not on the path to the scalar
+            # Consume the output's adjoint. Every consumer of this output sits
+            # later on the tape and has already contributed, so `dout` is final
+            # here. Popping matters when an op returns one of its inputs
+            # verbatim (`ops.clamp(x)` with no bounds, `ops.reshape` to the same
+            # shape): the entry's output_id and that input's array_id are then
+            # the *same* key, and accumulating below would add the passthrough
+            # cotangent on top of the `dout` we just consumed, doubling every
+            # upstream gradient silently. Re-seeding the key from the rule's
+            # own result is the only correct reading of an aliased edge.
+            del cotan[entry.output_id]
 
             if entry.vjp is None:
                 raise TesseraAutodiffError(

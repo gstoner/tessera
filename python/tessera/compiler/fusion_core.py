@@ -1455,8 +1455,16 @@ def discover_attention_regions(
         # optional scalar-multiply applying the attention scale.
         if ops[j].name in _SCALE_NAMES:
             factor = ops[j].attrs.get("scale", ops[j].attrs.get("factor"))
-            if isinstance(factor, (int, float)):
-                scale = float(factor)
+            if not isinstance(factor, (int, float)):
+                # The factor rides a graph value, not an attribute — a tensor
+                # scale or a mask multiply. Folding it into `scale` is not
+                # possible and consuming the op anyway would delete the
+                # multiply from the program: the fused kernel would compute an
+                # unscaled softmax(Q·Kᵀ)·V and the F4 oracle, which compares
+                # against the same region, could not see the difference. Leave
+                # the whole region unfused so the multiply still executes.
+                continue
+            scale = float(factor)
             chain.append(j)
             consumed.add(j)
             cur = ops[j].output

@@ -134,3 +134,46 @@ def test_s8_tiny_diffusion_and_attention_conformance_smoke():
     mixed = ts.nn.linear_general(tokens, proj)
     attn = ts.nn.multi_head_attention(mixed, mixed, mixed, num_heads=2)
     assert attn.shape == tokens.shape
+
+
+# ── Asymmetric quantization derives a usable zero-point ─────────────────────
+
+def test_asymmetric_quantization_round_trips_one_sided_data():
+    """Auto-scale used to leave zero_point at 0, so a tensor that does not
+    straddle zero — a ReLU/softmax output, the case asymmetric mode exists for —
+    saturated against one end of the code space."""
+    import tessera.quantization as q
+
+    x = np.array([0.0, 10.0], dtype=np.float32)
+    qq, scale, zp = q.quantize_int8(x, symmetric=False)
+    np.testing.assert_allclose(q.dequantize_int8(qq, scale, zp), x, atol=float(scale))
+
+    # A range entirely above zero must still resolve two distinct codes.
+    x2 = np.array([5.0, 10.0], dtype=np.float32)
+    q2, s2, zp2 = q.quantize_int8(x2, symmetric=False)
+    assert q2[0] != q2[1]
+    np.testing.assert_allclose(q.dequantize_int8(q2, s2, zp2), x2, atol=float(s2))
+
+    # int4 shares the rule.
+    q4, s4, zp4 = q.quantize_int4(x, symmetric=False)
+    np.testing.assert_allclose(q.dequantize_int4(q4, s4, zp4), x, atol=float(s4))
+
+
+def test_asymmetric_quantization_honors_explicit_zero_point():
+    import tessera.quantization as q
+
+    x = np.array([0.0, 10.0], dtype=np.float32)
+    _, _, zp = q.quantize_int8(x, scale=0.1, zero_point=7, symmetric=False)
+    assert zp == 7
+
+
+def test_observer_qparams_keep_zero_point_in_range():
+    """calculate_qparams must widen the observed range to include zero, or the
+    derived zero-point falls outside [qmin, qmax] and clipping loses the data."""
+    import tessera.quantization as q
+
+    obs = q.calibration_observer().observe(np.array([2.0, 4.0], dtype=np.float32))
+    scale, zp = obs.calculate_qparams(8, symmetric=False)
+    assert -128 <= zp <= 127
+    recovered = (np.round(4.0 / float(scale) + zp).clip(-128, 127) - zp) * float(scale)
+    np.testing.assert_allclose(recovered, 4.0, atol=float(scale))

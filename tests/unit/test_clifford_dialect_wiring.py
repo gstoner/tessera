@@ -473,11 +473,21 @@ def test_grade_fusion_basic_fixture_targets_bivector_slice() -> None:
     assert "--tessera-clifford-grade-fusion" in fixture
 
 
-def test_grade_fusion_multi_consumer_unions_grade_sets() -> None:
+def test_grade_fusion_multi_consumer_keeps_distinct_projections() -> None:
+    """Two grade ops asking for different slices of one product are NOT fused.
+
+    This asserted the union `[0, 2]` until 2026-08-28. The union is unsound:
+    `output_grades` restricts the product, and ExpandProductTable emits a
+    single shared value carrying every grade in the set — so folding both
+    consumers makes them the same SSA value and each receives the other's
+    grades. A union is only correct when the consumers are summed.
+    """
     fixture = (REPO_ROOT
         / "src/solvers/clifford/test/ir/passes/grade_fusion_multi_consumer.mlir").read_text()
-    # Two grade ops requesting grade 0 and grade 2 fuse into the union.
-    assert "tessera.clifford.output_grades = [0, 2]" in fixture
+    assert "tessera.clifford.output_grades = [0, 2]" not in fixture
+    assert "CHECK-NOT: tessera.clifford.output_grades" in fixture
+    # Both projections survive, each with its own grade.
+    assert "grades [0]" in fixture and "grades [2]" in fixture
 
 
 def test_full_pipeline_fixture_combines_all_three_passes() -> None:

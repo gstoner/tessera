@@ -148,3 +148,72 @@ def test_nesterov_velocity_cotangent_uses_momentum_squared():
     _, _, d_state = _VJPS["nesterov"](
         dout, params, grads, {"velocity": velocity}, lr=lr, momentum=m)
     np.testing.assert_allclose(d_state["velocity"], -lr * m * m * dout, rtol=1e-12)
+
+
+# ── schedules, clipping, losses ────────────────────────────────────────────
+
+def test_inverse_sqrt_lr_peaks_at_init_value_and_warms_up():
+    """The old form returned init_value*sqrt(warmup)/sqrt(step) at every step,
+    so the rate EXCEEDED init_value for the whole warmup — 63x the nominal peak
+    on step 1 at the usual warmup_steps=4000."""
+    from tessera import optim
+
+    init_value, warmup = 1e-3, 4000
+    rates = [optim.inverse_sqrt_lr(s, init_value=init_value, warmup_steps=warmup)
+             for s in range(1, 20001)]
+    assert max(rates) <= init_value + 1e-18
+    # Peak sits exactly at the end of warmup, and the schedule is continuous.
+    assert optim.inverse_sqrt_lr(warmup, init_value=init_value,
+                                 warmup_steps=warmup) == pytest.approx(init_value)
+    assert optim.inverse_sqrt_lr(1, init_value=init_value,
+                                 warmup_steps=warmup) < init_value
+    # ...and still decays as sqrt after it.
+    assert optim.inverse_sqrt_lr(4 * warmup, init_value=init_value,
+                                 warmup_steps=warmup) == pytest.approx(init_value / 2)
+
+
+def test_clip_grad_norm_honours_norm_type():
+    """Every norm_type other than inf silently fell through to the L2 norm, so
+    norm_type=1.0 clipped by — and reported — the wrong quantity."""
+    from tessera import optim
+
+    grads = [np.array([3.0]), np.array([4.0])]
+    assert optim.clip_grad_norm(grads, 1.0, norm_type=2.0)[1] == pytest.approx(5.0)
+    assert optim.clip_grad_norm(grads, 1.0, norm_type=1.0)[1] == pytest.approx(7.0)
+    assert optim.clip_grad_norm(grads, 1.0, norm_type=float("inf"))[1] == pytest.approx(4.0)
+    # A norm this cannot compute fails closed rather than substituting L2.
+    with pytest.raises(ValueError):
+        optim.clip_grad_norm(grads, 1.0, norm_type=0.0)
+
+
+def test_focal_loss_honours_ignore_index_and_range_checks():
+    """Targets were fancy-indexed unchecked, so numpy's negative wraparound
+    turned the -100 padding convention that cross_entropy_loss documents into a
+    real class index and averaged its probability into the loss."""
+    from tessera import losses
+
+    rng = np.random.default_rng(0)
+    logits = rng.standard_normal((4, 10))
+    padded = losses.focal_loss(logits, np.array([1, 2, -100, 3]))
+    unpadded = losses.focal_loss(logits[[0, 1, 3]], np.array([1, 2, 3]))
+    assert float(padded) == pytest.approx(float(unpadded))
+
+    with pytest.raises(ValueError):
+        losses.focal_loss(logits, np.array([1, 2, 99, 3]))
+
+
+def test_kl_divergence_is_finite_when_p_has_zero_probability_entries():
+    """p_log = -inf gives p = 0 and 0*(-inf) = NaN, which poisoned the whole
+    reduction. The true contribution of a zero-probability term is 0. -inf
+    arrives routinely from log_softmax over masked logits."""
+    from tessera import losses
+
+    logits = np.array([[1.0, 2.0, -np.inf]])
+    p_log = logits - np.log(np.exp(logits[np.isfinite(logits)]).sum())
+    q = np.array([[0.3, 0.6, 0.1]])
+
+    value = float(losses.kl_divergence(p_log, q))
+    assert np.isfinite(value)
+    p = np.exp(p_log)
+    expected = float(np.sum(np.where(p > 0, p * (p_log - np.log(q)), 0.0)))
+    assert value == pytest.approx(expected)

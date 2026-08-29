@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **515** ops in `primitive_coverage` registry.
-- **5774** total Python-test references, **1402** total lit-fixture references.
+- **5786** total Python-test references, **1402** total lit-fixture references.
 - **70** ops have **zero** references in either test surface.
-- **114** ops have ≤1 reference ("thinly tested").
-- **186** ops have ≥10 references ("well tested").
-- **177** ops have at least one associated `pytest.raises` negative test.
+- **113** ops have ≤1 reference ("thinly tested").
+- **187** ops have ≥10 references ("well tested").
+- **181** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **114** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **113** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **114** ops have at most one test reference across the whole test surface.
 | `ema_update` |    1 |    0 |    1 |
 | `entmax15` |    1 |    0 |    1 |
 
-_(54 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(53 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**114** ops have ≤1 direct test reference.  They break down as:
+**113** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   26 | Tested via a parent op or family wrapper |
-| `structural_only`        |   77 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |   76 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -179,7 +179,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `rng_multinomial` | category default for 'rng' |
 | `rng_permutation` | category default for 'rng' |
 
-## `structural_only` — 77 ops
+## `structural_only` — 76 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -216,4 +216,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_zip` | category default for 'data' |
 | `dynamic_slice` | unclassified — defaults to structural_only |
 
-_(47 additional structural ops omitted.)_
+_(46 additional structural ops omitted.)_

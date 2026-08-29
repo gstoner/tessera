@@ -472,7 +472,7 @@ scripts/release_gate.py --target=apple_gpu
 mypy python/tessera/
 ```
 
-C++/MLIR builds require a matched LLVM/MLIR 23 toolchain:
+C++/MLIR builds require a matched LLVM/MLIR 23.1.x toolchain:
 
 ```bash
 # Convenience build wrapper; defaults to CPU-only unless CUDA/HIP is enabled
@@ -490,8 +490,10 @@ cmake -S . -B build \
 
 cmake --build build --parallel
 
-# On Ubuntu 24.04 (x86 + TheRock ROCm 7.14): bootstrap the toolchain once with
-#   bash scripts/setup_ubuntu.sh           # LLVM/MLIR 23 from apt.llvm.org + venv
+# On Ubuntu 26.04 LTS (x86 + TheRock ROCm 7.14): bootstrap the toolchain once with
+#   bash scripts/setup_ubuntu.sh           # LLVM/MLIR 23.1 from apt.llvm.org + venv
+#   source .venv/bin/activate
+#   source scripts/_rocm_env.sh
 # then configure against upstream LLVM/MLIR and TheRock at /opt/rocm/core:
 cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \

@@ -6,8 +6,8 @@
 # on Linux, alongside the existing macOS Homebrew flow (which is unchanged — see
 # CLAUDE.md "Local Toolchain"). Target environment:
 #
-#   * A supported Ubuntu release
-#   * LLVM/MLIR 23 from apt.llvm.org
+#   * Ubuntu 26.04 LTS (Resolute)
+#   * A matched LLVM/MLIR 23.1 toolchain from apt.llvm.org
 #   * TheRock ROCm 7.14 at /opt/rocm/core
 #   * A project-local Python venv (.venv) with the lean dependency set
 #
@@ -24,6 +24,8 @@
 set -euo pipefail
 
 LLVM_VERSION=23
+LLVM_REQUIRED_VERSION="23.1"
+UBUNTU_REQUIRED_VERSION="26.04"
 ROCM_REQUIRED="7.14"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LLVM_PREFIX="/usr/lib/llvm-${LLVM_VERSION}"
@@ -54,9 +56,11 @@ fi
 say "Checking OS"
 # ---------------------------------------------------------------------------
 . /etc/os-release || die "cannot read /etc/os-release"
-CODENAME="${VERSION_CODENAME:-noble}"
+CODENAME="${VERSION_CODENAME:-resolute}"
 echo "  ${PRETTY_NAME:-unknown}  (codename: ${CODENAME})"
-[[ "$ID" == "ubuntu" ]] || warn "not Ubuntu — apt package names assume Debian/Ubuntu"
+[[ "$ID" == "ubuntu" ]] || die "Tessera's Linux setup requires Ubuntu ${UBUNTU_REQUIRED_VERSION}"
+[[ "${VERSION_ID:-}" == "${UBUNTU_REQUIRED_VERSION}" ]] \
+  || die "Tessera's supported Linux baseline is Ubuntu ${UBUNTU_REQUIRED_VERSION}; found ${VERSION_ID:-unknown}"
 
 configure_llvm_repo() {
   local keyring=/etc/apt/keyrings/apt.llvm.org.gpg
@@ -68,7 +72,8 @@ configure_llvm_repo() {
   # apt.llvm.org publishes the development major through the unversioned
   # snapshot suite. Once that major branches, it moves to the versioned suite.
   # Probe both so setup remains valid across that transition and across Ubuntu
-  # releases (for example Resolute currently serves LLVM 23 as the snapshot).
+  # releases (Resolute may serve LLVM 23 through the snapshot while 23.1 is
+  # under active development).
   if ! wget -q --spider \
       "https://apt.llvm.org/${CODENAME}/dists/${versioned_suite}/Release"; then
     suite=$snapshot_suite
@@ -129,13 +134,13 @@ fi
 
 # ---------------------------------------------------------------------------
 if [[ $DO_LLVM -eq 1 ]]; then
-  say "Installing LLVM/MLIR ${LLVM_VERSION} from apt.llvm.org (codename: ${CODENAME})"
+  say "Installing LLVM/MLIR ${LLVM_REQUIRED_VERSION} from apt.llvm.org (codename: ${CODENAME})"
   if [[ -x "${LLVM_PREFIX}/bin/mlir-tblgen" ]]; then
     echo "  ${LLVM_PREFIX} already has MLIR — skipping repo add"
   else
     $SUDO apt-get update -y
   fi
-  # Use one matched upstream LLVM/MLIR major for the whole compiler build.
+  # Use one matched upstream LLVM/MLIR 23.1 toolchain for the whole compiler build.
   $SUDO apt-get install -y \
     llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev llvm-${LLVM_VERSION}-tools \
     libmlir-${LLVM_VERSION}-dev mlir-${LLVM_VERSION}-tools \
@@ -144,7 +149,13 @@ if [[ $DO_LLVM -eq 1 ]]; then
 
   # Sanity: MLIR CMake config + tools must exist.
   [[ -d "${LLVM_PREFIX}/lib/cmake/mlir" ]] || die "MLIRConfig.cmake missing under ${LLVM_PREFIX}"
-  "${LLVM_PREFIX}/bin/llvm-config" --version
+  LLVM_INSTALLED_VERSION="$("${LLVM_PREFIX}/bin/llvm-config" --version)"
+  MLIR_INSTALLED_VERSION="$("${LLVM_PREFIX}/bin/mlir-opt" --version | sed -n 's/.*version \([0-9][0-9.]*\).*/\1/p' | head -1)"
+  [[ "${LLVM_INSTALLED_VERSION}" == ${LLVM_REQUIRED_VERSION}* ]] \
+    || die "LLVM ${LLVM_REQUIRED_VERSION}.x is required; found ${LLVM_INSTALLED_VERSION}"
+  [[ "${MLIR_INSTALLED_VERSION}" == ${LLVM_REQUIRED_VERSION}* ]] \
+    || die "MLIR ${LLVM_REQUIRED_VERSION}.x is required; found ${MLIR_INSTALLED_VERSION:-unknown}"
+  echo "  LLVM ${LLVM_INSTALLED_VERSION}; MLIR ${MLIR_INSTALLED_VERSION}"
   "${LLVM_PREFIX}/bin/mlir-tblgen" --version | head -1
   "${LLVM_PREFIX}/bin/FileCheck" --version | head -1 || true
 else
@@ -218,7 +229,7 @@ EOF
 )
 
 if [[ $DO_CONFIGURE -eq 1 ]]; then
-  say "Configuring the C++ build (ROCm + LLVM ${LLVM_VERSION})"
+  say "Configuring the C++ build (ROCm + LLVM/MLIR ${LLVM_REQUIRED_VERSION})"
   eval "$CONFIGURE_CMD"
 else
   say "Setup complete. Configure + build the C++ tree with:"

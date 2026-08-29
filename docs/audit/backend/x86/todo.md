@@ -8,6 +8,31 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **follow-up required on the native half.****
+PR #638 changes four SHARED contracts, so each backend records its own
+outcome rather than letting the queues drift:
+1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`
+   is false when either operand is NaN; IEEE-754 and numpy define `!=` as the
+   negation of `==`, so `NaN != NaN` is true and `x != x` — the idiomatic NaN
+   test — silently never fired. eq/lt/le/gt/ge stay ordered.
+2. **Control-flow predicate forms** (`LowerControlFlowToSCFPass`): boolean and
+   signless-integer conditions lower instead of crashing; explicitly
+   signed/unsigned integer predicates are refused, because `arith.cmpi`
+   requires signless operands and cannot express them at all.
+3. **Symbolic-dim while results** (`SymbolicDimEqualityPass`) are seeded from
+   the condition's forwarded values, not the init/yield position.
+4. **Recompute purity is derived** (`InsertRecomputePass`): an op with no
+   effect attribute must be provably memory-effect-free, so an RNG draw or an
+   opaque call is no longer marked recomputable.
+*x86 outcome.* Three of the four are shared-IR only, but the composed-layout
+fix in this PR is x86-specific and needs this box: `materializeX86ComposedLayouts`
+applied rem/div to EVERY basis leaf, wrapping coordinates at the declared
+extent so two distinct coordinates aliased one address. The slowest leaf now
+keeps the whole remaining quotient, matching what `TileToROCM.cpp` has always
+emitted for the same shared carrier. Verified by lit on arm64; **the native
+AVX-512 lane still owes an execution check** that no address aliasing survives
+in a real kernel.
+
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **action
 required: two lowering P0s landed and a new host-architecture build gate needs
 confirmation on a real x86 host.**

@@ -173,7 +173,16 @@ struct LowerControlFlowToSCF
   // point of use would leave a half-built scf.while behind.
   static bool isReduciblePredicateType(Type type) {
     auto tt = dyn_cast<RankedTensorType>(type);
-    return (tt ? tt.getElementType() : type).isIntOrFloat();
+    Type element = tt ? tt.getElementType() : type;
+    // Signedness matters here. `arith.cmpi` requires SIGNLESS operands —
+    // feeding it a `ui8` is not merely mis-signed, it does not verify
+    // ("'lhs' must be signless-non-zero-bitwidth-integer-like"). So an
+    // explicitly signed or unsigned predicate cannot be lowered by this pass
+    // at all; refuse it here rather than build invalid IR or silently read
+    // `ui8` 255 as -1 through a signed compare.
+    if (auto integer = dyn_cast<IntegerType>(element))
+      return integer.isSignless();
+    return isa<FloatType>(element);
   }
 
   // Reduce a predicate to an i1: `element[0,..,0] > 0`. Handles a 0-d

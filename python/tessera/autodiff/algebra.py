@@ -1113,10 +1113,17 @@ class TaylorModel:
                 corners = (a[0][i] * b[0][j], a[0][i] * b[1][j],
                            a[1][i] * b[0][j], a[1][i] * b[1][j])
                 l, h = self._widen(min(corners), max(corners))
-                lo[i + j] = lo[i + j] + l
-                hi[i + j] = hi[i + j] + h
-        return ([np.nextafter(v, -np.inf) for v in lo],
-                [np.nextafter(v, np.inf) for v in hi])
+                # Widen after EVERY accumulation, exactly as `add` does. One
+                # final outward step per coefficient is not a containment
+                # certificate: each intermediate sum rounds by half an ulp of
+                # the INTERMEDIATE magnitude, which cancellation can make
+                # enormous relative to the result. Summing 1e16, 3, -1e16
+                # (exact 3) rounds to 4 at the first add — an error of 1, where
+                # the single final nextafter widens by ~9e-16 and the claimed
+                # interval excludes the true value.
+                lo[i + j], hi[i + j] = self._widen(lo[i + j] + l,
+                                                   hi[i + j] + h)
+        return (list(lo), list(hi))
 
     def contains(self, model, exact, index: int) -> bool:
         return bool(model[0][index] <= exact <= model[1][index])

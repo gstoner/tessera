@@ -63,7 +63,23 @@ struct HaloInfer : public PassWrapper<HaloInfer, OperationPass<ModuleOp>> {
     int64_t order = 2;
     if (auto o = op->getAttrOfType<IntegerAttr>("order"))
       order = o.getInt();
-    int64_t radius = std::max<int64_t>(1, order / 2);
+    // `order / 2` is the reach of a CENTRAL difference only. The one-sided
+    // schemes LegalizeSpaceTime also admits reach further on their chosen
+    // side: second-order upwind is (3u_i - 4u_{i-1} + u_{i-2})/(2h), which
+    // reads two cells while order/2 infers one — so the halo exchange was a
+    // cell short and the stencil read stale ghost data.
+    //
+    // Non-central schemes take `order` as the radius. For upwind that is the
+    // exact reach; for weno/eno it is a deliberate upper bound, since an
+    // over-wide halo costs bandwidth while an under-wide one is wrong. A
+    // missing `scheme` also takes the conservative branch: LegalizeSpaceTime
+    // requires the attribute, so its absence means the op never passed
+    // legalization and nothing here may assume it is central.
+    StringRef scheme = "";
+    if (auto s = op->getAttrOfType<StringAttr>("scheme"))
+      scheme = s.getValue();
+    int64_t radius = scheme == "central" ? std::max<int64_t>(1, order / 2)
+                                         : std::max<int64_t>(1, order);
     halo.assign(rank, 0);
     if (auto axis = op->getAttrOfType<IntegerAttr>("axis")) {
       int64_t a = axis.getInt();

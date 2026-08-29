@@ -7,6 +7,35 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; SM120 execution unchanged, one device proof attempted.****
+PR #638 changes four SHARED contracts, so each backend records its own
+outcome rather than letting the queues drift:
+1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`
+   is false when either operand is NaN; IEEE-754 and numpy define `!=` as the
+   negation of `==`, so `NaN != NaN` is true and `x != x` — the idiomatic NaN
+   test — silently never fired. eq/lt/le/gt/ge stay ordered.
+2. **Control-flow predicate forms** (`LowerControlFlowToSCFPass`): boolean and
+   signless-integer conditions lower instead of crashing; explicitly
+   signed/unsigned integer predicates are refused, because `arith.cmpi`
+   requires signless operands and cannot express them at all.
+3. **Symbolic-dim while results** (`SymbolicDimEqualityPass`) are seeded from
+   the condition's forwarded values, not the init/yield position.
+4. **Recompute purity is derived** (`InsertRecomputePass`): an op with no
+   effect attribute must be provably memory-effect-free, so an RNG draw or an
+   opaque call is no longer marked recomputable.
+*NVIDIA outcome.* All four are host-free contract changes; no PTX, cubin,
+SM120 selector, or numeric policy moves. The emitted-CUDA barrier fix that
+rides in this PR (`nvidia_cuda.py`: `tsr_sum` returning `s[0]` with no barrier
+before the next call's `s[t]=v`, and the softmax max broadcast) WAS exercised
+on the RTX 5070 (cc 12.0) this cycle: the fixed pattern computes correctly and
+deterministically over 300 runs. **The race itself was NOT reproduced** —
+`compute-sanitizer --tool racecheck` cannot initialize under WSL2 ("Failed to
+initialize WDDM debugger interface"), so its output is not evidence, and 300
+direct runs of the pre-fix pattern produced identical results. The defect
+stands as a CUDA memory-model argument (an unsynchronized read of `s[0]`
+against a write of `s[t]`), not a measured failure. A racecheck-capable host
+would settle it.
+
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **no NVIDIA P0
 in this batch; foundation actions apply, and four sm_120-gated lanes plus one
 confirmed CUDA-emitter P1 are owed by this box.**

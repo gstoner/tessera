@@ -154,6 +154,21 @@ struct DistributeRank4FlashAttn : public RewritePattern {
         qType.getRank() != 4 || kType.getRank() != 4 ||
         vType.getRank() != 4 || outType.getRank() != 4)
       return failure();
+    // Distribution copies every attribute onto each per-(batch, head) rank-2
+    // instance, `dropout_seed` included, so all B*H instances would draw the
+    // SAME mask — dropout correlated across every batch and head instead of
+    // independent. The batch/head coordinates here are SSA loop induction
+    // variables, not constants, so a per-instance seed cannot be baked into an
+    // attribute; carrying one needs the rank-2 op to take the seed as an
+    // operand. Refuse rather than emit a silently wrong mask (Decision #21).
+    // The residual completeness walk reports the surviving op.
+    if (auto p = op->getAttrOfType<FloatAttr>("dropout_p")) {
+      if (p.getValueAsDouble() > 0.0)
+        return rewriter.notifyMatchFailure(
+            op, "rank-4 flash_attn with dropout cannot be distributed: every "
+                "per-(batch,head) instance would inherit one dropout_seed and "
+                "draw an identical mask");
+    }
     if (bias &&
         (!biasType || !biasType.hasStaticShape() ||
          (biasType.getRank() != 3 && biasType.getRank() != 4) ||
@@ -1207,9 +1222,17 @@ struct TileIRLoweringPass
     // any surviving target op is a hard lowering failure with a named diagnostic.
     WalkResult residual = getOperation()->walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
+      // Every op this pass registers a pattern for belongs here, or a
+      // configuration the pattern declines leaves the op behind and the pass
+      // still reports success. `tessera_attn.backward` (pattern at :648) and
+      // `schedule.prefetch` (:1022) were both missing: a backward with
+      // split_count = 1 — a perfectly plausible single-split configuration —
+      // is declined by LowerAttentionBackwardToLoops and then sailed through
+      // this check.
       if (name == "tessera.flash_attn" || name == "tessera.matmul" ||
           name == "tessera.control_for" || name == "tessera.control_if" ||
-          name == "tessera.control_while" || name == "tessera.control_scan") {
+          name == "tessera.control_while" || name == "tessera.control_scan" ||
+          name == "tessera_attn.backward" || name == "schedule.prefetch") {
         op->emitError() << "[TILE_IR_LOWERING] '" << name
                         << "' was not lowered to FA-4 Tile IR for sm_"
                         << static_cast<int>(smVersion)

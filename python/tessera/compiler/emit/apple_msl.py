@@ -319,6 +319,15 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
     }}
     threadgroup_barrier(mem_flags::mem_threadgroup);
 """
+        if region.reduction not in _TILED_REDUCTIONS:
+            # Callers gate on `tiled_reduction_eligible`; reaching here means a
+            # reduction this kernel has no cooperative block for. Name it
+            # instead of raising a bare KeyError from a dict subscript.
+            raise EmitError(
+                f"tiled MSL kernel has no reduction block for "
+                f"{region.reduction!r}; supported: "
+                f"{sorted(_TILED_REDUCTIONS)}"
+            )
         red = _TILED_REDUCTIONS[region.reduction].format(
             eps=region.eps, o_base=o_base
         )
@@ -536,6 +545,19 @@ _COOPMAT_REDUCTIONS: dict[str, str] = {
         "        for (int c = 0; c < N; ++c)\n"
         "            O[{output_index}] = ({io})(Cs[{cs_index}] * _inv);\n",
 }
+
+
+def tiled_reduction_eligible(region: FusedRegion) -> bool:
+    """Whether the tiled kernel can emit this region's terminal reduction.
+
+    `_TILED_REDUCTIONS` covers rmsnorm and softmax, but `REDUCTION_OPS` — the
+    set `FusedRegion.__post_init__` validates against — also admits layer_norm.
+    The tiled path indexed the table directly, so a valid
+    `FusedRegion(reduction="layer_norm")` raised an uncaught KeyError instead of
+    taking the documented reference fallback. The coopmat path has always
+    guarded its own table this way; this is the same guard for the tiled one.
+    """
+    return not region.reduction or region.reduction in _TILED_REDUCTIONS
 
 
 def coopmat_reduce_eligible(region: FusedRegion, N: int) -> bool:
@@ -871,6 +893,8 @@ def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
     # The tiled kernel has no residual buffer → residual stays on the stack path.
     n_cap = SYNTH_MAX_N if region.has_residual else SYNTH_MAX_N_TILED
+    if N > SYNTH_MAX_N and not tiled_reduction_eligible(region):
+        return None, "fallback"   # tiled kernel cannot emit this reduction
     if N > n_cap:
         return None, "fallback"
     bias_arr = None
@@ -939,6 +963,8 @@ def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     sym = _synth_f16_symbol()
     # The tiled kernel has no residual buffer → residual stays on the stack path.
     n_cap = SYNTH_MAX_N if region.has_residual else SYNTH_MAX_N_TILED
+    if N > SYNTH_MAX_N and not tiled_reduction_eligible(region):
+        sym = None                # tiled kernel cannot emit this reduction
     if sym is not None and N <= n_cap:
         is_tiled = 0 if N <= SYNTH_MAX_N else 1
         if is_tiled:
@@ -1038,6 +1064,7 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     # The tiled kernel has no residual buffer, so residual regions skip it.
     tiled = _synth_tiled_symbol()
     if (tiled is not None and not region.has_residual
+            and tiled_reduction_eligible(region)
             and SYNTH_MAX_N < N <= SYNTH_MAX_N_TILED):
         source = synthesize_matmul_epilogue_msl_tiled(region).encode("utf-8")
         out = np.zeros((M, N), np.float32)
@@ -1700,9 +1727,17 @@ def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
         Kn = np.ascontiguousarray(Kn, np.float32)
         Vn = np.ascontiguousarray(V, np.float32)
     else:
-        Qn = np.ascontiguousarray(Qn)
-        Kn = np.ascontiguousarray(Kn)
-        Vn = np.ascontiguousarray(V)
+        # Coerce all three to the TAG's dtype, not just to contiguity. The tag
+        # comes from V alone, and the dispatch reinterprets each operand with
+        # `a.view(np.uint16)`. A float32 Q against an f16 V — the realistic
+        # f32-query / f16-KV-cache mix — was therefore bit-reinterpreted as
+        # half: wrong element size, wrong indexing, garbage scores, and no error
+        # because float32.view(uint16) is legal. The result came back tagged
+        # "metal_runtime" as if it were correct.
+        half = np.float16 if tag == "f16" else _bf16_dtype()
+        Qn = np.ascontiguousarray(Qn, half)
+        Kn = np.ascontiguousarray(Kn, half)
+        Vn = np.ascontiguousarray(V, half)
     M, D = Qn.shape
     Nk, Dk = Kn.shape
     Nv, Dv = Vn.shape

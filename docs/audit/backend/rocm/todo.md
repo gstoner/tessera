@@ -6,6 +6,75 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `ROCM-LIT-CAUGHT-A-REGRESSION-2026-08-29` — **this queue's
+fixtures caught a shared-pass regression the Mac could not see.**
+`phase3/streaming_attention_backward_rocm.mlir` is `REQUIRES:
+tessera-rocm-backend`, so it is skipped entirely on a host without the ROCm
+backend built. A P1 fix that made `DistributeRank4FlashAttn` refuse rank-4
+`flash_attn` carrying dropout passed 429/429 on the Mac and broke this fixture
+here — the lane drives `dropout_p = 0.25` through that exact path. The refusal
+was reverted and the underlying defect (one `dropout_seed` copied to every
+per-(batch,head) instance, so all B*H draw the same mask) is recorded as
+deferred: fixing it needs the seed as an operand, since the coordinates are SSA
+induction variables. Standing lesson: a green `lit` on a host missing this
+backend says nothing about these fixtures.
+
+Cross-backend sync `DEVICE-PROOF-DELIVERED-2026-08-29` — **the P0 device
+proof this queue owed is DONE; the paired performance claim is WITHDRAWN.**
+
+Run on Princess-Luna (gfx1151, Ubuntu 26.04.1, ROCm 10, LLVM/MLIR 23.1.0
+assertions OFF), from a clean worktree at `f65f9b3b`, ROCm + x86 + HIP all
+configured.
+
+*Correctness — delivered.* The paged-attention barrier fix
+(`rocm_hip.py::_synthesize_paged_attention_direct_hip`, PR #635 P0) now has its
+exact-device evidence: 25 trials at P=4/L=16/HQ=8/HKV=4/D=64/Q=8/T=64
+(decode-shaped, 8 independent wave32s — the worst case for the race) give a max
+absolute error of **5.5e-07** against a numpy reference and a run-to-run spread
+of **exactly 0**. 0.056 ms/rep. The lane is correct on hardware.
+
+*Performance — the `expf` hoist buys nothing here, contrary to the finding.*
+The review recorded the per-output-dimension `expf` recomputation as a real
+cost. Measured at T=1024, D=128 — where the hoist removes **128x** the
+transcendental calls (131072 -> 1024 per row) — the two forms are
+indistinguishable: 0.866 vs 0.866 ms/rep, **1.00x, stable across three repeats**,
+with bit-identical outputs. The kernel is bound by the `v[d]` loads, not by the
+transcendental units, which have throughput to spare. Keep the hoist (it is
+strictly less work and provably identical output) but **do not carry a speedup
+claim for it**. A device measurement was the only thing that could have
+established this.
+
+*`check-tessera-rocm`: 66 passed, 2 unsupported, 0 failed* — and it had been
+SILENTLY SKIPPING. `find_program(TESSERA_LIT ...)` missed the runner because
+`lit` exists only in the project venv on this box and a non-interactive
+configure does not activate it, so the target printed "skipping" and the build
+exited 0. Since CI does not run this suite, that skip meant the ROCm backend had
+**no** automated fixture coverage anywhere. The search now includes the venv and
+warns loudly when no runner is found.
+
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; gfx1151 execution unchanged.****
+PR #638 changes four SHARED contracts, so each backend records its own
+outcome rather than letting the queues drift:
+1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`
+   is false when either operand is NaN; IEEE-754 and numpy define `!=` as the
+   negation of `==`, so `NaN != NaN` is true and `x != x` — the idiomatic NaN
+   test — silently never fired. eq/lt/le/gt/ge stay ordered.
+2. **Control-flow predicate forms** (`LowerControlFlowToSCFPass`): boolean and
+   signless-integer conditions lower instead of crashing; explicitly
+   signed/unsigned integer predicates are refused, because `arith.cmpi`
+   requires signless operands and cannot express them at all.
+3. **Symbolic-dim while results** (`SymbolicDimEqualityPass`) are seeded from
+   the condition's forwarded values, not the init/yield position.
+4. **Recompute purity is derived** (`InsertRecomputePass`): an op with no
+   effect attribute must be provably memory-effect-free, so an RNG draw or an
+   opaque call is no longer marked recomputable.
+*ROCm outcome.* Not-applicable for device claims: all four are host-free
+MLIR/IR contracts with no HIP kernel, hsaco, selector, or dtype-policy change.
+The `ne`-as-unordered correction does reach any ROCm lane that lowers a float
+`!=` through the shared `tessera-to-linalg` path, so a NaN-sensitive gfx1151
+numerical row should be re-read once the box is back (it was unreachable at
+2026-08-29 — no route to host).
+
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **action
 required on the gfx1151 box: one HIP kernel P0 is source-only and needs an
 exact-device run.**

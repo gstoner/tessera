@@ -952,8 +952,24 @@ def test_attention_cost_model():
     assert cost.dispatches_unfused == 3        # QKᵀ + softmax + PV
     assert cost.dispatch_saved == 2
     assert should_fuse_attention(AttentionRegion(), 32, 64, 48, 48)
-    too_big = attention_cost(AttentionRegion(), 32, SYNTH_MAX_N + 1, 48, 48)
+
+    # Past the per-thread stack cap the MATERIALIZED kernel is out, but the
+    # online (streaming-softmax) kernel has no Nk bound — only a head-dim one.
+    # This used to assert `not fusible` on Nk alone, which dead-ended exactly
+    # the long-context shape the online kernel exists for: the runtime prepass
+    # gates on this function before ever reaching the selector that would have
+    # chosen "online".
+    from tessera.compiler.fusion_core import SYNTH_MAX_D
+
+    long_context = attention_cost(AttentionRegion(), 32, SYNTH_MAX_N + 1, 48, 48)
+    assert long_context.fusible                    # online kernel takes it
+
+    # Only when NEITHER kernel fits — Nk over the stack cap AND Dv over the
+    # online head-dim cap — is the region genuinely unfusible.
+    too_big = attention_cost(
+        AttentionRegion(), 32, SYNTH_MAX_N + 1, 48, SYNTH_MAX_D + 1)
     assert not too_big.fusible
+    assert "online head_dim cap" in too_big.reason
 
 
 def test_runtime_prepass_cost_gate_skips_oversized_N():

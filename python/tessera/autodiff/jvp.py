@@ -80,7 +80,7 @@ def _sequence_tangents(trace: "_JVPTrace", primal: Any):
     tangents: list[Any] = []
     tracked = False
     for v in values:
-        t = trace.tangents.get(id(v))
+        t = trace.tangent_for(v)
         if t is not None:
             tracked = True
             tangents.append(t)
@@ -91,11 +91,23 @@ def _sequence_tangents(trace: "_JVPTrace", primal: Any):
 
 @dataclass
 class _JVPTrace:
-    tangents: dict[int, np.ndarray] = field(default_factory=dict)
+    #: id(primal) -> (primal, tangent). The primal is kept ALIVE deliberately.
+    #: Keying on `id()` alone is only sound while the object it names still
+    #: exists: an intermediate that is garbage-collected mid-trace frees its
+    #: address, CPython/numpy can hand the same address to an unrelated array,
+    #: and that new array then inherits the dead one's tangent — a silently
+    #: wrong derivative with no error. Holding the reference makes the id
+    #: unique for the trace's lifetime, which is the same guarantee the reverse
+    #: tape gets from `TapeEntry.output`.
+    tangents: dict[int, tuple[Any, np.ndarray]] = field(default_factory=dict)
+
+    def tangent_for(self, value: Any) -> np.ndarray | None:
+        entry = self.tangents.get(id(value))
+        return None if entry is None else entry[1]
 
     def bind(self, primal: Any, tangent: Any) -> None:
         value = _forward_value(primal)
-        self.tangents[id(value)] = np.asarray(tangent)
+        self.tangents[id(value)] = (value, np.asarray(tangent))
 
     def record_op(
         self,
@@ -126,7 +138,7 @@ class _JVPTrace:
         tangent_inputs: list[Any] = []
         active = False
         for primal in primals:
-            tangent = self.tangents.get(id(primal))
+            tangent = self.tangent_for(primal)
             if tangent is not None:
                 active = True
                 tangent_inputs.append(tangent)
@@ -1797,12 +1809,12 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
         _ACTIVE_JVP.reset(token)
     if isinstance(primal_out, tuple):
         tuple_tangents = tuple(
-            trace.tangents.get(id(_forward_value(value))) for value in primal_out
+            trace.tangent_for(_forward_value(value)) for value in primal_out
         )
         if any(value is None for value in tuple_tangents):
             raise TesseraAutodiffError("function output has no active tangent path")
         return primal_out, tuple_tangents
-    scalar_tangent = trace.tangents.get(id(_forward_value(primal_out)))
+    scalar_tangent = trace.tangent_for(_forward_value(primal_out))
     if scalar_tangent is None:
         scalar_tangent = np.zeros_like(np.asarray(primal_out), dtype=np.float64)
     return np.asarray(primal_out), scalar_tangent

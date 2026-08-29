@@ -496,6 +496,19 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 ### `src/transforms/lib/TileIRLoweringPass.cpp:306` — Identical dropout mask replicated across batch and head
 
+> **Deferred 2026-08-29 — needs an operand, not a local edit.** Refusing to
+> distribute a rank-4 `flash_attn` carrying dropout was implemented and then
+> **reverted after it regressed a committed ROCm lane**:
+> `tests/tessera-ir/phase3/streaming_attention_backward_rocm.mlir` drives
+> `dropout_p = 0.25` through exactly this path and passed before. The defect is
+> real but statistical (masks correlated across batch/head, not a wrong value
+> per element), and the batch/head coordinates at the distribution site are SSA
+> loop induction variables — so a per-instance seed cannot be an attribute and
+> must be threaded as an OPERAND, changing the op signature and its native
+> consumers. Same shape as the Adafactor row. Caught only by running lit on the
+> ROCm box; the Mac skips this fixture entirely (`REQUIRES: tessera-rocm-backend`).
+
+
 *C++ — tiling & Tile IR lowering · math*
 
 **What is wrong:** DistributeRank4FlashAttn copies all attributes verbatim (including dropout_seed) onto every per-(batch,head) rank-2 flash_attn (line 306), and the rank-2 lowering seeds tessera_attn.block_dropout with only (seed, boundary) where boundary restarts at 0 for every slice (lines 592-603, 484-491). Every one of the B*H slices therefore draws the exact same dropout mask — dropout is fully correlated across batch and head instead of iid, and violates the repo's RNG stream-separation discipline (Decision #18).
@@ -591,7 +604,18 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 **Independently verified:** InsertRecomputePass.cpp:51-60. With no tessera.effect attribute the function returns true whenever the op has zero regions and its name lacks the substrings alloc/store/dealloc — so func.call, a collective, an IO op, and any tessera.rng.* op are 'pure' and get tessera_sr.recompute_hint="recomputable" at line 124-127. The header comment ('Ops with side effects are never recomputable') and the inline comment ('conservatively assumed pure') both assert the opposite of what the code does. Nothing forces EffectAnnotationPass to run first: the pass declares no dependency, and its own fixture src/solvers/scaling_resilience/tests/sr/checkpoint.mlir runs `tessera-opt -tessera-insert-recompute` standalone, so absence of the attribute is the normal case. This is precisely the Decision #10a pattern (eligibility marking without a gating analysis) and the Decision #30 fail-open scar. Severity caveat: I grepped for a consumer of tessera_sr.recompute_hint and found none on the MLIR side (only python/tessera/compiler/checkpoint.py, an independent annotator), so the wrong-gradient outcome is latent rather than currently live — but per Decision #29/#10a an eligibility mark that a downstream pass will believe is the defect.
 
 
-## P2 — real but minor (41)
+## P2 — real but minor (42)
+
+### `python/tessera/compiler/profiler_rocm_native.py:255` — pre-run snapshot fails OPEN on a partial read
+
+*Added 2026-08-29, after the review — found in the fix for the mtime clock race (PR #637). Deferred to the P2 batch by owner decision.*
+
+**What is wrong:** `_snapshot_files` builds the pre-run baseline, and on any `OSError` it discards what it has collected and returns `{}`. `_files_written_since` then compares against an empty baseline, so every file already in the output directory looks newly written.
+
+**Evidence:** A file disappearing between `is_file()` and `stat()` — another process cleaning or rotating a reused output directory — or a permission error mid-walk empties the baseline. If the traced application then exits successfully without producing records, the stale traces from an earlier run are parsed as this run's output and the capture reports `status: "collected"` on someone else's evidence. That is the mirror of the defect #637 fixed (a spurious `blocked`) and the worse direction of the two: a false negative wastes time, a false positive is a claim-integrity failure.
+
+**Fix:** Distinguish "the directory was empty" from "no baseline could be established". Either keep the successfully captured entries and record the failed paths, or return a sentinel for an incomplete walk and have both collectors refuse the capture — the fail-closed form matches this file's own contract, where a blocked capture must carry a reason.
+
 
 ### `python/tessera/autodiff/vjp.py:3756` — instance/group norm affine params get silent None gradients
 
@@ -858,6 +882,17 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 **Independently verified:** Re-derived from the emitted output loop: `for(int d=t;d<D;d+=256){float acc=0.f;for(int j=0;j<T;j++){long long tok=idx[j];int pp=table[tok/L],off=tok%L;const float*v=...;acc+=expf(scores[j]-m)/z*v[d];}...}`. The softmax weight depends only on j, yet it is recomputed inside the j loop for every d-slice a thread owns, and the page-table address resolution (idx[j], table[tok/L], the v base pointer) is likewise j-only work recomputed per active lane. Per block that is one expf plus one full-precision float division (hipcc -O3 without fast-math cannot strength-reduce `/z` to a reciprocal multiply, so it expands to a ~10-instruction div sequence) executed once per wave per j across all active waves, versus T/256 iterations per thread for the proposed cooperative pass — the ALU work in the inner loop is dominated by this redundant transcendental+divide, while the necessary work is one coalesced v[d] load and one FMA. The proposed fix (`for(int j=t;j<T;j+=256) scores[j]=expf(scores[j]-m)/z;` + __syncthreads(), then use scores[j] directly) is numerically identical (same values, computed once) and fits the existing extern __shared__ scores[T] allocation; the Apple materialized attention kernel in the same review scope already uses exactly this shape (synthesize_attention_msl overwrites scores[n]=exp(...) before the P·V loop). Not a cold path: run_paged_attention_direct_f32 is the production route in paged_kv.py::_paged_attention_rocm and is the kernel whose device_ms is measured with reps=20.
 
 ### `python/tessera/compiler/emit/spectral_candidates.py:949` — ROCm availability probe launches device FFT every call
+
+> **Measured on gfx1151, 2026-08-29 — confirmed, with numbers.**
+> `RocmStockhamFFTCandidate.available()` costs **287.7 ms** on the first call
+> (library load + device probe) and **0.371 ms on every call after**, over 200
+> calls. It is NOT memoized: a cached boolean would be ~1e-4 ms, so each call
+> pays roughly **3700x** what the answer is worth — and the answer cannot change
+> within a process. At the scale this finding cites (an STFT with n=1M, win=1024,
+> hop=256 → ~3900 frames, one probe per frame) that is **~1.45 s of pure
+> probing** before any real work. This is a cheap, self-contained fix (memoize
+> per process) and should lead the P2 batch.
+
 
 *Emitter — spectral / Krylov / autotune · performance*
 

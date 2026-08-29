@@ -186,13 +186,24 @@ static LogicalResult materializeX86ComposedLayouts(ModuleOp module) {
               "x86 composed-layout dynamic basis leaf is missing");
           return failure();
         }
-        Value digit =
-            arith::RemUIOp::create(builder, loc, remaining, *shape);
+        // The SLOWEST basis mode keeps the entire remaining quotient. A
+        // CuTe-style layout is affine beyond its declared shape, so applying
+        // rem/div to every leaf wraps coordinates at the declared extent —
+        // column 16 of a [16]-basis map folds back onto column 0 and two
+        // distinct coordinates alias the same address. The ROCm sibling
+        // (Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp) already carries
+        // this guard for the same shared carrier; x86 was missing it.
+        const bool isSlowest = leafIndex + 1 == plan.basisShapes.size();
+        Value digit = isSlowest
+                          ? remaining
+                          : arith::RemUIOp::create(builder, loc, remaining,
+                                                   *shape);
         basis = arith::AddIOp::create(
             builder, loc, basis,
             arith::MulIOp::create(builder, loc, digit, *stride));
-        remaining =
-            arith::DivUIOp::create(builder, loc, remaining, *shape);
+        if (!isSlowest)
+          remaining =
+              arith::DivUIOp::create(builder, loc, remaining, *shape);
       }
       linear = arith::AddIOp::create(
           builder, loc, linear,

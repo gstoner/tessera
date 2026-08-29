@@ -8,7 +8,7 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
-Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; AVX-512 execution unchanged.****
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; AVX-512 execution unchanged.**
 The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
 tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
 now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
@@ -21,6 +21,49 @@ Measured on the migrated box (`Princess-Luna`): Ubuntu 26.04.1, LLVM/MLIR
 *x86 outcome.* The x86 backend shares this box, so the same migration
 applies. Native AVX-512 kernels build and the full `lit` suite is 425/425 there
 post-migration, so nothing in the x86 lane depends on the 24.04 baseline.
+Cross-backend sync `DEVICE-PROOF-DELIVERED-2026-08-29` — **the native
+half this queue owed is DONE.**
+
+Run on Princess-Luna (Zen 5, AVX-512, Ubuntu 26.04.1, LLVM/MLIR 23.1.0), from a
+clean worktree at `f65f9b3b` configured with `TESSERA_BUILD_X86_BACKEND=ON` —
+i.e. with the native AVX-512/AMX kernels actually compiled, which arm64 cannot
+do.
+
+**`lit tests/tessera-ir/` is 425/425.** That closes the open question on the two
+x86 P0s from PR #635 (f16 refused rather than decoded as bf16; `fused_epilogue`
+refusing rather than dropping the activation). Both are *refusals*, so the risk
+was never that they fail — it was that they narrow a configuration which
+previously lowered AND executed correctly. On the host that builds the real
+kernels, nothing regressed.
+
+Also confirmed here: the `CMAKE_SYSTEM_PROCESSOR` gate added for arm64 still
+selects the native kernels on an x86 host — the build compiled them and no
+"x86 native kernels skipped" line appeared.
+
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **follow-up required on the native half.**
+PR #638 changes four SHARED contracts, so each backend records its own
+outcome rather than letting the queues drift:
+1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`
+   is false when either operand is NaN; IEEE-754 and numpy define `!=` as the
+   negation of `==`, so `NaN != NaN` is true and `x != x` — the idiomatic NaN
+   test — silently never fired. eq/lt/le/gt/ge stay ordered.
+2. **Control-flow predicate forms** (`LowerControlFlowToSCFPass`): boolean and
+   signless-integer conditions lower instead of crashing; explicitly
+   signed/unsigned integer predicates are refused, because `arith.cmpi`
+   requires signless operands and cannot express them at all.
+3. **Symbolic-dim while results** (`SymbolicDimEqualityPass`) are seeded from
+   the condition's forwarded values, not the init/yield position.
+4. **Recompute purity is derived** (`InsertRecomputePass`): an op with no
+   effect attribute must be provably memory-effect-free, so an RNG draw or an
+   opaque call is no longer marked recomputable.
+*x86 outcome.* Three of the four are shared-IR only, but the composed-layout
+fix in this PR is x86-specific and needs this box: `materializeX86ComposedLayouts`
+applied rem/div to EVERY basis leaf, wrapping coordinates at the declared
+extent so two distinct coordinates aliased one address. The slowest leaf now
+keeps the whole remaining quotient, matching what `TileToROCM.cpp` has always
+emitted for the same shared carrier. Verified by lit on arm64; **the native
+AVX-512 lane still owes an execution check** that no address aliasing survives
+in a real kernel.
 
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **action
 required: two lowering P0s landed and a new host-architecture build gate needs

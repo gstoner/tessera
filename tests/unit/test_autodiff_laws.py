@@ -869,7 +869,10 @@ def test_forward_mode_positional_config_matches_keyword():
         trace.bind(x, dx)
         token = _ACTIVE_JVP.set(trace)
         try:
-            return trace.tangents.get(id(call(x)))
+            # `tangents` maps id -> (primal, tangent); the primal is retained so
+            # a collected intermediate cannot have its address reused and its
+            # tangent misattributed. Read through the accessor.
+            return trace.tangent_for(call(x))
         finally:
             _ACTIVE_JVP.reset(token)
 

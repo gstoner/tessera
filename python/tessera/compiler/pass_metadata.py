@@ -240,6 +240,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.weight_sharding",
         ),
         preserved_attrs=("tessera.effect",),
+        diagnostic_codes=(
+            "ADJOINT_COLLECTIVE_COTANGENT_ARITY",
+            "ADJOINT_COLLECTIVE_MULTIPLE_RETURNS",
+            "ADJOINT_COLLECTIVE_NO_RETURN",
+        ),
         must_run_after=("tessera-autodiff",),
         pass_kind="transform",
         sprint="COLLECTIVE-ASYNC-UNIFY-2026-08-09",

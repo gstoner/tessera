@@ -222,11 +222,17 @@ struct SelectLowering : public RewritePattern {
   }
 };
 
+// Float comparison semantics follow IEEE-754, which is also what the numpy
+// reference lane implements. Every ORDERED predicate is false when an operand
+// is NaN, which is correct for eq/lt/le/gt/ge — but `ne` is defined as the
+// NEGATION of `eq`, so it is *true* whenever either operand is NaN. Mapping it
+// to ONE made `NaN != NaN` false and silently defeated `x != x`, the idiomatic
+// NaN test; UNE is the unordered form that matches np.not_equal.
 static std::optional<arith::CmpFPredicate>
-orderedFloatPredicate(StringRef predicate) {
+floatComparePredicate(StringRef predicate) {
   return llvm::StringSwitch<std::optional<arith::CmpFPredicate>>(predicate)
       .Case("eq", arith::CmpFPredicate::OEQ)
-      .Case("ne", arith::CmpFPredicate::ONE)
+      .Case("ne", arith::CmpFPredicate::UNE)
       .Case("lt", arith::CmpFPredicate::OLT)
       .Case("le", arith::CmpFPredicate::OLE)
       .Case("gt", arith::CmpFPredicate::OGT)
@@ -263,7 +269,7 @@ struct BinaryComparisonLowering : public RewritePattern {
     StringRef name = op->getName().getStringRef();
     if (!name.consume_front("tessera."))
       return failure();
-    auto floatPredicate = orderedFloatPredicate(name);
+    auto floatPredicate = floatComparePredicate(name);
     if (!floatPredicate)
       return failure();
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
@@ -327,7 +333,7 @@ struct CompareScalarLowering : public RewritePattern {
     auto predicateAttr = op->getAttrOfType<StringAttr>("predicate");
     if (!rhsAttr || !predicateAttr)
       return rewriter.notifyMatchFailure(op, "missing rhs/predicate attribute");
-    auto predicate = orderedFloatPredicate(predicateAttr.getValue());
+    auto predicate = floatComparePredicate(predicateAttr.getValue());
     if (!predicate)
       return rewriter.notifyMatchFailure(op, "unsupported predicate");
     Type elem = inTy.getElementType();

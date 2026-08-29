@@ -168,19 +168,55 @@ struct LowerControlFlowToSCF
            TypeRange(ft.getResults()) == resultTypes;
   }
 
-  // Reduce a predicate tensor to an i1: `element[0,..,0] > 0`. Handles a 0-d
+  // Whether `extractPredicateI1` can reduce this type to an i1. Checked BEFORE
+  // any IR is created: a failed lowering is not rolled back, so refusing at the
+  // point of use would leave a half-built scf.while behind.
+  static bool isReduciblePredicateType(Type type) {
+    auto tt = dyn_cast<RankedTensorType>(type);
+    Type element = tt ? tt.getElementType() : type;
+    // Signedness matters here. `arith.cmpi` requires SIGNLESS operands —
+    // feeding it a `ui8` is not merely mis-signed, it does not verify
+    // ("'lhs' must be signless-non-zero-bitwidth-integer-like"). So an
+    // explicitly signed or unsigned predicate cannot be lowered by this pass
+    // at all; refuse it here rather than build invalid IR or silently read
+    // `ui8` 255 as -1 through a signed compare.
+    if (auto integer = dyn_cast<IntegerType>(element))
+      return integer.isSignless();
+    return isa<FloatType>(element);
+  }
+
+  // Reduce a predicate to an i1: `element[0,..,0] > 0`. Handles a 0-d
   // tensor<f32> (no indices) and a rank-r tensor (first element on each axis),
   // matching the control_if flag / control_while cond `>0` selector contract.
+  //
+  // Also handles the integer forms, which used to crash: a boolean condition
+  // (`tensor<i1>`, or a bare `i1`) is the most natural thing for a user to
+  // write, and it reached `getFloatAttr` on an integer type. A non-tensor
+  // predicate likewise reached `tensor.extract` on a non-tensor. Callers gate
+  // on `isReduciblePredicateType` first, so a null return is unreachable.
   Value extractPredicateI1(OpBuilder &b, Location loc, Value predTensor) {
-    auto tt = dyn_cast<RankedTensorType>(predTensor.getType());
-    SmallVector<Value> idx;
+    Type type = predTensor.getType();
+    auto tt = dyn_cast<RankedTensorType>(type);
+    Type elementType = tt ? tt.getElementType() : type;
+    if (!elementType.isIntOrFloat())
+      return {};
+
+    Value scalar = predTensor;
     if (tt) {
+      SmallVector<Value> idx;
       Value z = arith::ConstantIndexOp::create(b, loc, 0);
       for (int64_t d = 0; d < tt.getRank(); ++d)
         idx.push_back(z);
+      scalar = tensor::ExtractOp::create(b, loc, predTensor, idx);
     }
-    Value scalar = tensor::ExtractOp::create(b, loc, predTensor, idx);
     Type et = scalar.getType();
+    if (et.isInteger(1))
+      return scalar;  // already the i1 the caller wants
+    if (isa<IntegerType>(et)) {
+      Value zero = arith::ConstantOp::create(b, loc, et, b.getIntegerAttr(et, 0));
+      return arith::CmpIOp::create(b, loc, arith::CmpIPredicate::sgt, scalar,
+                                   zero);
+    }
     Value zero = arith::ConstantOp::create(b, loc, et, b.getFloatAttr(et, 0.0));
     return arith::CmpFOp::create(b, loc, arith::CmpFPredicate::OGT, scalar,
                                  zero);
@@ -323,6 +359,8 @@ struct LowerControlFlowToSCF
         !calleeMatches(op, elseSym, argTypes, resTypes))
       return Outcome::Skipped;
 
+    if (!isReduciblePredicateType(operands[flagIdx].getType()))
+      return Outcome::Skipped;
     Value cond = extractPredicateI1(b, loc, operands[flagIdx]);
     // With non-empty result types the builder creates both blocks WITHOUT
     // terminators — we add the func.call + scf.yield to each.
@@ -397,6 +435,8 @@ struct LowerControlFlowToSCF
         condFt.getNumResults() != 1)
       return Outcome::Skipped;
     Type predTy = condFt.getResult(0);
+    if (!isReduciblePredicateType(predTy))
+      return Outcome::Skipped;
 
     Value c1 = arith::ConstantIndexOp::create(b, loc, 1);
     Value maxV = arith::ConstantIndexOp::create(b, loc, maxA.getInt());

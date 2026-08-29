@@ -7,7 +7,7 @@ last_updated: 2026-08-29
 ---
 
 # Apple compiler, exact-device, and performance plan
-Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **not applicable to Apple execution, but the macOS install line changed.****
+Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **not applicable to Apple execution, but the macOS install line changed.**
 The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
 tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`
 now FAILS on any other Ubuntu release rather than warning. `CLAUDE.md`'s host
@@ -23,6 +23,30 @@ told users to `brew install llvm --HEAD`, and HEAD tracks LLVM's development
 branch — under the new 23.1.x pin that aborts configure. Homebrew's **stable**
 `llvm` formula is 23.1.0 (verified: `brew info` reports stable 23.1.0, and it is
 what this Mac runs), so the stable formula is now what the doc installs.
+Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; Apple execution unchanged, two Apple-specific fixes verified on device.**
+PR #638 changes four SHARED contracts, so each backend records its own
+outcome rather than letting the queues drift:
+1. **Float `ne` is now UNORDERED** (`TesseraToLinalgPass`). `arith.cmpf one`
+   is false when either operand is NaN; IEEE-754 and numpy define `!=` as the
+   negation of `==`, so `NaN != NaN` is true and `x != x` — the idiomatic NaN
+   test — silently never fired. eq/lt/le/gt/ge stay ordered.
+2. **Control-flow predicate forms** (`LowerControlFlowToSCFPass`): boolean and
+   signless-integer conditions lower instead of crashing; explicitly
+   signed/unsigned integer predicates are refused, because `arith.cmpi`
+   requires signless operands and cannot express them at all.
+3. **Symbolic-dim while results** (`SymbolicDimEqualityPass`) are seeded from
+   the condition's forwarded values, not the init/yield position.
+4. **Recompute purity is derived** (`InsertRecomputePass`): an op with no
+   effect attribute must be provably memory-effect-free, so an RNG draw or an
+   opaque call is no longer marked recomputable.
+*Apple outcome.* The four shared contracts are host-free here. Two
+Apple-specific P1s in the same PR were verified on this Mac's Metal runtime:
+the tiled MSL kernel no longer raises an uncaught KeyError for a valid
+`layer_norm` region (it takes the documented reference fallback, exact match,
+while `softmax` still runs on the tiled GPU lane), and mixed-dtype attention no
+longer bit-reinterprets an f32 Q against f16 K/V — measured error fell from
+3.42 to 4e-4 against the f32 reference, where the wrong result had been
+returned tagged `metal_runtime` as if correct.
 
 Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **this box is
 the one the foundation moved on; done here, and it is where the review's

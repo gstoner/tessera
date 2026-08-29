@@ -875,8 +875,24 @@ struct SymbolicDimEquality
           forwardedNames = it->second;
         if (forwardedNames)
           valueDims[argument] = *forwardedNames;
-        if (index < expectedNames.size() && expectedNames[index] &&
-            forwardedNames && *forwardedNames != *expectedNames[index]) {
+        // Result `index` IS the value the condition forwards at `index` — that
+        // is what an scf.while returns. Seeding it from the init/yield position
+        // instead was only correct when the condition forwards the carried
+        // state positionally; for `scf.condition(%c) %b` out of inits
+        // (%x, %y), result 0 is %b while position 0 names %x.
+        if (forwardedNames && index < whileOp.getNumResults())
+          valueDims[whileOp.getResult(index)] = *forwardedNames;
+        // For the same reason, only compare against the carried state's names
+        // when this forward really is positional: `condition.getArgs()[index]`
+        // must be the before-block argument at that index. Otherwise the two
+        // sequences describe different values and the comparison would reject
+        // a valid loop.
+        bool positionalForward =
+            index < before.getNumArguments() &&
+            forwarded == before.getArgument(static_cast<unsigned>(index));
+        if (positionalForward && index < expectedNames.size() &&
+            expectedNames[index] && forwardedNames &&
+            *forwardedNames != *expectedNames[index]) {
           condition.emitOpError(
               "SYMDIM_LOOP_YIELD_MISMATCH: scf.while condition operand ")
               << index << " changes the carried state's dim-names";
@@ -898,8 +914,9 @@ struct SymbolicDimEquality
                       "state's dim-names";
           failed = true;
         }
-        if (expectedNames[i])
-          valueDims[whileOp.getResult(i)] = *expectedNames[i];
+        // Results are seeded from the CONDITION's forwarded values above, not
+        // from here: yield operands feed the next iteration's carried state,
+        // which is a different sequence with a different length.
       }
 
     } else if (auto ifOp = dyn_cast<scf::IfOp>(op)) {

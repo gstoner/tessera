@@ -59,6 +59,29 @@ static mlir::Value buildStaticZero(mlir::OpBuilder &builder,
   return {};
 }
 
+/// A loop-carried value whose tangent rides an iter_arg is ACTIVE for the whole
+/// body, not only when its initial tangent is nonzero.
+///
+/// Activity across a loop is a fixed point: a carried value can be activated by
+/// an operation later in the body, and on the next iteration its tangent
+/// iter_arg holds that nonzero tangent. Seeding the set from the INIT alone
+/// under-approximates it — a body op whose operands are all such args is
+/// classified inactive, its result tangent is stored null, and `tangentOrZero`
+/// then reads a static zero. The carried recurrence term is dropped silently
+/// every iteration.
+///
+/// Marking every differentiable carried value active is the sound
+/// over-approximation: at worst it computes a tangent that is always zero,
+/// which is wasted work rather than a wrong derivative. Non-differentiable
+/// carriers (loop counters and the like) stay out so no tangent is built for
+/// an integer.
+static bool carriesDifferentiableTangent(mlir::Value value) {
+  mlir::Type type = value.getType();
+  if (auto shaped = mlir::dyn_cast<mlir::ShapedType>(type))
+    type = shaped.getElementType();
+  return mlir::isa<mlir::FloatType, mlir::ComplexType>(type);
+}
+
 struct ForwardState {
   mlir::IRMapping primals;
   llvm::DenseMap<mlir::Value, mlir::Value> tangents;
@@ -311,6 +334,7 @@ class RegionTangentBuilder {
     ForwardState bodyState = state;
     bodyState.primals.map(source.getInductionVar(),
                           combined.getInductionVar());
+
     unsigned count = source.getInitArgs().size();
     for (unsigned index = 0; index < count; ++index) {
       mlir::Value sourceArg = source.getRegionIterArg(index);
@@ -322,7 +346,8 @@ class RegionTangentBuilder {
       // state across iterations.
       bodyState.tangents[sourceArg] =
           combined.getRegionIterArg(index + count);
-      if (state.active.contains(source.getInitArgs()[index])) {
+      if (state.active.contains(source.getInitArgs()[index]) ||
+          carriesDifferentiableTangent(sourceArg)) {
         bodyState.active.insert(sourceArg);
       }
     }
@@ -381,7 +406,11 @@ class RegionTangentBuilder {
       for (unsigned index = 0; index < count; ++index) {
         mlir::Value sourceArg = source.getBefore().front().getArgument(index);
         beforeState.primals.map(sourceArg, target->getArgument(index));
-        if (state.active.contains(source.getInits()[index])) {
+        // Same fixed point as buildFor: a carried value can be activated
+        // later in the body, and its tangent iter_arg then holds a nonzero
+        // tangent on the next iteration.
+        if (state.active.contains(source.getInits()[index]) ||
+            carriesDifferentiableTangent(sourceArg)) {
           beforeState.tangents[sourceArg] = target->getArgument(index + count);
           beforeState.active.insert(sourceArg);
         } else {
@@ -426,7 +455,11 @@ class RegionTangentBuilder {
       for (unsigned index = 0; index < count; ++index) {
         mlir::Value sourceArg = source.getAfter().front().getArgument(index);
         afterState.primals.map(sourceArg, target->getArgument(index));
-        if (state.active.contains(source.getInits()[index])) {
+        // Same fixed point as buildFor: a carried value can be activated
+        // later in the body, and its tangent iter_arg then holds a nonzero
+        // tangent on the next iteration.
+        if (state.active.contains(source.getInits()[index]) ||
+            carriesDifferentiableTangent(sourceArg)) {
           afterState.tangents[sourceArg] = target->getArgument(index + count);
           afterState.active.insert(sourceArg);
         } else {

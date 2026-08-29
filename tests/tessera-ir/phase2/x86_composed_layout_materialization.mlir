@@ -27,13 +27,22 @@ module {
   }
 }
 
+// Corrected 2026-08-29: this fixture used to expect `remui, divui` for EVERY
+// basis leaf. That is the defect. A CuTe-style layout is affine beyond its
+// declared shape, so taking the remainder at the SLOWEST mode wraps
+// coordinates at the declared extent — column 16 of a [16]-basis map folds
+// back onto column 0 and two distinct coordinates alias one address. The
+// slowest leaf keeps the whole remaining quotient, which is what the ROCm
+// sibling (TileToROCM.cpp, `isSlowest`) has always emitted for this shared
+// carrier; only x86 was missing the guard.
+
 // CHECK-LABEL: func.func @static_mixed_radix
 // CHECK: cf.assert {{.*}}, "x86 composed-layout coordinate must be nonnegative"
 // CHECK: cf.assert {{.*}}, "x86 composed-layout coordinate exceeds its outer extent"
+// Fastest leaf takes rem/div; the slowest consumes the quotient directly.
 // CHECK: arith.remui
 // CHECK: arith.divui
-// CHECK: arith.remui
-// CHECK: arith.divui
+// CHECK-NOT: arith.remui
 // CHECK-NOT: tile.materialize_composed_layout
 
 // CHECK-LABEL: func.func @bounded_dynamic
@@ -48,14 +57,11 @@ module {
 // CHECK-LABEL: func.func @tuple_product
 // CHECK: cf.assert {{.*}}, "x86 composed-layout coordinate must be nonnegative"
 // CHECK: cf.assert {{.*}}, "x86 composed-layout coordinate exceeds its outer extent"
-// CHECK: arith.remui
-// CHECK: arith.divui
+// One rem/div per tuple member — the slowest leaf of each takes the quotient.
 // CHECK: arith.remui
 // CHECK: arith.divui
 // CHECK: cf.assert {{.*}}, "x86 composed-layout coordinate must be nonnegative"
 // CHECK: cf.assert {{.*}}, "x86 composed-layout coordinate exceeds its outer extent"
-// CHECK: arith.remui
-// CHECK: arith.divui
 // CHECK: arith.remui
 // CHECK: arith.divui
 // CHECK-NOT: tile.materialize_composed_layout

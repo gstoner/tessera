@@ -876,9 +876,17 @@ def attention_cost(region: AttentionRegion, M: int, Nk: int, D: int,
                    Dv: int) -> FusionCost:
     """Cost of fusing a ``matmul -> softmax -> matmul`` attention block."""
     unfused = 3                                # QKᵀ + softmax + PV
-    if Nk > SYNTH_MAX_N:
-        return FusionCost(False, unfused, unfused, 0,
-                          f"Nk={Nk} exceeds per-thread stack cap {SYNTH_MAX_N}")
+    if Nk > SYNTH_MAX_N and Dv > SYNTH_MAX_D:
+        # Past the per-thread stack cap the materialized kernel is out, but the
+        # ONLINE (streaming-softmax) kernel has no Nk bound — only a head-dim
+        # one. Refusing on Nk alone dead-ended exactly the long-context shape
+        # the online kernel exists for: the runtime prepass gates on this
+        # function before ever calling run_fused_attention, whose own selector
+        # would have chosen "online". Only refuse when NEITHER kernel fits.
+        return FusionCost(
+            False, unfused, unfused, 0,
+            f"Nk={Nk} exceeds per-thread stack cap {SYNTH_MAX_N} and "
+            f"Dv={Dv} exceeds online head_dim cap {SYNTH_MAX_D}")
     bytes_saved = 2 * M * Nk * 4               # the score matrix, kept in registers
     return FusionCost(True, unfused, 1, bytes_saved)
 
@@ -1108,13 +1116,27 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
     """Codegen-gated oracle for a synthesized attention block (see
     ``verify_synthesized_region``)."""
     r = runner or _runner()
-    key = (r.target, "A", round(region.scale, 9), region.causal)
+    # The orientation flags change what is verified, so they belong in the key.
+    key = (r.target, "A", round(region.scale, 9), region.causal,
+           bool(getattr(region, "q_transposed", False)),
+           bool(getattr(region, "k_transposed", False)))
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
     Q = (rng.standard_normal((8, 16)) * .2).astype(np.float32)
     K = (rng.standard_normal((8, 16)) * .2).astype(np.float32)
     V = (rng.standard_normal((8, 16)) * .2).astype(np.float32)
+    # Same double-flip the matmul probe above guards against: the region flips
+    # its operands back to natural via `_natural`, so a natural probe fed to a
+    # transposed region is flipped again into a Q/K head-dim mismatch and the
+    # verifier raises instead of returning a verdict. `k_transposed=True` is the
+    # ordinary case for any graph whose score matmul has no transpose_b flag,
+    # and the raise was swallowed by the caller's `except Exception: continue`,
+    # silently disabling the fused attention lane for that whole region class.
+    if getattr(region, "q_transposed", False):
+        Q = np.ascontiguousarray(Q.T)
+    if getattr(region, "k_transposed", False):
+        K = np.ascontiguousarray(K.T)
     out, execution = r.run_fused_attention(region, Q, K, V)
     if execution in REFERENCE_EXECUTIONS:
         verdict = True

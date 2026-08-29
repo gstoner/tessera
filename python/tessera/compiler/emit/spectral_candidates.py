@@ -1188,6 +1188,25 @@ def _fp32_budget(n: int, atol: float) -> float:
     return max(atol, 1e-4 * max(1, n))
 
 
+def _transform_length(region: Any) -> int:
+    """The length round-off actually accumulates over for this region.
+
+    `_fp32_budget` scales with the size of the transform, so it must be given
+    the TRANSFORM length — not whatever the region happens to call `n`. For a
+    framed op that is the window: `SpectralSTFTRegion.n` is the SIGNAL length,
+    so a 100k-sample signal with win=64 produced a budget of 10.0 absolute
+    while the bins it checks have magnitude ~sqrt(64)≈8 — the gate passed an
+    all-zero candidate. `SpectralISTFTRegion` and `SpectralFilterRegion` have
+    no `n` at all and silently took the floor, so their budget never scaled
+    with size in the first place, contradicting this helper's own contract.
+    """
+    for attribute in ("win", "n", "bins"):
+        value = getattr(region, attribute, None)
+        if value:
+            return int(value)
+    return 1
+
+
 def _verify_region(candidate: Candidate, region: Any, *, atol: float = 1e-3,
                    seed: int = 0) -> bool:
     """Verify against the region's own reference, whatever its operand arity.
@@ -1200,7 +1219,7 @@ def _verify_region(candidate: Candidate, region: Any, *, atol: float = 1e-3,
     probe = region.probe_input(seed)
     args = probe if isinstance(probe, tuple) else (probe,)
     return verify_by_reference(candidate, region, args, region.reference(*args),
-                               atol=_fp32_budget(getattr(region, "n", 1), atol))
+                               atol=_fp32_budget(_transform_length(region), atol))
 
 
 register_op_kind(OP_SPECTRAL_RFFT, _verify_region)

@@ -7,6 +7,31 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `SM120-REGRESSION-VALIDATION-2026-08-29` — **branch
+validated on the RTX 5070; no regressions, and no P0 was ever owed here.**
+
+Built and run on The-Super-Bear (RTX 5070 cc 12.0 / sm_120, Ubuntu 26.04,
+CUDA 13.3, LLVM/MLIR 23.1.0 assertions OFF) with `TESSERA_ENABLE_CUDA=ON`,
+from clean worktrees at the branch and at `f65f9b3b`:
+
+* unit suite **13503 passed / 53 failed / 5414 skipped**, and the failure set is
+  **byte-identical to main's on the same box (53 = 53)** — no regressions, none
+  fixed. `lit tests/tessera-ir/` **429/429**.
+* Confirm before reading the numbers: NO P0 from the 2026-08-29 review touches
+  NVIDIA code. The CUDA item is a P1 (`nvidia_cuda.py:1137` shared reduction
+  scratch reused without a barrier).
+* That P1 remains **only partially proven**. The fixed pattern is correct and
+  deterministic over 300 runs on sm_120, but the race was NOT reproduced, and
+  `compute-sanitizer --tool racecheck` **cannot initialize under WSL2**
+  ("Failed to initialize WDDM debugger interface") — its summary reports its own
+  init failure identically for both variants, so it is not evidence either way.
+  Nsight Compute (`ncu`) and Nsight Systems (`nsys`) ARE installed here and are
+  the obvious next instrument.
+* Build note, pre-existing on main: `TESSERA_ENABLE_CUDA=ON` fails to configure
+  because `examples/advanced/power_retention/src/extension` has no
+  CMakeLists.txt. Work around with `-DTESSERA_BUILD_EXAMPLES=OFF`; the example
+  tree needs repair independently.
+
 Cross-backend sync `SHARED-CONTRACTS-P1-REVIEW-2026-08-29` — **assessed; SM120 execution unchanged, one device proof attempted.****
 PR #638 changes four SHARED contracts, so each backend records its own
 outcome rather than letting the queues drift:

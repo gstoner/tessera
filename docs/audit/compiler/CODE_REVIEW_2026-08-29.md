@@ -883,6 +883,17 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 ### `python/tessera/compiler/emit/spectral_candidates.py:949` — ROCm availability probe launches device FFT every call
 
+> **Measured on gfx1151, 2026-08-29 — confirmed, with numbers.**
+> `RocmStockhamFFTCandidate.available()` costs **287.7 ms** on the first call
+> (library load + device probe) and **0.371 ms on every call after**, over 200
+> calls. It is NOT memoized: a cached boolean would be ~1e-4 ms, so each call
+> pays roughly **3700x** what the answer is worth — and the answer cannot change
+> within a process. At the scale this finding cites (an STFT with n=1M, win=1024,
+> hop=256 → ~3900 frames, one probe per frame) that is **~1.45 s of pure
+> probing** before any real work. This is a cheap, self-contained fix (memoize
+> per process) and should lead the P2 batch.
+
+
 *Emitter — spectral / Krylov / autotune · performance*
 
 **What is wrong:** RocmStockhamFFTCandidate.available() runs a real 4-point device transform (ts_fft_stockham_amd_hostptr) on every invocation with no memoization. available() is called on every arbitration (_inner_fft per composed frame, _ComposedSpectralCandidate.available, measured_arbitrate cache-hit revalidation, corpus_winner), so each dispatch pays an extra kernel launch plus two host-device transfers purely to answer a question whose answer cannot change within a process.

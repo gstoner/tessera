@@ -21,3 +21,25 @@ func.func @while_yields_more_than_it_returns(
   }
   return %r : tensor<4xf32>
 }
+
+// A condition that forwards a NON-PREFIX slice of the carried state. Result 0
+// is %b (init position 1), so seeding it from position 0 would attach %x's
+// dim-names to %y's value — and the positional mismatch check would compare
+// two unrelated sequences and could reject a valid loop. Results are seeded
+// from the condition's forwarded values, and the check only fires where the
+// forward really is positional.
+
+// CHECK-LABEL: func.func @while_forwards_non_prefix_state
+// CHECK: scf.while
+func.func @while_forwards_non_prefix_state(
+    %x: tensor<4xf32>, %y: tensor<8xf32>) -> tensor<8xf32> {
+  %r = scf.while (%a = %x, %b = %y)
+      : (tensor<4xf32>, tensor<8xf32>) -> tensor<8xf32> {
+    %c = arith.constant true
+    scf.condition(%c) %b : tensor<8xf32>
+  } do {
+  ^bb0(%arg: tensor<8xf32>):
+    scf.yield %x, %arg : tensor<4xf32>, tensor<8xf32>
+  }
+  return %r : tensor<8xf32>
+}

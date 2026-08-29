@@ -591,7 +591,18 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 **Independently verified:** InsertRecomputePass.cpp:51-60. With no tessera.effect attribute the function returns true whenever the op has zero regions and its name lacks the substrings alloc/store/dealloc — so func.call, a collective, an IO op, and any tessera.rng.* op are 'pure' and get tessera_sr.recompute_hint="recomputable" at line 124-127. The header comment ('Ops with side effects are never recomputable') and the inline comment ('conservatively assumed pure') both assert the opposite of what the code does. Nothing forces EffectAnnotationPass to run first: the pass declares no dependency, and its own fixture src/solvers/scaling_resilience/tests/sr/checkpoint.mlir runs `tessera-opt -tessera-insert-recompute` standalone, so absence of the attribute is the normal case. This is precisely the Decision #10a pattern (eligibility marking without a gating analysis) and the Decision #30 fail-open scar. Severity caveat: I grepped for a consumer of tessera_sr.recompute_hint and found none on the MLIR side (only python/tessera/compiler/checkpoint.py, an independent annotator), so the wrong-gradient outcome is latent rather than currently live — but per Decision #29/#10a an eligibility mark that a downstream pass will believe is the defect.
 
 
-## P2 — real but minor (41)
+## P2 — real but minor (42)
+
+### `python/tessera/compiler/profiler_rocm_native.py:255` — pre-run snapshot fails OPEN on a partial read
+
+*Added 2026-08-29, after the review — found in the fix for the mtime clock race (PR #637). Deferred to the P2 batch by owner decision.*
+
+**What is wrong:** `_snapshot_files` builds the pre-run baseline, and on any `OSError` it discards what it has collected and returns `{}`. `_files_written_since` then compares against an empty baseline, so every file already in the output directory looks newly written.
+
+**Evidence:** A file disappearing between `is_file()` and `stat()` — another process cleaning or rotating a reused output directory — or a permission error mid-walk empties the baseline. If the traced application then exits successfully without producing records, the stale traces from an earlier run are parsed as this run's output and the capture reports `status: "collected"` on someone else's evidence. That is the mirror of the defect #637 fixed (a spurious `blocked`) and the worse direction of the two: a false negative wastes time, a false positive is a claim-integrity failure.
+
+**Fix:** Distinguish "the directory was empty" from "no baseline could be established". Either keep the successfully captured entries and record the failed paths, or return a sentinel for an incomplete walk and have both collectors refuse the capture — the fail-closed form matches this file's own contract, where a blocked capture must carry a reason.
+
 
 ### `python/tessera/autodiff/vjp.py:3756` — instance/group norm affine params get silent None gradients
 

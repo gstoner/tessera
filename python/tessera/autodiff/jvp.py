@@ -1275,16 +1275,30 @@ def jvp_ebm_inner_step(primals, tangents, *, eta, noise_scale=0.0, **_):
 
 
 @_jvp("cross_entropy_loss")
-def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
+def jvp_cross_entropy_loss(
+    primals,
+    tangents,
+    *,
+    reduction="mean",
+    axis=-1,
+    ignore_index=-100,
+    label_smoothing=0.0,
+    **_,
+):
     from tessera import losses as ts_losses
 
     logits, targets = primals
     dlogits = tangents[0]
-    primal = ts_losses.cross_entropy_loss(logits, targets, reduction=reduction)
+    # This rule differentiates by central-differencing the eager loss, so the
+    # eager calls must receive every kwarg that changes what that loss computes
+    # — dropping them differentiates a different objective.
+    kw = dict(reduction=reduction, axis=axis, ignore_index=ignore_index,
+              label_smoothing=label_smoothing)
+    primal = ts_losses.cross_entropy_loss(logits, targets, **kw)
     eps = 1e-6
     tangent = (
-        ts_losses.cross_entropy_loss(logits + eps * dlogits, targets, reduction=reduction)
-        - ts_losses.cross_entropy_loss(logits - eps * dlogits, targets, reduction=reduction)
+        ts_losses.cross_entropy_loss(logits + eps * dlogits, targets, **kw)
+        - ts_losses.cross_entropy_loss(logits - eps * dlogits, targets, **kw)
     ) / (2.0 * eps)
     return primal, tangent
 

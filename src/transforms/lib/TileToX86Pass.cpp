@@ -347,6 +347,27 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
     if (auto ek = op->getAttrOfType<IntegerAttr>("epilogue"))
       epilogueKind = static_cast<int>(ek.getInt());
 
+    // Decide whether this op is lowerable BEFORE creating any IR. The C shim
+    // exports exactly two epilogues — bias, and bias+GELU
+    // (tessera_x86_backend/src/kernels/epilogue.cpp); `..._bias_fp32` applies
+    // no activation at all, so routing RELU there would silently discard it,
+    // and replacing the op with the bare GEMM would do the same. Refuse
+    // instead (Decision #21).
+    //
+    // The check has to happen here rather than at the point of use: a failed
+    // pattern is NOT rolled back, so bailing out after the allocation and the
+    // GEMM call below would leave a stray side-effecting call next to the
+    // still-unlowered op.
+    bool hasBias = op->getAttrOfType<BoolAttr>("has_bias") &&
+                   op->getAttrOfType<BoolAttr>("has_bias").getValue();
+    if (epilogueKind != 0 && epilogueKind != 2) return failure();
+    if (epilogueKind != 0 && !hasBias) return failure();
+    RankedTensorType biasTy;
+    if (hasBias) {
+      biasTy = llvm::dyn_cast<RankedTensorType>(bias.getType());
+      if (!biasTy || biasTy.isDynamicDim(0)) return failure();
+    }
+
     Location loc   = op->getLoc();
     ModuleOp  mod  = op->getParentOfType<ModuleOp>();
     MLIRContext *ctx = op->getContext();
@@ -385,19 +406,8 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
         loc, gemmName, TypeRange{},
         ValueRange{aPtr, bPtr, cPtr, Mv, Nv, Kv, betaV});
 
-    // Epilogue. The C shim exports exactly two — bias, and bias+GELU
-    // (tessera_x86_backend/src/kernels/epilogue.cpp); `..._bias_fp32` applies
-    // no activation at all. Any other configuration has no symbol to call, and
-    // falling through to replace the op with the bare GEMM result would
-    // silently discard the activation the program asked for. Refuse instead
-    // (Decision #21: an unsupported lowering names the op and the target).
-    bool hasBias = op->getAttrOfType<BoolAttr>("has_bias") &&
-                   op->getAttrOfType<BoolAttr>("has_bias").getValue();
-    if (epilogueKind != 0 && epilogueKind != 2) return failure();
-    if (epilogueKind != 0 && !hasBias) return failure();
+    // Epilogue. Support was settled above, before any IR was created.
     if (hasBias) {
-      auto biasTy = llvm::dyn_cast<RankedTensorType>(bias.getType());
-      if (!biasTy || biasTy.isDynamicDim(0)) return failure();
       auto biasMemTy = MemRefType::get({N}, f32Ty);
       Value biasPtr = extractPtr(rewriter, loc, bias, biasMemTy);
 
@@ -594,11 +604,33 @@ struct TileToX86PassImpl
         int epilogueKind = 0;
         if (auto ek = op->getAttrOfType<IntegerAttr>("epilogue"))
           epilogueKind = static_cast<int>(ek.getInt());
+        bool hasBias = op->getAttrOfType<BoolAttr>("has_bias") &&
+                       op->getAttrOfType<BoolAttr>("has_bias").getValue();
         if (epilogueKind != 0 && epilogueKind != 2) {
           op->emitError("x86 fused-epilogue lowering supports epilogue "
                         "none|gelu; the requested activation has no x86 "
                         "kernel and must not fall through to the bare GEMM");
           unlowered = true;
+          return;
+        }
+        // Every reason the pattern refuses must be reported here, or a
+        // refusal it does not name leaves an unlowered op behind and the pass
+        // still reports success.
+        if (epilogueKind != 0 && !hasBias) {
+          op->emitError("x86 fused-epilogue lowering has no bias-free "
+                        "activation kernel; every exported epilogue applies "
+                        "a bias");
+          unlowered = true;
+          return;
+        }
+        if (hasBias && op->getNumOperands() > 2) {
+          auto biasTy =
+              dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+          if (!biasTy || biasTy.isDynamicDim(0)) {
+            op->emitError("x86 fused-epilogue lowering requires a statically "
+                          "shaped bias operand");
+            unlowered = true;
+          }
         }
       });
       if (unlowered) return signalPassFailure();

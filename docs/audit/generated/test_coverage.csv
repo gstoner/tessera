@@ -195,7 +195,7 @@ floor,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 floor_div,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 focal_loss,8,0,0,8,0,,directly_tested,8 direct test references
 fori_loop,25,0,3,25,0,fp16,directly_tested,25 direct test references
-fused_epilogue,6,7,3,13,0,f16 nvfp4,directly_tested,13 direct test references
+fused_epilogue,6,8,3,14,0,f16 nvfp4,directly_tested,14 direct test references
 game_boltzmann_value,12,0,1,12,0,,directly_tested,12 direct test references
 game_coalition_excess,4,0,0,4,0,,directly_tested,4 direct test references
 game_coalition_marginal,5,0,1,5,0,,directly_tested,5 direct test references

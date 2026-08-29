@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import subprocess
+import time
 from pathlib import Path
 
 from tessera.compiler.profiler_rocm_native import (
@@ -180,3 +183,43 @@ def test_rtg_fresh_process_requires_ordered_raw_dispatch_record(
     assert artifact["dispatch_records"][0]["duration_ns"] == 8000
     assert artifact["process"]["teardown_complete"] is True
     assert artifact["eligible_for_promotion"] is False
+
+
+def test_capture_survives_a_filesystem_timestamp_behind_the_wall_clock(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Trace files must be selected by a state diff, not by comparing their
+    mtime against a `time.time_ns()` reading taken before the run.
+
+    Those are two different clocks. On Linux an inode timestamp comes from the
+    COARSE clock (one scheduler tick of granularity) while `time.time_ns()`
+    reads the fine clock, so a file written microseconds after the reference
+    can carry an mtime that rounds BELOW it. The file was then filtered out, no
+    dispatch records were parsed, and a capture that actually succeeded
+    reported `blocked` — intermittently, and more often the faster the traced
+    application. This backdates the trace by 5 ms to make that deterministic.
+    """
+    platform.platform()  # warm uname()'s cache before subprocess.run is patched
+    library = tmp_path / "rtg_tracer.so"
+    library.write_bytes(b"test")
+
+    def run(command, **kwargs):
+        environment = kwargs["env"]
+        trace = Path(environment["RTG_FILE_PREFIX"].replace("%p", "123"))
+        trace.parent.mkdir(parents=True, exist_ok=True)
+        trace.write_text(
+            "HSA: pid:123 tid:7 dispatch queue:0xabc agent:1 signal:9 "
+            "name:'tessera_gemm' start:1000 stop:9000 id:4\n",
+            encoding="utf-8",
+        )
+        backdated = time.time_ns() - 5_000_000
+        os.utime(trace, ns=(backdated, backdated))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("tessera.compiler.profiler_rocm_native.subprocess.run", run)
+    artifact = collect_rtg_tracer(
+        application=("./application",), output_directory=tmp_path / "trace",
+        rtg_library=library,
+    )
+    assert artifact["status"] == "collected", artifact.get("reason")
+    assert artifact["proof"]["dispatch_activity_seen"] is True

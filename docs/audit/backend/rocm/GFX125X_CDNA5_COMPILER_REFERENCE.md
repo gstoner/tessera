@@ -1039,12 +1039,12 @@ Useful paths: `llvm/lib/Target/AMDGPU/{AMDGPU.td,GCNHazardRecognizer.cpp}`,
 `shared/stinkytofu`, `dnn-providers/hip-kernel-provider/rocke`
 (`ROCm/rocm-libraries@develop`).
 
-**Toolchain note.** Two LLVMs are present on the current Mac: the Homebrew keg
-`llvm/22.1.8` (on `PATH`), and **LLVM 23.1.0-rc1 at
-`/opt/homebrew/llvm-23.1.0-rc1/`** — the latter is what `build/CMakeCache.txt`
-pins as `LLVM_DIR`. Note it is *not* at the `/opt/homebrew/opt/llvm@23` path
-`CLAUDE.md` cites, so that reference is stale even though the toolchain itself is
-present.
+**Toolchain note (updated 2026-08-28).** The Mac now has a single LLVM: the
+Homebrew keg `llvm` 23.1.0 at `/opt/homebrew/opt/llvm/`, which is what
+`build/CMakeCache.txt` pins as `LLVM_DIR`. At probe time (pre-2026-08-28) two
+were present — the then-22.1.8 brew keg and the manual pre-release
+`llvm-23.1.0-rc1` (since removed); both were probed then and agreed on
+everything in this document.
 
 Both versions were probed and agree on everything in this document: each encodes
 the gfx1250 WMMA family, TDM (`tensor_load_to_lds`), the cluster-scope barrier

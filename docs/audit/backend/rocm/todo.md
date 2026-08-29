@@ -1,11 +1,62 @@
 ---
-last_updated: 2026-08-27
+last_updated: 2026-08-29
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **action
+required on the gfx1151 box: one HIP kernel P0 is source-only and needs an
+exact-device run.**
+
+*Foundation (all backends).* The LLVM/MLIR major pin is unchanged at **23**;
+what moved is the Mac, from a manual pre-release `23.1.0git` prefix to
+Homebrew's production `llvm` keg **23.1.0** (that prefix has been deleted).
+This box stays on apt.llvm.org `/usr/lib/llvm-23`. **No fleet box has an
+assertions-enabled LLVM any more**, so every "does not reproduce" for an MLIR
+promise/contract claim is provisional (Decision #19). Python/deps: the
+`numpy<2.2` venv cap **is no longer required** — `pyproject.toml` now skips
+numpy/scipy stubs (`follow_imports = "skip"` **plus**
+`follow_imports_for_stubs = true`), keeping `python_version = "3.10"` while
+making the mypy ratchet independent of the installed numpy. Two build-system
+repairs ride along: `check-{clifford,ebm,spectral}` no longer hardcode
+`llvm-lit` (absent from some distributions) and now pass `BUILD_DIR` so the
+suite finds its own driver; and driver discovery in
+`tests/_support/compiler_tool.py`, `compiler/driver.py` and `_jit_boundary.py`
+now requires a candidate binary to actually **start**, not merely exist — a
+build tree left behind by an uninstalled toolchain otherwise outranks a live
+one and every lowering dies in the dynamic loader.
+
+*Actions on this box, in order.*
+1. `grep -l llvm-23.1.0-rc1 build*/CMakeCache.txt` and `ldd` the built drivers;
+   reconfigure any tree pinned to a removed prefix. On the Mac this class of
+   staleness alone accounted for ~86 unit failures.
+2. `source .venv/bin/activate && source scripts/_rocm_env.sh` before pytest —
+   a bare sweep is still not a valid ROCm result.
+3. `ninja -C build && ninja -C build check-tessera-rocm` (CI does not run that
+   suite at all).
+
+*The P0 this box owns.* `python/tessera/compiler/emit/rocm_hip.py`
+`_synthesize_paged_attention_direct_hip` had a **shared-memory race**: after
+the softmax-max tree reduction every thread read `red[0]` and then overwrote
+`red[t]` with its exp-sum partial with no `__syncthreads()` between, so a fast
+thread could turn another wave's max into a partial sum. blockDim is 256 = 8
+independent wave32s, and for decode-sized `T` the exp loop is one iteration,
+which is the worst case. A barrier was inserted, and in the same kernel the
+per-output-dimension `expf` recomputation was hoisted: the softmax weights are
+now normalized once into `scores[]` (T exp calls instead of T×D). **Both are
+source-level only — verified by reading the emitted kernel text on a host with
+no ROCm.** This box owes: a gfx1151 correctness run of the paged-attention
+lane against the host reference, and a before/after timing of the `expf` hoist.
+Until then neither the race fix nor the speedup is a device claim. Guard test:
+`tests/unit/test_paged_kv_rocm_abi.py::test_paged_attn_hip_barrier_between_max_read_and_scratch_reuse`
+(source-level; it pins the barrier, it does not prove the kernel).
+
+*Also still open here from the same review, unfixed:* `rocm_hip.py:104`
+unchecked `hipMemcpy`/`hipMalloc` return codes can report garbage as a native
+result (P2, fail-open).
+
 Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **follow-up
 required; ROCm is the owning lane, no device claim yet.** The IKF-1 plan
 (`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`, PR #634) proposes a

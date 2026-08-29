@@ -3,10 +3,62 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-27
+last_updated: 2026-08-29
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **this box is
+the one the foundation moved on; done here, and it is where the review's
+verification was performed.**
+
+*What changed on this host.* LLVM/MLIR is now Homebrew's **production `llvm`
+keg 23.1.0** at `/opt/homebrew/opt/llvm`; the manual pre-release
+`/opt/homebrew/llvm-23.1.0-rc1` prefix (`23.1.0git`, assertions **ON**) was
+deleted by owner decision. The keg is **NDEBUG**, so this box is no longer the
+fleet's MLIR-assertion falsifier — see the Decision #19 update in `CLAUDE.md`
+and the `APPLE-VECTORIZE-1` note below; the from-source assertions recipe is
+preserved in this file. The Metal 4 evidence lane's pinned prefix and
+`TESSERA_LLVM23_PREFIX` default now point at the keg;
+`validate_apple_metal4_evidence.py` accepts **either** pin so packets sealed
+before 2026-08-29 stay valid as recorded.
+
+*Fallout that had to be repaired, and the general lesson.* Removing the rc1
+prefix stranded four build trees — `build-apple`, `build-asan`, `build-tsan`,
+`build-ubsan` — whose `CMakeCache.txt` still pin it and whose binaries link
+`@rpath/libLLVM.23.1git.dylib`. That alone caused **~86 unit failures**, 69 in
+`test_apple_value_target_ir.py`, every message about a missing dylib rather
+than about anything under test. `build_artifacts.py` had been hardened for
+exactly this in Aug 2026, but three *other* discovery paths still checked only
+existence — and two are **product** code that actively *preferred*
+`build-apple` on Darwin: `compiler/driver.py::_resolve_tessera_opt` and
+`_jit_boundary.py::_find_tessera_opt` (plus `tests/_support/compiler_tool.py`).
+All now require the binary to start. Lesson worth carrying: fixing one
+discovery path does not fix the class — after removing any toolchain prefix,
+sweep `grep -l <prefix> build*/CMakeCache.txt` and `otool -L` the drivers.
+
+*Also repaired here:* `ninja check-{clifford,ebm,spectral}` were dead because
+the brew keg ships no `llvm-lit` (they now fall back to a standalone `lit` and
+pass `BUILD_DIR` so the suite locates its own driver); and
+`TESSERA_BUILD_X86_BACKEND=ON` is now safe on this Mac — `src/CMakeLists.txt`
+skips only the native AVX-512/AMX kernel subdirectory on a non-x86 host, so
+`ninja -C build` completes and `lit tests/tessera-ir/` goes **414/425 →
+425/425**. Enable it here: this is the only fleet host *without* AVX-512, hence
+the only one whose green result on the x86 Target IR fixtures is evidence of
+host portability (Decision #19).
+
+*Verification performed on this box for the whole review batch:* unit suite
+**114 → 27 failures** (15263 passed), the 27 all citing `sm_120`, `gfx1151` or
+`x86_64_avx512`; a stash-and-rerun over exactly the failing files gave
+**identical failure sets (22 = 22), i.e. zero regressions**; `lit
+tests/tessera-ir/` 425/425 and Clifford 16/16; `mypy` restored from a hard
+abort to **0 errors over 480 files**; `ruff` clean on `python/tessera/` and
+every touched file. A pre-existing hard **bus error** in
+`test_numeric_policy_carrier_execution.py` was also fixed: it hand-rolled the
+x86-64 large-struct-return convention (result pointer as first argument), which
+is wrong on AArch64 where the indirect return slot is `x8`. It now calls MLIR's
+`_mlir_ciface_` wrapper, whose ABI is explicit and target-independent — the
+oracle still reproduces the bf16-accumulator defect it exists to catch.
+
 Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **follow-up
 required at IKF-P6; Apple execution unchanged, and the clock primitive is
 unverified.** The IKF-1 intra-kernel measurement plan
@@ -3031,15 +3083,20 @@ generalize a winner across Apple GPU families without a matching record.
 
 ### Use the dedicated LLVM/MLIR 23 prefix
 
-The generic Homebrew `llvm` symlink is not this lane: it may resolve to a
-different keg (currently LLVM 23) or be absent. Apple validation and
-`build-apple` use the dedicated, pinned upstream `release/23.x` build at
-`/opt/homebrew/llvm-23.1.0-rc1`; it must be built with
-`LLVM_ENABLE_RTTI=ON`, or Tessera's pass and dialect typeinfo cannot link.
-Before configuring or testing, set and validate this exact prefix:
+**Updated 2026-08-28 — the accepted prefix is now Homebrew's `llvm` keg.**
+Homebrew shipped the production LLVM/MLIR 23.1.0 release (RTTI ON, assertions
+**OFF**), and by owner decision it replaces the manual pre-release
+`/opt/homebrew/llvm-23.1.0-rc1` build, which has been removed from the
+machine. The RTTI requirement stands: the toolchain must be built with
+`LLVM_ENABLE_RTTI=ON`, or Tessera's pass and dialect typeinfo cannot link
+(the brew keg satisfies this). Note the keg is an NDEBUG build — no fleet box
+now has an assertions-enabled LLVM, so MLIR promise/contract regressions
+(APPLE-VECTORIZE-1 class) are invisible everywhere until checked against an
+assertions build; the source-build recipe below is preserved for recreating
+one on demand. Before configuring or testing, set and validate the prefix:
 
 ```bash
-export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
+export TESSERA_LLVM23_PREFIX=/opt/homebrew/opt/llvm
 test -x "$TESSERA_LLVM23_PREFIX/bin/llvm-config"
 test -d "$TESSERA_LLVM23_PREFIX/lib/cmake/mlir"
 export PATH="$TESSERA_LLVM23_PREFIX/bin:$PATH"
@@ -3051,9 +3108,11 @@ export CMAKE_PREFIX_PATH="$TESSERA_LLVM23_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PRE
 ```
 
 All three version commands must begin with `23.`. If either path check fails,
-stop rather than falling back to `brew --prefix llvm` or AppleClang's system
-libraries. To recreate the dedicated toolchain, install the Xcode Command Line
-Tools first, then build it:
+stop rather than falling back to AppleClang's system libraries. To recreate a
+dedicated **assertions-ON** toolchain (for falsifying MLIR promise/contract
+claims — none is resident anywhere in the fleet since 2026-08-28), install the
+Xcode Command Line Tools first, then build it into a distinct prefix and point
+`TESSERA_LLVM23_PREFIX` at it:
 
 ```bash
 xcode-select --install                    # omit if already installed
@@ -3062,7 +3121,7 @@ brew install cmake ninja lit
 git clone --depth 1 --branch release/23.x https://github.com/llvm/llvm-project.git /private/tmp/llvm-project-23
 cmake -S /private/tmp/llvm-project-23/llvm -B /private/tmp/llvm-23-build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/opt/homebrew/llvm-23.1.0-rc1 \
+  -DCMAKE_INSTALL_PREFIX=/opt/homebrew/llvm-23-asserts \
   -DLLVM_ENABLE_PROJECTS='mlir;clang;lld' \
   -DLLVM_TARGETS_TO_BUILD='AArch64;AMDGPU;NVPTX;X86' \
   -DLLVM_ENABLE_ASSERTIONS=ON \
@@ -3071,7 +3130,7 @@ cmake -S /private/tmp/llvm-project-23/llvm -B /private/tmp/llvm-23-build -G Ninj
   -DLLVM_LINK_LLVM_DYLIB=ON
 cmake --build /private/tmp/llvm-23-build --target install --parallel 8
 
-export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
+export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23-asserts
 export PATH="$TESSERA_LLVM23_PREFIX/bin:$PATH"
 export CMAKE_PREFIX_PATH="$TESSERA_LLVM23_PREFIX${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 "$(brew --prefix lit)/bin/lit" --version
@@ -3084,7 +3143,7 @@ with this LLVM/MLIR 23 prefix. Record the upstream commit plus
 For compiler artifacts, build the Apple backend and portable MLIR tools:
 
 ```bash
-export TESSERA_LLVM23_PREFIX=/opt/homebrew/llvm-23.1.0-rc1
+export TESSERA_LLVM23_PREFIX=/opt/homebrew/opt/llvm
 cmake -S . -B build-apple -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="$TESSERA_LLVM23_PREFIX/bin/clang" \
@@ -3767,9 +3826,9 @@ shared attention lit coverage.
 Cross-backend sync `LLVM23-BACKBONE-2026-07-20` makes LLVM/MLIR 23.x the sole
 accepted compiler build environment. Top-level and standalone CMake entry
 points reject every other major and mixed installations. The Apple Metal
-evidence lane continues to use the pinned
-`/opt/homebrew/llvm-23.1.0-rc1` prefix described above; a versioned Homebrew
-`llvm@23` keg does not substitute for that evidence-producing toolchain.
+evidence lane uses the pinned prefix described above — since 2026-08-28 that
+is Homebrew's production `llvm` keg 23.1.0 (`/opt/homebrew/opt/llvm`),
+replacing the removed pre-release `llvm-23.1.0-rc1` build.
 Apple target semantics and Metal/MPS runtime contracts are unchanged, and the
 LLVM 23 compiler/lit build validates parity.
 

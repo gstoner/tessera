@@ -148,3 +148,22 @@ def test_live_rocm_paged_gather_handles_permuted_pages():
     idx = np.asarray([9, 0, 7, 4], dtype=np.int64)
     out = run_paged_kv_cache_read_f32(abi.k_pages, abi.page_table, idx)
     np.testing.assert_array_equal(out, logical_k[idx])
+
+
+# ── Emitted HIP kernel: shared-memory reduction hygiene ────────────────────
+
+def test_paged_attn_hip_barrier_between_max_read_and_scratch_reuse():
+    """The block reduction reuses one `red[]` scratch buffer for the softmax max
+    and then the exp-sum. Every thread must have read `red[0]` before any thread
+    overwrites its slot, or a fast thread turns another's softmax max into a
+    partial sum. Source-level check: this host has no ROCm to run the kernel."""
+    from tessera.compiler.emit.rocm_hip import _synthesize_paged_attention_direct_hip
+
+    src = _synthesize_paged_attention_direct_hip()
+    assert "m=red[0];__syncthreads();" in src, (
+        "missing barrier between the max broadcast and the exp-sum's reuse of red[]"
+    )
+    # The per-element softmax weight is normalized once into shared memory
+    # rather than recomputed for every output dimension.
+    assert "scores[j]=expf(scores[j]-m)/z;__syncthreads();" in src
+    assert "acc+=scores[j]*v[d];" in src

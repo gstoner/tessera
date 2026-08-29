@@ -61,6 +61,29 @@ _DEFAULT_CANDIDATES = (
 )
 
 
+@lru_cache(maxsize=16)
+def is_runnable(tool: Path) -> bool:
+    """Whether this binary actually starts.
+
+    Existence is not enough. A build directory left over from a previous
+    toolchain still holds executables, and they link a shared library that may
+    no longer be installed — on macOS the process then dies in dyld with
+    `Library not loaded: @rpath/libLLVM.<ver>.dylib` before `main` runs. Every
+    test that resolved such a binary reports a hard failure whose message is
+    about a missing dylib, which reads as a broken compiler rather than a
+    stale build tree. Checking here keeps a dead tree from outranking a live
+    one, and lets `tessera_opt_path()` return None (a clean skip) when no tree
+    is usable at all.
+    """
+    try:
+        return subprocess.run(
+            [str(tool), "--version"], capture_output=True,
+            check=False, timeout=60,
+        ).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def tessera_opt_candidates() -> tuple[Path, ...]:
     """Every discoverable driver, most-preferred first.
 
@@ -92,7 +115,7 @@ def tessera_opt_candidates() -> tuple[Path, ...]:
     unique: dict[Path, Path] = {}
     for path in found:  # `build/bin/tessera-opt` is often a link to the real one
         unique.setdefault(path.resolve(), path)
-    return tuple(unique.values())
+    return tuple(path for path in unique.values() if is_runnable(path))
 
 
 def tessera_opt_path() -> Path | None:

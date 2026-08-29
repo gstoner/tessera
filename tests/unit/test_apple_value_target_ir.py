@@ -19,17 +19,25 @@ import pytest
 from tests._support.apple import skip_if_apple_pipeline_unregistered
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_OPT_DEFAULT = REPO_ROOT / "build-apple" / "tools" / "tessera-opt" / "tessera-opt"
-if not _OPT_DEFAULT.is_file():
-    _OPT_DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 def _find_opt() -> str | None:
+    """Resolve the driver through the shared discovery.
+
+    This used to prefer `build-apple/` and fall back to `build/` only when the
+    file was *absent* — so a build tree left behind by a previous toolchain,
+    whose binaries no longer link, outranked a working one and turned every
+    test in this module into a dyld failure. `tessera_opt_candidates()` ranks
+    the trees and drops any binary that cannot start.
+    """
     configured = os.environ.get("TESSERA_OPT")
     if configured and os.access(configured, os.X_OK):
         return configured
-    if _OPT_DEFAULT.is_file() and os.access(_OPT_DEFAULT, os.X_OK):
-        return str(_OPT_DEFAULT)
+    from tests._support.compiler_tool import tessera_opt_path
+
+    found = tessera_opt_path()
+    if found is not None:
+        return str(found)
     return shutil.which("tessera-opt")
 
 
@@ -749,9 +757,10 @@ def test_value_mode_output_has_no_husk_or_tile_leftover():
 # exists). It also pins the coverage boundary: CPU linalg value calls execute;
 # GPU value calls and non-linalg value calls stay gated / artifact-mode.
 
-_REPO_BUILT_OPT = REPO_ROOT / "build-apple" / "tools" / "tessera-opt" / "tessera-opt"
-if not _REPO_BUILT_OPT.is_file():
-    _REPO_BUILT_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
+# Same rule as `_find_opt` above: rank the build trees and skip any binary that
+# cannot start, so a tree left over from an earlier toolchain does not win.
+_REPO_BUILT_OPT = Path(_OPT) if _OPT else (
+    REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt")
 
 
 def test_repo_root_walk_finds_source_root():

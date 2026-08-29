@@ -226,9 +226,17 @@ struct LowerMatmulToX86 : public RewritePattern {
     if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
       return failure();
 
-    // Only lower bf16 and f16 GEMMs (the x86 backend supports these).
+    // Only bf16 lowers here. The only GEMM symbols the C shim exports are
+    // `tessera_x86_{amx,avx512}_gemm_bf16`, whose ABI carries no dtype
+    // selector and decodes each uint16 operand as bf16 — so accepting f16
+    // would reinterpret a 5/10 exponent/mantissa split as 8/7 and compute on
+    // garbage with every IR type still self-consistent. Refuse instead.
+    // Refusal here is reported by the completeness walk in runOnOperation —
+    // a diagnostic emitted from inside a pattern that returns failure does not
+    // fail the pass, so the driver would print it and still exit 0.
     Type lhsElem = lhsTy.getElementType();
-    if (!lhsElem.isBF16() && !lhsElem.isF16()) return failure();
+    if (!lhsElem.isBF16()) return failure();
+    if (rhsTy.getElementType() != lhsElem) return failure();
 
     // Require static shapes.
     if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
@@ -319,8 +327,12 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
     auto rhsTy = llvm::dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
       return failure();
+    // bf16 only — see LowerMatmulToX86: the shim's GEMM symbol is bf16-typed
+    // and would silently reinterpret f16 bits. Reported by the completeness
+    // walk in runOnOperation, not from here.
     Type lhsElem = lhsTy.getElementType();
-    if (!lhsElem.isBF16() && !lhsElem.isF16()) return failure();
+    if (!lhsElem.isBF16()) return failure();
+    if (rhsTy.getElementType() != lhsElem) return failure();
     if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
         rhsTy.isDynamicDim(0) || rhsTy.isDynamicDim(1))
       return failure();
@@ -334,6 +346,27 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
     int epilogueKind = 0;
     if (auto ek = op->getAttrOfType<IntegerAttr>("epilogue"))
       epilogueKind = static_cast<int>(ek.getInt());
+
+    // Decide whether this op is lowerable BEFORE creating any IR. The C shim
+    // exports exactly two epilogues — bias, and bias+GELU
+    // (tessera_x86_backend/src/kernels/epilogue.cpp); `..._bias_fp32` applies
+    // no activation at all, so routing RELU there would silently discard it,
+    // and replacing the op with the bare GEMM would do the same. Refuse
+    // instead (Decision #21).
+    //
+    // The check has to happen here rather than at the point of use: a failed
+    // pattern is NOT rolled back, so bailing out after the allocation and the
+    // GEMM call below would leave a stray side-effecting call next to the
+    // still-unlowered op.
+    bool hasBias = op->getAttrOfType<BoolAttr>("has_bias") &&
+                   op->getAttrOfType<BoolAttr>("has_bias").getValue();
+    if (epilogueKind != 0 && epilogueKind != 2) return failure();
+    if (epilogueKind != 0 && !hasBias) return failure();
+    RankedTensorType biasTy;
+    if (hasBias) {
+      biasTy = llvm::dyn_cast<RankedTensorType>(bias.getType());
+      if (!biasTy || biasTy.isDynamicDim(0)) return failure();
+    }
 
     Location loc   = op->getLoc();
     ModuleOp  mod  = op->getParentOfType<ModuleOp>();
@@ -373,29 +406,21 @@ struct LowerFusedEpilogueToX86 : public RewritePattern {
         loc, gemmName, TypeRange{},
         ValueRange{aPtr, bPtr, cPtr, Mv, Nv, Kv, betaV});
 
-    // Epilogue: bias (always) + optional activation.
-    bool hasBias = op->getAttrOfType<BoolAttr>("has_bias") &&
-                   op->getAttrOfType<BoolAttr>("has_bias").getValue();
+    // Epilogue. Support was settled above, before any IR was created.
     if (hasBias) {
-      // Extract bias pointer.
-      auto biasTy = llvm::dyn_cast<RankedTensorType>(bias.getType());
-      if (biasTy && !biasTy.isDynamicDim(0)) {
-        auto biasMemTy = MemRefType::get({N}, f32Ty);
-        Value biasPtr = extractPtr(rewriter, loc, bias, biasMemTy);
+      auto biasMemTy = MemRefType::get({N}, f32Ty);
+      Value biasPtr = extractPtr(rewriter, loc, bias, biasMemTy);
 
-        StringRef epilogueName;
-        if (epilogueKind == 2)      // Gelu
-          epilogueName = "tessera_x86_epilogue_bias_gelu_fp32";
-        else                        // Relu or None-with-bias
-          epilogueName = "tessera_x86_epilogue_bias_fp32";
+      StringRef epilogueName = (epilogueKind == 2)
+                                   ? "tessera_x86_epilogue_bias_gelu_fp32"
+                                   : "tessera_x86_epilogue_bias_fp32";
 
-        FunctionType epFnTy = FunctionType::get(
-            ctx, {i64Ty, i64Ty, i32Ty, i32Ty}, {});
-        ensureExternalDecl(mod, epilogueName, epFnTy);
-        rewriter.create<func::CallOp>(
-            loc, epilogueName, TypeRange{},
-            ValueRange{cPtr, biasPtr, Mv, Nv});
-      }
+      FunctionType epFnTy = FunctionType::get(
+          ctx, {i64Ty, i64Ty, i32Ty, i32Ty}, {});
+      ensureExternalDecl(mod, epilogueName, epFnTy);
+      rewriter.create<func::CallOp>(
+          loc, epilogueName, TypeRange{},
+          ValueRange{cPtr, biasPtr, Mv, Nv});
     }
 
     auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
@@ -546,6 +571,70 @@ struct TileToX86PassImpl
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
       return signalPassFailure();
+
+    // Decision #21 completeness: name the GEMM configurations this pass knows
+    // it cannot lower instead of leaving them behind for a later stage to
+    // misread. Both cases used to produce a plausible wrong answer rather than
+    // an error — f16 operands reinterpreted by the bf16-typed kernel, and an
+    // epilogue with no matching symbol replaced by the bare GEMM result.
+    if (!portableBase) {
+      bool unlowered = false;
+      getOperation().walk([&](Operation *op) {
+        StringRef name = op->getName().getStringRef();
+        bool isEpilogue = name == "tessera.fused_epilogue";
+        if (name != "tessera.matmul" && !isEpilogue) return;
+        if (op->getNumOperands() < 2) return;
+        auto lhsTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+        auto rhsTy = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+        if (lhsTy && lhsTy.getElementType().isF16()) {
+          op->emitError("x86 GEMM lowering has no f16 kernel: the exported "
+                        "symbol is bf16-only and its ABI carries no dtype "
+                        "tag, so f16 operands would be decoded as bf16");
+          unlowered = true;
+          return;
+        }
+        if (lhsTy && rhsTy && lhsTy.getElementType().isBF16() &&
+            rhsTy.getElementType() != lhsTy.getElementType()) {
+          op->emitError("x86 GEMM lowering requires both operands to share an "
+                        "element type");
+          unlowered = true;
+          return;
+        }
+        if (!isEpilogue) return;
+        int epilogueKind = 0;
+        if (auto ek = op->getAttrOfType<IntegerAttr>("epilogue"))
+          epilogueKind = static_cast<int>(ek.getInt());
+        bool hasBias = op->getAttrOfType<BoolAttr>("has_bias") &&
+                       op->getAttrOfType<BoolAttr>("has_bias").getValue();
+        if (epilogueKind != 0 && epilogueKind != 2) {
+          op->emitError("x86 fused-epilogue lowering supports epilogue "
+                        "none|gelu; the requested activation has no x86 "
+                        "kernel and must not fall through to the bare GEMM");
+          unlowered = true;
+          return;
+        }
+        // Every reason the pattern refuses must be reported here, or a
+        // refusal it does not name leaves an unlowered op behind and the pass
+        // still reports success.
+        if (epilogueKind != 0 && !hasBias) {
+          op->emitError("x86 fused-epilogue lowering has no bias-free "
+                        "activation kernel; every exported epilogue applies "
+                        "a bias");
+          unlowered = true;
+          return;
+        }
+        if (hasBias && op->getNumOperands() > 2) {
+          auto biasTy =
+              dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+          if (!biasTy || biasTy.isDynamicDim(0)) {
+            op->emitError("x86 fused-epilogue lowering requires a statically "
+                          "shaped bias operand");
+            unlowered = true;
+          }
+        }
+      });
+      if (unlowered) return signalPassFailure();
+    }
 
     if (failed(materializeX86ComposedLayouts(getOperation())))
       return signalPassFailure();

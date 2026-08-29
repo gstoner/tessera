@@ -183,8 +183,12 @@ public:
     // element of the loss tensor (or scalar). For arbitrary loss shapes
     // the user can wrap the call in a sum reduction at the Python boundary.
     mlir::Value seed;
+    // `dyn_cast` yields a null interface for a plain scalar loss (`f32`), which
+    // is exactly what this pass's own precondition asks for — so the null must
+    // be tested before any method call, or the scalar branch below is
+    // unreachable and the call crashes on the way to it.
     if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(lossValue.getType());
-        shapedType.hasStaticShape()) {
+        shapedType && shapedType.hasStaticShape()) {
       auto elemType = shapedType.getElementType();
       mlir::Attribute oneAttr;
       if (mlir::isa<mlir::FloatType>(elemType)) {
@@ -196,7 +200,14 @@ public:
       seed = builder.create<mlir::arith::ConstantOp>(
           lossValue.getLoc(), splatAttr);
     } else if (!mlir::isa<mlir::ShapedType>(lossValue.getType())) {
-      auto seedAttr = builder.getF32FloatAttr(1.0f);
+      // Seed in the loss's own type: an f64 loss seeded with an f32 one would
+      // produce a constant whose type does not match the value it seeds.
+      mlir::Type lossType = lossValue.getType();
+      mlir::TypedAttr seedAttr;
+      if (mlir::isa<mlir::FloatType>(lossType))
+        seedAttr = mlir::FloatAttr::get(lossType, 1.0);
+      else
+        seedAttr = mlir::IntegerAttr::get(lossType, 1);
       seed = builder.create<mlir::arith::ConstantOp>(
           lossValue.getLoc(), seedAttr);
     } else {

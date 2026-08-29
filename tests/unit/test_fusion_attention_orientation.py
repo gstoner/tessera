@@ -91,3 +91,30 @@ def test_jit_generic_softmax_sandwich_still_works():
     e = np.exp(s - s.max(-1, keepdims=True))
     ref = (e / e.sum(-1, keepdims=True)) @ c
     np.testing.assert_allclose(np.asarray(fn(a, b, c)), ref, rtol=1e-4, atol=1e-4)
+
+
+# ── A scale multiply the region cannot fold must not be consumed ────────────
+
+def test_value_carried_scale_factor_blocks_attention_fusion():
+    """`discover_attention_regions` folds the scale multiply into the region's
+    `scale` field. When the factor rides a graph value instead of an attribute —
+    a tensor scale or a mask multiply, and the normal form the tracer emits —
+    there is nothing to fold, and consuming the op anyway would drop the
+    multiply from the program entirely."""
+    from tessera.compiler.fusion_core import _Op, discover_attention_regions
+
+    def graph(mul_attrs):
+        return [
+            _Op("tessera.matmul", ("Q", "K"), "S", {"transpose_b": True}),
+            _Op("tessera.mul", ("S", "scale_val"), "S2", mul_attrs),
+            _Op("tessera.softmax", ("S2",), "P", {}),
+            _Op("tessera.matmul", ("P", "V"), "O", {}),
+        ]
+
+    # Constant attribute: still fused, scale carried through.
+    found = discover_attention_regions(graph({"scale": 0.125}))
+    assert len(found) == 1
+    assert found[0][1].scale == 0.125
+
+    # Value-carried factor: no region, so the multiply survives as its own op.
+    assert discover_attention_regions(graph({})) == []

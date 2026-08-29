@@ -2022,12 +2022,45 @@ def _tessera_repo_root() -> Path | None:
     return None
 
 
+_opt_runs_cache: dict[str, bool] = {}
+
+
+def _tessera_opt_runs(path: str) -> bool:
+    """Whether this driver binary actually starts.
+
+    The executable bit is not the question — a build directory from a previous
+    toolchain keeps its executables, and they link a shared library that may no
+    longer be installed. The process then dies in the dynamic loader before
+    ``main`` (``Library not loaded: @rpath/libLLVM.<ver>.dylib``), and every
+    caller sees a compiler that appears to exist and fails at everything.
+    Result is cached: this runs on the compile path.
+    """
+    cached = _opt_runs_cache.get(path)
+    if cached is None:
+        try:
+            cached = subprocess.run(
+                [path, "--version"], capture_output=True,
+                check=False, timeout=60,
+            ).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            cached = False
+        _opt_runs_cache[path] = cached
+    return cached
+
+
 def _resolve_tessera_opt() -> str | None:
     """Find tessera-opt with precedence: TESSERA_OPT env, then PATH (both via
     _find_tessera_opt), then an in-repo platform build followed by the generic
-    build. Prefer ``build-apple`` on Darwin source checkouts so a stale generic
-    binary linked against an older Homebrew LLVM cannot silently win over the
-    compiler that owns the active Apple backend."""
+    build.
+
+    ``build-apple`` is preferred on Darwin source checkouts so a stale generic
+    binary cannot silently win over the compiler that owns the active Apple
+    backend — but preference alone once inverted the very guarantee it was
+    written for: when the *platform* tree went stale instead (its LLVM
+    uninstalled), it outranked a perfectly good generic build and every Apple
+    lowering failed in dyld. Rank by preference, then take the first candidate
+    that can actually run, which is the symmetric form of the same rule.
+    """
     found = _find_tessera_opt()
     if found:
         return found
@@ -2036,7 +2069,8 @@ def _resolve_tessera_opt() -> str | None:
         build_dirs = ("build-apple", "build") if sys.platform == "darwin" else ("build",)
         for build_dir in build_dirs:
             built = repo / build_dir / "tools" / "tessera-opt" / "tessera-opt"
-            if built.is_file() and os.access(built, os.X_OK):
+            if (built.is_file() and os.access(built, os.X_OK)
+                    and _tessera_opt_runs(str(built))):
                 return str(built)
     return None
 

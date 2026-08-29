@@ -182,13 +182,26 @@ def validate_bundle(path: Path) -> dict[str, Any]:
         raise ValueError("Metal 4 proof status is not a success for its source commit")
 
     cmake_cache = (path / "apple-cmake-cache.txt").read_text(encoding="utf-8")
+    # Accepted toolchain pins: the Homebrew production keg (canonical since
+    # 2026-08-28) or the manual pre-release prefix that packets sealed before
+    # that date were built with — sealed evidence stays valid as recorded.
     cache_paths = {
-        "LLVM_DIR": "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm",
-        "MLIR_DIR": "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir",
+        "LLVM_DIR": (
+            "/opt/homebrew/opt/llvm/lib/cmake/llvm",
+            "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm",
+        ),
+        "MLIR_DIR": (
+            "/opt/homebrew/opt/llvm/lib/cmake/mlir",
+            "/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir",
+        ),
     }
-    for key, value in cache_paths.items():
-        if re.search(rf"^{key}:[^=]+={re.escape(value)}$", cmake_cache, re.MULTILINE) is None:
-            raise ValueError(f"Metal 4 CMake cache lacks required setting: {key}={value}")
+    for key, values in cache_paths.items():
+        if not any(
+            re.search(rf"^{key}:[^=]+={re.escape(value)}$", cmake_cache, re.MULTILINE)
+            for value in values
+        ):
+            raise ValueError(
+                f"Metal 4 CMake cache lacks required setting: {key} in {values}")
     if "TESSERA_BUILD_APPLE_BACKEND:BOOL=ON" not in cmake_cache:
         raise ValueError("Metal 4 CMake cache does not enable the Apple backend")
 

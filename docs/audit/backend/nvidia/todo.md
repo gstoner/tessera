@@ -3,10 +3,56 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-27
+last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `FOUNDATION-LLVM231-REVIEW-P0-2026-08-29` — **no NVIDIA P0
+in this batch; foundation actions apply, and four sm_120-gated lanes plus one
+confirmed CUDA-emitter P1 are owed by this box.**
+
+*Foundation (all backends).* The LLVM/MLIR major pin is unchanged at **23**;
+the Mac moved from a manual pre-release `23.1.0git` prefix to Homebrew's
+production `llvm` keg **23.1.0** (old prefix deleted). This box stays on
+apt.llvm.org `/usr/lib/llvm-23`. **No fleet box has an assertions-enabled LLVM
+any more**, so an MLIR promise/contract claim can currently be falsified
+nowhere (Decision #19) — relevant before recording any "no longer reproduces"
+here. Python/deps: the `numpy<2.2` cap **can be dropped** — `pyproject.toml`
+now skips numpy/scipy stubs (`follow_imports = "skip"` **plus**
+`follow_imports_for_stubs = true`), keeping `python_version = "3.10"` while
+making the mypy ratchet independent of the installed numpy (the fleet spans
+three versions). Also: `check-{clifford,ebm,spectral}` no longer hardcode
+`llvm-lit`, and driver discovery in `tests/_support/compiler_tool.py`,
+`compiler/driver.py` and `_jit_boundary.py` now requires a candidate binary to
+**start**, not merely exist.
+
+*Actions on this box.*
+1. Sweep for build trees pinned to a removed toolchain:
+   `grep -l llvm-23.1.0-rc1 build*/CMakeCache.txt`, then `ldd` the drivers.
+   On the Mac, four stranded trees produced ~86 unit failures whose messages
+   were all about a missing dylib rather than about any code under test.
+2. This host is x86_64, so the new `CMAKE_SYSTEM_PROCESSOR` gate in
+   `src/CMakeLists.txt` must still select the native x86 kernels — confirm
+   `cmake` prints no "x86 native kernels skipped" line (see the x86 todo).
+3. Run the four sm_120-gated lanes that cannot be evaluated on the Mac and
+   currently fail there as hardware-absent:
+   `tests/unit/test_scheduled_matmul_consumers.py` (3) and
+   `tests/unit/test_nvidia_compiler_artifacts.py::test_sm120_tile_fragment_lowers_to_real_nvvm_mma`.
+
+*The confirmed CUDA-emitter finding this box owns (P1, unfixed).*
+`python/tessera/compiler/emit/nvidia_cuda.py:1137` — several emitted
+block-reduction kernels read the reduction result from `scratch[0]` and then
+rewrite the same shared buffer for the next phase **with no
+`__syncthreads()` between**, a data race under the CUDA memory model. The
+reported instance is `run_row_norm(x, 'layer_norm', eps)` at K=4096 with a
+256-thread block (8 warps): after `tsr_sum` returns, warp 0 can re-enter the
+scratch write while slower warps are still reading. This is the same defect
+class fixed in the HIP paged-attention kernel this cycle (see the ROCm todo),
+which is corroborating but **not** transferable evidence — it needs an sm_120
+run. Two adjacent confirmed P2s in the same emitter: `:622` split-reduced
+backward recomputes softmax statistics `Sk` times, and `:879` recomputes the
+decay product `O(S)` per key for `O(S^3)` total.
+
 Cross-backend sync `IKF-INTRA-KERNEL-CONTRACT-2026-08-27` — **follow-up
 required at IKF-P6; SM120 execution unchanged.** The IKF-1 intra-kernel
 measurement plan (`docs/audit/compiler/INTRA_KERNEL_FEEDBACK_PLAN.md`,

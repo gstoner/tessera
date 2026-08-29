@@ -56,22 +56,42 @@ struct GradeFusionPattern : public RewritePattern {
     auto gradesAttr = op->getAttrOfType<ArrayAttr>("grades");
     if (!gradesAttr) return failure();
 
-    // Merge with any existing output_grades on the geo_product (set by a
-    // previous GradeFusion application — the same geo_product may be
-    // consumed by multiple grade ops, in which case we need the union).
     std::set<int64_t> gradeSet;
     for (Attribute g : gradesAttr) {
       if (auto gi = dyn_cast<IntegerAttr>(g)) {
         gradeSet.insert(gi.getInt());
       }
     }
-    if (auto existing = src->getAttrOfType<ArrayAttr>(kOutputGradesAttr)) {
-      for (Attribute g : existing) {
-        if (auto gi = dyn_cast<IntegerAttr>(g)) {
-          gradeSet.insert(gi.getInt());
-        }
-      }
+
+    // `output_grades` restricts the PRODUCT, not this one consumer:
+    // ExpandProductTable drops every Cayley entry whose result grade is
+    // outside the set. So the projection may be folded into the product only
+    // when it speaks for every consumer of that product. A second grade op
+    // asking for different grades, or any non-grade consumer of the raw
+    // product, would otherwise silently receive this projection's restriction
+    // — a union across differing consumers hands each of them the others'
+    // grades, and a lone consumer's set strips the raw user's.
+    auto gradesOf = [](Operation *o, std::set<int64_t> &out) -> bool {
+      auto attr = o->getAttrOfType<ArrayAttr>("grades");
+      if (!attr) return false;
+      for (Attribute g : attr)
+        if (auto gi = dyn_cast<IntegerAttr>(g)) out.insert(gi.getInt());
+      return true;
+    };
+    for (Operation *user : src->getResult(0).getUsers()) {
+      if (user->getName().getStringRef() != kGradeOpName) return failure();
+      std::set<int64_t> userGrades;
+      if (!gradesOf(user, userGrades)) return failure();
+      if (userGrades != gradeSet) return failure();
     }
+    // A previous fold may already have restricted the product; it must agree.
+    if (auto existing = src->getAttrOfType<ArrayAttr>(kOutputGradesAttr)) {
+      std::set<int64_t> existingSet;
+      for (Attribute g : existing)
+        if (auto gi = dyn_cast<IntegerAttr>(g)) existingSet.insert(gi.getInt());
+      if (existingSet != gradeSet) return failure();
+    }
+
     SmallVector<Attribute, 4> mergedGrades;
     for (int64_t g : gradeSet) {
       mergedGrades.push_back(rewriter.getI64IntegerAttr(g));

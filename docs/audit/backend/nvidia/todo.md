@@ -7,6 +7,33 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `P3-DEVICE-VERIFIED-2026-08-30` — **the two NVIDIA rows
+owed by `P3-SOURCE-ONLY` are now measured, and one of them was a regression.**
+
+* `emit/nvidia_solver_krylov.py` `tsr_matvec` — the warp-per-row rewrite was
+  shipped on a reasoned access-pattern claim. Measured on an RTX 5070
+  (sm_120), medians of 9 reps, device_event: **dense_cg 0.44-0.63x (a
+  REGRESSION of up to 2.3x)** and **dense_gmres 1.22-1.56x (a win)**. The
+  coalescing argument was correct and still lost, because a COOPERATIVE
+  launch caps the grid at what stays resident, so warp-per-row also buys 32x
+  fewer rows in flight. The solvers no longer share one matvec:
+  `tsr_matvec_scalar` for CG, `tsr_matvec_warp` for GMRES, with the table in
+  the source. Re-measured after the split: CG back to 1.00-1.06x of scalar,
+  GMRES keeps 1.24-1.56x. `benchmarks/baselines/nvidia_sm120_solver_krylov_performance.json`
+  was recorded with the OLD matvec and **passed throughout the regression** —
+  re-recorded at 15 reps / 5 warmup, and the ratchet now measures reality.
+* `emit/nvidia_cuda.py` flash-backward cleanup — the 20 Krylov/solver device
+  tests and the flash-backward route tests pass on sm_120. An induced
+  allocation failure is still not exercised; that remains the honest gap.
+
+Also closed here: the `rc=5` invoke failure (the runtime dispatches scheduled
+sm_120 matmuls by NAME PREFIX while the compiler named the kernel after the
+caller's Graph function) and the sm_120 packager reading matmul epilogue
+edges from `op.kwargs` when the verifier requires operands. Device suite:
+**81 failed -> 5 failed / 844 passed.** The 5 remaining are 4 stale
+shared-staging assertions (`__tessera_sm120_ab_stage_bf16`, pre-existing and
+a routing question, not a test-editing one) and NCCL not being installed.
+
 Cross-backend sync `P3-SOURCE-ONLY-2026-08-30` — **two rows are fixed in
 source and have never run on a GPU; they are this queue's to close.**
 The P3 batch changed two NVIDIA emitters with no CUDA host available:

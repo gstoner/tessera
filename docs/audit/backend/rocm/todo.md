@@ -6,6 +6,22 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `P3-DEVICE-VERIFIED-2026-08-30` — **the batch FFT seam
+written blind against the `.hip` signature is real, correct and faster.**
+`RocmStockhamFFTCandidate.run_rows` was landed unexecuted, declining to the
+per-row path when the image lacked the batch ABI — which is precisely the
+state it was tested in. Measured here on gfx1151: the shipped image DOES
+export `ts_fft_stockham_amd_hostptr_batch`, the candidate reports available,
+and a (512, 256) transform runs on lane `rocm_stockham` with **max abs error
+1.9e-05** against `numpy.fft` and **62.6 ms vs 237.7 ms per-row — 3.80x**.
+
+Also verified here: the rank-4 dropout `stream_offset` contract change. The
+fixture that broke the PREVIOUS attempt at this row,
+`phase3/streaming_attention_backward_rocm.mlir`, is `REQUIRES:
+tessera-rocm-backend` and therefore unsupported on the Mac — it runs on this
+box and passes. `lit` 439 discovered / 384 passed / 0 failed;
+`check-tessera-rocm` 67 passed / 1 unsupported, identical to baseline.
+
 Cross-backend sync `P3-SOURCE-ONLY-2026-08-30` — **one row is written from
 the `.hip` signature and has never executed.**
 The P3 batch added `RocmStockhamFFTCandidate.run_rows`, wired to

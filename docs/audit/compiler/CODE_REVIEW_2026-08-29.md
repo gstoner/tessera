@@ -2,7 +2,7 @@
 title: Full Code Review — 2026-08-29 (logic · mathematical correctness · algorithms · performance)
 last_updated: 2026-08-29
 scope: Python numeric core (autodiff · RNG/quantization · losses/optimizers · fusion + four backend emitters) · MLIR passes (linalg lowering · autodiff · tiling · analysis · legality · solver dialects)
-status: 102 findings confirmed by an independent refutation pass; all four severity tiers have fixes committed, with 3 P3 rows still owing device verification
+status: 102 findings confirmed by an independent refutation pass; all four severity tiers closed and device-verified
 audit_role: snapshot
 ---
 
@@ -1206,11 +1206,13 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 **Independently verified:** AsyncPrefetch.cpp:33-40 + 77-84: producesOperandOf compares prev->getResults() against op->getOperands() only, and the hoist at line 81 fires whenever prev is non-terminator and that SSA test is false. A zero-result writer — memref.store, a linalg op on memrefs, a collective writing a buffer — always fails the test, so the prefetch moves above the write. Nothing restricts the prefetch source to value semantics: Schedule_PrefetchOp takes AnyType:$source (ScheduleMeshPipelineOps.td:556-566) and its verifier (ScheduleDialect.cpp:748-757) checks only type preservation, non-empty `into`, and the overlap enum — a memref source is legal. The pass also never consults MemoryEffectOpInterface for prev or for the prefetch, and the pass runs on a plain module walk with no bufferization ordering constraint, so the header's 'dependency-safe' claim rests on an SSA-only fact (Decision #30, told-not-derived, failing open). The existing fixture (async_prefetch_overlap.mlir) uses only tensor values and comp.matmul, so it does not pin the memref case as intentional. Proposed fix (refuse the hoist when prev has write effects on a buffer the prefetch touches) is the right shape.
 
 
-## P3 — improvement opportunities (16) — FIXED IN SOURCE 2026-08-30, 3 rows device-unverified
+## P3 — improvement opportunities (16) — CLOSED 2026-08-30, all rows device-verified
 
-> All 16 have a fix committed, together with the 3 P1 rows that had been left
-> open as performance/scope items. **"Fixed" is not "closed" for three of
-> them.** `nvidia_cuda.py:626` (flash-backward cleanup),
+> All 16 fixed, together with the 3 P1 rows that had been left open as
+> performance/scope items. The three rows that were device-unverified on
+> 2026-08-30 have since been measured on their own hardware, and **one of
+> them was a regression the reasoning had missed** — see the Krylov row in
+> `../backend/nvidia/todo.md`. Superseded text follows for the record. `nvidia_cuda.py:626` (flash-backward cleanup),
 > `nvidia_solver_krylov.py:79` (warp-per-row matvec) and the ROCm half of the
 > spectral per-frame row are verified only as generated text plus a clean
 > `clang++ -fsyntax-only` parse — no GPU has executed any of them, and this

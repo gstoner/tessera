@@ -102,7 +102,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current status snapshot (reviewed 2026-08-24). Generated dashboards are the
+Current status snapshot (reviewed 2026-08-30). Generated dashboards are the
 source of truth for exact counts and executable lanes:
 [`runtime_execution_matrix.md`](docs/audit/generated/runtime_execution_matrix.md),
 [`runtime_abi.md`](docs/audit/generated/runtime_abi.md), and
@@ -120,8 +120,11 @@ source of truth for exact counts and executable lanes:
 | Mathematical and model IR surfaces | implemented / lit-testable | GA/EBM, reasoning-attention families, DFlash, DiffusionGemma, and frontier MoE model-class contracts are compiler-visible. Native execution is claimed only where a backend row below or a generated audit proves it. |
 | Runtime ABI and audits | implemented | Runtime C ABI surfaces and generated audit dashboards are drift-gated; exact counts are listed in the support snapshot below. |
 
-The fast unit suite passes under `-m "not slow"`; the full Python
-suite collects ~14,400 tests including slow/heavy benchmark contracts.
+The fast unit suite passes under `-m "not slow"`; the full Python suite
+additionally collects the slow/heavy benchmark contracts. Per the note above
+and Decision #26, the collected count is deliberately not quoted — it drifts
+with every landing, and the figure previously written here had drifted by
+several thousand.
 
 ### Current Support Snapshot
 
@@ -183,17 +186,58 @@ Graph IR    (tessera dialect: math ops, shape/dtype/layout metadata, diagnostics
 Schedule IR (schedule.* dialect: mesh.define/region, pipeline.region, stage, yield)
      |
      v
-Tile IR     (tile.* ops, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
+Tile IR     (tile.* ops, tessera.attn.* FA-4 ops)
      |
      v
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
 ```
+
+New backends expose a **hardware-free Target IR dialect** before any
+hardware-specific lowering (Decision #19) — Tile IR is never lowered straight
+to PTX/HIP/Metal source.
+
+### Direction: MLIR/LLVM is the architecture; the Python backend path is bootstrap
+
+The original Python→backend compiler was a **bootstrap compiler**. The
+direction is to **prune it and build the core out through MLIR and LLVM IR**,
+so that the four layers above are the compiler rather than a description of
+one. Concretely, that means a program's physical code comes from
+Graph → Schedule → Tile → Target lowering driven by `tessera-opt`, not from
+Python emitting target source directly.
+
+This is the backend half of **E2E-REAL-6 ("one compiler authority")**, whose
+frontend half is already retiring the decoration-time AST extractor. It
+inherits that program's discipline: **duplicate lowering authorities are
+removed only after the surviving path is proven to carry what they carried**
+(Decision #31's ordering caveat), never by deletion first.
+
+Fast paths remain legitimate and expected — inline PTX or GCN assembly, and
+Tessera Standard Library native libraries. The requirement is that they arrive
+through a **standard interface** rather than a silent Python-side branch: a
+declared Target IR op that names the boundary, so Decision #28's arbiter can
+tell compiler-generated work from delegated work and score them against each
+other. `tessera_x86.abi_call` is the shipped precedent for that boundary;
+giving NVIDIA and ROCm the equivalent is the enabling step that has to land
+*before* the bootstrap path is pruned, since today several legitimate fast
+paths live inside it and have nowhere else to go.
 
 The Python compiler carries object models and verifier checks for Graph IR,
 Schedule IR, Tile IR, and CPU/x86, NVIDIA/CUDA, Apple, and ROCm Target IR.
 The JIT artifact spine emits textual MLIR-like inspection strings from those
 objects; native hardware execution remains target-specific and is claimed only
 where backend docs say so.
+
+Read that Python surface in two parts, because they are on opposite sides of
+the direction above. The **object models, verifiers and contract registries**
+are load-bearing and stay. The **per-backend packagers** — the
+`package_*` families in `{nvidia,rocm,x86,apple_cpu}_native.py` that emit
+target artifacts directly from Graph IR — are the bootstrap compiler, and are
+the prune target. They are entered today on a *tool-presence check*: when
+`tessera-opt` is findable the compiled route runs, and when it is not the
+packager does, which means a second lowering authority can be selected by
+whether a binary happens to be installed. Supplying a packager-only key on the
+compiled route now raises `SCHEDULE_KEY_NOT_HONORED_ON_COMPILED_ROUTE` rather
+than being dropped in silence (Decision #21a).
 
 For compiler-readiness audits, keep three lanes separate:
 
@@ -215,9 +259,9 @@ authoritative status source). The canonical lowering pipelines registered in
 
 | Pipeline | Status |
 |------|--------|
-| `tessera-lower-to-x86` | implemented / lit-testable; hardware-runtime via the CPU JIT + native CPU ABI + AVX-512 compiled lanes (the AMX lane emits but is artifact-only — no AMX hardware in the fleet) |
+| `tessera-lower-to-x86` | implemented / lit-testable; hardware-runtime via the CPU JIT + native CPU ABI + AVX-512 compiled lanes. The AMX lane emits and stays artifact-only **by direction, not by hardware availability**: AMX is a retired target, superseded by ACE (AI Compute Extensions, agreed jointly by AMD and Intel), so the AMX ops remain an IR-level contract with no `amx.*` lowering. x86 native execution proof means AVX-512 |
 | `tessera-lower-to-gpu` (NVIDIA SM90 WGMMA/TMA) | implemented / lit-testable (SM90 WGMMA has no hardware-execution proof yet) |
-| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable; the sm_120 `mma.sync` GEMM additionally **executes** on consumer Blackwell hardware via a separate emit/runtime lane (`ptx_emit.py` + `libtessera_nvidia_gemm.so`), not through this IR pipeline |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` (per-SM aliases) | implemented / lit-testable. Two sm_120 lanes execute on consumer Blackwell, and they are **not** the same thing: the canonical matmul compiles Graph→Schedule→Tile through `tessera-opt` and is packaged to PTX via `tessera-nvidia-opt` + `mlir-opt` (this is the compiled route, and the one the direction above builds out), while the older `ptx_emit.py` + `libtessera_nvidia_gemm.so` GEMM is a separate bootstrap emit/runtime lane that bypasses the IR pipeline. **Requires `-DTESSERA_ENABLE_CUDA=ON` with `-DTESSERA_BUILD_NVIDIA_BACKEND=ON`**; a CUDA-less NVIDIA build produces a lean driver that never registers the NVIDIA Target IR dialect, and every scheduled lane then fails at `--tessera-schedule-to-tile` having touched no GPU |
 | `tessera-lower-to-rocm` | implemented / lit-testable / hardware-runtime on capable gfx1151 (RDNA3.5) hosts via HIP (WMMA matmul + attention family) |
 | `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / lit-testable / hardware-runtime |
 | `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / lit-testable / hardware-runtime |
@@ -321,6 +365,14 @@ framework raises the floor and must never cap their ceiling.** Hand-tuned
 `wgmma` / `mma.sync` / MFMA / WMMA kernels stay first-class candidates the arbiter
 measures — a compiled kernel wins only when it is both faster and in accuracy
 budget.
+
+This is what makes the bootstrap prune above safe rather than lossy, and the
+two must be read together. A hand-tuned or library kernel keeps its place as a
+**Tier-3 candidate the arbiter measures**; what it loses is the ability to be
+reached as an unmeasured fallback because a tool was missing. The distinction
+is *chosen* versus *defaulted into* — which is why the enabling work is the
+declared Target IR boundary (`abi_call` and its NVIDIA/ROCm equivalents), not
+the deletion.
 
 ---
 
@@ -452,7 +504,7 @@ pip install -e ".[dev]"
 # Daily edit-loop sanity check (fast tests only, < 512 MB RAM)
 pytest tests/unit/ -m "not slow" -q
 
-# Full Python suite including heavy benchmarks (~14,400 collected)
+# Full Python suite including heavy benchmarks
 pytest tests/unit/ -q
 
 # GA + EBM native Apple GPU health check; skip-recording on non-Darwin
@@ -490,11 +542,12 @@ cmake -S . -B build \
 
 cmake --build build --parallel
 
-# On Ubuntu 26.04 LTS (x86 + TheRock ROCm 7.14): bootstrap the toolchain once with
+# On Ubuntu 26.04 LTS (x86 + ROCm 10 series, HIP 7.15): bootstrap the toolchain once with
 #   bash scripts/setup_ubuntu.sh           # LLVM/MLIR 23.1 from apt.llvm.org + venv
 #   source .venv/bin/activate
 #   source scripts/_rocm_env.sh
-# then configure against upstream LLVM/MLIR and TheRock at /opt/rocm/core:
+# then configure against upstream LLVM/MLIR and ROCm. Both /opt/rocm and
+# /opt/rocm/core exist on that box and either works as CMAKE_PREFIX_PATH:
 cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
   -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
@@ -527,7 +580,7 @@ NVIDIA / ROCm toolchain checks (skip cleanly when toolchains absent):
 # Validate CUDA 13.3 PTX patterns against installed nvcc
 python scripts/validate_nvcc_compile.py
 
-# Validate ROCm 7.2.4 AMDGCN intrinsics against installed hipcc
+# Validate AMDGCN intrinsics against installed hipcc (ROCm 10 / HIP 7.15)
 python scripts/validate_hipcc_compile.py
 
 # Probe NCCL/RCCL ≥ 2.22 symbols at runtime

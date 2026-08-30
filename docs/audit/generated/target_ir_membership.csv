@@ -1,0 +1,139 @@
+backend,mnemonic,verdict,required,optional
+nvidia,block_coordinate,requires,arch grid_order tile_m tile_n,
+nvidia,macro_cta_matmul,requires,accum arch grid_order staging storage tile_k tile_m tile_n warps,
+nvidia,mma_fused,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,mma_attention,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,fpquant,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,nvfp4_block_scale_mma,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,mx_block_scale_mma,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,wgmma,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,tcgen05_mma,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,wmma,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,tma_async_copy,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,mbarrier,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,tmem_alloc,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,tmem_load,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,tmem_store,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,cuda_kernel,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,training_kernel,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,cuda_math_kernel,requires,input_storage output_storage rounding,
+nvidia,control_for,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,control_if,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,control_while,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,control_scan,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,func,no-contract,,
+nvidia,inline_ptx,requires,accuracy arch determinism,tolerance tolerance_rel
+nvidia,profiler_probe,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+rocm,memcpy,optional-only,,dst_space src_space
+rocm,async_copy,optional-only,,dst_space src_space
+rocm,wait,optional-only,,dst_space src_space
+rocm,mfma,optional-only,,dst_space src_space
+rocm,wmma_gemm,requires,dtype,dst_space src_space
+rocm,flash_attn,requires,dtype,dst_space src_space
+rocm,flash_attn_bwd,requires,dtype,dst_space src_space
+rocm,linear_attn,requires,dtype feature_map,dst_space src_space
+rocm,softmax,requires,dtype,dst_space src_space
+rocm,depth_attention,requires,arch dtype,dst_space src_space
+rocm,tridiagonal_solve,requires,accum arch dtype status_abi,dst_space src_space
+rocm,coalition_butterfly,requires,accum arch dtype stage_order,dst_space src_space
+rocm,solver_ift,requires,dtype,dst_space src_space
+rocm,spectral_backward,requires,storage,dst_space src_space
+rocm,wmma,optional-only,,dst_space src_space
+rocm,activation,requires,dtype,dst_space src_space
+rocm,silu_mul,requires,dtype,dst_space src_space
+rocm,pointwise_loss,requires,dtype,dst_space src_space
+rocm,binary_loss,requires,dtype,dst_space src_space
+rocm,class_loss_backward,requires,dtype,dst_space src_space
+rocm,policy_loss,requires,dtype,dst_space src_space
+rocm,fpquant,requires,dtype,dst_space src_space
+rocm,dequant_gemm,optional-only,,dst_space src_space
+rocm,dft,optional-only,,dst_space src_space
+rocm,spmm,optional-only,,dst_space src_space
+rocm,sddmm,optional-only,,dst_space src_space
+rocm,selective_ssm,requires,dtype,dst_space src_space
+rocm,selective_ssm_bwd,optional-only,,dst_space src_space
+rocm,cholesky,optional-only,,dst_space src_space
+rocm,tri_solve,optional-only,,dst_space src_space
+rocm,lu,optional-only,,dst_space src_space
+rocm,qr,optional-only,,dst_space src_space
+rocm,svd,optional-only,,dst_space src_space
+rocm,moe,optional-only,,dst_space src_space
+rocm,grouped_gemm,optional-only,,dst_space src_space
+rocm,gemm_f32,optional-only,,dst_space src_space
+rocm,recurrent_cell,optional-only,,dst_space src_space
+rocm,batched_gemm_f32,optional-only,,dst_space src_space
+rocm,predicate,optional-only,,dst_space src_space
+rocm,optimizer,optional-only,,dst_space src_space
+rocm,alibi,requires,dtype,dst_space src_space
+rocm,deltanet,requires,dtype,dst_space src_space
+rocm,rope,requires,dtype,dst_space src_space
+rocm,dspark_draft_block,optional-only,,dst_space src_space
+rocm,mla_absorb_decode,optional-only,,dst_space src_space
+rocm,block_sparse_attention,optional-only,,dst_space src_space
+rocm,block_sparse_attention_tiled,optional-only,,dst_space src_space
+rocm,block_sparse_topk_select,optional-only,,dst_space src_space
+rocm,norm,requires,dtype,dst_space src_space
+rocm,int4_pack,optional-only,,dst_space src_space
+rocm,reduce,requires,dtype,dst_space src_space
+rocm,paged_kv_read,requires,storage table_storage,dst_space src_space
+rocm,moe_dispatch,requires,index_storage storage,dst_space src_space
+rocm,argreduce,requires,dtype,dst_space src_space
+rocm,scan,requires,dtype,dst_space src_space
+rocm,unary,requires,dtype,dst_space src_space
+rocm,binary,requires,dtype,dst_space src_space
+rocm,compare,requires,dtype,dst_space src_space
+rocm,logical,optional-only,,dst_space src_space
+rocm,bitwise,optional-only,,dst_space src_space
+rocm,where,requires,dtype,dst_space src_space
+rocm,philox,optional-only,,dst_space src_space
+rocm,es_low_rank_correction,optional-only,,dst_space src_space
+rocm,gather,optional-only,,dst_space src_space
+rocm,ebm_langevin,optional-only,,dst_space src_space
+rocm,ebm_affine_langevin,optional-only,,dst_space src_space
+rocm,ebm_partition,optional-only,,dst_space src_space
+rocm,ebm_ebt_tiny,optional-only,,dst_space src_space
+rocm,ebm_energy_quadratic,optional-only,,dst_space src_space
+rocm,ebm_decode_init,optional-only,,dst_space src_space
+rocm,scatter,optional-only,,dst_space src_space
+rocm,sort,optional-only,,dst_space src_space
+rocm,clifford,optional-only,,dst_space src_space
+rocm,buffer_load,optional-only,,dst_space src_space
+rocm,ds_read_tr,optional-only,,dst_space src_space
+rocm,emit,optional-only,,dst_space src_space
+rocm,elementwise,optional-only,,dst_space src_space
+rocm,kv_cache_read,optional-only,,dst_space src_space
+rocm,msa_block_sparse,optional-only,,dst_space src_space
+rocm,profiler_probe,optional-only,,dst_space src_space
+x86,amx_tile_load,no-contract,,
+x86,amx_tile_store,no-contract,,
+x86,amx_tile_zero,no-contract,,
+x86,amx_dpbf16ps,no-contract,,
+x86,amx_dpbusd,no-contract,,
+x86,avx512_gemm_microkernel,requires,dtype,
+x86,pack_b_panel,requires,dtype,
+x86,elementwise,no-contract,,
+x86,abi_call,requires,abi,
+x86,kernel,no-contract,,
+x86,kv_cache_read,no-contract,,
+x86,unsupported,no-contract,,
+x86,profiler_probe,no-contract,,
+apple,cpu.vector_op,optional-only,,abi dtype
+apple,cpu.vector_reduce,optional-only,,abi dtype
+apple,gpu.metal_kernel,optional-only,,dtype
+apple,gpu.dispatch,no-contract,,
+apple,gpu.mps_matmul,optional-only,,abi dtype
+apple,gpu.mps_softmax,optional-only,,abi dtype
+apple,gpu.mps_dispatch,no-contract,,
+apple,gpu.msl_kernel,optional-only,,dtype
+apple,diagnostic,no-contract,,
+apple,cpu.kv_cache_cpu,optional-only,,abi
+apple,gpu.kv_cache_gpu,optional-only,,abi
+apple,gpu.kernel_call,optional-only,,abi argument_layout dtype
+apple,gpu.package_call,optional-only,,abi argument_layout dtype
+apple,gpu.control_loop,no-contract,,
+apple,gpu.control_if,no-contract,,
+apple,gpu.control_while,no-contract,,
+apple,cpu.kv_cache_read,no-contract,,
+apple,cpu.moe_solver,no-contract,,
+apple,cpu.profiler_probe,no-contract,,
+apple,gpu.profiler_probe,no-contract,,

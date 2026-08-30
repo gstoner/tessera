@@ -37,12 +37,24 @@ A pytest session ledger (`tests/_support/device_accounting.py`) now tallies
 executed-vs-skipped per hardware family and fails the session when a family
 skipped everything on a host that plausibly has the device.
 
-*x86 outcome: follow-up required — this lane has no hardware marker family.*
-The declared hardware markers are `hardware_nvidia`, `hardware_rocm`,
-`hardware_apple_gpu`/`metal4` and `hardware_amx`. **There is no marker for
-AVX-512**, so x86 native execution is the one device lane the ledger cannot
-see: an AVX-512 host that silently stopped executing these lanes would not
-be caught by it.
+*x86 outcome: **closed 2026-08-30** (was follow-up required).*
+`hardware_avx512` now exists across every registry that owns a marker —
+`policy.MARKERS`, the PR expression and its four verbatim copies
+(`validate.yml`, `validate.sh`, `setup_ubuntu.sh`, `tests_manifest.py`),
+`pyproject.toml`, and a device family with a `/proc/cpuinfo` `avx512f` probe.
+The x86 native lane is no longer invisible to the ledger. Measured:
+Princess-Luna `avx512=True, amx=False` and `tests/device/x86/` **executes**
+there (its one failure is identical on `main`, so pre-existing); the Mac
+skips all three honestly.
+
+That work also fixed a live false red it turned up: `test_amx_int8_gemm.py`
+is marked `hardware_amx`, but **nothing consumed that marker**, so on arm64
+it FAILED at the AMX compile step instead of skipping. `conftest` now
+consumes `hardware_avx512` and `hardware_amx` centrally, mirroring the
+`hardware_nvidia` boundary — `tests/device/x86/` on the Mac goes
+1 failed / 2 skipped → 3 skipped.
+
+*Historical note on why the two files were left unmarked in #645:*
 
 Two files under `tests/device/x86/`
 (`test_mpi_rank_collectives.py`, `test_native_vjp_execution_certificates.py`)

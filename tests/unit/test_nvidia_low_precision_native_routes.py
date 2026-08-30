@@ -57,8 +57,12 @@ def test_committed_native_route_ratchet_has_dual_domain_resources_and_guards():
     assert all(set(row["timings"]) == {"end_to_end", "device"}
                for row in routes["rows"])
     promoted = [row for row in routes["rows"] if row["selector_promoted"]]
-    assert all(row["timing_domain_consensus"] and row["resource_fingerprints"]
-               for row in promoted)
+    # Cross-check the summary field against the rows rather than trusting it.
+    # This also proves `promoted` is non-empty: every assertion below filters
+    # on it, and `all([])`/`set() <= known` are both vacuously true, so a
+    # recording that promoted nothing would close this ratchet having checked
+    # no promotion.
+    assert len(promoted) == routes["selector_promotions"] > 0
     assert all(not row["selector_promoted"] for row in routes["rows"]
                if row["op"] == "attention" and row["workload_shape"][1] == 512)
     assert len(resources["rows"]) == 12

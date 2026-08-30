@@ -80,6 +80,40 @@ def nvidia_gpu_is_plausibly_present() -> bool:
     )
 
 
+def rocm_gpu_is_plausibly_present() -> bool:
+    """Whether this host looks like it has an AMD ROCm GPU, ignoring PATH.
+
+    Deliberately does NOT probe ``/dev/dxg``. Under WSL2 that node is the
+    generic GPU paravirtualisation device and is present for NVIDIA hosts too,
+    so trusting it would claim a ROCm device on The-Super-Bear. The honest
+    signals are the KFD node and an installed toolkit root.
+    """
+    if Path("/dev/kfd").exists():
+        return True
+    return any(
+        (Path(root) / "bin/rocminfo").is_file()
+        for root in ("/opt/rocm", "/opt/rocm/core")
+    )
+
+
+def apple_metal_is_plausibly_present() -> bool:
+    """Whether this host is an Apple-silicon Mac, which always has Metal."""
+    return platform.system() == "Darwin" and platform.machine().startswith("arm")
+
+
+def amx_is_plausibly_present() -> bool:
+    """Whether this host advertises Intel AMX tile support.
+
+    No box in the current fleet has AMX (Zen 5 has AVX-512 but AMX is
+    Intel-only), so this is expected to be False everywhere today. It exists so
+    that the day an AMX host appears, its lanes cannot silently skip.
+    """
+    try:
+        return "amx_tile" in Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:
     configured = os.environ.get(env_name)
     if configured:

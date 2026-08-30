@@ -31,10 +31,13 @@ def test_recorded_elementwise_evidence_controls_selector_promotion() -> None:
     assert {row["family"] for row in data["rows"]} == {"unary", "binary", "predicate"}
     assert data["selector_changed"] is True
     assert data["selector_policy_pass"] is True
-    assert all(
-        row["end_to_end"]["non_regression_10pct"]
-        for row in data["rows"] if row["selector_eligible"]
-    )
+    # Bind and prove non-empty before asserting over the filter: `all([])` is
+    # True, so a recording in which nothing became selector-eligible would
+    # report a clean promotion gate having checked no promotion at all. The
+    # `small_binary` assertion below already uses this idiom.
+    eligible = [row for row in data["rows"] if row["selector_eligible"]]
+    assert eligible, "no selector-eligible row; the promotion gate checked nothing"
+    assert all(row["end_to_end"]["non_regression_10pct"] for row in eligible)
     small_binary = [
         row for row in data["rows"]
         if row["family"] == "binary" and row["elements"] < benchmark.BINARY_PROMOTION_MIN_ELEMENTS

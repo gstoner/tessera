@@ -23,9 +23,10 @@ def test_recorded_flat_followon_controls_selector_policy() -> None:
     assert {row["family"] for row in data["rows"]} == {
         "where", "transcendental", "pow", "silu_mul",
     }
-    assert all(
-        row["end_to_end"]["non_regression_10pct"]
-        for row in data["rows"] if row["selector_eligible"]
-    )
+    # `all([])` is True: bind the filter and prove it non-empty, or a recording
+    # in which nothing was promoted reports a clean gate having checked nothing.
+    eligible = [row for row in data["rows"] if row["selector_eligible"]]
+    assert eligible, "no selector-eligible row; the promotion gate checked nothing"
+    assert all(row["end_to_end"]["non_regression_10pct"] for row in eligible)
     excluded = [row for row in data["rows"] if not row["selector_eligible"]]
     assert {row["family"] for row in excluded} == {"where", "pow", "silu_mul"}

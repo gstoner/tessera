@@ -1,7 +1,13 @@
 """Native NVIDIA plugin execute-and-compare proofs."""
 
+import pytest
+
 from tests._support import nvidia_plugin_cases as cases
 
+# Declares the hardware this file needs. The marker is what the PR-lane
+# expression deselects and what tests/_support/device_accounting.py counts;
+# an unmarked device test is invisible to both.
+pytestmark = pytest.mark.hardware_nvidia
 
 test_live_nvidia_generic_cuda_gated = cases.test_live_nvidia_generic_cuda_gated
 test_live_nvidia_arbitrated_residual_executes = cases.test_live_nvidia_arbitrated_residual_executes

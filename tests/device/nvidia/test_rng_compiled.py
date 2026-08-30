@@ -8,6 +8,12 @@ import pytest
 from tessera import rng_device as reference
 
 
+
+# Declares the hardware this file needs. The marker is what the PR-lane
+# expression deselects and what tests/_support/device_accounting.py counts;
+# an unmarked device test is invisible to both.
+pytestmark = pytest.mark.hardware_nvidia
+
 def _runtime_or_skip():
     from tessera import runtime
 

@@ -61,13 +61,50 @@ Two things this settles, and one it does not:
 * Within the scheduled route there **is** a shape split — (16,8,16) has no
   `tile.matmul_kernel` at all while (37,29,23) does — matching the
   `sm120_scheduled_typed_16x8_mn` vs `macro_cta_32x32_mn` policy selection.
-* **Open, and an owner's design call:** should `nvidia_schedule` select the
-  route (forcing `package_matmul`), or is the scheduled route always
-  authoritative? Either answer is defensible, but the current behaviour is
-  not: **Decision #21a says a performance key may fall back and must say so
-  with a diagnostic, and this one falls back silently.** The minimum fix
-  independent of the routing answer is that diagnostic. The four tests should
-  be rewritten only after that call, since what they assert depends on it.
+* **Resolved 2026-08-30 (project direction): the compiled route is
+  authoritative and `nvidia_schedule` does NOT select it.** The Tessera
+  foundation is core MLIR/LLVM → Tile IR → codegen; hand-written NVIDIA/CUDA
+  kernels are not what should fall out of a compile. `driver.py:526` already
+  encodes this — the scheduled route is taken whenever `tessera-opt` is
+  available, and `package_matmul` is the fallback for when it is not. So
+  `nvidia_schedule` steers only that fallback.
+
+  What was wrong was the silence, and that is fixed. `driver.py` now emits
+  **`SCHEDULE_KEY_NOT_HONORED_ON_COMPILED_ROUTE`** (registered in
+  `diagnostic_codes.py`, severity `warning`) when a fallback-only key is
+  supplied on the compiled route. `"auto"` is deliberately not reported: it
+  means "you choose", which is what the compiled route does, and warning on it
+  would train people to ignore the diagnostic.
+
+  The four tests now assert the **contract** rather than a spelling — entry
+  carries the `nvidia_sm120_scheduled_matmul_` prefix, the launch policy is one
+  of the two scheduled policies, and the k contract goes through the existing
+  producer-aware `_assert_canonical_k_loop` rather than pinning
+  `canonical_k_loop` (which the typed-16x8 route legitimately does not emit).
+  Two new tests cover the diagnostic itself, in both directions. Measured on
+  sm_120 with the full driver: `test_e2e_spine_native.py` **304 passed, 0
+  failed** (was 4 failed at three different assertions).
+
+  The diagnostic paid for itself immediately: it surfaced 16 warnings per run
+  from `test_canonical_sm120_k_loop_shape_matrix`, which was still supplying
+  `nvidia_schedule="shared"` on the compiled route. That key is now dropped
+  there. One site remains by design —
+  `benchmarks/e2e_spine/record_sm120_packet.py:256` passes `"direct"`, which is
+  inert on any host with `tessera-opt` but **does** change the fallback's
+  choice on a host without it (`auto` resolves to `shared` for fp16/bf16), so
+  removing it would be a silent behaviour change on that path. Left alone; the
+  diagnostic will tell whoever runs it.
+
+* **Follow-on, not done here: Decision #31 on this boundary.** Two packagers
+  now serve one IR-level boundary — the compiled scheduled route and the
+  templated `package_matmul`. Decision #31 allows exactly one production
+  lowering per boundary; a second must be either a **declared oracle with a
+  differential test** or deleted. Given the direction above, the fallback is
+  the one to declare or retire. Decision #31's own ordering caveat applies —
+  do not collapse it before the compiled route demonstrably carries what it
+  carried — so this wants a scoped plan with a coverage comparison
+  (which `native_package_kind` families reach which packager, and what happens
+  on a host with no `tessera-opt`), not a drive-by deletion.
 
 ## `SM120-BASELINE-IS-BUILD-DEPENDENT-2026-08-30` — read before trusting any sm_120 suite count
 

@@ -145,6 +145,25 @@ IR dialect`. Thirteen tests in `test_scheduled_matmul_consumers.py` fail in
 build cannot evaluate these lanes" — it reads as a code regression, and a
 control run on `main` is the only thing that tells the two apart.
 
+**Three configurations, and do not collapse them** (a README edit did, and
+review caught it). `TESSERA_BUILD_NVIDIA_BACKEND=ON` **always** builds the
+hardware-free Target IR spine — `src/compiler/codegen/tessera_gpu_backend_NVIDIA/CMakeLists.txt`
+says so in its header, and `tools/tessera-opt/CMakeLists.txt` links
+`TesseraNVIDIAIR`/`TesseraNVIDIAConversion` under `if(TARGET
+TesseraNVIDIAConversion)`, which is not gated on leanness.
+
+| Config | NVIDIA Target IR | Core spine | Scheduled lanes |
+|---|---|---|---|
+| backend ON + `ENABLE_CUDA=ON` | registered | linked | run |
+| backend ON + CUDA off (**lean**) | **registered** | not linked | unavailable — missing *core*, not the dialect |
+| backend OFF (what this box has) | not built | linked | fail with `requires the registered NVIDIA Target IR dialect` |
+
+The middle row is the **supported host-free artifact configuration** that
+Decision #19's hardware-free Target IR exists to enable; `_tessera_opt_lean_permitted`
+lists `nvidia-backend` explicitly. Saying a CUDA-less NVIDIA build "never
+registers the dialect" erases it and contradicts that contract — the symptom
+above belongs to the third row only.
+
 **Consequence for the open staging item.** The four
 `__tessera_sm120_ab_stage_bf16` assertions were recorded as "stale
 shared-staging assertions — a routing question". **That characterisation

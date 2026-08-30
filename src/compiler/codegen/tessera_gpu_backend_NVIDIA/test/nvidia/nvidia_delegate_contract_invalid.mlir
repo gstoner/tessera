@@ -101,3 +101,30 @@ func.func @empty_inline_ptx(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
+
+// -----
+
+func.func @unknown_provenance(%a: f32) -> f32 {
+  // Tiering is what lets the arbiter tell delegated from compiler-generated
+  // work; an unrecognised provenance would leave a candidate untierable.
+  %r = tessera_nvidia.kernel_call %a
+      // expected-error @+1 {{attribute 'provenance' failed to satisfy constraint}}
+      {callee = "tessera_nvidia_flash", arch = "sm_120",
+       binding = "cuda_kernel", provenance = "rumour",
+       accuracy = "reference_exact"}
+      : (f32) -> f32
+  return %r : f32
+}
+
+// -----
+
+func.func @empty_arch(%a: f32) -> f32 {
+  // expected-error @+1 {{requires a non-empty `arch`}}
+  %r = tessera_nvidia.kernel_call %a
+      {callee = "tessera_nvidia_flash", arch = "",
+       binding = "cuda_kernel", provenance = "handwritten_kernel",
+       accuracy = "reference_exact"}
+      : (f32) -> f32
+  return %r : f32
+}
+

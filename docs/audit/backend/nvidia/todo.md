@@ -7,6 +7,73 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## `SM120-BASELINE-IS-BUILD-DEPENDENT-2026-08-30` — read before trusting any sm_120 suite count
+
+**The Super-Bear device-suite baseline of "5 failed / 844 passed" is only
+valid for a build with `TESSERA_BUILD_NVIDIA_BACKEND=ON`. That box is
+currently configured OFF, and the identical commit then reports 34 failed /
+815 passed.** Measured 2026-08-30, both numbers on `main`, same box, same
+GPU, differing only in that cmake flag.
+
+The mechanism is not subtle once seen: without the NVIDIA backend the
+`tessera-opt` in `build/` never registers the NVIDIA Target IR dialect, so
+every scheduled-matmul lane dies at the `--tessera-schedule-to-tile`
+boundary with `SM120 scheduled matmul requires the registered NVIDIA Target
+IR dialect`. Thirteen tests in `test_scheduled_matmul_consumers.py` fail in
+2.5 s having touched no GPU at all. Nothing in the suite output says "your
+build cannot evaluate these lanes" — it reads as a code regression, and a
+control run on `main` is the only thing that tells the two apart.
+
+**Consequence for the open staging item.** The four
+`__tessera_sm120_ab_stage_bf16` assertions were recorded as "stale
+shared-staging assertions — a routing question". **That characterisation
+does not currently reproduce and should not be acted on until it is
+re-measured.** On this box the four tests
+(`test_canonical_sm120_{bf16,request}_*`, two shapes each) never reach the
+staging assertion: they fail 1.4 s in, at the same missing-dialect boundary.
+Whatever was seen last session was seen on a differently configured build.
+
+What *is* established about that item, from source rather than from a run:
+the Python side is correct end to end. `emit_matmul_tile_ir(schedule="shared")`
+emits `warps = 4 : i64, staging = "shared"` into the Tile IR, and
+`NVIDIALowering.cpp:1228` reads that attribute with **no shape guard and no
+silent fallback** — if `staging == "shared"` arrives, the buffer is
+materialised or the pass hard-errors. So the routing question, if one
+survives re-measurement, is about which op the attribute reaches, not about
+small shapes being quietly re-routed. The scheduled path is the suspect:
+`package_native`'s `kind` dispatch forwards `nvidia_schedule` only on the
+fall-through `package_matmul` branch, and `package_scheduled_matmul` selects
+`sm120_scheduled_macro_cta_32x32_mn` vs `sm120_scheduled_typed_16x8_mn` from
+the entry name without consulting the requested schedule. If a caller's
+`nvidia_schedule="shared"` is being dropped there, Decision #21a applies —
+a performance key may fall back, but not silently.
+
+**Owner's call needed on the box, not the code:** turning the NVIDIA backend
+on in that build tree carves out core/x86/Apple pass registration (the
+`tessera-opt` registration gotcha), so the two cannot be measured from one
+build directory. That is a fleet-configuration decision and is left to the
+repo owner rather than changed unilaterally.
+
+Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
+changed; per-backend outcome below.**
+A pytest session ledger (`tests/_support/device_accounting.py`) now tallies
+executed-vs-skipped per hardware family and **fails the session** when a
+family skipped everything on a host that plausibly has the device. It exists
+because `pytest tests/device/nvidia/` on this box once reported 454 passed /
+395 skipped / exit 0 while running zero GPU work.
+
+*NVIDIA outcome: parity validated, with follow-up.* Eight files under
+`tests/device/nvidia/` carried no hardware marker
+(`test_{fft_workspace,optimizer_reverse,philox_jvp,plugin,rng_compiled,spectral_autodiff,spectral_jvp,spectral_policy}.py`);
+they were invisible to both the PR-lane deselection and the new ledger, and
+they *failed* rather than skipped on a non-CUDA host. All eight are marked,
+and `conftest` now consumes `hardware_nvidia` centrally, matching the
+existing `hardware_apple_gpu` boundary — verified on the Mac, where those
+four optimizer tests changed from hard failures to honest skips. Follow-up:
+the device suite count above cannot be re-baselined until the build-config
+question in this section is settled.
+
 Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
 policy changed; per-backend outcome below.**
 `optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent
@@ -26,10 +93,17 @@ is exactly 0, so defaulting would have made a stateful caller that never
 passes one discard its own moments; such a caller keeps the legacy
 uncorrected decay.
 
-*NVIDIA outcome: follow-up required.* `sm120_adafactor_*` receives the
-effective decay through the existing scalar; `tests/device/nvidia/test_optimizer_reverse.py`
-was migrated to pass `step`. Not executed on sm_120 in this batch — an exact-device
-run of the optimizer lanes is owed.
+*NVIDIA outcome: parity validated 2026-08-30 (was follow-up required).*
+`sm120_adafactor_*` receives the effective decay through the existing scalar;
+`tests/device/nvidia/test_optimizer_reverse.py` was migrated to pass `step`.
+**The owed exact-device run is done.** On The-Super-Bear (RTX 5070, sm_120,
+CUDA 13.3, `scripts/_nvidia_env.sh` sourced) that file is **4 passed, 0
+skipped**, including
+`test_sm120_adafactor_full_and_factored_exact_certificates`, which compares
+the device reverse package against `get_vjp("adafactor")` for both the full
+and factored topologies. Zero skips is the load-bearing half of that
+sentence: the same file reported a clean *skip* on this host for as long as
+the driver shim was off `PATH`.
 
 Cross-backend sync `P3-DEVICE-VERIFIED-2026-08-30` — **the two NVIDIA rows
 owed by `P3-SOURCE-ONLY` are now measured, and one of them was a regression.**

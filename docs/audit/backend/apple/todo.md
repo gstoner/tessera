@@ -7,6 +7,39 @@ last_updated: 2026-08-29
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
+changed; per-backend outcome below.**
+A pytest session ledger (`tests/_support/device_accounting.py`) now tallies
+executed-vs-skipped per hardware family and **fails the session** when a
+family skipped everything on a host that plausibly has the device.
+
+*Apple outcome: parity validated 2026-08-30, and this backend is where the
+gate was proven.* The `apple_gpu` family covers both `hardware_apple_gpu`
+and `metal4`, and probes for Darwin-on-arm — which always has Metal, so the
+probe cannot false-positive on a Linux box. Two pieces of evidence, in the
+order they matter:
+
+* **The gate fires.** A test marked `hardware_apple_gpu` that skips on this
+  Mac drives the session to **exit 1** with a named lane and remedy, while a
+  normal run exits 0. This used the real probe with no mocking, because the
+  Mac genuinely has the device — the one host in the fleet where that
+  end-to-end proof is available without simulating anything.
+* **It does not fire spuriously.** `pytest tests/unit -m "not slow"` on the
+  M1 Max is **27 failed / 15475 passed / 3656 skipped** with the gate
+  silent, which is correct: the Apple lanes executed. Those 27 are
+  pre-existing — the subset I could isolate is identical on `main`, and
+  neither conftest hook can reach the rest (no applied `hardware_nvidia`
+  marker in `tests/unit`).
+
+The Apple-specific failure mode this guards is the stale dylib: it makes
+Apple GPU lanes skip *or hang* rather than fail, so `ninja -C build
+TesseraAppleRuntimeShared` is named directly in the remedy text the gate
+prints.
+
+*Adafactor (`ADAFACTOR-BIAS-CORRECTION-2026-08-30`) remains not applicable
+here* — unchanged, and stated with its reason below.
+
 Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
 policy changed; per-backend outcome below.**
 `optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent

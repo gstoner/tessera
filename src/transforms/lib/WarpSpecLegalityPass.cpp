@@ -274,12 +274,31 @@ struct WarpSpecLegality
           tessera::provenance::Resolution res =
               tessera::provenance::resolveThroughLoopCarry(operand);
           bool isToken = isa<tessera::tile::AsyncTokenType>(operand.getType());
-          for (Value root : res.roots) {
+          // resolveThroughLoopCarry stops at the first defining op, so a cast,
+          // slice, or transpose between the copy and the mma became the root
+          // and the staged data stopped looking staged — the operand was then
+          // dropped from the check entirely and the missing-token race went
+          // unreported. Keep chasing through non-producer defs so an
+          // intervening op cannot hide the copy.
+          llvm::SmallVector<Value> pending(res.roots.begin(), res.roots.end());
+          llvm::SmallPtrSet<Value, 8> seen(res.roots.begin(), res.roots.end());
+          while (!pending.empty()) {
+            Value root = pending.pop_back_val();
             Operation *def = root.getDefiningOp();
-            if (!def || !isAsyncDataProducer(def))
+            if (!def)
               continue;
-            auto &flags = fromProducer[def];
-            (isToken ? flags.second : flags.first) = true;
+            if (isAsyncDataProducer(def)) {
+              auto &flags = fromProducer[def];
+              (isToken ? flags.second : flags.first) = true;
+              continue;
+            }
+            for (Value nested : def->getOperands()) {
+              tessera::provenance::Resolution deeper =
+                  tessera::provenance::resolveThroughLoopCarry(nested);
+              for (Value candidate : deeper.roots)
+                if (seen.insert(candidate).second)
+                  pending.push_back(candidate);
+            }
           }
           // (b) retirement, only for a token minted directly by a copy op
           // (a loop-carried token is retired structurally on the back edge;

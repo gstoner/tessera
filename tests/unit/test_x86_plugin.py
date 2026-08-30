@@ -147,6 +147,7 @@ _CHAINS = [
     F.FusedRegion(epilogue=(), reduction="rmsnorm"),
     F.FusedRegion(epilogue=("relu",), reduction="layer_norm"),
     F.FusedRegion(epilogue=("gelu",), prologue=("relu",)),
+    F.FusedRegion(epilogue=("bias", "relu"), prologue=("gelu",)),
 ]
 
 
@@ -335,3 +336,45 @@ def test_x86_arbiter_falls_to_generic_when_aocl_absent():
     out, tag = run_arbitrated(region, OP_FUSED_REGION, "x86", A, B, bias)
     assert tag == "x86_c_native"
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)
+
+
+# ── shared scalar body: the prologue runs once per A element ─────────────────
+#
+# `_fused_scalar_body.row_compute_body` is emitted verbatim by the x86 C, ROCm
+# HIP and NVIDIA CUDA fused lanes, so this contract is all three backends'. With
+# `n` outermost the prologue activation sits at the A-load site inside `k` and is
+# evaluated N*K times per row instead of K -- redundancy the C compiler cannot
+# remove, since it spans the OUTER loop and neither A nor `row` is `restrict`
+# (stores to row[] may alias A). k outermost evaluates it once per element and
+# keeps the per-output accumulation over k ascending, so the sum is unchanged.
+
+
+def test_prologue_activation_is_evaluated_once_per_a_element():
+    from tessera.compiler.emit._fused_scalar_body import row_compute_body
+    body = row_compute_body(F.FusedRegion(epilogue=(), prologue=("gelu",)))
+    k_loop = body.index("for (int k = 0; k < K; ++k)")
+    activation = body.index("tanhf")
+    accumulate = body.index("for (int n = 0; n < N; ++n) row[n] += a *")
+    assert k_loop < activation < accumulate
+    assert body.count("tanhf") == 1
+
+
+def test_epilogue_only_body_keeps_the_register_accumulator_form():
+    # No prologue, no interchange: the n-outer/register-accumulator shape is
+    # unchanged, so the epilogue-only lanes emit exactly what they emitted before.
+    from tessera.compiler.emit._fused_scalar_body import row_compute_body
+    body = row_compute_body(F.FusedRegion(epilogue=("gelu",)))
+    assert body.index("for (int n") < body.index("for (int k")
+    assert "v += a * B[" in body
+
+
+def test_prologue_body_still_carries_epilogue_residual_and_reduction():
+    from tessera.compiler.emit._fused_scalar_body import row_compute_body
+    body = row_compute_body(
+        F.FusedRegion(epilogue=("bias", "relu"), bias_name="b",
+                      prologue=("silu",), residual=True))
+    assert "v = v + bias[n];" in body
+    assert "v = v + residual[(long)m*N + n];" in body
+    reduction = row_compute_body(
+        F.FusedRegion(epilogue=(), prologue=("silu",), reduction="softmax"))
+    assert "_sm" in reduction

@@ -420,6 +420,8 @@ def eigh_coupling(
         row = flat_w[b]
         clusters = eigenvalue_clusters(row, tol=tol)
         if not clusters:
+            _warn_if_eigen_ill_conditioned(op, row, tol, mode=mode,
+                                           batch=_batch_label(w_arr, b))
             continue
         if name == FAIL_CLOSED or not admit_generalized:
             extra = "" if admit_generalized else (
@@ -523,27 +525,31 @@ def _degenerate_message(op: str, s: np.ndarray, clusters, tol: float, extra: str
     )
 
 
-def _warn_if_ill_conditioned(op: str, s: np.ndarray, tol: float,
-                             mode: str = "backward", batch: str = "") -> None:
+def _warn_if_thin_gap(op: str, coupled: np.ndarray, tol: float, mode: str,
+                      batch: str, *, quantity: str, coupling: str) -> None:
     """Warn (never raise) in the band where the derivative exists but is thin.
 
     Above :func:`existence_tolerance` the coupling term has a finite limit, so
     refusing would reject a real gradient; below :func:`conditioning_tolerance`
     that gradient has lost more than half its digits, so returning it silently
     is the failure this module exists to stop.
+
+    ``coupled`` is the quantity the rule actually divides differences of —
+    ``s^2`` for the SVD, the eigenvalues themselves for ``eigh`` — which is
+    also what :func:`_cluster_indices` groups on, so the warning band sits
+    directly above the refusal band on the same scale.
     """
     warn_at = conditioning_tolerance(np.float64)
     if tol >= warn_at:
         return
-    s_arr = np.asarray(s, dtype=np.float64).ravel()
-    if s_arr.size < 2:
+    values = np.asarray(coupled, dtype=np.float64).ravel()
+    if values.size < 2:
         return
-    s2 = s_arr ** 2
-    scale = float(s2.max())
+    scale = float(np.max(np.abs(values)))
     if scale <= 0.0:
         return
-    order = np.argsort(-s2, kind="stable")
-    gaps = np.abs(np.diff(s2[order])) / scale
+    order = np.argsort(-values, kind="stable")
+    gaps = np.abs(np.diff(values[order])) / scale
     worst = int(np.argmin(gaps))
     rel = float(gaps[worst])
     if rel > warn_at:
@@ -551,15 +557,31 @@ def _warn_if_ill_conditioned(op: str, s: np.ndarray, tol: float,
     i, j = int(order[worst]), int(order[worst + 1])
     warnings.warn(
         f"{DEGENERACY_DIAGNOSTIC_CODE}: {op} {mode} is defined here but ill "
-        f"conditioned{f' (batch element {batch})' if batch else ''} — singular "
-        f"values {i} and {j} have relative gap "
+        f"conditioned{f' (batch element {batch})' if batch else ''} — "
+        f"{quantity} {i} and {j} have relative gap "
         f"{rel:.3e}, below the sqrt(eps) half-digits threshold {warn_at:.3e}. "
-        f"The coupling term 1/(s_j^2 - s_i^2) has a finite limit, so this is "
+        f"The coupling term {coupling} has a finite limit, so this is "
         f"not a refusal; expect the result to have lost most of its "
         f"significant digits.",
         TesseraDegeneracyWarning,
-        stacklevel=3,
+        stacklevel=4,
     )
+
+
+def _warn_if_ill_conditioned(op: str, s: np.ndarray, tol: float,
+                             mode: str = "backward", batch: str = "") -> None:
+    """Conditioning band for the SVD coupling (grouped on ``s^2``)."""
+    _warn_if_thin_gap(op, np.asarray(s, dtype=np.float64).ravel() ** 2, tol,
+                      mode, batch, quantity="singular values",
+                      coupling="1/(s_j^2 - s_i^2)")
+
+
+def _warn_if_eigen_ill_conditioned(op: str, w: np.ndarray, tol: float,
+                                   mode: str = "backward",
+                                   batch: str = "") -> None:
+    """Conditioning band for the eigh coupling (grouped on ``lambda``)."""
+    _warn_if_thin_gap(op, w, tol, mode, batch, quantity="eigenvalues",
+                      coupling="1/(w_j - w_i)")
 
 
 # ── The svd coupling matrix (the thing the dead `eps` was pretending to guard) ─

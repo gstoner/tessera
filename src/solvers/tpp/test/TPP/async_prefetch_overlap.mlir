@@ -34,3 +34,33 @@ func.func @pipe(%a: tensor<4x4xf32>, %b: tensor<4x4xf32>) -> tensor<4x4xf32> {
       : (tensor<4x4xf32>) -> tensor<4x4xf32>
   return %p1 : tensor<4x4xf32>
 }
+
+// P2 code review (2026-08-29): the hoist legality test was SSA-only, so a
+// zero-result writer through a memref the prefetch reads — memref.store, a
+// linalg op on memrefs, a collective writing a buffer — passed it and the
+// prefetch moved above the write, staging pre-store contents. Prefetch sources
+// are AnyType, so a memref source is legal IR and this is reachable.
+// CHECK-LABEL: func.func @no_hoist_above_a_memref_write
+// CHECK: memref.store
+// CHECK: schedule.prefetch
+// CHECK-SAME: tpp.prefetch.hoisted = false
+func.func @no_hoist_above_a_memref_write(%buf: memref<4xf32>, %v: f32,
+                                         %i: index) {
+  memref.store %v, %buf[%i] : memref<4xf32>
+  %p = "schedule.prefetch"(%buf) {overlap = "compute", into = "lds"}
+      : (memref<4xf32>) -> memref<4xf32>
+  return
+}
+
+// A preceding op that writes nothing the prefetch reads still permits the
+// overlap, so the memory-effect test did not disable the transform.
+// CHECK-LABEL: func.func @still_hoists_above_unrelated_pure_compute
+// CHECK: schedule.prefetch
+// CHECK-SAME: tpp.prefetch.hoisted = true
+func.func @still_hoists_above_unrelated_pure_compute(%buf: memref<4xf32>,
+                                                     %a: tensor<4xf32>) {
+  %z = "tessera.relu"(%a) : (tensor<4xf32>) -> tensor<4xf32>
+  %p = "schedule.prefetch"(%buf) {overlap = "compute", into = "lds"}
+      : (memref<4xf32>) -> memref<4xf32>
+  return
+}

@@ -63,6 +63,27 @@ class TesseraOperatorError(TesseraAutodiffError):
     maps)."""
 
 
+def _as_real(arr: np.ndarray, label: str, where: str) -> np.ndarray:
+    """Coerce to float64, refusing complex rather than dropping ``Im``.
+
+    The whole type is real-valued: `materialize` builds its basis over
+    ``np.eye``, the adjoint law is checked with a real inner product, and
+    the solvers that consume an operator work in float64. A complex map is
+    therefore not a supported operator, and coercing one costs its
+    imaginary part — a wrong answer numpy reports only as a
+    ``ComplexWarning`` (#21a: a semantic path fails closed).
+    """
+    if np.iscomplexobj(arr):
+        raise TesseraOperatorError(
+            f"{label}: complex {where} is not supported — `OperatorTangent` "
+            f"is a real (float64) linear map, and casting here would discard "
+            f"the imaginary part and return a silently wrong result. Split "
+            f"the map into its real and imaginary actions, or carry the "
+            f"complex space as a real one of twice the dimension."
+        )
+    return arr.astype(np.float64, copy=False)
+
+
 @dataclass(frozen=True)
 class OperatorTangent:
     """A matrix-free linear map ``v ↦ A v`` with a declared adjoint.
@@ -96,14 +117,14 @@ class OperatorTangent:
         """Apply the map; returns the FLATTENED output (the convention the
         matrix-free solvers already use)."""
         m, n = self.shape
-        arr = np.asarray(v, dtype=np.float64)
+        arr = _as_real(np.asarray(v), self._label, "input")
         if arr.size != n:
             raise TesseraOperatorError(
                 f"{self._label}: input has {arr.size} values, expected {n} "
                 f"(in_shape {self.in_shape})"
             )
-        out = np.asarray(self.fwd(arr.reshape(self.in_shape)),
-                         dtype=np.float64).reshape(-1)
+        out = _as_real(np.asarray(self.fwd(arr.reshape(self.in_shape))),
+                       self._label, "action").reshape(-1)
         if out.size != m:
             raise TesseraOperatorError(
                 f"{self._label}: action returned {out.size} values, "
@@ -180,7 +201,8 @@ class OperatorTangent:
         negated_adj: Optional[Callable[[np.ndarray], np.ndarray]] = None
         if adj_fn is not None:
             def _neg_adj(u: np.ndarray) -> np.ndarray:
-                return -np.asarray(adj_fn(u), dtype=np.float64).reshape(-1)
+                return -_as_real(np.asarray(adj_fn(u)),
+                                 f"(-{self._label}).T", "action").reshape(-1)
 
             negated_adj = _neg_adj
         return OperatorTangent(

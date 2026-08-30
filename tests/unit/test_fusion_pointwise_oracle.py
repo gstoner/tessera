@@ -77,3 +77,56 @@ def test_reference_only_host_is_trusted(monkeypatch):
 
     monkeypatch.setattr("tessera.compiler.emit.apple_msl.run_pointwise_graph",_ref_run)
     assert F.verify_synthesized_pointwise(region, force=True) is True
+
+
+# ── the declared relative budget reaches the matmul + pointwise verifiers ────
+#
+# `_effective_rtol` exists to consume a candidate's `accuracy_rtol`, and the
+# region/attention/gated verifiers all pass it. These two dropped it, so a
+# candidate that declares a relative budget was judged at numpy's default
+# rtol=1e-5 and a numerically correct low-precision GEMM could be rejected as a
+# miscompile and starved by the arbiter.
+
+
+class _BudgetRunner:
+    """Candidate adapter that returns a result off by a fixed RELATIVE amount,
+    with a declared relative budget and no absolute one."""
+
+    target = "budget_probe"
+    accuracy_atol = None
+
+    def __init__(self, rel_error, accuracy_rtol=1e-2):
+        self.rel_error = rel_error
+        self.accuracy_rtol = accuracy_rtol
+
+    def run_matmul(self, region, A, B):
+        return region.reference(A, B) * (1.0 + self.rel_error), "budget_probe"
+
+    def run_pointwise_graph(self, region, probes):
+        return region.reference(*probes) * (1.0 + self.rel_error), "budget_probe"
+
+
+def test_matmul_oracle_honors_declared_relative_budget():
+    F.clear_verification_cache()
+    # 5e-3 relative on a probe whose entries are ~O(1) is far outside the
+    # default atol=1e-3, so only the declared rtol can accept it.
+    assert F.verify_synthesized_matmul(
+        F.MatmulRegion(), force=True, runner=_BudgetRunner(5e-3)) is True
+
+
+def test_matmul_oracle_still_rejects_out_of_budget_error():
+    F.clear_verification_cache()
+    assert F.verify_synthesized_matmul(
+        F.MatmulRegion(), force=True, runner=_BudgetRunner(0.5)) is False
+
+
+def test_pointwise_oracle_honors_declared_relative_budget():
+    F.clear_verification_cache()
+    assert F.verify_synthesized_pointwise(
+        _region(), force=True, runner=_BudgetRunner(5e-3)) is True
+
+
+def test_pointwise_oracle_still_rejects_out_of_budget_error():
+    F.clear_verification_cache()
+    assert F.verify_synthesized_pointwise(
+        _region(), force=True, runner=_BudgetRunner(0.5)) is False

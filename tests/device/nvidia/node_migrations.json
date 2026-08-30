@@ -2,20 +2,12 @@
   "schema_version": 1,
   "migration": "NVIDIA-TEST-6-HIGH",
   "post_migration_nodes": [
-    "tests/device/nvidia/test_flash_attention_backward.py::test_live_nvidia_flash_attn_bwd_atomic_and_split_share_advanced_oracle",
-    "tests/device/nvidia/test_flash_attention_backward.py::test_live_nvidia_flash_attn_bwd_split_reduced_is_deterministic_and_bounded",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa[4]",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_d128_mha_gqa_mqa[8]",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap[4]",
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap[8]",
-    "tests/device/nvidia/test_moe_transport.py::test_grouped_swiglu_collapsed_route_matches_legacy_decomposition",
-    "tests/device/nvidia/test_moe_transport.py::test_moe_device_timing_retains_resident_batches",
-    "tests/unit/test_nvidia_deltanet_contract.py::test_deltanet_backward_rejects_unvalidated_head_dimensions_without_cuda",
-    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_rejects_bad_partition",
-    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_retains_empty_and_ragged_groups",
-    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_binds_rank_device_topology",
-    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_is_grouped_ragged_and_ordered",
-    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_rejects_duplicate_and_missing_kept_slots",
+    "tests/device/nvidia/test_flash_attention_backward.py::test_live_nvidia_flash_attn_bwd_atomic_and_split_share_advanced_oracle",
+    "tests/device/nvidia/test_flash_attention_backward.py::test_live_nvidia_flash_attn_bwd_split_reduced_is_deterministic_and_bounded",
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_python_nvfp4_dispatch_rejects_malformed_scale_views_before_launch",
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_shipped_nvfp4_general_shape_runtime[16-8-64]",
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_shipped_nvfp4_general_shape_runtime[33-19-129]",
@@ -24,6 +16,9 @@
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_sm120_f16_aot_cache_key_distinguishes_packaged_formats",
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_sm120_f16_aot_require_rejects_missing_artifact",
     "tests/device/nvidia/test_mma_runtime_symbol.py::test_sm120_f16_aot_stale_image_falls_back_to_nvrtc",
+    "tests/device/nvidia/test_moe_transport.py::test_grouped_swiglu_collapsed_route_matches_legacy_decomposition",
+    "tests/device/nvidia/test_moe_transport.py::test_moe_device_timing_retains_resident_batches",
+    "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_composed_layout_linear_base_reaches_fragment_mma",
     "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_tile_nvfp4_logical_scales_match_numpy",
     "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_tile_nvfp4_scale_views_apply_nonzero_origins",
     "tests/integration/test_nvidia_paged_kv_native.py::test_paged_routes_cover_permuted_pages_and_boundary_lengths[1-1]",
@@ -39,7 +34,13 @@
     "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[1-3-2]",
     "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[2-7-5]",
     "tests/integration/test_nvidia_replay_ssm.py::test_cuda_replay_wide_transition_matrix[4-8-3]",
-    "tests/device/nvidia/test_tile_fragment_compiler_path.py::test_sm120_composed_layout_linear_base_reaches_fragment_mma"
+    "tests/unit/test_nvidia_deltanet_contract.py::test_deltanet_backward_rejects_unvalidated_head_dimensions_without_cuda",
+    "tests/unit/test_nvidia_linear_attn_contract.py::test_decay_factor_is_a_running_product_not_a_per_key_inner_loop",
+    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_rejects_bad_partition",
+    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_retains_empty_and_ragged_groups",
+    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_binds_rank_device_topology",
+    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_is_grouped_ragged_and_ordered",
+    "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_rejects_duplicate_and_missing_kept_slots"
   ],
   "mappings": {
     "tests/unit/test_nvidia_moe_transport_compiled.py::test_dispatch_and_combine_match_oracles": "tests/device/nvidia/test_moe_transport.py::test_dispatch_and_combine_match_oracles",
@@ -267,43 +268,82 @@
       "source_file": "tests/unit/test_nvidia_matmul_relu_compiled.py",
       "destination_file": "tests/device/nvidia/test_matmul_relu.py",
       "test_name": "test_live_nvidia_matmul_relu_matches_numpy",
-      "parameters": ["False-16-8-16-f16-0.005", "False-16-8-16-bf16-0.05", "False-37-23-29-f16-0.005", "False-37-23-29-bf16-0.05", "True-16-8-16-f16-0.005", "True-16-8-16-bf16-0.05", "True-37-23-29-f16-0.005", "True-37-23-29-bf16-0.05"]
+      "parameters": [
+        "False-16-8-16-f16-0.005",
+        "False-16-8-16-bf16-0.05",
+        "False-37-23-29-f16-0.005",
+        "False-37-23-29-bf16-0.05",
+        "True-16-8-16-f16-0.005",
+        "True-16-8-16-bf16-0.05",
+        "True-37-23-29-f16-0.005",
+        "True-37-23-29-bf16-0.05"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_matmul_relu_compiled.py",
       "destination_file": "tests/device/nvidia/test_matmul_relu.py",
       "test_name": "test_live_nvidia_matmul_relu_tf32_fp8_breadth",
-      "parameters": ["tf32-0.01", "fp8_e4m3-1.0", "fp8_e5m2-2.0"]
+      "parameters": [
+        "tf32-0.01",
+        "fp8_e4m3-1.0",
+        "fp8_e5m2-2.0"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_matmul_softmax_compiled.py",
       "destination_file": "tests/device/nvidia/test_matmul_softmax.py",
       "test_name": "test_live_nvidia_matmul_softmax_matches_numpy",
-      "parameters": ["16-8-16", "39-27-31", "5-300-17"]
+      "parameters": [
+        "16-8-16",
+        "39-27-31",
+        "5-300-17"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_matmul_softmax_compiled.py",
       "destination_file": "tests/device/nvidia/test_matmul_softmax.py",
       "test_name": "test_live_nvidia_matmul_softmax_tf32_fp8_breadth",
-      "parameters": ["tf32-0.0002", "e4m3-0.02", "e5m2-0.04"]
+      "parameters": [
+        "tf32-0.0002",
+        "e4m3-0.02",
+        "e5m2-0.04"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_mma_runtime_symbol.py",
       "destination_file": "tests/device/nvidia/test_mma_runtime_symbol.py",
       "test_name": "test_shipped_nvidia_mma_gemm_matches_numpy",
-      "parameters": ["bf16", "f16", "tf32", "e4m3", "e5m2"]
+      "parameters": [
+        "bf16",
+        "f16",
+        "tf32",
+        "e4m3",
+        "e5m2"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_mma_runtime_symbol.py",
       "destination_file": "tests/device/nvidia/test_mma_runtime_symbol.py",
       "test_name": "test_runtime_launch_reaches_every_declared_nvidia_mma_dtype",
-      "parameters": ["bf16", "f16", "tf32", "e4m3", "e5m2"]
+      "parameters": [
+        "bf16",
+        "f16",
+        "tf32",
+        "e4m3",
+        "e5m2"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_mma_runtime_symbol.py",
       "destination_file": "tests/performance/nvidia/test_mma_runtime_symbol.py",
       "test_name": "test_device_resident_gemm_stream_and_event_abi",
-      "parameters": ["bf16", "f16", "tf32", "e4m3", "e5m2"]
+      "parameters": [
+        "bf16",
+        "f16",
+        "tf32",
+        "e4m3",
+        "e5m2"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_tile_fragment_compiler_path.py",
@@ -319,55 +359,116 @@
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_generic_cuda_gated",
-      "parameters": ["('relu',)/None/()", "('bias', 'gelu')/None/()", "('silu',)/None/()", "('bias',)/softmax/()", "()/rmsnorm/()", "('relu',)/layer_norm/()", "('gelu',)/None/('relu',)"]
+      "parameters": [
+        "('relu',)/None/()",
+        "('bias', 'gelu')/None/()",
+        "('silu',)/None/()",
+        "('bias',)/softmax/()",
+        "()/rmsnorm/()",
+        "('relu',)/layer_norm/()",
+        "('gelu',)/None/('relu',)"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_tile_matmul_schedule_candidates",
-      "parameters": ["direct-float16", "direct-bfloat16", "shared-float16", "shared-bfloat16"]
+      "parameters": [
+        "direct-float16",
+        "direct-bfloat16",
+        "shared-float16",
+        "shared-bfloat16"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_flash_attention",
-      "parameters": ["8x8x16x16-1.0-False", "8x8x16x16-0.25-False", "8x8x16x16-0.125-True", "16x24x32x64-1.0-False", "16x24x32x64-0.25-False", "16x24x32x64-0.125-True"]
+      "parameters": [
+        "8x8x16x16-1.0-False",
+        "8x8x16x16-0.25-False",
+        "8x8x16x16-0.125-True",
+        "16x24x32x64-1.0-False",
+        "16x24x32x64-0.25-False",
+        "16x24x32x64-0.125-True"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_gated_swiglu",
-      "parameters": ["silu", "gelu", "relu"]
+      "parameters": [
+        "silu",
+        "gelu",
+        "relu"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_mma_fused_tensor_core",
-      "parameters": ["epilogue0", "epilogue1", "epilogue2", "epilogue3"]
+      "parameters": [
+        "epilogue0",
+        "epilogue1",
+        "epilogue2",
+        "epilogue3"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_mma_attn_tensor_core",
-      "parameters": ["16x16x16x16-0.125-False", "16x16x16x16-0.25-False", "16x16x16x16-0.125-True", "32x48x32x64-0.125-False", "32x48x32x64-0.25-False", "32x48x32x64-0.125-True", "64x128x64x64-0.125-False", "64x128x64x64-0.25-False", "64x128x64x64-0.125-True"]
+      "parameters": [
+        "16x16x16x16-0.125-False",
+        "16x16x16x16-0.25-False",
+        "16x16x16x16-0.125-True",
+        "32x48x32x64-0.125-False",
+        "32x48x32x64-0.25-False",
+        "32x48x32x64-0.125-True",
+        "64x128x64x64-0.125-False",
+        "64x128x64x64-0.25-False",
+        "64x128x64x64-0.125-True"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_tensor_core_dtype_variants",
-      "parameters": ["fused-nvidia_mma_fused_bf16-0.05", "attention-nvidia_mma_attn_bf16-0.05", "gated-nvidia_mma_gated-0.01", "gated-nvidia_mma_gated_bf16-0.1"]
+      "parameters": [
+        "fused-nvidia_mma_fused_bf16-0.05",
+        "attention-nvidia_mma_attn_bf16-0.05",
+        "gated-nvidia_mma_gated-0.01",
+        "gated-nvidia_mma_gated_bf16-0.1"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/device/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_tf32_fp8_composed_transformer_lanes",
-      "parameters": ["f32-tf32-0.02-fused", "f32-tf32-0.02-attention", "f32-tf32-0.02-gated", "fp8_e4m3-fp8_e4m3-0.2-fused", "fp8_e4m3-fp8_e4m3-0.2-attention", "fp8_e4m3-fp8_e4m3-0.2-gated", "fp8_e5m2-fp8_e5m2-0.4-fused", "fp8_e5m2-fp8_e5m2-0.4-attention", "fp8_e5m2-fp8_e5m2-0.4-gated"]
+      "parameters": [
+        "f32-tf32-0.02-fused",
+        "f32-tf32-0.02-attention",
+        "f32-tf32-0.02-gated",
+        "fp8_e4m3-fp8_e4m3-0.2-fused",
+        "fp8_e4m3-fp8_e4m3-0.2-attention",
+        "fp8_e4m3-fp8_e4m3-0.2-gated",
+        "fp8_e5m2-fp8_e5m2-0.4-fused",
+        "fp8_e5m2-fp8_e5m2-0.4-attention",
+        "fp8_e5m2-fp8_e5m2-0.4-gated"
+      ]
     },
     {
       "source_file": "tests/unit/test_nvidia_plugin.py",
       "destination_file": "tests/performance/nvidia/test_plugin.py",
       "test_name": "test_live_nvidia_matmul_arbitrated",
-      "parameters": ["16x8x16-bfloat16", "16x8x16-float16", "32x16x32-bfloat16", "32x16x32-float16", "64x64x64-bfloat16", "64x64x64-float16"]
+      "parameters": [
+        "16x8x16-bfloat16",
+        "16x8x16-float16",
+        "32x16x32-bfloat16",
+        "32x16x32-float16",
+        "64x64x64-bfloat16",
+        "64x64x64-float16"
+      ]
     }
   ]
 }

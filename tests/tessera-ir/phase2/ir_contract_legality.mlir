@@ -123,3 +123,50 @@ func.func @buffer_conflict(%a: tensor<8xf32>) -> tensor<8xf32> {
        : (tensor<8xf32>) -> tensor<8xf32>
   return %1 : tensor<8xf32>
 }
+
+// -----
+
+// P2 code review (2026-08-29): the narrowing-accum rule compared mantissa bits
+// across the int/float boundary. numericPolicyMantissaBits returns significand
+// bits for a float and representable width for an integer, so int16 (16) into
+// fp16 (11) read as a narrowing and was refused — while this function's own
+// comment declares int storage with a float accumulator "the ordinary
+// dequantized-weight path". The 25.8x-dominance measurement behind the refusal
+// was taken on float/float pairs and does not transfer to dequantization, where
+// the storage bits are integer codes rather than running-sum precision. Only
+// int8 slipped through before (8 <= 11), which is exactly the boundary a
+// bit-count comparison predicts.
+// CHECK-LABEL: func.func @dtype_int16_into_fp16_ok
+func.func @dtype_int16_into_fp16_ok(%a: tensor<8x8xf32>, %b: tensor<8x8xf32>)
+    -> tensor<8x8xf32> {
+  %0 = "tessera.matmul"(%a, %b)
+      {numeric_policy = {storage = "int16", accum = "fp16"}}
+      : (tensor<8x8xf32>, tensor<8x8xf32>) -> tensor<8x8xf32>
+  return %0 : tensor<8x8xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func.func @dtype_int32_into_fp32_ok
+func.func @dtype_int32_into_fp32_ok(%a: tensor<8x8xf32>, %b: tensor<8x8xf32>)
+    -> tensor<8x8xf32> {
+  %0 = "tessera.matmul"(%a, %b)
+      {numeric_policy = {storage = "int32", accum = "fp32"}}
+      : (tensor<8x8xf32>, tensor<8x8xf32>) -> tensor<8x8xf32>
+  return %0 : tensor<8x8xf32>
+}
+
+// -----
+
+// Same-domain narrowing is still refused, in both domains — the point of the
+// fix is the domain boundary, not the rule.
+func.func @dtype_int32_into_int8_still_refused(%a: tensor<8x8xf32>,
+                                               %b: tensor<8x8xf32>)
+    -> tensor<8x8xf32> {
+  // expected-error @+2 {{NUMERIC_POLICY_NARROWING_ACCUM}}
+  // expected-note @+1 {{cannot represent every value it loads}}
+  %0 = "tessera.matmul"(%a, %b)
+      {numeric_policy = {storage = "int32", accum = "int8"}}
+      : (tensor<8x8xf32>, tensor<8x8xf32>) -> tensor<8x8xf32>
+  return %0 : tensor<8x8xf32>
+}

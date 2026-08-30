@@ -273,6 +273,16 @@ def test_fp4_pack_roundtrip_quantizes_to_e2m1_grid():
         assert np.max(nearest) < 1e-4
 
 
+@pytest.mark.parametrize("mode", ["MX", "mxfp4", "nvfp4", "", "fp32"])
+def test_fp4_unknown_scale_mode_is_rejected(mode):
+    """scale_mode picks the scale *semantics*, so it fails closed (Decision
+    #21a): every value but the exact "mx" used to take the fp32-scale branch,
+    handing an e8m0-decoding consumer non-power-of-two scales."""
+    W = np.random.RandomState(5).randn(4, 32).astype(np.float32)
+    with pytest.raises(ValueError, match="scale_mode"):
+        quantize_fp4_packed(W, group_size=32, scale_mode=mode)
+
+
 @pytest.mark.parametrize(
     "mode,gs", [("mx", 32), ("nv", 16)],  # MXFP4 (g32, pow2 scale) / NVFP4 (g16)
 )

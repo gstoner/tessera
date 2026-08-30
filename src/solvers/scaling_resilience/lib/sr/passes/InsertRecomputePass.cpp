@@ -30,6 +30,8 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
+#include <algorithm>
 #include <cstdint>
 #include <numeric>
 
@@ -38,9 +40,18 @@ using namespace mlir;
 namespace {
 
 /// Estimate tensor memory in bytes from a shaped type (bf16 = 2 bytes).
+///
+/// A scalar is not an unknown: pricing an i1 loop bound at the dynamic-shape
+/// estimate made scalar-heavy regions look activation-heavy and drove the
+/// budget across on control flow alone.
 static int64_t estimateTensorBytes(Type ty) {
   auto shaped = mlir::dyn_cast<ShapedType>(ty);
-  if (!shaped || !shaped.hasStaticShape())
+  if (!shaped) {
+    if (ty.isIntOrFloat())
+      return (ty.getIntOrFloatBitWidth() + 7) / 8;
+    return 4096;
+  }
+  if (!shaped.hasStaticShape())
     return 4096; // conservative estimate for dynamic shapes
   int64_t elems = 1;
   for (int64_t d : shaped.getShape())
@@ -104,10 +115,58 @@ struct InsertRecomputePass
       int64_t liveBytes = 0;
       int64_t lastCkptId = -1;
 
+      // Decision #10 specifies a live-set scan, so a value's bytes must leave
+      // the running total when its last use passes. Without this the quantity
+      // compared to the budget is "bytes produced since the last checkpoint",
+      // which crosses any budget on a long enough chain of dead temporaries and
+      // checkpoints a program whose true peak liveness never approached it.
+      llvm::DenseMap<Operation *, int64_t> ordinal;
+      int64_t nextOrdinal = 0;
+      fn.walk([&](Operation *op) { ordinal[op] = nextOrdinal++; });
+
+      // Each entry keeps the defining ordinal alongside the bytes: a
+      // checkpoint reset drops every pre-checkpoint value from the counter,
+      // so a pre-checkpoint value dying later must NOT be subtracted again —
+      // that would remove bytes belonging to post-checkpoint values and let
+      // subsequent liveness exceed the budget without another checkpoint.
+      llvm::DenseMap<int64_t, llvm::SmallVector<std::pair<int64_t, int64_t>, 2>>
+          freedAt;
+      for (auto &[op, defOrdinal] : ordinal) {
+        for (Value v : op->getResults()) {
+          int64_t lastUse = defOrdinal;
+          bool escapes = false;
+          for (Operation *user : v.getUsers()) {
+            auto found = ordinal.find(user);
+            if (found == ordinal.end()) {
+              escapes = true;
+              break;
+            }
+            lastUse = std::max(lastUse, found->second);
+          }
+          if (!escapes)
+            freedAt[lastUse].push_back(
+                {defOrdinal, estimateTensorBytes(v.getType())});
+        }
+      }
+
+      int64_t lastCkptOrdinal = -1;
       fn.walk([&](Operation *op) {
-        // Skip non-compute ops.
-        if (op->getNumResults() == 0)
+        int64_t thisOrdinal = ordinal.lookup(op);
+        auto releaseDeadValues = [&] {
+          auto freed = freedAt.find(thisOrdinal);
+          if (freed == freedAt.end())
+            return;
+          for (auto [defOrdinal, bytes] : freed->second)
+            if (defOrdinal > lastCkptOrdinal)
+              liveBytes = std::max<int64_t>(0, liveBytes - bytes);
+        };
+
+        // Skip non-compute ops — but a non-compute op can still be the last
+        // consumer of a live value.
+        if (op->getNumResults() == 0) {
+          releaseDeadValues();
           return;
+        }
 
         // Accumulate live tensor bytes produced by this op.
         for (Value v : op->getResults()) {
@@ -119,6 +178,7 @@ struct InsertRecomputePass
           op->setAttr("tessera_sr.checkpoint_id",
                       IntegerAttr::get(IntegerType::get(ctx, 64), ckptId++));
           liveBytes = 0;
+          lastCkptOrdinal = thisOrdinal;
           lastCkptId = ckptId - 1;
           return;
         }
@@ -130,9 +190,12 @@ struct InsertRecomputePass
           op->setAttr("tessera_sr.checkpoint_id",
                       IntegerAttr::get(IntegerType::get(ctx, 64), ckptId++));
           liveBytes = 0;
+          lastCkptOrdinal = thisOrdinal;
           lastCkptId = ckptId - 1;
           return;
         }
+
+        releaseDeadValues();
 
         // Tag pure ops between checkpoints as recomputable.
         if (isPureOp(op)) {

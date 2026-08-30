@@ -180,6 +180,56 @@ def test_truncated_normal_stays_in_bounds():
     assert (samples <= 1.0).all()
 
 
+def _truncated_normal_mean(a: float, b: float) -> float:
+    """E[Z | a ≤ Z ≤ b] for standard Z, by Riemann sum on the ratio."""
+    z = np.linspace(a, b, 20_001)
+    w = np.exp(-0.5 * (z * z - min(abs(a), abs(b)) ** 2))
+    return float(np.sum(z * w) / np.sum(w))
+
+
+@pytest.mark.parametrize("lower,upper", [(6.0, 7.0), (-7.0, -6.0), (4.0, 50.0)])
+def test_truncated_normal_far_tail_terminates_with_the_conditional_law(lower, upper):
+    """Plain rejection needs ~1e12 draws to fill 1000 entries from [6, 7].
+
+    Legal arguments, so the sampler must return them — correctly, not merely
+    quickly: the mean is checked against the conditional density.
+    """
+    samples = truncated_normal(
+        RNGKey.from_seed(3), (20_000,), lower=lower, upper=upper, dtype="fp64")
+    assert (samples >= lower).all() and (samples <= upper).all()
+    assert samples.mean() == pytest.approx(
+        _truncated_normal_mean(lower, upper), abs=5e-3)
+
+
+def test_truncated_normal_tail_honours_mean_and_std():
+    samples = truncated_normal(
+        RNGKey.from_seed(11), (20_000,), lower=6.0, upper=7.0,
+        mean=2.0, std=0.5, dtype="fp64")
+    assert (samples >= 6.0).all() and (samples <= 7.0).all()
+    standardized = (samples - 2.0) / 0.5
+    assert standardized.mean() == pytest.approx(
+        _truncated_normal_mean(8.0, 10.0), abs=5e-3)
+
+
+def test_truncated_normal_zero_std_is_the_point_mass_or_an_error():
+    assert (truncated_normal(RNGKey.from_seed(0), (3,), lower=-1.0, upper=1.0,
+                             mean=0.25, std=0.0) == 0.25).all()
+    with pytest.raises(ValueError, match="point mass"):
+        truncated_normal(RNGKey.from_seed(0), (3,), lower=-1.0, upper=1.0,
+                         mean=5.0, std=0.0)
+
+
+@pytest.mark.parametrize("dtype,low,high", [
+    ("fp16", 0.0, 1.0), ("fp16", -3.0, 2.5), ("fp32", 0.0, 1.0)])
+def test_uniform_downcast_preserves_the_half_open_interval(dtype, low, high):
+    """The float64 → target cast rounds to nearest, so a draw within half an
+    ulp of `high` used to land on `high` (2⁻¹² per element in fp16)."""
+    samples = uniform(RNGKey.from_seed(0), (200_000,), low=low, high=high,
+                      dtype=dtype)
+    assert samples.max() < high
+    assert samples.min() >= low
+
+
 def test_bernoulli_returns_bool_dtype_by_default():
     k = RNGKey.from_seed(0)
     samples = bernoulli(k, (1024,), p=0.7)

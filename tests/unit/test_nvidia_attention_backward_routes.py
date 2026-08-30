@@ -80,3 +80,44 @@ def test_unknown_backward_route_rejects_stably(route):
     _, _, k, v = _inputs()
     with pytest.raises(ValueError, match="unknown NVIDIA flash backward route"):
         nv.flash_attention_backward_workspace_bytes(k, v, route=route)
+
+
+# ── the deterministic split route does not do asymptotically redundant work ──
+#
+# The route is forced whenever deterministic=True, and its cost is fed to the
+# route arbiter, so redundant work here is charged to determinism.
+
+
+def _kernel(source, name):
+    """The text of one __global__ kernel, so a claim about kernel A is not
+    satisfied by a line in kernel B."""
+    start = source.index(f"__global__ void {name}(")
+    nxt = source.find("__global__ void ", start + 1)
+    return source[start:nxt if nxt != -1 else len(source)]
+
+
+def test_split_route_reads_precomputed_row_stats_instead_of_recomputing_them():
+    source = nv._synthesize_flash_bwd_cuda()
+    # The row's max/z/delta depend on (b, qh, m) only, but the split kernel is
+    # n-parallel: recomputing them per key is an Sk-fold blowup.
+    assert "tsr_flash_bwd_stats" in source
+    split = _kernel(source, "tsr_flash_bwd_split")
+    assert "float mx=sm[r],z=sz[r],delta=sd[r];" in split
+    assert "for(long j=0;j<Sk;++j)" not in split
+
+
+def test_split_route_dq_accumulates_over_keys_once_per_output_row():
+    # n outermost into aq[d] -- not the d-outer form that recomputed every score
+    # and dp D times per row, which the atomic kernel never did.
+    dq = _kernel(nv._synthesize_flash_bwd_cuda(), "tsr_flash_bwd_dq")
+    assert "float aq[TSR_FA_CAP]" in dq
+    assert "float out=0.f" not in dq
+
+
+def test_split_route_allocates_and_frees_the_row_stats_workspace():
+    source = nv._synthesize_flash_bwd_cuda()
+    # Both split entries (plain + timed) own the workspace end to end.
+    for buf in ("sm", "sz", "sd"):
+        assert source.count(f"cudaMalloc(&{buf},ns)") == 2
+        assert source.count(f"if({buf})cudaFree({buf})") == 2        # fail path
+        assert source.count(f"cudaFree({buf})") == 4  # + the two success paths

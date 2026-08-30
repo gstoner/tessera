@@ -59,7 +59,10 @@ def smooth_l1_loss(pred, target, beta: float = 1.0, reduction: str = "mean"):
 
 
 def log_cosh_loss(pred, target, reduction: str = "mean"):
-    err = _asarray(pred) - _asarray(target)
+    # log(cosh(e)) = |e| + log1p(exp(-2|e|)) - log 2. The |e| form is required,
+    # not cosmetic: writing it on the raw error makes exp(-2e) overflow float64
+    # for e < -354.9 and return inf, while log_cosh is even in e.
+    err = np.abs(_asarray(pred) - _asarray(target))
     loss = err + np.log1p(np.exp(-2.0 * err)) - np.log(2.0)
     return _reduce(loss, reduction)
 
@@ -80,6 +83,9 @@ def cross_entropy_loss(
         axis += logits.ndim
     if axis < 0 or axis >= logits.ndim:
         raise ValueError("axis out of range")
+    smooth = float(label_smoothing)
+    if not 0.0 <= smooth < 1.0:
+        raise ValueError("label_smoothing must be in [0, 1)")
     log_probs = _log_softmax(logits, axis=axis)
     if targets.dtype.kind in "iu":
         moved = np.moveaxis(log_probs, axis, -1)
@@ -93,9 +99,6 @@ def cross_entropy_loss(
             raise ValueError("target class index out of range")
         safe_idx = np.where(valid, idx, 0)
         nll = -flat[np.arange(idx.size), safe_idx]
-        smooth = float(label_smoothing)
-        if not 0.0 <= smooth < 1.0:
-            raise ValueError("label_smoothing must be in [0, 1)")
         if smooth:
             if flat.shape[-1] <= 1:
                 raise ValueError("label smoothing requires at least 2 classes")
@@ -108,6 +111,20 @@ def cross_entropy_loss(
     else:
         if targets.shape != logits.shape:
             raise ValueError("probability targets must match logits")
+        # Both are semantic keys (Decision #21a) and neither is expressible
+        # against a distribution target: smoothing is already the caller's to
+        # apply to `targets`, and there is no single index to mask. Applying
+        # smoothing here silently would also diverge from
+        # autodiff.vjp.vjp_cross_entropy_loss, which differentiates the
+        # unsmoothed objective on this branch.
+        if smooth:
+            raise ValueError(
+                "label_smoothing is not supported for probability targets; "
+                "pass label_smoothing=0.0 and smooth `targets` directly")
+        if 0 <= int(ignore_index) < logits.shape[axis]:
+            raise ValueError(
+                f"ignore_index={int(ignore_index)} names a class but targets "
+                "are a probability distribution; masking is undefined here")
         loss = -np.sum(targets * log_probs, axis=axis)
     return _reduce(loss, reduction)
 

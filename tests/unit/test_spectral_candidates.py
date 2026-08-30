@@ -187,3 +187,67 @@ def test_rocm_composite_launch_rechecks_architecture(monkeypatch):
     )
     with pytest.raises(RuntimeError, match="architecture mismatch"):
         SC.run_rocm_spectral_composite({}, [])
+
+
+# ── compile-cache hit must cost nothing (no scratch dir, no device probe) ────
+
+
+def test_cpu_lib_creates_one_scratch_directory_for_the_whole_process(tmp_path,
+                                                                    monkeypatch):
+    """`_compile` serves every call after the first from `_libs`, so a scratch
+    directory made BEFORE that check is abandoned empty on every later call --
+    unbounded in TMPDIR, and (measured on this host) 64 us of mkdtemp per call
+    on a path the composed STFT lane runs once per frame."""
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setattr(SC, "_libs", {})
+    monkeypatch.setattr(SC.tempfile, "tempdir", None, raising=False)
+    for _ in range(5):
+        SC._cpu_lib()
+    made = list(tmp_path.glob("tessera_spectral_cpu_*"))
+    assert len(made) <= 1
+
+
+def test_cpu_lib_returns_the_cached_handle_without_recompiling(monkeypatch):
+    SC._cpu_lib()
+    if SC._libs.get("cpu") is None:
+        pytest.skip("no C++ toolchain: the CPU lane declines, nothing to cache")
+    monkeypatch.setattr(SC, "_compile", lambda *_a, **_k: pytest.fail(
+        "cache hit must not reach the compiler"))
+    monkeypatch.setattr(SC.tempfile, "mkdtemp", lambda *_a, **_k: pytest.fail(
+        "cache hit must not create a scratch directory"))
+    assert SC._cpu_lib() is SC._libs["cpu"]
+
+
+def test_rocm_availability_probe_runs_once_per_process(monkeypatch):
+    """`available()` is called per arbitration -- per composed STFT frame -- and
+    its 4-point device transform measured 0.371 ms per call on gfx1151. The
+    answer cannot change within a process, so it is probed once."""
+    calls = []
+
+    class _Lib:
+        def ts_fft_stockham_amd_hostptr(self, *_a):
+            calls.append(1)
+            return 0
+
+    lib = _Lib()
+    monkeypatch.setattr(SC, "_amd_candidate_lib", lambda: lib)
+    monkeypatch.setattr(SC, "_amd_probe", {})
+    candidate = SC.RocmStockhamFFTCandidate()
+    assert [candidate.available() for _ in range(5)] == [True] * 5
+    assert len(calls) == 1
+
+
+def test_rocm_availability_probe_memoizes_a_failed_probe_too(monkeypatch):
+    calls = []
+
+    class _Lib:
+        def ts_fft_stockham_amd_hostptr(self, *_a):
+            calls.append(1)
+            return 1                       # device present but transform failed
+
+    lib = _Lib()
+    monkeypatch.setattr(SC, "_amd_candidate_lib", lambda: lib)
+    monkeypatch.setattr(SC, "_amd_probe", {})
+    candidate = SC.RocmStockhamFFTCandidate()
+    assert [candidate.available() for _ in range(3)] == [False] * 3
+    assert len(calls) == 1

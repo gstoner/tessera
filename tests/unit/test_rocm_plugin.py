@@ -368,3 +368,54 @@ def test_live_escape_hatch_forces_generic_over_crown_jewel():
     out_w, tag_w = C.run_arbitrated(region, OP_FUSED_REGION, "rocm", A, B, None,
                                     force="rocm_wmma_gemm")
     assert tag_w == "rocm_wmma"
+
+
+# ── every HIP runtime call's status reaches the return code ──────────────────
+#
+# The runner treats rc == 1 as proof the device produced the buffer and tags it
+# "rocm_hip" (real execution). An ignored failed H2D would leave the kernel
+# reading uninitialised device memory and an ignored failed D2H would leave the
+# caller's zero-filled array intact -- either way a wrong result under a
+# real-execution tag, which is the claim-integrity failure Decision #21 and the
+# no-green-over-red rule both forbid. hipDeviceSynchronize does not resurface a
+# non-sticky copy error, so it cannot stand in for these checks.
+
+
+def _fused_hip_source(region=None):
+    from tessera.compiler.emit.rocm_hip import _synthesize_fused_hip
+    return _synthesize_fused_hip(region or F.FusedRegion(epilogue=("bias", "relu"),
+                                                         bias_name="b",
+                                                         residual=True))
+
+
+def test_fused_hip_wrapper_checks_every_transfer_and_allocation():
+    wrapper = " ".join(_fused_hip_source().split('extern "C"', 1)[1].split())
+    calls = [stmt for stmt in wrapper.split(";")
+             if "hipMalloc(" in stmt or "hipMemcpy(" in stmt]
+    # 5 allocations (A, B, O, bias, residual) + 4 H2D copies + 1 D2H.
+    assert len(calls) == 10, calls
+    for call in calls:
+        assert "!=hipSuccess) goto cleanup" in call, call
+
+
+def test_fused_hip_wrapper_distinguishes_allocation_from_transfer_failure():
+    wrapper = _fused_hip_source()
+    assert "int t=64, b=0, rc=2;" in wrapper       # allocation failure
+    assert "    rc=3;\n" in wrapper                # transfer/launch failure
+    assert "    rc=1;\n" in wrapper                # only after the D2H succeeds
+    assert wrapper.index("rc=3;") < wrapper.index("hipMemcpyHostToDevice")
+    assert wrapper.index("hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost)") < \
+        wrapper.index("    rc=1;")
+
+
+def test_fused_hip_wrapper_frees_every_allocation_on_every_path():
+    wrapper = _fused_hip_source()
+    assert "cleanup:\n" in wrapper
+    for buf in ("dA", "dB", "dO", "dbias", "dres"):
+        assert f"if ({buf}) hipFree({buf});" in wrapper
+
+
+def test_fused_hip_wrapper_rejects_null_buffers_before_allocating():
+    wrapper = _fused_hip_source()
+    assert wrapper.index("if (!hA||!hB||!hout) goto cleanup;") < \
+        wrapper.index("hipMalloc(&dA")

@@ -220,12 +220,18 @@ def vjp_gemm(dout, A, B, bias=None, residual=None, *,
 
     Supports batched matmul where leading dims broadcast.
     """
-    preactivation = np.matmul(A, B)
-    if bias is not None:
-        preactivation = preactivation + np.asarray(bias)
-    local_dout = np.asarray(dout) * _matmul_activation_derivative(
-        preactivation, activation
-    )
+    if activation == "none":
+        # The identity's derivative is 1 everywhere, so the preactivation —
+        # a third full GEMM on the hottest backward in the tape — is never
+        # read on this path. Adding a bias does not change that.
+        local_dout = np.asarray(dout)
+    else:
+        preactivation = np.matmul(A, B)
+        if bias is not None:
+            preactivation = preactivation + np.asarray(bias)
+        local_dout = np.asarray(dout) * _matmul_activation_derivative(
+            preactivation, activation
+        )
     dA = np.matmul(local_dout, np.swapaxes(B, -1, -2))
     dB = np.matmul(np.swapaxes(A, -1, -2), local_dout)
     dA = _sum_to_shape(dA, A.shape)
@@ -2964,30 +2970,81 @@ def vjp_log_cosh_loss(dout, pred, target, *, reduction="mean", **_):
 
 
 @_vjp("cross_entropy_loss")
-def vjp_cross_entropy_loss(dout, logits, targets, *, reduction="mean", **_):
+def vjp_cross_entropy_loss(
+    dout,
+    logits,
+    targets,
+    *,
+    reduction="mean",
+    axis=-1,
+    ignore_index=-100,
+    label_smoothing=0.0,
+    **_,
+):
     logits_arr = np.asarray(logits, dtype=np.float64)
     targets_arr = np.asarray(targets)
-    shifted = logits_arr - np.max(logits_arr, axis=-1, keepdims=True)
+    axis = int(axis)
+    if axis < 0:
+        axis += logits_arr.ndim
+    # The class axis is not always last, and the rest of this rule is written
+    # against a trailing class axis. Move it, then move the gradient back.
+    moved = np.moveaxis(logits_arr, axis, -1)
+    shifted = moved - np.max(moved, axis=-1, keepdims=True)
     probs = np.exp(shifted) / np.sum(np.exp(shifted), axis=-1, keepdims=True)
     if targets_arr.dtype.kind in "iu":
-        one_hot = np.zeros_like(probs)
-        np.put_along_axis(one_hot.reshape(-1, one_hot.shape[-1]), targets_arr.reshape(-1, 1).astype(np.int64), 1.0, axis=-1)
+        # The eager loss applies label smoothing and ignore_index on this path;
+        # a rule that drops them returns the gradient of a different objective.
+        # Smoothing replaces the one-hot target with q_y = 1 - s and
+        # q_c = s/(C-1) elsewhere, and d/dlogits of -sum_c q_c log p_c is
+        # probs - q, so the smoothed target is the only thing that changes.
+        classes = probs.shape[-1]
+        smooth = float(label_smoothing)
+        if not 0.0 <= smooth < 1.0:
+            raise ValueError("label_smoothing must be in [0, 1)")
+        if smooth and classes <= 1:
+            raise ValueError("label smoothing requires at least 2 classes")
+        flat = np.zeros((int(np.prod(probs.shape[:-1])), classes),
+                        dtype=probs.dtype)
+        idx = targets_arr.reshape(-1).astype(np.int64)
+        valid = idx != int(ignore_index)
+        safe_idx = np.where(valid, idx, 0)
+        if smooth:
+            flat[:] = smooth / (classes - 1)
+            flat[np.arange(idx.size), safe_idx] = 1.0 - smooth
+        else:
+            flat[np.arange(idx.size), safe_idx] = 1.0
+        one_hot = flat.reshape(probs.shape)
+        # An ignored position contributes nothing to the loss, so it receives
+        # no gradient, and "mean" divides by the number of scoring positions
+        # rather than by the element count.
+        keep = valid.reshape(probs.shape[:-1])
         target_grad = None
     else:
-        one_hot = targets_arr
+        one_hot = np.moveaxis(targets_arr, axis, -1)
+        keep = None
         target_grad = -(
-            logits_arr - (np.log(np.sum(np.exp(shifted), axis=-1, keepdims=True)) + np.max(logits_arr, axis=-1, keepdims=True))
+            moved - (np.log(np.sum(np.exp(shifted), axis=-1, keepdims=True)) + np.max(moved, axis=-1, keepdims=True))
         )
     scale_shape = probs.shape[:-1]
-    scale = _reduction_cotangent(dout, scale_shape, reduction)[..., None]
+    if keep is not None and reduction == "mean":
+        scale = (np.ones(scale_shape, dtype=np.asarray(dout).dtype)
+                 * np.asarray(dout)
+                 / max(int(np.count_nonzero(keep)), 1))[..., None]
+    else:
+        scale = _reduction_cotangent(dout, scale_shape, reduction)[..., None]
     grad_logits = (probs - one_hot) * scale
+    if keep is not None:
+        grad_logits = np.where(keep[..., None], grad_logits, 0.0)
+    grad_logits = np.moveaxis(grad_logits, -1, axis)
     if target_grad is not None:
         # d/d(soft targets) of -sum(targets * log_softmax(logits)) is
         # -log_softmax(logits); it must carry the SAME reduction scaling /
         # upstream cotangent as grad_logits. Previously returned unscaled,
         # which is a factor of N too large for reduction="mean" and ignores
-        # dout for reduction="none".
-        target_grad = _sum_to_shape(target_grad * scale, targets_arr.shape)
+        # dout for reduction="none". Scale while still class-axis-last, then
+        # restore the caller's axis order.
+        target_grad = np.moveaxis(target_grad * scale, -1, axis)
+        target_grad = _sum_to_shape(target_grad, targets_arr.shape)
     return (_sum_to_shape(grad_logits, logits_arr.shape), target_grad)
 
 

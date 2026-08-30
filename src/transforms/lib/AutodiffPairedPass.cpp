@@ -945,6 +945,28 @@ static mlir::LogicalResult materializeWhileResiduals(
     llvm::SmallVector<mlir::RankedTensorType> tapeTypes;
     llvm::SmallVector<mlir::Value> tapeInits;
     mlir::OpBuilder builder(whileOp);
+    // The tape's dynamic extents come from the loop INIT, while insertState
+    // slices with the current iteration's extent — scf.while lets a
+    // `tensor<?xf32>` state yield any extent, so a growing state writes an
+    // out-of-bounds slice. The generic_for path demands a declared shape
+    // envelope for exactly this reason; until while carries one, refuse rather
+    // than emit the unguarded insert (Decision #21a). Decided before any IR is
+    // built so a refusal leaves no partial tape behind.
+    for (mlir::Value init : whileOp.getInits()) {
+      if (!llvm::isa<mlir::FloatType>(
+              mlir::getElementTypeOrSelf(init.getType())))
+        continue;
+      auto shaped = llvm::dyn_cast<mlir::ShapedType>(init.getType());
+      if (shaped && !shaped.hasStaticShape()) {
+        whileOp.emitError()
+            << "AUTODIFF_WHILE_DYNAMIC_STATE: saved scf.while state "
+            << init.getType()
+            << " has a dynamic extent; the residual tape is sized from the "
+               "loop init and cannot bound an extent that varies across "
+               "iterations";
+        return mlir::failure();
+      }
+    }
     for (auto [index, init] : llvm::enumerate(whileOp.getInits())) {
       if (!llvm::isa<mlir::FloatType>(
               mlir::getElementTypeOrSelf(init.getType())))
@@ -1771,7 +1793,12 @@ private:
            residualOwner.getValue() == "scf_while");
       if (failed(differentiateOperation(op, outCotans, builder, cotan)))
         return mlir::failure();
-      if (eraseSavedPrimal)
+      // Re-check emptiness: differentiateOperation can create a use of this
+      // clone that did not exist when the decision was latched. A dynamically
+      // shaped state with no cotangent seed makes buildZeroLike emit a
+      // zeros_like taking the clone's result, and erasing under that live use
+      // is a dangling reference on the fleet's NDEBUG builds.
+      if (eraseSavedPrimal && op->use_empty())
         op->erase();
     }
 

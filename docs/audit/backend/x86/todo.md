@@ -8,6 +8,37 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
+passes changed; only the Mac's fixture set could be run.**
+The P2 code-review batch touched passes every backend lowers through:
+`TesseraToLinalgPass` (rejection checks moved before IR creation),
+`SymbolicDimEqualityPass` (transposeA/B in the contract + flow rules, and
+malformed `dim_bindings`/`dim_sizes` now fail closed),
+`AdjointCollectiveInsertionPass` (cotangent-array bounds),
+`AutodiffPairedPass` (dynamic while state refused; erase re-checks use_empty),
+`RegionAdjointInterface` (O(1) dense-checkpoint slot),
+`ActivationRematerializationPass` (difference-array peak),
+`WarpSpecLegalityPass` (transitive staged-data provenance),
+`TileBufferArenaPass` (non-scalar element types),
+`IRContractLegalityPass` (narrowing-accum restricted to same-domain pairs),
+`MaterializeControlPayloadPass` (shared body-stub conflict),
+`InsertRecomputePass` (real live-set), `LegalizeSpaceTime` + the CPU stencil
+hook (orders 6 and 8 implemented; unimplemented orders refused), and
+`AsyncPrefetch` (memory-write dependence).
+Evidence produced: `lit tests/tessera-ir/` **437 discovered, 396 passed, 41
+unsupported, 0 failed** on the Mac (M1 Max, brew LLVM/MLIR 23.1.0, assertions
+OFF), plus per-finding reproductions with controls. **Not evidence for this
+backend's own fixtures.**
+
+*What this queue must run.* `test_x86_plugin.py::test_x86_kernel_runs_and_matches_numpy`
+including the new `FusedRegion(epilogue=("bias","relu"), prologue=("gelu",))`
+chain added to `_CHAINS` — those lanes skip honestly on the Mac. The fused
+scalar body now emits k-outer with a zeroed row accumulator whenever a prologue
+is present, so the prologue activation runs K times per row rather than N*K;
+the epilogue-only path is byte-for-byte unchanged. Host-compiled with clang on
+the Mac and checked against `FusedRegion.reference` across 9 region shapes
+(<=2.4e-7), which is a numerics check, not an AVX-512 one.
+
 Cross-backend sync `LINUX-BASELINE-2604-LLVM231-2026-08-29` — **this is the migrated host; AVX-512 execution unchanged.**
 The Linux baseline moves to **Ubuntu 26.04 LTS** and the compiler-backbone pin
 tightens from "LLVM/MLIR 23.x" to **23.1.x exactly**; `scripts/setup_ubuntu.sh`

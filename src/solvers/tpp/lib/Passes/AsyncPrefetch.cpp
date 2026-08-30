@@ -22,6 +22,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -37,6 +38,40 @@ static bool producesOperandOf(Operation *prev, Operation *op) {
     for (Value operand : op->getOperands())
       if (res == operand)
         return true;
+  return false;
+}
+
+// An SSA test alone cannot see a dependency carried through memory: a
+// memref.store, a linalg op on memrefs, or a collective writing a buffer has no
+// results at all, so producesOperandOf is false and the prefetch would hoist
+// above the write and stage pre-store contents. Prefetch sources are AnyType,
+// so a memref source is legal IR and this is reachable. An op whose effects
+// cannot be established counts as writing (Decision #30).
+static bool mayWriteMemoryReadBy(Operation *prev, Operation *op) {
+  // Only a prefetch that stages FROM memory can be invalidated by a write. A
+  // tensor operand is an SSA value that no store can change, so a value-semantic
+  // prefetch keeps overlapping across an opaque preceding op exactly as before.
+  bool readsMemory = false;
+  for (Value operand : op->getOperands())
+    readsMemory |= isa<BaseMemRefType>(operand.getType());
+  if (!readsMemory)
+    return false;
+
+  auto effects = dyn_cast<MemoryEffectOpInterface>(prev);
+  if (!effects)
+    return prev->getNumRegions() != 0 || !isMemoryEffectFree(prev);
+  llvm::SmallVector<MemoryEffects::EffectInstance> instances;
+  effects.getEffects(instances);
+  for (const MemoryEffects::EffectInstance &instance : instances) {
+    if (!isa<MemoryEffects::Write>(instance.getEffect()))
+      continue;
+    Value written = instance.getValue();
+    if (!written)
+      return true;  // writes something unidentified
+    for (Value operand : op->getOperands())
+      if (operand == written)
+        return true;
+  }
   return false;
 }
 
@@ -78,7 +113,8 @@ struct AsyncPrefetch
       if (wantOverlap) {
         Operation *prev = op->getPrevNode();
         if (prev && !prev->hasTrait<OpTrait::IsTerminator>() &&
-            !producesOperandOf(prev, op)) {
+            !producesOperandOf(prev, op) &&
+            !mayWriteMemoryReadBy(prev, op)) {
           op->moveBefore(prev);
           hoisted = true;
         }

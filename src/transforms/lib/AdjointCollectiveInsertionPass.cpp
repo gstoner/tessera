@@ -164,6 +164,19 @@ public:
       return signalPassFailure();
     }
 
+    // The walk below indexes this array by argument number. ArrayAttr indexes
+    // its underlying ArrayRef unchecked, so on the fleet's NDEBUG builds a
+    // short array reads adjacent attribute storage and can desynchronise
+    // cotanIndex onto an unrelated return operand.
+    if (cotanArrayAttr.size() != func.getNumArguments()) {
+      func.emitError(
+          "ADJOINT_COLLECTIVE_COTANGENT_SLOT_COUNT: "
+          "tessera.autodiff.arg_cotangents has ")
+          << cotanArrayAttr.size() << " entries but the function has "
+          << func.getNumArguments() << " arguments";
+      return signalPassFailure();
+    }
+
     // Original-result count = full result count - number of populated
     // cotangent slots in the array attr.
     int populatedCotans = 0;

@@ -92,30 +92,48 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "    float* row = out + (long)m * N;\n"
         f"{row_compute_body(region)}"
         "}\n"
+        # Every hipMalloc/hipMemcpy status is checked and turned into a non-1
+        # return code, because the runner treats rc==1 as proof the device
+        # produced `hout` and tags it as real execution. An ignored failed H2D
+        # would leave the kernel reading uninitialised device memory, and an
+        # ignored failed D2H would leave the caller's zero-filled buffer intact
+        # — either way a wrong result carrying the rocm_hip tag. A non-sticky
+        # copy error is not resurfaced by hipDeviceSynchronize, so the sync
+        # check alone cannot stand in for these.
         f'extern "C" int {_ENTRY}(const float* hA, const float* hB,\n'
         "        const float* hbias, const float* hresidual, float* hout,\n"
         "        int M, int N, int K) {\n"
         "    size_t szA=(size_t)M*K*sizeof(float), szB=(size_t)K*N*sizeof(float),\n"
-        "           szO=(size_t)M*N*sizeof(float);\n"
+        "           szO=(size_t)M*N*sizeof(float), szBias=(size_t)N*sizeof(float);\n"
         "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
-        "    if (hipMalloc(&dA,szA)!=hipSuccess) return 2;\n"
-        "    if (hipMalloc(&dB,szB)!=hipSuccess) { hipFree(dA); return 2; }\n"
-        "    if (hipMalloc(&dO,szO)!=hipSuccess) { hipFree(dA); hipFree(dB); return 2; }\n"
-        "    hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice);\n"
-        "    hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice);\n"
-        "    if (hbias) { hipMalloc(&dbias,(size_t)N*sizeof(float));\n"
-        "        hipMemcpy(dbias,hbias,(size_t)N*sizeof(float),hipMemcpyHostToDevice); }\n"
-        "    if (hresidual) { hipMalloc(&dres,szO);\n"
-        "        hipMemcpy(dres,hresidual,szO,hipMemcpyHostToDevice); }\n"
-        "    int t=64, b=(M+t-1)/t;\n"
+        "    int t=64, b=0, rc=2;\n"
+        "    if (!hA||!hB||!hout) goto cleanup;\n"
+        "    if (hipMalloc(&dA,szA)!=hipSuccess) goto cleanup;\n"
+        "    if (hipMalloc(&dB,szB)!=hipSuccess) goto cleanup;\n"
+        "    if (hipMalloc(&dO,szO)!=hipSuccess) goto cleanup;\n"
+        "    if (hbias && hipMalloc(&dbias,szBias)!=hipSuccess) goto cleanup;\n"
+        "    if (hresidual && hipMalloc(&dres,szO)!=hipSuccess) goto cleanup;\n"
+        "    rc=3;\n"
+        "    if (hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    if (hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    if (hbias && hipMemcpy(dbias,hbias,szBias,\n"
+        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    if (hresidual && hipMemcpy(dres,hresidual,szO,\n"
+        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    b=(M+t-1)/t;\n"
         f"    hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
         "        dA,dB,dbias,dres,dO,M,N,K);\n"
-        "    int ok = (hipDeviceSynchronize()==hipSuccess) ? 1 : 3;\n"
-        "    if (ok==1) hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost);\n"
-        "    hipFree(dA); hipFree(dB); hipFree(dO);\n"
+        "    if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
+        "    if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
+        "    if (hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost)!=hipSuccess) goto cleanup;\n"
+        "    rc=1;\n"
+        "cleanup:\n"
+        "    if (dA) hipFree(dA);\n"
+        "    if (dB) hipFree(dB);\n"
+        "    if (dO) hipFree(dO);\n"
         "    if (dbias) hipFree(dbias);\n"
         "    if (dres) hipFree(dres);\n"
-        "    return ok;\n"
+        "    return rc;\n"
         "}\n"
     )
 

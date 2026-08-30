@@ -250,3 +250,48 @@ def test_aliased_output_still_accumulates_real_fan_out():
 
     # d/dv sum(y + y) with y = 2v  ->  4 per element.
     np.testing.assert_allclose(ts.autodiff.grad(fan_out)(x), np.array([4.0, 4.0]))
+
+
+# ── the forward-signature cache serves every signature question ─────────────
+
+def test_kwarg_operand_promotion_does_not_reparse_signatures_per_call():
+    """`promote_operand_kwargs.has_none_default` called `inspect.signature`
+    directly, bypassing the cache two functions above it, so every taped call
+    carrying a kwarg re-parsed the forward — ~7 us on this Mac, about a third
+    of the call, repeated identically every iteration of a training loop
+    (2026-08-29 review, P2)."""
+    import importlib
+    import inspect
+
+    # `tessera.autodiff.tape` the name is the context manager, not the module.
+    tape_mod = importlib.import_module("tessera.autodiff.tape")
+
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 8))
+    B = rng.standard_normal((8, 8))
+
+    calls = []
+    real = inspect.signature
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    # `activation` makes the rule's unfilled `bias` slot the one this path
+    # asks about, which is what enters `has_none_default`.
+    with ts.autodiff.tape():
+        ops.gemm(A, B, activation="relu")       # warm every cache entry
+
+    original = tape_mod.inspect.signature
+    try:
+        tape_mod.inspect.signature = counting
+        with ts.autodiff.tape():
+            for _ in range(50):
+                ops.gemm(A, B, activation="relu")
+    finally:
+        tape_mod.inspect.signature = original
+
+    assert len(calls) == 0, (
+        f"{len(calls)} signature parses for 50 warm taped calls — the cache "
+        f"is being bypassed again"
+    )

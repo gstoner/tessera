@@ -225,6 +225,9 @@ def quantize_int4_packed(w: Any, group_size: int = 64):
 _FP4_E2M1_LUT = np.array(
     [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], np.float32)
 
+#: Legal ``scale_mode`` values for :func:`quantize_fp4_packed`.
+_FP4_SCALE_MODES = frozenset({"mx", "nv"})
+
 
 def quantize_fp4_packed(w: Any, group_size: int = 32, scale_mode: str = "mx"):
     """FP4 e2m1 packing — the MXFP4 / NVFP4 packed layout for the Apple GPU
@@ -243,6 +246,13 @@ def quantize_fp4_packed(w: Any, group_size: int = 32, scale_mode: str = "mx"):
     w = _asarray(w).astype(np.float32, copy=False)
     if w.ndim != 2:
         raise ValueError("quantize_fp4_packed expects a 2-D weight [N, K]")
+    # scale_mode selects the scale *semantics* (shared power-of-two exponent vs
+    # fp32), so it fails closed on an unrecognized value (Decision #21a) — an
+    # e8m0-decoding consumer cannot tell a silently-fp32 scale from an MX one.
+    if scale_mode not in _FP4_SCALE_MODES:
+        raise ValueError(
+            f"quantize_fp4_packed: unknown scale_mode {scale_mode!r}; "
+            f"expected one of {sorted(_FP4_SCALE_MODES)}")
     n, k = w.shape
     gs = int(group_size) if group_size and group_size > 0 else k
     ng = (k + gs - 1) // gs

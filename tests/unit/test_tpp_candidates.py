@@ -8,6 +8,8 @@ refused, and the arbiter falls back honestly to the reference.
 """
 from __future__ import annotations
 
+import ctypes
+
 import numpy as np
 import pytest
 
@@ -136,3 +138,53 @@ def test_reference_fallback():
     out, tag = C.run_arbitrated(reg, OP_TPP_STENCIL, "no_such_target", f)
     assert tag == "reference"
     assert np.allclose(out, reg.reference(f))
+
+
+# --- P2 code review 2026-08-29: declared order must be the order computed -----
+
+@pytest.mark.parametrize("order,rate", [(2, 2.0), (4, 4.0), (6, 6.0)])
+def test_declared_order_matches_observed_convergence(order, rate):
+    """``order`` selects the operator's truncation error, so the kernel that
+    answers must be the one that was asked for.  ``order >= 4`` used to route 6
+    and 8 into the fourth-order tap set, returning an O(h^4) answer under an
+    order-6 label — an error a convergence study blames on the model."""
+    if not _cpu().available():
+        pytest.skip("no C++ toolchain")
+    lib = TC._cpu_lib()
+
+    def max_error(n: int) -> float:
+        h = 2.0 * np.pi / n
+        x = np.arange(n) * h
+        field = np.ascontiguousarray(np.tile(np.sin(x), (n, 1)).astype(np.float32))
+        out = np.empty_like(field)
+        status = lib.ts_stencil_grad_cpu(
+            TC._cptr(field), TC._cptr(out),
+            n, n, 1, order, ctypes.c_float(h))
+        assert status == 0
+        return float(np.abs(out[0].astype(np.float64) - np.cos(x)).max())
+
+    # Coarse grids only: at n >= 64 the order-6 truncation error is already
+    # below float32 round-off, so a finer pair would measure noise, not order.
+    observed = np.log2(max_error(8) / max_error(16))
+    assert observed == pytest.approx(rate, abs=0.35)
+
+
+@pytest.mark.parametrize("order", [3, 10, 0, -2])
+def test_unimplemented_order_is_refused_not_silently_downgraded(order):
+    if not _cpu().available():
+        pytest.skip("no C++ toolchain")
+    lib = TC._cpu_lib()
+    field = np.zeros((8, 8), np.float32)
+    out = np.empty_like(field)
+    status = lib.ts_stencil_grad_cpu(
+        TC._cptr(field), TC._cptr(out),
+        8, 8, 1, order, ctypes.c_float(0.1))
+    assert status != 0
+
+
+def test_candidate_raises_rather_than_returning_a_wrong_order():
+    if not _cpu().available():
+        pytest.skip("no C++ toolchain")
+    region = StencilGradRegion(8, 8, axis=0, order=10)
+    with pytest.raises(TC.TesseraStencilHookError):
+        _cpu().run(region, region.probe_input(0))

@@ -137,7 +137,11 @@ def gmres_solve(
         return out
 
     rhs_norm = float(np.linalg.norm(flat_rhs))
-    threshold = tol * max(1.0, rhs_norm)
+    # Relative, not `tol * max(1, ||b||)`: the solution scales linearly with
+    # the right-hand side, so an absolute floor makes x = 0 "converged" for
+    # every ||b|| <= tol — a 100% error on a cotangent that is merely small
+    # (a late-training gradient), reported as a success.
+    threshold = tol * rhs_norm
     iterations = 0
     restarts = 0
     residual = flat_rhs - apply(x)
@@ -227,7 +231,10 @@ def cg_solve(
     r: np.ndarray = np.asarray(b - np.asarray(matvec(x), dtype=np.float64), dtype=np.float64)
     p: np.ndarray = np.array(r, dtype=np.float64, copy=True)
     rs_old: float = float(np.sum(r * r))
-    if rs_old <= tol * tol:
+    # Relative to ||b||, for the same reason as `gmres_solve`: an absolute
+    # residual floor calls x = 0 converged whenever ||b|| <= tol.
+    threshold_sq = (tol * float(np.linalg.norm(b.reshape(-1)))) ** 2
+    if rs_old <= threshold_sq:
         return x
     limit = maxiter if maxiter is not None else 10 * max(n, 1)
     for _ in range(limit):
@@ -239,7 +246,7 @@ def cg_solve(
         x = x + alpha * p
         r = r - alpha * Ap
         rs_new = float(np.vdot(r, r).real)
-        if rs_new <= tol * tol:
+        if rs_new <= threshold_sq:
             return x.reshape(shape)
         p = r + (rs_new / rs_old) * p
         rs_old = rs_new
@@ -311,7 +318,15 @@ def _partial_jacobian_matvecs(
 
     def matvec(v: np.ndarray) -> np.ndarray:
         v = np.asarray(v, dtype=np.float64).reshape(a.shape)
-        return ((_perturbed(eps * v) - _perturbed(-eps * v)) / (2 * eps)).reshape(-1)
+        # Central differencing of g(t) = F(a + t v) has truncation error
+        # (h^2/6)·D^3F[v,v,v], i.e. relative error O((h·||v||)^2) — so a fixed
+        # h degrades quadratically in ||v||, and the operator is applied to
+        # un-normalized vectors (a user tangent in `root_jvp`, the GMRES
+        # iterate). Scaling the step by ||v||_inf keeps the perturbation
+        # O(eps) whatever the direction's magnitude, which is what makes the
+        # matvec a scale-invariant linear map rather than a secant.
+        h = eps / max(1.0, float(np.max(np.abs(v))))
+        return ((_perturbed(h * v) - _perturbed(-h * v)) / (2 * h)).reshape(-1)
 
     # Jᵀ via the definition ⟨J v, r⟩ = ⟨v, Jᵀ r⟩. Evaluate one basis column at
     # a time so the general matrix-free path remains O(n) memory; callers that

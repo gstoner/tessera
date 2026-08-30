@@ -271,6 +271,39 @@ class TestRematerialize:
         # `checkpoint` is just an alias matching torch's spelling
         assert ts.autodiff.checkpoint is ts.autodiff.rematerialize
 
+    def test_remat_refuses_an_impure_fn(self):
+        """Backward differentiates the RECOMPUTED trace, so an unseeded
+        dropout mask inside a checkpointed block produced a gradient shaped by
+        a mask the forward never applied — matching no realized computation,
+        with no diagnostic (2026-08-29 review, P2)."""
+        np.random.seed(0)
+        p = ts.nn.Parameter(np.ones((2, 4)))
+
+        @ts.autodiff.rematerialize
+        def block(z):
+            mask = (np.random.rand(*np.asarray(z).shape) > 0.5).astype(np.float64)
+            return ts.ops.mul(z, mask)
+
+        with pytest.raises(ts.autodiff.TesseraAutodiffError,
+                           match="did not reproduce the forward output"):
+            with ts.autodiff.tape() as t:
+                out = block(p)
+                t.backward(out, cotangent=np.ones((2, 4)))
+
+    def test_remat_accepts_a_seeded_dropout(self):
+        """The purity check is on the realized values, so a key-functional
+        sampler — the supported way to checkpoint a dropout — still works."""
+        x = ts.nn.Parameter(np.random.randn(3, 4).astype(np.float64))
+
+        @ts.autodiff.rematerialize
+        def block(z):
+            return ts.ops.dropout(z, p=0.5, seed=1234)
+
+        with ts.autodiff.tape() as t:
+            y = block(x)
+            t.backward(ts.ops.reduce(y, op="sum"))
+        assert x.grad is not None and np.all(np.isfinite(x.grad.numpy()))
+
     def test_remat_input_cotangent_propagates(self):
         # A non-Parameter input flowing through rematerialize should still
         # contribute its cotangent to upstream tape entries.

@@ -913,7 +913,11 @@ def jvp_log_cosh_loss(primals, tangents, *, reduction="mean", **_):
     pred, target = primals
     dpred, dtarget = tangents
     err = pred - target
-    loss = err + np.log1p(np.exp(-2.0 * err)) - np.log(2.0)
+    # Same |e| form the eager loss uses: on the raw error exp(-2e) overflows to
+    # inf for e < -354.9, so the primal this rule returns would diverge from
+    # losses.log_cosh_loss on exactly the inputs the eager path was fixed for.
+    # The tangent is odd in e and stays on the signed error.
+    loss = np.abs(err) + np.log1p(np.exp(-2.0 * np.abs(err))) - np.log(2.0)
     return _reduce_loss(loss, np.tanh(err) * (dpred - dtarget), reduction)
 
 
@@ -1271,16 +1275,30 @@ def jvp_ebm_inner_step(primals, tangents, *, eta, noise_scale=0.0, **_):
 
 
 @_jvp("cross_entropy_loss")
-def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
+def jvp_cross_entropy_loss(
+    primals,
+    tangents,
+    *,
+    reduction="mean",
+    axis=-1,
+    ignore_index=-100,
+    label_smoothing=0.0,
+    **_,
+):
     from tessera import losses as ts_losses
 
     logits, targets = primals
     dlogits = tangents[0]
-    primal = ts_losses.cross_entropy_loss(logits, targets, reduction=reduction)
+    # This rule differentiates by central-differencing the eager loss, so the
+    # eager calls must receive every kwarg that changes what that loss computes
+    # — dropping them differentiates a different objective.
+    kw = dict(reduction=reduction, axis=axis, ignore_index=ignore_index,
+              label_smoothing=label_smoothing)
+    primal = ts_losses.cross_entropy_loss(logits, targets, **kw)
     eps = 1e-6
     tangent = (
-        ts_losses.cross_entropy_loss(logits + eps * dlogits, targets, reduction=reduction)
-        - ts_losses.cross_entropy_loss(logits - eps * dlogits, targets, reduction=reduction)
+        ts_losses.cross_entropy_loss(logits + eps * dlogits, targets, **kw)
+        - ts_losses.cross_entropy_loss(logits - eps * dlogits, targets, **kw)
     ) / (2.0 * eps)
     return primal, tangent
 

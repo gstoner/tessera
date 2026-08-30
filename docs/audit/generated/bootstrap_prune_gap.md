@@ -24,6 +24,10 @@ the bootstrap row can go.
 | Backends with a bootstrap module | 4 |
 | `package_*` functions total | 49 |
 | — **bootstrap** (re-enter Graph IR; prune target) | 34 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 24 |
+|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 1 |
+|   ·  of the bootstrap, both | 1 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 8 |
 | — compiled-route packagers (consume a lowered artifact) | 15 |
 | Lines in those modules | 8738 |
 | Classified families | 24 |
@@ -94,6 +98,17 @@ covered because a same-named family is compiled.
 | `rocm_gfx1151` | `package_paged_kv_read` |
 
 ## How to read a closing gap
+
+**Measured, and it redirects the work:** the bootstrap surface is
+overwhelmingly *IR-constructing*, not delegating. Most packagers build
+Tile IR in Python and then compile it through `tessera-opt`, so the
+MLIR pipeline already runs from Tile onward and what bypasses it is
+Graph → Schedule → Tile. Those retire by **absorption**, and there is
+no fast path in them to preserve. The genuine delegation surface —
+the one the Target IR boundary exists for — is elsewhere
+(`ptx_emit.py`, `emit/nvidia_cuda.py`, `runtime.py`). A plan that
+treats the whole bootstrap surface as fast paths to re-express scopes
+the wrong work; this table exists partly to stop that.
 
 A family leaves this table one of two ways, and only these two:
 

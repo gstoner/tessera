@@ -11,9 +11,24 @@ last_updated: 2026-08-29
 ## `NVIDIA-DELEGATE-CONTRACT-2026-08-30` — the fast-path boundary is real; NVIDIA goes first
 
 **Enabling step for the bootstrap prune, and it had to land before any
-deletion.** The 19 NVIDIA bootstrap packagers contain legitimate fast paths —
-vendor library entries, hand-tuned kernels, inline PTX. Pruning first would
-delete capability; the boundary they land on has to exist first. NVIDIA was
+deletion.**
+
+*Corrected 2026-08-30, by measuring rather than assuming.* This section first
+said "the 19 NVIDIA bootstrap packagers contain legitimate fast paths — vendor
+library entries, hand-tuned kernels, inline PTX". **They contain none.**
+`nvidia_native.py` has zero references to NVRTC, cuBLAS/cuDNN/CUTLASS, any
+`.so`, or raw device source; 13 of its 19 bootstrap packagers construct Tile
+IR and compile it through `tessera-opt`. NVIDIA's real delegation surface is
+`ptx_emit.py`, `emit/nvidia_cuda.py` and `runtime.py` — different files.
+
+Across all four backends the same holds: **24 of 34 bootstrap packagers are
+IR-constructing, 1 delegates** (`bootstrap_prune_gap.md`). So the prune is
+overwhelmingly an *absorption* job — moving Graph → Schedule → Tile into the
+compiled route — not a delegation-migration job. The boundary below was still
+the right thing to land first, but for the delegation surface that actually
+exists, not for these packagers.
+
+NVIDIA was
 chosen over ROCm because it has both the largest gap (19 of 34 bootstrap
 packagers) and **working profiling tools**, which matters more than gap size:
 Decision #28's arbiter is *measured*, so a delegation boundary on a target

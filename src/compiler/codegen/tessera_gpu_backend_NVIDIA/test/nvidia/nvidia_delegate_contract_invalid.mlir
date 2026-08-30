@@ -1,4 +1,9 @@
-// RUN: not %tnv --split-input-file --verify-diagnostics %s 2>&1 | FileCheck %s
+// RUN: %tnv --split-input-file --verify-diagnostics %s
+//
+// `--verify-diagnostics` IS the check: it requires every `expected-error`
+// to be produced AND fails on any diagnostic that was not expected, which
+// is stricter than grepping stderr. It exits 0 on success, so this RUN line
+// must not be wrapped in `not`.
 //
 // The delegation contract must REJECT, or it is decoration.
 //
@@ -17,7 +22,6 @@ func.func @empty_callee(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: requires a non-empty `callee`
 
 // -----
 
@@ -31,7 +35,6 @@ func.func @bounded_without_a_bound(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: requires a `tolerance` attribute
 
 // -----
 
@@ -45,7 +48,6 @@ func.func @exact_claim_carrying_a_tolerance(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: must not carry a `tolerance`
 
 // -----
 
@@ -58,7 +60,6 @@ func.func @non_positive_tolerance(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: must be finite and greater than zero
 
 // -----
 
@@ -75,7 +76,6 @@ func.func @unknown_binding(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: attribute 'binding' failed to satisfy constraint
 
 // -----
 
@@ -89,7 +89,6 @@ func.func @inline_ptx_without_constraints(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: requires a non-empty `constraints` string
 
 // -----
 
@@ -102,4 +101,3 @@ func.func @empty_inline_ptx(%a: f32) -> f32 {
       : (f32) -> f32
   return %r : f32
 }
-// CHECK: requires non-empty `ptx`

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import tessera as ts
+from tessera import optim
 from tessera.state import tree_flatten, tree_unflatten
 
 
@@ -303,3 +304,74 @@ def test_adafactor_vjp_rejects_the_nominal_decay():
         np.max(np.abs(uncorrected - corrected) / (np.abs(corrected) + 1e-12))
     )
     assert relative > 0.05, relative
+
+
+# --- PR #644 review: the two Adafactor ABI/representation seams ---------------
+
+def test_flat_adafactor_without_step_preserves_the_moments_it_was_given():
+    """`adafactor_decay(b2, 1)` is exactly 0 -- right for a genuine first step,
+    where v_1 = g^2. Defaulting an ABSENT step to 1 would therefore make every
+    call of a stateful caller that never passes one discard the moments it just
+    supplied, turning a stateful optimizer stateless with no diagnostic."""
+    import tessera as ts
+
+    assert optim.adafactor_decay(0.999, 1) == 0.0
+    param = np.ones((4, 4), np.float32)
+    grad = np.full((4, 4), 0.5, np.float32)
+    carried = np.full((4, 4), 9.0, np.float32)
+
+    no_step = np.asarray(ts.ops.adafactor(param, grad, carried)[1])
+    first_step = np.asarray(ts.ops.adafactor(param, grad, carried, step=1)[1])
+
+    # Omitting step keeps the carried EMA (legacy, uncorrected) ...
+    assert float(no_step.ravel()[0]) > 8.0
+    # ... while an explicit step 1 correctly restarts from g^2.
+    assert float(first_step.ravel()[0]) == pytest.approx(0.25)
+
+
+def test_unmarked_adafactor_state_warns_rather_than_being_misread():
+    """`state["v"]` changed meaning: it now carries the debiased estimate, not
+    the raw EMA. The two cannot be told apart from the values, so an unmarked
+    state at step > 0 is flagged. It is deliberately NOT rescaled: auto-
+    migrating would silently rewrite every hand-built state dict, which is a
+    worse failure than the one it fixes."""
+    params = {"w": np.ones((4, 4), np.float32)}
+    grads = {"w": np.full((4, 4), 0.5, np.float32)}
+    _, marked = optim.adafactor(params, grads)
+    assert marked["v_representation"] == optim._ADAFACTOR_V_REPRESENTATION
+
+    _, marked_2 = optim.adafactor(params, grads, marked)
+    unmarked = {k: v for k, v in marked.items() if k != "v_representation"}
+    with pytest.warns(RuntimeWarning, match="v_representation"):
+        _, from_unmarked = optim.adafactor(params, grads, unmarked)
+    # Warned, but the values are untouched -- identical to the marked run.
+    np.testing.assert_array_equal(
+        np.asarray(from_unmarked["v"]["w"]["row"]),
+        np.asarray(marked_2["v"]["w"]["row"]),
+    )
+
+
+def test_explicit_migration_recovers_a_legacy_checkpoint_and_is_idempotent():
+    params = {"w": np.ones((4, 4), np.float32)}
+    grads = {"w": np.full((4, 4), 0.5, np.float32)}
+    _, native_1 = optim.adafactor(params, grads)
+    _, native_2 = optim.adafactor(params, grads, native_1)
+
+    # Forge the pre-correction representation: same step, v scaled back by the
+    # bias factor the old code left in.
+    bias = 1.0 - 0.999 ** int(native_1["step"])
+    legacy = {k: v for k, v in native_1.items() if k != "v_representation"}
+    legacy["v"] = optim._adafactor_tree_map_unary(
+        lambda slot: optim._adafactor_scale_state(slot, bias, state_dtype="fp32"),
+        native_1["v"],
+    )
+
+    migrated = optim.migrate_adafactor_state(legacy, 0.999)
+    _, resumed = optim.adafactor(params, grads, migrated)
+    np.testing.assert_allclose(
+        np.asarray(resumed["v"]["w"]["row"]),
+        np.asarray(native_2["v"]["w"]["row"]),
+        rtol=1e-5,
+    )
+    # Migrating an already-marked state is a no-op.
+    assert optim.migrate_adafactor_state(migrated, 0.999) is migrated

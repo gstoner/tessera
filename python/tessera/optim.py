@@ -12,6 +12,8 @@ from dataclasses import dataclass
 import math
 from typing import Any, Callable
 
+import warnings
+
 import numpy as np
 
 
@@ -351,6 +353,65 @@ def adam(
     )
 
 
+_ADAFACTOR_V_REPRESENTATION = "debiased_v1"
+
+
+def migrate_adafactor_state(
+    state: dict[str, Any], beta2: float, *, state_dtype: str = "fp32"
+) -> dict[str, Any]:
+    """Convert a pre-bias-correction Adafactor state to the debiased form.
+
+    Call this ONCE on a checkpoint written before `adafactor_decay` existed.
+    Such a state holds the raw EMA ``v_raw = (1 - b2**t) * v_debiased``, so it
+    is divided by that factor -- exactly inverting the bias it was written
+    with. A state already carrying the marker is returned unchanged.
+    """
+    if state.get("v_representation") == _ADAFACTOR_V_REPRESENTATION:
+        return state
+    step = int(state.get("step", 0))
+    migrated = dict(state)
+    migrated["v_representation"] = _ADAFACTOR_V_REPRESENTATION
+    bias = 1.0 - float(beta2) ** step
+    if step <= 0 or bias <= 0.0:
+        return migrated
+    migrated["v"] = _adafactor_tree_map_unary(
+        lambda s: _adafactor_scale_state(s, 1.0 / bias, state_dtype=state_dtype),
+        state["v"],
+    )
+    return migrated
+
+
+def _warn_if_adafactor_state_unmarked(state: dict[str, Any]) -> None:
+    """Flag a state whose second-moment representation is ambiguous.
+
+    ``state["v"]`` carries the DEBIASED estimate since the bias correction
+    landed; before that it carried the raw EMA. A state without the marker
+    could be either, and the two cannot be told apart from the values.
+
+    This deliberately does NOT rescale. Auto-migrating on a missing marker
+    would silently rewrite every hand-built state dict -- which is a worse
+    failure than the one it fixes, since a test or caller that assembles its
+    own state has no legacy bias to remove. Callers restoring a genuine
+    pre-correction checkpoint should call `migrate_adafactor_state` once.
+    """
+    if state.get("v_representation") == _ADAFACTOR_V_REPRESENTATION:
+        return
+    if int(state.get("step", 0)) <= 0:
+        return
+    warnings.warn(
+        "Adafactor state carries no 'v_representation' marker at step "
+        f"{int(state.get('step', 0))}. Since the bias correction landed, "
+        "state['v'] holds the DEBIASED second moment; a checkpoint written "
+        "before that holds the raw EMA and will be read as if it were already "
+        "debiased, erasing most of its history. If this state came from an "
+        "older checkpoint, pass it through optim.migrate_adafactor_state "
+        "once; if it was built by hand, set "
+        "state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def adafactor_decay(beta2: float, step: int) -> float:
     """Bias-corrected second-moment decay for the Adafactor update at ``step``.
 
@@ -418,7 +479,20 @@ def adafactor(
     """
     base_params = _master_tree(params, state, master_dtype)
     if state is None:
-        state = {"v": tree_map(lambda p: _adafactor_zero_state(_asarray(p), state_dtype=state_dtype), params), "step": 0}
+        state = {
+            "v": tree_map(lambda p: _adafactor_zero_state(_asarray(p), state_dtype=state_dtype), params),
+            "step": 0,
+            "v_representation": _ADAFACTOR_V_REPRESENTATION,
+        }
+    # `v` changed meaning when the bias correction landed: the step-dependent
+    # decay makes the recursion carry the DEBIASED estimate directly, where it
+    # previously carried the raw EMA. A checkpoint written before that holds
+    # the raw form, and reading it as debiased silently erases most of the
+    # accumulated history -- at step 2 with the default beta2 the effective
+    # decay is ~0.5, so a stored 0.001*g1^2 is treated as the whole prior
+    # estimate. The schema had no marker to tell the two apart, so it gets one,
+    # and a state without it is migrated rather than misread.
+    _warn_if_adafactor_state_unmarked(state)
     # The tracked step is finally used: without it the zero-initialized second
     # moment is biased low and the first updates are inflated by
     # 1/sqrt(1 - beta2**step).  See `adafactor_decay`.
@@ -435,7 +509,15 @@ def adafactor(
     )
     new_master = tree_map2(lambda p, u: _compute_array(p, compute_dtype) - float(lr) * _compute_array(u, compute_dtype), base_params, updates)
     new_params = tree_map2(lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype), new_master, params)
-    return new_params, _attach_master_state({"v": new_v, "step": int(state["step"]) + 1}, new_master, master_dtype)
+    return new_params, _attach_master_state(
+        {
+            "v": new_v,
+            "step": int(state["step"]) + 1,
+            "v_representation": _ADAFACTOR_V_REPRESENTATION,
+        },
+        new_master,
+        master_dtype,
+    )
 
 
 def _is_adafactor_slot(x: Any) -> bool:
@@ -462,6 +544,33 @@ def _adafactor_zero_state(arr: np.ndarray, *, state_dtype: str = "fp32"):
             "factored": True,
         }
     return {"v": np.zeros_like(arr, dtype=_np_dtype(state_dtype)), "factored": False}
+
+
+def _adafactor_tree_map_unary(fn: Callable[[Any], Any], slot_tree: Tree) -> Tree:
+    if _is_adafactor_slot(slot_tree):
+        return fn(slot_tree)
+    if isinstance(slot_tree, dict):
+        return {k: _adafactor_tree_map_unary(fn, v) for k, v in slot_tree.items()}
+    if isinstance(slot_tree, tuple):
+        return tuple(_adafactor_tree_map_unary(fn, s) for s in slot_tree)
+    if isinstance(slot_tree, list):
+        return [_adafactor_tree_map_unary(fn, s) for s in slot_tree]
+    return fn(slot_tree)
+
+
+def _adafactor_scale_state(state, scale: float, *, state_dtype: str = "fp32"):
+    """Scale a slot's second moments, preserving the factored/full shape."""
+    dtype = _np_dtype(state_dtype)
+    if state["factored"]:
+        return {
+            "row": (np.asarray(state["row"], dtype=dtype) * dtype(scale)).astype(dtype, copy=False),
+            "col": (np.asarray(state["col"], dtype=dtype) * dtype(scale)).astype(dtype, copy=False),
+            "factored": True,
+        }
+    return {
+        "v": (np.asarray(state["v"], dtype=dtype) * dtype(scale)).astype(dtype, copy=False),
+        "factored": False,
+    }
 
 
 def _adafactor_update_state(state, grad: np.ndarray, beta2: float, *, state_dtype: str = "fp32"):

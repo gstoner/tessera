@@ -7,6 +7,30 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
+policy changed; per-backend outcome below.**
+`optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent
+(`b2_t = b2*(1 - b2^(t-1))/(1 - b2^t)`), removing an early-step update
+inflation of 1/sqrt(1 - b2^t) — 31.6x at step 1, 10.0x at step 10, 1.26x at
+step 1000 for the default beta2. The correction is applied HOST-SIDE as a
+scalar decay, so **no kernel ABI moves**: every physical kernel already takes
+`beta2` as a scalar and receives the effective value instead of the nominal
+one. The flat op gained an optional `step` kwarg matching the `adam`/`adamw`
+ABI beside it.
+
+Two contract details a backend owner needs to know. `state["v"]` now carries
+the DEBIASED estimate rather than the raw EMA, so the state dict grew a
+`v_representation` marker and a state without one is migrated on load rather
+than misread. And an absent `step` is NOT treated as step 1 — `decay(b2, 1)`
+is exactly 0, so defaulting would have made a stateful caller that never
+passes one discard its own moments; such a caller keeps the legacy
+uncorrected decay.
+
+*NVIDIA outcome: follow-up required.* `sm120_adafactor_*` receives the
+effective decay through the existing scalar; `tests/device/nvidia/test_optimizer_reverse.py`
+was migrated to pass `step`. Not executed on sm_120 in this batch — an exact-device
+run of the optimizer lanes is owed.
+
 Cross-backend sync `P3-DEVICE-VERIFIED-2026-08-30` — **the two NVIDIA rows
 owed by `P3-SOURCE-ONLY` are now measured, and one of them was a regression.**
 

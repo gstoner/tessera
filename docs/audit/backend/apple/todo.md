@@ -7,6 +7,32 @@ last_updated: 2026-08-29
 ---
 
 # Apple compiler, exact-device, and performance plan
+Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
+policy changed; per-backend outcome below.**
+`optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent
+(`b2_t = b2*(1 - b2^(t-1))/(1 - b2^t)`), removing an early-step update
+inflation of 1/sqrt(1 - b2^t) — 31.6x at step 1, 10.0x at step 10, 1.26x at
+step 1000 for the default beta2. The correction is applied HOST-SIDE as a
+scalar decay, so **no kernel ABI moves**: every physical kernel already takes
+`beta2` as a scalar and receives the effective value instead of the nominal
+one. The flat op gained an optional `step` kwarg matching the `adam`/`adamw`
+ABI beside it.
+
+Two contract details a backend owner needs to know. `state["v"]` now carries
+the DEBIASED estimate rather than the raw EMA, so the state dict grew a
+`v_representation` marker and a state without one is migrated on load rather
+than misread. And an absent `step` is NOT treated as step 1 — `decay(b2, 1)`
+is exactly 0, so defaulting would have made a stateful caller that never
+passes one discard its own moments; such a caller keeps the legacy
+uncorrected decay.
+
+*Apple outcome: not applicable.* The Apple backend exposes no Adafactor
+kernel — neither the Accelerate CPU lane nor the MSL/MPS GPU lane registers
+one, so there is no Apple code path this policy reaches. The reference
+`optim.adafactor` runs as host numpy here like any other pure-Python lane and
+is covered by `tests/unit/test_s10_optim.py`; nothing Apple-specific to
+validate.
+
 Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
 passes changed; only the Mac's fixture set could be run.**
 The P2 code-review batch touched passes every backend lowers through:

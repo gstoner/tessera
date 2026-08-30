@@ -1150,10 +1150,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         # public tree optimizer and its dictionary state remain unchanged.
         #
         # ``step`` follows the flat ``adam``/``adamw`` ABI above: a 1-based
-        # kwarg defaulting to 1, because the flat form carries no state
-        # dictionary to read it from.  It selects the bias-corrected
-        # second-moment decay (`optim.adafactor_decay`); without it the first
-        # updates are inflated by 1/sqrt(1 - beta2**step).
+        # kwarg, because the flat form carries no state dictionary to read it
+        # from.  It selects the bias-corrected second-moment decay
+        # (`optim.adafactor_decay`); without it the first updates are inflated
+        # by 1/sqrt(1 - beta2**step).
+        #
+        # ABSENT is not the same as 1.  adafactor_decay(b2, 1) is exactly 0 --
+        # correct for a genuine first step, where v_1 = g^2 -- so defaulting a
+        # missing ``step`` to 1 would make every call of a stateful caller that
+        # never passes one discard the moments it just supplied, turning a
+        # stateful optimizer into a stateless one with no diagnostic. Such a
+        # caller keeps the legacy uncorrected decay instead: no bias
+        # correction, exactly as before this ABI grew a step, and strictly
+        # better than silently resetting its state.
         if isinstance(state, np.ndarray):
             from . import optim as _optim
 
@@ -1163,10 +1172,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             if param.shape != grad.shape:
                 raise ValueError("flat Adafactor parameter and gradient must match")
             lr = np.float32(float(kwargs.get("lr", 1.0e-3)))
+            nominal_beta2 = float(kwargs.get("beta2", 0.999))
             beta2 = np.float32(
-                _optim.adafactor_decay(
-                    float(kwargs.get("beta2", 0.999)), int(kwargs.get("step", 1))
-                )
+                _optim.adafactor_decay(nominal_beta2, int(kwargs["step"]))
+                if "step" in kwargs
+                else nominal_beta2
             )
             eps = np.float32(float(kwargs.get("eps", 1.0e-30)))
             grad2 = grad * grad

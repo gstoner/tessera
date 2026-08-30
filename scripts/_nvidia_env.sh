@@ -31,15 +31,19 @@
 # detect by capability, respect anything already exported, and be a SILENT
 # NO-OP on a host with no NVIDIA GPU so Mac/ROCm boxes still skip honestly
 # (Decision #26) instead of having a device fabricated for them.
+#
+# Every expansion is nounset-safe (${VAR:-}). A release or CI script sourcing
+# this under `set -u` would otherwise abort on the first unset CUDA_HOME or
+# LD_LIBRARY_PATH instead of detecting the toolkit.
 
 # Driver shim (WSL2 puts nvidia-smi and libcuda.so here; native Linux does not
 # have this directory at all, and does not need it).
 if [ -d /usr/lib/wsl/lib ]; then
-  case ":${PATH}:" in
+  case ":${PATH:-}:" in
     *":/usr/lib/wsl/lib:"*) ;;
     *) PATH="/usr/lib/wsl/lib:${PATH}"; export PATH ;;
   esac
-  case ":${LD_LIBRARY_PATH}:" in
+  case ":${LD_LIBRARY_PATH:-}:" in
     *":/usr/lib/wsl/lib:"*) ;;
     *) LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
        export LD_LIBRARY_PATH ;;
@@ -48,7 +52,7 @@ fi
 
 # CUDA toolkit. An already-exported CUDA_HOME wins; otherwise prefer the
 # versioned symlink over a bare guess.
-if [ -z "${CUDA_HOME}" ]; then
+if [ -z "${CUDA_HOME:-}" ]; then
   for _tessera_cuda_root in /usr/local/cuda /opt/cuda; do
     if [ -x "${_tessera_cuda_root}/bin/nvcc" ]; then
       CUDA_HOME="${_tessera_cuda_root}"
@@ -58,13 +62,13 @@ if [ -z "${CUDA_HOME}" ]; then
   done
   unset _tessera_cuda_root
 fi
-if [ -n "${CUDA_HOME}" ] && [ -x "${CUDA_HOME}/bin/nvcc" ]; then
-  case ":${PATH}:" in
+if [ -n "${CUDA_HOME:-}" ] && [ -x "${CUDA_HOME}/bin/nvcc" ]; then
+  case ":${PATH:-}:" in
     *":${CUDA_HOME}/bin:"*) ;;
     *) PATH="${CUDA_HOME}/bin:${PATH}"; export PATH ;;
   esac
   if [ -d "${CUDA_HOME}/lib64" ]; then
-    case ":${LD_LIBRARY_PATH}:" in
+    case ":${LD_LIBRARY_PATH:-}:" in
       *":${CUDA_HOME}/lib64:"*) ;;
       *) LD_LIBRARY_PATH="${CUDA_HOME}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
          export LD_LIBRARY_PATH ;;

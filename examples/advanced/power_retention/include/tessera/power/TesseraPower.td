@@ -1,10 +1,10 @@
 include "mlir/IR/OpBase.td"
-// MemoryEffectOpInterface is used below; OpBase.td does not define it, so
-// without this include tablegen fails with "Variable not defined". Reachable
-// only under -DTESSERA_ENABLE_CUDA=ON, which is the whole reason it survived.
+// Pure is defined here, not in OpBase.td. Without this include tablegen fails
+// with "Variable not defined" — reachable only under -DTESSERA_ENABLE_CUDA=ON,
+// which is the whole reason it survived.
 include "mlir/Interfaces/SideEffectInterfaces.td"
 def Power_Dialect : Dialect { let name = "power"; let cppNamespace = "::tessera::power"; }
-def Power_AttnOp : Op<Power_Dialect, "attn", [DeclareOpInterfaceMethods<MemoryEffectOpInterface>]> {
+def Power_AttnOp : Op<Power_Dialect, "attn", [Pure]> {
   let summary = "Symmetric power attention (linear-cost)";
   let arguments = (ins AnyTensor:$q, AnyTensor:$k, AnyTensor:$v,
                         I64Attr:$state,
@@ -15,7 +15,7 @@ def Power_AttnOp : Op<Power_Dialect, "attn", [DeclareOpInterfaceMethods<MemoryEf
 }
 
 def Power_RetentionOp : Op<Power_Dialect, "retention",
-    [DeclareOpInterfaceMethods<MemoryEffectOpInterface>]> {
+    [Pure]> {
   let summary = "Power Retention (linear-cost; training/inference variants)";
   let arguments = (ins AnyTensor:$q, AnyTensor:$k, AnyTensor:$v,
                         Optional<AnyTensor>:$log_g,

@@ -15,6 +15,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = REPO_ROOT / "python"
 CUDA_BIN_DIRS = (Path("/usr/local/cuda/bin"), Path("/usr/local/cuda-13.3/bin"))
+# WSL2 ships the NVIDIA driver shim (nvidia-smi, libcuda.so) here rather than in
+# a system bin directory, and only an interactive shell puts it on PATH.
+NVIDIA_DRIVER_DIRS = (Path("/usr/lib/wsl/lib"),)
 
 
 def is_wsl() -> bool:
@@ -39,6 +42,42 @@ def ensure_cuda_bin_on_path() -> Path | None:
                 os.environ["PATH"] = os.pathsep.join([str(root), *filter(None, entries)])
             return root
     return None
+
+
+def ensure_nvidia_driver_on_path() -> Path | None:
+    """Make the NVIDIA driver shim visible to this process.
+
+    Under WSL2 ``nvidia-smi`` lives in ``/usr/lib/wsl/lib``, which the
+    interactive ``.bashrc`` adds and a non-interactive shell -- an
+    ``ssh <host> <cmd>``, a CI step, a bare ``pytest`` -- never sees. Because
+    the device gate probes for ``nvidia-smi`` by name, its absence from PATH
+    made every NVIDIA device test SKIP while the run still exited 0: measured
+    2026-08-30 on The-Super-Bear as *454 passed, 395 skipped*, with a healthy
+    RTX 5070, /dev/dxg and CUDA 13.3 present the whole time. Reporting that as
+    sm_120 evidence would assert a hardware result that never ran, so the gate
+    repairs its own PATH rather than trusting the caller to remember.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    for root in NVIDIA_DRIVER_DIRS:
+        if (root / "nvidia-smi").is_file():
+            if str(root) not in entries:
+                os.environ["PATH"] = os.pathsep.join([str(root), *filter(None, entries)])
+            return root
+    return None
+
+
+def nvidia_gpu_is_plausibly_present() -> bool:
+    """Whether this host looks like it has an NVIDIA GPU, ignoring PATH.
+
+    Used to tell "no GPU here, skip honestly" apart from "a GPU is sitting
+    right there and the environment is hiding it", which is a misconfiguration
+    worth shouting about rather than skipping past.
+    """
+    if any((root / "nvidia-smi").is_file() for root in NVIDIA_DRIVER_DIRS):
+        return True
+    return any(
+        Path(node).exists() for node in ("/dev/nvidiactl", "/dev/nvidia0", "/dev/dxg")
+    )
 
 
 def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:

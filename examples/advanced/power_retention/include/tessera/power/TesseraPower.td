@@ -1,4 +1,8 @@
 include "mlir/IR/OpBase.td"
+// MemoryEffectOpInterface is used below; OpBase.td does not define it, so
+// without this include tablegen fails with "Variable not defined". Reachable
+// only under -DTESSERA_ENABLE_CUDA=ON, which is the whole reason it survived.
+include "mlir/Interfaces/SideEffectInterfaces.td"
 def Power_Dialect : Dialect { let name = "power"; let cppNamespace = "::tessera::power"; }
 def Power_AttnOp : Op<Power_Dialect, "attn", [DeclareOpInterfaceMethods<MemoryEffectOpInterface>]> {
   let summary = "Symmetric power attention (linear-cost)";

@@ -356,6 +356,32 @@ def _cluster_indices(values: np.ndarray, *, tol: float) -> list[tuple[int, ...]]
     return [tuple(sorted(c)) for c in clusters if len(c) > 1]
 
 
+def _rows_needing_inspection(values: np.ndarray, tol: float) -> np.ndarray:
+    """Which rows of a ``(batch, k)`` spectrum can possibly flag.
+
+    Both :func:`_cluster_indices` and :func:`_warn_if_thin_gap` reduce to the
+    same per-row quantity: the smallest gap between adjacent sorted values,
+    relative to that row's own ``max |value|``. A row whose minimum relative
+    gap exceeds both the existence tolerance and the conditioning threshold
+    therefore holds no cluster and raises no warning, so nothing in the
+    per-element loop can fire for it.
+
+    This is an exact screen, not a heuristic: rows that flag still go through
+    the unchanged per-element cluster/diagnostic path. Anything the screen
+    cannot decide (a zero or non-finite scale) flags, so it errs toward doing
+    the work rather than skipping it.
+    """
+    n, k = values.shape
+    if k < 2:
+        return np.zeros(n, dtype=bool)
+    screen = max(tol, conditioning_tolerance(np.float64))
+    scale = np.max(np.abs(values), axis=1)
+    gaps = np.min(np.diff(np.sort(values, axis=1), axis=1), axis=1)
+    positive = scale > 0.0
+    rel = np.where(positive, gaps / np.where(positive, scale, 1.0), 0.0)
+    return rel <= screen
+
+
 def eigenvalue_clusters(w: np.ndarray, *, tol: float) -> list[tuple[int, ...]]:
     """Degenerate eigenvalue groups of a symmetric spectrum.
 
@@ -416,7 +442,10 @@ def eigh_coupling(
     ]
     admit_tol = admissibility_tolerance(np.float64)
     masks = np.zeros((flat_w.shape[0], k, k), dtype=bool)
-    for b in range(flat_w.shape[0]):
+    # One vectorized gap screen, then the per-element diagnostic path only for
+    # the rows it cannot clear — the common no-degeneracy batch never pays the
+    # interpreter cost of a cluster walk per element.
+    for b in np.flatnonzero(_rows_needing_inspection(flat_w, tol)).tolist():
         row = flat_w[b]
         clusters = eigenvalue_clusters(row, tol=tol)
         if not clusters:
@@ -653,7 +682,9 @@ def svd_coupling(
     ]
     admit_tol = admissibility_tolerance(np.float64)
     masks = np.zeros((flat_s.shape[0], k, k), dtype=bool)
-    for b in range(flat_s.shape[0]):
+    # Screened as in `eigh_coupling`, on `s^2` — the quantity both the cluster
+    # grouping and the conditioning warning actually work on.
+    for b in np.flatnonzero(_rows_needing_inspection(flat_s ** 2, tol)).tolist():
         row = flat_s[b]
         clusters = singular_value_clusters(row, tol=tol)
         if not clusters:
@@ -760,18 +791,36 @@ def check_full_rank(
     if tol is None:
         tol = tol_override
     s_arr = np.asarray(s, dtype=np.float64)
+    if s_arr.ndim == 0:
+        s_arr = s_arr.reshape(1)
     if tol is None:
         tol = existence_tolerance(s_arr.shape[-1], np.float64)
-    scale = float(np.max(np.abs(s_arr))) if s_arr.size else 0.0
-    smallest = float(np.min(np.abs(s_arr))) if s_arr.size else 0.0
-    rel = smallest / scale if scale > 0.0 else 0.0
+    # Judge each batch element on its own spectrum, as `check_factor_rank` and
+    # `svd_coupling` do. A global min/max over the batch compares magnitudes
+    # across unrelated elements, so an element that is perfectly full rank at
+    # its own scale is refused for coexisting with a larger-scaled one. The
+    # global ratio lower-bounds every per-row ratio, so per-row judging only
+    # removes spurious refusals — it can never admit a rank-deficient element.
+    if s_arr.size:
+        flat = np.abs(s_arr).reshape(-1, s_arr.shape[-1])
+        maxes = flat.max(axis=1)
+        mins = flat.min(axis=1)
+        ratios = np.where(maxes > 0.0, mins / np.where(maxes > 0.0, maxes, 1.0), 0.0)
+        worst = int(np.argmin(ratios))
+        rel = float(ratios[worst])
+        smallest = float(mins[worst])
+        batch = _batch_label(s_arr, worst)
+    else:
+        rel = smallest = 0.0
+        batch = ""
     if rel > tol:
         return True
     if name == GENERALIZED:
         return True
+    where = f" at batch element {batch}" if batch else ""
     raise TesseraDegeneracyError(
         f"{DEGENERACY_DIAGNOSTIC_CODE}: {op} {mode} is not defined at this "
-        f"input — {what} is rank deficient (smallest singular value "
+        f"input — {what} is rank deficient{where} (smallest singular value "
         f"{smallest:.6e}, relative {rel:.3e} <= tol {tol:.3e}). The function is "
         f"differentiable only at full rank; here its subdifferential is a SET, "
         f"and the singular vectors spanning the null space are arbitrary, so "

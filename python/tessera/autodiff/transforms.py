@@ -21,7 +21,7 @@ appropriate tensor shape for higher-rank inputs.
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import numpy as np
 
@@ -304,20 +304,21 @@ def jacfwd(
 
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
-        # Sample run to get output shape.
-        sample = np.asarray(fn(*args, **kwargs))
-        out_shape = sample.shape
+        # The output shape is learned from the first jvp's primal, not from a
+        # separate sample run: every jvp already evaluates the same primal and
+        # returns it, so a leading `fn(*args)` would be an extra full forward
+        # pass whose result is discarded — (n+1)/n cost for an n-element input.
+        out_shape: Optional[tuple[int, ...]] = None
 
-        # Pre-allocate Jacobian buffers, one per diff'd arg.
-        jacobians = []
-        for i in argnums_tuple:
-            ai = np.asarray(args[i])
-            jac = np.zeros(out_shape + ai.shape, dtype=np.float64)
-            jacobians.append((i, jac, ai))
+        # Jacobian buffers are allocated on the first jvp of each arg, once
+        # `out_shape` is known. `[i, buffer, ai]` — buffer starts unallocated.
+        jacobians: list[list] = [[i, None, np.asarray(args[i])]
+                                 for i in argnums_tuple]
 
         # For each diff'd arg, sweep one-hot tangents over its input
         # space and accumulate columns of the Jacobian.
-        for slot_idx, (arg_i, jac_buf, ai) in enumerate(jacobians):
+        for entry in jacobians:
+            arg_i, _, ai = entry
             in_size = ai.size
             for k in range(in_size):
                 tangent = np.zeros_like(ai, dtype=np.float64)
@@ -327,11 +328,23 @@ def jacfwd(
                     new_args = list(args)
                     new_args[_arg_i] = x_at_i
                     return fn(*new_args, **kwargs)
-                _, dy = jvp(fn_of_one, ai, tangent)
+                y, dy = jvp(fn_of_one, ai, tangent)
+                if out_shape is None:
+                    out_shape = np.asarray(y).shape
+                if entry[1] is None:
+                    entry[1] = np.zeros(out_shape + ai.shape, dtype=np.float64)
                 in_idx = np.unravel_index(k, ai.shape)
                 # jac_buf[..., *in_idx] = dy[...]  — broadcasting via tuple slicing
                 slicer = (slice(None),) * len(out_shape) + tuple(in_idx)
-                jac_buf[slicer] = np.asarray(dy)
+                entry[1][slicer] = np.asarray(dy)
+
+            if entry[1] is None:
+                # A zero-size input runs no jvp, so it is the one case with no
+                # primal to read the output shape from — pay the forward pass
+                # rather than guess, and only for that arg.
+                if out_shape is None:
+                    out_shape = np.asarray(fn(*args, **kwargs)).shape
+                entry[1] = np.zeros(out_shape + ai.shape, dtype=np.float64)
 
         result = tuple(jac for _, jac, _ in jacobians)
         return result[0] if singleton else result

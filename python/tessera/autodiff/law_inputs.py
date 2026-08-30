@@ -105,6 +105,25 @@ def _binary(shape=(3, 4), tie_gap=None):
     return make
 
 
+def _atan2_input(shape=(3, 4), margin=0.25):
+    """``atan2(y, x)`` sampled off its actual bad set.
+
+    A ``tie_gap`` guard is the wrong shape here: ``y == x`` is not a nonsmooth
+    point of atan2. The bad set is the origin (both partials carry
+    ``1/(x^2+y^2)``) and the branch cut ``y == 0, x < 0``, across which the
+    *value* jumps by 2*pi — the chain law's central difference straddles it and
+    reports an O(1/eps_fd) residual for a correct rule. Bounding ``|y|`` away
+    from 0 by a margin far larger than the FD step excludes both, and keeps
+    ``x`` free so all four quadrants are still sampled (the derivative itself
+    is smooth across the cut; only the value is not).
+    """
+    def make(rng):
+        y = _away_from(rng.standard_normal(shape), 0.0, margin=margin)
+        x = rng.standard_normal(shape)
+        return (y, x), {}
+    return make
+
+
 def _norm_input(shape=(4, 8)):
     def make(rng):
         return (rng.standard_normal(shape),), {}
@@ -156,7 +175,9 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
     "mul": S(_binary()),
     "maximum": S(_binary(tie_gap=0.2)),
     "minimum": S(_binary(tie_gap=0.2)),
-    "atan2": S(_binary(tie_gap=0.3)),
+    "atan2": S(_atan2_input(),
+               note="|y| >= 0.25 — off the origin and the y=0, x<0 branch cut; "
+                    "y==x is not a kink of atan2"),
 
     # ── reductions ───────────────────────────────────────────────────────────
     "sum": S(lambda rng: ((rng.standard_normal((3, 4)),), {"axis": -1})),

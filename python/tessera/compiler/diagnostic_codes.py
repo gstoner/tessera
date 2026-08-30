@@ -239,6 +239,24 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="MATRIX-CALCULUS-MC2", language="python",
     ),
     DiagnosticCode(
+        code="E_GRAD_SCALE_EXHAUSTED",
+        pass_origin="tessera.autodiff.mixed_precision",
+        severity="error",
+        summary=(
+            "GradScaler backed the loss scale off to its floor and the "
+            "gradients still overflow, so no further backoff can recover: "
+            "every subsequent step would be skipped and training would stall "
+            "with no error raised."
+        ),
+        fix_hint=(
+            "The unscaled gradients exceed the gradient dtype's range. Reduce "
+            "the loss magnitude, clip the gradients, or widen the gradient "
+            "dtype — raising GradScaler(init_scale=...) cannot help."
+        ),
+        spec="docs/audit/compiler/CODE_REVIEW_2026-08-29.md",
+        sprint="CODE-REVIEW-2026-08-29", language="python",
+    ),
+    DiagnosticCode(
         code="E_TENSOR_UNWRAP",
         pass_origin="tessera.ops",
         severity="error",

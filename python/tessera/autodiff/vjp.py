@@ -731,12 +731,24 @@ def vjp_moe(dout, x, experts, *, router="topk", k=1, transport=None,
 
     dx_tokens = np.zeros_like(tokens)
     dE = np.zeros_like(experts_arr)
-    for i in range(tokens.shape[0]):
-        e = int(route_arr[i])
-        # dx[i] = dout[i] @ E[e].T
-        dx_tokens[i] = dout_arr[i] @ experts_arr[e].T
-        # Accumulate per-expert weight gradient.
-        dE[e] += np.outer(tokens[i], dout_arr[i])
+    # Routing is a fixed integer partition of the tokens, so the per-token
+    # matvec/outer-product pair is one batched GEMM pair per expert — the same
+    # segmentation `vjp_grouped_gemm` uses. Sorting by expert makes each
+    # segment contiguous, so the gather is one fancy-index per expert rather
+    # than one BLAS dispatch per token.
+    order = np.argsort(route_arr, kind="stable")
+    bounds = np.cumsum(np.bincount(route_arr, minlength=num_experts))
+    start = 0
+    for e in range(num_experts):
+        end = int(bounds[e])
+        rows = order[start:end]
+        start = end
+        if rows.size == 0:
+            continue
+        # dx[i] = dout[i] @ E[e].T for every token routed to e.
+        dx_tokens[rows] = dout_arr[rows] @ experts_arr[e].T
+        # Per-expert weight gradient: sum_i x[i].T @ dout[i] over the segment.
+        dE[e] = tokens[rows].T @ dout_arr[rows]
 
     dx = dx_tokens.reshape(x_arr.shape)
     # Restore experts gradient to the same shape as the input (drop the

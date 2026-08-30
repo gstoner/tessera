@@ -203,3 +203,69 @@ def test_mixed_precision_grad_scaler_can_step_optimizer_closure():
     assert scaler.step(step, params=[p])
     assert state["m"].dtype == np.float32
     assert state["master_params"].dtype == np.float32
+
+
+class _FakeGrad:
+    def __init__(self, values: np.ndarray) -> None:
+        self._data = np.asarray(values, dtype=np.float64)
+
+    def numpy(self) -> np.ndarray:
+        return self._data
+
+
+class _FakeParam:
+    def __init__(self, values) -> None:
+        self.grad = _FakeGrad(values)
+        self.zeroed = 0
+
+    def zero_grad(self) -> None:
+        self.zeroed += 1
+
+
+def test_grad_scaler_backoff_reaches_sub_unity_scales() -> None:
+    """Review finding: the backoff was `max(scale * backoff, 1.0)`, so the
+    loss scale could never fall below 1. A workload whose unscaled gradients
+    are already near the gradient dtype's maximum needs a sub-unity scale —
+    every step overflowed, every step was skipped, and the scale stayed pinned
+    at 1.0 forever with no error. torch's `_amp_update_scale_` has no floor at
+    1 for exactly this reason.
+    """
+    scaler = ts.autodiff.GradScaler(init_scale=1.0)
+    seen = []
+    for _ in range(4):
+        took = scaler.step(lambda: None, params=[_FakeParam([np.inf])])
+        assert took is False
+        seen.append(scaler.scale)
+    assert seen == [0.5, 0.25, 0.125, 0.0625], seen
+
+    # And the recovery the class exists to provide is now reachable: once the
+    # scale is small enough that gradients are finite, the step is taken.
+    recovered = scaler.step(lambda: None, params=[_FakeParam([1.0])])
+    assert recovered is True
+    assert scaler.scale == 0.0625
+
+
+def test_grad_scaler_reports_an_unrecoverable_stall_instead_of_spinning() -> None:
+    """Removing the floor must not let the scale reach zero: a zero scale
+    makes every gradient zero, which never overflows, so `step` would start
+    reporting success on gradients carrying no signal. At the floor the state
+    is provably unrecoverable, so it gets a named diagnostic rather than an
+    unbounded run of silent skips (Decision #21)."""
+    from tessera.autodiff.mixed_precision import (
+        GRAD_SCALE_EXHAUSTED_CODE,
+        _MIN_LOSS_SCALE,
+    )
+    from tessera.autodiff.tape import TesseraAutodiffError
+
+    assert 0.0 < _MIN_LOSS_SCALE < 1.0
+
+    scaler = ts.autodiff.GradScaler(init_scale=_MIN_LOSS_SCALE * 2)
+    assert scaler.step(lambda: None, params=[_FakeParam([np.inf])]) is False
+    assert scaler.scale == _MIN_LOSS_SCALE
+
+    try:
+        scaler.step(lambda: None, params=[_FakeParam([np.inf])])
+    except TesseraAutodiffError as exc:
+        assert str(exc).startswith(GRAD_SCALE_EXHAUSTED_CODE), exc
+    else:  # pragma: no cover - the silent-stall regression
+        raise AssertionError("a permanently stalled scaler reported no error")

@@ -46,11 +46,48 @@ def _philox_seed(seed_high: int, seed_low: int) -> np.random.Generator:
     return np.random.Generator(bg)
 
 
+def _canonical_hash_part(p: object) -> str:
+    """Canonical text for one hash input — value-keyed, not repr-keyed.
+
+    `repr` is not machine-independent over the values that actually reach
+    here. A numpy scalar reprs as ``np.int64(3)`` under numpy >= 2 and as
+    ``3`` under numpy 1.x, so ``fold_in(np.int64(epoch))`` forks the stream
+    both away from ``fold_in(epoch)`` and across numpy major versions —
+    silently, in the one function whose entire contract is replay. Each
+    integer width forks separately too: ``np.int32(3)``, ``np.uint8(3)``,
+    ``np.int64(3)`` and ``3`` produced four different streams.
+
+    Normalization is chosen to leave the already-supported types' streams
+    **bit-identical** (a Python int already hashed as ``repr(int(p))``, a str
+    as ``repr(str(p))``), so no recorded checkpoint or replay manifest moves;
+    it only pulls the numpy-typed spellings onto the same text. Bool keeps its
+    own text rather than collapsing to 0/1, so ``fold_in(True)`` stays distinct
+    from ``fold_in(1)``. Anything else fails closed (Decision #21a): a repr
+    fallback for an arbitrary object is a stream key nothing guarantees the
+    stability of.
+    """
+    if isinstance(p, (bool, np.bool_)):
+        return repr(bool(p))
+    if isinstance(p, (int, np.integer)):
+        return repr(int(p))
+    if isinstance(p, str):
+        return repr(str(p))
+    if isinstance(p, (bytes, bytearray)):
+        return repr(bytes(p))
+    raise TypeError(
+        f"RNG key material must be int, bool, str, or bytes (numpy scalars of "
+        f"those types are accepted and normalized); got "
+        f"{type(p).__name__}. Hashing an arbitrary object's repr would key the "
+        f"stream on a spelling that is not stable across versions, which "
+        f"breaks replay silently rather than loudly."
+    )
+
+
 def _hash_to_u64(*parts: object) -> int:
-    """Deterministic, machine-independent hash of arbitrary parts to u64."""
+    """Deterministic, machine-independent hash of key material to u64."""
     h = hashlib.blake2b(digest_size=8)
     for p in parts:
-        h.update(repr(p).encode("utf-8"))
+        h.update(_canonical_hash_part(p).encode("utf-8"))
         h.update(b"\x00")
     return int.from_bytes(h.digest(), "little")
 

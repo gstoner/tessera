@@ -173,7 +173,7 @@ def test_forward_mode_executions_are_counted() -> None:
 
 
 def test_jacfwd_cost_scales_with_the_input_dimension() -> None:
-    """jacfwd runs one sample pass plus one per input; jacrev runs one."""
+    """jacfwd runs exactly one pass per input; jacrev runs one."""
     n = 8
     x = np.random.default_rng(0).standard_normal(n)
     with count_primitive_executions() as fwd:
@@ -181,11 +181,23 @@ def test_jacfwd_cost_scales_with_the_input_dimension() -> None:
     with count_primitive_executions() as rev:
         jacrev(_wide)(x)
     per_pass = rev[0]
-    assert fwd[0] == per_pass * (n + 1), (
-        f"expected {per_pass * (n + 1)} forward-mode executions "
-        f"({n} inputs + 1 sample pass), got {fwd[0]}"
+    # Exactly n, not n+1: each jvp already evaluates the primal and returns
+    # it, so the output shape needs no separate sample pass. A regression to
+    # the sample run shows up here as (n + 1).
+    assert fwd[0] == per_pass * n, (
+        f"expected {per_pass * n} forward-mode executions ({n} inputs, no "
+        f"sample pass), got {fwd[0]}"
     )
     assert fwd[0] > rev[0], "the R1 cost oracle must see the asymmetry"
+
+
+def test_jacfwd_handles_a_zero_size_input() -> None:
+    """A zero-size input runs no jvp — the buffer must still be shaped."""
+    def _f(x):
+        return ops.reduce(ops.tanh(np.zeros(3)), op="sum") + ops.reduce(x, op="sum")
+
+    jac = jacfwd(_f)(np.zeros(0))
+    assert jac.shape == (0,), jac.shape
 
 
 # ── MC9: free second-derivative laws ────────────────────────────────────────

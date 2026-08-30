@@ -26,6 +26,23 @@ from typing import Iterable
 
 import numpy as np
 
+from .tape import TesseraAutodiffError
+
+#: Diagnostic for a loss scale that has backed off as far as it can and still
+#: overflows — the one GradScaler state from which no further step can recover.
+GRAD_SCALE_EXHAUSTED_CODE = "E_GRAD_SCALE_EXHAUSTED"
+
+#: Backoff floor. It is deliberately BELOW 1: a workload whose unscaled
+#: gradients already sit near the gradient dtype's maximum needs a sub-unity
+#: loss scale, and a floor of 1.0 made that unreachable — every step overflowed,
+#: every step was skipped, and the scale stayed pinned forever with no error
+#: (torch's `_amp_update_scale_` has no floor for the same reason). It is not
+#: zero either: a zero scale makes every gradient zero, which never overflows,
+#: so `step` would start reporting success on gradients carrying no signal.
+#: 2**-14 is fp16's smallest normal — below it the scaled gradient is subnormal
+#: and the scaling has stopped buying range.
+_MIN_LOSS_SCALE = 2.0 ** -14
+
 
 # Ops that should stay in fp32 even when an autocast is active.
 # Matches torch's default mixed-precision policy: reductions and norms
@@ -182,11 +199,26 @@ class GradScaler:
         ``optimizer_fn`` is called with no args — the caller closes over the
         params. Returns ``True`` if the step was taken, ``False`` if it was
         skipped due to overflow.
+
+        Raises :class:`TesseraAutodiffError` when the scale has already backed
+        off to :data:`_MIN_LOSS_SCALE` and the gradients still overflow: that
+        state cannot recover, so every later call would return ``False`` and
+        the run would stall with nothing raised.
         """
         params = list(params)
         if self._has_inf_nan(params):
-            # Overflow — drop the step, halve the scale, reset growth counter
-            self._scale = max(self._scale * self._backoff, 1.0)
+            # Overflow — drop the step, back the scale off, reset growth counter
+            if self._scale <= _MIN_LOSS_SCALE:
+                raise TesseraAutodiffError(
+                    f"{GRAD_SCALE_EXHAUSTED_CODE}: gradients still overflow at "
+                    f"the minimum loss scale {_MIN_LOSS_SCALE:.6g}, so no "
+                    f"backoff can recover — every further step would be "
+                    f"skipped and training would stall with no error. The "
+                    f"unscaled gradients themselves exceed the gradient "
+                    f"dtype's range: reduce the loss magnitude, clip the "
+                    f"gradients, or widen the gradient dtype."
+                )
+            self._scale = max(self._scale * self._backoff, _MIN_LOSS_SCALE)
             self._steps_since_growth = 0
             for p in params:
                 if p.grad is not None:

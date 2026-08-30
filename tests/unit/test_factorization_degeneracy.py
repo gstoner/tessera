@@ -416,3 +416,99 @@ def test_all_refusals_carry_the_registered_code() -> None:
         with pytest.raises(deg.TesseraDegeneracyError) as excinfo:
             probe()
         assert str(excinfo.value).startswith(CODE)
+
+
+# ── batched judging: per element, never across the batch ────────────────────
+def test_check_full_rank_judges_each_batch_element_on_its_own_scale() -> None:
+    """Review finding: `check_full_rank` took min/max over the WHOLE array,
+    batch dimensions included, so a batch element that is perfectly full rank
+    at its own scale was refused for coexisting with a larger-scaled one. Its
+    siblings (`check_factor_rank`, `svd_coupling`) already judge per element.
+
+    Direction matters: the global ratio lower-bounds every per-row ratio, so
+    the bug could only produce spurious refusals — the guard never admitted a
+    rank-deficient element, and must still not.
+    """
+    regular = np.array([1.0, 0.5])            # own ratio 0.5
+    tiny_but_regular = np.array([1e-16, 5e-17])  # own ratio 0.5, 16 orders down
+
+    for row in (regular, tiny_but_regular):
+        assert deg.check_full_rank(row, op="norm", what="A") is True
+
+    # Stacking two individually-regular spectra must stay regular.
+    assert deg.check_full_rank(np.stack([regular, tiny_but_regular]),
+                               op="norm", what="A") is True
+
+    # A genuinely rank-deficient element still fails closed, and the
+    # diagnostic names which one.
+    deficient = np.stack([regular, np.array([1.0, 1e-18])])
+    with pytest.raises(deg.TesseraDegeneracyError) as excinfo:
+        deg.check_full_rank(deficient, op="norm", what="A")
+    assert str(excinfo.value).startswith(CODE)
+    assert "batch element" in str(excinfo.value), excinfo.value
+
+    # Unbatched behaviour is unchanged.
+    with pytest.raises(deg.TesseraDegeneracyError):
+        deg.check_full_rank(np.array([1.0, 1e-18]), op="norm", what="A")
+
+
+def test_batched_nuclear_norm_gradient_survives_a_small_scaled_element() -> None:
+    """The end-to-end shape of the same defect: `_norm_vjp` passes the batched
+    spectrum straight through, so the cross-batch ratio refused a gradient the
+    unbatched calls both return."""
+    small = np.diag([1e-16, 5e-17])
+    big = np.diag([1.0, 0.5])
+    per_element = [_VJPS["norm"](np.ones(()), m, ord="nuc")[0] for m in (big, small)]
+    batched = _VJPS["norm"](np.ones(2), np.stack([big, small]), ord="nuc")[0]
+    assert np.allclose(batched[0], per_element[0])
+    assert np.allclose(batched[1], per_element[1])
+
+
+# ── the degeneracy screen is exact, not a heuristic ─────────────────────────
+@pytest.mark.parametrize("coupling,quantity", [
+    (deg.svd_coupling, lambda s: s ** 2),
+    (deg.eigh_coupling, lambda s: s),
+])
+def test_vectorized_gap_screen_matches_the_per_element_loop(coupling, quantity) -> None:
+    """The batched couplings screen rows with one vectorized sorted-gap pass
+    and enter the per-element cluster loop only for rows that flag. That screen
+    must be EXACT — same result, same warnings, same refusals — or it is a
+    silent policy change wearing a performance fix's clothes.
+    """
+    rng = np.random.default_rng(7)
+
+    def forced_full_loop(fn, *args, **kwargs):
+        original = deg._rows_needing_inspection
+        deg._rows_needing_inspection = (
+            lambda values, tol: np.ones(values.shape[0], dtype=bool))
+        try:
+            return _outcome(fn, *args, **kwargs)
+        finally:
+            deg._rows_needing_inspection = original
+
+    def _outcome(fn, *args, **kwargs):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                return ("ok", np.asarray(fn(*args, **kwargs)), len(caught))
+            except deg.TesseraDegeneracyError as exc:
+                return ("raise", str(exc), len(caught))
+
+    for trial in range(120):
+        k = int(rng.integers(1, 6))
+        s = np.abs(rng.standard_normal((int(rng.integers(1, 5)), k))) + 0.1
+        if trial % 4 == 1 and k >= 2:
+            s[0, 1] = s[0, 0]                    # an exact cluster
+        elif trial % 4 == 2 and k >= 2:
+            s[0, 1] = s[0, 0] * (1 + 1e-9)       # inside the warning band
+        elif trial % 4 == 3:
+            s[0] = 0.0                           # no scale to be relative to
+        for policy in (None, "generalized"):
+            want = forced_full_loop(coupling, quantity(s), policy=policy)
+            got = _outcome(coupling, quantity(s), policy=policy)
+            assert want[0] == got[0], (trial, policy, want[0], got[0])
+            assert want[2] == got[2], f"warning count differs: {want[2]} vs {got[2]}"
+            if want[0] == "ok":
+                assert np.array_equal(want[1], got[1], equal_nan=True)
+            else:
+                assert want[1] == got[1]

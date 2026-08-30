@@ -31,12 +31,20 @@ fixed point before.
 from __future__ import annotations
 
 import functools
+import warnings
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 
 from .operator import OperatorTangent, certify_root
+
+#: How many Jacobian entries the finite-difference adjoint may memoize.
+#: 8M float64 is 64 MB — a cap against a pathological allocation, not a real
+#: working limit: at n ≈ 2800 a single un-memoized adjoint application already
+#: costs 5600 residual evaluations, so the streaming path is unusable long
+#: before the memo becomes expensive.
+_FD_JACOBIAN_ELEMENT_BUDGET = 8 * 1024 * 1024
 
 __all__ = [
     "TesseraImplicitDiffError",
@@ -328,16 +336,56 @@ def _partial_jacobian_matvecs(
         h = eps / max(1.0, float(np.max(np.abs(v))))
         return ((_perturbed(h * v) - _perturbed(-h * v)) / (2 * h)).reshape(-1)
 
-    # Jᵀ via the definition ⟨J v, r⟩ = ⟨v, Jᵀ r⟩. Evaluate one basis column at
-    # a time so the general matrix-free path remains O(n) memory; callers that
-    # explicitly request the dense oracle materialize it themselves.
+    # Jᵀ via the definition ⟨J v, r⟩ = ⟨v, Jᵀ r⟩, which needs EVERY basis
+    # column of J — there is no matrix-free form of this adjoint, only a
+    # question of whether the columns are kept. They do not depend on `r`, so
+    # they are built once and reused. Rebuilding them per call made the
+    # "matrix-free" default cost 2·n residual evaluations on every GMRES
+    # application (and GMRES applies the adjoint 2·iters + 1 times), strictly
+    # dominating the dense oracle it ships alongside, which pays 2·n once.
+    # The O(n)-memory rationale this replaced was not being honoured on the
+    # default path anyway: `custom_root` defaults to `certify=True` and
+    # `certify_root` materializes the same dense Jacobian before the solve.
     n_in = a.size
     n_out = int(np.prod(out_shape)) if out_shape else 1
+    cache: list[Optional[np.ndarray]] = [None]
+    warned = [False]
+
+    def _cached_jacobian() -> Optional[np.ndarray]:
+        """The ``(n_out, n_in)`` FD Jacobian, or None above the memo budget."""
+        if cache[0] is None:
+            if n_out * n_in > _FD_JACOBIAN_ELEMENT_BUDGET:
+                return None
+            basis = np.zeros(n_in, dtype=np.float64)
+            columns = np.empty((n_out, n_in), dtype=np.float64)
+            for j in range(n_in):
+                basis[j] = 1.0
+                columns[:, j] = matvec(basis)
+                basis[j] = 0.0
+            cache[0] = columns
+        return cache[0]
 
     def rmatvec(r: np.ndarray) -> np.ndarray:
         r = np.asarray(r, dtype=np.float64).reshape(-1)
         if r.size != n_out:
             raise TesseraImplicitDiffError(f"residual cotangent has {r.size} values, expected {n_out}")
+        columns = _cached_jacobian()
+        if columns is not None:
+            return columns.T @ r
+        # Above the budget, stream the columns as before. That is a
+        # performance fallback, so it announces itself (Decision #21a) — at
+        # this size every adjoint application costs 2·n residual evaluations.
+        if not warned[0]:
+            warned[0] = True
+            warnings.warn(
+                f"finite-difference adjoint is not memoized: caching the "
+                f"{n_out}x{n_in} Jacobian would exceed the "
+                f"{_FD_JACOBIAN_ELEMENT_BUDGET}-element budget, so each "
+                f"application re-evaluates the residual {2 * n_in} times. "
+                f"Supply an exact linearization to avoid the sweep entirely.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
         result = np.empty(n_in, dtype=np.float64)
         basis = np.zeros(n_in, dtype=np.float64)
         for j in range(n_in):

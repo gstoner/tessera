@@ -667,15 +667,37 @@ def kink_check(op: str, spec, vjp_fn: Callable, jvp_fn: Optional[Callable],
                                      None,
                                      f"jvp at kink: {type(e).__name__}: {e}")
                 # With a unit tangent the JVP tangent equals the selection.
+                # A shape mismatch or an empty mask means the selection was
+                # never inspected — report that, never "both modes agree"
+                # (Decision #21a: unprovable is not the permissive answer).
+                checked = False
                 for m in masks[:1]:
-                    sel = np.asarray(t_out)[np.asarray(m)] \
-                        if np.shape(t_out) == np.shape(m) else np.array([])
-                    if sel.size and not np.allclose(sel, spec.expected, atol=1e-12):
+                    m_arr = np.asarray(m)
+                    out_arr = np.asarray(t_out)
+                    if out_arr.shape != m_arr.shape:
+                        return LawResult(
+                            op, registry, "kink", "rule_error", 1, None,
+                            f"forward-mode selection not checkable: the JVP "
+                            f"tangent has shape {out_arr.shape} but the kink "
+                            f"mask has shape {m_arr.shape}")
+                    sel = out_arr[m_arr]
+                    if not sel.size:
+                        return LawResult(
+                            op, registry, "kink", "rule_error", 1, None,
+                            "forward-mode selection not checkable: the probe "
+                            "marks no element at the kink")
+                    if not np.allclose(sel, spec.expected, atol=1e-12):
                         return LawResult(
                             op, registry, "kink", "fail", 1, None,
                             f"forward mode selects {sel.tolist()} at the kink, "
                             f"reverse mode selects {spec.expected} — the modes "
                             f"disagree on the declared policy")
+                    checked = True
+                if not checked:
+                    return LawResult(
+                        op, registry, "kink", "rule_error", 1, None,
+                        "forward-mode selection not checkable: the probe "
+                        "declares no kink mask")
             detail.append("both modes agree")
 
         return LawResult(op, registry, "kink", "pass", 1, None, "; ".join(detail))
@@ -696,8 +718,11 @@ def _check_split_forward_mode(op, spec, jvp_fn, primals, kwargs, masks,
     The discriminating probe perturbs ONE tied operand at a time: with a unit
     tangent on operand i and zero elsewhere, an equal m-way split yields
     ``1/m`` at the tie, a first-select yields ``1`` or ``0`` depending on i,
-    and a last-select yields the mirror image. Returns a failing LawResult,
-    or None when forward mode conforms.
+    and a last-select yields the mirror image. Returns None ONLY when a
+    discriminating probe actually ran and forward mode conformed; every path
+    that cannot evaluate the selection returns a ``rule_error`` LawResult
+    instead, because the caller turns None into the affirmative claim "both
+    modes agree" (Decision #21a: a check that did not run is not a pass).
     """
     n_diff = sum(1 for p in primals if _is_float(p))
     if n_diff < 2:
@@ -707,7 +732,11 @@ def _check_split_forward_mode(op, spec, jvp_fn, primals, kwargs, masks,
         mask = np.asarray(masks[0])
         idx = np.argwhere(mask)
         if len(idx) < 2:
-            return None
+            return LawResult(
+                op, registry, "kink", "rule_error", 1, None,
+                f"forward-mode selection not checkable: a SUBGRAD_SPLIT probe "
+                f"needs at least two tied elements to tell an equal share from "
+                f"a hard select, but the mask marks {len(idx)}")
         target = tuple(idx[0])
         tangent = np.zeros_like(arr)
         tangent[target] = 1.0
@@ -733,6 +762,7 @@ def _check_split_forward_mode(op, spec, jvp_fn, primals, kwargs, masks,
         return None
 
     # Elementwise tie across operands: perturb each operand alone.
+    checked = False
     for i, p in enumerate(primals):
         if not _is_float(p):
             continue
@@ -747,14 +777,29 @@ def _check_split_forward_mode(op, spec, jvp_fn, primals, kwargs, masks,
         m = np.asarray(masks[i])
         out = np.asarray(t_out)
         if out.shape != m.shape:
-            return None
+            return LawResult(
+                op, registry, "kink", "rule_error", 1, None,
+                f"forward-mode selection not checkable: perturbing operand {i} "
+                f"gives a JVP tangent of shape {out.shape} but its kink mask "
+                f"has shape {m.shape}")
         sel = out[m]
-        if sel.size and not np.allclose(sel, 1.0 / n_diff, atol=1e-12):
+        if not sel.size:
+            return LawResult(
+                op, registry, "kink", "rule_error", 1, None,
+                f"forward-mode selection not checkable: operand {i}'s kink "
+                f"mask marks no tied element")
+        if not np.allclose(sel, 1.0 / n_diff, atol=1e-12):
             return LawResult(
                 op, registry, "kink", "fail", 1, None,
                 f"forward mode gives {sel.tolist()} when only operand {i} is "
                 f"perturbed; the declared equal split requires "
                 f"{1.0 / n_diff:.6g} (a hard select would give 1 or 0)")
+        checked = True
+    if not checked:
+        return LawResult(
+            op, registry, "kink", "rule_error", 1, None,
+            "forward-mode selection not checkable: no differentiable operand "
+            "carried a discriminating probe")
     return None
 
 

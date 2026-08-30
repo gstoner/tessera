@@ -268,6 +268,10 @@ def NVIDIA_DelegateProvenanceAttr
     : NVIDIA_EnumStrAttr<["vendor_library", "handwritten_kernel"],
         "what the delegate is: a vendor library entry or an in-tree hand-written kernel">;
 
+def NVIDIA_DelegateCoversAttr
+    : NVIDIA_EnumStrAttr<["root_only", "whole_region"],
+        "how much of a fusable region the delegate implements">;
+
 def NVIDIA_DelegateDeterminismAttr
     : NVIDIA_EnumStrAttr<["deterministic", "nondeterministic"],
         "whether the delegate is reproducible run to run">;
@@ -327,6 +331,7 @@ def NVIDIA_KernelCallOp : Op<TesseraNVIDIADialect, "kernel_call"> {
       NVIDIA_DelegateProvenanceAttr:$provenance,
       NVIDIA_DelegateAccuracyAttr:$accuracy,
       NVIDIA_DelegateDeterminismAttr:$determinism,
+      NVIDIA_DelegateCoversAttr:$covers,
       OptionalAttr<F64Attr>:$tolerance,
       OptionalAttr<F64Attr>:$tolerance_rel);
   let results = (outs Variadic<NVIDIA_TargetValue>:$outputs);
@@ -368,6 +373,7 @@ def NVIDIA_InlinePtxOp : Op<TesseraNVIDIADialect, "inline_ptx"> {
       StrAttr:$arch,
       NVIDIA_DelegateAccuracyAttr:$accuracy,
       NVIDIA_DelegateDeterminismAttr:$determinism,
+      NVIDIA_DelegateCoversAttr:$covers,
       OptionalAttr<F64Attr>:$tolerance,
       OptionalAttr<F64Attr>:$tolerance_rel,
       UnitAttr:$has_side_effects);

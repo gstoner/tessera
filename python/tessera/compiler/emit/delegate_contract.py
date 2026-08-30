@@ -32,6 +32,7 @@ Python a budget it did not declare in IR.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from tessera.compiler.emit.candidate import Candidate, Tier
 
@@ -53,6 +54,20 @@ ACCURACIES: tuple[str, ...] = ("reference_exact", "tolerance_bounded")
 #: inside a deterministic region -- a guarantee defeated through a path nobody
 #: checked, which is the Decision #5 scar exactly.
 DETERMINISMS: tuple[str, ...] = ("deterministic", "nondeterministic")
+
+#: Legal `covers` values — how much of a fusable region the delegate implements.
+#:
+#: This exists because the arbiter compares candidates *for one region*, and a
+#: delegate that implements only the region's root is not offering the same
+#: thing more cheaply — it is offering a different plan: the delegate, plus a
+#: separate epilogue kernel, plus the DRAM round-trip between them. Treating
+#: the two as peers is a category error, and it biases selection toward
+#: delegates on exactly the graphs where fusion is the win.
+#:
+#: Declared rather than inferred: an external kernel cannot be introspected,
+#: and guessing its coverage is how a partial candidate wins a whole-region
+#: comparison.
+COVERS: tuple[str, ...] = ("root_only", "whole_region")
 
 
 class DelegateContractError(ValueError):
@@ -77,6 +92,7 @@ class DelegateContract:
     arch: str
     accuracy: str
     determinism: str
+    covers: str
     tolerance: float | None = None
     tolerance_rel: float | None = None
     # kernel_call pathway
@@ -114,6 +130,10 @@ class DelegateContract:
         if self.accuracy not in ACCURACIES:
             raise DelegateContractError(
                 f"`accuracy` must be one of {ACCURACIES}, got {self.accuracy!r}"
+            )
+        if self.covers not in COVERS:
+            raise DelegateContractError(
+                f"`covers` must be one of {COVERS}, got {self.covers!r}"
             )
         if self.determinism not in DETERMINISMS:
             raise DelegateContractError(
@@ -196,6 +216,10 @@ class DelegateContract:
         """Relative budget, if the delegate stated one."""
         return self.tolerance_rel
 
+    def serves_whole_region(self) -> bool:
+        """Whether this delegate implements a fused region, not just its root."""
+        return self.covers == "whole_region"
+
     def is_deterministic(self) -> bool:
         """Whether this delegate may be selected inside a deterministic region."""
         return self.determinism == "deterministic"
@@ -231,6 +255,7 @@ class DelegateContract:
         parts.append(f'arch = "{self.arch}"')
         parts.append(f'accuracy = "{self.accuracy}"')
         parts.append(f'determinism = "{self.determinism}"')
+        parts.append(f'covers = "{self.covers}"')
         if self.tolerance is not None:
             parts.append(f"tolerance = {self.tolerance:.6e} : f64")
         if self.tolerance_rel is not None:
@@ -277,6 +302,39 @@ class DelegatedCandidate(Candidate):
         self.accuracy_atol = contract.arbiter_accuracy_atol()
         self.accuracy_rtol = contract.arbiter_accuracy_rtol()
 
+    #: Region fields whose presence means the region is more than its root.
+    #: A `root_only` delegate cannot serve such a region without splitting it.
+    _FUSED_STRUCTURE = ("epilogue", "reduction", "prologue", "residual")
+
+    def applies_to(self, region: Any) -> bool:
+        """Decline a region this delegate implements only part of.
+
+        **This is what keeps the arbiter from being biased toward delegates**,
+        and it is a structural fact rather than a cost estimate.
+
+        `arbitrate()` compares candidates for one region and picks by tier
+        (hand-tuned wins by default) or by measured latency of the candidate in
+        isolation. A `root_only` delegate — a bare GEMM, say — faced with a
+        matmul+epilogue region is not a cheaper way to do the same work. It is
+        a *different plan*: the delegate, plus a separate epilogue kernel, plus
+        the DRAM round-trip between them. Under tier priority it would win
+        outright; under measured latency it would win because the measurement
+        excludes the work it displaced. Both paths would systematically prefer
+        delegates on exactly the graphs where fusion is the win.
+
+        Declining is the honest answer rather than applying a penalty: a
+        penalty is a guess at the foregone fusion, whereas "this candidate does
+        not serve this region" is a fact the delegate declared. If the
+        delegate-plus-epilogue plan really is faster, that belongs in a
+        comparison of *plans*, not smuggled in as a peer candidate here.
+        """
+        if self.delegate_contract.serves_whole_region():
+            return True
+        return not any(
+            getattr(region, field, None)
+            for field in self._FUSED_STRUCTURE
+        )
+
     def render_target_ir(self, operands: str = "",
                          signature: str = "() -> ()") -> str:
         """The Target IR op declaring this candidate's delegation."""
@@ -300,6 +358,7 @@ __all__ = [
     "PROVENANCES",
     "DelegateContract",
     "DETERMINISMS",
+    "COVERS",
     "DelegateContractError",
     "DelegatedCandidate",
     "contract_for_candidate",

@@ -31,6 +31,7 @@ def _call(**overrides):
         provenance="handwritten_kernel",
         accuracy="reference_exact",
         determinism="deterministic",
+        covers="whole_region",
     )
     base.update(overrides)
     return base
@@ -43,6 +44,7 @@ def _ptx(**overrides):
         arch="sm_120",
         accuracy="reference_exact",
         determinism="deterministic",
+        covers="whole_region",
     )
     base.update(overrides)
     return base
@@ -138,7 +140,7 @@ def test_a_delegate_cannot_be_both_pathways():
     with pytest.raises(DelegateContractError, match="not both"):
         DelegateContract(
             arch="sm_120", accuracy="reference_exact",
-            determinism="deterministic",
+            determinism="deterministic", covers="whole_region",
             callee="x", binding="c_abi", provenance="vendor_library",
             ptx="mul.f32 $0, $1, $1;", constraints="=f,f",
         )
@@ -147,7 +149,7 @@ def test_a_delegate_cannot_be_both_pathways():
 def test_a_delegate_must_be_one_of_the_pathways():
     with pytest.raises(DelegateContractError, match="must name a `callee` or carry"):
         DelegateContract(arch="sm_120", accuracy="reference_exact",
-                         determinism="deterministic")
+                         determinism="deterministic", covers="whole_region")
 
 
 def test_both_provenances_are_tier_three():
@@ -282,3 +284,73 @@ def test_delegated_candidate_carries_both_budgets():
                                       tolerance=1e-5, tolerance_rel=1e-3)),
              target="nvidia", op="matmul")
     assert (c.accuracy_atol, c.accuracy_rtol) == (1e-5, 1e-3)
+
+
+class _FakeRegion:
+    """Minimal stand-in carrying the fields that make a region more than a root."""
+
+    def __init__(self, **fields):
+        self.epilogue = fields.get("epilogue", ())
+        self.reduction = fields.get("reduction")
+        self.prologue = fields.get("prologue", ())
+        self.residual = fields.get("residual", False)
+
+
+def _delegate(covers, op="matmul"):
+    from tessera.compiler.emit.delegate_contract import DelegatedCandidate
+
+    class _Lib(DelegatedCandidate):
+        def run(self, region, *inputs, **kwargs):  # pragma: no cover
+            raise NotImplementedError
+
+    return _Lib(DelegateContract(**_call(covers=covers)), target="nvidia", op=op)
+
+
+def test_a_root_only_delegate_declines_a_fused_region():
+    """The fusion-foreclosure fix, stated as the scenario it prevents.
+
+    `arbitrate()` picks by tier by default, and HAND_TUNED is the highest —
+    so a delegate wins outright before anything is measured. On the measured
+    path it wins because the latency excludes the work it displaced. Either
+    way a bare-GEMM delegate would beat a fused compiled kernel on exactly
+    the regions where fusion is the win.
+    """
+    root_only = _delegate("root_only")
+    assert root_only.applies_to(_FakeRegion()) is True
+    for structure in (
+        {"epilogue": ("bias", "relu")},
+        {"reduction": "softmax"},
+        {"prologue": ("gelu",)},
+        {"residual": True},
+    ):
+        assert root_only.applies_to(_FakeRegion(**structure)) is False, structure
+
+
+def test_a_whole_region_delegate_still_competes():
+    """Declining must not disarm legitimate fused hand-tuned kernels.
+
+    Decision #28's governing rule is that shared infra never caps the leads; a
+    hand-tuned fused attention kernel has to stay a first-class candidate.
+    """
+    whole = _delegate("whole_region")
+    assert whole.applies_to(_FakeRegion(epilogue=("bias",), reduction="softmax")) is True
+
+
+def test_coverage_must_be_declared_not_guessed():
+    """An external kernel cannot be introspected; guessing is the bug."""
+    with pytest.raises(DelegateContractError, match="`covers` must be one of"):
+        DelegateContract(**_call(covers="probably_all_of_it"))
+
+
+def test_declining_beats_penalising():
+    """Recorded as a design note, asserted so the mechanism cannot drift back.
+
+    A cost penalty for foregone fusion is a guess at DRAM traffic. "This
+    candidate does not serve this region" is a fact the delegate declared, and
+    it removes the candidate from the comparison rather than hoping a fudge
+    factor outweighs a tier bonus.
+    """
+    root_only = _delegate("root_only")
+    fused = _FakeRegion(epilogue=("bias",))
+    assert root_only.applies_to(fused) is False
+    assert root_only.tier is Tier.HAND_TUNED  # would otherwise win on tier alone

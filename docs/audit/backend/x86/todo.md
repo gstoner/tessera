@@ -4,10 +4,32 @@ audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
-scope: x86 AVX-512 implementation/proof and AMX access planning
+scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## Standing: AMX is retired, not merely unavailable (project direction, 2026-08-30)
+
+**AMX is a dead end and is not a Tessera target.** It was Intel-only, and it
+is superseded by **ACE (AI Compute Extensions)**, the matrix-instruction spec
+agreed jointly by AMD and Intel. Read every "AMX not applicable (no fleet
+hardware)" row below in that light: those rows are **closed by direction**,
+not parked pending a hardware purchase. Do not scope AMX enablement,
+benchmarking, or box acquisition, and do not treat an AMX row as owed work.
+
+Consequences that bite in practice:
+
+* **x86 native execution proof means AVX-512.** Zen 5 (Princess-Luna) has
+  AVX-512 and no AMX; the NR2 Pro's Core Ultra 7 265F has neither.
+* **Never gate a test on `hardware_amx` to mean "x86 hardware".** It skips the
+  test on the only box that could run it. The two files noted in the sync
+  block below were nearly marked that way.
+* The compiler-side position is unchanged and already recorded in CLAUDE.md's
+  Decision #19 discussion: the `tessera_x86` AMX ops stay an **IR-level
+  contract with no `amx.*` lowering**, and only the `x86vector.*` / AVX-512
+  half is live follow-on work. When a matrix lane is next needed here, the
+  target is ACE.
 
 Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
 changed; this backend has the one open gap.**
@@ -25,10 +47,11 @@ be caught by it.
 Two files under `tests/device/x86/`
 (`test_mpi_rank_collectives.py`, `test_native_vjp_execution_certificates.py`)
 were deliberately **left unmarked** rather than given `hardware_amx`. They
-need AVX-512 and MPI, not AMX — and since Zen 5 has AVX-512 but no AMX
-(AMX is Intel-only, and no fleet box has it), marking them `hardware_amx`
-would make them skip on the only box that can actually run them. That would
-have manufactured exactly the failure this work exists to prevent. Both
+need AVX-512 and MPI, not AMX — and per the standing section above AMX is a
+**retired** target, not a pending one, so `hardware_amx` will never be
+satisfiable on any fleet box. Marking them that way would make them skip on
+the only box that can actually run them, permanently. That would have
+manufactured exactly the failure this work exists to prevent. Both
 already skip honestly today (verified on the Mac: "production tessera-opt
 and AVX-512 runtime are required"), so the gap is coverage of the ledger,
 not a live false green.

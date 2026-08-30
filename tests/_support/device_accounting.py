@@ -87,11 +87,21 @@ DEVICE_FAMILIES: tuple[DeviceFamily, ...] = (
         is_plausibly_present=apple_metal_is_plausibly_present,
         remedy="ninja -C build TesseraAppleRuntimeShared (a stale dylib skips or hangs)",
     ),
+    # AMX is a dead end, not a pending target: Intel-only, absent from every
+    # fleet box, and superseded by ACE (the joint AMD/Intel matrix spec). This
+    # family exists solely to give the pre-existing `hardware_amx` marker a
+    # consumer; its probe is expected to stay False forever, so the lane can
+    # never go hollow. Do not read it as AMX support, and do not gate an
+    # AVX-512 test on `hardware_amx` -- that skips it on the only box that
+    # could run it.
     DeviceFamily(
         name="amx",
         markers=frozenset({"hardware_amx"}),
         is_plausibly_present=amx_is_plausibly_present,
-        remedy="run on a host with Intel AMX and OS tile-state permission",
+        remedy=(
+            "AMX is not a supported target (superseded by ACE); no fleet host "
+            "has it, so this lane is expected to be permanently absent"
+        ),
     ),
 )
 

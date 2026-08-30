@@ -104,9 +104,13 @@ def apple_metal_is_plausibly_present() -> bool:
 def amx_is_plausibly_present() -> bool:
     """Whether this host advertises Intel AMX tile support.
 
-    No box in the current fleet has AMX (Zen 5 has AVX-512 but AMX is
-    Intel-only), so this is expected to be False everywhere today. It exists so
-    that the day an AMX host appears, its lanes cannot silently skip.
+    Expected to be False everywhere, permanently. **AMX is a dead end and is
+    not a Tessera target**: it was Intel-only, no fleet box has it (Zen 5 has
+    AVX-512; the Core Ultra 7 265F has neither), and it is superseded by ACE
+    (AI Compute Extensions), the joint AMD/Intel matrix spec. This probe is
+    not a roadmap placeholder -- it exists only so the `hardware_amx` marker
+    already gating `tests/device/x86/test_amx_*.py` has a consumer
+    (Decision #29). The x86 lane that needs marker coverage is AVX-512.
     """
     try:
         return "amx_tile" in Path("/proc/cpuinfo").read_text(encoding="utf-8")

@@ -22,7 +22,7 @@ audit_role: snapshot
 > | Severity | Closed in | Outcome |
 > |---|---|---|
 > | P0 · 9 | PR #635 | all 9 fixed |
-> | P1 · 36 | PRs #636, #637, #638, and the P3 batch | 34 fixed (the 3 performance/scope rows closed alongside P3); 2 remain deferred with recorded ABI reasoning: Adafactor bias correction and the rank-4 dropout per-instance seed |
+> | P1 · 36 | PRs #636, #637, #638, the P3 batch, and the deferred-P1 batch | all 36 fixed. The last 2 — Adafactor bias correction and the rank-4 dropout per-instance seed — were deferred 2026-08-29 with ABI reasoning that **did not survive re-examination**: neither needed a kernel ABI change. Both fixed 2026-08-30; see their rows. The dropout row's severity was also corrected downward (the executing gfx1151 lane was already iid across batch/head; the defect was in the Tile-IR contract). The rank-4 dropout fix is **not yet lit-verified on the ROCm box** |
 > | P2 · 42 | PR #640 | 39 fixed; 3 needed no change — two had already been fixed by the P0 batch and the review quoted the pre-fix body, one (`AutodiffPass.cpp:199`) was closed by the P0 seed-type fix |
 > | P3 · 16 | the P3 batch | all 16 fixed in source; 13 host-measured, **3 device-unverified** (see the P3 section); 2 of the 16 were correctness defects, not improvements |
 >
@@ -316,19 +316,27 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 ### `python/tessera/optim.py:427` — Adafactor missing second-moment bias correction
 
-> **Deferred 2026-08-29 — needs an ABI change, not a one-line fix.** The
-> finding is correct and the tree reference is easy to correct, but Adafactor
-> has **three** implementations that a test deliberately keeps in agreement:
-> `optim.adafactor` (tree), the analytic VJP/JVP in `autodiff/`, and the flat
-> `ts.ops.adafactor(params, grads, row, col)` op — and the flat form, which is
-> what the native x86/ROCm kernels bind to, **carries no step counter in its
-> signature**, so it cannot compute `1 - beta2**t` at all. Correcting only the
-> reachable halves makes the Python reference disagree with the certified
-> native path, which is the exact defect shape reported for `nesterov` above.
-> Fixing this properly means threading a step operand through the flat op and
-> its native kernels, and re-proving them on ROCm/x86 hardware. Attempted and
-> reverted; `test_flat_adafactor_full_and_factored_match_tree_reference` is the
-> gate that catches a partial fix.
+> **FIXED 2026-08-30 — the deferral's premise was wrong; no kernel ABI change
+> was needed.** The deferral said the flat `ts.ops.adafactor` "carries no step
+> counter in its signature, so it cannot compute `1 - beta2**t` at all". Two
+> things falsify that. (a) The flat **`adam`/`adamw`** ABI right next to it
+> already takes `step: int = 1` as a kwarg and the ROCm/x86 executors already
+> read `int(kwargs.get("step", 1))` — so a step kwarg on the flat adafactor is
+> the house pattern, not a new ABI. (b) The correction is exactly expressible
+> as a step-dependent **decay rate**,
+> `b2_t = b2*(1 - b2**(t-1))/(1 - b2**t)`, for which the recursion carries the
+> debiased estimate directly (`v_t == EMA_t/(1 - b2**t)`, `b2_1 = 0`) — and
+> every physical Adafactor kernel already takes `beta2` as a **scalar**, so the
+> correction is applied host-side and `tessera_x86_avx512_adafactor_*` /
+> `adafactor_row|col|mean|update` / `sm120_adafactor_*` are untouched.
+> Landed as one shared `optim.adafactor_decay` consumed by the tree form, the
+> flat op, the analytic VJP, the x86/ROCm/NVIDIA forward and backward
+> executors, and the backward state contract (which now records nominal
+> `beta2`, `step`, and `beta2_effective`). Pinned by six tests in
+> `tests/unit/test_s10_optim.py`;
+> `test_flat_adafactor_full_and_factored_match_tree_reference` was strengthened
+> to step 3, since at step 1 the corrected decay is 0 and the carried state
+> would not be exercised at all.
 
 
 *Losses, optimizers, RL, nn.functional · math*
@@ -511,17 +519,47 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 
 ### `src/transforms/lib/TileIRLoweringPass.cpp:306` — Identical dropout mask replicated across batch and head
 
-> **Deferred 2026-08-29 — needs an operand, not a local edit.** Refusing to
-> distribute a rank-4 `flash_attn` carrying dropout was implemented and then
-> **reverted after it regressed a committed ROCm lane**:
-> `tests/tessera-ir/phase3/streaming_attention_backward_rocm.mlir` drives
-> `dropout_p = 0.25` through exactly this path and passed before. The defect is
-> real but statistical (masks correlated across batch/head, not a wrong value
-> per element), and the batch/head coordinates at the distribution site are SSA
-> loop induction variables — so a per-instance seed cannot be an attribute and
-> must be threaded as an OPERAND, changing the op signature and its native
-> consumers. Same shape as the Adafactor row. Caught only by running lit on the
-> ROCm box; the Mac skips this fixture entirely (`REQUIRES: tessera-rocm-backend`).
+> **FIXED 2026-08-30 — as an operand, but on `block_dropout`, not on
+> `flash_attn`; and the severity is lower than reported.** The deferral was
+> right that a per-instance seed cannot be an attribute (the batch/head
+> coordinates are `scf.for` induction variables). It was wrong about which op
+> has to change and about the blast radius.
+>
+> **Correction to the finding's evidence.** "No backend can recover the
+> distinction" does not hold. The only backend that executes dropout attention
+> is ROCm, and it does not consume `block_dropout`'s operands at all:
+> `TileToROCM.cpp:1549` records a bare `dropout = true/false` on
+> `tessera_rocm.flash_attn`, and the generated kernels rebuild the mask from
+> launch geometry — `counter = ((bh*Sq)+q)*Sk + k` in *both*
+> `GenerateWMMAFlashAttnKernel.cpp:418` and `...BwdKernel.cpp:482`, with `bh`
+> the fused batch-head block id. So the **executed** gfx1151 masks are already
+> iid across batch and head, and forward/backward already agree. Apple refuses
+> dropout outright (`APPLE_STREAMING_ATTN_DROPOUT_UNSUPPORTED`). The defect is
+> therefore a **Tile-IR contract defect** (Decisions #29/#32 — the shared
+> boundary understated what the physical kernels do), not a wrong numerical
+> result on any lane that runs today.
+>
+> **Fix.** `tessera_attn.block_dropout` gained an `Index:$stream_offset`
+> operand; `LowerFlashAttnToTileIR` derives the instance index `b*H + h` from
+> the `tessera.attention_distribution` batch/query_head loops this same pass
+> already annotates (Decision #30 — derive, don't ask) and passes
+> `(b*H + h) * Sq * Sk_padded`, the same disjoint counter block the WMMA
+> kernels use. A rank-2 attention that was never distributed passes 0 and its
+> mask is bit-identical to before; a distributed instance whose annotated loops
+> are unreachable **fails the match with a diagnostic** rather than silently
+> emitting stream 0 (Decision #21a). `tessera.flash_attn` is untouched, so no
+> `operandSegmentSizes` churn.
+>
+> **Why the ROCm lane cannot regress this time** (stated, not assumed — this
+> Mac skips `streaming_attention_backward_rocm.mlir` via
+> `REQUIRES: tessera-rocm-backend`, so it is unverified here): no fixture in
+> the repo parses `tessera_attn.block_dropout` textually; `ROCMWaveLdsPipeline`
+> never mentions attention or dropout ops; and `TileToROCM` tests only
+> `blockDropout != nullptr`. The only change in that fixture's output is one
+> more operand printed on `block_dropout`, which no CHECK line matches. **A
+> lit run on the ROCm box is still owed.** Host-free coverage added at
+> `tests/tessera-ir/phase3/streaming_attention_dropout_stream.mlir` (positive
+> rank-4 case + `stream = %c0` rank-2 negative).
 
 
 *C++ — tiling & Tile IR lowering · math*

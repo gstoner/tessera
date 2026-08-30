@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pytest
 
@@ -439,6 +441,35 @@ def _decode_ue8m0(codes: np.ndarray) -> np.ndarray:
     return np.ldexp(np.ones(codes.shape, np.float32), codes.astype(np.int32) - 127)
 
 
+def _assert_canonical_k_loop(bundle, *, expected_k: int) -> None:
+    """Assert the canonical k-loop contract in whichever form was emitted.
+
+    Two producers satisfy this contract and they state it differently, so
+    pinning one spelling fails on the other for reasons that have nothing to do
+    with the loop being canonical:
+
+      * ``tile.matmul_kernel`` DECLARES it as ``tessera.canonical_k_loop`` +
+        ``tessera.tile_k``. Those attributes are read by
+        ``MatmulKernelOp::verify`` and ``materializeSm120MatmulKernel``, and by
+        nothing else.
+      * the typed-MMA producer emits no ``matmul_kernel`` at all and instead
+        STATES the same facts structurally: a typed ``mma_desc`` carrying k and
+        an explicit ``scf.for`` stepping by it. Adding the attribute to this
+        route would be a declaration with no consumer (Decision #29).
+
+    Which producer runs depends on shape as well as storage -- ragged K falls
+    back to ``matmul_kernel`` even for fp16/bf16 -- so branch on what was
+    actually emitted.
+    """
+    tile_text = bundle.tile.text
+    if "tile.matmul_kernel" in tile_text:
+        assert "tessera.canonical_k_loop = true" in tile_text
+        assert f"tessera.tile_k = {expected_k} : i64" in tile_text
+    else:
+        assert f"k = {expected_k}" in tile_text
+        assert re.search(rf"scf\.for\b.*\bstep %c{expected_k}", tile_text)
+
+
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("shape", [(16, 8, 16), (37, 29, 23)])
 def test_canonical_sm120_request_packages_registers_launches_and_compares(shape) -> None:
@@ -585,11 +616,28 @@ def test_canonical_sm120_k_loop_shape_matrix(storage, shape) -> None:
     assert bundle.native_image is not None
     assert bundle.native_image.resource_record is not None
     assert bundle.launch_descriptor is not None
-    expected_k = 8 if storage == "tf32" else 16
-    assert "tessera.canonical_k_loop = true" in bundle.tile.text
-    assert "a = " in bundle.tile.text and 'acc = "f32"' in bundle.tile.text
-    assert f"tessera.tile_k = {expected_k} : i64" in bundle.tile.text
-    assert 'epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">' in bundle.tile.text
+    # The canonical k-loop contract is expressed differently by the two
+    # producers, and asserting one form against both was the defect here.
+    #
+    #   tf32 (schedule "direct")  -> tile.matmul_kernel, which DECLARES the
+    #       loop with tessera.canonical_k_loop / tile_k. Those attributes are
+    #       read by MatmulKernelOp::verify and materializeSm120MatmulKernel,
+    #       and by nothing else.
+    #   fp16/bf16 (schedule "shared") -> the typed-MMA producer, which emits
+    #       no matmul_kernel at all and instead STATES the same facts in the
+    #       IR: a typed mma_desc carrying k, and an explicit scf.for stepping
+    #       by it. Nothing reads the attribute off this route, so adding it
+    #       here would be a declaration with no consumer (Decision #29).
+    #
+    # Assert the structural form where it exists, since a materialised loop
+    # with the right step is a stronger guarantee than a boolean asserting one.
+    assert 'acc = "f32"' in bundle.tile.text
+    _assert_canonical_k_loop(bundle, expected_k=8 if storage == "tf32" else 16)
+    if "tile.matmul_kernel" in bundle.tile.text:
+        assert (
+            'epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">'
+            in bundle.tile.text
+        )
     assert "scf.for" in bundle.target_ir.text
     metrics = bundle.native_image.resource_record.metrics
     assert metrics["spill_store_bytes"] == 0

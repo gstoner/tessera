@@ -92,9 +92,7 @@ def test_the_lit_fixture_covers_the_same_cases():
         / "nvidia_delegate_contract_invalid.mlir"
     ).read_text(encoding="utf-8")
 
-    # `provenance` and `arch` are enum/`StrAttr`-shaped on the ODS side and are
-    # covered there by the same constraint machinery as `binding`; the named
-    # reasons below are the ones the C++ verifier emits by hand.
+    # Reasons the C++ verifier emits by hand.
     verifier_authored = {
         "non-empty `callee`",
         "requires a `tolerance`",
@@ -102,9 +100,24 @@ def test_the_lit_fixture_covers_the_same_cases():
         "finite and greater than zero",
         "non-empty `constraints`",
         "non-empty `ptx`",
+        "non-empty `arch`",
     }
-    missing = sorted(r for r in verifier_authored if r not in fixture)
+    # Reasons the ODS *constraint* machinery emits, for the string-enum
+    # attributes. These reject at parse time rather than in verify(), so they
+    # need their own fixture cases or the enum would be untested on that side.
+    ods_constrained = {
+        "attribute 'binding' failed to satisfy constraint",
+        "attribute 'provenance' failed to satisfy constraint",
+    }
+    missing = sorted(r for r in verifier_authored | ods_constrained if r not in fixture)
     assert not missing, f"rejection reasons not covered by the lit fixture: {missing}"
+
+    # And every Python rejection case must have a fixture counterpart, so the
+    # two enforcers cannot drift apart by one side growing a case alone.
+    assert len(REJECTION_CASES) == fixture.count("func.func @"), (
+        f"{len(REJECTION_CASES)} Python rejection cases but "
+        f"{fixture.count('func.func @')} lit cases — the enforcers have drifted"
+    )
 
 
 def test_accepts_both_pathways():
@@ -183,3 +196,27 @@ def test_a_non_delegate_candidate_has_no_contract():
         pass
 
     assert contract_for_candidate(_Plain()) is None
+
+
+def test_delegated_candidate_derives_tier_and_budget_from_the_contract():
+    """A delegate cannot claim a budget in Python it did not declare in IR.
+
+    Hand-setting these at the registration site is how the Python and C++
+    halves of a compiler drift apart, so they are derived rather than passed.
+    """
+    from tessera.compiler.emit.delegate_contract import DelegatedCandidate
+
+    class _Lib(DelegatedCandidate):
+        def run(self, region, *inputs, **kwargs):  # pragma: no cover - unused
+            raise NotImplementedError
+
+    contract = DelegateContract(
+        **_call(provenance="vendor_library", accuracy="tolerance_bounded",
+                tolerance=5e-4))
+    candidate = _Lib(contract, target="nvidia", op="matmul")
+
+    assert candidate.tier is Tier.HAND_TUNED
+    assert candidate.accuracy_atol == 5e-4
+    assert candidate.name == "tessera_nvidia_flash:sm_120"
+    assert contract_for_candidate(candidate) is contract
+    assert "provenance = \"vendor_library\"" in candidate.render_target_ir()

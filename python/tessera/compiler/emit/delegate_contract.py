@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tessera.compiler.emit.candidate import Tier
+from tessera.compiler.emit.candidate import Candidate, Tier
 
 #: Legal `binding` values — how the delegate is reached. Mirrors
 #: NVIDIA_DelegateBindingAttr.
@@ -216,6 +216,39 @@ class DelegateContract:
         return f"{lead} {self.render_attributes()} : {signature}"
 
 
+class DelegatedCandidate(Candidate):
+    """An arbiter candidate whose tier and budget come from its IR contract.
+
+    This is the integration point, and the reason it is a base class rather
+    than a helper: a delegate author cannot hand-set `tier` or
+    `accuracy_atol`. Both are derived from the `DelegateContract` the delegate
+    declares in Target IR, so a candidate cannot claim a budget in Python that
+    it did not declare to the verifier — which is precisely how the two halves
+    of a compiler drift apart.
+
+    Subclasses supply `run()` (binding the symbol or emitting the asm) and,
+    where the delegate is only present on real silicon, `available()`. Nothing
+    else about arbitration changes: a delegate is enumerated, F4-gated, and
+    selected by the same `arbitrate()` path as compiled candidates, which is
+    the point — Decision #28 scores a hand-tuned kernel *against* compiled
+    output rather than trusting it above.
+    """
+
+    def __init__(self, contract: DelegateContract, *, target: str, op: str) -> None:
+        self.delegate_contract = contract
+        self.name = contract.identity()
+        self.target = target
+        self.op = op
+        # Derived, never assigned by the subclass.
+        self.tier = contract.arbiter_tier()
+        self.accuracy_atol = contract.arbiter_accuracy_atol()
+
+    def render_target_ir(self, operands: str = "",
+                         signature: str = "() -> ()") -> str:
+        """The Target IR op declaring this candidate's delegation."""
+        return self.delegate_contract.render_op(operands, signature)
+
+
 def contract_for_candidate(candidate) -> DelegateContract | None:
     """The contract a registered candidate declares, or ``None``.
 
@@ -233,5 +266,6 @@ __all__ = [
     "PROVENANCES",
     "DelegateContract",
     "DelegateContractError",
+    "DelegatedCandidate",
     "contract_for_candidate",
 ]

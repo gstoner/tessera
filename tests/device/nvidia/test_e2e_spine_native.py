@@ -683,9 +683,11 @@ def test_canonical_sm120_k_loop_shape_matrix(storage, shape) -> None:
     ml_dtypes = pytest.importorskip("ml_dtypes")
     m, n, k = shape
     module = _module(m, n, k, storage=storage)
+    # No `nvidia_schedule` here: this test asserts the *compiled* route's k-loop
+    # contract, and that route selects its own physical schedule. Supplying the
+    # key produced 16 SCHEDULE_KEY_NOT_HONORED warnings per run -- exactly the
+    # volume that teaches people to ignore a diagnostic.
     options = {"package_native": True}
-    if storage in {"fp16", "bf16"}:
-        options["nvidia_schedule"] = "shared"
     bundle = compile_graph_module(
         module,
         source_origin="CORE-GEMM-KLOOP-2026-07-25",

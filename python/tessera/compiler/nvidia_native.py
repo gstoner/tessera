@@ -2065,10 +2065,31 @@ def package_matmul(
     fn = module.functions[0]
     op = fn.body[0]
     activation = str(op.kwargs.get("activation", "none"))
-    bias_value = op.kwargs.get("bias")
-    residual_value = op.kwargs.get("residual")
-    bias_name = bias_value.removeprefix("%") if isinstance(bias_value, str) else None
-    residual_name = residual_value.removeprefix("%") if isinstance(residual_value, str) else None
+    # The epilogue edges are OPERANDS, not attributes. Reading them from
+    # op.kwargs put this packager in direct conflict with the Graph IR
+    # verifier, which rejects an attribute holding an SSA value
+    # (GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE) and points at
+    # _KEYWORD_OPERANDS["tessera.matmul"] == ("bias", "residual"). Valid IR
+    # therefore produced bias_name=None here, no buffer binding, and the launch
+    # failed with E_LAUNCH_BINDING_MISMATCH; only IR the verifier rejects could
+    # reach the working path. Rank disambiguates the two without new metadata,
+    # and it is the same contract this function already asserts a few lines
+    # below when it emits bias as rank 1 and residual as rank 2.
+    bias_name: str | None = None
+    residual_name: str | None = None
+    for operand in op.operands[2:]:
+        name = operand.removeprefix("%")
+        shape = _shape(module, name)
+        if shape is not None and len(shape) == 1 and bias_name is None:
+            bias_name = name
+        elif shape is not None and len(shape) == 2 and residual_name is None:
+            residual_name = name
+    if bias_name is None and isinstance(op.kwargs.get("bias"), str):
+        bias_name = str(op.kwargs["bias"]).removeprefix("%")
+    if residual_name is None and isinstance(op.kwargs.get("residual"), str):
+        residual_name = str(op.kwargs["residual"]).removeprefix("%")
+    bias_value = bias_name
+    residual_value = residual_name
     fused = bias_value not in {None, False} or residual_value not in {None, False} or activation != "none"
     output_storage = fn.result_types[0].dtype if fn.result_types else "fp32"
     output_ir = "f16" if output_storage == "fp16" else (

@@ -240,3 +240,41 @@ def test_threadgroup_budget_arithmetic():
     # An f32 tile of 16384 elements is exactly twice the budget; an f16 tile of
     # the same count fits exactly. Counting elements alone would accept both.
     assert 16384 * 4 > budget and 16384 * 2 == budget
+
+
+def test_bf16_storage_still_needs_the_fp32_accumulator():
+    """bf16 is a supported simdgroup storage type, and it needs f32 accumulation.
+
+    The MSL synthesizer emits `simdgroup_matrix<bfloat, 8, 8>` natively, so a
+    storage enum without bf16 left the IR unable to express a route the backend
+    already supported — the exact gap these primitives exist to close.
+
+    bf16 trades precision for range against f16: 7 mantissa bits versus 10, but
+    an f32-sized exponent. The precision loss is why the fp32 accumulator is not
+    optional for it either.
+    """
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
+
+    def chain(storage, accum, k_slabs=512, seed=0):
+        rng = np.random.default_rng(seed)
+        acc = np.zeros((_MMA_EXTENT, _MMA_EXTENT), dtype=accum)
+        for _ in range(k_slabs):
+            a = rng.standard_normal((_MMA_EXTENT, _MMA_EXTENT)).astype(storage)
+            b = rng.standard_normal((_MMA_EXTENT, _MMA_EXTENT)).astype(storage)
+            acc = (a.astype(accum) @ b.astype(accum) + acc).astype(accum)
+        return acc.astype(np.float64)
+
+    exact = chain(np.float64, np.float64)
+    scale = np.abs(exact).max()
+    bf16_fp32 = np.abs(chain(bf16, np.float32) - exact).max() / scale
+    f16_f16 = np.abs(chain(np.float16, np.float16) - exact).max() / scale
+
+    # Lower storage precision than f16, yet still better than accumulating in
+    # f16 — so the accumulator contract carries its weight for bf16 too.
+    assert bf16_fp32 < f16_f16, (
+        f"bf16 with an fp32 accumulator ({bf16_fp32}) should still beat f16 "
+        f"accumulated in f16 ({f16_f16})"
+    )
+    # And the range is the point of bf16: it holds values f16 cannot represent.
+    assert float(ml_dtypes.finfo(bf16).max) > float(np.finfo(np.float16).max) * 1e30

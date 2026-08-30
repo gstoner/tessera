@@ -160,3 +160,19 @@ func.func @threadgroup_size_attribute_disagrees_with_the_type() {
   return
 }
 
+// -----
+
+func.func @integer_matrix_has_no_metal_spelling(%m: memref<64xi32>, %o: index) {
+  // Metal declares simdgroup_matrix for half, bfloat and float. An i32 matrix
+  // verified and round-tripped before the type was constrained, then had
+  // nothing to lower to -- and it made the load/store element-match check a
+  // comparison between two arbitrary types rather than a contract.
+  // The diagnostic fires where the TYPE is parsed, not on the op's first line,
+  // so it is anchored there.
+  %a = tessera_apple.gpu.simdgroup_load %m, %o
+      {leading_dim = 8 : i64, space = "threadgroup"}
+      // expected-error @+1 {{element type must be f16, bf16 or f32}}
+      : memref<64xi32>, index -> !tessera_apple.simdgroup_matrix<i32>
+  return
+}
+

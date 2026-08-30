@@ -39,6 +39,13 @@ def Apple_SimdgroupMatrixType : TypeDef<TesseraApple_Dialect, "SimdgroupMatrix">
   let summary = "An 8x8 Metal simdgroup_matrix register value";
   let parameters = (ins "::mlir::Type":$elementType);
   let assemblyFormat = "`<` $elementType `>`";
+  // Metal's simdgroup_matrix exists for half, bfloat and float. An
+  // unconstrained parameter accepted `simdgroup_matrix<i32>`, which has no
+  // Metal spelling and no MMA -- it verified and round-tripped, then had
+  // nothing to lower to. Constraining the type is what makes the load/store
+  // element-match check meaningful rather than a comparison between two
+  // arbitrary types.
+  let genVerifyDecl = 1;
 }
 
 class TesseraApple_Op<string mnemonic, list<Trait> traits = []> :
@@ -80,7 +87,7 @@ def Apple_AddressSpaceAttr
         "Metal address space the matrix is loaded from or stored to">;
 
 def Apple_MmaStorageAttr
-    : Apple_EnumStrAttr<["f16", "f32"],
+    : Apple_EnumStrAttr<["f16", "bf16", "f32"],
         "simdgroup_matrix input element type">;
 
 def AppleGPU_ThreadgroupAllocOp : TesseraApple_Op<"gpu.threadgroup_alloc"> {

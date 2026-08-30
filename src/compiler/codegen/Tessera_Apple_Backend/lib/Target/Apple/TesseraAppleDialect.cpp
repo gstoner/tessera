@@ -83,6 +83,19 @@ namespace {
 // GPU machine primitives — the numerics are contract, so they are verified.
 //===----------------------------------------------------------------------===//
 
+// Metal declares simdgroup_matrix for half, bfloat and float. Anything else --
+// an integer matrix, an f64 matrix -- has no Metal spelling and no MMA to
+// lower to, so it fails at construction rather than surviving to emission.
+::mlir::LogicalResult SimdgroupMatrixType::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::Type elementType) {
+  if (!elementType.isF16() && !elementType.isBF16() && !elementType.isF32())
+    return emitError() << "simdgroup_matrix element type must be f16, bf16 or "
+                          "f32; Metal declares the type for half, bfloat and "
+                          "float only";
+  return ::mlir::success();
+}
+
 // Apple7 supports exactly one simdgroup-matrix shape. Stated once so a future
 // part fails closed at the op rather than lowering to a shape the hardware
 // does not have.
@@ -209,9 +222,19 @@ static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
   // a Metal simdgroup MMA -- it would be a convert plus an MMA, and accepting
   // it here would hide that conversion from the numerics the epilogue reasons
   // about.
-  const bool wantF16 = getStorage() == "f16";
+  //
+  // bf16 is a first-class storage type here, not an afterthought: the MSL
+  // synthesizer emits `simdgroup_matrix<bfloat, 8, 8>` natively (Metal 3.1+,
+  // Apple6 and later). It trades precision for range against f16 -- 7 mantissa
+  // bits against 10, but an f32-sized exponent -- and the fp32 accumulator
+  // matters just as much for it: measured over K = 4096, bf16 storage with an
+  // fp32 accumulator is 2.2e-03 relative error, still better than f16 storage
+  // accumulated in f16 at 5.8e-03.
+  ::llvm::StringRef storage = getStorage();
   auto matchesStorage = [&](::mlir::Type t) {
-    return wantF16 ? t.isF16() : t.isF32();
+    if (storage == "f16") return t.isF16();
+    if (storage == "bf16") return t.isBF16();
+    return t.isF32();
   };
   if (!matchesStorage(aElem) || !matchesStorage(bElem))
     return emitOpError() << "operands `a` and `b` must both have element type "

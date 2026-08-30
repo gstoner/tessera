@@ -83,9 +83,13 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     Type elem = lhsTy.getElementType();
     if (elem != rhsTy.getElementType())
       return rewriter.notifyMatchFailure(op, "mixed input element types");
-    // The MMA storage set: an f64 or integer matmul has no simdgroup form.
-    if (!elem.isF16() && !elem.isF32())
-      return rewriter.notifyMatchFailure(op, "simdgroup MMA needs f16 or f32");
+    // The MMA storage set. bf16 is native on Apple6+ -- the MSL synthesizer
+    // emits `simdgroup_matrix<bfloat, 8, 8>` -- so leaving it out would make
+    // the IR unable to express a route the backend already supports, which is
+    // the exact gap these primitives exist to close.
+    if (!elem.isF16() && !elem.isBF16() && !elem.isF32())
+      return rewriter.notifyMatchFailure(
+          op, "simdgroup MMA storage must be f16, bf16 or f32");
 
     const int64_t M = lhsTy.getDimSize(0), K = lhsTy.getDimSize(1);
     const int64_t N = rhsTy.getDimSize(1);
@@ -103,10 +107,10 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     if (!resTy || !resTy.hasStaticShape())
       return rewriter.notifyMatchFailure(op, "requires a static result type");
     Type resElem = resTy.getElementType();
-    if (!resElem.isF16() && !resElem.isF32())
+    if (!resElem.isF16() && !resElem.isBF16() && !resElem.isF32())
       return rewriter.notifyMatchFailure(
-          op, "result must be f16 or f32; the accumulator is f32 and only "
-              "those have a defined rounding epilogue");
+          op, "result must be f16, bf16 or f32; the accumulator is f32 and "
+              "only those have a defined rounding epilogue");
 
     Location loc = op->getLoc();
     Type f32Ty = rewriter.getF32Type();
@@ -157,7 +161,7 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
 
     Type accTy = SimdgroupMatrixType::get(getContext(), f32Ty);
     Type inTy = SimdgroupMatrixType::get(getContext(), elem);
-    StringRef storage = elem.isF16() ? "f16" : "f32";
+    StringRef storage = elem.isF16() ? "f16" : (elem.isBF16() ? "bf16" : "f32");
     auto scope = rewriter.getStringAttr("threadgroup");
     auto tileStride = rewriter.getI64IntegerAttr(kExtent);
 

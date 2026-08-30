@@ -84,3 +84,23 @@ func.func @f16_result_rounds_once_in_the_epilogue(
 // round-to-nearest-even despite the name.
 // CHECK: memref.alloc() : memref<128xf16>
 // CHECK: arith.truncf
+
+// -----
+
+// bf16 is a first-class storage type, not an afterthought: the MSL synthesizer
+// emits `simdgroup_matrix<bfloat, 8, 8>` natively (Metal 3.1+, Apple6 and
+// later). Omitting it left the IR unable to express a route the backend
+// already supported -- the exact gap these primitives exist to close.
+func.func @bf16_storage_with_fp32_accumulator(
+    %a: tensor<16x16xbf16>, %b: tensor<16x8xbf16>) -> tensor<16x8xbf16> {
+  %c = "tessera.matmul"(%a, %b)
+      : (tensor<16x16xbf16>, tensor<16x8xbf16>) -> tensor<16x8xbf16>
+  return %c : tensor<16x8xbf16>
+}
+// CHECK-LABEL: @bf16_storage_with_fp32_accumulator
+// CHECK: tessera_apple.gpu.simdgroup_load {{.*}} -> <bf16>
+// The accumulator stays f32: bf16 has 7 mantissa bits against f16's 10, so the
+// fp32 accumulator matters at least as much for it.
+// CHECK: tessera_apple.gpu.simdgroup_matmul {{.*}}storage = "bf16"{{.*}} -> <f32>
+// CHECK: arith.truncf {{.*}} : f32 to bf16
+

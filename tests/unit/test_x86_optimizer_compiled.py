@@ -165,6 +165,11 @@ def test_lion_backward_stop_sign_vjp():
 
 
 def _adafactor_artifact(rt, *, backward: bool, factored: bool, shape):
+    # Every reference below carries state step 1, so the update under test is
+    # step 2.  `step` is 1-based and selects Adafactor's bias-corrected
+    # second-moment decay (`optim.adafactor_decay`), exactly as it does for the
+    # flat adam/adamw ABI above.
+    numeric = {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": 2}
     operands = ["p", "g", "row", "col"] if factored else ["p", "g", "moment"]
     names = operands + (["dy"] if backward else [])
     metadata = {
@@ -177,7 +182,7 @@ def _adafactor_artifact(rt, *, backward: bool, factored: bool, shape):
         "arg_names": names, "out_cotangent": "dy",
         "ops": [{
             "op_name": "tessera.adafactor", "operands": operands,
-            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            "kwargs": dict(numeric),
         }],
     }
     if backward:
@@ -187,7 +192,7 @@ def _adafactor_artifact(rt, *, backward: bool, factored: bool, shape):
             target="x86",
             parameter_shape=shape,
             topology="factored" if factored else "full",
-            kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            kwargs=dict(numeric),
         )
         metadata["state_contract"] = dict(scheduled.state_contract)
         metadata["scheduled_training"] = scheduled.metadata()

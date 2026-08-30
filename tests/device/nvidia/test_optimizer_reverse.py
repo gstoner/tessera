@@ -49,7 +49,7 @@ def _adamw(p, g, m1, m2):
 @ts.jit(target="nvidia_sm120", autodiff="reverse", wrt=("p", "g", "state"))
 def _adafactor_full(p, g, state):
     updated, _new_state = ts.ops.adafactor(
-        p, g, state, lr=0.003, beta2=0.91, eps=1.0e-7
+        p, g, state, lr=0.003, beta2=0.91, eps=1.0e-7, step=2
     )
     return updated
 
@@ -59,7 +59,7 @@ def _adafactor_full(p, g, state):
 )
 def _adafactor_factored(p, g, row, col):
     updated, _new_row, _new_col = ts.ops.adafactor(
-        p, g, row, col, lr=0.003, beta2=0.91, eps=1.0e-7
+        p, g, row, col, lr=0.003, beta2=0.91, eps=1.0e-7, step=2
     )
     return updated
 
@@ -162,6 +162,8 @@ def test_sm120_adafactor_full_and_factored_exact_certificates():
     from tessera.autodiff.vjp import get_vjp
 
     rng = np.random.default_rng(1311)
+    # The jit'd forwards above declare step=2, matching the `"step": 1` state
+    # the reference VJPs carry (the update being differentiated is step 2).
     kwargs = {"lr": 0.003, "beta2": 0.91, "eps": 1.0e-7}
     for compiled, shape, topology in (
         (_adafactor_full, (17,), "full"),

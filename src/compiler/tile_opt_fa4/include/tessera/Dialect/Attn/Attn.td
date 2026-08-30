@@ -191,16 +191,37 @@ def BoundaryMaskOp : Op<Tessera_Attn_Dialect, "boundary_mask", [Pure]> {
 
 // Counter-based dropout for one score block. The absolute KV offset is an SSA
 // operand, preventing every loop iteration from replaying the first mask tile.
+//
+// `stream_offset` is the second, orthogonal counter axis: the RNG stream base
+// of the *instance* this block belongs to (Decision #18). A rank-4
+// FlashAttention is distributed into B*H rank-2 instances by
+// `DistributeRank4FlashAttn`, and the batch/head coordinates at that site are
+// `scf.for` induction variables — SSA values, so they cannot ride on the
+// `seed` attribute. Without this operand every instance replays one mask and
+// dropout is fully correlated across batch and head instead of iid.
+//
+// The contract is that instances occupy DISJOINT counter ranges: the producer
+// passes `(b*H + h) * Sq * Sk_padded`, so a consumer keying on
+// `(seed, stream_offset + row*Sk + (kv_offset + col))` gets an independent
+// stream per (batch, head). That is exactly the counter the generated gfx1151
+// WMMA attention kernels already build from their launch geometry
+// (`((bh*Sq)+q)*Sk + k`, GenerateWMMAFlashAttnKernel.cpp / ...BwdKernel.cpp);
+// stating it here makes the shared Tile-IR contract say what the physical
+// kernels do instead of understating it (Decisions #29/#32).
+//
+// A rank-2 attention that was never distributed passes index 0 and keeps its
+// previous mask exactly.
 def BlockDropoutOp : Op<Tessera_Attn_Dialect, "block_dropout", []> {
   let summary = "Apply deterministic counter-based dropout to one score block";
   let arguments = (ins
     AnyType:$scores,
     Index:$kv_offset,
+    Index:$stream_offset,
     F32Attr:$dropout_p,
     I64Attr:$seed
   );
   let results = (outs AnyType:$masked_scores);
-  let assemblyFormat = "$scores `kv_off` `=` $kv_offset `p` `=` $dropout_p `seed` `=` $seed attr-dict `:` type($scores) `->` type($masked_scores)";
+  let assemblyFormat = "$scores `kv_off` `=` $kv_offset `stream` `=` $stream_offset `p` `=` $dropout_p `seed` `=` $seed attr-dict `:` type($scores) `->` type($masked_scores)";
   let hasVerifier = 1;
 }
 

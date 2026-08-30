@@ -496,6 +496,34 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     Value upper = arith::ConstantIndexOp::create(rewriter, loc, paddedSk);
     Value step = arith::ConstantIndexOp::create(rewriter, loc, tkv);
 
+    // Per-instance dropout RNG stream base (Decision #18).  This slice may be
+    // one of B*H instances that `DistributeRank4FlashAttn` produced; the KV
+    // `boundary` iter-arg below restarts at 0 inside every one of them, so
+    // without a distinct stream base every instance would replay one identical
+    // mask and dropout would be fully correlated across batch and head.
+    //
+    // The base is loop-invariant, so it is materialized once here rather than
+    // inside the KV loop.
+    Value dropoutStream = zeroIndex;
+    if (dropout && dropout.getValueAsDouble() > 0.0) {
+      Value instance = deriveDistributionInstanceIndex(rewriter, loc, op);
+      if (instance) {
+        Value stride = arith::ConstantIndexOp::create(
+            rewriter, loc, qRows * paddedSk);
+        dropoutStream =
+            arith::MulIOp::create(rewriter, loc, instance, stride);
+      } else if (op->hasAttr("tessera.rank4_distributed")) {
+        // Fail closed: this op IS one of the distributed instances but the
+        // batch/head loops this pass annotates are not reachable, so a
+        // per-instance stream cannot be derived.  Emitting stream 0 would
+        // silently restore the correlated-mask defect (Decisions #21/#21a).
+        return rewriter.notifyMatchFailure(
+            op, "distributed rank-4 attention carries dropout but its "
+                "tessera.attention_distribution batch/query_head loops are "
+                "not reachable, so no per-instance RNG stream can be derived");
+      }
+    }
+
     auto kvLoop = scf::ForOp::create(
         rewriter, loc, zeroIndex, upper, step,
         ValueRange{accInit, negInf, zero, producerInit, consumerInit,

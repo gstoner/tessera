@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import tessera as ts
 from tessera.state import tree_flatten, tree_unflatten
@@ -110,3 +111,195 @@ def test_ema_polyak_and_optimizer_state_tree_round_trip():
     restored = tree_unflatten(treedef, leaves)
     assert restored["step"] == state["step"]
     np.testing.assert_allclose(restored["m"]["w"], state["m"]["w"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Adafactor second-moment bias correction (CODE_REVIEW_2026-08-29,
+# `python/tessera/optim.py:427`).  The tracked `step` used to be incremented and
+# never read, so the zero-initialized second moment was biased low and the first
+# ~1/(1-beta2) updates were inflated by 1/sqrt(1 - beta2**step) — 31.6x at the
+# default beta2=0.999.  `optim.adafactor_decay` is the single shared correction;
+# these tests pin it against an independently written reference so a regression
+# in either the tree form, the flat compiler ABI, or the analytic VJP shows up.
+
+
+def _uncorrected_adafactor_full(g, *, beta2, eps, steps):
+    """Textbook Adafactor full-moment update with an EXPLICIT 1-beta2**t debias.
+
+    Written directly from the definition (raw EMA, then divide by 1-beta2**t)
+    rather than through `adafactor_decay`, so it is an independent check of the
+    step-dependent-decay formulation rather than a restatement of it.
+    """
+    v = np.zeros_like(g[0], dtype=np.float64)
+    updates = []
+    for t in range(1, steps + 1):
+        gt = np.asarray(g[t - 1], dtype=np.float64)
+        v = beta2 * v + (1.0 - beta2) * gt * gt
+        v_hat = v / (1.0 - beta2**t)
+        updates.append(gt / (np.sqrt(np.maximum(v_hat, eps)) + eps))
+    return updates
+
+
+def test_adafactor_step_one_update_is_not_inflated_by_the_ema_bias():
+    """A constant gradient must give a ~1.0 normalized update from step 1."""
+    grad = np.full((4, 4), 0.1, dtype=np.float32)
+    params, state = ts.optim.adafactor(
+        {"w": np.ones((4, 4), dtype=np.float32)}, {"w": grad}, lr=1.0
+    )
+    magnitude = float(np.abs(1.0 - np.asarray(params["w"])).mean())
+    # Pre-fix this was 1/sqrt(1-0.999) = 31.6227...
+    assert magnitude == pytest.approx(1.0, rel=1e-4), magnitude
+    assert state["step"] == 1
+
+
+def test_adafactor_matches_explicit_bias_corrected_ema_across_steps():
+    """Full-moment (rank-1) leaves must track the explicit 1-beta2**t debias."""
+    rng = np.random.default_rng(20260830)
+    beta2, eps, lr, steps = 0.999, 1e-30, 1.0, 6
+    grads = [rng.normal(scale=0.3, size=(7,)).astype(np.float32) for _ in range(steps)]
+    expected = _uncorrected_adafactor_full(grads, beta2=beta2, eps=eps, steps=steps)
+
+    params, state = {"w": np.zeros(7, dtype=np.float32)}, None
+    for index, grad in enumerate(grads):
+        previous = np.asarray(params["w"], dtype=np.float64)
+        params, state = ts.optim.adafactor(
+            params, {"w": grad}, state, lr=lr, beta2=beta2, eps=eps
+        )
+        applied = (previous - np.asarray(params["w"], dtype=np.float64)) / lr
+        np.testing.assert_allclose(applied, expected[index], rtol=2e-5, atol=2e-6)
+        assert state["step"] == index + 1
+
+
+def test_adafactor_decay_is_the_debiasing_recursion_and_fails_closed():
+    beta2 = 0.9
+    # t=1 must discard the (empty) prior so v_1 == g_1**2 exactly.
+    assert ts.optim.adafactor_decay(beta2, 1) == 0.0
+    # The recursion must reproduce EMA_t / (1 - beta2**t) exactly.
+    raw, corrected = 0.0, 0.0
+    for t in range(1, 40):
+        g2 = float(t) ** 2
+        raw = beta2 * raw + (1.0 - beta2) * g2
+        decay = ts.optim.adafactor_decay(beta2, t)
+        corrected = decay * corrected + (1.0 - decay) * g2
+        assert corrected == pytest.approx(raw / (1.0 - beta2**t), rel=1e-12)
+    # Asymptotically the caller's beta2 is preserved, not replaced.
+    assert ts.optim.adafactor_decay(beta2, 500) == pytest.approx(beta2, rel=1e-9)
+    # Semantic keys fail closed rather than defaulting (Decision #21a).
+    for bad_step in (0, -1):
+        with pytest.raises(ValueError, match="1-based"):
+            ts.optim.adafactor_decay(beta2, bad_step)
+    for bad_beta2 in (1.0, -0.1, 1.5):
+        with pytest.raises(ValueError, match=r"beta2"):
+            ts.optim.adafactor_decay(bad_beta2, 3)
+
+
+def test_flat_adafactor_abi_carries_the_step_like_flat_adam():
+    """The flat compiler ABI must agree with the tree form at every step, not
+    only at step 1 where the correction happens to zero the carried state."""
+    rng = np.random.default_rng(90210)
+    shape = (3, 5)
+    kwargs = {"lr": 0.003, "beta2": 0.91, "eps": 1.0e-7}
+    p = rng.normal(size=shape).astype(np.float32)
+    row = np.zeros(shape[:-1], np.float32)
+    col = np.zeros(shape[-1], np.float32)
+    tree_params, tree_state = {"w": p}, None
+    for step in range(1, 5):
+        g = rng.normal(scale=0.3, size=shape).astype(np.float32)
+        p, row, col = ts.ops.adafactor(p, g, row, col, step=step, **kwargs)
+        tree_params, tree_state = ts.optim.adafactor(
+            tree_params, {"w": g}, tree_state, **kwargs
+        )
+        assert tree_state["step"] == step
+        np.testing.assert_allclose(p, tree_params["w"], rtol=2e-6, atol=2e-6)
+        np.testing.assert_allclose(row, tree_state["v"]["w"]["row"], rtol=2e-6)
+        np.testing.assert_allclose(col, tree_state["v"]["w"]["col"], rtol=2e-6)
+    # A declared step that contradicts the tree state must not be silently
+    # resolved in favour of either side.
+    with pytest.raises(ValueError, match="disagrees with the carried state"):
+        ts.ops.adafactor(tree_params, {"w": g}, tree_state, step=99, **kwargs)
+
+
+def test_adafactor_vjp_differentiates_the_corrected_forward():
+    """The analytic VJP must track the step-dependent decay, not nominal beta2.
+
+    (A previous batch shipped a defect by fixing an eager path while its VJP
+    kept the old behaviour; this pins the pair together.)"""
+    from tessera.autodiff.vjp import get_vjp
+
+    rng = np.random.default_rng(4242)
+    shape = (17,)
+    kwargs = {"lr": 0.003, "beta2": 0.91, "eps": 1.0e-7}
+    p = rng.normal(size=shape).astype(np.float32)
+    g = rng.normal(scale=0.2, size=shape).astype(np.float32)
+    dy = rng.normal(size=shape).astype(np.float32)
+    for carried in (0, 1, 5):
+        state = {
+            "v": {
+                "v": rng.uniform(0.1, 0.3, size=shape).astype(np.float32),
+                "factored": False,
+            },
+            "step": carried,
+        }
+        analytic = get_vjp("adafactor")(dy, p, g, state, **kwargs)
+
+        def forward(gradient):
+            return np.asarray(
+                ts.optim.adafactor(p, gradient, state, **kwargs)[0],
+                dtype=np.float64,
+            )
+
+        numeric = np.zeros(shape, dtype=np.float64)
+        h = 1e-3
+        for index in range(shape[0]):
+            bump = np.zeros(shape, dtype=np.float64)
+            bump[index] = h
+            plus = forward((g + bump).astype(np.float32))
+            minus = forward((g - bump).astype(np.float32))
+            numeric[index] = float(
+                np.sum(np.asarray(dy, dtype=np.float64) * (plus - minus)) / (2 * h)
+            )
+        # The forward computes in fp32, so central differences sit on a ~1e-4
+        # noise floor (the same reason `jvp_adafactor` pins h=1e-3).  That is
+        # still two orders tighter than the error an uncorrected decay causes:
+        # see `test_adafactor_vjp_rejects_the_nominal_decay` below.
+        np.testing.assert_allclose(
+            np.asarray(analytic[1], dtype=np.float64), numeric, rtol=2e-2, atol=1e-4
+        )
+
+
+def test_adafactor_vjp_rejects_the_nominal_decay():
+    """Discrimination check for the test above: had the VJP kept differentiating
+    the *nominal* beta2 (the pre-fix behaviour), the gradient would be wrong by
+    far more than the fp32 finite-difference noise floor."""
+    from tessera.autodiff import vjp as vjp_module
+    from tessera.autodiff.vjp import get_vjp
+
+    rng = np.random.default_rng(4242)
+    shape = (17,)
+    kwargs = {"lr": 0.003, "beta2": 0.91, "eps": 1.0e-7}
+    p = rng.normal(size=shape).astype(np.float32)
+    g = rng.normal(scale=0.2, size=shape).astype(np.float32)
+    dy = rng.normal(size=shape).astype(np.float32)
+    state = {
+        "v": {
+            "v": rng.uniform(0.1, 0.3, size=shape).astype(np.float32),
+            "factored": False,
+        },
+        "step": 1,
+    }
+    corrected = np.asarray(get_vjp("adafactor")(dy, p, g, state, **kwargs)[1])
+
+    original = vjp_module.adafactor_decay if hasattr(vjp_module, "adafactor_decay") else None
+    del original
+    import tessera.optim as optim_module
+
+    saved = optim_module.adafactor_decay
+    try:  # pre-fix behaviour: a fixed, uncorrected decay
+        optim_module.adafactor_decay = lambda beta2, step: float(beta2)
+        uncorrected = np.asarray(get_vjp("adafactor")(dy, p, g, state, **kwargs)[1])
+    finally:
+        optim_module.adafactor_decay = saved
+    relative = float(
+        np.max(np.abs(uncorrected - corrected) / (np.abs(corrected) + 1e-12))
+    )
+    assert relative > 0.05, relative

@@ -29,7 +29,7 @@ def artifact() -> rt.RuntimeArtifact:
             "op_name": "tessera.adafactor",
             "result": "output",
             "operands": ["parameter", "gradient", "row", "col"],
-            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": 8},
         }],
     })
 
@@ -47,7 +47,7 @@ def backward_artifact() -> rt.RuntimeArtifact:
             "result": "gradients",
             "operands": ["parameter", "gradient", "row", "col"],
             "out_cotangent": "dy",
-            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": 8},
         }],
     })
 

@@ -146,6 +146,7 @@ markers = [
     "hardware_nvidia: requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm: requires an AMD GPU with the ROCm toolkit",
     "hardware_amx: requires Intel AMX hardware with OS tile-state permission",
+    "hardware_avx512: requires an x86 host with AVX-512",
 ]
 
 # ----------------------------------------------------------------------------

@@ -8,6 +8,9 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/ADT/StringSet.h"
 
+#include <cmath>
+#include <optional>
+
 #include "TesseraNVIDIADialect.h.inc"
 
 #define GET_OP_CLASSES
@@ -85,6 +88,80 @@ LogicalResult MacroCTAMatmulOp::verify() {
   if (!digest || digest.getValue().size() != 64)
     return emitOpError("requires a 64-character tessera.schedule_hash");
   return success();
+}
+
+// Shared accuracy contract for the two delegation ops.
+//
+// Decision #28's arbiter selects the fastest *in-budget* candidate, so a
+// delegate that does not state a numerical claim is not comparable to
+// compiled output -- it is only faster. `tolerance_bounded` without a
+// tolerance is that failure wearing a contract's clothes, so it is rejected
+// rather than defaulted (Decision #21a: a semantic key never defaults).
+static LogicalResult verifyBound(Operation *op, StringRef name,
+                                 std::optional<llvm::APFloat> bound) {
+  if (!bound)
+    return success();
+  const double value = bound->convertToDouble();
+  if (!(value > 0.0) || !std::isfinite(value))
+    return op->emitOpError("`") << name << "` must be finite and greater than zero";
+  return success();
+}
+
+static LogicalResult verifyDelegateAccuracy(
+    Operation *op, StringRef accuracy, std::optional<llvm::APFloat> tolerance,
+    std::optional<llvm::APFloat> toleranceRel) {
+  if (failed(verifyBound(op, "tolerance", tolerance)) ||
+      failed(verifyBound(op, "tolerance_rel", toleranceRel)))
+    return failure();
+
+  if (accuracy == "tolerance_bounded") {
+    // Absolute OR relative satisfies the claim, and both together is the
+    // ordinary mixed criterion. An absolute bound alone is meaningless without
+    // knowing the magnitude of the result -- 1e-6 is vacuous on values of
+    // order 1e6 and unsatisfiable on 1e-9 -- so a delegate whose real claim is
+    // relative must be able to say so rather than overclaim in absolute terms.
+    if (!tolerance && !toleranceRel)
+      return op->emitOpError(
+          "accuracy=tolerance_bounded requires `tolerance` and/or "
+          "`tolerance_rel`; a bounded numerical claim with no stated bound is "
+          "not a claim the arbiter can budget against");
+    return success();
+  }
+  // reference_exact
+  if (tolerance || toleranceRel)
+    return op->emitOpError(
+        "accuracy=reference_exact must not carry a tolerance; an exact claim "
+        "with a tolerance is two contradictory claims, and a reader cannot "
+        "tell which one the delegate honours");
+  return success();
+}
+
+LogicalResult KernelCallOp::verify() {
+  if (getCallee().empty())
+    return emitOpError(
+        "requires a non-empty `callee`; a delegation with no named target "
+        "cannot be bound, cached, or re-measured");
+  if (getArch().empty())
+    return emitOpError("requires a non-empty `arch`");
+  return verifyDelegateAccuracy(getOperation(), getAccuracy(), getTolerance(),
+                                getToleranceRel());
+}
+
+LogicalResult InlinePtxOp::verify() {
+  if (getPtx().empty())
+    return emitOpError(
+        "requires non-empty `ptx`; an empty inline-asm body is a silently "
+        "successful no-op rather than an error, which is exactly the failure "
+        "this contract exists to prevent");
+  if (getConstraints().empty())
+    return emitOpError(
+        "requires a non-empty `constraints` string; inline asm whose operand "
+        "constraints are unstated cannot be bound correctly, and guessing "
+        "them is how register clobbers become silent miscompiles");
+  if (getArch().empty())
+    return emitOpError("requires a non-empty `arch`");
+  return verifyDelegateAccuracy(getOperation(), getAccuracy(), getTolerance(),
+                                getToleranceRel());
 }
 
 LogicalResult CudaMathKernelOp::verify() {

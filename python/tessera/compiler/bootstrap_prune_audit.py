@@ -30,7 +30,8 @@ would make a prune lossy, so it fails closed.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _COMPILER = Path(__file__).resolve().parent
@@ -76,6 +77,8 @@ class BackendInventory:
     packagers: tuple[tuple[str, str], ...]
     families: tuple[str, ...]
     lines: int
+    #: bootstrap packager name -> what it actually does.
+    kinds: dict[str, str] = field(default_factory=dict)
 
     @property
     def bootstrap(self) -> tuple[str, ...]:
@@ -106,7 +109,7 @@ def _first_param_type(node: ast.FunctionDef) -> str:
         return ""
 
 
-def _packagers(tree: ast.Module) -> tuple[tuple[str, str], ...]:
+def _packagers(tree: ast.Module, source: str = "") -> tuple[tuple[str, str], ...]:
     """(name, first-parameter type) for every ``package_*`` function.
 
     The first parameter is what separates the two populations, and it is a
@@ -130,10 +133,84 @@ def _packagers(tree: ast.Module) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _packager_kinds(tree: ast.Module, source: str) -> dict[str, str]:
+    """name -> kind, for every bootstrap packager in the module."""
+    lines = source.split("\n")
+    out: dict[str, str] = {}
+    for node in tree.body:
+        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("package_")):
+            continue
+        if not _is_bootstrap(_first_param_type(node)):
+            continue
+        body = "\n".join(lines[node.lineno - 1:node.end_lineno])
+        out[node.name] = _packager_kind(body)
+    return out
+
+
 def _is_bootstrap(param_type: str) -> bool:
     """Whether a packager re-enters Graph IR rather than consuming an artifact."""
     return "GraphIRModule" in param_type
 
+
+#: Substrings that mean a packager reaches outside the compiler for its code:
+#: a runtime compiler, a vendor library, a shipped shared object, or raw device
+#: source. Absence of all of them is what distinguishes "constructs IR" from
+#: "delegates".
+#: Any of these means the packager built IR and ran it through the tool.
+#: A regex because each backend spells the helper differently.
+_IR_CONSTRUCTION_RE = re.compile(
+    r"_compile_\w*_ir\b|emit_\w*_(?:tile|graph)_ir\b|tessera-opt|run_tessera_opt"
+)
+
+_DELEGATION_MARKERS: tuple[str, ...] = (
+    "nvrtc", "NVRTC", "hiprtc", "HIPRTC",
+    "cublas", "cudnn", "cutlass", "rocblas", "hipblas",
+    ".so", "__global__", "ptx_emit", "libtessera",
+)
+
+
+def _packager_kind(body: str) -> str:
+    """What a bootstrap packager actually does, which decides how it is retired.
+
+    The distinction matters because the two kinds take opposite treatment and
+    a plan that conflates them scopes the wrong work:
+
+    * ``constructs_tile_ir`` -- builds Tile IR in Python and then compiles it
+      through ``tessera-opt``. The MLIR pipeline *is* running from Tile
+      onward; what bypasses it is Graph -> Schedule -> Tile. These are
+      **absorbed** by growing the compiled route, not re-expressed as
+      delegates. There is no fast path here to preserve.
+    * ``delegates`` -- reaches a runtime compiler, vendor library, or shipped
+      object. This is the genuine fast path, and the one the Target IR
+      delegation boundary (`kernel_call` / `inline_ptx`) exists to carry.
+    * ``both`` -- constructs IR *and* reaches outside; reported distinctly
+      rather than forced into one bucket, because it needs both treatments.
+    * ``other`` -- typically a thin dtype wrapper or dispatcher over one of
+      the above; it retires with whatever it forwards to.
+
+    Measured 2026-08-30, this overturned a planning assumption: the NVIDIA
+    bootstrap packagers were described as containing "vendor libraries,
+    hand-tuned kernels, inline PTX". None of them delegate -- 13 of 19
+    construct Tile IR and compile it. NVIDIA's real delegation surface is
+    `ptx_emit.py`, `emit/nvidia_cuda.py` and `runtime.py`: different files,
+    different work.
+
+    The IR-construction markers are deliberately a regex rather than one
+    literal. Each backend spells its helper differently -- NVIDIA
+    ``_compile_tile_ir``, ROCm ``_compile_attention_tile_ir``, x86
+    ``emit_matmul_tile_ir`` plus a direct ``tessera-opt`` invocation -- and a
+    detector keyed to one spelling silently classified the other two as
+    ``other``, which is a taxonomy that reports mostly nothing.
+    """
+    constructs = bool(_IR_CONSTRUCTION_RE.search(body))
+    delegates = any(marker in body for marker in _DELEGATION_MARKERS)
+    if constructs and delegates:
+        return "both"
+    if constructs:
+        return "constructs_tile_ir"
+    if delegates:
+        return "delegates"
+    return "other"
 
 def _classified_families(tree: ast.Module) -> tuple[str, ...]:
     """String literals returned by ``native_package_kind``.
@@ -181,6 +258,7 @@ def collect_inventories() -> tuple[BackendInventory, ...]:
                 packagers=_packagers(tree),
                 families=_classified_families(tree),
                 lines=text.count("\n") + 1,
+                kinds=_packager_kinds(tree, text),
             )
         )
     return tuple(out)
@@ -258,6 +336,16 @@ def summary() -> dict[str, int]:
         "compiled": sum(1 for r in rows if r[3] == "compiled"),
         "gap": sum(1 for r in rows if r[3] == "gap"),
         "orphan_packagers": len(orphan_packagers()),
+        "constructs_tile_ir": sum(
+            sum(1 for k in i.kinds.values() if k == "constructs_tile_ir")
+            for i in inventories),
+        "delegates": sum(
+            sum(1 for k in i.kinds.values() if k == "delegates")
+            for i in inventories),
+        "both": sum(
+            sum(1 for k in i.kinds.values() if k == "both") for i in inventories),
+        "other_kind": sum(
+            sum(1 for k in i.kinds.values() if k == "other") for i in inventories),
     }
 
 
@@ -294,6 +382,10 @@ def render_markdown() -> str:
         f"| Backends with a bootstrap module | {s['backends']} |",
         f"| `package_*` functions total | {s['packagers']} |",
         f"| — **bootstrap** (re-enter Graph IR; prune target) | {s['bootstrap']} |",
+        f"|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | {s['constructs_tile_ir']} |",
+        f"|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | {s['delegates']} |",
+        f"|   ·  of the bootstrap, both | {s['both']} |",
+        f"|   ·  of the bootstrap, other (wrapper / dispatcher) | {s['other_kind']} |",
         f"| — compiled-route packagers (consume a lowered artifact) | {s['compiled_packagers']} |",
         f"| Lines in those modules | {s['lines']} |",
         f"| Classified families | {s['families']} |",
@@ -347,6 +439,17 @@ def render_markdown() -> str:
     out += [
         "",
         "## How to read a closing gap",
+        "",
+        "**Measured, and it redirects the work:** the bootstrap surface is",
+        "overwhelmingly *IR-constructing*, not delegating. Most packagers build",
+        "Tile IR in Python and then compile it through `tessera-opt`, so the",
+        "MLIR pipeline already runs from Tile onward and what bypasses it is",
+        "Graph → Schedule → Tile. Those retire by **absorption**, and there is",
+        "no fast path in them to preserve. The genuine delegation surface —",
+        "the one the Target IR boundary exists for — is elsewhere",
+        "(`ptx_emit.py`, `emit/nvidia_cuda.py`, `runtime.py`). A plan that",
+        "treats the whole bootstrap surface as fast paths to re-express scopes",
+        "the wrong work; this table exists partly to stop that.",
         "",
         "A family leaves this table one of two ways, and only these two:",
         "",

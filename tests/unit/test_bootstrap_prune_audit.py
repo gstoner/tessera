@@ -85,3 +85,45 @@ def test_markdown_states_the_two_legitimate_exits():
     assert "Absorbed" in text and "Re-expressed" in text
     assert "abi_call" in text
     assert "Decision #31" in text
+
+
+def test_packager_kind_detects_every_backends_spelling():
+    """A detector keyed to one backend's helper name reports mostly nothing.
+
+    NVIDIA spells it `_compile_tile_ir`, ROCm `_compile_attention_tile_ir`,
+    x86 `emit_matmul_tile_ir` plus a direct `tessera-opt` invocation. Keying
+    on the first literal classified the other two as `other`, which made the
+    taxonomy useless rather than wrong-looking.
+    """
+    assert audit._packager_kind("x = _compile_tile_ir(t)") == "constructs_tile_ir"
+    assert audit._packager_kind("_compile_attention_tile_ir(m)") == "constructs_tile_ir"
+    assert audit._packager_kind("emit_matmul_tile_ir(e)") == "constructs_tile_ir"
+    assert audit._packager_kind('run(["tessera-opt"])') == "constructs_tile_ir"
+    assert audit._packager_kind("load('libtessera_x.so')") == "delegates"
+    assert audit._packager_kind("emit_matmul_tile_ir(e); nvrtc(x)") == "both"
+    assert audit._packager_kind("return _dispatch(module)") == "other"
+
+
+def test_every_bootstrap_packager_is_classified():
+    """No packager may fall out of the kind accounting unnoticed."""
+    for inv in audit.collect_inventories():
+        assert set(inv.kinds) == set(inv.bootstrap)
+        assert all(
+            k in {"constructs_tile_ir", "delegates", "both", "other"}
+            for k in inv.kinds.values()
+        )
+
+
+def test_the_surface_is_mostly_ir_constructing_not_delegating():
+    """The finding that redirected step 2, asserted so a regression is visible.
+
+    If this ever flips, the prune plan changes shape: absorption work becomes
+    delegation-migration work. Replace this guard with the evidence that
+    flipped it rather than deleting it.
+    """
+    s = audit.summary()
+    constructing = s["constructs_tile_ir"] + s["both"]
+    assert constructing > s["delegates"] * 5, (
+        f"{constructing} IR-constructing vs {s['delegates']} delegating — the "
+        "bootstrap surface's character changed; re-scope the prune"
+    )

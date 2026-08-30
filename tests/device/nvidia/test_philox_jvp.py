@@ -8,11 +8,13 @@ import pytest
 import tessera
 
 
+# The hardware marker is applied PER TEST here, not module-wide. The marker is
+# what the PR-lane expression deselects and what
+# tests/_support/device_accounting.py counts, and an unmarked device test is
+# invisible to both -- but this file mixes device proofs with a host-free
+# fail-closed check, and a module-wide marker would skip the latter on every
+# non-NVIDIA host. Measured: it passes on the Mac.
 
-# Declares the hardware this file needs. The marker is what the PR-lane
-# expression deselects and what tests/_support/device_accounting.py counts;
-# an unmarked device test is invisible to both.
-pytestmark = pytest.mark.hardware_nvidia
 
 @tessera.jit(target="nvidia_sm120", autodiff="jvp", wrt=("x",))
 def _seeded_dropout(x):
@@ -21,6 +23,7 @@ def _seeded_dropout(x):
     )
 
 
+@pytest.mark.hardware_nvidia
 def test_compiler_jvp_replays_philox_mask_on_primal_and_tangent():
     from tessera import runtime
 

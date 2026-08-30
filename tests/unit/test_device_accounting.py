@@ -80,13 +80,48 @@ def test_a_failing_device_test_counts_as_executed():
         ({"hardware_nvidia": True, "test_x": True}, {"nvidia"}),
         ({"hardware_rocm": True}, {"rocm"}),
         ({"hardware_apple_gpu": True}, {"apple_gpu"}),
-        ({"metal4": True}, {"apple_gpu"}),
+        ({"metal4": True}, {"metal4"}),
         ({"hardware_amx": True}, {"amx"}),
         ({"test_plain": True}, set()),
     ],
 )
 def test_marker_attribution(keywords, expected):
     assert set(da.families_for_keywords(keywords)) == expected
+
+
+def test_metal4_is_tallied_apart_from_generic_metal():
+    """A generic Metal test that ran must not vouch for a skipped Metal 4 lane.
+
+    Folding both markers into one family made this invisible: `apple_gpu`
+    would show executed > 0 from the generic test and the Metal 4 lane --
+    skipped in its entirety -- would look accounted for.
+    """
+    families = (
+        da.DeviceFamily("apple_gpu", frozenset({"hardware_apple_gpu"}),
+                        lambda: True, "rebuild the dylib"),
+        da.DeviceFamily("metal4", frozenset({"metal4"}),
+                        lambda: True, "needs a Metal 4 runtime"),
+    )
+    ledger = da.DeviceLedger()
+    ledger.record(["apple_gpu"], executed=True)
+    for _ in range(6):
+        ledger.record(["metal4"], executed=False)
+    hollow = ledger.hollow_lanes(families)
+    assert [family.name for family, _ in hollow] == ["metal4"]
+
+
+def test_metal4_absent_capability_is_an_honest_skip():
+    """Apple silicon whose runtime lacks Metal 4 must not be failed for skipping.
+
+    The generic Apple-silicon probe is True on such a host, so judging the
+    Metal 4 lane by it would convert a correct capability skip into a session
+    failure. The capability-aware probe is what prevents that.
+    """
+    families = (
+        da.DeviceFamily("metal4", frozenset({"metal4"}),
+                        lambda: False, "needs a Metal 4 runtime"),
+    )
+    assert _ledger(executed=0, skipped=6, name="metal4").hollow_lanes(families) == []
 
 
 def test_every_hardware_marker_belongs_to_a_family():

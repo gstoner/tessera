@@ -42,6 +42,7 @@ from typing import Callable, Iterable, Mapping
 
 from tests._support.environment import (
     amx_is_plausibly_present,
+    apple_metal4_is_plausibly_present,
     apple_metal_is_plausibly_present,
     nvidia_gpu_is_plausibly_present,
     rocm_gpu_is_plausibly_present,
@@ -83,9 +84,25 @@ DEVICE_FAMILIES: tuple[DeviceFamily, ...] = (
     ),
     DeviceFamily(
         name="apple_gpu",
-        markers=frozenset({"hardware_apple_gpu", "metal4"}),
+        markers=frozenset({"hardware_apple_gpu"}),
         is_plausibly_present=apple_metal_is_plausibly_present,
         remedy="ninja -C build TesseraAppleRuntimeShared (a stale dylib skips or hangs)",
+    ),
+    # Metal 4 is tracked SEPARATELY from generic Metal, because folding them
+    # into one tally is wrong in both directions. Merged, a single generic
+    # Metal test that ran would set executed > 0 and mask a Metal 4 lane that
+    # skipped entirely; and a targeted Metal 4 run on an Apple-silicon host
+    # whose runtime does not report the capability would skip honestly and be
+    # failed by the generic Apple-silicon probe. The probe here is
+    # capability-aware for that reason.
+    DeviceFamily(
+        name="metal4",
+        markers=frozenset({"metal4"}),
+        is_plausibly_present=apple_metal4_is_plausibly_present,
+        remedy=(
+            "requires a runtime reporting Metal 4 capability; parts of the "
+            "surface are macOS 27.0-gated, so an honest skip here is normal"
+        ),
     ),
     # AMX is a dead end, not a pending target: Intel-only, absent from every
     # fleet box, and superseded by ACE (the joint AMD/Intel matrix spec). This

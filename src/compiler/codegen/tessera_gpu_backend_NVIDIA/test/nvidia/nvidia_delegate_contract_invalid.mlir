@@ -65,14 +65,17 @@ func.func @non_positive_tolerance(%a: f32) -> f32 {
 func.func @unknown_binding(%a: f32) -> f32 {
   // The legal set is stated by the attribute, not left to a free-form string
   // (Decision #21a: no unvalidated StrAttr where an enum states the set).
-  // expected-error @+1 {{}}
+  // The diagnostic is attached to the attribute dictionary, not to the op's
+  // first line, so it is anchored where the parser actually reports it.
   %r = tessera_nvidia.kernel_call %a
+      // expected-error @+1 {{attribute 'binding' failed to satisfy constraint}}
       {callee = "tessera_nvidia_flash", arch = "sm_120",
        binding = "carrier_pigeon", provenance = "handwritten_kernel",
        accuracy = "reference_exact"}
       : (f32) -> f32
   return %r : f32
 }
+// CHECK: attribute 'binding' failed to satisfy constraint
 
 // -----
 

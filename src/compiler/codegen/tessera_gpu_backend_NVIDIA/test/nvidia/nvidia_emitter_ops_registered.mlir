@@ -19,10 +19,10 @@ module {
     %r = tessera_nvidia.kernel_call %a, %b
         {callee = "tessera_nvidia_flash", arch = "sm_120",
          binding = "cuda_kernel", provenance = "handwritten_kernel",
-         accuracy = "reference_exact"} : (f32, f32) -> f32
+         accuracy = "reference_exact", determinism = "deterministic"} : (f32, f32) -> f32
     %p = tessera_nvidia.inline_ptx %r
         {ptx = "mul.f32 $0, $1, $1;", constraints = "=f,f",
-         arch = "sm_120", accuracy = "tolerance_bounded",
+         arch = "sm_120", accuracy = "tolerance_bounded", determinism = "deterministic",
          tolerance = 1.000000e-06 : f64} : (f32) -> f32
     return %p : f32
   }

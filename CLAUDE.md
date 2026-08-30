@@ -276,7 +276,18 @@ Per-phase deliverables and the open-work priority queue live in
 
 18. **RNG streams are deterministically assigned.** `stream_id = global_seed * num_ranks + rank`. Philox counter offsets are non-overlapping for 2^128 elements.
 
-19. **Backends expose hardware-free Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of abstract target ops (`tessera_rocm.mfma`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) between Tile IR and final hardware emission. The hardware-free layer is what makes backends lit-testable; validated by `test_target_ir_contract.py`.
+19. **Backends expose a toolchain-free, contract-carrying Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of target ops (`tessera_rocm.mfma`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) between Tile IR and final hardware emission. Validated by `test_target_ir_contract.py`.
+
+    **Amended 2026-08-30 — the original justification was wrong, and the corrected one changes what belongs here.** This decision used to read *"hardware-free … the hardware-free layer is what makes backends lit-testable."* Both halves misled:
+
+    * **"Hardware-free" was never true and never required.** This decision's own example, `tessera_rocm.mfma`, names AMD hardware. The accurate property is **toolchain-free**: the layer is parseable, verifiable and lit-testable without nvcc/hipcc/xcrun or the device. Ops may — and for machine primitives should — name the machine.
+    * **Lit-testability is not what the layer buys.** NVVM and ROCDL are MLIR dialects too; `mlir-opt` parses and verifies them on any host. Host-free testing comes from *being in MLIR*, not from being in a Tessera dialect. If that were the real reason this layer would be deletable with nothing lost.
+
+    **What it actually buys is contract carriage — and that is load-bearing.** `tessera_<backend>` Target IR is the last level where Tessera's own contracts still exist. NVVM has nowhere to put `accum=fp32`, `math_mode=tf32`, `layout`, `distribution`, or an arbiter's provenance/accuracy/determinism claim. Lower Tile IR straight to NVVM/ROCDL and those drop or ride as discardable attributes — Decision #32's information-loss failure, whose canonical scar (`numeric_policy` vanishing above the MMA) is already recorded there.
+
+    **Membership test.** An op belongs in `tessera_<backend>` when it carries at least one Tessera contract the upstream dialect (`vector`, `x86vector`, NVVM, ROCDL, LLVM) cannot express — and **the op's description must name which**. This is not a bar on duplication: `vector.fma` and a `tessera_x86` FMA may look alike, and the Tessera one earns its place by carrying an accumulator contract, an ISA feature level (`avx10.2`, `ace`), or arbiter metadata that upstream has no field for. An op that names no such contract is Decision #29's unconsumed declaration and should lower straight to upstream instead.
+
+    **Operator expansion is expected, not exceptional.** Apple and x86 in particular are under-built at this level and should grow: Apple GPU currently declares only dispatch containers (`msl_kernel`, `mps_matmul`, `dispatch`) and no machine primitives at all, while its Python synthesizer already models `simdgroup_matrix`, `simdgroup_multiply_accumulate` and `threadgroup_barrier` — the machine vocabulary lives outside the compiler. x86 is inverted: real primitives for the **retired** AMX ISA and a single opaque `avx512_gemm_microkernel` directive for the live one. Growing both is how the ISA-extension axis (AVX10, ACE, AMD DL extensions) becomes an *attribute* rather than a new op family per generation. Name ops by **machine model, not ISA generation** for the same reason.
 
     **`X86-DIALECT-LOAD-CRASH-2026-08-12` was a build-flag leak, not an IR
     defect — root-caused 2026-08-15.** The dialect and its `TileType`

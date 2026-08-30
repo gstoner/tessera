@@ -47,6 +47,13 @@ PROVENANCES: tuple[str, ...] = ("vendor_library", "handwritten_kernel")
 #: NVIDIA_DelegateAccuracyAttr.
 ACCURACIES: tuple[str, ...] = ("reference_exact", "tolerance_bounded")
 
+#: Legal `determinism` values. Tessera guarantees `@jit(deterministic=True)`,
+#: and a delegate using split-K with atomic accumulation is not reproducible
+#: run to run. Without this the arbiter could silently select such a delegate
+#: inside a deterministic region -- a guarantee defeated through a path nobody
+#: checked, which is the Decision #5 scar exactly.
+DETERMINISMS: tuple[str, ...] = ("deterministic", "nondeterministic")
+
 
 class DelegateContractError(ValueError):
     """A delegate that the Target IR verifier would reject.
@@ -69,7 +76,9 @@ class DelegateContract:
 
     arch: str
     accuracy: str
+    determinism: str
     tolerance: float | None = None
+    tolerance_rel: float | None = None
     # kernel_call pathway
     callee: str | None = None
     binding: str | None = None
@@ -106,22 +115,35 @@ class DelegateContract:
             raise DelegateContractError(
                 f"`accuracy` must be one of {ACCURACIES}, got {self.accuracy!r}"
             )
+        if self.determinism not in DETERMINISMS:
+            raise DelegateContractError(
+                f"`determinism` must be one of {DETERMINISMS}, "
+                f"got {self.determinism!r}"
+            )
         # The budget half of "fastest in-budget candidate". A semantic key:
         # never defaulted, and never self-contradictory (Decision #21a).
+        for name in ("tolerance", "tolerance_rel"):
+            bound = getattr(self, name)
+            if bound is not None and (
+                not (bound > 0.0) or bound == float("inf")
+            ):
+                raise DelegateContractError(
+                    f"`{name}` must be finite and greater than zero"
+                )
         if self.accuracy == "tolerance_bounded":
-            if self.tolerance is None:
+            # Absolute OR relative satisfies the claim. An absolute bound alone
+            # is meaningless without the result's magnitude, so a delegate whose
+            # real claim is relative must be able to say so rather than
+            # overclaim in absolute terms.
+            if self.tolerance is None and self.tolerance_rel is None:
                 raise DelegateContractError(
-                    "accuracy=tolerance_bounded requires a `tolerance`; a "
-                    "bounded numerical claim with no stated bound is not a "
-                    "claim the arbiter can budget against"
+                    "accuracy=tolerance_bounded requires `tolerance` and/or "
+                    "`tolerance_rel`; a bounded numerical claim with no stated "
+                    "bound is not a claim the arbiter can budget against"
                 )
-            if not (self.tolerance > 0.0) or self.tolerance == float("inf"):
-                raise DelegateContractError(
-                    "`tolerance` must be finite and greater than zero"
-                )
-        elif self.tolerance is not None:
+        elif self.tolerance is not None or self.tolerance_rel is not None:
             raise DelegateContractError(
-                "accuracy=reference_exact must not carry a `tolerance`; an "
+                "accuracy=reference_exact must not carry a tolerance; an "
                 "exact claim with a tolerance is two contradictory claims"
             )
 
@@ -170,6 +192,14 @@ class DelegateContract:
         """
         return Tier.HAND_TUNED
 
+    def arbiter_accuracy_rtol(self) -> float | None:
+        """Relative budget, if the delegate stated one."""
+        return self.tolerance_rel
+
+    def is_deterministic(self) -> bool:
+        """Whether this delegate may be selected inside a deterministic region."""
+        return self.determinism == "deterministic"
+
     def arbiter_accuracy_atol(self) -> float | None:
         """Absolute budget the F4 oracle must hold this delegate to.
 
@@ -200,8 +230,11 @@ class DelegateContract:
             parts.append(f'provenance = "{self.provenance}"')
         parts.append(f'arch = "{self.arch}"')
         parts.append(f'accuracy = "{self.accuracy}"')
+        parts.append(f'determinism = "{self.determinism}"')
         if self.tolerance is not None:
             parts.append(f"tolerance = {self.tolerance:.6e} : f64")
+        if self.tolerance_rel is not None:
+            parts.append(f"tolerance_rel = {self.tolerance_rel:.6e} : f64")
         if self.is_inline_asm and self.has_side_effects:
             parts.append("has_side_effects")
         return "{" + ", ".join(parts) + "}"
@@ -242,6 +275,7 @@ class DelegatedCandidate(Candidate):
         # Derived, never assigned by the subclass.
         self.tier = contract.arbiter_tier()
         self.accuracy_atol = contract.arbiter_accuracy_atol()
+        self.accuracy_rtol = contract.arbiter_accuracy_rtol()
 
     def render_target_ir(self, operands: str = "",
                          signature: str = "() -> ()") -> str:
@@ -265,6 +299,7 @@ __all__ = [
     "BINDINGS",
     "PROVENANCES",
     "DelegateContract",
+    "DETERMINISMS",
     "DelegateContractError",
     "DelegatedCandidate",
     "contract_for_candidate",

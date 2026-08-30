@@ -18,7 +18,7 @@ func.func @empty_callee(%a: f32) -> f32 {
   // expected-error @+1 {{requires a non-empty `callee`}}
   %r = tessera_nvidia.kernel_call %a
       {callee = "", arch = "sm_120", binding = "c_abi",
-       provenance = "vendor_library", accuracy = "reference_exact"}
+       provenance = "vendor_library", accuracy = "reference_exact", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }
@@ -28,10 +28,10 @@ func.func @empty_callee(%a: f32) -> f32 {
 func.func @bounded_without_a_bound(%a: f32) -> f32 {
   // A tolerance-bounded claim with no bound is the failure this contract
   // exists to catch: it reads as a numerical guarantee and constrains nothing.
-  // expected-error @+1 {{requires a `tolerance` attribute}}
+  // expected-error @+1 {{requires `tolerance` and/or}}
   %r = tessera_nvidia.kernel_call %a
       {callee = "cublasLtMatmul", arch = "sm_120", binding = "c_abi",
-       provenance = "vendor_library", accuracy = "tolerance_bounded"}
+       provenance = "vendor_library", accuracy = "tolerance_bounded", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }
@@ -40,11 +40,11 @@ func.func @bounded_without_a_bound(%a: f32) -> f32 {
 
 func.func @exact_claim_carrying_a_tolerance(%a: f32) -> f32 {
   // Two contradictory claims; a reader cannot tell which one is honoured.
-  // expected-error @+1 {{must not carry a `tolerance`}}
+  // expected-error @+1 {{must not carry a tolerance}}
   %r = tessera_nvidia.kernel_call %a
       {callee = "tessera_nvidia_flash", arch = "sm_120",
        binding = "cuda_kernel", provenance = "handwritten_kernel",
-       accuracy = "reference_exact", tolerance = 1.000000e-03 : f64}
+       accuracy = "reference_exact", determinism = "deterministic", tolerance = 1.000000e-03 : f64}
       : (f32) -> f32
   return %r : f32
 }
@@ -55,7 +55,7 @@ func.func @non_positive_tolerance(%a: f32) -> f32 {
   // expected-error @+1 {{must be finite and greater than zero}}
   %r = tessera_nvidia.kernel_call %a
       {callee = "cublasLtMatmul", arch = "sm_120", binding = "c_abi",
-       provenance = "vendor_library", accuracy = "tolerance_bounded",
+       provenance = "vendor_library", accuracy = "tolerance_bounded", determinism = "deterministic",
        tolerance = 0.000000e+00 : f64}
       : (f32) -> f32
   return %r : f32
@@ -72,7 +72,7 @@ func.func @unknown_binding(%a: f32) -> f32 {
       // expected-error @+1 {{attribute 'binding' failed to satisfy constraint}}
       {callee = "tessera_nvidia_flash", arch = "sm_120",
        binding = "carrier_pigeon", provenance = "handwritten_kernel",
-       accuracy = "reference_exact"}
+       accuracy = "reference_exact", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }
@@ -85,7 +85,7 @@ func.func @inline_ptx_without_constraints(%a: f32) -> f32 {
   // expected-error @+1 {{requires a non-empty `constraints` string}}
   %r = tessera_nvidia.inline_ptx %a
       {ptx = "mul.f32 $0, $1, $1;", constraints = "", arch = "sm_120",
-       accuracy = "reference_exact"}
+       accuracy = "reference_exact", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }
@@ -97,7 +97,7 @@ func.func @empty_inline_ptx(%a: f32) -> f32 {
   // expected-error @+1 {{requires non-empty `ptx`}}
   %r = tessera_nvidia.inline_ptx %a
       {ptx = "", constraints = "=f,f", arch = "sm_120",
-       accuracy = "reference_exact"}
+       accuracy = "reference_exact", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }
@@ -111,7 +111,7 @@ func.func @unknown_provenance(%a: f32) -> f32 {
       // expected-error @+1 {{attribute 'provenance' failed to satisfy constraint}}
       {callee = "tessera_nvidia_flash", arch = "sm_120",
        binding = "cuda_kernel", provenance = "rumour",
-       accuracy = "reference_exact"}
+       accuracy = "reference_exact", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }
@@ -123,7 +123,7 @@ func.func @empty_arch(%a: f32) -> f32 {
   %r = tessera_nvidia.kernel_call %a
       {callee = "tessera_nvidia_flash", arch = "",
        binding = "cuda_kernel", provenance = "handwritten_kernel",
-       accuracy = "reference_exact"}
+       accuracy = "reference_exact", determinism = "deterministic"}
       : (f32) -> f32
   return %r : f32
 }

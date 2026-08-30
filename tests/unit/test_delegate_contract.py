@@ -30,6 +30,7 @@ def _call(**overrides):
         binding="cuda_kernel",
         provenance="handwritten_kernel",
         accuracy="reference_exact",
+        determinism="deterministic",
     )
     base.update(overrides)
     return base
@@ -41,6 +42,7 @@ def _ptx(**overrides):
         constraints="=f,f",
         arch="sm_120",
         accuracy="reference_exact",
+        determinism="deterministic",
     )
     base.update(overrides)
     return base
@@ -51,9 +53,9 @@ def _ptx(**overrides):
 REJECTION_CASES = [
     ("empty_callee", _call(callee=""), "non-empty `callee`"),
     ("bounded_without_a_bound",
-     _call(accuracy="tolerance_bounded"), "requires a `tolerance`"),
+     _call(accuracy="tolerance_bounded"), "requires `tolerance` and/or"),
     ("exact_carrying_a_tolerance",
-     _call(tolerance=1e-3), "must not carry a `tolerance`"),
+     _call(tolerance=1e-3), "must not carry a tolerance"),
     ("non_positive_tolerance",
      _call(accuracy="tolerance_bounded", tolerance=0.0),
      "finite and greater than zero"),
@@ -95,8 +97,8 @@ def test_the_lit_fixture_covers_the_same_cases():
     # Reasons the C++ verifier emits by hand.
     verifier_authored = {
         "non-empty `callee`",
-        "requires a `tolerance`",
-        "must not carry a `tolerance`",
+        "requires `tolerance` and/or",
+        "must not carry a tolerance",
         "finite and greater than zero",
         "non-empty `constraints`",
         "non-empty `ptx`",
@@ -136,6 +138,7 @@ def test_a_delegate_cannot_be_both_pathways():
     with pytest.raises(DelegateContractError, match="not both"):
         DelegateContract(
             arch="sm_120", accuracy="reference_exact",
+            determinism="deterministic",
             callee="x", binding="c_abi", provenance="vendor_library",
             ptx="mul.f32 $0, $1, $1;", constraints="=f,f",
         )
@@ -143,7 +146,8 @@ def test_a_delegate_cannot_be_both_pathways():
 
 def test_a_delegate_must_be_one_of_the_pathways():
     with pytest.raises(DelegateContractError, match="must name a `callee` or carry"):
-        DelegateContract(arch="sm_120", accuracy="reference_exact")
+        DelegateContract(arch="sm_120", accuracy="reference_exact",
+                         determinism="deterministic")
 
 
 def test_both_provenances_are_tier_three():
@@ -220,3 +224,61 @@ def test_delegated_candidate_derives_tier_and_budget_from_the_contract():
     assert candidate.name == "tessera_nvidia_flash:sm_120"
     assert contract_for_candidate(candidate) is contract
     assert "provenance = \"vendor_library\"" in candidate.render_target_ir()
+
+
+def test_determinism_must_be_declared():
+    """Tessera guarantees @jit(deterministic=True); a delegate can break it.
+
+    A split-K kernel accumulating with atomics is not reproducible run to run.
+    Without a declared determinism the arbiter could select one inside a
+    deterministic region -- a guarantee defeated through a path nobody checked,
+    which is the Decision #5 scar exactly.
+    """
+    import dataclasses
+
+    nd = DelegateContract(**_call(determinism="nondeterministic"))
+    assert nd.is_deterministic() is False
+    assert 'determinism = "nondeterministic"' in nd.render_attributes()
+    assert DelegateContract(**_call()).is_deterministic() is True
+
+    with pytest.raises(DelegateContractError, match="`determinism` must be one of"):
+        DelegateContract(**_call(determinism="probably"))
+    # and it cannot simply be omitted
+    with pytest.raises(TypeError):
+        kwargs = _call()
+        del kwargs["determinism"]
+        DelegateContract(**kwargs)
+    assert dataclasses.is_dataclass(nd)
+
+
+def test_a_relative_only_claim_is_expressible():
+    """An absolute bound alone is meaningless without the result's magnitude.
+
+    1e-6 is vacuous on values of order 1e6 and unsatisfiable on 1e-9, so a
+    delegate whose real claim is relative must be able to state it rather than
+    overclaim in absolute terms. The arbiter's Candidate already carried both
+    atol and rtol; the contract initially carried only atol.
+    """
+    rel = DelegateContract(**_call(accuracy="tolerance_bounded", tolerance_rel=1e-3))
+    assert rel.arbiter_accuracy_rtol() == 1e-3
+    assert rel.arbiter_accuracy_atol() is None
+
+    mixed = DelegateContract(
+        **_call(accuracy="tolerance_bounded", tolerance=1e-6, tolerance_rel=1e-3))
+    assert (mixed.arbiter_accuracy_atol(), mixed.arbiter_accuracy_rtol()) == (1e-6, 1e-3)
+
+    with pytest.raises(DelegateContractError, match="must not carry a tolerance"):
+        DelegateContract(**_call(tolerance_rel=1e-3))
+
+
+def test_delegated_candidate_carries_both_budgets():
+    from tessera.compiler.emit.delegate_contract import DelegatedCandidate
+
+    class _Lib(DelegatedCandidate):
+        def run(self, region, *inputs, **kwargs):  # pragma: no cover
+            raise NotImplementedError
+
+    c = _Lib(DelegateContract(**_call(accuracy="tolerance_bounded",
+                                      tolerance=1e-5, tolerance_rel=1e-3)),
+             target="nvidia", op="matmul")
+    assert (c.accuracy_atol, c.accuracy_rtol) == (1e-5, 1e-3)

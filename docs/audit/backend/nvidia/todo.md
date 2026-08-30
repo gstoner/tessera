@@ -73,12 +73,82 @@ empty callee, bounded-without-a-bound, exact-carrying-a-tolerance,
 non-positive tolerance, unknown `binding`, empty constraints, empty ptx.
 NVIDIA lit suite **60/60**.
 
-*Not done, and named rather than implied:* nothing yet **queries** these
-attributes to score a candidate. The verifier is a real consumer (Decision
-#29 is satisfied), but the arbiter integration — reading `provenance` and
-`accuracy` to admit or reject a Tier-3 candidate against compiled output — is
-the next step, and until it lands this is a contract without a scorer. The
-ROCm equivalent is also still owed.
+*Arbiter integration landed:* `DelegatedCandidate`
+(`emit/delegate_contract.py`) derives tier from `provenance` and the F4 budget
+from `accuracy`/`tolerance`/`tolerance_rel`, so a delegate cannot claim in
+Python a budget it did not declare in IR. The ROCm equivalent is still owed.
+
+### Gaps found by stress-testing this design (2026-08-30)
+
+Two were live defects in the contract as first shipped and are **fixed**:
+
+* **Determinism was undeclarable.** Tessera guarantees
+  `@jit(deterministic=True)`, and a split-K delegate accumulating with atomics
+  is not reproducible run to run — the arbiter could have selected one inside
+  a deterministic region. `determinism` is now a required enum. Same shape as
+  the Decision #5 scar: a guarantee defeated through a path nobody checked.
+* **The accuracy claim was absolute-only** while `Candidate` already carried
+  both atol *and* rtol. An absolute bound is meaningless without the result's
+  magnitude — 1e-6 is vacuous at 1e6 and unsatisfiable at 1e-9 — so a delegate
+  whose real claim is relative had to overclaim. `tolerance_rel` added;
+  either or both now satisfy a bounded claim.
+
+Open, ordered by whether the design is *wrong* versus merely incomplete:
+
+1. **Per-op accuracy budgets do not compose (mathematical, unsound as stated).**
+   Five delegates each within 1e-3 do not give an end-to-end result within
+   1e-3; propagation depends on conditioning. A graph can be assembled
+   entirely from in-budget candidates and land outside any budget with nothing
+   detecting it. Needs a graph-level check, or the composition claim must be
+   withdrawn.
+2. **Fusion foreclosure is not costed (algorithmic; biases the arbiter).**
+   A delegated GEMM cannot be fused into, so selecting it forecloses epilogue
+   fusion. The honest comparison is *(delegate + separate epilogue + DRAM
+   round-trip)* vs *(fused compiled kernel)*. A greedy per-op arbiter
+   over-selects delegates on exactly the graphs where fusion is the win.
+3. **`kernel_call` does not verify operands against the callee ABI.** The op
+   requires `constraints` for inline PTX on the argument that unstated
+   constraints become silent miscompiles — and then leaves the symbol path
+   unchecked. Inconsistent; `tessera_x86.abi_call` has the same hole.
+4. **No delegate versioning.** cuBLAS 12 and 13 differ numerically and in
+   performance; with no version or ABI hash, a cached measurement from one
+   applies to the other. That is the stale-baseline failure this queue already
+   recorded once for the Krylov ratchet.
+5. **Accuracy uses a vocabulary parallel to `numeric_policy`.** Decision #15a
+   puts accumulator contracts there; `reference_exact` cannot even be honoured
+   for float reductions, where result depends on accumulation order. This is a
+   Decision #32 information-loss issue inside the op meant to prevent them.
+6. **`has_side_effects` is one bit.** Reads, writes and barriers have
+   different legality; one bit forces treating any side-effecting asm as a
+   full barrier, which costs real performance. MLIR has `MemoryEffects`.
+7. **Shape-bucket boundaries are undefined.** The sm_120 macro-CTA threshold
+   is one number (67,108,864 FLOPs) measured once under WSL, and this file
+   already says it is not global selector authority. Coarse buckets apply an
+   M=4096 measurement at M=17.
+8. **No measurement statistic or hysteresis.** "Fastest" by mean, median or
+   min, over how many reps? Without a minimum effect size the arbiter thrashes
+   inside noise.
+9. **The arbiter is on the wrong side of the prune (architectural).** It lives
+   in Python. Pruning the Python backend path while keeping a Python arbiter
+   keeps the seam. Probable resolution: arbitration is legitimately *outside*
+   the IR pipeline because it requires execution, like PGO — but then the
+   contract must be stated: IR declares candidates, an orchestrator measures
+   and selects, selection is recorded back as an attribute.
+10. **`tessera_rocm.mfma` vs `rocdl.mfma`** — measure whether the Target IR op
+    carries a contract ROCDL cannot, per Decision #19's amended membership
+    test. If it mirrors, it is Decision #31 duplication.
+
+**Sequencing rule for the Apple/x86 operator expansion.** Add each op only
+when its producer and its consumer land with it. Apple needs ~12 ops and x86
+~8; landing the families ahead of the passes that produce them manufactures
+exactly the unconsumed-declaration anti-pattern (Decision #29) this contract
+work exists to remove. One op proven end-to-end beats twelve declared.
+
+**And when x86's `avx512_gemm_microkernel` is decomposed into primitives, the
+microkernel must survive as a Tier-3 candidate rather than being replaced.**
+If it is hand-scheduled, decomposing it and hoping LLVM re-schedules is the
+"generic IR caps the ceiling" trap applied within x86 — the arbiter should
+decide, not the refactor.
 
 Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
 marker vocabulary and conftest boundary changed; per-backend outcome below.**

@@ -98,33 +98,47 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
       return rewriter.notifyMatchFailure(
           op, "every extent must be a multiple of 8 until tail masking lands");
 
-    // The accumulator is f32, and simdgroup_store does not convert -- storing
-    // it into an f16 buffer would reinterpret bits, not round values. The MSL
-    // kernel handles this by storing to a `threadgroup float` tile and
-    // converting in the epilogue. Until this pass emits that epilogue it
-    // declines an f16 result rather than emitting the reinterpretation; the
-    // MPS lane still serves those. Found by building the pass and reading what
-    // it produced, not by a failing test.
+    // The accumulator is f32 and `simdgroup_store` does not convert -- it
+    // moves raw elements. An f16 result therefore needs an explicit rounding
+    // epilogue, which is exactly what the MSL kernel does: store the tile to
+    // `threadgroup float`, then convert per element on the way out. Emitting
+    // that is what keeps Decision #15a's split real here -- storage f16,
+    // accumulator f32 -- and it is why the rounding happens ONCE at the end
+    // rather than at every K step.
     auto resTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-    if (!resTy || !resTy.getElementType().isF32())
+    if (!resTy || !resTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "requires a static result type");
+    Type resElem = resTy.getElementType();
+    if (!resElem.isF16() && !resElem.isF32())
       return rewriter.notifyMatchFailure(
-          op, "f32 result required: the fp32 accumulator has no convert "
-              "epilogue in this pass yet");
+          op, "result must be f16 or f32; the accumulator is f32 and only "
+              "those have a defined rounding epilogue");
 
     Location loc = op->getLoc();
-    auto lhsMem = MemRefType::get({M, K}, elem);
-    auto rhsMem = MemRefType::get({K, N}, elem);
-    auto outMem = MemRefType::get({M, N}, rewriter.getF32Type());
+    Type f32Ty = rewriter.getF32Type();
 
-    Value aBuf = rewriter.create<bufferization::ToBufferOp>(loc, lhsMem, lhs);
-    Value bBuf = rewriter.create<bufferization::ToBufferOp>(loc, rhsMem, rhs);
-    Value cBuf = rewriter.create<memref::AllocOp>(loc, outMem);
+    // Flat buffers: the primitives take a base plus a LINEAR element offset and
+    // an explicit row stride, mirroring Metal's pointer arithmetic. A rank-2
+    // memref would leave the offset's meaning ambiguous (row index or flat
+    // index -- they differ by `leading_dim`), which the verifier now rejects.
+    SmallVector<ReassociationIndices, 1> collapse{{0, 1}};
+    auto flat = [&](Value tensor, int64_t rows, int64_t cols, Type et) {
+      Value buf = rewriter.create<bufferization::ToBufferOp>(
+          loc, MemRefType::get({rows, cols}, et), tensor);
+      return rewriter
+          .create<memref::CollapseShapeOp>(loc, buf, collapse)
+          .getResult();
+    };
+    Value aBuf = flat(lhs, M, K, elem);
+    Value bBuf = flat(rhs, K, N, elem);
+    // The accumulator tile is always f32 -- the MMA's fixed contract.
+    Value accBuf =
+        rewriter.create<memref::AllocOp>(loc, MemRefType::get({M * N}, f32Ty));
 
-    Type f32 = rewriter.getF32Type();
     auto matTy = [&](Type t) { return SimdgroupMatrixType::get(getContext(), t); };
     // The accumulator is f32 whatever the inputs are -- the simdgroup MMA's
     // fixed numerical contract, enforced by SimdgroupMatmulOp::verify.
-    Type accTy = matTy(f32);
+    Type accTy = matTy(f32Ty);
     Type inTy = matTy(elem);
     StringRef storage = elem.isF16() ? "f16" : "f32";
 
@@ -180,13 +194,40 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     Value cOff = rewriter.create<arith::AddIOp>(
         loc, rewriter.create<arith::MulIOp>(loc, m, nStride), n);
     rewriter.create<SimdgroupStoreOp>(
-        loc, kLoop.getResult(0), cBuf, cOff, rewriter.getI64IntegerAttr(N),
+        loc, kLoop.getResult(0), accBuf, cOff, rewriter.getI64IntegerAttr(N),
         rewriter.getStringAttr("threadgroup"));
 
     rewriter.setInsertionPointAfter(mLoop);
-    auto outTensorTy = RankedTensorType::get({M, N}, rewriter.getF32Type());
-    Value result =
-        rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, cBuf);
+
+    // Rounding epilogue. When the result is f32 the accumulator tile IS the
+    // result; when it is f16 each element is rounded once, here, rather than
+    // at every K step. That single-rounding property is the whole point of the
+    // fp32 accumulator: measured over K = 4096 it is ~1e-7 relative error
+    // against ~5.8e-3 for accumulating in f16 (see
+    // tests/unit/test_apple_simdgroup_contract.py).
+    Value outFlat = accBuf;
+    if (!resElem.isF32()) {
+      outFlat = rewriter.create<memref::AllocOp>(
+          loc, MemRefType::get({M * N}, resElem));
+      Value total = idx(M * N);
+      Value one = idx(1);
+      auto cvt = rewriter.create<scf::ForOp>(loc, zero, total, one);
+      rewriter.setInsertionPointToStart(cvt.getBody());
+      Value v = rewriter.create<memref::LoadOp>(loc, accBuf,
+                                                ValueRange{cvt.getInductionVar()});
+      // arith.truncf is round-to-nearest-even, the same rounding Metal applies
+      // converting float to half on the way out of the epilogue.
+      Value rounded = rewriter.create<arith::TruncFOp>(loc, resElem, v);
+      rewriter.create<memref::StoreOp>(loc, rounded, outFlat,
+                                       ValueRange{cvt.getInductionVar()});
+      rewriter.setInsertionPointAfter(cvt);
+    }
+
+    SmallVector<ReassociationIndices, 1> expand{{0, 1}};
+    Value out2d = rewriter.create<memref::ExpandShapeOp>(
+        loc, MemRefType::get({M, N}, resElem), outFlat, expand);
+    Value result = rewriter.create<bufferization::ToTensorOp>(
+        loc, RankedTensorType::get({M, N}, resElem), out2d);
     rewriter.replaceOp(op, result);
     return success();
   }

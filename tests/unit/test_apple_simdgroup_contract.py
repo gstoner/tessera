@@ -141,3 +141,51 @@ def test_only_the_native_shape_is_expressible(bad_extent):
                / "apple_simdgroup_primitives_invalid.mlir").read_text()
     assert "requires an 8x8x8 shape" in invalid
     assert bad_extent != _MMA_EXTENT
+
+
+def test_rounding_once_at_the_end_preserves_the_fp32_benefit():
+    """Why the epilogue rounds once rather than accumulating in f16.
+
+    The pass keeps an fp32 accumulator tile and converts per element on the way
+    out, which is what the MSL kernel does. That is only worth the extra buffer
+    if a single terminal rounding is materially better than rounding at every K
+    step — otherwise the simpler f16 accumulator would be fine and the contract
+    would be ceremony. It is not: the error of the end-rounded result is bounded
+    by one half-ulp of f16, while accumulating in f16 compounds.
+    """
+    k_slabs = 512
+    exact = _mma_chain(k_slabs, accum_dtype=np.float64)
+    # fp32 accumulate, then a single round-to-nearest-even on the way out.
+    end_rounded = _mma_chain(k_slabs, accum_dtype=np.float32).astype(
+        np.float16).astype(np.float64)
+    # f16 accumulate: rounded at every step.
+    every_step = _mma_chain(k_slabs, accum_dtype=np.float16).astype(np.float64)
+
+    scale = np.abs(exact).max()
+    end_err = np.abs(end_rounded - exact).max() / scale
+    step_err = np.abs(every_step - exact).max() / scale
+
+    # A single f16 rounding cannot do better than ~half an f16 ulp (~4.9e-4
+    # relative), so that is the floor the epilogue is allowed to reach.
+    assert end_err < 2e-3, f"terminal rounding drifted more than f16 resolution: {end_err}"
+    assert step_err > end_err, (
+        f"accumulating in f16 ({step_err}) is not worse than rounding once "
+        f"({end_err}); if this ever holds, the fp32 accumulator tile and its "
+        "epilogue are not earning the extra buffer"
+    )
+
+
+def test_truncf_is_the_rounding_the_epilogue_claims():
+    """`arith.truncf` is round-to-nearest-even, not truncation toward zero.
+
+    The op's name suggests truncation; it is not, and the difference is a
+    systematic bias rather than noise. A pass that assumed truncation would
+    skew every output slightly negative-of-magnitude, which no shape test would
+    catch.
+    """
+    # 1 + 2^-11 sits exactly halfway between two f16 values; RNE picks the even
+    # neighbour, truncation would always pick the lower one.
+    halfway = np.float32(1.0 + 2.0 ** -11)
+    assert np.float16(halfway) == np.float16(1.0), "expected round-to-even at the tie"
+    above = np.float32(1.0 + 3.0 * 2.0 ** -12)
+    assert np.float16(above) > np.float16(1.0), "expected rounding up above the tie"

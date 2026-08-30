@@ -118,6 +118,18 @@ static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
   auto memTy = ::llvm::dyn_cast<::mlir::MemRefType>(buffer.getType());
   if (!memTy)
     return ::mlir::success();  // non-memref buffers are checked elsewhere
+  // Rank 1, because this op models Metal's `base + offset` pointer arithmetic
+  // with an explicit row stride -- not MLIR's multidimensional indexing. On a
+  // rank-2 memref a reader cannot tell whether the single `offset` operand is
+  // a row index or a flat element index, and the two differ by a factor of
+  // `leading_dim`. That ambiguity is a silent wrong-address, so the flat shape
+  // is required rather than documented.
+  if (memTy.getRank() != 1)
+    return op->emitOpError()
+           << "requires a rank-1 " << role
+           << "; this op takes a base plus a LINEAR element offset and an "
+              "explicit row stride, so a multidimensional memref leaves the "
+              "offset's meaning ambiguous -- collapse the buffer first";
   if (memTy.getElementType() != matrixElem)
     return op->emitOpError()
            << "matrix element type does not match the " << role

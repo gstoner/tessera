@@ -117,3 +117,21 @@ func.func @store_f32_accumulator_into_an_f16_buffer(
       : !tessera_apple.simdgroup_matrix<f32>, memref<64xf16>, index
   return
 }
+
+// -----
+
+func.func @rank_two_buffer_leaves_the_offset_ambiguous(
+    %m: memref<8x8xf32>, %o: index) {
+  // The op takes a base plus a LINEAR element offset and an explicit row
+  // stride, mirroring Metal's pointer arithmetic -- it does not use MLIR's
+  // multidimensional indexing. On a rank-2 memref a reader cannot tell whether
+  // `%o` is a row index or a flat index, and the two differ by `leading_dim`.
+  // A silent wrong-address, so the flat shape is required rather than
+  // documented.
+  // expected-error @+1 {{requires a rank-1 source}}
+  %a = tessera_apple.gpu.simdgroup_load %m, %o
+      {leading_dim = 8 : i64, space = "threadgroup"}
+      : memref<8x8xf32>, index -> !tessera_apple.simdgroup_matrix<f32>
+  return
+}
+

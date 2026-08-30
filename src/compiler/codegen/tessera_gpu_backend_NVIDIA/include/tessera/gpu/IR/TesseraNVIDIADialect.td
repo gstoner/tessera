@@ -260,8 +260,114 @@ def NVIDIA_FuncOp : Op<TesseraNVIDIADialect, "func", [NoTerminator]> {
   // No assemblyFormat: the emitter writes the generic form, which every
   // registered op parses; keeping it generic avoids constraining the emitter.
 }
-def NVIDIA_KernelCallOp : TesseraNVIDIA_Op<"kernel_call"> {
-  let summary = "Named CUDA kernel / value-target C-ABI call contract";
+def NVIDIA_DelegateBindingAttr
+    : NVIDIA_EnumStrAttr<["cuda_kernel", "c_abi"],
+        "how the delegate is reached: device kernel launch or host C-ABI call">;
+
+def NVIDIA_DelegateProvenanceAttr
+    : NVIDIA_EnumStrAttr<["vendor_library", "handwritten_kernel"],
+        "what the delegate is: a vendor library entry or an in-tree hand-written kernel">;
+
+def NVIDIA_DelegateAccuracyAttr
+    : NVIDIA_EnumStrAttr<["reference_exact", "tolerance_bounded"],
+        "numerical claim the delegate makes against the compiled reference">;
+
+def NVIDIA_KernelCallOp : Op<TesseraNVIDIADialect, "kernel_call"> {
+  let summary = "Delegation to a named CUDA kernel or host C-ABI symbol";
+  let description = [{
+    A **fast path out of the compiler**, made visible to it.
+
+    Tessera's architecture is Graph -> Schedule -> Tile -> Target driven by
+    `tessera-opt`. Some work legitimately does not come from that pipeline: a
+    vendor library entry, or a hand-tuned kernel that beats anything the
+    compiler will emit. Decision #28 keeps those as first-class **Tier-3
+    candidates** — but only if a *measured, accuracy-budgeted arbiter* can
+    score them against compiled output. An arbiter cannot score what it
+    cannot see, which is what this op exists to prevent.
+
+    This op previously carried a summary line and nothing else. `callee` — the
+    single fact that says *what is being delegated to* — rode in the inherited
+    `attr-dict` as an unvalidated discardable attribute, so an emitter could
+    name any symbol, or none, and still verify. That is a declaration with no
+    consumer (Decision #29): it reads in review as a closed contract while
+    carrying nothing.
+
+    The attributes are the arbiter's inputs, and each is required because a
+    missing one silently removes this candidate's comparability rather than
+    failing:
+
+    * `callee` / `arch` — identity. Without them the candidate cannot be
+      cached, re-measured, or bound.
+    * `binding` — which of the two pathways this is. A device kernel launch
+      and a host C-ABI call have different launch costs and different
+      failure modes; collapsing them would make a measurement meaningless.
+    * `provenance` — vendor library vs in-tree hand-written kernel. The
+      arbiter's tiering, and the thing that distinguishes "delegated" from
+      "compiler-generated" when scoring.
+    * `accuracy` — the *budget* half of "fastest in-budget candidate". A
+      delegate claiming `tolerance_bounded` must state its `tolerance`;
+      being faster is not a reason to select a candidate whose numerical
+      claim is unstated. This is a semantic key and never defaults
+      (Decision #21a).
+
+    For inline PTX, see `tessera_nvidia.inline_ptx` — the other pathway. That
+    is a distinct op rather than a mode of this one because the delegate is
+    *text embedded in the artifact* rather than a binding resolved elsewhere,
+    so the two have different verifiers and different failure modes.
+  }];
+  let arguments = (ins
+      Variadic<NVIDIA_TargetValue>:$inputs,
+      StrAttr:$callee,
+      StrAttr:$arch,
+      NVIDIA_DelegateBindingAttr:$binding,
+      NVIDIA_DelegateProvenanceAttr:$provenance,
+      NVIDIA_DelegateAccuracyAttr:$accuracy,
+      OptionalAttr<F64Attr>:$tolerance);
+  let results = (outs Variadic<NVIDIA_TargetValue>:$outputs);
+  let assemblyFormat = [{
+    $inputs attr-dict `:` functional-type($inputs, $outputs)
+  }];
+  let hasVerifier = 1;
+}
+
+def NVIDIA_InlinePtxOp : Op<TesseraNVIDIADialect, "inline_ptx"> {
+  let summary = "Delegation to inline PTX embedded in the compiled artifact";
+  let description = [{
+    The second fast path, and deliberately a separate op from
+    `tessera_nvidia.kernel_call`.
+
+    Inline PTX is not a variant of a symbol call: the delegate is *text
+    carried in the artifact* rather than a binding resolved at link or launch
+    time. It has no callee to cache on, its side effects are not inferable
+    from a symbol, and an empty asm string is a silently-successful no-op
+    rather than an unresolved-symbol error. Folding both into one op with a
+    mode attribute would force a verifier that checks which half of its own
+    attributes to trust — the shape that lets a malformed candidate through.
+
+    `constraints` is required for the same reason it is in LLVM: an inline
+    asm block whose operand constraints are unstated cannot be bound
+    correctly, and guessing them is how register clobbers become silent
+    miscompiles. `has_side_effects` is explicit because PTX that touches
+    memory or barriers must not be reordered or eliminated, and absence of
+    evidence is not purity.
+
+    Accuracy carries the same contract as `kernel_call`: an arbiter selects
+    the fastest *in-budget* candidate, so a delegate with no stated numerical
+    claim is not selectable (Decision #21a — a semantic key never defaults).
+  }];
+  let arguments = (ins
+      Variadic<NVIDIA_TargetValue>:$inputs,
+      StrAttr:$ptx,
+      StrAttr:$constraints,
+      StrAttr:$arch,
+      NVIDIA_DelegateAccuracyAttr:$accuracy,
+      OptionalAttr<F64Attr>:$tolerance,
+      UnitAttr:$has_side_effects);
+  let results = (outs Variadic<NVIDIA_TargetValue>:$outputs);
+  let assemblyFormat = [{
+    $inputs attr-dict `:` functional-type($inputs, $outputs)
+  }];
+  let hasVerifier = 1;
 }
 def NVIDIA_ProfilerProbeOp : TesseraNVIDIA_Op<"profiler_probe"> {
   let summary = "Profiler probe marker (device-timer instrumentation point)";

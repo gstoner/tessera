@@ -17,8 +17,14 @@ module {
 
   func.func @call(%a: f32, %b: f32) -> f32 {
     %r = tessera_nvidia.kernel_call %a, %b
-        {callee = "tessera_nvidia_flash", arch = "sm_120"} : (f32, f32) -> f32
-    return %r : f32
+        {callee = "tessera_nvidia_flash", arch = "sm_120",
+         binding = "cuda_kernel", provenance = "handwritten_kernel",
+         accuracy = "reference_exact"} : (f32, f32) -> f32
+    %p = tessera_nvidia.inline_ptx %r
+        {ptx = "mul.f32 $0, $1, $1;", constraints = "=f,f",
+         arch = "sm_120", accuracy = "tolerance_bounded",
+         tolerance = 1.000000e-06 : f64} : (f32) -> f32
+    return %p : f32
   }
 }
 
@@ -26,3 +32,4 @@ module {
 // CHECK: tessera_nvidia.cuda_kernel
 // CHECK: tessera_nvidia.profiler_probe
 // CHECK: tessera_nvidia.kernel_call
+// CHECK: tessera_nvidia.inline_ptx

@@ -8,6 +8,9 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/ADT/StringSet.h"
 
+#include <cmath>
+#include <optional>
+
 #include "TesseraNVIDIADialect.h.inc"
 
 #define GET_OP_CLASSES
@@ -85,6 +88,60 @@ LogicalResult MacroCTAMatmulOp::verify() {
   if (!digest || digest.getValue().size() != 64)
     return emitOpError("requires a 64-character tessera.schedule_hash");
   return success();
+}
+
+// Shared accuracy contract for the two delegation ops.
+//
+// Decision #28's arbiter selects the fastest *in-budget* candidate, so a
+// delegate that does not state a numerical claim is not comparable to
+// compiled output -- it is only faster. `tolerance_bounded` without a
+// tolerance is that failure wearing a contract's clothes, so it is rejected
+// rather than defaulted (Decision #21a: a semantic key never defaults).
+static LogicalResult verifyDelegateAccuracy(Operation *op, StringRef accuracy,
+                                            std::optional<double> tolerance) {
+  if (accuracy == "tolerance_bounded") {
+    if (!tolerance)
+      return op->emitOpError(
+          "accuracy=tolerance_bounded requires a `tolerance` attribute; a "
+          "bounded numerical claim with no stated bound is not a claim the "
+          "arbiter can budget against");
+    if (!(*tolerance > 0.0) || !std::isfinite(*tolerance))
+      return op->emitOpError("`tolerance` must be finite and greater than zero");
+    return success();
+  }
+  // reference_exact
+  if (tolerance)
+    return op->emitOpError(
+        "accuracy=reference_exact must not carry a `tolerance`; an exact claim "
+        "with a tolerance is two contradictory claims, and a reader cannot "
+        "tell which one the delegate honours");
+  return success();
+}
+
+LogicalResult KernelCallOp::verify() {
+  if (getCallee().empty())
+    return emitOpError(
+        "requires a non-empty `callee`; a delegation with no named target "
+        "cannot be bound, cached, or re-measured");
+  if (getArch().empty())
+    return emitOpError("requires a non-empty `arch`");
+  return verifyDelegateAccuracy(getOperation(), getAccuracy(), getTolerance());
+}
+
+LogicalResult InlinePtxOp::verify() {
+  if (getPtx().empty())
+    return emitOpError(
+        "requires non-empty `ptx`; an empty inline-asm body is a silently "
+        "successful no-op rather than an error, which is exactly the failure "
+        "this contract exists to prevent");
+  if (getConstraints().empty())
+    return emitOpError(
+        "requires a non-empty `constraints` string; inline asm whose operand "
+        "constraints are unstated cannot be bound correctly, and guessing "
+        "them is how register clobbers become silent miscompiles");
+  if (getArch().empty())
+    return emitOpError("requires a non-empty `arch`");
+  return verifyDelegateAccuracy(getOperation(), getAccuracy(), getTolerance());
 }
 
 LogicalResult CudaMathKernelOp::verify() {

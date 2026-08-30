@@ -135,3 +135,28 @@ func.func @rank_two_buffer_leaves_the_offset_ambiguous(
   return
 }
 
+// -----
+
+func.func @threadgroup_tile_exceeds_the_target_budget() {
+  // 32768 is [MTLDevice maxThreadgroupMemoryLength] on Apple7, queried from the
+  // device rather than assumed. It is carried in the IR rather than compiled
+  // into the verifier so this check stays exact without making the compiler's
+  // answer depend on the host it runs on -- the property Decision #19 buys.
+  // Exceeding it fails at pipeline creation, far from the pass that caused it.
+  // expected-error @+1 {{needs 65536 bytes but the target budget is 32768}}
+  %t = tessera_apple.gpu.threadgroup_alloc
+      {elements = 16384 : i64, budget_bytes = 32768 : i64} : memref<16384xf32>
+  return
+}
+
+// -----
+
+func.func @threadgroup_size_attribute_disagrees_with_the_type() {
+  // The attribute is the budgeted size; if it disagrees with what is actually
+  // allocated, one of the two is not what runs.
+  // expected-error @+1 {{disagrees with the result type's}}
+  %t = tessera_apple.gpu.threadgroup_alloc
+      {elements = 64 : i64, budget_bytes = 32768 : i64} : memref<128xf16>
+  return
+}
+

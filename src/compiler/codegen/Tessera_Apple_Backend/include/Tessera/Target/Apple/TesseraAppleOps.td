@@ -83,6 +83,35 @@ def Apple_MmaStorageAttr
     : Apple_EnumStrAttr<["f16", "f32"],
         "simdgroup_matrix input element type">;
 
+def AppleGPU_ThreadgroupAllocOp : TesseraApple_Op<"gpu.threadgroup_alloc"> {
+  let summary = "Allocate a threadgroup-memory tile against a declared budget";
+  let description = [{
+    Threadgroup memory is the staging area a tiled matmul needs and the reason
+    ragged shapes work at all: Metal's `simdgroup_load` has **no bounds
+    predicate**, so out-of-range elements cannot be masked at the load. They
+    are masked when the tile is *copied in* — `As[e] = (gr < M && gk < K) ?
+    A[...] : 0` — and the MMA then reads a staged tile that is always fully
+    in range. Zero padding is exact: a zero operand contributes nothing to the
+    dot product, so every valid output element is unaffected.
+
+    `budget_bytes` is the target's per-threadgroup limit, carried **in the IR**
+    rather than compiled into the verifier. The limit is a device property
+    (`[MTLDevice maxThreadgroupMemoryLength]` — 32768 on Apple7, queried, not
+    assumed), and baking it into C++ would make the verifier's answer depend on
+    the host it runs on. That would break the property Decision #19 actually
+    buys: this layer must be checkable on any machine, including one with no
+    Metal device. Carrying it as an attribute keeps the check exact and the
+    compiler host-free, and it makes the budget a fact a reader can see.
+
+    Exceeding the budget is a pipeline-creation failure at runtime, far from
+    the pass that caused it, which is why it fails here instead.
+  }];
+  let arguments = (ins I64Attr:$elements, I64Attr:$budget_bytes);
+  let results = (outs AnyMemRef:$tile);
+  let assemblyFormat = "attr-dict `:` type($tile)";
+  let hasVerifier = 1;
+}
+
 def AppleGPU_SimdgroupFillOp : TesseraApple_Op<"gpu.simdgroup_fill", [Pure]> {
   let summary = "A constant-filled simdgroup_matrix (make_filled_simdgroup_matrix)";
   let description = [{

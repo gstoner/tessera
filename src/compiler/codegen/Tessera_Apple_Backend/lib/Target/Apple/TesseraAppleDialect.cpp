@@ -139,6 +139,36 @@ static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
   return ::mlir::success();
 }
 
+::mlir::LogicalResult ThreadgroupAllocOp::verify() {
+  auto memTy = ::llvm::dyn_cast<::mlir::MemRefType>(getTile().getType());
+  if (!memTy || memTy.getRank() != 1)
+    return emitOpError("threadgroup tile must be a rank-1 memref");
+  const int64_t elements = getElements();
+  if (elements <= 0)
+    return emitOpError("`elements` must be positive");
+  if (memTy.getNumElements() != elements)
+    return emitOpError()
+           << "`elements` (" << elements << ") disagrees with the result type's "
+           << memTy.getNumElements()
+           << "; the attribute is the budgeted size and a disagreement means "
+              "one of the two is not what gets allocated";
+
+  const unsigned bits = memTy.getElementType().getIntOrFloatBitWidth();
+  if (bits % 8u)
+    return emitOpError("threadgroup tiles need a byte-sized element type");
+  const int64_t bytes = elements * static_cast<int64_t>(bits / 8u);
+  const int64_t budget = getBudgetBytes();
+  if (budget <= 0)
+    return emitOpError("`budget_bytes` must be positive");
+  if (bytes > budget)
+    return emitOpError()
+           << "threadgroup tile needs " << bytes << " bytes but the target "
+           << "budget is " << budget
+           << "; exceeding it fails at pipeline creation, far from the pass "
+              "that caused it";
+  return ::mlir::success();
+}
+
 ::mlir::LogicalResult SimdgroupLoadOp::verify() {
   if (::mlir::failed(verifyRowStride(getOperation(), getLeadingDim())))
     return ::mlir::failure();

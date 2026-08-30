@@ -189,3 +189,54 @@ def test_truncf_is_the_rounding_the_epilogue_claims():
     assert np.float16(halfway) == np.float16(1.0), "expected round-to-even at the tie"
     above = np.float32(1.0 + 3.0 * 2.0 ** -12)
     assert np.float16(above) > np.float16(1.0), "expected rounding up above the tie"
+
+
+def test_zero_padded_ragged_tiling_is_exact():
+    """Why ragged shapes are correct, not merely tolerated.
+
+    Metal's `simdgroup_load` has no bounds predicate, so out-of-range elements
+    cannot be masked at the load; they are substituted with zero when the tile
+    is staged. That is exact rather than approximate: a zero operand
+    contributes nothing to the dot product, so every valid output element is
+    unaffected, and the padded tail is never copied out.
+    """
+    E = _MMA_EXTENT
+    rng = np.random.default_rng(0)
+    for M, N, K in [(17, 13, 23), (8, 8, 8), (1, 1, 1), (31, 9, 7)]:
+        A = rng.standard_normal((M, K)).astype(np.float32)
+        B = rng.standard_normal((K, N)).astype(np.float32)
+        C = np.zeros((M, N), np.float32)
+        for m in range(0, M, E):
+            for n in range(0, N, E):
+                acc = np.zeros((E, E), np.float32)
+                for k in range(0, K, E):
+                    a = np.zeros((E, E), np.float32)
+                    b = np.zeros((E, E), np.float32)
+                    for i in range(E):
+                        for j in range(E):
+                            if m + i < M and k + j < K:
+                                a[i, j] = A[m + i, k + j]
+                            if k + i < K and n + j < N:
+                                b[i, j] = B[k + i, n + j]
+                    acc = a @ b + acc
+                for i in range(E):
+                    for j in range(E):
+                        if m + i < M and n + j < N:
+                            C[m + i, n + j] = acc[i, j]
+        assert np.allclose(C, A @ B, atol=1e-5), f"ragged {M}x{N}x{K} diverged"
+
+
+def test_threadgroup_budget_arithmetic():
+    """The budget check is bytes, not elements — the element type matters.
+
+    32768 is `[MTLDevice maxThreadgroupMemoryLength]` on this Apple7 part,
+    queried from the device rather than recalled (Decision #27). The same
+    element count fits or does not depending on width, which is why the
+    verifier multiplies rather than comparing counts.
+    """
+    budget = 32768
+    for width_bytes, dtype in ((2, "f16"), (4, "f32")):
+        assert 8192 * width_bytes <= budget, dtype
+    # An f32 tile of 16384 elements is exactly twice the budget; an f16 tile of
+    # the same count fits exactly. Counting elements alone would accept both.
+    assert 16384 * 4 > budget and 16384 * 2 == budget

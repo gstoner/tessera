@@ -91,12 +91,6 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
     const int64_t N = rhsTy.getDimSize(1);
     if (rhsTy.getDimSize(0) != K)
       return rewriter.notifyMatchFailure(op, "matmul shape mismatch");
-    // Ragged tails would need predicated loads. Declining is correct: the MPS
-    // lane still serves those shapes, and emitting an unmasked nest for them
-    // would read out of bounds.
-    if (M % kExtent || N % kExtent || K % kExtent)
-      return rewriter.notifyMatchFailure(
-          op, "every extent must be a multiple of 8 until tail masking lands");
 
     // The accumulator is f32 and `simdgroup_store` does not convert -- it
     // moves raw elements. An f16 result therefore needs an explicit rounding
@@ -116,112 +110,156 @@ struct LowerMatmulToAppleSimdgroup : public RewritePattern {
 
     Location loc = op->getLoc();
     Type f32Ty = rewriter.getF32Type();
+    const int64_t MP = ((M + kExtent - 1) / kExtent) * kExtent;
+    const int64_t NP = ((N + kExtent - 1) / kExtent) * kExtent;
 
     // Flat buffers: the primitives take a base plus a LINEAR element offset and
-    // an explicit row stride, mirroring Metal's pointer arithmetic. A rank-2
-    // memref would leave the offset's meaning ambiguous (row index or flat
-    // index -- they differ by `leading_dim`), which the verifier now rejects.
+    // an explicit row stride, mirroring Metal's pointer arithmetic.
     SmallVector<ReassociationIndices, 1> collapse{{0, 1}};
     auto flat = [&](Value tensor, int64_t rows, int64_t cols, Type et) {
       Value buf = rewriter.create<bufferization::ToBufferOp>(
           loc, MemRefType::get({rows, cols}, et), tensor);
-      return rewriter
-          .create<memref::CollapseShapeOp>(loc, buf, collapse)
+      return rewriter.create<memref::CollapseShapeOp>(loc, buf, collapse)
           .getResult();
     };
     Value aBuf = flat(lhs, M, K, elem);
     Value bBuf = flat(rhs, K, N, elem);
-    // The accumulator tile is always f32 -- the MMA's fixed contract.
+    // Padded to whole tiles so a ragged edge writes into the pad rather than
+    // out of bounds; the epilogue copies back only the valid region.
     Value accBuf =
-        rewriter.create<memref::AllocOp>(loc, MemRefType::get({M * N}, f32Ty));
-
-    auto matTy = [&](Type t) { return SimdgroupMatrixType::get(getContext(), t); };
-    // The accumulator is f32 whatever the inputs are -- the simdgroup MMA's
-    // fixed numerical contract, enforced by SimdgroupMatmulOp::verify.
-    Type accTy = matTy(f32Ty);
-    Type inTy = matTy(elem);
-    StringRef storage = elem.isF16() ? "f16" : "f32";
+        rewriter.create<memref::AllocOp>(loc, MemRefType::get({MP * NP}, f32Ty));
 
     auto idx = [&](int64_t v) {
       return rewriter.create<arith::ConstantIndexOp>(loc, v).getResult();
     };
-    Value zero = idx(0), step = idx(kExtent);
-    Value mBound = idx(M), nBound = idx(N), kBound = idx(K);
-    Value kStride = idx(K), nStride = idx(N);
+    Value zero = idx(0), one = idx(1), step = idx(kExtent);
+    Value mBound = idx(MP), nBound = idx(NP), kBound = idx(K);
+    Value mLimit = idx(M), nLimit = idx(N), kLimit = idx(K);
+    Value kStride = idx(K), nStride = idx(N), npStride = idx(NP);
 
-    // for m in 0..M step 8 { for n in 0..N step 8 { ... } }
+    // Staging tiles. Metal's simdgroup_load has NO bounds predicate, so an
+    // out-of-range element cannot be masked at the load; it is masked when the
+    // tile is copied in. That is why ragged shapes need threadgroup memory at
+    // all, and why this pass stages unconditionally rather than only on the
+    // ragged path -- one code path is easier to trust than two.
+    const int64_t tileElems = kExtent * kExtent;
+    const int64_t budget = 32768;  // [MTLDevice maxThreadgroupMemoryLength], Apple7
+    auto tileTy = MemRefType::get({tileElems}, elem);
+    Value aTile = rewriter.create<ThreadgroupAllocOp>(
+        loc, tileTy, rewriter.getI64IntegerAttr(tileElems),
+        rewriter.getI64IntegerAttr(budget));
+    Value bTile = rewriter.create<ThreadgroupAllocOp>(
+        loc, tileTy, rewriter.getI64IntegerAttr(tileElems),
+        rewriter.getI64IntegerAttr(budget));
+
+    Value zeroElem = rewriter.create<arith::ConstantOp>(
+        loc, elem, rewriter.getFloatAttr(elem, 0.0));
+
+    Type accTy = SimdgroupMatrixType::get(getContext(), f32Ty);
+    Type inTy = SimdgroupMatrixType::get(getContext(), elem);
+    StringRef storage = elem.isF16() ? "f16" : "f32";
+    auto scope = rewriter.getStringAttr("threadgroup");
+    auto tileStride = rewriter.getI64IntegerAttr(kExtent);
+
     auto mLoop = rewriter.create<scf::ForOp>(loc, zero, mBound, step);
     rewriter.setInsertionPointToStart(mLoop.getBody());
     auto nLoop = rewriter.create<scf::ForOp>(loc, zero, nBound, step);
     rewriter.setInsertionPointToStart(nLoop.getBody());
-
     Value m = mLoop.getInductionVar(), n = nLoop.getInductionVar();
+
     Value acc0 = rewriter.create<SimdgroupFillOp>(
         loc, accTy, rewriter.getF32FloatAttr(0.0f));
-
-    // acc = for k in 0..K step 8 iter_args(acc) { acc = a*b + acc }
-    //
-    // The accumulator is an iteration argument rather than a memory cell: the
-    // dependence between K steps is then explicit in the IR, which is what
-    // lets a later pass reorder or split K without having to prove anything
-    // about aliasing.
     auto kLoop = rewriter.create<scf::ForOp>(loc, zero, kBound, step,
                                              ValueRange{acc0});
     rewriter.setInsertionPointToStart(kLoop.getBody());
     Value k = kLoop.getInductionVar();
     Value accIn = kLoop.getRegionIterArgs()[0];
 
-    // A[m, k] at m*K + k; B[k, n] at k*N + n.
-    Value aOff = rewriter.create<arith::AddIOp>(
-        loc, rewriter.create<arith::MulIOp>(loc, m, kStride), k);
-    Value bOff = rewriter.create<arith::AddIOp>(
-        loc, rewriter.create<arith::MulIOp>(loc, k, nStride), n);
+    // Copy one 8x8 tile in, substituting zero out of range. The load itself is
+    // inside the guard: computing the address and selecting afterwards would
+    // still have read out of bounds.
+    auto stageTile = [&](Value dst, Value src, Value rowBase, Value colBase,
+                         Value rowLimit, Value colLimit, Value srcStride) {
+      auto iLoop = rewriter.create<scf::ForOp>(loc, zero, step, one);
+      rewriter.setInsertionPointToStart(iLoop.getBody());
+      Value i = iLoop.getInductionVar();
+      auto jLoop = rewriter.create<scf::ForOp>(loc, zero, step, one);
+      rewriter.setInsertionPointToStart(jLoop.getBody());
+      Value j = jLoop.getInductionVar();
 
-    auto aMat = rewriter.create<SimdgroupLoadOp>(
-        loc, inTy, aBuf, aOff, rewriter.getI64IntegerAttr(K),
-        rewriter.getStringAttr("threadgroup"));
-    auto bMat = rewriter.create<SimdgroupLoadOp>(
-        loc, inTy, bBuf, bOff, rewriter.getI64IntegerAttr(N),
-        rewriter.getStringAttr("threadgroup"));
+      Value r = rewriter.create<arith::AddIOp>(loc, rowBase, i);
+      Value c = rewriter.create<arith::AddIOp>(loc, colBase, j);
+      Value rOk = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult,
+                                                 r, rowLimit);
+      Value cOk = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult,
+                                                 c, colLimit);
+      Value inRange = rewriter.create<arith::AndIOp>(loc, rOk, cOk);
+      auto guard = rewriter.create<scf::IfOp>(loc, TypeRange{elem}, inRange,
+                                              /*withElseRegion=*/true);
+      rewriter.setInsertionPointToStart(guard.thenBlock());
+      Value off = rewriter.create<arith::AddIOp>(
+          loc, rewriter.create<arith::MulIOp>(loc, r, srcStride), c);
+      Value v = rewriter.create<memref::LoadOp>(loc, src, ValueRange{off});
+      rewriter.create<scf::YieldOp>(loc, ValueRange{v});
+      rewriter.setInsertionPointToStart(guard.elseBlock());
+      rewriter.create<scf::YieldOp>(loc, ValueRange{zeroElem});
+      rewriter.setInsertionPointAfter(guard);
+
+      Value dstOff = rewriter.create<arith::AddIOp>(
+          loc, rewriter.create<arith::MulIOp>(loc, i, step), j);
+      rewriter.create<memref::StoreOp>(loc, guard.getResult(0), dst,
+                                       ValueRange{dstOff});
+      rewriter.setInsertionPointAfter(iLoop);
+    };
+
+    rewriter.create<ThreadgroupBarrierOp>(loc, scope);
+    stageTile(aTile, aBuf, m, k, mLimit, kLimit, kStride);
+    stageTile(bTile, bBuf, k, n, kLimit, nLimit, nStride);
+    // Orders the staging writes against the simdgroup reads below. `mem_none`
+    // here would compile and race.
+    rewriter.create<ThreadgroupBarrierOp>(loc, scope);
+
+    auto aMat = rewriter.create<SimdgroupLoadOp>(loc, inTy, aTile, zero,
+                                                 tileStride, scope);
+    auto bMat = rewriter.create<SimdgroupLoadOp>(loc, inTy, bTile, zero,
+                                                 tileStride, scope);
     auto mma = rewriter.create<SimdgroupMatmulOp>(
         loc, accTy, aMat, bMat, accIn, rewriter.getStringAttr(storage),
         rewriter.getI64IntegerAttr(kExtent), rewriter.getI64IntegerAttr(kExtent),
         rewriter.getI64IntegerAttr(kExtent));
     rewriter.create<scf::YieldOp>(loc, ValueRange{mma.getResult()});
 
-    // C[m, n] at m*N + n.
     rewriter.setInsertionPointAfter(kLoop);
     Value cOff = rewriter.create<arith::AddIOp>(
-        loc, rewriter.create<arith::MulIOp>(loc, m, nStride), n);
-    rewriter.create<SimdgroupStoreOp>(
-        loc, kLoop.getResult(0), accBuf, cOff, rewriter.getI64IntegerAttr(N),
-        rewriter.getStringAttr("threadgroup"));
+        loc, rewriter.create<arith::MulIOp>(loc, m, npStride), n);
+    rewriter.create<SimdgroupStoreOp>(loc, kLoop.getResult(0), accBuf, cOff,
+                                      rewriter.getI64IntegerAttr(NP), scope);
 
     rewriter.setInsertionPointAfter(mLoop);
 
-    // Rounding epilogue. When the result is f32 the accumulator tile IS the
-    // result; when it is f16 each element is rounded once, here, rather than
-    // at every K step. That single-rounding property is the whole point of the
-    // fp32 accumulator: measured over K = 4096 it is ~1e-7 relative error
-    // against ~5.8e-3 for accumulating in f16 (see
-    // tests/unit/test_apple_simdgroup_contract.py).
-    Value outFlat = accBuf;
-    if (!resElem.isF32()) {
-      outFlat = rewriter.create<memref::AllocOp>(
-          loc, MemRefType::get({M * N}, resElem));
-      Value total = idx(M * N);
-      Value one = idx(1);
-      auto cvt = rewriter.create<scf::ForOp>(loc, zero, total, one);
-      rewriter.setInsertionPointToStart(cvt.getBody());
-      Value v = rewriter.create<memref::LoadOp>(loc, accBuf,
-                                                ValueRange{cvt.getInductionVar()});
-      // arith.truncf is round-to-nearest-even, the same rounding Metal applies
-      // converting float to half on the way out of the epilogue.
-      Value rounded = rewriter.create<arith::TruncFOp>(loc, resElem, v);
-      rewriter.create<memref::StoreOp>(loc, rounded, outFlat,
-                                       ValueRange{cvt.getInductionVar()});
-      rewriter.setInsertionPointAfter(cvt);
-    }
+    // Epilogue: copy the valid region out of the padded accumulator, rounding
+    // ONCE when the result is narrower. Measured over K = 4096 that is 1.7e-04
+    // relative error against 5.8e-03 for accumulating in f16 -- which is what
+    // the fp32 tile buys (tests/unit/test_apple_simdgroup_contract.py).
+    Value outFlat = rewriter.create<memref::AllocOp>(
+        loc, MemRefType::get({M * N}, resElem));
+    auto rLoop = rewriter.create<scf::ForOp>(loc, zero, mLimit, one);
+    rewriter.setInsertionPointToStart(rLoop.getBody());
+    Value r = rLoop.getInductionVar();
+    auto cLoop = rewriter.create<scf::ForOp>(loc, zero, nLimit, one);
+    rewriter.setInsertionPointToStart(cLoop.getBody());
+    Value c = cLoop.getInductionVar();
+    Value srcOff = rewriter.create<arith::AddIOp>(
+        loc, rewriter.create<arith::MulIOp>(loc, r, npStride), c);
+    Value v = rewriter.create<memref::LoadOp>(loc, accBuf, ValueRange{srcOff});
+    // arith.truncf is round-to-nearest-even despite the name.
+    Value outV = resElem.isF32()
+                     ? v
+                     : rewriter.create<arith::TruncFOp>(loc, resElem, v).getResult();
+    Value dstOff = rewriter.create<arith::AddIOp>(
+        loc, rewriter.create<arith::MulIOp>(loc, r, nStride), c);
+    rewriter.create<memref::StoreOp>(loc, outV, outFlat, ValueRange{dstOff});
+    rewriter.setInsertionPointAfter(rLoop);
 
     SmallVector<ReassociationIndices, 1> expand{{0, 1}};
     Value out2d = rewriter.create<memref::ExpandShapeOp>(

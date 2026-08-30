@@ -1982,6 +1982,96 @@ def test_kink_law_catches_hard_select_in_forward_mode():
                           _JVPS[op]).status == "pass"
 
 
+def test_kink_law_never_claims_agreement_it_did_not_check():
+    """Review finding: every unevaluable forward-mode path returned the same
+    `None` as the conformance path, and kink_check turned that into the
+    affirmative detail 'both modes agree'. A JVP whose tangent does not match
+    the kink mask's shape therefore got a PASS asserting a conformance that
+    was never inspected — the claim-integrity failure the harness exists to
+    prevent (Decision #21a). Not-checkable must be a named rule_error."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.law_inputs import KINK_SPECS, KinkSpec
+    from tessera.autodiff.laws import kink_check
+    from tessera.autodiff.vjp import _VJPS
+
+    # Hard first-select AND a keepdims-reduced (1, 1) tangent. The wrong
+    # selection is exactly what the split probe was written to catch; the
+    # shape mismatch used to make it invisible.
+    def hard_first_wrong_shape(primals, tangents, **_):
+        a, b = (np.asarray(v, dtype=np.float64) for v in primals)
+        da, db = (np.asarray(v, dtype=np.float64) for v in tangents)
+        t = np.where(a >= b, da, db)
+        return np.maximum(a, b), t.sum(axis=-1, keepdims=True)
+
+    r = kink_check("maximum", KINK_SPECS["maximum"], _VJPS["maximum"],
+                   hard_first_wrong_shape)
+    assert r.status == "rule_error", r
+    assert "not checkable" in r.detail, r
+    assert "both modes agree" not in r.detail, r
+
+    # Same for the SUBGRAD_ZERO branch.
+    def relu_wrong_shape(primals, tangents, **_):
+        x = np.asarray(primals[0], dtype=np.float64)
+        t = np.asarray(tangents[0], dtype=np.float64)
+        return np.maximum(x, 0.0), (t * (x > 0)).sum(axis=-1, keepdims=True)
+
+    r2 = kink_check("relu", KINK_SPECS["relu"], _VJPS["relu"], relu_wrong_shape)
+    assert r2.status == "rule_error" and "not checkable" in r2.detail, r2
+
+    # A split probe with a single tied element cannot discriminate an equal
+    # share from a hard select, so it may not report agreement either.
+    one_tie = KinkSpec(
+        lambda: ((np.array([[3.0, 1.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.max(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split")
+    r3 = kink_check("amax", one_tie, _VJPS["amax"], _JVPS["amax"])
+    assert r3.status == "rule_error" and "not checkable" in r3.detail, r3
+
+    # Every registered op still passes with its real probe — the guard fails
+    # closed on unevaluable input, it does not fail the working rules.
+    for op, spec in KINK_SPECS.items():
+        got = kink_check(op, spec, _VJPS[op], _JVPS.get(op))
+        assert got.status == "pass", f"{op}: {got.status} — {got.detail}"
+
+
+def test_atan2_spec_avoids_its_real_singularity_not_a_fake_one():
+    """Review finding: the atan2 spec used the `maximum`-style tie guard,
+    which displaces b away from a == b — not a nonsmooth point of atan2 at
+    all. Its real bad set is the origin and the y == 0, x < 0 branch cut,
+    across which the value jumps by 2*pi and the chain law's central
+    difference reports an O(1/eps) residual for a CORRECT rule. The committed
+    sample passed only because the fixed seed happened to land min|y| at
+    0.041; the guard must be structural, not lucky."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.law_inputs import LAW_INPUT_SPECS, InputSpec
+    from tessera.autodiff.laws import chain_check
+
+    spec = LAW_INPUT_SPECS["atan2"]
+    saw_negative_x = False
+    for seed in range(500):
+        (y, x), _ = spec.make(np.random.default_rng(seed))
+        assert np.abs(y).min() >= 0.25 - 1e-12, (
+            f"seed {seed}: |y| reaches {np.abs(y).min():.3e} — inside the "
+            f"FD-straddling band around the branch cut")
+        saw_negative_x = saw_negative_x or bool((x < 0).any())
+    # Excluding the cut must not cost the x < 0 quadrants: only the VALUE
+    # jumps there, and the derivative is smooth.
+    assert saw_negative_x, "the spec no longer samples x < 0"
+
+    assert chain_check("atan2", spec, _JVPS["atan2"]).status == "pass"
+
+    # The correct rule really does fail on a near-cut sample — this is what
+    # the structural guard buys, not a tolerance loosening.
+    def _near_cut(rng):
+        y = rng.standard_normal((3, 4))
+        y[0, 0] = 1e-7
+        return (y, -0.5 - np.abs(rng.standard_normal((3, 4)))), {}
+
+    near = chain_check("atan2", InputSpec(_near_cut), _JVPS["atan2"])
+    assert near.status == "fail", near
+
+
 def test_hutchinson_has_no_unnormalized_scale_knob():
     """Review finding: a `radius` parameter scaled each direction but not the
     returned mean, so the function silently estimated `radius^2 * laplacian`.

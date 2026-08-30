@@ -71,13 +71,31 @@ __device__ float tsr_grid_sum(float local, float *partials, float *scalar,
 template <typename T>
 __device__ void tsr_matvec(const T *a, const float *x, float *y, int n,
                            cg::grid_group grid) {
-  long gid = (long)blockIdx.x * blockDim.x + threadIdx.x;
-  long stride = (long)gridDim.x * blockDim.x;
-  for (long row = gid; row < n; row += stride) {
+  // One WARP per row, lane `l` walking columns `l, l+32, ...`: the 32 lanes of
+  // a single load instruction then touch 32 consecutive elements of one row
+  // rather than one element of 32 different rows `n*sizeof(T)` apart. Total
+  // per-thread work is unchanged (each thread still touches n elements); what
+  // changes is the number of memory transactions per load instruction.
+  //
+  // Requires blockDim.x to be a multiple of the warp size — every launch site
+  // in this file uses 256 — so `row` is warp-uniform and the full-mask
+  // shuffles below always see all 32 lanes.
+  const int lane = threadIdx.x & 31;
+  long warp = ((long)blockIdx.x * blockDim.x + threadIdx.x) >> 5;
+  long warps = ((long)gridDim.x * blockDim.x) >> 5;
+  for (long row = warp; row < n; row += warps) {
     float sum = 0.0f;
     const T *arow = a + row * (long)n;
-    for (int col = 0; col < n; ++col) sum = fmaf(tsr_load(arow, col), x[col], sum);
-    y[row] = sum;
+    for (int col = lane; col < n; col += 32)
+      sum = fmaf(tsr_load(arow, col), x[col], sum);
+    // Fixed 5-step butterfly over a fixed 32-lane warp: reproducible for a
+    // fixed launch geometry and independent of grid size, the same contract
+    // tsr_grid_sum states above. (The per-row summation ORDER differs from a
+    // scalar left-to-right sum, so results are not bit-identical to a
+    // sequential host reference — they are reproducible, not identical.)
+    for (int off = 16; off; off >>= 1)
+      sum += __shfl_down_sync(0xffffffffu, sum, off);
+    if (lane == 0) y[row] = sum;
   }
   grid.sync();
 }

@@ -948,6 +948,25 @@ class CpuStockhamFFTCandidate(Candidate):
         except Exception:
             return region.reference(x), "reference"
 
+    def run_rows(self, region: SpectralFFTRegion,
+                 rows: np.ndarray) -> tuple[Any, str]:
+        """Transform a `(batch, n)` matrix. The CPU ABI is single-row, so this
+        saves the per-row candidate resolution, not a transfer."""
+        lib = _cpu_lib()
+        if lib is None or not _supported_length(region.n):
+            return rows, "reference"
+        try:
+            xin = np.ascontiguousarray(rows, np.complex64)
+            if xin.ndim != 2 or xin.shape[1] != region.n:
+                return rows, "reference"
+            out = np.empty_like(xin)
+            for i in range(xin.shape[0]):
+                lib.ts_fft_stockham_cpu(_cptr(xin[i]), _cptr(out[i]),
+                                        region.n, region.sign)
+            return out, "cpu_stockham"
+        except Exception:
+            return rows, "reference"
+
 
 class RocmStockhamFFTCandidate(Candidate):
     """Tier-3: the shipped ROCm Stockham kernel on a live gfx device (crown-jewel
@@ -994,6 +1013,36 @@ class RocmStockhamFFTCandidate(Candidate):
             return out, "rocm_stockham"
         except Exception:
             return region.reference(x), "reference"
+
+    def run_rows(self, region: SpectralFFTRegion,
+                 rows: np.ndarray) -> tuple[Any, str]:
+        """Transform a `(batch, n)` matrix in ONE host-pointer call.
+
+        Per `TargetHooks/AMD/StockhamRadix4.hip`, the batch entry allocates
+        once and does ONE H2D / D2H pair for the whole matrix (the per-row
+        launches are unchanged); the single-row entry above pays an allocation
+        and a transfer pair per row. Declines -- rather than looping the
+        single-row entry -- when the image predates the batch ABI, so the
+        caller falls back per row.
+
+        Not measured: no ROCm device on the hosts that run this suite.
+        """
+        lib = _amd_candidate_lib()
+        if (lib is None or not _supported_length(region.n)
+                or not hasattr(lib, "ts_fft_stockham_amd_hostptr_batch")):
+            return rows, "reference"
+        try:
+            xin = np.ascontiguousarray(rows, np.complex64)
+            if xin.ndim != 2 or xin.shape[1] != region.n:
+                return rows, "reference"
+            out = np.empty_like(xin)
+            rc = lib.ts_fft_stockham_amd_hostptr_batch(
+                _cptr(xin), _cptr(out), int(xin.shape[0]), region.n, region.sign)
+            if rc != 0:
+                return rows, "reference"
+            return out, "rocm_stockham"
+        except Exception:
+            return rows, "reference"
 
 
 register_candidate(CpuStockhamFFTCandidate())
@@ -1049,6 +1098,70 @@ def _inner_fft(target: str, n: int, sign: int, x: np.ndarray) -> tuple[np.ndarra
         except Exception:
             continue
     return region.reference(x), "reference"
+
+
+def _inner_fft_rows(target: str, n: int, sign: int,
+                    rows: np.ndarray) -> tuple[np.ndarray, str]:
+    """Transform every row of a `(batch, n)` matrix through ONE resolved lane.
+
+    Candidate discovery, `applies_to` and the device `available()` probe are
+    done once for the whole batch rather than once per row: for a framed op the
+    per-row rediscovery costs more than the transform it selects. A candidate
+    that publishes `run_rows` also gets one host↔device transfer pair for the
+    batch instead of one per row.
+
+    All-or-nothing on purpose: a partially native batch reported under a native
+    lane name is exactly the mislabelling Decision #21 forbids, so any row the
+    lane declines drops the whole call to `"reference"`.
+    """
+    from tessera.compiler.emit.candidate import candidates_for
+
+    values = np.ascontiguousarray(rows, np.complex64)
+    region = SpectralFFTRegion(n=n, sign=sign)
+    for cand in candidates_for(target, OP_SPECTRAL_FFT):
+        try:
+            if not cand.applies_to(region) or not cand.available():
+                continue
+        except Exception:
+            continue
+        batched = getattr(cand, "run_rows", None)
+        if batched is not None:
+            try:
+                out, lane = batched(region, values)
+                if lane != "reference":
+                    return np.asarray(out, np.complex64), lane
+            except Exception:
+                pass
+        try:
+            done = np.empty_like(values)
+            lane = getattr(cand, "name", "reference")
+            for i in range(values.shape[0]):
+                out, row_lane = cand.run(region, values[i])
+                if row_lane == "reference":
+                    break
+                lane, done[i] = row_lane, out
+            else:
+                if lane != "reference":
+                    return done, lane
+        except Exception:
+            continue
+    return (np.stack([region.reference(r) for r in values]).astype(np.complex64)
+            if values.shape[0] else values), "reference"
+
+
+def _hermitian_full(half: np.ndarray, n: int, bins: int) -> np.ndarray:
+    """Rebuild the full length-`n` spectrum along the last axis from `bins`.
+
+    Mirrored bins are `conj(X[k])` at `n-k`. DC -- plus Nyquist when `n` is
+    even -- are their own mirror and must NOT be written twice; doubling them
+    keeps the result real and plausible with the endpoints wrong.
+    `half[..., 1:n-bins+1]` reversed is exactly the non-self-conjugate set, for
+    both parities of `n`.
+    """
+    full = np.zeros(half.shape[:-1] + (n,), np.complex64)
+    full[..., :bins] = half[..., :bins]
+    full[..., bins:] = np.conj(half[..., 1:n - bins + 1])[..., ::-1]
+    return full
 
 
 class SpectralRFFTRegion:
@@ -1349,10 +1462,7 @@ class IRFFTCandidate(_ComposedSpectralCandidate):
         try:
             half = np.asarray(xf, np.complex64)
             n = region.n
-            full = np.zeros(n, np.complex64)
-            full[:region.bins] = half[:region.bins]
-            for k_idx in range(1, (n + 1) // 2):
-                full[n - k_idx] = np.conj(half[k_idx])
+            full = _hermitian_full(half, n, region.bins)
             out, lane = _inner_fft(self.target, n, +1, full)
             if lane == "reference":
                 return region.reference(xf), "reference"
@@ -1374,17 +1484,16 @@ class STFTCandidate(_ComposedSpectralCandidate):
         try:
             sig = np.asarray(x, np.float32)
             w = np.asarray(win, np.float32)
-            inner = SpectralRFFTRegion(region.win)
-            rfft = RFFTCandidate()
-            rfft.target = self.target
-            frames, lane_seen = [], None
-            for start in range(0, region.n - region.win + 1, region.hop):
-                out, lane = rfft.run(inner, sig[start:start + region.win] * w)
-                if lane == "reference":
-                    return region.reference(x, win), "reference"
-                lane_seen = lane
-                frames.append(np.asarray(out, np.complex64))
-            return np.stack(frames, axis=-2), f"{lane_seen}+stft"
+            # Frame + window once into a contiguous (frames, win) matrix, then
+            # one batched inner transform. Framing per frame in Python cost
+            # more than the transform the composed lane exists to exploit.
+            windows = np.lib.stride_tricks.sliding_window_view(sig, region.win)
+            rows = (windows[::region.hop] * w).astype(np.complex64)
+            spec, lane = _inner_fft_rows(self.target, region.win, -1, rows)
+            if lane == "reference":
+                return region.reference(x, win), "reference"
+            bins = SpectralRFFTRegion(region.win).bins
+            return np.asarray(spec[:, :bins], np.complex64), f"{lane}+rfft+stft"
         except Exception:
             return region.reference(x, win), "reference"
 
@@ -1408,21 +1517,25 @@ class ISTFTCandidate(_ComposedSpectralCandidate):
             spec = np.asarray(xf, np.complex64)
             w = np.asarray(win, np.float32)
             inner = SpectralIRFFTRegion(region.win)
-            irfft = IRFFTCandidate()
-            irfft.target = self.target
+            # Mirror every frame's Hermitian spectrum at once, then one batched
+            # inverse transform: the per-frame lane rediscovery cost more than
+            # the transform itself.
+            rows = _hermitian_full(spec[:region.frames], region.win, inner.bins)
+            done, lane = _inner_fft_rows(self.target, region.win, +1, rows)
+            if lane == "reference":
+                return region.reference(xf, win), "reference"
+            frames = np.real(done).astype(np.float64) * w
             out = np.zeros(region.samples, np.float64)
             weight = np.zeros_like(out)
-            lane_seen = None
+            wsq = (w * w).astype(np.float64)
+            # Overlapping writes: the accumulation stays a loop because
+            # neighbouring frames alias the same output samples.
             for i in range(region.frames):
-                frame, lane = irfft.run(inner, spec[i])
-                if lane == "reference":
-                    return region.reference(xf, win), "reference"
-                lane_seen = lane
                 start = i * region.hop
-                out[start:start + region.win] += np.asarray(frame, np.float64) * w
-                weight[start:start + region.win] += w * w
+                out[start:start + region.win] += frames[i]
+                weight[start:start + region.win] += wsq
             return ((out / np.maximum(weight, 1e-12)).astype(np.float32),
-                    f"{lane_seen}+istft")
+                    f"{lane}+irfft+istft")
         except Exception:
             return region.reference(xf, win), "reference"
 

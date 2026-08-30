@@ -329,3 +329,71 @@ def test_adjoint_state_linear_constraint():
     # ∇h(w) = M⁻ᵀ M⁻¹ w
     expected = np.linalg.solve(M.T, np.linalg.solve(M, w))
     np.testing.assert_allclose(g, expected, atol=1e-5)
+
+
+# ── the FD adjoint is built once, not once per solver iteration ─────────────
+def _counted_linear_root(n: int):
+    """A linear residual plus a counter for the residual evaluations."""
+    rng = np.random.default_rng(0)
+    A = np.eye(n) * 3.0 + rng.standard_normal((n, n)) * 0.2
+    b = np.random.default_rng(1).standard_normal(n)
+    calls = [0]
+
+    def F(x, theta):
+        calls[0] += 1
+        return A @ x - theta * b
+
+    return F, np.linalg.solve(A, 1.7 * b), [np.array(1.7)], calls
+
+
+def test_fd_adjoint_is_memoized_across_gmres_iterations():
+    """Review finding: `rmatvec` rebuilt all n finite-difference Jacobian
+    columns on every call, and GMRES applies the adjoint 2*iters + 1 times.
+    The 'matrix-free' default therefore cost O(n * iters) residual evaluations
+    against O(n) for the dense oracle it ships alongside — strictly dominated
+    by the path it was meant to improve on. The columns do not depend on the
+    cotangent, so building them once makes the two paths cost the same.
+    """
+    for n in (12, 40):
+        F, xstar, params, calls = _counted_linear_root(n)
+        u = np.ones(n)
+
+        calls[0] = 0
+        gmres_grad = root_vjp(F, xstar, params, u, linear_solver="gmres")
+        gmres_evals = calls[0]
+
+        calls[0] = 0
+        dense_grad = root_vjp(F, xstar, params, u, linear_solver="dense")
+        dense_evals = calls[0]
+
+        # Same F-eval budget as the dense oracle: one basis sweep for A, one
+        # for B. Before the fix this was (2*iters + 1) sweeps for A alone.
+        assert gmres_evals == dense_evals, (
+            f"n={n}: gmres path used {gmres_evals} residual evaluations vs "
+            f"{dense_evals} for dense — the FD columns are being rebuilt")
+        assert np.allclose(gmres_grad, dense_grad, rtol=1e-9), (
+            gmres_grad, dense_grad)
+
+
+def test_fd_adjoint_memo_agrees_with_the_streaming_sweep():
+    """Memoizing must not change the answer: the cached columns are exactly
+    the ones the per-call sweep computed (the FD step for a unit basis vector
+    is a constant `eps`, so the columns are a well-defined matrix)."""
+    from tessera.autodiff import implicit as impl
+
+    n = 10
+    F, xstar, params, _ = _counted_linear_root(n)
+    u = np.linspace(-1.0, 1.0, n)
+
+    memoized = root_vjp(F, xstar, params, u, linear_solver="gmres")
+
+    budget = impl._FD_JACOBIAN_ELEMENT_BUDGET
+    impl._FD_JACOBIAN_ELEMENT_BUDGET = 0  # force the streaming fallback
+    try:
+        with pytest.warns(RuntimeWarning, match="not memoized"):
+            streamed = root_vjp(F, xstar, params, u, linear_solver="gmres")
+    finally:
+        impl._FD_JACOBIAN_ELEMENT_BUDGET = budget
+
+    assert np.allclose(memoized, streamed, rtol=1e-10, atol=1e-12), (
+        memoized, streamed)

@@ -221,3 +221,107 @@ def test_jit_pointwise_f16():
     got = np.asarray(fn(x, a, b)).astype(np.float32)
     ref = _gelu(x.astype(np.float32) * a.astype(np.float32) + b.astype(np.float32))
     np.testing.assert_allclose(got, ref, rtol=3e-2, atol=3e-2)
+
+
+# ── exit scan is linear, not quadratic (code review 2026-08-29, P3) ──────────
+def _wide_pointwise_graph(chains: int, chain_len: int, filler: int):
+    """`chains` disjoint pointwise chains buried in `filler` non-candidate ops.
+
+    The shape that made the exit scan quadratic: the per-component member cap
+    bounds ONE component, never the sum over components, so total work grew as
+    candidates x total-ops when exits were found by rescanning every op.
+    """
+    ops = []
+    for c in range(chains):
+        prev = f"in{c}"
+        for j in range(chain_len):
+            ops.append(F._Op("tessera.add", [prev, f"b{c}_{j}"], f"v{c}_{j}", {}))
+            prev = f"v{c}_{j}"
+    ops += [F._Op("tessera.matmul", [f"m{i}a", f"m{i}b"], f"m{i}o", {})
+            for i in range(filler)]
+    return ops
+
+
+@pytest.mark.performance
+def test_pointwise_exit_scan_scales_linearly_with_graph_size():
+    import time
+
+    small = _wide_pointwise_graph(40, 4, 400)
+    large = _wide_pointwise_graph(200, 4, 2000)   # 5x the ops, 5x the candidates
+
+    def _timed(ops):
+        best = float("inf")
+        for _ in range(5):
+            t0 = time.perf_counter()
+            regions = F.discover_pointwise_graph(ops)
+            best = min(best, time.perf_counter() - t0)
+        return best, regions
+
+    t_small, r_small = _timed(small)
+    t_large, r_large = _timed(large)
+    assert len(r_small) == 40 and len(r_large) == 200
+
+    # Quadratic would be ~25x for a 5x graph; linear-with-index is ~5x. The
+    # bound is deliberately loose (12x) so this pins the complexity class, not
+    # the constant factor of whichever machine runs it.
+    assert t_large < 12.0 * max(t_small, 1e-6), (
+        f"exit scan grew {t_large / max(t_small, 1e-9):.1f}x for a 5x graph")
+
+
+def test_pointwise_exit_scan_still_finds_the_single_exit():
+    # A chain whose middle value is ALSO consumed outside the region has two
+    # exits and must be declined — the property the index lookup replaced.
+    ops = [F._Op("tessera.mul", ("x", "a"), "m", {}),
+           F._Op("tessera.add", ("m", "b"), "s", {}),
+           F._Op("tessera.matmul", ("m", "w"), "leak", {})]
+    assert F.discover_pointwise_graph(ops) == []
+    ops = [F._Op("tessera.mul", ("x", "a"), "m", {}),
+           F._Op("tessera.add", ("m", "b"), "s", {})]
+    found = F.discover_pointwise_graph(ops)
+    assert len(found) == 1 and found[0][1].output == "s"
+
+
+# ── bf16 storage round-trips through the pointwise lane (P3) ────────────────
+def _bf16():
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    return ml_dtypes.bfloat16
+
+
+def test_pointwise_operand_plan_records_bf16_as_the_storage_dtype():
+    """bf16 has no MSL pointwise element type, so the kernel computes in f32.
+    The STORAGE dtype is a contract (Decision #15a) and must survive the round
+    trip — the plan says f32 compute AND bf16 store, not f32 for both."""
+    from tessera.compiler.emit import apple_msl
+
+    bf16 = _bf16()
+    x = _RNG.standard_normal((4, 8)).astype(np.float32).astype(bf16)
+    plan = apple_msl.pointwise_operand_plan([x, x])
+    assert plan.elem == "f32" and plan.npdt is np.float32
+    assert plan.store_npdt is bf16
+    # f32 / f16 inputs are unchanged: store == compute.
+    for dt in (np.float32, np.float16):
+        p = apple_msl.pointwise_operand_plan([x.astype(dt)])
+        assert p.store_npdt is p.npdt is dt
+
+
+def test_pointwise_graph_and_reduce_return_bf16_for_bf16_input():
+    from tessera.compiler.emit import apple_msl
+    from tessera.compiler.fusion_core import (PointwiseGraphRegion,
+                                              PointwiseReduceRegion)
+
+    bf16 = _bf16()
+    x = (_RNG.standard_normal((4, 8)) * 4.0).astype(np.float32).astype(bf16)
+    y = (_RNG.standard_normal((4, 8)) * 4.0).astype(np.float32).astype(bf16)
+
+    graph = PointwiseGraphRegion(
+        ops=(("mul", ("a", "b"), "t"), ("relu", ("t",), "o")),
+        inputs=("a", "b"), output="o")
+    out, _ = apple_msl.run_pointwise_graph(graph, [x, y])
+    assert out.dtype == bf16, f"bf16 in, {out.dtype} out"
+    ref = graph.reference(x.astype(np.float32), y.astype(np.float32))
+    np.testing.assert_allclose(out.astype(np.float32), ref, rtol=8e-3, atol=8e-3)
+
+    reduce_region = PointwiseReduceRegion(
+        ops=(("mul", ("a", "a"), "t"),), inputs=("a",), output="t", reduce="sum")
+    red, _ = apple_msl.run_pointwise_reduce(reduce_region, [x])
+    assert red.dtype == bf16, f"bf16 in, {red.dtype} out"

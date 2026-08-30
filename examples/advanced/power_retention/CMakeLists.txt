@@ -47,7 +47,8 @@ target_link_libraries(TesseraPowerTransforms PUBLIC
 if (TESSERA_ENABLE_CUDA)
   add_library(tessera_power_kernels_cuda STATIC src/kernels/cuda/power_attention.cu)
   target_link_libraries(tessera_power_kernels_cuda PUBLIC CUDA::cudart)
-  set_target_properties(tessera_power_kernels_cuda PROPERTIES CUDA_ARCHITECTURES "80;89;90;100")
+  # 120 = consumer Blackwell (RTX 50-series), the fleet's only CUDA device.
+  set_target_properties(tessera_power_kernels_cuda PROPERTIES CUDA_ARCHITECTURES "80;89;90;100;120")
 endif()
 if (TESSERA_ENABLE_HIP)
   add_library(tessera_power_kernels_hip STATIC src/kernels/hip/power_attention.hip.cu)
@@ -57,5 +58,13 @@ add_library(tessera_power_runtime STATIC lib/Runtime/Runtime.cpp lib/Runtime/Aut
 target_link_libraries(tessera_power_runtime PUBLIC MLIRIR
   $<IF:$<BOOL:${TESSERA_ENABLE_CUDA}>,tessera_power_kernels_cuda,>
   $<IF:$<BOOL:${TESSERA_ENABLE_HIP}>,tessera_power_kernels_hip,>)
-add_subdirectory(src/extension)
+# src/extension holds a two-line pybind stub over <torch/extension.h> and no
+# CMakeLists, so this add_subdirectory aborted configure outright — and only
+# under -DTESSERA_ENABLE_CUDA=ON, which is why it survived: every CPU-only
+# configure skips this file's CUDA branch above and never reaches here. A torch
+# extension also cannot be a build target of this project (Decision #23), so
+# the guard is the fix rather than writing the missing CMakeLists.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/extension/CMakeLists.txt")
+  add_subdirectory(src/extension)
+endif()
 enable_testing()

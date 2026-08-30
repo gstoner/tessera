@@ -362,12 +362,21 @@ def _epilogue_module(
     out = IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
     args = [IRArg("a", a), IRArg("b", b)]
     kwargs: dict[str, object] = {"activation": activation}
+    # bias and residual are VALUE edges, so they belong in the operand list, not
+    # in an attribute holding an SSA name. Building them as attributes made
+    # every one of these modules fail GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE — the
+    # verifier is right, and _KEYWORD_OPERANDS["tessera.matmul"] already
+    # declares the ("bias", "residual") order this appends in.
+    epilogue_operands: list[str] = []
+    epilogue_operand_types: list[str] = []
     if bias:
         args.append(IRArg("bias", bias_type))
-        kwargs["bias"] = "%bias"
+        epilogue_operands.append("%bias")
+        epilogue_operand_types.append(str(bias_type))
     if residual:
         args.append(IRArg("residual", residual_type))
-        kwargs["residual"] = "%residual"
+        epilogue_operands.append("%residual")
+        epilogue_operand_types.append(str(residual_type))
     return GraphIRModule(
         functions=[
             GraphIRFunction(
@@ -378,8 +387,8 @@ def _epilogue_module(
                     IROp(
                         result="c",
                         op_name="tessera.matmul",
-                        operands=["%a", "%b"],
-                        operand_types=[str(a), str(b)],
+                        operands=["%a", "%b", *epilogue_operands],
+                        operand_types=[str(a), str(b), *epilogue_operand_types],
                         result_type=str(out),
                         kwargs=kwargs,
                         numeric_policy=(
@@ -1051,6 +1060,11 @@ def test_canonical_sm120_fused_epilogue_matrix(
         "activation": activation,
         "residual": residual,
         "order": ["matmul", "bias", "activation", "residual"],
+        # The packager records the epilogue's output dtype alongside the
+        # members; _epilogue_module always declares an f32 result. This
+        # expectation predated that field and only became reachable once these
+        # modules stopped failing the Graph IR verifier.
+        "output": "f32",
     }
     rng = np.random.default_rng(121_100 + int(bias) * 7 + int(residual) * 11)
     dtype = np.float16 if storage == "fp16" else ml_dtypes.bfloat16

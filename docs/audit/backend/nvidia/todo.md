@@ -7,6 +7,36 @@ last_updated: 2026-08-29
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+Cross-backend sync `P3-SOURCE-ONLY-2026-08-30` — **two rows are fixed in
+source and have never run on a GPU; they are this queue's to close.**
+The P3 batch changed two NVIDIA emitters with no CUDA host available:
+
+* `emit/nvidia_cuda.py` flash-backward — `TSR_ATOMIC_ENTRY` and the f16
+  wrapper now free through a `goto fail` block, and the atomic entry CHECKS
+  its H2D copies, which it previously fired unchecked (a failed upload
+  yielded a confidently wrong gradient). Needs a real run, and ideally an
+  induced allocation failure confirming the cleanup frees exactly what was
+  allocated.
+* `emit/nvidia_solver_krylov.py` `tsr_matvec` — now a warp per row with
+  lane-strided columns and a `__shfl_down_sync` butterfly. The claim made is
+  structural only: at a fixed inner iteration a load's 32 lanes touch 32
+  consecutive elements of one row rather than 32 rows `n*sizeof(T)` apart,
+  so transactions per load drop from 32 to 4 for f32. **No speedup was
+  claimed and none is known.** Two consequences to check on device: the
+  per-row summation order changed, so CG/GMRES convergence needs
+  re-confirming and results are no longer bit-identical to a sequential sum;
+  and `tests/performance/nvidia/test_solver_krylov_ratchet.py` compares
+  against `benchmarks/baselines/nvidia_sm120_solver_krylov_performance.json`,
+  recorded with the OLD matvec — that baseline will report a false result
+  until re-recorded. Whether to enlarge the launch geometry now that a warp
+  owns a row (`useful = ceil(n/256)` was sized for one thread per row) is an
+  open measured question, deliberately left alone.
+
+Evidence that does exist: the generated text was asserted on, and both
+sources parse clean under `clang++ -std=c++17 -fsyntax-only -Wall` with CUDA
+stubs — a harness confirmed to reject a `goto`-crosses-initialization, so the
+clean parse means something. It is not device evidence.
+
 Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
 passes changed; only the Mac's fixture set could be run.**
 The P2 code-review batch touched passes every backend lowers through:

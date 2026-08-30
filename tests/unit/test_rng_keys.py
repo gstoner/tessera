@@ -338,3 +338,44 @@ def test_per_shard_determinism_via_fold_in():
     # Reproducible.
     again = uniform(base.fold_in(2), (64,))
     np.testing.assert_array_equal(streams[2], again)
+
+
+def test_fold_in_is_keyed_on_the_value_not_its_repr() -> None:
+    """Review finding: `_hash_to_u64` hashed `repr(p)`, so a numpy scalar
+    keyed the stream on its spelling. `np.int64(3)` hashed as "np.int64(3)"
+    under numpy >= 2 and as "3" under numpy 1.x — so `fold_in(np.int64(epoch))`
+    forked away from `fold_in(epoch)` AND across numpy major versions, in the
+    one function whose whole contract is deterministic replay. Each integer
+    width forked separately as well.
+    """
+    base = RNGKey.from_seed(0)
+    want = base.fold_in(3)
+    for spelling in (np.int64(3), np.int32(3), np.int16(3), np.uint8(3)):
+        assert base.fold_in(spelling) == want, (
+            f"{type(spelling).__name__} forks the stream away from int 3")
+
+    # Same for the other accepted types' numpy spellings.
+    assert base.fold_in(np.str_("layer_0")) == base.fold_in("layer_0")
+    assert base.fold_in(np.True_) == base.fold_in(True)
+    # bool is an int subclass, but True and 1 are different key material and
+    # must stay different streams.
+    assert base.fold_in(True) != base.fold_in(1)
+
+    # Unsupported key material fails closed rather than keying the stream on
+    # an arbitrary object's repr.
+    for rejected in (1.5, np.float64(1.5), None, [1], np.array([1, 2])):
+        with pytest.raises(TypeError, match="RNG key material"):
+            base.fold_in(rejected)
+
+
+def test_normalization_did_not_move_any_existing_stream() -> None:
+    """The normalization is only allowed to pull numpy spellings ONTO the
+    existing text — a recorded checkpoint replaying `fold_in(epoch)` must
+    produce the same stream it always did, so these are pinned literals."""
+    key = RNGKey.from_seed(7, name="d")
+    assert key.seed_high == 12263577119339054801
+    assert key.fold_in("layer_0").seed_low == 6195148620269712393
+    assert key.fold_in(0).seed_low == 13627183196990922259
+    assert key.fold_in(1).seed_low == 2381958865395780004
+    assert key.split(3)[2].seed_high == 12249589817307296333
+    assert key.fold_in(b"x").seed_low == 3967506089227249409

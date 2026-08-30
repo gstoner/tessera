@@ -142,7 +142,9 @@ def test_adafactor_factored_multistep():
     row = np.zeros(SHAPE[:-1], np.float32)
     col = np.zeros(SHAPE[-1], np.float32)
     state = None
-    for _ in range(3):
+    # `step` is 1-based and selects Adafactor's bias-corrected second-moment
+    # decay, exactly as it does for the flat adamw ABI above.
+    for step in range(1, 4):
         g = rng.standard_normal(SHAPE).astype(np.float32)
         artifact = rt.RuntimeArtifact(metadata={
             "target": "rocm",
@@ -155,7 +157,9 @@ def test_adafactor_factored_multistep():
                 "op_name": "tessera.adafactor",
                 "result": "o",
                 "operands": ["p", "g", "row", "col"],
-                "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+                "kwargs": {
+                    "lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": step,
+                },
             }],
         })
         result = rt.launch(artifact, (p, g, row, col))
@@ -195,7 +199,9 @@ def test_adafactor_factored_nan_gradient_propagates_like_reference():
             "op_name": "tessera.adafactor",
             "result": "o",
             "operands": ["p", "g", "row", "col"],
-            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+            # The tree reference below carries step 1, so the update being
+            # computed is step 2.
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": 2},
         }],
     })
     result = rt.launch(artifact, (p, g, row, col))
@@ -223,7 +229,7 @@ def test_adafactor_full_moment_vector_multistep():
     p = rng.standard_normal(19).astype(np.float32)
     moment = np.zeros_like(p)
     state = None
-    for _ in range(3):
+    for step in range(1, 4):
         g = rng.standard_normal(p.shape).astype(np.float32)
         artifact = rt.RuntimeArtifact(metadata={
             "target": "rocm",
@@ -236,7 +242,9 @@ def test_adafactor_full_moment_vector_multistep():
                 "op_name": "tessera.adafactor",
                 "result": "o",
                 "operands": ["p", "g", "moment"],
-                "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+                "kwargs": {
+                    "lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": step,
+                },
             }],
         })
         result = rt.launch(artifact, (p, g, moment))
@@ -325,7 +333,9 @@ def test_adafactor_factored_backward_executes_on_gfx1151():
         target="rocm_gfx1151",
         parameter_shape=SHAPE,
         topology="factored",
-        kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        # The reference VJP below carries state step 1, so the update being
+        # differentiated is step 2 (selects the bias-corrected decay).
+        kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": 2},
     )
     artifact = rt.RuntimeArtifact(metadata={
         "target": "rocm",
@@ -372,7 +382,9 @@ def test_adafactor_full_backward_executes_on_gfx1151():
         target="rocm_gfx1151",
         parameter_shape=p.shape,
         topology="full",
-        kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        # The reference VJP below carries state step 1, so the update being
+        # differentiated is step 2 (selects the bias-corrected decay).
+        kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6, "step": 2},
     )
     artifact = rt.RuntimeArtifact(metadata={
         "target": "rocm",

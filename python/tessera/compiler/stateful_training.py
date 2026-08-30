@@ -172,12 +172,25 @@ def build_adafactor_vjp_state_contract(
         raise ValueError("factored Adafactor requires rank-2+ parameter state")
     if topology == "full" and len(shape) >= 2:
         raise ValueError("full Adafactor requires rank-0/1 parameter state")
-    numeric = {
+    from tessera.optim import adafactor_decay
+
+    # `beta2` is the caller's nominal asymptotic decay and `step` its 1-based
+    # update index; `beta2_effective` is the bias-corrected decay the forward
+    # actually applied (`optim.adafactor_decay`) and therefore the one the
+    # adjoint must differentiate.  Both are recorded so the contract round-trips
+    # through its own `numeric` dict without re-applying the correction.
+    nominal_beta2 = float(kwargs.get("beta2", 0.999))
+    step = int(kwargs.get("step", 1))
+    numeric: dict[str, Any] = {
         "lr": float(kwargs.get("lr", 1.0e-3)),
-        "beta2": float(kwargs.get("beta2", 0.999)),
+        "beta2": nominal_beta2,
         "eps": float(kwargs.get("eps", 1.0e-30)),
+        "step": step,
+        "beta2_effective": adafactor_decay(nominal_beta2, step),
     }
-    if not all(math.isfinite(value) for value in numeric.values()):
+    if not all(
+        math.isfinite(float(value)) for value in numeric.values()
+    ):
         raise ValueError("Adafactor VJP lineage requires finite coefficients")
     state_shapes = (
         (shape[:-1], (shape[-1],)) if topology == "factored" else (shape,)
@@ -720,7 +733,7 @@ def lower_scheduled_adafactor_vjp(
     write_order = ", ".join(map(str, range(len(output_shapes))))
     schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
   func.func @tessera_adafactor_vjp({args}) -> ({", ".join(output_types)}) {{
-    %grads:{len(output_types)} = schedule.adafactor_vjp {inputs} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", topology = "{topology}", learning_rate = {float(numeric["lr"]):.9e} : f32, beta2 = {float(numeric["beta2"]):.9e} : f32, epsilon = {float(numeric["eps"]):.9e} : f32, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {write_order}>, workgroup_size = {256 if target != "x86" else 1} : i64}} : {", ".join(input_types)} -> {", ".join(output_types)}
+    %grads:{len(output_types)} = schedule.adafactor_vjp {inputs} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", topology = "{topology}", learning_rate = {float(numeric["lr"]):.9e} : f32, beta2 = {float(numeric["beta2_effective"]):.9e} : f32, epsilon = {float(numeric["eps"]):.9e} : f32, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {write_order}>, workgroup_size = {256 if target != "x86" else 1} : i64}} : {", ".join(input_types)} -> {", ".join(output_types)}
     schedule.artifact {{hash = "{digest}", arch = "{architecture}", shape_key = "family=adafactor_vjp;topology={topology};shape={'x'.join(map(str, shape))};storage=f32", numeric_policy = "f32;functional_no_alias"}}
     return {", ".join(f"%grads#{index}" for index in range(len(output_types)))} : {", ".join(output_types)}
   }}
@@ -769,7 +782,9 @@ def validate_scheduled_adafactor_vjp_metadata(
         raise ValueError("Adafactor VJP scheduled artifact policy is stale")
     for name, key in (
         ("learning_rate", "lr"),
-        ("beta2", "beta2"),
+        # The scheduled artifact carries the bias-corrected decay, which is what
+        # the physical adjoint consumes; `numeric["beta2"]` stays the nominal.
+        ("beta2", "beta2_effective"),
         ("epsilon", "eps"),
     ):
         match = re.search(rf"{name} = ([+\-0-9.eE]+) : f32", tile_ir)

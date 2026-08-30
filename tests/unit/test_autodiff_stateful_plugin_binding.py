@@ -113,14 +113,17 @@ def test_flat_adafactor_full_and_factored_match_tree_reference() -> None:
     g = rng.normal(size=(3, 5)).astype(np.float32)
     row = np.abs(rng.normal(size=(3,))).astype(np.float32)
     col = np.abs(rng.normal(size=(5,))).astype(np.float32)
+    # Step 3, not the default 1: at step 1 the bias-corrected decay is exactly
+    # 0, so the carried row/col are discarded and the comparison would not
+    # exercise the state at all.
     kwargs = {"lr": 0.003, "beta2": 0.91, "eps": 1.0e-7}
     actual_p, actual_row, actual_col = ts.ops.adafactor(
-        p, g, row, col, **kwargs
+        p, g, row, col, step=3, **kwargs
     )
     expected_p, expected_state = ts.optim.adafactor(
         p,
         g,
-        {"v": {"row": row, "col": col, "factored": True}, "step": 0},
+        {"v": {"row": row, "col": col, "factored": True}, "step": 2},
         **kwargs,
     )
     np.testing.assert_allclose(actual_p, expected_p, rtol=2e-6, atol=2e-6)
@@ -130,11 +133,13 @@ def test_flat_adafactor_full_and_factored_match_tree_reference() -> None:
     vector_p = p[0]
     vector_g = g[0]
     full = np.abs(rng.normal(size=(5,))).astype(np.float32)
-    actual_p, actual_full = ts.ops.adafactor(vector_p, vector_g, full, **kwargs)
+    actual_p, actual_full = ts.ops.adafactor(
+        vector_p, vector_g, full, step=3, **kwargs
+    )
     expected_p, expected_state = ts.optim.adafactor(
         vector_p,
         vector_g,
-        {"v": {"v": full, "factored": False}, "step": 0},
+        {"v": {"v": full, "factored": False}, "step": 2},
         **kwargs,
     )
     np.testing.assert_allclose(actual_p, expected_p, rtol=2e-6, atol=2e-6)

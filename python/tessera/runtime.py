@@ -10078,8 +10078,9 @@ def _execute_nvidia_adafactor_backward(
     from .compiler.nvidia_training import package_adafactor_backward
 
     package = package_adafactor_backward(
+        # The bias-corrected decay the forward applied, not the nominal beta2.
         topology=topology, lr=float(numeric["lr"]),
-        beta2=float(numeric["beta2"]), epsilon=float(numeric["eps"]),
+        beta2=float(numeric["beta2_effective"]), epsilon=float(numeric["eps"]),
     )
     count = int(arrays[operands[0]].size)
     buffers = {
@@ -15890,9 +15891,15 @@ def _execute_x86_compiled_adafactor(
     operand_names = [str(name) for name in ops[0].get("operands", [])]
     values = _bind_launch_args(args, names)
     kwargs = ops[0].get("kwargs") or {}
+    from .optim import adafactor_decay
+
     parameters = {
         "lr": float(kwargs.get("lr", 1e-3)),
-        "beta2": float(kwargs.get("beta2", 0.999)),
+        # The AVX-512 kernel takes a scalar decay, so the step-dependent bias
+        # correction is applied here — the kernel ABI is unchanged.
+        "beta2": adafactor_decay(
+            float(kwargs.get("beta2", 0.999)), int(kwargs.get("step", 1))
+        ),
         "eps": float(kwargs.get("eps", 1e-30)),
     }
     if len(operand_names) == 3:
@@ -15951,7 +15958,9 @@ def _execute_x86_compiled_adafactor_backward(
         state_contract=state_contract,
     )
     lr = float(kwargs.get("lr", 1e-3))
-    beta2 = float(kwargs.get("beta2", 0.999))
+    # The contract records both the nominal decay and the bias-corrected one the
+    # forward applied; the adjoint must differentiate the latter.
+    beta2 = float(kwargs["beta2_effective"])
     eps = float(kwargs.get("eps", 1e-30))
     g = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), np.float32)
     dy = np.ascontiguousarray(_as_numpy(values[cotangent_name]), np.float32)
@@ -28396,9 +28405,15 @@ def _execute_rocm_compiled_adafactor(
         )
     values = _bind_launch_args(args, arg_names)
     kwargs = ops[0].get("kwargs") or {}
+    from .optim import adafactor_decay
+
     parameters = dict(
         lr=float(kwargs.get("lr", 1e-3)),
-        beta2=float(kwargs.get("beta2", 0.999)),
+        # gfx1151 adafactor_row/col/update take a scalar decay, so the
+        # step-dependent bias correction is applied here (kernel ABI unchanged).
+        beta2=adafactor_decay(
+            float(kwargs.get("beta2", 0.999)), int(kwargs.get("step", 1))
+        ),
         eps=float(kwargs.get("eps", 1e-30)),
     )
     if len(names) == 3:
@@ -28824,7 +28839,9 @@ def _execute_rocm_compiled_adafactor_backward(
     )
     parameters = dict(
         lr=float(kwargs.get("lr", 1e-3)),
-        beta2=float(kwargs.get("beta2", 0.999)),
+        # The contract records both the nominal decay and the bias-corrected one
+        # the forward applied; the adjoint must differentiate the latter.
+        beta2=float(kwargs["beta2_effective"]),
         eps=float(kwargs.get("eps", 1e-30)),
     )
     if len(names) == 3:

@@ -1,7 +1,7 @@
 """Host-free contracts on the emitted dense-Krylov CUDA source.
 
 There is no CUDA on the machines that run this suite, so these assert on the
-GENERATED TEXT. They pin the memory-access shape of `tsr_matvec`, which is the
+GENERATED TEXT. They pin the memory-access shape of `tsr_matvec_warp`, which is the
 O(n^2) term of every CG/GMRES iteration; nothing here is a device measurement,
 and no wall-clock claim can be made from it (code review 2026-08-29, P3).
 """
@@ -37,7 +37,7 @@ def test_matvec_columns_are_walked_by_lane_not_by_one_thread():
     transaction-count argument is sound, the wall-clock effect is not available
     on a host without CUDA.
     """
-    body = _device_fn(kv._source(), "tsr_matvec")
+    body = _device_fn(kv._source(), "tsr_matvec_warp")
     assert "for (int col = lane; col < n; col += 32)" in body, (
         "column loop is not lane-strided — the loads are uncoalesced")
     assert "for (int col = 0; col < n; ++col)" not in body
@@ -47,7 +47,7 @@ def test_matvec_reduction_is_a_fixed_full_mask_shuffle_tree():
     """The per-row sum must stay reproducible for a fixed launch geometry, the
     same contract `tsr_grid_sum` states. A fixed 5-step butterfly over a fixed
     32-lane warp is; a size-dependent or atomic reduction is not."""
-    body = _device_fn(kv._source(), "tsr_matvec")
+    body = _device_fn(kv._source(), "tsr_matvec_warp")
     assert "for (int off = 16; off; off >>= 1)" in body
     assert "__shfl_down_sync(0xffffffffu, sum, off)" in body
     assert "atomicAdd" not in body, "an atomic makes the row sum non-reproducible"
@@ -58,7 +58,7 @@ def test_matvec_row_index_is_warp_uniform():
     """The full-mask shuffles require all 32 lanes of the warp to reach them,
     so `row` must be derived from a warp id, not a thread id — otherwise lanes
     of one warp take different trip counts and the shuffle is undefined."""
-    body = _device_fn(kv._source(), "tsr_matvec")
+    body = _device_fn(kv._source(), "tsr_matvec_warp")
     assert re.search(r"long warp = .*blockDim\.x \+ threadIdx\.x\) >> 5", body)
     assert re.search(r"long warps = .*gridDim\.x \* blockDim\.x\) >> 5", body)
     assert "for (long row = warp; row < n; row += warps)" in body
@@ -69,5 +69,25 @@ def test_matvec_row_index_is_warp_uniform():
 def test_matvec_still_widens_low_precision_storage_before_multiplying():
     """The module contract: f16/bf16 operands convert to f32 before the
     multiply so the Krylov convergence claim is unambiguous."""
-    body = _device_fn(kv._source(), "tsr_matvec")
+    body = _device_fn(kv._source(), "tsr_matvec_warp")
     assert "fmaf(tsr_load(arow, col), x[col], sum)" in body
+
+
+def test_cg_and_gmres_select_their_measured_matvec():
+    """The two solvers must not share one matvec.
+
+    Measured on an RTX 5070 (sm_120), medians of 9 reps: the warp-per-row form
+    is 1.24-1.56x faster for GMRES on device_event, and 0.44-0.63x — i.e. up to
+    2.3x SLOWER — for CG. A cooperative launch caps the grid at what stays
+    resident, so warp-per-row also buys 32x fewer rows in flight; GMRES absorbs
+    that and CG, which grid-syncs far more per iteration, does not. Shipping one
+    form for both shipped that CG regression.
+    """
+    source = kv._source()
+    assert "tsr_matvec_scalar" in source and "tsr_matvec_warp" in source
+    cg = _device_fn(source, "tsr_dense_cg")
+    gmres = _device_fn(source, "tsr_dense_gmres")
+    assert "tsr_matvec_scalar(a," in cg
+    assert "tsr_matvec_warp(a," not in cg
+    assert "tsr_matvec_warp(a," in gmres
+    assert "tsr_matvec_scalar(a," not in gmres

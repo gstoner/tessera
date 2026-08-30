@@ -6,6 +6,47 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
+policy changed; per-backend outcome below.**
+`optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent
+(`b2_t = b2*(1 - b2^(t-1))/(1 - b2^t)`), removing an early-step update
+inflation of 1/sqrt(1 - b2^t) — 31.6x at step 1, 10.0x at step 10, 1.26x at
+step 1000 for the default beta2. The correction is applied HOST-SIDE as a
+scalar decay, so **no kernel ABI moves**: every physical kernel already takes
+`beta2` as a scalar and receives the effective value instead of the nominal
+one. The flat op gained an optional `step` kwarg matching the `adam`/`adamw`
+ABI beside it.
+
+Two contract details a backend owner needs to know. `state["v"]` now carries
+the DEBIASED estimate rather than the raw EMA, so the state dict grew a
+`v_representation` marker and a state without one is migrated on load rather
+than misread. And an absent `step` is NOT treated as step 1 — `decay(b2, 1)`
+is exactly 0, so defaulting would have made a stateful caller that never
+passes one discard its own moments; such a caller keeps the legacy
+uncorrected decay.
+
+*ROCm outcome: follow-up required.* The gfx1151 `adafactor_row|col|mean|update`
+kernels take `beta2` as a scalar and are unchanged; `tests/unit/test_rocm_optimizer_compiled.py`
+and `benchmarks/rocm/benchmark_rocm_adafactor.py` were migrated to pass `step`.
+The host-free lanes pass here, but a gfx1151 optimizer execution comparing the
+corrected trajectory against the numpy reference is owed.
+
+Cross-backend sync `P3-DEVICE-VERIFIED-2026-08-30` — **the batch FFT seam
+written blind against the `.hip` signature is real, correct and faster.**
+`RocmStockhamFFTCandidate.run_rows` was landed unexecuted, declining to the
+per-row path when the image lacked the batch ABI — which is precisely the
+state it was tested in. Measured here on gfx1151: the shipped image DOES
+export `ts_fft_stockham_amd_hostptr_batch`, the candidate reports available,
+and a (512, 256) transform runs on lane `rocm_stockham` with **max abs error
+1.9e-05** against `numpy.fft` and **62.6 ms vs 237.7 ms per-row — 3.80x**.
+
+Also verified here: the rank-4 dropout `stream_offset` contract change. The
+fixture that broke the PREVIOUS attempt at this row,
+`phase3/streaming_attention_backward_rocm.mlir`, is `REQUIRES:
+tessera-rocm-backend` and therefore unsupported on the Mac — it runs on this
+box and passes. `lit` 439 discovered / 384 passed / 0 failed;
+`check-tessera-rocm` 67 passed / 1 unsupported, identical to baseline.
+
 Cross-backend sync `P3-SOURCE-ONLY-2026-08-30` — **one row is written from
 the `.hip` signature and has never executed.**
 The P3 batch added `RocmStockhamFFTCandidate.run_rows`, wired to

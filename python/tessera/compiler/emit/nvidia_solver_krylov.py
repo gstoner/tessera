@@ -68,8 +68,38 @@ __device__ float tsr_grid_sum(float local, float *partials, float *scalar,
   return *scalar;
 }
 
+// Two matvecs, chosen per solver from MEASURED device results rather than from
+// the access-pattern argument alone (RTX 5070, sm_120, medians of 9 reps).
+//
+//   solver / shape        one thread per row   one warp per row
+//   dense_cg 2049          1.011 ms             2.277 ms   (0.44x)
+//   dense_cg 1025          0.534 ms             1.073 ms   (0.50x)
+//   dense_gmres 2049       0.967 ms             0.621 ms   (1.56x)
+//   dense_gmres 1025       0.579 ms             0.400 ms   (1.45x)
+//
+// The warp form coalesces better -- 32 lanes touch one row instead of 32 rows
+// -- but a COOPERATIVE launch caps the grid at what stays resident, so it also
+// buys 32x fewer rows in flight at the same block count. GMRES absorbs that and
+// wins; CG, which grid-syncs far more often per iteration, does not and loses
+// roughly half its throughput. Shipping one form for both regressed CG by up to
+// 2.3x, which no amount of reasoning about transactions per load would have
+// revealed.
 template <typename T>
-__device__ void tsr_matvec(const T *a, const float *x, float *y, int n,
+__device__ void tsr_matvec_scalar(const T *a, const float *x, float *y, int n,
+                           cg::grid_group grid) {
+  long gid = (long)blockIdx.x * blockDim.x + threadIdx.x;
+  long stride = (long)gridDim.x * blockDim.x;
+  for (long row = gid; row < n; row += stride) {
+    float sum = 0.0f;
+    const T *arow = a + row * (long)n;
+    for (int col = 0; col < n; ++col) sum = fmaf(tsr_load(arow, col), x[col], sum);
+    y[row] = sum;
+  }
+  grid.sync();
+}
+
+template <typename T>
+__device__ void tsr_matvec_warp(const T *a, const float *x, float *y, int n,
                            cg::grid_group grid) {
   // One WARP per row, lane `l` walking columns `l, l+32, ...`: the 32 lanes of
   // a single load instruction then touch 32 consecutive elements of one row
@@ -126,7 +156,7 @@ __global__ void tsr_dense_cg(
   grid.sync();
 
   for (int iteration = 0; iteration < max_iterations && *status == 0; ++iteration) {
-    tsr_matvec(a, p, ap, n, grid);
+    tsr_matvec_scalar(a, p, ap, n, grid);
     float local_pap = 0.0f;
     for (long i = gid; i < n; i += stride) local_pap += p[i] * ap[i];
     float pap = tsr_grid_sum(local_pap, partials, &scalars[3], grid);
@@ -154,7 +184,7 @@ __global__ void tsr_dense_cg(
 
     if (scalars[6] != 0.0f) {
       // A convergence decision is always based on the true residual b-Ax.
-      tsr_matvec(a, x, workspace, n, grid);
+      tsr_matvec_scalar(a, x, workspace, n, grid);
       float local_true = 0.0f;
       for (long i = gid; i < n; i += stride) {
         r[i] = tsr_load(b, i) - workspace[i];
@@ -186,7 +216,7 @@ __global__ void tsr_dense_cg(
   if (gid == 0 && *status == 0) *status = 3;
   grid.sync();
   // Return A*x as the final matvec state, not a stale search-direction product.
-  tsr_matvec(a, x, ap, n, grid);
+  tsr_matvec_scalar(a, x, ap, n, grid);
   for (long i = gid; i < n; i += stride) r[i] = tsr_load(b, i) - ap[i];
 }
 
@@ -214,7 +244,7 @@ __global__ void tsr_dense_gmres(
   grid.sync();
 
   while (*iterations < max_iterations && *status == 0) {
-    tsr_matvec(a, x, w, n, grid);
+    tsr_matvec_warp(a, x, w, n, grid);
     float local_r = 0.0f;
     for (long i = gid; i < n; i += stride) {
       r[i] = tsr_load(b, i) - w[i]; local_r += r[i] * r[i];
@@ -237,7 +267,7 @@ __global__ void tsr_dense_gmres(
 
     for (int j = 0; j < restart && *iterations < max_iterations; ++j) {
       const float *vj = basis + (long)j * n;
-      tsr_matvec(a, vj, w, n, grid);
+      tsr_matvec_warp(a, vj, w, n, grid);
 
       // Twice-modified Gram-Schmidt protects orthogonality on difficult
       // matrices while retaining a deterministic reduction order.
@@ -316,7 +346,7 @@ __global__ void tsr_dense_gmres(
     grid.sync();
 
     // Estimated Givens residual never establishes convergence by itself.
-    tsr_matvec(a, x, w, n, grid);
+    tsr_matvec_warp(a, x, w, n, grid);
     float local_true = 0.0f;
     for (long k = gid; k < n; k += stride) {
       r[k] = tsr_load(b, k) - w[k]; local_true += r[k] * r[k];

@@ -4687,10 +4687,17 @@ def vjp_adafactor(dout, params, grads, state=None, *,
         )
         return d_params, d_grads, d_state
 
+    from tessera.optim import adafactor_decay
+
     p = np.asarray(params)
     g = np.asarray(grads, dtype=np.float64)
     do = np.asarray(dout, dtype=np.float64)
-    b2 = float(beta2)
+    # Differentiate the forward that actually runs: the second-moment decay is
+    # the bias-corrected, step-dependent one (`optim.adafactor_decay`), not the
+    # nominal `beta2`.  The step is 1-based and comes from the carried state.
+    b2 = adafactor_decay(
+        float(beta2), 1 if state is None else int(state.get("step", 0)) + 1
+    )
     epsilon = float(eps)
     dparam = do
     if state is None:

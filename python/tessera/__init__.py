@@ -1148,14 +1148,36 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         # operands.  A full state returns ``(new_param, new_state)``; factored
         # row/column state returns ``(new_param, new_row, new_column)``.  The
         # public tree optimizer and its dictionary state remain unchanged.
+        #
+        # ``step`` follows the flat ``adam``/``adamw`` ABI above: a 1-based
+        # kwarg, because the flat form carries no state dictionary to read it
+        # from.  It selects the bias-corrected second-moment decay
+        # (`optim.adafactor_decay`); without it the first updates are inflated
+        # by 1/sqrt(1 - beta2**step).
+        #
+        # ABSENT is not the same as 1.  adafactor_decay(b2, 1) is exactly 0 --
+        # correct for a genuine first step, where v_1 = g^2 -- so defaulting a
+        # missing ``step`` to 1 would make every call of a stateful caller that
+        # never passes one discard the moments it just supplied, turning a
+        # stateful optimizer into a stateless one with no diagnostic. Such a
+        # caller keeps the legacy uncorrected decay instead: no bias
+        # correction, exactly as before this ABI grew a step, and strictly
+        # better than silently resetting its state.
         if isinstance(state, np.ndarray):
+            from . import optim as _optim
+
             param = np.asarray(params)
             grad = np.asarray(grads, dtype=np.float32)
             row_or_full = np.asarray(state, dtype=np.float32)
             if param.shape != grad.shape:
                 raise ValueError("flat Adafactor parameter and gradient must match")
             lr = np.float32(float(kwargs.get("lr", 1.0e-3)))
-            beta2 = np.float32(float(kwargs.get("beta2", 0.999)))
+            nominal_beta2 = float(kwargs.get("beta2", 0.999))
+            beta2 = np.float32(
+                _optim.adafactor_decay(nominal_beta2, int(kwargs["step"]))
+                if "step" in kwargs
+                else nominal_beta2
+            )
             eps = np.float32(float(kwargs.get("eps", 1.0e-30)))
             grad2 = grad * grad
             if column_state is None:
@@ -1179,7 +1201,26 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             update = grad / (np.sqrt(scale) + eps)
             return param - lr * update, new_row, new_column
         from . import optim as _optim
-        return _optim.adafactor(params, grads, state, **kwargs)
+        tree_kwargs = dict(kwargs)
+        declared_step = tree_kwargs.pop("step", None)
+        if declared_step is not None:
+            # The tree ABI owns the step counter inside its state dict.  A
+            # caller that also declares one must agree with it: silently
+            # preferring either would make the two ABIs disagree on which
+            # decay was applied (Decision #21a — semantic keys never default).
+            if state is not None and not isinstance(state, dict):
+                raise ValueError(
+                    "tree Adafactor state must be the optimizer state dict "
+                    f"carrying 'step'; got {type(state).__name__}"
+                )
+            carried = 0 if state is None else int(state.get("step", 0))
+            if int(declared_step) != carried + 1:
+                raise ValueError(
+                    "tree Adafactor derives its step from state['step']; "
+                    f"declared step={int(declared_step)} disagrees with the "
+                    f"carried state step {carried} (expected {carried + 1})"
+                )
+        return _optim.adafactor(params, grads, state, **tree_kwargs)
 
     def lion(params, grads, state=None, **kwargs):
         # The compiler-visible flat ABI carries the moment tensor directly and

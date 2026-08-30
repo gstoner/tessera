@@ -98,14 +98,15 @@ LogicalResult MacroCTAMatmulOp::verify() {
 // tolerance is that failure wearing a contract's clothes, so it is rejected
 // rather than defaulted (Decision #21a: a semantic key never defaults).
 static LogicalResult verifyDelegateAccuracy(Operation *op, StringRef accuracy,
-                                            std::optional<double> tolerance) {
+                                            std::optional<llvm::APFloat> tolerance) {
   if (accuracy == "tolerance_bounded") {
     if (!tolerance)
       return op->emitOpError(
           "accuracy=tolerance_bounded requires a `tolerance` attribute; a "
           "bounded numerical claim with no stated bound is not a claim the "
           "arbiter can budget against");
-    if (!(*tolerance > 0.0) || !std::isfinite(*tolerance))
+    const double bound = tolerance->convertToDouble();
+    if (!(bound > 0.0) || !std::isfinite(bound))
       return op->emitOpError("`tolerance` must be finite and greater than zero");
     return success();
   }

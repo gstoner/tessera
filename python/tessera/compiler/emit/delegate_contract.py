@@ -32,6 +32,7 @@ Python a budget it did not declare in IR.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from tessera.compiler.emit.candidate import Candidate, Tier
 
@@ -53,6 +54,20 @@ ACCURACIES: tuple[str, ...] = ("reference_exact", "tolerance_bounded")
 #: inside a deterministic region -- a guarantee defeated through a path nobody
 #: checked, which is the Decision #5 scar exactly.
 DETERMINISMS: tuple[str, ...] = ("deterministic", "nondeterministic")
+
+#: Legal `covers` values — how much of a fusable region the delegate implements.
+#:
+#: This exists because the arbiter compares candidates *for one region*, and a
+#: delegate that implements only the region's root is not offering the same
+#: thing more cheaply — it is offering a different plan: the delegate, plus a
+#: separate epilogue kernel, plus the DRAM round-trip between them. Treating
+#: the two as peers is a category error, and it biases selection toward
+#: delegates on exactly the graphs where fusion is the win.
+#:
+#: Declared rather than inferred: an external kernel cannot be introspected,
+#: and guessing its coverage is how a partial candidate wins a whole-region
+#: comparison.
+COVERS: tuple[str, ...] = ("root_only", "whole_region")
 
 
 class DelegateContractError(ValueError):
@@ -77,6 +92,7 @@ class DelegateContract:
     arch: str
     accuracy: str
     determinism: str
+    covers: str
     tolerance: float | None = None
     tolerance_rel: float | None = None
     # kernel_call pathway
@@ -114,6 +130,10 @@ class DelegateContract:
         if self.accuracy not in ACCURACIES:
             raise DelegateContractError(
                 f"`accuracy` must be one of {ACCURACIES}, got {self.accuracy!r}"
+            )
+        if self.covers not in COVERS:
+            raise DelegateContractError(
+                f"`covers` must be one of {COVERS}, got {self.covers!r}"
             )
         if self.determinism not in DETERMINISMS:
             raise DelegateContractError(
@@ -196,6 +216,10 @@ class DelegateContract:
         """Relative budget, if the delegate stated one."""
         return self.tolerance_rel
 
+    def serves_whole_region(self) -> bool:
+        """Whether this delegate implements a fused region, not just its root."""
+        return self.covers == "whole_region"
+
     def is_deterministic(self) -> bool:
         """Whether this delegate may be selected inside a deterministic region."""
         return self.determinism == "deterministic"
@@ -231,6 +255,7 @@ class DelegateContract:
         parts.append(f'arch = "{self.arch}"')
         parts.append(f'accuracy = "{self.accuracy}"')
         parts.append(f'determinism = "{self.determinism}"')
+        parts.append(f'covers = "{self.covers}"')
         if self.tolerance is not None:
             parts.append(f"tolerance = {self.tolerance:.6e} : f64")
         if self.tolerance_rel is not None:
@@ -277,10 +302,124 @@ class DelegatedCandidate(Candidate):
         self.accuracy_atol = contract.arbiter_accuracy_atol()
         self.accuracy_rtol = contract.arbiter_accuracy_rtol()
 
+    #: Fields whose presence means a `FusedRegion` is more than its root.
+    _FUSED_STRUCTURE = ("epilogue", "reduction", "prologue", "residual")
+
+    #: Region classes that are fused **by construction**, whatever their fields
+    #: say. `AttentionRegion` is softmax(QKᵀ)·V — two matmuls and a softmax —
+    #: and carries none of `_FUSED_STRUCTURE`, so probing those names alone
+    #: reports it as a bare root and re-admits the very bias this method exists
+    #: to remove (review finding on PR #650). Declared rather than derived
+    #: because "how many operations is this region" is not a question the
+    #: dataclasses answer; verified against `fusion_core` so a rename fails
+    #: loudly instead of silently widening what a partial delegate may serve.
+    _INTRINSICALLY_FUSED = (
+        "AttentionRegion",
+        "GatedMatmulRegion",
+        "NormChainRegion",
+        "PointwiseReduceRegion",
+    )
+
+    #: Regions carrying an explicit operation list are fused when it holds more
+    #: than one op — `PointwiseGraphRegion` is a chain, and a single-op chain is
+    #: the only shape a root-only delegate can serve whole.
+    _OP_LIST_FIELD = "ops"
+
+    def applies_to(self, region: Any) -> bool:
+        """Decline a region this delegate implements only part of.
+
+        **This is what keeps the arbiter from being biased toward delegates**,
+        and it is a structural fact rather than a cost estimate.
+
+        `arbitrate()` compares candidates for one region and picks by tier
+        (hand-tuned wins by default) or by measured latency of the candidate in
+        isolation. A `root_only` delegate — a bare GEMM, say — faced with a
+        matmul+epilogue region is not a cheaper way to do the same work. It is
+        a *different plan*: the delegate, plus a separate epilogue kernel, plus
+        the DRAM round-trip between them. Under tier priority it would win
+        outright; under measured latency it would win because the measurement
+        excludes the work it displaced. Both paths would systematically prefer
+        delegates on exactly the graphs where fusion is the win.
+
+        Declining is the honest answer rather than applying a penalty: a
+        penalty is a guess at the foregone fusion, whereas "this candidate does
+        not serve this region" is a fact the delegate declared. If the
+        delegate-plus-epilogue plan really is faster, that belongs in a
+        comparison of *plans*, not smuggled in as a peer candidate here.
+
+        **Fails closed on an unrecognised region.** The first version of this
+        method probed four `FusedRegion` field names and returned `True` when
+        none were set — so every region class that does not have those fields,
+        including `AttentionRegion`, was reported as a bare root and admitted a
+        partial delegate anyway. An unknown region shape is now treated as
+        fused: being wrong in that direction costs a candidate its slot, while
+        being wrong the other way silently restores the bias.
+        """
+        if self.delegate_contract.serves_whole_region():
+            return True
+        return _region_is_a_single_operation(
+            region,
+            fused_structure=self._FUSED_STRUCTURE,
+            intrinsically_fused=self._INTRINSICALLY_FUSED,
+            op_list_field=self._OP_LIST_FIELD,
+        )
+
     def render_target_ir(self, operands: str = "",
                          signature: str = "() -> ()") -> str:
         """The Target IR op declaring this candidate's delegation."""
         return self.delegate_contract.render_op(operands, signature)
+
+
+#: Region classes a root-only delegate may serve, when otherwise unstructured.
+#: Anything not named here and not matching a known single-op shape is treated
+#: as fused — see `verify_region_classes`.
+_SINGLE_OP_REGIONS: tuple[str, ...] = ("MatmulRegion", "FusedRegion",
+                                       "PointwiseGraphRegion")
+
+
+def _region_is_a_single_operation(
+    region: Any, *, fused_structure: tuple[str, ...],
+    intrinsically_fused: tuple[str, ...], op_list_field: str,
+) -> bool:
+    """Whether `region` is one operation, so a root-only delegate serves it whole.
+
+    Fails closed: an unrecognised region class is fused. Three shapes are
+    recognised as possibly-single, and each is checked structurally rather than
+    trusted by name.
+    """
+    name = type(region).__name__
+    if name in intrinsically_fused:
+        return False
+    if name not in _SINGLE_OP_REGIONS:
+        return False  # unknown shape — assume fused
+    ops = getattr(region, op_list_field, None)
+    if ops is not None:
+        return len(ops) <= 1
+    return not any(getattr(region, field, None) for field in fused_structure)
+
+
+def verify_region_classes() -> None:
+    """Fail loudly if a named region class no longer exists.
+
+    Both tables above are declared, not derived. A renamed or deleted region
+    would silently drop out of `_INTRINSICALLY_FUSED` and be re-admitted as a
+    bare root — restoring the bias with no test failing, because the wrong
+    answer is a `True` rather than an exception.
+    """
+    from tessera.compiler import fusion_core
+
+    missing = [
+        n for n in (*_SINGLE_OP_REGIONS,
+                    *DelegatedCandidate._INTRINSICALLY_FUSED)
+        if not hasattr(fusion_core, n)
+    ]
+    if missing:
+        raise RuntimeError(
+            "delegate_contract: region classes no longer in fusion_core: "
+            + ", ".join(sorted(missing))
+            + ". Update the tables rather than letting a partial delegate be "
+            "admitted to a fused region."
+        )
 
 
 def contract_for_candidate(candidate) -> DelegateContract | None:
@@ -300,6 +439,7 @@ __all__ = [
     "PROVENANCES",
     "DelegateContract",
     "DETERMINISMS",
+    "COVERS",
     "DelegateContractError",
     "DelegatedCandidate",
     "contract_for_candidate",

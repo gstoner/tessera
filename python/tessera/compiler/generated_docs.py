@@ -68,6 +68,16 @@ def _r_contract_consumers_csv() -> str:
     return contract_consumers.render_csv()
 
 
+def _r_target_ir_membership() -> str:
+    from . import target_ir_membership
+    return target_ir_membership.render_markdown()
+
+
+def _r_target_ir_membership_csv() -> str:
+    from . import target_ir_membership
+    return target_ir_membership.render_csv()
+
+
 def _r_bootstrap_prune() -> str:
     from . import bootstrap_prune_audit
     return bootstrap_prune_audit.render_markdown()
@@ -481,6 +491,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         csv_path=_GEN / "compiler_progress.csv",
         render_csv=_r_compiler_progress_csv,
         also_gate_md=True,
+    ),
+    # ── Decision #19 membership: does a Target IR op require its contract? ──
+    GeneratedDoc(
+        "target_ir_membership", "compiler_progress",
+        _GEN / "target_ir_membership.md", _r_target_ir_membership,
+        csv_path=_GEN / "target_ir_membership.csv",
+        render_csv=_r_target_ir_membership_csv,
     ),
     # ── Bootstrap-prune gap analysis (E2E-REAL-6 backend half) ──
     GeneratedDoc(

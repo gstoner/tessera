@@ -8,6 +8,63 @@ last_updated: 2026-08-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## `NVIDIA-DELEGATE-CONTRACT-2026-08-30` — the fast-path boundary is real; NVIDIA goes first
+
+**Enabling step for the bootstrap prune, and it had to land before any
+deletion.** The 19 NVIDIA bootstrap packagers contain legitimate fast paths —
+vendor library entries, hand-tuned kernels, inline PTX. Pruning first would
+delete capability; the boundary they land on has to exist first. NVIDIA was
+chosen over ROCm because it has both the largest gap (19 of 34 bootstrap
+packagers) and **working profiling tools**, which matters more than gap size:
+Decision #28's arbiter is *measured*, so a delegation boundary on a target
+that cannot be profiled is bookkeeping rather than a candidate.
+
+**What `tessera_nvidia.kernel_call` was.** A summary line and nothing else.
+It inherited `TesseraNVIDIA_Op`'s shared `attr-dict`, so `callee` — the single
+fact naming *what is delegated to* — rode as an unvalidated discardable
+attribute. An emitter could name any symbol, or none, and still verify. The
+dialect header says why it existed: Python emitters "may add
+`tessera_nvidia.kernel_call`", and registering it "keeps the emitted surface
+parseable". It was a parse-compatibility stub **for the bootstrap packagers
+being pruned** — Decision #29's anti-pattern exactly.
+
+**Both pathways are now declared, as two ops rather than one with a mode.**
+
+| Op | Delegate is | Required contract |
+|---|---|---|
+| `kernel_call` | a named CUDA kernel or host C-ABI symbol | `callee`, `arch`, `binding` ∈ {`cuda_kernel`,`c_abi`}, `provenance` ∈ {`vendor_library`,`handwritten_kernel`}, `accuracy` |
+| `inline_ptx` | PTX text embedded in the artifact | `ptx`, `constraints`, `arch`, `accuracy`, optional `has_side_effects` |
+
+They are separate ops because the delegate differs in kind: one is a binding
+resolved at link/launch time, the other is text carried in the artifact. An
+empty `callee` is an unresolved-symbol error; an empty `ptx` body is a
+*silently successful no-op*. One op with a mode attribute would need a
+verifier that decides which half of its own attributes to trust — the shape
+that lets a malformed candidate through.
+
+**The attributes are the arbiter's inputs, which is what "real" means here.**
+`accuracy` is the budget half of "fastest *in-budget* candidate": a delegate
+claiming `tolerance_bounded` must state `tolerance`, and `reference_exact`
+must not carry one, because two contradictory claims leave a reader unable to
+tell which is honoured. It is a semantic key and never defaults (#21a).
+`provenance` is what lets the arbiter tell delegated from compiler-generated
+work when scoring; `binding` separates two pathways whose launch costs and
+failure modes differ.
+
+*Evidence (The-Super-Bear, full driver):* `tessera-nvidia-opt` builds clean;
+the positive fixture parses both ops with full attributes; the new negative
+fixture `nvidia_delegate_contract_invalid.mlir` rejects **7 cases** —
+empty callee, bounded-without-a-bound, exact-carrying-a-tolerance,
+non-positive tolerance, unknown `binding`, empty constraints, empty ptx.
+NVIDIA lit suite **60/60**.
+
+*Not done, and named rather than implied:* nothing yet **queries** these
+attributes to score a candidate. The verifier is a real consumer (Decision
+#29 is satisfied), but the arbiter integration — reading `provenance` and
+`accuracy` to admit or reject a Tier-3 candidate against compiled output — is
+the next step, and until it lands this is a contract without a scorer. The
+ROCm equivalent is also still owed.
+
 Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
 marker vocabulary and conftest boundary changed; per-backend outcome below.**
 `hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its
@@ -154,9 +211,9 @@ TesseraNVIDIAConversion)`, which is not gated on leanness.
 
 | Config | NVIDIA Target IR | Core spine | Scheduled lanes |
 |---|---|---|---|
-| backend ON + `ENABLE_CUDA=ON` | registered | linked | run |
-| backend ON + CUDA off (**lean**) | **registered** | not linked | unavailable — missing *core*, not the dialect |
-| backend OFF (what this box has) | not built | linked | fail with `requires the registered NVIDIA Target IR dialect` |
+| backend ON + `ENABLE_CUDA=ON` | registered | linked + registered | run |
+| backend ON + CUDA off (**lean**) | **registered** | linked, **not registered** | unavailable — missing core *registration*, not the dialect |
+| backend OFF (what this box has) | not built | linked + registered | fail with `requires the registered NVIDIA Target IR dialect` |
 
 The middle row is the **supported host-free artifact configuration** that
 Decision #19's hardware-free Target IR exists to enable; `_tessera_opt_lean_permitted`

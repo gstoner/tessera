@@ -4,10 +4,71 @@ audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
-scope: x86 AVX-512 implementation/proof and AMX access planning
+scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## Standing: AMX is retired, not merely unavailable (project direction, 2026-08-30)
+
+**AMX is a dead end and is not a Tessera target.** It was Intel-only, and it
+is superseded by **ACE (AI Compute Extensions)**, the matrix-instruction spec
+agreed jointly by AMD and Intel. Read every "AMX not applicable (no fleet
+hardware)" row below in that light: those rows are **closed by direction**,
+not parked pending a hardware purchase. Do not scope AMX enablement,
+benchmarking, or box acquisition, and do not treat an AMX row as owed work.
+
+Consequences that bite in practice:
+
+* **x86 native execution proof means AVX-512.** Zen 5 (Princess-Luna) has
+  AVX-512 and no AMX; the NR2 Pro's Core Ultra 7 265F has neither.
+* **Never gate a test on `hardware_amx` to mean "x86 hardware".** It skips the
+  test on the only box that could run it. The two files noted in the sync
+  block below were nearly marked that way.
+* The compiler-side position is unchanged and already recorded in CLAUDE.md's
+  Decision #19 discussion: the `tessera_x86` AMX ops stay an **IR-level
+  contract with no `amx.*` lowering**, and only the `x86vector.*` / AVX-512
+  half is live follow-on work. When a matrix lane is next needed here, the
+  target is ACE.
+
+Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
+changed; this backend has the one open gap.**
+A pytest session ledger (`tests/_support/device_accounting.py`) now tallies
+executed-vs-skipped per hardware family and fails the session when a family
+skipped everything on a host that plausibly has the device.
+
+*x86 outcome: follow-up required — this lane has no hardware marker family.*
+The declared hardware markers are `hardware_nvidia`, `hardware_rocm`,
+`hardware_apple_gpu`/`metal4` and `hardware_amx`. **There is no marker for
+AVX-512**, so x86 native execution is the one device lane the ledger cannot
+see: an AVX-512 host that silently stopped executing these lanes would not
+be caught by it.
+
+Two files under `tests/device/x86/`
+(`test_mpi_rank_collectives.py`, `test_native_vjp_execution_certificates.py`)
+were deliberately **left unmarked** rather than given `hardware_amx`. They
+need AVX-512 and MPI, not AMX — and per the standing section above AMX is a
+**retired** target, not a pending one, so `hardware_amx` will never be
+satisfiable on any fleet box. Marking them that way would make them skip on
+the only box that can actually run them, permanently. That would have
+manufactured exactly the failure this work exists to prevent. Both
+already skip honestly today (verified on the Mac: "production tessera-opt
+and AVX-512 runtime are required"), so the gap is coverage of the ledger,
+not a live false green.
+
+Closing it means adding a `hardware_avx512` marker plus a `/proc/cpuinfo`
+probe and a family entry, then marking those two files — a small change,
+but one that alters selection for existing `compiler_avx512` tests and so
+wants its own PR and its own before/after count on Princess-Luna.
+`tests/unit/test_device_accounting.py::test_every_hardware_marker_belongs_to_a_family`
+is the drift gate that will fail if a marker is added without a family.
+
+*x86 execution evidence in this batch (Princess-Luna, Zen 5 AVX-512):*
+`tests/unit/test_x86_optimizer_compiled.py` is **10 passed / 0 skipped**, and
+re-run under `-W error::RuntimeWarning` after the Adafactor fixtures declared
+`v_representation` it is 32 passed alongside the ROCm file — so the marked
+representation now executes on this backend rather than only the legacy one.
+
 Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
 policy changed; per-backend outcome below.**
 `optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent
@@ -27,10 +88,16 @@ is exactly 0, so defaulting would have made a stateful caller that never
 passes one discard its own moments; such a caller keeps the legacy
 uncorrected decay.
 
-*x86 outcome: follow-up required.* `tessera_x86_avx512_adafactor_*` takes
-`beta2` as a scalar and is unchanged; `tests/unit/test_x86_optimizer_compiled.py`
-was migrated to pass `step`. AVX-512 execution lives on the Strix Halo box, so
-an exact-device run of the corrected optimizer is owed there.
+*x86 outcome: parity validated 2026-08-30 (was follow-up required).*
+`tessera_x86_avx512_adafactor_*` takes `beta2` as a scalar and is unchanged;
+`tests/unit/test_x86_optimizer_compiled.py` was migrated to pass `step`.
+**The owed exact-device run is done.** On Princess-Luna (Zen 5, AVX-512, the
+box that owns x86 execution) that file is **10 passed, 0 skipped**, including
+`test_adafactor_factored_forward_and_backward` and
+`test_adafactor_full_forward_and_backward`, which assert
+`execution_kind == "native_cpu"` against the numpy reference. As on ROCm, the
+hand-built state was unmarked and took the legacy `v_representation` branch;
+the fixtures now declare the marker.
 
 Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
 passes changed; only the Mac's fixture set could be run.**

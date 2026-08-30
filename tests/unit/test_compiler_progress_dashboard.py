@@ -58,10 +58,13 @@ def test_terminal_no_kernel_required_closes_phase_rows() -> None:
 
 def test_open_work_omits_closed_rows() -> None:
     rows = list(csv.DictReader(io.StringIO(compiler_progress.render_csv())))
-    assert all(int(r["open"]) > 0 for r in rows if r["scope"] == "open_work")
-    assert not any(
-        r["item"] == "Verifier coverage" for r in rows if r["scope"] == "open_work"
-    )
+    # An empty open-work scope satisfies both assertions below vacuously, so
+    # a dashboard that stopped emitting the scope entirely would read as a
+    # well-formed queue instead of a missing one.
+    open_work = [r for r in rows if r["scope"] == "open_work"]
+    assert open_work, "dashboard emitted no open_work rows"
+    assert all(int(r["open"]) > 0 for r in open_work)
+    assert not any(r["item"] == "Verifier coverage" for r in open_work)
 
 
 def test_compiler_progress_keeps_backend_axis_separate_from_all_up_status() -> None:
@@ -76,4 +79,6 @@ def test_compiler_progress_keeps_backend_axis_separate_from_all_up_status() -> N
 def test_compiler_progress_csv_includes_next_action() -> None:
     rows = list(csv.DictReader(io.StringIO(compiler_progress.render_csv())))
     assert "next_action" in rows[0]
-    assert all(r["next_action"] for r in rows if r["scope"] == "open_work")
+    open_work = [r for r in rows if r["scope"] == "open_work"]
+    assert open_work, "dashboard emitted no open_work rows"
+    assert all(r["next_action"] for r in open_work)

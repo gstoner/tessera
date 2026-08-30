@@ -10,6 +10,12 @@ import pytest
 import tessera
 
 
+# The hardware marker is applied PER TEST here, not module-wide. Every test
+# below gates on `_require_sm120()` except
+# `test_sm120_schedule_to_tile_admits_digest_bound_numeric_policy`, which only
+# lowers and inspects metadata and passes host-free -- a module-wide marker
+# would skip that one on every non-NVIDIA host.
+
 @tessera.jit(target="nvidia_sm120", autodiff="jvp", wrt=("x", "window"))
 def _stft_product(x, window):
     return tessera.ops.stft(
@@ -73,6 +79,7 @@ def _require_sm120() -> None:
         pytest.skip("exact SM120 CUDA spectral package is unavailable")
 
 
+@pytest.mark.hardware_nvidia
 def test_public_fft_jvp_reaches_cuda_with_bound_operation_metadata():
     _require_sm120()
     rng = np.random.default_rng(1206)
@@ -137,6 +144,7 @@ def test_sm120_schedule_to_tile_admits_digest_bound_numeric_policy():
 
 
 @pytest.mark.parametrize("storage", ("f16", "bf16"))
+@pytest.mark.hardware_nvidia
 def test_sm120_low_precision_dct_stft_istft_use_fp32_accumulation(storage):
     from tessera import runtime
     from tessera.compiler.scheduled_spectral import lower_scheduled_spectral
@@ -211,6 +219,7 @@ def test_sm120_low_precision_dct_stft_istft_use_fp32_accumulation(storage):
 
 
 @pytest.mark.parametrize("storage", ("f16", "bf16"))
+@pytest.mark.hardware_nvidia
 def test_sm120_low_precision_stft_istft_reverse_preserves_storage_policy(storage):
     _require_sm120()
     dtype = np.float16
@@ -265,6 +274,7 @@ def test_sm120_low_precision_stft_istft_reverse_preserves_storage_policy(storage
     )
 
 
+@pytest.mark.hardware_nvidia
 def test_public_content_addressed_stft_jvp_matches_analytic_product():
     _require_sm120()
     rng = np.random.default_rng(1211)
@@ -294,6 +304,7 @@ def test_public_content_addressed_stft_jvp_matches_analytic_product():
     assert evidence["schedule_program_digest"] != evidence["tile_program_digest"]
 
 
+@pytest.mark.hardware_nvidia
 def test_public_content_addressed_istft_jvp_matches_centered_difference():
     _require_sm120()
     rng = np.random.default_rng(1213)
@@ -328,6 +339,7 @@ def test_public_content_addressed_istft_jvp_matches_centered_difference():
 
 
 @pytest.mark.parametrize("storage", ("f16", "bf16"))
+@pytest.mark.hardware_nvidia
 def test_public_content_addressed_stft_jvp_preserves_low_precision_policy(storage):
     _require_sm120()
     dtype = np.float16
@@ -364,6 +376,7 @@ def test_public_content_addressed_stft_jvp_preserves_low_precision_policy(storag
     )
 
 
+@pytest.mark.hardware_nvidia
 def test_public_spectral_filter_jvp_uses_cuda_binary_accumulator():
     _require_sm120()
     rng = np.random.default_rng(1231)
@@ -391,6 +404,7 @@ def test_public_spectral_filter_jvp_uses_cuda_binary_accumulator():
     assert evidence["family"] == "spectral_compound"
 
 
+@pytest.mark.hardware_nvidia
 def test_public_spectral_conv_jvp_matches_bilinear_oracle():
     _require_sm120()
     rng = np.random.default_rng(1237)
@@ -413,6 +427,7 @@ def test_public_spectral_conv_jvp_matches_bilinear_oracle():
     np.testing.assert_allclose(tangent, expected_tangent, rtol=6e-5, atol=6e-5)
 
 
+@pytest.mark.hardware_nvidia
 def test_stft_jvp_vjp_adjoint_law_on_exact_sm120():
     _require_sm120()
     rng = np.random.default_rng(1217)

@@ -60,9 +60,9 @@ def test_recorded_gfx1151_evidence_closes_comparable_device_and_e2e_gates() -> N
         for row in data["rows"]
     )
     assert data["all_non_regression"] is True
-    assert all(
-        row["device"]["non_regression_10pct"]
-        for row in data["rows"]
-        if row["device_comparable"]
-    )
+    # `all([])` is True, so a recording with no device-comparable row would
+    # close the *device* gate without comparing a single device timing.
+    comparable = [row for row in data["rows"] if row["device_comparable"]]
+    assert comparable, "no device-comparable row; the gfx1151 device gate compared nothing"
+    assert all(row["device"]["non_regression_10pct"] for row in comparable)
     assert max(abs(row["host_overhead"]["compiler_minus_retained_ms"]) for row in data["rows"]) < 0.2

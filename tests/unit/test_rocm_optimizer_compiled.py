@@ -208,8 +208,15 @@ def test_adafactor_factored_nan_gradient_propagates_like_reference():
     assert result["ok"] is True, result.get("reason")
     p_new, row_new, col_new = (
         np.asarray(value) for value in result["output"])
+    # Hand-built state must declare which representation `v` is in, exactly as
+    # the missing-marker warning instructs. Without it this lane exercised the
+    # legacy branch, so no device test ran the representation production uses.
     p_ref, state = optim.adafactor(
-        p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        p, g, {
+            "v": {"row": row, "col": col, "factored": True},
+            "step": 1,
+            "v_representation": optim._ADAFACTOR_V_REPRESENTATION,
+        },
         lr=1e-2, beta2=0.9, eps=1e-6,
     )
     p_ref = np.asarray(p_ref)
@@ -271,6 +278,7 @@ def test_adafactor_factored_analytic_vjp_matches_directional_difference():
             "factored": True,
         },
         "step": 2,
+        "v_representation": optim._ADAFACTOR_V_REPRESENTATION,
     }
     dout = rng.normal(size=SHAPE)
     dp, dg, ds = get_vjp("adafactor")(
@@ -286,7 +294,7 @@ def test_adafactor_factored_analytic_vjp_matches_directional_difference():
             lambda value: (
                 p,
                 g,
-                {"v": {**state["v"], "row": value}, "step": 2},
+                {**state, "v": {**state["v"], "row": value}},
             ),
         ),
         (
@@ -295,7 +303,7 @@ def test_adafactor_factored_analytic_vjp_matches_directional_difference():
             lambda value: (
                 p,
                 g,
-                {"v": {**state["v"], "col": value}, "step": 2},
+                {**state, "v": {**state["v"], "col": value}},
             ),
         ),
     ]

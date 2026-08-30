@@ -6,6 +6,36 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
+changed; per-backend outcome below.**
+A pytest session ledger (`tests/_support/device_accounting.py`) now tallies
+executed-vs-skipped per hardware family and **fails the session** when a
+family skipped everything on a host that plausibly has the device. It exists
+because `pytest tests/device/nvidia/` on The-Super-Bear once reported 454
+passed / 395 skipped / exit 0 while running zero GPU work, hiding 80 real
+failures. `_rocm_env.sh` guards the ROCm equivalent of that trap
+(`ROCM_PATH`/`LD_LIBRARY_PATH` exported only from an interactive `.bashrc`),
+and the ledger is what notices when the guard was not sourced.
+
+*ROCm outcome: parity validated 2026-08-30.* Presence is decided by running
+`rocminfo` and requiring a `Device Type: GPU` agent — **not** by `/dev/dxg`
+(vendor-neutral under WSL2, so it would claim a ROCm device on the NVIDIA
+box), and **not** by an installed toolkit (a build or NVIDIA host may carry
+`/opt/rocm` purely to compile, and inferring a device from it would fail
+those hosts' correct skips). `/dev/kfd` is kept as a fast path but is not
+sufficient alone: **this box has no `/dev/kfd` at all** under WSL2 while
+running gfx1151 happily, so requiring it would disable the gate exactly where
+it is needed. Measured probe matrix: Princess-Luna `rocm=True, nvidia=False`;
+The-Super-Bear `rocm=False, nvidia=True`; Mac both False. Evidence on
+Princess-Luna (gfx1151, ROCm 10):
+`pytest tests/unit -m "not slow"` is **41 failed / 16843 passed / 2274
+skipped**, the gate correctly stayed silent (ROCm lanes executed, so the
+lane is not hollow), and the 11 failures I could isolate are **byte-identical
+on `main`** — pre-existing, not introduced here. No ROCm test file needed a
+marker; unlike NVIDIA, this backend's device gates already skip honestly via
+`_rocm_or_skip`.
+
 Cross-backend sync `ADAFACTOR-BIAS-CORRECTION-2026-08-30` — **shared numerical
 policy changed; per-backend outcome below.**
 `optim.adafactor_decay` makes the Adafactor second-moment decay step-dependent
@@ -25,11 +55,23 @@ is exactly 0, so defaulting would have made a stateful caller that never
 passes one discard its own moments; such a caller keeps the legacy
 uncorrected decay.
 
-*ROCm outcome: follow-up required.* The gfx1151 `adafactor_row|col|mean|update`
-kernels take `beta2` as a scalar and are unchanged; `tests/unit/test_rocm_optimizer_compiled.py`
-and `benchmarks/rocm/benchmark_rocm_adafactor.py` were migrated to pass `step`.
-The host-free lanes pass here, but a gfx1151 optimizer execution comparing the
-corrected trajectory against the numpy reference is owed.
+*ROCm outcome: parity validated 2026-08-30 (was follow-up required).* The
+gfx1151 `adafactor_row|col|mean|update` kernels take `beta2` as a scalar and
+are unchanged; `tests/unit/test_rocm_optimizer_compiled.py` and
+`benchmarks/rocm/benchmark_rocm_adafactor.py` were migrated to pass `step`.
+**The owed gfx1151 execution is done.** On Princess-Luna (gfx1151, ROCm 10,
+`scripts/_rocm_env.sh` sourced) that file is **22 passed, 0 skipped**,
+including `test_adafactor_factored_backward_executes_on_gfx1151` and
+`test_adafactor_full_backward_executes_on_gfx1151`, both of which assert
+`execution_kind == "native_gpu"` and compare the corrected trajectory against
+the numpy reference.
+
+One thing the run surfaced: every Adafactor lane here was tripping the
+missing-`v_representation` warning, because the test built its state by hand
+without the marker. The comparison was still valid — both sides read the same
+state — but it meant **no ROCm test executed the representation production
+uses**; they all took the legacy branch. The fixtures now set the marker, as
+the warning text instructs.
 
 Cross-backend sync `P3-DEVICE-VERIFIED-2026-08-30` — **the batch FFT seam
 written blind against the `.hip` signature is real, correct and faster.**

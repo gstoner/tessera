@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+from tests._support.environment import apple_metal_is_plausibly_present
+
 
 def _module():
     path = (Path(__file__).resolve().parents[2] / "benchmarks" / "apple_gpu" /
@@ -24,8 +26,15 @@ def test_resident_replay_report_has_paired_routes_and_timing_domains():
     assert {row["route"] for row in report["rows"]} == {
         "fused_block", "resident_ring"}
     assert all(row["device"] == report["device"] for row in report["rows"])
-    assert all(row["correctness"] for row in report["rows"]
-               if row["available"])
+    available = [row for row in report["rows"] if row["available"]]
+    # This benchmark runs live, so on a host without Metal every row is
+    # legitimately unavailable and the correctness assertion below is vacuously
+    # true -- that is the honest answer there. On a Metal host it is not: a
+    # broken availability path would take the same branch and report a clean
+    # replay having replayed nothing.
+    if apple_metal_is_plausibly_present():
+        assert available, "Metal host produced no available replay route"
+    assert all(row["correctness"] for row in available)
     assert all(row["correctness"] is None for row in report["rows"]
                if not row["available"])
     assert {d["timing_domain"] for d in report["decisions"]} == {

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import platform
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -72,12 +74,120 @@ def nvidia_gpu_is_plausibly_present() -> bool:
     Used to tell "no GPU here, skip honestly" apart from "a GPU is sitting
     right there and the environment is hiding it", which is a misconfiguration
     worth shouting about rather than skipping past.
+
+    Every signal must be NVIDIA-*specific*. ``/dev/dxg`` was accepted here
+    until 2026-08-30 and is not: under WSL2 it is the generic GPU
+    paravirtualisation node, present whatever the vendor. Measured that day --
+    Princess-Luna (AMD gfx1151, no NVIDIA anything) has ``/dev/dxg`` and
+    therefore claimed an NVIDIA GPU, which would fail any session on that box
+    that collected NVIDIA lanes and honestly skipped them. The WSL driver shim
+    (``/usr/lib/wsl/lib/nvidia-smi``) is vendor-specific and is what The-Super-Bear
+    is recognised by; Princess-Luna does not have it.
     """
     if any((root / "nvidia-smi").is_file() for root in NVIDIA_DRIVER_DIRS):
         return True
-    return any(
-        Path(node).exists() for node in ("/dev/nvidiactl", "/dev/nvidia0", "/dev/dxg")
+    return any(Path(node).exists() for node in ("/dev/nvidiactl", "/dev/nvidia0"))
+
+
+@functools.lru_cache(maxsize=1)
+def rocm_gpu_is_plausibly_present() -> bool:
+    """Whether this host actually has an AMD ROCm GPU, ignoring PATH.
+
+    Two things this must NOT infer a device from, both of which produce a
+    false claim that then fails an otherwise-valid run:
+
+    * ``/dev/dxg`` -- under WSL2 that is the generic GPU paravirtualisation
+      node and is present on the NVIDIA box too, so it would claim a ROCm
+      device on The-Super-Bear.
+    * **an installed toolkit** -- a build or NVIDIA host may carry
+      ``/opt/rocm`` purely to compile, with no AMD device anywhere.
+
+    ``/dev/kfd`` is a genuine signal (the amdgpu/KFD driver creates it, not
+    the toolkit) but is *not sufficient on its own*: under WSL2 it does not
+    exist at all, and Princess-Luna -- the fleet's only ROCm box -- has no
+    ``/dev/kfd`` while running gfx1151 happily. Requiring it would disable
+    this probe precisely where it is needed.
+
+    So the authority is ``rocminfo`` itself: run it and require a
+    ``Device Type: GPU`` agent. A toolkit-only host reports CPU agents alone
+    or fails outright. Cached, because the answer cannot change within a
+    session and the subprocess is not free.
+    """
+    if Path("/dev/kfd").exists():
+        return True
+    binary = shutil.which("rocminfo") or next(
+        (
+            str(candidate)
+            for candidate in (
+                Path(root) / "bin/rocminfo" for root in ("/opt/rocm", "/opt/rocm/core")
+            )
+            if candidate.is_file()
+        ),
+        None,
     )
+    if binary is None:
+        return False
+    try:
+        result = subprocess.run(
+            [binary], capture_output=True, text=True, timeout=20, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    return any(
+        line.split(":", 1)[1].strip() == "GPU"
+        for line in result.stdout.splitlines()
+        if line.strip().startswith("Device Type:")
+    )
+
+
+def apple_metal_is_plausibly_present() -> bool:
+    """Whether this host is an Apple-silicon Mac, which always has Metal."""
+    return platform.system() == "Darwin" and platform.machine().startswith("arm")
+
+
+@functools.lru_cache(maxsize=1)
+def apple_metal4_is_plausibly_present() -> bool:
+    """Whether a *Metal 4* runtime is actually available, not merely Metal.
+
+    Being Apple silicon is the wrong question for the Metal 4 lane. Metal 4
+    additionally needs a runtime that reports the capability -- macOS 26.5.1
+    exposes Metal 4.0, and parts of the surface (8-bit matrix ops) are gated
+    behind macOS 27.0 -- so a Metal-capable Mac can honestly skip every
+    ``metal4`` test. Judging that lane by the generic Apple-silicon probe
+    would turn a correct capability skip into a session failure.
+
+    Mirrors the gate in ``tests._support.apple.require_apple_metal4`` so the
+    presence probe and the skip decision cannot drift apart. The import is
+    lazy and broadly guarded because this runs at session end on hosts where
+    the runtime may not import at all.
+    """
+    if not apple_metal_is_plausibly_present():
+        return False
+    try:
+        from tessera import runtime
+
+        return bool(runtime.apple_gpu_metal4_caps().get("available"))
+    except Exception:
+        return False
+
+
+def amx_is_plausibly_present() -> bool:
+    """Whether this host advertises Intel AMX tile support.
+
+    Expected to be False everywhere, permanently. **AMX is a dead end and is
+    not a Tessera target**: it was Intel-only, no fleet box has it (Zen 5 has
+    AVX-512; the Core Ultra 7 265F has neither), and it is superseded by ACE
+    (AI Compute Extensions), the joint AMD/Intel matrix spec. This probe is
+    not a roadmap placeholder -- it exists only so the `hardware_amx` marker
+    already gating `tests/device/x86/test_amx_*.py` has a consumer
+    (Decision #29). The x86 lane that needs marker coverage is AVX-512.
+    """
+    try:
+        return "amx_tile" in Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        return False
 
 
 def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:

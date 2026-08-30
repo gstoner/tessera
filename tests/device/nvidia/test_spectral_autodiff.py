@@ -8,6 +8,12 @@ import pytest
 import tessera
 
 
+
+# Declares the hardware this file needs. The marker is what the PR-lane
+# expression deselects and what tests/_support/device_accounting.py counts;
+# an unmarked device test is invisible to both.
+pytestmark = pytest.mark.hardware_nvidia
+
 @tessera.jit(target="nvidia_sm120", autodiff="reverse", wrt=("x", "weight"))
 def _spectral_conv(x, weight):
     return tessera.ops.spectral_conv(x, weight)

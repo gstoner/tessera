@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import tessera as ts
 
+# Declares the hardware this file needs. The marker is what the PR-lane
+# expression deselects and what tests/_support/device_accounting.py counts;
+# an unmarked device test is invisible to both.
+pytestmark = pytest.mark.hardware_nvidia
 
 @ts.jit(target="nvidia_sm120", autodiff="reverse", wrt=("p", "g"))
 def _sgd(p, g):

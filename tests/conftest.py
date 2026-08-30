@@ -14,12 +14,26 @@ from tests._support.compiler_ownership import (
     compiler_test_required_platform,
     selected_compiler_test_platform,
 )
+from tests._support.device_accounting import (
+    DeviceLedger,
+    families_for_keywords,
+    format_hollow_lane_report,
+)
+
+_DEVICE_LEDGER_KEY = "tessera_device_ledger"
+
+#: Set at configure time so ``pytest_runtest_logreport`` -- which receives a
+#: report and no config -- can reach the session's ledger.
+_ACTIVE_LEDGER: DeviceLedger | None = None
 
 
 def pytest_configure(config):
+    global _ACTIVE_LEDGER
     ensure_cuda_bin_on_path()
     for name, description in MARKERS.items():
         config.addinivalue_line("markers", f"{name}: {description}")
+    _ACTIVE_LEDGER = DeviceLedger()
+    setattr(config, _DEVICE_LEDGER_KEY, _ACTIVE_LEDGER)
 
 
 @pytest.fixture(scope="session")
@@ -72,6 +86,57 @@ def pytest_collection_modifyitems(config, items):
         )
 
 
+def pytest_runtest_logreport(report):
+    """Tally device-lane execution as it happens.
+
+    A test counts as *executed* once its call phase runs, whether it passed or
+    failed -- the question this ledger answers is whether the lane was
+    reachable, not whether it was correct. Skips are recorded from setup so a
+    device gate that declines before the body counts as the skip it is.
+    """
+    if _ACTIVE_LEDGER is None:
+        return
+    ledger = _ACTIVE_LEDGER
+    families = families_for_keywords(report.keywords)
+    if not families:
+        return
+    if report.skipped and report.when == "setup":
+        ledger.record(families, executed=False)
+    elif report.when == "call":
+        ledger.record(families, executed=not report.skipped)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Fail a session whose device lanes skipped on a host that has the device.
+
+    This is deliberately fatal rather than a warning. The incident it exists
+    for produced a warning-shaped situation -- 395 skips printed in plain
+    sight -- and the run was still read as evidence, because exit 0 is what
+    gets believed. A signal that does not change the exit code does not change
+    what anyone concludes.
+    """
+    # Under xdist every worker also runs this hook, holding only the shard of
+    # tests it happened to receive -- a worker handed nothing but skipped
+    # device tests would report a hollow lane for the whole run. The controller
+    # receives all workers' reports, so it is the only process that can judge
+    # this; workers identify themselves by carrying `workerinput`.
+    if hasattr(session.config, "workerinput"):
+        return
+    ledger = getattr(session.config, _DEVICE_LEDGER_KEY, None)
+    if ledger is None:
+        return
+    hollow = ledger.hollow_lanes()
+    if not hollow:
+        return
+    reporter = session.config.pluginmanager.getplugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_sep("=", "hollow device lane", red=True)
+        for line in format_hollow_lane_report(hollow):
+            reporter.write_line(line)
+    if exitstatus == 0:
+        session.exitstatus = 1
+
+
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Make cross-platform compiler skips visible without treating them as passes."""
 
@@ -112,6 +177,12 @@ def pytest_runtest_setup(item):
             "native-host test skipped under WSL; this test deliberately aborts "
             "a compiler child process"
         )
+    if item.get_closest_marker("hardware_nvidia") is not None:
+        from tests._support.nvidia import nvidia_cuda_host_ready
+
+        if not nvidia_cuda_host_ready():
+            pytest.skip("requires an NVIDIA GPU with the CUDA toolkit")
+        return
     if item.get_closest_marker("metal4") is not None:
         from tests._support.apple import require_apple_metal4
 

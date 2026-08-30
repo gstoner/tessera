@@ -30,10 +30,11 @@ def test_recorded_evidence_controls_family_specific_promotion() -> None:
     assert data["selector_policy_pass"] is True
     assert data["selector_changed"] is True
     assert len(data["rows"]) == 12
-    assert all(
-        row["end_to_end"]["non_regression_10pct"]
-        for row in data["rows"] if row["selector_eligible"]
-    )
+    # `all([])` is True: bind the filter and prove it non-empty, or a recording
+    # in which nothing was promoted reports a clean gate having checked nothing.
+    eligible = [row for row in data["rows"] if row["selector_eligible"]]
+    assert eligible, "no selector-eligible row; the promotion gate checked nothing"
+    assert all(row["end_to_end"]["non_regression_10pct"] for row in eligible)
     assert all(
         row["selector_eligible"]
         == (row["elements"] >= benchmark.PROMOTION_MIN_ELEMENTS[row["family"]])

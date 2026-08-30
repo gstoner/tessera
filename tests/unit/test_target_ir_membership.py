@@ -38,8 +38,8 @@ def test_required_contract_count_does_not_regress():
     """Ratchet. Raise the floor when it improves; never lower it to pass."""
     per = membership.summary()
     requires = sum(b["requires"] for b in per.values())
-    assert requires >= 38, (
-        f"{requires} ops require their contract, was 38 — an op was added or "
+    assert requires >= 45, (
+        f"{requires} ops require their contract, was 45 — an op was added or "
         "changed that declares its contract as optional. Decision #19's layer "
         "exists for contract carriage; an OptionalAttr contract fails open."
     )
@@ -56,14 +56,33 @@ def test_every_op_lands_in_exactly_one_verdict():
             assert not row.required and not row.optional
 
 
-def test_apple_is_reported_as_the_weakest_backend():
-    """The finding that shapes the Apple work, asserted so a fix is visible.
+def test_apple_grew_required_contracts():
+    """This assertion replaces "apple requires nothing", which now fails.
 
-    Apple requires no contract at all — the same gap as its missing machine
-    primitives, seen from the contract side: a dialect of dispatch containers
-    has nothing to enforce. When this fails because Apple grew a required
-    contract, replace the assertion with the evidence rather than deleting it.
+    That guard said: when it fails because Apple grew a required contract,
+    replace it with the evidence rather than deleting it. The evidence is the
+    simdgroup quartet — the first Apple ops that are machine primitives rather
+    than dispatch containers, and the first that enforce anything.
     """
     per = membership.summary()
-    assert per["apple"]["requires"] == 0
+    apple = {r.mnemonic for r in membership.collect()
+             if r.backend == "apple" and r.verdict == "requires"}
+    assert apple >= {
+        "gpu.simdgroup_load", "gpu.simdgroup_store",
+        "gpu.simdgroup_matmul", "gpu.threadgroup_barrier",
+    }, f"the simdgroup quartet must require its contracts; got {sorted(apple)}"
     assert per["rocm"]["requires"] > per["nvidia"]["requires"]
+
+
+def test_a_brace_less_def_does_not_swallow_the_next_op():
+    """Regression guard for a parser bug that silently deleted ops.
+
+    Every enum attribute is a brace-less `def X : Base<...>;`. Matching
+    `[^{]*?{` from one of those runs forward into the NEXT operation's opening
+    brace and consumes that operation's body as its own, so the op disappears
+    from the audit with no error — `simdgroup_load` vanished exactly this way,
+    and the total was under-reported as 138 when it is 147.
+    """
+    names = {r.mnemonic for r in membership.collect()}
+    assert "gpu.simdgroup_load" in names
+    assert len(membership.collect()) >= 147

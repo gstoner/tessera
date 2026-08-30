@@ -6,6 +6,15 @@
 Decision #19 (amended 2026-08-30) says the `tessera_<backend>` layer
 exists for **contract carriage**. This measures whether that holds.
 
+**Corrected 2026-08-30: the first published totals were wrong.**
+This audit reported "38 of 138" before two defects were found in
+its own parser: the contract vocabulary could not see `memory_scope`
+or `leading_dim` (real contracts, uncounted), and a brace-less
+`def X : Base<...>;` matched forward into the next operation's body
+and **consumed that operation**, so ops vanished with no error.
+Both produced a confident number rather than a failure, which is why
+each now has a named regression test.
+
 `optional-only` is the row to read. Those ops declare their contract
 attributes as `OptionalAttr`, almost always inherited from the
 dialect's op base class, which hands the same bag to every op. The
@@ -16,14 +25,14 @@ dropped) and Decision #21a (a semantic key never defaults), violated
 by construction rather than by mistake. Such an op satisfies #19's
 membership test on paper and carries nothing in practice.
 
-**38 of 138 ops require the contract they carry.**
+**45 of 147 ops require the contract they carry.**
 
 | Backend | requires | optional-only | no contract |
 |---|---|---|---|
-| `nvidia` | 4 | 20 | 1 |
+| `nvidia` | 5 | 21 | 2 |
 | `rocm` | 31 | 49 | 0 |
-| `x86` | 3 | 0 | 10 |
-| `apple` | 0 | 10 | 10 |
+| `x86` | 5 | 0 | 8 |
+| `apple` | 4 | 12 | 10 |
 
 ## What this means for the operator expansion
 
@@ -41,9 +50,8 @@ side: a dialect of dispatch containers has no contract to enforce.
 
 | Backend | Op |
 |---|---|
+| `nvidia` | `philox` |
 | `nvidia` | `func` |
-| `x86` | `amx_tile_load` |
-| `x86` | `amx_tile_store` |
 | `x86` | `amx_tile_zero` |
 | `x86` | `amx_dpbf16ps` |
 | `x86` | `amx_dpbusd` |

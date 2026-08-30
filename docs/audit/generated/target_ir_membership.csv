@@ -1,6 +1,7 @@
 backend,mnemonic,verdict,required,optional
+nvidia,mma_sync,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,block_coordinate,requires,arch grid_order tile_m tile_n,
-nvidia,macro_cta_matmul,requires,accum arch grid_order staging storage tile_k tile_m tile_n warps,
+nvidia,macro_cta_matmul,requires,accum arch grid_order leading_dimensions staging storage tile_k tile_m tile_n warps,
 nvidia,mma_fused,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,mma_attention,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,fpquant,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
@@ -16,12 +17,14 @@ nvidia,tmem_load,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue s
 nvidia,tmem_store,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,cuda_kernel,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,training_kernel,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,philox,no-contract,,
 nvidia,cuda_math_kernel,requires,input_storage output_storage rounding,
 nvidia,control_for,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,control_if,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,control_while,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,control_scan,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,func,no-contract,,
+nvidia,kernel_call,requires,accuracy arch covers determinism provenance,tolerance tolerance_rel
 nvidia,inline_ptx,requires,accuracy arch covers determinism,tolerance tolerance_rel
 nvidia,profiler_probe,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 rocm,memcpy,optional-only,,dst_space src_space
@@ -104,8 +107,8 @@ rocm,elementwise,optional-only,,dst_space src_space
 rocm,kv_cache_read,optional-only,,dst_space src_space
 rocm,msa_block_sparse,optional-only,,dst_space src_space
 rocm,profiler_probe,optional-only,,dst_space src_space
-x86,amx_tile_load,no-contract,,
-x86,amx_tile_store,no-contract,,
+x86,amx_tile_load,requires,stride,
+x86,amx_tile_store,requires,stride,
 x86,amx_tile_zero,no-contract,,
 x86,amx_dpbf16ps,no-contract,,
 x86,amx_dpbusd,no-contract,,
@@ -117,6 +120,11 @@ x86,kernel,no-contract,,
 x86,kv_cache_read,no-contract,,
 x86,unsupported,no-contract,,
 x86,profiler_probe,no-contract,,
+apple,gpu.simdgroup_load,requires,leading_dim space,
+apple,gpu.simdgroup_store,requires,leading_dim space,
+apple,gpu.simdgroup_matmul,requires,storage,
+apple,gpu.threadgroup_barrier,requires,memory_scope,
+apple,cpu.accelerate_gemm,optional-only,,abi dtype
 apple,cpu.vector_op,optional-only,,abi dtype
 apple,cpu.vector_reduce,optional-only,,abi dtype
 apple,gpu.metal_kernel,optional-only,,dtype
@@ -128,6 +136,7 @@ apple,gpu.msl_kernel,optional-only,,dtype
 apple,diagnostic,no-contract,,
 apple,cpu.kv_cache_cpu,optional-only,,abi
 apple,gpu.kv_cache_gpu,optional-only,,abi
+apple,cpu.call,optional-only,,abi argument_layout dtype
 apple,gpu.kernel_call,optional-only,,abi argument_layout dtype
 apple,gpu.package_call,optional-only,,abi argument_layout dtype
 apple,gpu.control_loop,no-contract,,

@@ -29,6 +29,10 @@ mlir_tablegen(TesseraAppleOps.h.inc -gen-op-decls)
 mlir_tablegen(TesseraAppleOps.cpp.inc -gen-op-defs)
 mlir_tablegen(TesseraAppleDialect.h.inc -gen-dialect-decls -dialect=tessera_apple)
 mlir_tablegen(TesseraAppleDialect.cpp.inc -gen-dialect-defs -dialect=tessera_apple)
+# The GPU machine primitives take a `!tessera_apple.simdgroup_matrix<T>` SSA
+# value, so the dialect now defines a type as well as operations.
+mlir_tablegen(TesseraAppleTypes.h.inc -gen-typedef-decls -typedefs-dialect=tessera_apple)
+mlir_tablegen(TesseraAppleTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=tessera_apple)
 add_public_tablegen_target(TesseraAppleOpsIncGen)
 
 # ------------------------------------------------------------------
@@ -99,7 +103,8 @@ target_link_libraries(TesseraApple
 # layout (CMAKE_CURRENT_BINARY_DIR/<file>.inc) by symlinking on demand.
 set(_TBG_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 foreach(_inc TesseraAppleOps.h.inc TesseraAppleOps.cpp.inc
-             TesseraAppleDialect.h.inc TesseraAppleDialect.cpp.inc)
+             TesseraAppleDialect.h.inc TesseraAppleDialect.cpp.inc
+             TesseraAppleTypes.h.inc TesseraAppleTypes.cpp.inc)
   set(_src ${_TBG_OUT_DIR}/${_inc})
   set(_dst ${CMAKE_CURRENT_BINARY_DIR}/include/Tessera/Target/Apple/${_inc})
   add_custom_command(

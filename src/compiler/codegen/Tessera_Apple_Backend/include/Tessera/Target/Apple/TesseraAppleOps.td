@@ -19,6 +19,26 @@ def TesseraApple_Dialect : Dialect {
 
   // Use plain attributes (not op-properties storage). Keeps the dialect
   // header-only and round-trippable without the Op<> getProperties() machinery.
+  let useDefaultTypePrinterParser = 1;
+}
+
+// A `simdgroup_matrix` register value.
+//
+// Metal's simdgroup matrix is an opaque value distributed across the 32 lanes
+// of a SIMD-group, not a per-thread array -- modelling it as an SSA type is
+// what lets the verifier reject a multiply whose operands never came from a
+// `simdgroup_load`. Mirrors `!tessera_x86.tile` for AMX and
+// `!tessera_rocm.token` for async copies.
+//
+// The element type is carried; the 8x8 shape is not, because Apple7 supports
+// exactly one simdgroup-matrix shape and encoding a single legal value in the
+// type would be ceremony. The MMA op verifies it instead, so a future shape
+// fails closed at the operation rather than silently type-checking.
+def Apple_SimdgroupMatrixType : TypeDef<TesseraApple_Dialect, "SimdgroupMatrix"> {
+  let mnemonic = "simdgroup_matrix";
+  let summary = "An 8x8 Metal simdgroup_matrix register value";
+  let parameters = (ins "::mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
 }
 
 class TesseraApple_Op<string mnemonic, list<Trait> traits = []> :
@@ -34,6 +54,135 @@ def Apple_KVCacheKindAttr
     : Apple_EnumStrAttr<["tessera.kv_cache.create", "tessera.kv_cache.append",
                          "tessera.kv_cache.prune", "tessera.kv_cache.read"],
                         "canonical KV-cache operation kind">;
+
+//===----------------------------------------------------------------------===//
+// Apple GPU machine primitives.
+//
+// Everything else this dialect declares is a *dispatch container* -- msl_kernel,
+// mps_matmul, dispatch, kernel_call -- which is why the MLIR pipeline could
+// only ever say "call this kernel" and never express what a kernel does. The
+// machine vocabulary lived entirely in `emit/apple_msl.py`, which is the
+// two-disconnected-compilers seam CLAUDE.md names for Apple.
+//
+// These are the peers of `nvvm.mma.sync` and `rocdl.mfma`: they name the
+// machine. Per Decision #19 as amended, every contract attribute below is
+// REQUIRED, not an optional bag -- an `OptionalAttr` contract verifies with the
+// field unset and so fails open, which is what the membership audit found
+// across most of the existing Target IR (38 of 138 ops require anything).
+//===----------------------------------------------------------------------===//
+
+def Apple_MemoryScopeAttr
+    : Apple_EnumStrAttr<["none", "threadgroup", "device", "threadgroup_device"],
+        "Metal mem_flags scope the barrier orders against">;
+
+def Apple_AddressSpaceAttr
+    : Apple_EnumStrAttr<["threadgroup", "device"],
+        "Metal address space the matrix is loaded from or stored to">;
+
+def Apple_MmaStorageAttr
+    : Apple_EnumStrAttr<["f16", "f32"],
+        "simdgroup_matrix input element type">;
+
+def AppleGPU_SimdgroupLoadOp : TesseraApple_Op<"gpu.simdgroup_load"> {
+  let summary = "Load an 8x8 simdgroup_matrix from strided memory";
+  let description = [{
+    `simdgroup_load(dst, src, elements_per_row)`.
+
+    `leading_dim` is the source's **row stride in elements**, and it is the
+    single most dangerous number in this op: Metal reads row *r* at
+    `src + r * leading_dim`, so a stride smaller than the matrix width makes
+    consecutive rows overlap and the MMA silently consumes the wrong elements.
+    There is no fault -- the kernel runs and the numbers are wrong. The
+    verifier therefore requires `leading_dim >= 8`.
+
+    `space` is required because `threadgroup` and `device` loads have different
+    visibility rules; a `device` load that should have been `threadgroup` reads
+    memory the staging barrier never ordered.
+  }];
+  let arguments = (ins AnyMemRef:$source, Index:$offset,
+                       I64Attr:$leading_dim,
+                       Apple_AddressSpaceAttr:$space);
+  let results = (outs Apple_SimdgroupMatrixType:$matrix);
+  let assemblyFormat = [{
+    $source `,` $offset attr-dict `:` type($source) `,` type($offset)
+    `->` type($matrix)
+  }];
+  let hasVerifier = 1;
+}
+
+def AppleGPU_SimdgroupStoreOp : TesseraApple_Op<"gpu.simdgroup_store"> {
+  let summary = "Store an 8x8 simdgroup_matrix to strided memory";
+  let description = [{
+    `simdgroup_store(m, dst, elements_per_row)`. `leading_dim` carries the same
+    row-stride contract as the load, and the same silent-corruption failure
+    when it is too small -- here it overwrites neighbouring rows instead of
+    reading them.
+  }];
+  let arguments = (ins Apple_SimdgroupMatrixType:$matrix,
+                       AnyMemRef:$destination, Index:$offset,
+                       I64Attr:$leading_dim,
+                       Apple_AddressSpaceAttr:$space);
+  let assemblyFormat = [{
+    $matrix `,` $destination `,` $offset attr-dict `:` type($matrix) `,`
+    type($destination) `,` type($offset)
+  }];
+  let hasVerifier = 1;
+}
+
+def AppleGPU_SimdgroupMatmulOp : TesseraApple_Op<"gpu.simdgroup_matmul"> {
+  let summary = "8x8x8 simdgroup matrix multiply-accumulate: d = a*b + c";
+  let description = [{
+    `simdgroup_multiply_accumulate(d, a, b, c)` computes **d = a·b + c** over
+    8x8 operands, so this is a full 8x8x8 MMA with K = 8.
+
+    Two numerical facts are contract, not convention, and both are verified:
+
+    * **The accumulator is always fp32**, whatever the inputs are. Metal's
+      accumulate form takes `simdgroup_float8x8` and `emit/apple_msl.py`
+      relies on it -- "the accumulator is always fp32, so the epilogue sees
+      full-precision matmul results". An f16 accumulator would change the
+      numerics of every kernel built on this op, so `c` and the result must be
+      f32 and an f16 accumulator is rejected rather than accepted and
+      quietly re-rounded. This is Decision #15a's storage-versus-accumulator
+      split expressed at the machine level.
+    * **Both inputs carry the same storage type**, matching `storage`. Mixing
+      an f16 and an f32 operand is not a Metal simdgroup MMA; it would have to
+      be a convert plus an MMA, and accepting it here would hide that
+      conversion from the numerics the epilogue reasons about.
+
+    The 8x8x8 shape is verified rather than assumed. Apple7 supports exactly
+    one simdgroup-matrix shape; stating it means a future part fails closed
+    here instead of lowering to a `simdgroup_matrix<T, R, C>` the hardware
+    does not have.
+  }];
+  let arguments = (ins Apple_SimdgroupMatrixType:$a,
+                       Apple_SimdgroupMatrixType:$b,
+                       Apple_SimdgroupMatrixType:$c,
+                       Apple_MmaStorageAttr:$storage,
+                       I64Attr:$m, I64Attr:$n, I64Attr:$k);
+  let results = (outs Apple_SimdgroupMatrixType:$d);
+  let assemblyFormat = [{
+    $a `,` $b `,` $c attr-dict `:` type($a) `,` type($b) `,` type($c)
+    `->` type($d)
+  }];
+  let hasVerifier = 1;
+}
+
+def AppleGPU_ThreadgroupBarrierOp : TesseraApple_Op<"gpu.threadgroup_barrier"> {
+  let summary = "threadgroup_barrier with an explicit Metal memory scope";
+  let description = [{
+    `threadgroup_barrier(mem_flags::...)`.
+
+    The scope is required and never defaults. A barrier is only a barrier for
+    the memory it names: staging a tile into threadgroup memory and then
+    ordering with `mem_none` compiles, runs, and races. Decision #21a -- the
+    scope selects semantics, so absence must fail closed rather than pick the
+    common case.
+  }];
+  let arguments = (ins Apple_MemoryScopeAttr:$memory_scope);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
 
 def AppleCPU_AccelerateGemmOp : TesseraApple_Op<"cpu.accelerate_gemm", [Pure]> {
   let summary = "Accelerate/CBLAS GEMM artifact for Apple Silicon CPU";

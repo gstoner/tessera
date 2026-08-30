@@ -18,11 +18,17 @@ failures. `_rocm_env.sh` guards the ROCm equivalent of that trap
 (`ROCM_PATH`/`LD_LIBRARY_PATH` exported only from an interactive `.bashrc`),
 and the ledger is what notices when the guard was not sourced.
 
-*ROCm outcome: parity validated 2026-08-30.* The `rocm` family probes
-`/dev/kfd` or an installed toolkit root and deliberately does **not** probe
-`/dev/dxg`: under WSL2 that node is the generic GPU paravirtualisation
-device and is present on the NVIDIA box too, so trusting it would claim a
-ROCm device on The-Super-Bear. Evidence on Princess-Luna (gfx1151, ROCm 10):
+*ROCm outcome: parity validated 2026-08-30.* Presence is decided by running
+`rocminfo` and requiring a `Device Type: GPU` agent — **not** by `/dev/dxg`
+(vendor-neutral under WSL2, so it would claim a ROCm device on the NVIDIA
+box), and **not** by an installed toolkit (a build or NVIDIA host may carry
+`/opt/rocm` purely to compile, and inferring a device from it would fail
+those hosts' correct skips). `/dev/kfd` is kept as a fast path but is not
+sufficient alone: **this box has no `/dev/kfd` at all** under WSL2 while
+running gfx1151 happily, so requiring it would disable the gate exactly where
+it is needed. Measured probe matrix: Princess-Luna `rocm=True, nvidia=False`;
+The-Super-Bear `rocm=False, nvidia=True`; Mac both False. Evidence on
+Princess-Luna (gfx1151, ROCm 10):
 `pytest tests/unit -m "not slow"` is **41 failed / 16843 passed / 2274
 skipped**, the gate correctly stayed silent (ROCm lanes executed, so the
 lane is not hollow), and the 11 failures I could isolate are **byte-identical

@@ -140,6 +140,55 @@ def test_every_hardware_marker_belongs_to_a_family():
     )
 
 
+def test_generic_wsl_gpu_node_implies_no_vendor():
+    """`/dev/dxg` is vendor-neutral and must not imply NVIDIA *or* ROCm.
+
+    Under WSL2 every GPU host has this node whatever the silicon. Trusting it
+    claimed an NVIDIA GPU on Princess-Luna (AMD gfx1151) until 2026-08-30,
+    which would fail any session there that collected NVIDIA lanes and
+    honestly skipped them. A vendor probe must use a vendor-specific signal.
+    """
+    import tests._support.environment as env
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(env, "NVIDIA_DRIVER_DIRS", ())
+        mp.setattr(env.Path, "exists", lambda self: str(self) == "/dev/dxg")
+        mp.setattr(env.shutil, "which", lambda _name: None)
+        assert env.nvidia_gpu_is_plausibly_present() is False
+        env.rocm_gpu_is_plausibly_present.cache_clear()
+        try:
+            assert env.rocm_gpu_is_plausibly_present() is False
+        finally:
+            env.rocm_gpu_is_plausibly_present.cache_clear()
+
+
+def test_rocm_toolkit_without_a_device_is_not_a_device():
+    """An installed toolkit is not hardware.
+
+    A build or NVIDIA host may carry `/opt/rocm` purely to compile. Inferring
+    a GPU from it turns those hosts' correct `hardware_rocm` skips into a
+    session failure, so presence is decided by `rocminfo` reporting an actual
+    `Device Type: GPU` agent -- a toolkit-only host reports CPU agents alone.
+    """
+    import subprocess as sp
+
+    import tests._support.environment as env
+
+    cpu_only = "Agent 1\n  Device Type:             CPU\n"
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(env.Path, "exists", lambda self: False)  # no /dev/kfd
+        mp.setattr(env.shutil, "which", lambda _name: "/opt/rocm/bin/rocminfo")
+        mp.setattr(
+            env.subprocess, "run",
+            lambda *a, **k: sp.CompletedProcess(a[0], 0, cpu_only, ""),
+        )
+        env.rocm_gpu_is_plausibly_present.cache_clear()
+        try:
+            assert env.rocm_gpu_is_plausibly_present() is False
+        finally:
+            env.rocm_gpu_is_plausibly_present.cache_clear()
+
+
 def test_probes_are_callable_and_total_on_this_host():
     """Every probe must answer on any host rather than raising.
 

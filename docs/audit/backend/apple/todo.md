@@ -15,10 +15,22 @@ executed-vs-skipped per hardware family and **fails the session** when a
 family skipped everything on a host that plausibly has the device.
 
 *Apple outcome: parity validated 2026-08-30, and this backend is where the
-gate was proven.* The `apple_gpu` family covers both `hardware_apple_gpu`
-and `metal4`, and probes for Darwin-on-arm — which always has Metal, so the
-probe cannot false-positive on a Linux box. Two pieces of evidence, in the
-order they matter:
+gate was proven.* `hardware_apple_gpu` probes for Darwin-on-arm, which always
+has Metal, so it cannot false-positive on a Linux box.
+
+**`metal4` is a separate family with its own capability-aware probe**
+(review finding, PR #645). Folding it into `apple_gpu` was wrong in both
+directions: merged, one generic Metal test that ran would set `executed > 0`
+and mask a Metal 4 lane that skipped entirely; and on an Apple-silicon host
+whose runtime does not report Metal 4, `require_apple_metal4()` skips
+correctly and the generic Darwin-on-arm probe would have converted that
+honest capability skip into a session failure. The `metal4` probe mirrors
+that gate exactly — `runtime.apple_gpu_metal4_caps()["available"]` — so the
+presence check and the skip decision cannot drift apart. This matters here
+specifically because parts of the Metal 4 surface are macOS 27.0-gated, so
+capability skips on a Metal-capable Mac are normal, not a defect.
+
+Two pieces of evidence, in the order they matter:
 
 * **The gate fires.** A test marked `hardware_apple_gpu` that skips on this
   Mac drives the session to **exit 1** with a named lane and remedy, while a

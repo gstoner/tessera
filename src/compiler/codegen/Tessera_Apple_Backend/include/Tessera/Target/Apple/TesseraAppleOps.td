@@ -83,6 +83,27 @@ def Apple_MmaStorageAttr
     : Apple_EnumStrAttr<["f16", "f32"],
         "simdgroup_matrix input element type">;
 
+def AppleGPU_SimdgroupFillOp : TesseraApple_Op<"gpu.simdgroup_fill", [Pure]> {
+  let summary = "A constant-filled simdgroup_matrix (make_filled_simdgroup_matrix)";
+  let description = [{
+    `make_filled_simdgroup_matrix<T, 8, 8>(v)`.
+
+    The K-loop accumulator has to start somewhere, and the alternative --
+    loading it from a zeroed buffer -- is both an extra memory round-trip and
+    a different program: it makes the accumulator's initial value depend on
+    memory the compiler would then have to prove was zeroed. Metal provides
+    the fill directly and `emit/apple_msl.py` uses it, so the IR says the same
+    thing.
+
+    `Pure` because the result depends only on the attributes: it reads no
+    memory and has no ordering requirement, which lets CSE share one zero
+    accumulator across tiles.
+  }];
+  let arguments = (ins F32Attr:$value);
+  let results = (outs Apple_SimdgroupMatrixType:$matrix);
+  let assemblyFormat = "attr-dict `:` type($matrix)";
+}
+
 def AppleGPU_SimdgroupLoadOp : TesseraApple_Op<"gpu.simdgroup_load"> {
   let summary = "Load an 8x8 simdgroup_matrix from strided memory";
   let description = [{

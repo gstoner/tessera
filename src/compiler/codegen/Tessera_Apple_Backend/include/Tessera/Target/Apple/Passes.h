@@ -80,6 +80,12 @@ std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleCPUPass();
 /// counterpart to the artifact-only `tessera-lower-to-apple_gpu` pipeline.
 std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleGPUPass();
 
+/// Lower `tessera.matmul` to the Apple GPU machine primitives (simdgroup
+/// fill/load/matmul/store) instead of a call into the runtime shim. This is
+/// the producer for those ops; the MPS lane above remains for shapes it
+/// declines (ragged extents) and for performance.
+std::unique_ptr<::mlir::Pass> createLowerMatmulToAppleSimdgroupPass();
+
 /// tessera.rope (rank-2, f32, x.shape == theta.shape) → func.call into the
 /// Apple GPU runtime shim's custom-MSL rope kernel. Phase 8.4 — the first
 /// concrete custom kernel emitted via the gpu.msl_kernel op contract.

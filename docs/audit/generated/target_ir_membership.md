@@ -25,14 +25,14 @@ dropped) and Decision #21a (a semantic key never defaults), violated
 by construction rather than by mistake. Such an op satisfies #19's
 membership test on paper and carries nothing in practice.
 
-**45 of 147 ops require the contract they carry.**
+**45 of 148 ops require the contract they carry.**
 
 | Backend | requires | optional-only | no contract |
 |---|---|---|---|
 | `nvidia` | 5 | 21 | 2 |
 | `rocm` | 31 | 49 | 0 |
 | `x86` | 5 | 0 | 8 |
-| `apple` | 4 | 12 | 10 |
+| `apple` | 4 | 12 | 11 |
 
 ## What this means for the operator expansion
 
@@ -60,6 +60,7 @@ side: a dialect of dispatch containers has no contract to enforce.
 | `x86` | `kv_cache_read` |
 | `x86` | `unsupported` |
 | `x86` | `profiler_probe` |
+| `apple` | `gpu.simdgroup_fill` |
 | `apple` | `gpu.dispatch` |
 | `apple` | `gpu.mps_dispatch` |
 | `apple` | `diagnostic` |

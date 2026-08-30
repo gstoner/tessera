@@ -154,6 +154,7 @@ void registerTesseraAppleBackendPipelines() {
   registerPass([]() { return createLowerControlWhileToAppleGPUPass(); });
   registerPass([]() { return createLowerMatmulToAppleCPUPass(); });
   registerPass([]() { return createLowerMatmulToAppleGPUPass(); });
+  registerPass([]() { return createLowerMatmulToAppleSimdgroupPass(); });
   registerPass([]() { return createLowerRopeToAppleGPUPass(); });
   registerPass([]() { return createLowerFlashAttnToAppleGPUPass(); });
   registerPass([]() { return createLowerSoftmaxToAppleGPUPass(); });

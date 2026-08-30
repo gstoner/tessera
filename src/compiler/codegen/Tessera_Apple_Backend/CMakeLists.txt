@@ -51,6 +51,7 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/Lowering/ControlWhileToAppleGPU.cpp
   lib/Target/Apple/Lowering/MatmulToAppleCPU.cpp
   lib/Target/Apple/Lowering/MatmulToAppleGPU.cpp
+  lib/Target/Apple/Lowering/MatmulToAppleSimdgroup.cpp
   lib/Target/Apple/Lowering/RopeToAppleGPU.cpp
   lib/Target/Apple/Lowering/FlashAttnToAppleGPU.cpp
   lib/Target/Apple/Lowering/SoftmaxToAppleGPU.cpp

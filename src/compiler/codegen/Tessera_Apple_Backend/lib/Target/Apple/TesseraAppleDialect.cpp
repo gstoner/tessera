@@ -104,12 +104,45 @@ static ::mlir::LogicalResult verifyRowStride(::mlir::Operation *op,
   return ::mlir::success();
 }
 
+// The matrix and the buffer must agree on element type. Metal's
+// simdgroup_load/store move raw elements; they do not convert. Storing an f32
+// accumulator into an f16 buffer therefore reinterprets the bits rather than
+// rounding the values -- the kernel runs and every output is garbage. The MSL
+// kernel stores the accumulator to a `threadgroup float` tile and converts in
+// the epilogue, which is exactly the step this check forces a lowering to
+// emit rather than skip.
+static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
+                                                ::mlir::Type matrixElem,
+                                                ::mlir::Value buffer,
+                                                ::llvm::StringRef role) {
+  auto memTy = ::llvm::dyn_cast<::mlir::MemRefType>(buffer.getType());
+  if (!memTy)
+    return ::mlir::success();  // non-memref buffers are checked elsewhere
+  if (memTy.getElementType() != matrixElem)
+    return op->emitOpError()
+           << "matrix element type does not match the " << role
+           << " element type; simdgroup load/store move raw elements and do "
+              "not convert, so this reinterprets bits rather than rounding "
+              "values -- insert an explicit conversion";
+  return ::mlir::success();
+}
+
 ::mlir::LogicalResult SimdgroupLoadOp::verify() {
-  return verifyRowStride(getOperation(), getLeadingDim());
+  if (::mlir::failed(verifyRowStride(getOperation(), getLeadingDim())))
+    return ::mlir::failure();
+  return verifyElementMatch(
+      getOperation(),
+      ::llvm::cast<SimdgroupMatrixType>(getMatrix().getType()).getElementType(),
+      getSource(), "source");
 }
 
 ::mlir::LogicalResult SimdgroupStoreOp::verify() {
-  return verifyRowStride(getOperation(), getLeadingDim());
+  if (::mlir::failed(verifyRowStride(getOperation(), getLeadingDim())))
+    return ::mlir::failure();
+  return verifyElementMatch(
+      getOperation(),
+      ::llvm::cast<SimdgroupMatrixType>(getMatrix().getType()).getElementType(),
+      getDestination(), "destination");
 }
 
 ::mlir::LogicalResult SimdgroupMatmulOp::verify() {

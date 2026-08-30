@@ -100,3 +100,20 @@ func.func @unknown_memory_scope() {
   tessera_apple.gpu.threadgroup_barrier {memory_scope = "eventually"}
   return
 }
+
+// -----
+
+func.func @store_f32_accumulator_into_an_f16_buffer(
+    %m: memref<64xf16>, %o: index, %v: !tessera_apple.simdgroup_matrix<f32>) {
+  // simdgroup_store moves raw elements; it does not convert. Storing an f32
+  // accumulator into an f16 buffer reinterprets bits rather than rounding
+  // values, so every output is garbage and nothing faults. The MSL kernel
+  // stores to a `threadgroup float` tile and converts in the epilogue -- this
+  // rejection is what forces a lowering to emit that step instead of skipping
+  // it. Found by building the producer pass and reading what it emitted.
+  // expected-error @+1 {{matrix element type does not match the destination}}
+  tessera_apple.gpu.simdgroup_store %v, %m, %o
+      {leading_dim = 8 : i64, space = "threadgroup"}
+      : !tessera_apple.simdgroup_matrix<f32>, memref<64xf16>, index
+  return
+}

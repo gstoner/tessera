@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 
 import numpy as np
 import pytest
@@ -470,6 +471,84 @@ def _assert_canonical_k_loop(bundle, *, expected_k: int) -> None:
         assert re.search(rf"scf\.for\b.*\bstep %c{expected_k}", tile_text)
 
 
+#: The two physical schedules the compiled route may select. Which one it picks
+#: is a shape-driven decision the compiler owns -- (16,8,16) takes the typed
+#: 16x8 body and never emits `tile.matmul_kernel`, (37,29,23) takes the macro-CTA
+#: body and does. Pinning either spelling here asserts an implementation detail,
+#: which is what these tests used to do.
+_SCHEDULED_POLICIES = {
+    "sm120_scheduled_macro_cta_32x32_mn",
+    "sm120_scheduled_typed_16x8_mn",
+}
+
+
+def _assert_compiled_scheduled_route(bundle, *, storage: str) -> None:
+    """Require the compiled Graph->Schedule->Tile->Target route, not a spelling.
+
+    These assertions previously described the *templated fallback packager*:
+    a `tessera_tile_matmul_shared_<storage>` entry, a `__tessera_sm120_ab_stage_*`
+    shared-staging global, and an unconditional `tile.matmul_kernel`. None of
+    those survive the compiled route, which is authoritative whenever
+    tessera-opt is available -- so all four parametrisations failed, at three
+    different assertions, and were misread for weeks as a staging-routing
+    defect. What the E2E spine actually needs to prove is that the module went
+    through the compiled route, got a real scheduled policy, and launches with
+    correct numerics.
+    """
+    entries = re.findall(r"\.visible \.entry (\w+)", bundle.backend.text)
+    assert entries, "no PTX entry point was emitted"
+    assert all(
+        name.startswith("nvidia_sm120_scheduled_matmul_") for name in entries
+    ), f"expected compiled scheduled entries, got {entries}"
+    assert any(storage in name for name in entries), (
+        f"no entry carries the {storage} storage contract: {entries}"
+    )
+    policy = bundle.launch_descriptor.geometry.policy
+    assert policy in _SCHEDULED_POLICIES, f"unexpected launch policy {policy!r}"
+
+
+@pytest.mark.hardware_nvidia
+def test_nvidia_schedule_key_is_diagnosed_not_dropped_on_the_compiled_route() -> None:
+    """A schedule key the compiled route cannot honour must say so (#21a).
+
+    `nvidia_schedule` steers the templated fallback packager only. Dropping it
+    in silence is what let four tests request "shared" and then assert the
+    fallback's artifacts; the request looked honoured and was not. Decision
+    #21a permits a performance key to fall back but never silently.
+    """
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    module = _module(37, 29, 23)
+    with pytest.warns(RuntimeWarning, match="SCHEDULE_KEY_NOT_HONORED_ON_COMPILED_ROUTE"):
+        compile_graph_module(
+            module,
+            source_origin="NVIDIA-E2E-1",
+            target="nvidia_sm120",
+            options={"package_native": True, "nvidia_schedule": "shared"},
+            enable_tool_validation=False,
+        )
+
+
+@pytest.mark.hardware_nvidia
+def test_auto_schedule_is_not_reported_as_unhonored() -> None:
+    """"auto" means "you choose", which is what the compiled route does.
+
+    Warning on it would train people to ignore the diagnostic.
+    """
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    module = _module(37, 29, 23)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        compile_graph_module(
+            module,
+            source_origin="NVIDIA-E2E-1",
+            target="nvidia_sm120",
+            options={"package_native": True, "nvidia_schedule": "auto"},
+            enable_tool_validation=False,
+        )
+
+
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("shape", [(16, 8, 16), (37, 29, 23)])
 def test_canonical_sm120_request_packages_registers_launches_and_compares(shape) -> None:
@@ -481,7 +560,7 @@ def test_canonical_sm120_request_packages_registers_launches_and_compares(shape)
         module,
         source_origin="NVIDIA-E2E-1",
         target="nvidia_sm120",
-        options={"package_native": True, "nvidia_schedule": "shared"},
+        options={"package_native": True},
         enable_tool_validation=False,
     )
     assert bundle.orchestration_state == "launchable"
@@ -492,18 +571,17 @@ def test_canonical_sm120_request_packages_registers_launches_and_compares(shape)
     assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
     assert "static_shared_memory_bytes" in bundle.native_image.resource_record.metrics
     assert bundle.launch_descriptor is not None
-    assert "tile.matmul_kernel" in bundle.tile.text
     assert "tessera.canonical_k_loop = true" in bundle.tile.text
     assert "tessera.tile_k = 16 : i64" in bundle.tile.text
     assert "scf.for" in bundle.target_ir.text
     assert "nvvm.mma.sync" in bundle.target_ir.text
-    assert ".visible .entry tessera_tile_matmul_shared_f16" in bundle.backend.text
+    _assert_compiled_scheduled_route(bundle, storage="f16")
 
     warm = compile_graph_module(
         module,
         source_origin="NVIDIA-E2E-1",
         target="nvidia_sm120",
-        options={"package_native": True, "nvidia_schedule": "shared"},
+        options={"package_native": True},
         enable_tool_validation=False,
     )
     assert warm.native_image is not None
@@ -546,7 +624,7 @@ def test_canonical_sm120_bf16_packages_launches_and_compares(shape) -> None:
         module,
         source_origin="NVIDIA-E2E-2",
         target="nvidia_sm120",
-        options={"package_native": True, "nvidia_schedule": "shared"},
+        options={"package_native": True},
         enable_tool_validation=False,
     )
     assert bundle.orchestration_state == "launchable"
@@ -557,13 +635,11 @@ def test_canonical_sm120_bf16_packages_launches_and_compares(shape) -> None:
     assert bundle.launch_descriptor is not None
     assert bundle.launch_descriptor.buffers[0].dtype == "bf16"
     assert bundle.launch_descriptor.provenance["storage"] == "bf16"
-    assert "tile.matmul_kernel" in bundle.tile.text
     assert "tessera.canonical_k_loop = true" in bundle.tile.text
     assert "tessera.tile_k = 16 : i64" in bundle.tile.text
     assert "scf.for" in bundle.target_ir.text
-    assert "__tessera_sm120_ab_stage_bf16" in bundle.target_ir.text
     assert "nvvm.mma.sync" in bundle.target_ir.text
-    assert ".visible .entry tessera_tile_matmul_shared_bf16" in bundle.backend.text
+    _assert_compiled_scheduled_route(bundle, storage="bf16")
 
     rng = np.random.default_rng(120_016 + k)
     a = np.ascontiguousarray((rng.standard_normal((m, k)) * 0.25).astype(ml_dtypes.bfloat16))

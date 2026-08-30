@@ -8,6 +8,28 @@ last_updated: 2026-08-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
+marker vocabulary and conftest boundary changed; per-backend outcome below.**
+`hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its
+four verbatim copies, `pyproject.toml`, and the device-accounting families.
+`conftest` now consumes `hardware_avx512` and `hardware_amx` centrally,
+matching the existing `hardware_nvidia` / `hardware_apple_gpu` boundaries.
+
+*NVIDIA outcome: parity validated — no behaviour change, and the reason
+matters.* The `hardware_nvidia` arm of `pytest_runtest_setup` is checked
+**before** the two new arms and returns early, so no NVIDIA lane can be
+diverted by them; no test under `tests/device/nvidia/` carries
+`hardware_avx512` or `hardware_amx`. The new PR-expression term
+(`not hardware_avx512`) deselects nothing here for the same reason.
+
+One fleet fact worth recording, because it is the opposite of the intuition:
+**The-Super-Bear has no AVX-512.** Its Threadripper 3970X (Zen 2) reports no
+`avx512f`, so despite building the x86 backend (`TESSERA_BUILD_X86_BACKEND=ON`)
+that box probes `avx512=False` and its x86 lanes skip honestly. Princess-Luna
+(Zen 5) is the only AVX-512 host in the fleet, which is also why
+`hardware_amx` must never be used to mean "x86 hardware" — see the standing
+section in `docs/audit/backend/x86/todo.md`.
+
 ## `SM120-BUILD-CONFIG-RESOLVED-2026-08-30` — there was no trade; use CUDA=ON
 
 **Superseded the "fleet-config decision" framing below: configuring the NVIDIA

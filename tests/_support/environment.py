@@ -74,12 +74,19 @@ def nvidia_gpu_is_plausibly_present() -> bool:
     Used to tell "no GPU here, skip honestly" apart from "a GPU is sitting
     right there and the environment is hiding it", which is a misconfiguration
     worth shouting about rather than skipping past.
+
+    Every signal must be NVIDIA-*specific*. ``/dev/dxg`` was accepted here
+    until 2026-08-30 and is not: under WSL2 it is the generic GPU
+    paravirtualisation node, present whatever the vendor. Measured that day --
+    Princess-Luna (AMD gfx1151, no NVIDIA anything) has ``/dev/dxg`` and
+    therefore claimed an NVIDIA GPU, which would fail any session on that box
+    that collected NVIDIA lanes and honestly skipped them. The WSL driver shim
+    (``/usr/lib/wsl/lib/nvidia-smi``) is vendor-specific and is what The-Super-Bear
+    is recognised by; Princess-Luna does not have it.
     """
     if any((root / "nvidia-smi").is_file() for root in NVIDIA_DRIVER_DIRS):
         return True
-    return any(
-        Path(node).exists() for node in ("/dev/nvidiactl", "/dev/nvidia0", "/dev/dxg")
-    )
+    return any(Path(node).exists() for node in ("/dev/nvidiactl", "/dev/nvidia0"))
 
 
 @functools.lru_cache(maxsize=1)

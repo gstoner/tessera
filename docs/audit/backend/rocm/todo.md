@@ -6,6 +6,18 @@ scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+Cross-backend sync `P3-SOURCE-ONLY-2026-08-30` — **one row is written from
+the `.hip` signature and has never executed.**
+The P3 batch added `RocmStockhamFFTCandidate.run_rows`, wired to
+`ts_fft_stockham_amd_hostptr_batch` with the signature `(in, out, batch, N,
+sign)` and `rc == 0` for success, so STFT/ISTFT resolve the FFT lane once per
+call instead of once per frame. On the Mac the CPU half measured istft 512
+frames/win256 18.4 -> 4.11 ms, but **the ROCm batch path was never run** — it
+declines cleanly to the per-row path when the image lacks the batch ABI,
+which is exactly the state it was tested in. This queue owns confirming that
+the batch entry point exists in the shipped image, that it produces the same
+spectra as the per-row path, and that the transfer saving is real.
+
 Cross-backend sync `P2-REVIEW-SHARED-PASSES-2026-08-29` — **15 shared MLIR
 passes changed; only the Mac's fixture set could be run.**
 The P2 code-review batch touched passes every backend lowers through:

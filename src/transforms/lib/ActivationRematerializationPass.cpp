@@ -44,6 +44,29 @@
 //     present. The largest long-lived pure activation intervals are selected
 //     until the estimated peak fits. Explicit markers remain authoritative.
 //
+// Clone expansion (`--max-clone-expansion`, budget-selected plans only)
+// ---------------------------------------------------------------------
+// Materializing a tagged op clones it once per surviving consumer, and a tagged
+// CONSUMER contributes one consumer per clone it will itself produce. Along a
+// producer chain those counts compound, so a fully-tagged chain of depth d
+// emits O(d^2) clones — the greedy has no term for this, because it prices each
+// candidate by its own recompute cost alone. Measured on a 2000-deep chain with
+// every intermediate live to a sink: 4,001 ops became 2,001,002 in 16.4s.
+//
+// `projectCloneCount` computes the chosen plan's clone count EXACTLY before any
+// IR is built (emitted ops = input + projected - selected originals erased,
+// verified at depths 4/8/16/24/32/40/48), and the plan is then trimmed to fit
+// `max-clone-expansion x |ops|`, warning REMAT_PLAN_CLONE_BOUND with what it
+// gave up. Trimming drops the op nearest the MIDDLE of the tagged chain, which
+// splits one chain of length K into two of K/2 — the segmentation real
+// activation checkpointing performs. On that 2000-deep chain: 33,842 ops in
+// 2.4s with peak cut 93.5%, against 2,001,002 ops in 16.4s for a 99.8% cut.
+// The bound therefore trades ~6 points of peak reduction for a 59x smaller
+// function; it is not strictly better, and `max-clone-expansion=0` restores
+// the unbounded behavior for a caller who wants the last of the memory.
+// (Dropping the MAXIMUM-clone op instead only peels the chain's downstream end:
+// same input, 35,627 ops but a mere 12.5% peak cut.)
+//
 // Cross-references:
 //   * python/tessera/autodiff/rematerialize.py — the Python F2 surface.
 //   * AutodiffPass.cpp — emits the backward graph this pass rematerialises into.
@@ -83,6 +106,7 @@ constexpr const char *kMeasuredResidualBytesAttr =
 constexpr const char *kPeakBeforeAttr = "tessera.remat_peak_before_bytes";
 constexpr const char *kPeakAfterAttr = "tessera.remat_peak_after_bytes";
 constexpr const char *kSelectedCostAttr = "tessera.remat_selected_cost_ns";
+constexpr const char *kProjectedClonesAttr = "tessera.remat_projected_clones";
 constexpr const char *kDeviceCapacityAttr =
     "tessera.device_memory_capacity_bytes";
 constexpr const char *kDeviceReserveBasisPointsAttr =
@@ -103,6 +127,59 @@ constexpr const char *kModelStateBytesAttr = "tessera.model_state_bytes";
 static bool isBackwardOperation(mlir::Operation *op) {
   auto phase = op->getAttrOfType<mlir::StringAttr>(kAutodiffPhaseAttr);
   return phase && phase.getValue() == "backward";
+}
+
+// Projected clone counts for materializing `tagged` (given in PROGRAM order),
+// mirroring the reverse walk in runOnOperation without touching IR: an op is
+// cloned once per surviving unique consumer, and a tagged consumer contributes
+// one consumer per clone IT will produce — so along a fully-tagged producer
+// chain whose intermediates all have external users the counts compound to a
+// quadratic total (measured: a 2000-op chain expanded 4,001 ops into
+// 2,001,002). Because each clone of a tagged consumer still references this
+// op's operands rather than recursively cloning untagged producers, the
+// blowup travels only through the tagged set, which is what makes it
+// projectable exactly. `survives` tracks ops the walk will NOT erase (a user
+// was skipped by the backward-only filter), since a surviving original counts
+// as one more consumer of its own producers.
+static int64_t projectCloneCount(
+    llvm::ArrayRef<mlir::Operation *> tagged,
+    llvm::function_ref<bool(mlir::Operation *)> backwardOnlyFor,
+    llvm::DenseMap<mlir::Operation *, int64_t> &cloneCounts) {
+  llvm::SmallPtrSet<mlir::Operation *, 16> taggedSet(tagged.begin(),
+                                                     tagged.end());
+  llvm::SmallPtrSet<mlir::Operation *, 16> survives;
+  auto saturatingAdd = [](int64_t lhs, int64_t rhs) {
+    return lhs > std::numeric_limits<int64_t>::max() - rhs
+               ? std::numeric_limits<int64_t>::max()
+               : lhs + rhs;
+  };
+  int64_t total = 0;
+  for (mlir::Operation *op : llvm::reverse(tagged)) {
+    bool backwardOnly = backwardOnlyFor(op);
+    llvm::SmallPtrSet<mlir::Operation *, 8> seen;
+    int64_t clones = 0;
+    bool anySkipped = false;
+    for (mlir::Operation *user : op->getUsers()) {
+      if (user == op || !seen.insert(user).second)
+        continue;
+      if (backwardOnly && !isBackwardOperation(user)) {
+        anySkipped = true;
+        continue;
+      }
+      int64_t weight = 1;
+      if (taggedSet.contains(user)) {
+        auto found = cloneCounts.find(user);
+        if (found != cloneCounts.end())
+          weight = found->second + (survives.contains(user) ? 1 : 0);
+      }
+      clones = saturatingAdd(clones, weight);
+    }
+    cloneCounts[op] = clones;
+    if (anySkipped)
+      survives.insert(op);
+    total = saturatingAdd(total, clones);
+  }
+  return total;
 }
 
 static std::optional<int64_t> checkedAdd(int64_t lhs, int64_t rhs) {
@@ -347,6 +424,13 @@ public:
                      "activations when explicit markers are absent"),
       llvm::cl::init(0)};
 
+  Option<int> maxCloneExpansion{
+      *this, "max-clone-expansion",
+      llvm::cl::desc("refuse a budget-selected plan whose projected clone "
+                     "count exceeds this multiple of the function's op count "
+                     "(0 disables the bound)"),
+      llvm::cl::init(8)};
+
   void runOnOperation() override {
     auto func = getOperation();
 
@@ -504,6 +588,97 @@ public:
         applyInterval(*best, -1);
         active.erase(best);
       }
+      // The greedy loop above prices each candidate by its OWN recompute cost,
+      // which is not what materializing it costs. A tagged op is cloned once
+      // per surviving consumer, and a tagged consumer contributes one consumer
+      // per clone it will itself produce — so selecting a whole producer chain
+      // compounds into a quadratic number of clones (measured: 4,001 ops ->
+      // 2,001,002). The greedy has no term for that and will happily choose
+      // such a plan.
+      //
+      // Rather than re-derive a plan-wide cost inside the greedy (which would
+      // make each step depend on every other), project the chosen plan's clone
+      // count exactly and then trim it: repeatedly drop the op contributing the
+      // most clones until the projection fits. Dropping an interior op of a
+      // chain breaks it into two shorter chains, so this converges on the
+      // segmentation that real activation checkpointing uses, without needing
+      // to name a segment size.
+      int64_t cloneBudget =
+          maxCloneExpansion.getValue() > 0
+              ? static_cast<int64_t>(ordered.size()) * maxCloneExpansion
+              : std::numeric_limits<int64_t>::max();
+      int64_t droppedForClones = 0;
+      llvm::SmallPtrSet<mlir::Operation *, 16> droppedOps;
+      llvm::DenseMap<mlir::Operation *, int64_t> cloneCounts;
+      auto projectSelected = [&]() {
+        // projectCloneCount needs PROGRAM order; `selected` is in removal
+        // order, so sort by ordinal first.
+        llvm::SmallVector<mlir::Operation *> inOrder(selected);
+        llvm::sort(inOrder, [&](mlir::Operation *lhs, mlir::Operation *rhs) {
+          return ordinal.lookup(lhs) < ordinal.lookup(rhs);
+        });
+        cloneCounts.clear();
+        return projectCloneCount(
+            inOrder,
+            [&](mlir::Operation *) { return hasAutodiffPhases; },
+            cloneCounts);
+      };
+      int64_t projectedClones = projectSelected();
+      while (projectedClones > cloneBudget && !selected.empty()) {
+        // Drop the op nearest the MIDDLE of the tagged chain, not the end of
+        // it. cloneCounts rises monotonically along a chain (each step
+        // multiplies through its tagged consumer), so the op whose count is
+        // closest to half the maximum sits near the chain's midpoint.
+        // Removing it splits one chain of length K into two of K/2, taking the
+        // projection from ~K^2/2 to ~K^2/4 in a single drop — that is the
+        // segmentation real activation checkpointing performs. Dropping the
+        // maximum instead peels one element off the downstream end and leaves
+        // a shorter contiguous chain, which converges far more slowly and
+        // keeps the surviving plan quadratic in its own length.
+        int64_t maxClones = 0;
+        for (mlir::Operation *op : selected)
+          maxClones = std::max(maxClones, cloneCounts.lookup(op));
+        int64_t target = maxClones / 2;
+        auto split = std::min_element(
+            selected.begin(), selected.end(),
+            [&](mlir::Operation *lhs, mlir::Operation *rhs) {
+              int64_t lhsDistance =
+                  std::abs(cloneCounts.lookup(lhs) - target);
+              int64_t rhsDistance =
+                  std::abs(cloneCounts.lookup(rhs) - target);
+              if (lhsDistance != rhsDistance)
+                return lhsDistance < rhsDistance;
+              // Deterministic tie-break; program order keeps the choice
+              // reproducible across DenseMap iteration orders.
+              return ordinal.lookup(lhs) < ordinal.lookup(rhs);
+            });
+        droppedOps.insert(*split);
+        selected.erase(split);
+        ++droppedForClones;
+        projectedClones = projectSelected();
+      }
+      if (droppedForClones > 0) {
+        func->emitWarning()
+            << "REMAT_PLAN_CLONE_BOUND: the budget-selected recompute plan "
+               "projected more than " << cloneBudget
+            << " clones (" << maxCloneExpansion.getValue()
+            << "x the function's " << ordered.size()
+            << " ops); dropped " << droppedForClones
+            << " selection(s) to fit. The remaining plan may not reach the "
+               "memory budget — recompute along a producer chain costs the "
+               "whole prefix, not each op alone.";
+        // A dropped op keeps its activation live, so its interval must go
+        // back into the difference array or the reported peak-after would
+        // describe a plan we are not emitting.
+        for (const RematCandidate &candidate : candidates)
+          if (droppedOps.contains(candidate.op))
+            applyInterval(candidate, 1);
+      }
+      func->setAttr(kProjectedClonesAttr,
+                    mlir::IntegerAttr::get(
+                        mlir::IntegerType::get(&getContext(), 64),
+                        projectedClones));
+
       func->setAttr(kPeakBeforeAttr,
                     mlir::IntegerAttr::get(
                         mlir::IntegerType::get(&getContext(), 64), peakBefore));

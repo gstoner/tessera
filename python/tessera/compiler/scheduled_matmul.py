@@ -17,6 +17,13 @@ from .graph_ir import GraphIRModule
 _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
 
 
+# Mirrors kScheduledSm120MatmulPrefix in
+# src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp.
+# The runtime selects the scheduled-matmul launcher by this prefix, so it is
+# ABI, not cosmetics.
+_SM120_SCHEDULED_MATMUL_PREFIX = "nvidia_sm120_scheduled_matmul_"
+
+
 @dataclass(frozen=True)
 class ScheduledMatmulArtifact:
     graph_ir: str
@@ -115,6 +122,15 @@ def lower_scheduled_matmul(
     targeted = copy.deepcopy(module)
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
+    # The Tile kernel symbol is derived by the C++ passes from this function's
+    # name, and the runtime dispatches scheduled sm_120 matmuls by name prefix,
+    # so the prefix has to be applied HERE -- renaming only the Python-side
+    # descriptor entry desynchronises it from the symbol actually present in the
+    # compiled PTX ("native PTX is missing entry ...").
+    if targeted.functions and contract[0] == "nvidia_sm120":
+        fn0 = targeted.functions[0]
+        if not fn0.name.startswith(_SM120_SCHEDULED_MATMUL_PREFIX):
+            fn0.name = f"{_SM120_SCHEDULED_MATMUL_PREFIX}{fn0.name}"
     graph_ir = targeted.to_mlir(target=target, canonical=True)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
@@ -353,7 +369,19 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         )
         if reduced:
             suffix += "_outf16"
-        function_name = f"{function.name}{suffix}" + (
+        # The runtime dispatches scheduled sm_120 matmuls by NAME PREFIX
+        # (kScheduledSm120MatmulPrefix in tessera_nvidia_ptx_launch.cpp). Naming
+        # the kernel after the caller's Graph function made that dispatch depend
+        # on what the user happened to call their function: every name without
+        # the prefix fell through the runtime's strcmp chain and the launch
+        # returned rc=5. Exactly one place in the tree — a benchmark — named a
+        # function to satisfy it; every other caller silently could not launch.
+        # The prefix is part of the ABI, so the compiler emits it rather than
+        # asking the frontend to spell it.
+        base_name = function.name
+        if not base_name.startswith(_SM120_SCHEDULED_MATMUL_PREFIX):
+            base_name = f"{_SM120_SCHEDULED_MATMUL_PREFIX}{base_name}"
+        function_name = f"{base_name}{suffix}" + (
             "_macro_kernel"
             if _uses_sm120_macro_cta(m, n, k, storage, accum)
             else "_kernel"

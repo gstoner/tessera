@@ -115,6 +115,13 @@ def pytest_sessionfinish(session, exitstatus):
     gets believed. A signal that does not change the exit code does not change
     what anyone concludes.
     """
+    # Under xdist every worker also runs this hook, holding only the shard of
+    # tests it happened to receive -- a worker handed nothing but skipped
+    # device tests would report a hollow lane for the whole run. The controller
+    # receives all workers' reports, so it is the only process that can judge
+    # this; workers identify themselves by carrying `workerinput`.
+    if hasattr(session.config, "workerinput"):
+        return
     ledger = getattr(session.config, _DEVICE_LEDGER_KEY, None)
     if ledger is None:
         return

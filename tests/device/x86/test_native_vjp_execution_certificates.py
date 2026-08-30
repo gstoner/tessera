@@ -11,6 +11,14 @@ from tests.unit import test_autodiff_spectral_target_binding as spectral
 from tests.unit import test_autodiff_stateful_plugin_binding as stateful
 from tests.unit import test_autodiff_training_series_target_binding as training
 
+# This lane exercises the AVX-512 elementwise runtime itself -- it needs
+# `production tessera-opt and AVX-512 runtime`, and skips when either is
+# absent. Only tests that actually drive that runtime may credit the
+# avx512 family in tests/_support/device_accounting.py; a generic CPU test
+# marked this way would clear the lane without executing any AVX-512 work,
+# which is the exact hollow state the ledger exists to catch.
+pytestmark = pytest.mark.hardware_avx512
+
 
 def test_every_declared_x86_vjp_family_records_an_exact_certificate() -> None:
     from tessera import runtime

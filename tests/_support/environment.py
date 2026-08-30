@@ -147,6 +147,21 @@ def apple_metal_is_plausibly_present() -> bool:
     return platform.system() == "Darwin" and platform.machine().startswith("arm")
 
 
+def avx512_is_plausibly_present() -> bool:
+    """Whether this host advertises AVX-512.
+
+    This is the x86 lane that actually exists. AMX is retired (superseded by
+    ACE) and no fleet box has it, so `hardware_amx` can never stand in for
+    "x86 hardware" -- doing so skips the test on Princess-Luna, the only host
+    that can run it. `avx512f` is the base feature every other AVX-512 subset
+    implies, so it is the right thing to key on.
+    """
+    try:
+        return "avx512f" in Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 @functools.lru_cache(maxsize=1)
 def apple_metal4_is_plausibly_present() -> bool:
     """Whether a *Metal 4* runtime is actually available, not merely Metal.

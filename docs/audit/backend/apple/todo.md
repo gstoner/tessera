@@ -8,6 +8,21 @@ last_updated: 2026-08-29
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
+marker vocabulary and conftest boundary changed; per-backend outcome below.**
+`hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its
+four verbatim copies, `pyproject.toml`, and the device-accounting families.
+`conftest` now consumes `hardware_avx512` and `hardware_amx` centrally,
+matching the existing `hardware_nvidia` / `hardware_apple_gpu` boundaries, so
+a marker that states a hardware requirement produces an honest skip rather
+than a failure on a host that cannot meet it (Decision #29).
+
+*Apple outcome: not applicable — no Apple lane carries `hardware_avx512` or
+`hardware_amx`, and the `hardware_apple_gpu` / `metal4` boundaries in
+`conftest` are unchanged by this. Re-verified on the M1 Max: the new
+conftest arms do not intercept Apple markers, and `tests/device/x86/`
+skips all three lanes there rather than failing one.*
+
 Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
 changed; per-backend outcome below.**
 A pytest session ledger (`tests/_support/device_accounting.py`) now tallies

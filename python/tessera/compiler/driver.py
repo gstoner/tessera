@@ -17,8 +17,44 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
+
+#: Backend keys that steer only the templated fallback packagers. The compiled
+#: Graph->Schedule->Tile->Target route picks its own physical schedule, so a
+#: request carried in one of these cannot be honoured there.
+_FALLBACK_ONLY_SCHEDULE_KEYS: dict[str, tuple[str, ...]] = {
+    "nvidia_sm120": ("nvidia_schedule",),
+}
+
+
+def _warn_schedule_key_not_honored(target_kind: str, options) -> None:
+    """Say so when a schedule key cannot apply, instead of dropping it.
+
+    Decision #21a: a *performance* key may fall back, but never silently. The
+    compiled route is authoritative whenever ``tessera-opt`` is available --
+    that is the whole point of the MLIR foundation -- so `nvidia_schedule`
+    steers only the templated packager used in its absence. Silently ignoring
+    it produced four sm_120 tests that requested "shared" and then asserted the
+    fallback packager's artifacts, which read as a staging defect for weeks.
+
+    ``auto`` is not reported: it means "you choose", which is exactly what the
+    compiled route does.
+    """
+    for key in _FALLBACK_ONLY_SCHEDULE_KEYS.get(target_kind, ()):
+        requested = (options or {}).get(key)
+        if requested is None or str(requested) == "auto":
+            continue
+        warnings.warn(
+            f"SCHEDULE_KEY_NOT_HONORED_ON_COMPILED_ROUTE: {key}={requested!r} was "
+            f"supplied, but this module compiled through the MLIR scheduled "
+            f"route, which selects its own physical schedule. The key steers "
+            f"only the templated fallback packager used when tessera-opt is "
+            f"unavailable. Drop it or pass \"auto\".",
+            RuntimeWarning,
+            stacklevel=3,
+        )
 from typing import Any, Mapping
 
 from .graph_ir import GraphIRModule
@@ -532,6 +568,7 @@ def compile_graph_module(
                 target=target_kind,
             )
             graph_text = scheduled_matmul_artifact.graph_ir
+            _warn_schedule_key_not_honored(target_kind, options)
         else:
             from . import scheduled_attention
 

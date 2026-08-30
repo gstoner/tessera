@@ -41,22 +41,23 @@ MARKERS: dict[str, str] = {
     "hardware_nvidia": "requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm": "requires an AMD GPU with the ROCm toolkit",
     "hardware_amx": "requires Intel AMX hardware with OS tile-state permission",
+    "hardware_avx512": "requires an x86 host with AVX-512",
 }
 
 
 PR_MARKER_EXPRESSION = (
     "not slow and not performance and not hardware_apple_gpu "
-    "and not hardware_nvidia and not hardware_rocm and not hardware_amx"
+    "and not hardware_nvidia and not hardware_rocm and not hardware_amx and not hardware_avx512"
 )
 
 
 APPLE_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not hardware_apple_gpu and not performance "
-    "and not hardware_nvidia and not hardware_rocm and not hardware_amx"
+    "and not hardware_nvidia and not hardware_rocm and not hardware_amx and not hardware_avx512"
 )
 
 
 ROCM_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not performance and not hardware_apple_gpu "
-    "and not hardware_nvidia and not hardware_rocm and not hardware_amx"
+    "and not hardware_nvidia and not hardware_rocm and not hardware_amx and not hardware_avx512"
 )

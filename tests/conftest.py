@@ -183,6 +183,23 @@ def pytest_runtest_setup(item):
         if not nvidia_cuda_host_ready():
             pytest.skip("requires an NVIDIA GPU with the CUDA toolkit")
         return
+    if item.get_closest_marker("hardware_avx512") is not None:
+        from tests._support.environment import avx512_is_plausibly_present
+
+        if not avx512_is_plausibly_present():
+            pytest.skip("requires an x86 host with AVX-512")
+        return
+    if item.get_closest_marker("hardware_amx") is not None:
+        # AMX is retired (superseded by ACE) and no fleet host has it, so this
+        # always skips today. It is a skip rather than a failure because the
+        # marker states a hardware requirement the host cannot meet -- without
+        # this, `test_amx_int8_gemm.py` fails on arm64 at the compile step,
+        # which reads as a code defect rather than absent hardware.
+        from tests._support.environment import amx_is_plausibly_present
+
+        if not amx_is_plausibly_present():
+            pytest.skip("requires Intel AMX hardware (retired target; no fleet host has it)")
+        return
     if item.get_closest_marker("metal4") is not None:
         from tests._support.apple import require_apple_metal4
 

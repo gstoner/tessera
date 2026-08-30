@@ -44,6 +44,7 @@ from tests._support.environment import (
     amx_is_plausibly_present,
     apple_metal4_is_plausibly_present,
     apple_metal_is_plausibly_present,
+    avx512_is_plausibly_present,
     nvidia_gpu_is_plausibly_present,
     rocm_gpu_is_plausibly_present,
 )
@@ -102,6 +103,15 @@ DEVICE_FAMILIES: tuple[DeviceFamily, ...] = (
         remedy=(
             "requires a runtime reporting Metal 4 capability; parts of the "
             "surface are macOS 27.0-gated, so an honest skip here is normal"
+        ),
+    ),
+    DeviceFamily(
+        name="avx512",
+        markers=frozenset({"hardware_avx512"}),
+        is_plausibly_present=avx512_is_plausibly_present,
+        remedy=(
+            "run on an AVX-512 host (Princess-Luna) with the x86 runtime built: "
+            "ninja -C build tessera_x86_elementwise"
         ),
     ),
     # AMX is a dead end, not a pending target: Intel-only, absent from every

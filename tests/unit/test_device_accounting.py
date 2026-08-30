@@ -82,6 +82,7 @@ def test_a_failing_device_test_counts_as_executed():
         ({"hardware_apple_gpu": True}, {"apple_gpu"}),
         ({"metal4": True}, {"metal4"}),
         ({"hardware_amx": True}, {"amx"}),
+        ({"hardware_avx512": True}, {"avx512"}),
         ({"test_plain": True}, set()),
     ],
 )

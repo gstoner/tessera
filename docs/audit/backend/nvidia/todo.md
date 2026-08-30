@@ -8,6 +8,126 @@ last_updated: 2026-08-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
+marker vocabulary and conftest boundary changed; per-backend outcome below.**
+`hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its
+four verbatim copies, `pyproject.toml`, and the device-accounting families.
+`conftest` now consumes `hardware_avx512` and `hardware_amx` centrally,
+matching the existing `hardware_nvidia` / `hardware_apple_gpu` boundaries.
+
+*NVIDIA outcome: parity validated — no behaviour change, and the reason
+matters.* The `hardware_nvidia` arm of `pytest_runtest_setup` is checked
+**before** the two new arms and returns early, so no NVIDIA lane can be
+diverted by them; no test under `tests/device/nvidia/` carries
+`hardware_avx512` or `hardware_amx`. The new PR-expression term
+(`not hardware_avx512`) deselects nothing here for the same reason.
+
+One fleet fact worth recording, because it is the opposite of the intuition:
+**The-Super-Bear has no AVX-512.** Its Threadripper 3970X (Zen 2) reports no
+`avx512f`, so despite building the x86 backend (`TESSERA_BUILD_X86_BACKEND=ON`)
+that box probes `avx512=False` and its x86 lanes skip honestly. Princess-Luna
+(Zen 5) is the only AVX-512 host in the fleet, which is also why
+`hardware_amx` must never be used to mean "x86 hardware" — see the standing
+section in `docs/audit/backend/x86/todo.md`.
+
+## `SM120-BUILD-CONFIG-RESOLVED-2026-08-30` — there was no trade; use CUDA=ON
+
+**Superseded the "fleet-config decision" framing below: configuring the NVIDIA
+backend on Super-Bear costs nothing, because that box has CUDA.** The lean
+driver that carves out core/x86/Apple registration is gated on
+
+```cmake
+(TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)
+```
+
+— it only fires for a **CUDA-less** NVIDIA build. `tools/tessera-opt/CMakeLists.txt`
+says so directly: "A backend built against a real toolchain (CUDA or HIP) IS a
+full build and gets the core dialect." Measured: configuring
+`build-nvidia-cuda/` with `-DTESSERA_ENABLE_CUDA=ON
+-DTESSERA_BUILD_NVIDIA_BACKEND=ON -DTESSERA_BUILD_X86_BACKEND=ON` yields
+`tessera-opt --tessera-build-info` → **`build profile: full`, features
+`… core-tessera-ir … nvidia-backend … x86-target-ir`** — all three at once.
+The existing `build/` was left untouched; point tests at the new tree with
+`TESSERA_BUILD_DIR=build-nvidia-cuda`.
+
+## `SM120-STAGING-ROUTING-DIAGNOSED-2026-08-30` — the filed description was wrong on every count
+
+With the full driver the four tests get far enough to say what is actually
+happening, and **it is not "4 stale shared-staging assertions".** They fail at
+**three different assertions**, and only one of them is about staging:
+
+| storage | shape | `tile.matmul_kernel` in Tile IR | `ab_stage` in Target IR | PTX entry | fails at |
+|---|---|---|---|---|---|
+| f16 | (16,8,16) | ✗ | ✗ | `nvidia_sm120_scheduled_matmul_…_kernel` | L495 `tile.matmul_kernel` |
+| f16 | (37,29,23) | ✓ | ✗ | `nvidia_sm120_scheduled_matmul_…_kernel` | L500 entry name |
+| bf16 | (16,8,16) | ✗ | ✗ | `nvidia_sm120_scheduled_matmul_…_kernel` | L560 `tile.matmul_kernel` |
+| bf16 | (37,29,23) | ✓ | ✗ | `nvidia_sm120_scheduled_matmul_…_kernel` | L564 `ab_stage_bf16` |
+
+**Root cause: `nvidia_schedule="shared"` is silently dropped on the
+scheduled-matmul route.** All four requests take
+`package_scheduled_matmul`, whose entry is named by
+`_SM120_SCHEDULED_MATMUL_PREFIX`; `package_native`'s `kind` dispatch forwards
+`nvidia_schedule` **only** on the fall-through `package_matmul` branch. The
+tests request `shared` and then assert `package_matmul`'s artifacts (entry
+`tessera_tile_matmul_shared_*`, the `__tessera_sm120_ab_stage_*` global,
+`tile.matmul_kernel`), so they are describing a route the compiler no longer
+sends them down.
+
+Two things this settles, and one it does not:
+
+* The earlier source-read holds: `emit_matmul_tile_ir(schedule="shared")` does
+  emit `warps = 4 : i64, staging = "shared"`, and `NVIDIALowering.cpp:1228`
+  consumes it with no shape guard and no silent fallback. The Python and C++
+  halves of the *shared* route are fine. Nothing is quietly re-routing small
+  shapes away from staging.
+* Within the scheduled route there **is** a shape split — (16,8,16) has no
+  `tile.matmul_kernel` at all while (37,29,23) does — matching the
+  `sm120_scheduled_typed_16x8_mn` vs `macro_cta_32x32_mn` policy selection.
+* **Resolved 2026-08-30 (project direction): the compiled route is
+  authoritative and `nvidia_schedule` does NOT select it.** The Tessera
+  foundation is core MLIR/LLVM → Tile IR → codegen; hand-written NVIDIA/CUDA
+  kernels are not what should fall out of a compile. `driver.py:526` already
+  encodes this — the scheduled route is taken whenever `tessera-opt` is
+  available, and `package_matmul` is the fallback for when it is not. So
+  `nvidia_schedule` steers only that fallback.
+
+  What was wrong was the silence, and that is fixed. `driver.py` now emits
+  **`SCHEDULE_KEY_NOT_HONORED_ON_COMPILED_ROUTE`** (registered in
+  `diagnostic_codes.py`, severity `warning`) when a fallback-only key is
+  supplied on the compiled route. `"auto"` is deliberately not reported: it
+  means "you choose", which is what the compiled route does, and warning on it
+  would train people to ignore the diagnostic.
+
+  The four tests now assert the **contract** rather than a spelling — entry
+  carries the `nvidia_sm120_scheduled_matmul_` prefix, the launch policy is one
+  of the two scheduled policies, and the k contract goes through the existing
+  producer-aware `_assert_canonical_k_loop` rather than pinning
+  `canonical_k_loop` (which the typed-16x8 route legitimately does not emit).
+  Two new tests cover the diagnostic itself, in both directions. Measured on
+  sm_120 with the full driver: `test_e2e_spine_native.py` **304 passed, 0
+  failed** (was 4 failed at three different assertions).
+
+  The diagnostic paid for itself immediately: it surfaced 16 warnings per run
+  from `test_canonical_sm120_k_loop_shape_matrix`, which was still supplying
+  `nvidia_schedule="shared"` on the compiled route. That key is now dropped
+  there. One site remains by design —
+  `benchmarks/e2e_spine/record_sm120_packet.py:256` passes `"direct"`, which is
+  inert on any host with `tessera-opt` but **does** change the fallback's
+  choice on a host without it (`auto` resolves to `shared` for fp16/bf16), so
+  removing it would be a silent behaviour change on that path. Left alone; the
+  diagnostic will tell whoever runs it.
+
+* **Follow-on, not done here: Decision #31 on this boundary.** Two packagers
+  now serve one IR-level boundary — the compiled scheduled route and the
+  templated `package_matmul`. Decision #31 allows exactly one production
+  lowering per boundary; a second must be either a **declared oracle with a
+  differential test** or deleted. Given the direction above, the fallback is
+  the one to declare or retire. Decision #31's own ordering caveat applies —
+  do not collapse it before the compiled route demonstrably carries what it
+  carried — so this wants a scoped plan with a coverage comparison
+  (which `native_package_kind` families reach which packager, and what happens
+  on a host with no `tessera-opt`), not a drive-by deletion.
+
 ## `SM120-BASELINE-IS-BUILD-DEPENDENT-2026-08-30` — read before trusting any sm_120 suite count
 
 **The Super-Bear device-suite baseline of "5 failed / 844 passed" is only
@@ -49,11 +169,14 @@ the entry name without consulting the requested schedule. If a caller's
 `nvidia_schedule="shared"` is being dropped there, Decision #21a applies —
 a performance key may fall back, but not silently.
 
-**Owner's call needed on the box, not the code:** turning the NVIDIA backend
-on in that build tree carves out core/x86/Apple pass registration (the
-`tessera-opt` registration gotcha), so the two cannot be measured from one
-build directory. That is a fleet-configuration decision and is left to the
-repo owner rather than changed unilaterally.
+**Corrected 2026-08-30 — see `SM120-BUILD-CONFIG-RESOLVED` above.** This
+section originally said turning the NVIDIA backend on would carve out
+core/x86/Apple registration, making it a fleet-configuration trade. That is
+true only for a **CUDA-less** NVIDIA build; Super-Bear has CUDA, so
+`-DTESSERA_ENABLE_CUDA=ON -DTESSERA_BUILD_NVIDIA_BACKEND=ON` gives a full
+driver with all three registered and there is no trade to make. The
+build-dependence of the suite count, which is the point of this section,
+still stands.
 
 Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
 changed; per-backend outcome below.**

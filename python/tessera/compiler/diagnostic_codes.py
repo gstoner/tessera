@@ -3243,6 +3243,26 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="W1.1b",
     ),
+    DiagnosticCode(
+        code="SCHEDULE_KEY_NOT_HONORED_ON_COMPILED_ROUTE",
+        pass_origin="driver.compile_graph_module",
+        severity="warning",
+        summary=(
+            "A backend schedule key was supplied but the module compiled "
+            "through the MLIR scheduled route, which chooses its own physical "
+            "schedule and cannot honour it."
+        ),
+        fix_hint=(
+            "The compiled Graph->Schedule->Tile->Target route is authoritative "
+            "whenever tessera-opt is available; `nvidia_schedule` steers only "
+            "the templated fallback packager used when it is not. Drop the key, "
+            "or pass \"auto\". Decision #21a: a performance key may fall back, "
+            "but never silently."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md",
+        sprint="SM120-STAGING-ROUTING",
+        language="python", status="implemented",
+    ),
 )
 
 

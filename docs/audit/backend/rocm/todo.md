@@ -7,6 +7,23 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
+marker vocabulary and conftest boundary changed; per-backend outcome below.**
+`hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its
+four verbatim copies, `pyproject.toml`, and the device-accounting families.
+`conftest` now consumes `hardware_avx512` and `hardware_amx` centrally,
+matching the existing `hardware_nvidia` / `hardware_apple_gpu` boundaries, so
+a marker that states a hardware requirement produces an honest skip rather
+than a failure on a host that cannot meet it (Decision #29).
+
+*ROCm outcome: not applicable to the ROCm marker itself — `hardware_rocm` keeps its
+existing per-test `_rocm_or_skip` gating and was deliberately NOT added to
+the new centralised arms, because those gates already skip honestly and
+changing them risks silently reducing gfx1151 coverage. Relevant only in
+that Princess-Luna is also the AVX-512 host, so the same box now reports
+`rocm=True, avx512=True, nvidia=False, amx=False` — each lane identified
+independently.*
+
 Cross-backend sync `HOLLOW-GREEN-GATES-2026-08-30` — **shared test infra
 changed; per-backend outcome below.**
 A pytest session ledger (`tests/_support/device_accounting.py`) now tallies

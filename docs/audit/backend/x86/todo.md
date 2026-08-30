@@ -37,12 +37,49 @@ A pytest session ledger (`tests/_support/device_accounting.py`) now tallies
 executed-vs-skipped per hardware family and fails the session when a family
 skipped everything on a host that plausibly has the device.
 
-*x86 outcome: follow-up required — this lane has no hardware marker family.*
-The declared hardware markers are `hardware_nvidia`, `hardware_rocm`,
-`hardware_apple_gpu`/`metal4` and `hardware_amx`. **There is no marker for
-AVX-512**, so x86 native execution is the one device lane the ledger cannot
-see: an AVX-512 host that silently stopped executing these lanes would not
-be caught by it.
+Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **this
+backend owns the change.**
+
+*x86 outcome: **closed 2026-08-30** (was follow-up required).*
+`hardware_avx512` now exists across every registry that owns a marker —
+`policy.MARKERS`, the PR expression and its four verbatim copies
+(`validate.yml`, `validate.sh`, `setup_ubuntu.sh`, `tests_manifest.py`),
+`pyproject.toml`, and a device family with a `/proc/cpuinfo` `avx512f` probe.
+The x86 native lane is no longer invisible to the ledger. Measured:
+Princess-Luna `avx512=True, amx=False` and `tests/device/x86/` **executes**
+there (its one failure is identical on `main`, so pre-existing); the Mac
+skips all three honestly.
+
+**Only `test_native_vjp_execution_certificates.py` carries the marker, and
+that boundary is the point.** It drives the AVX-512 elementwise runtime
+directly (`device_arch == "x86_avx512"`, and it skips when either production
+`tessera-opt` or the runtime is absent). `test_mpi_rank_collectives.py`
+deliberately does **not** carry it: its schedule functions are `target="cpu"`
+and it exercises MPI collectives, not the AVX-512 runtime. Marking it was a
+review finding on PR #646 and was reverted — because
+`DeviceLedger.hollow_lanes()` clears a family as soon as *any* of its tests
+executes, a generic CPU test in the avx512 family would clear the lane on a
+two-rank MPI run that never touched AVX-512 at all. That is precisely the
+hollow state the ledger exists to detect, reintroduced through the marker.
+**Rule this establishes: a test may only carry a hardware marker if it
+exercises that hardware's runtime**; needing the same *host* is not enough.
+The MPI packet keeps its honest `importorskip("mpi4py")` gate and remains
+untracked by the ledger; giving it a marker of its own is a separate change.
+
+Also corrected here: the same review found that the scripted edit which added
+these markers had **duplicated the body of both files** (352 vs 182 and 121
+vs 61 lines). CI did not catch it — the tests skip without `mpi4py`, and
+duplicate `def`s merely shadow. Both files were restored from `main` and the
+one legitimate marker re-applied by hand.
+
+That work also fixed a live false red it turned up: `test_amx_int8_gemm.py`
+is marked `hardware_amx`, but **nothing consumed that marker**, so on arm64
+it FAILED at the AMX compile step instead of skipping. `conftest` now
+consumes `hardware_avx512` and `hardware_amx` centrally, mirroring the
+`hardware_nvidia` boundary — `tests/device/x86/` on the Mac goes
+1 failed / 2 skipped → 3 skipped.
+
+*Historical note on why the two files were left unmarked in #645:*
 
 Two files under `tests/device/x86/`
 (`test_mpi_rank_collectives.py`, `test_native_vjp_execution_certificates.py`)

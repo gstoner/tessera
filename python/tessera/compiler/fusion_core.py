@@ -553,9 +553,16 @@ def discover_pointwise_graph(ops: list[_Op], skip: set[int] | None = None
     candset = set(cand)
     produced = {ops[i].output: i for i in cand}
     use_count: dict[str, int] = {}
-    for op in ops:
+    # One by-input index for the whole call: the exit scan below runs once per
+    # member of every component, so a per-value rescan of `ops` would be
+    # quadratic in graph size. Mirrors `discover_fusable_regions`.
+    by_input: dict[str, list[int]] = {}
+    for oi, op in enumerate(ops):
         for v in op.inputs:
             use_count[v] = use_count.get(v, 0) + 1
+            consumers = by_input.setdefault(v, [])
+            if not consumers or consumers[-1] != oi:
+                consumers.append(oi)
 
     # Union-find over candidate ops connected by an intra-candidate value edge.
     parent = {i: i for i in cand}
@@ -593,7 +600,8 @@ def discover_pointwise_graph(ops: list[_Op], skip: set[int] | None = None
             continue
         # single exit: exactly one internal value used outside the region.
         exits = [ops[i].output for i in members
-                 if any(c not in mset for c in _consumers(ops, ops[i].output))
+                 if any(c not in mset
+                        for c in by_input.get(ops[i].output, ()))
                  or use_count.get(ops[i].output, 0) == 0]
         # the terminal (use_count 0) or the unique externally-consumed value.
         exits = list(dict.fromkeys(exits))
@@ -609,6 +617,11 @@ def discover_pointwise_graph(ops: list[_Op], skip: set[int] | None = None
 
 
 def _consumers(ops: list[_Op], value: str) -> list[int]:
+    """Op indices consuming `value`. Re-exported by `compiler.fusion`.
+
+    Not used by the discoverers: a per-value rescan inside a per-member loop is
+    quadratic in graph size, so they build one by-input index per call instead.
+    """
     return [i for i, op in enumerate(ops) if value in op.inputs]
 
 

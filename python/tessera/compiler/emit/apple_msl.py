@@ -1341,6 +1341,11 @@ class PointwiseOperandPlan(NamedTuple):
     broadcast: tuple[bool, ...]    #: per input: index `[gid % C]` rather than `[gid]`
     counts: tuple[int, ...]        #: per input: elements actually uploaded
     dispatchable: bool             #: False ⇒ no Metal form; use the reference
+    #: Storage dtype the *result* must carry back. Differs from `npdt` only for
+    #: bf16, which has no MSL pointwise element type and so computes in f32 —
+    #: the storage dtype is a contract (Decision #15a) and must round-trip, as
+    #: `run_fused_region` / `run_gated_matmul_region` already do.
+    store_npdt: Any
 
 
 def pointwise_operand_plan(arrays: list[np.ndarray]) -> PointwiseOperandPlan:
@@ -1353,8 +1358,11 @@ def pointwise_operand_plan(arrays: list[np.ndarray]) -> PointwiseOperandPlan:
     in_dtype = np.asarray(arrays[0]).dtype
     elem = "f16" if in_dtype == np.float16 else "f32"
     npdt = np.float16 if elem == "f16" else np.float32
+    bf16 = _bf16_dtype()
+    store_npdt = bf16 if (bf16 is not None and in_dtype == bf16) else npdt
     arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
-    empty = PointwiseOperandPlan(elem, npdt, arrs, (), 0, 1, (), (), False)
+    empty = PointwiseOperandPlan(elem, npdt, arrs, (), 0, 1, (), (), False,
+                                 store_npdt)
     try:
         out_shape = np.broadcast_shapes(*[a.shape for a in arrs])
     except ValueError:                          # incompatible shapes
@@ -1376,7 +1384,7 @@ def pointwise_operand_plan(arrays: list[np.ndarray]) -> PointwiseOperandPlan:
         else:
             return empty
     return PointwiseOperandPlan(elem, npdt, arrs, out_shape, n, cols,
-                                tuple(bc), tuple(counts), True)
+                                tuple(bc), tuple(counts), True, store_npdt)
 
 
 def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
@@ -1395,9 +1403,9 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
     would be feeding different buffers while claiming to differ only in compile
     strategy."""
     plan = pointwise_operand_plan(arrays)
-    elem, npdt = plan.elem, plan.npdt
+    elem, npdt, store = plan.elem, plan.npdt, plan.store_npdt
     if not plan.dispatchable:
-        return region.reference(*arrays).astype(npdt), "reference"
+        return region.reference(*arrays).astype(store), "reference"
     arrs, out_shape = plan.arrays, plan.out_shape
     n, cols, bc, counts = plan.total, plan.cols, plan.broadcast, plan.counts
 
@@ -1425,8 +1433,8 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
                  ctypes.cast(count_arr, ctypes.POINTER(ctypes.c_int32)),
                  len(arrs), out.ctypes.data, n, cols)
         if rc == 1:
-            return out, tag
-    return region.reference(*arrays).astype(npdt), "reference"
+            return (out if store is npdt else out.astype(store)), tag
+    return region.reference(*arrays).astype(store), "reference"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1510,10 +1518,13 @@ def run_pointwise_reduce(region: PointwiseReduceRegion,
     in_dtype = np.asarray(arrays[0]).dtype
     elem = "f16" if in_dtype == np.float16 else "f32"
     npdt = np.float16 if elem == "f16" else np.float32
+    bf16 = _bf16_dtype()
+    # bf16 has no MSL pointwise element type: compute in f32, hand back bf16.
+    store = bf16 if (bf16 is not None and in_dtype == bf16) else npdt
     arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
     shape = arrs[0].shape
     if not shape or any(a.shape != shape for a in arrs):
-        return region.reference(*arrays).astype(npdt), "reference"
+        return region.reference(*arrays).astype(store), "reference"
     cols = int(shape[-1])
     rows = int(np.prod(shape[:-1])) if len(shape) > 1 else 1
     out_shape = shape[:-1]
@@ -1526,8 +1537,9 @@ def run_pointwise_reduce(region: PointwiseReduceRegion,
                  ctypes.cast(in_ptrs, ctypes.POINTER(ctypes.c_void_p)),
                  len(arrs), out.ctypes.data, rows, cols)
         if rc == 1:
-            return out.reshape(out_shape), "metal_runtime"
-    return region.reference(*arrays).astype(npdt), "reference"
+            res = out.reshape(out_shape)
+            return (res if store is npdt else res.astype(store)), "metal_runtime"
+    return region.reference(*arrays).astype(store), "reference"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

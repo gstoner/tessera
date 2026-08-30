@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pytest
 
@@ -121,3 +123,67 @@ def test_split_route_allocates_and_frees_the_row_stats_workspace():
         assert source.count(f"cudaMalloc(&{buf},ns)") == 2
         assert source.count(f"if({buf})cudaFree({buf})") == 2        # fail path
         assert source.count(f"cudaFree({buf})") == 4  # + the two success paths
+
+
+# ── allocation-failure cleanup (code review 2026-08-29, P3) ─────────────────
+def _entry_body(source: str, name: str) -> str:
+    """The brace-balanced body of one `extern "C"` entry."""
+    start = source.index(f'extern "C" int {name}(')
+    open_brace = source.index("{", start)
+    depth = 0
+    for i in range(open_brace, len(source)):
+        if source[i] == "{":
+            depth += 1
+        elif source[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace:i + 1]
+    raise AssertionError(f"unbalanced braces in {name}")
+
+
+def _entries_with_device_allocations(source: str) -> list[str]:
+    return [m.group(1) for m in re.finditer(r'extern "C" int (\w+)\(', source)
+            if "cudaMalloc" in _entry_body(source, m.group(1))]
+
+
+@pytest.mark.parametrize("synth", ["_synthesize_flash_bwd_cuda",
+                                   "_synthesize_flash_bwd_f16_cuda"])
+def test_flash_backward_entries_free_every_buffer_on_every_exit(synth):
+    """A `return` between the first cudaMalloc and the cleanup block strands
+    every buffer that already succeeded — nq+nk+no+nv is GB-scale at Sq=Sk=4k,
+    and the arbiter process outlives the call, so a retry with a smaller batch
+    finds LESS memory than the attempt that failed. The atomic entry and the
+    f16 wrapper skipped the `goto fail` cleanup their _timed and SPLIT siblings
+    already use."""
+    source = getattr(nv, synth)()
+    entries = _entries_with_device_allocations(source)
+    assert entries, "no allocating entry found — extraction is broken"
+    for name in entries:
+        body = _entry_body(source, name)
+        allocated = set(re.findall(r"cudaMalloc\(&(\w+)", body))
+        freed = set(re.findall(r"cudaFree\((\w+)\)", body))
+        assert allocated <= freed, f"{name} never frees {sorted(allocated - freed)}"
+        assert "fail:" in body, f"{name} has no cleanup label"
+        # Every return reached before the cleanup label must already have freed
+        # every buffer (that is the entry's own success path); a return that has
+        # freed fewer is the leak. The HEAD defect was `return 2;` with zero.
+        label = body.index("fail:")
+        for hit in re.finditer(r"return \w+;", body[:label]):
+            if "cudaMalloc" not in body[:hit.start()]:
+                continue
+            done = len(re.findall(r"cudaFree\(", body[:hit.start()]))
+            assert done >= len(allocated), (
+                f"{name} returns at offset {hit.start()} having freed "
+                f"{done} of {len(allocated)} buffers")
+
+
+def test_flash_backward_entries_check_every_transfer():
+    """The atomic entry used to fire its H2D copies unchecked and then report
+    the sync's status, so a failed upload produced a confidently wrong gradient
+    rather than a diagnostic (Decision #21)."""
+    body = _entry_body(nv._synthesize_flash_bwd_cuda(),
+                       nv._FLASH_BWD_ENTRY)
+    copies = re.findall(r"cudaMemcpy\(", body)
+    guarded = re.findall(r"(?:if\(|\|\||&&)cudaMemcpy\(", body)
+    assert len(copies) == len(guarded), (
+        f"{len(copies) - len(guarded)} unchecked cudaMemcpy in the atomic entry")

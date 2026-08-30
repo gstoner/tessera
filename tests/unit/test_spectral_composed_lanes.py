@@ -433,3 +433,132 @@ def test_stft_frames_and_reference_agree_at_the_boundary():
     assert wide.reference(
         np.random.default_rng(1).standard_normal(256).astype(np.float32),
         w).shape[-2] == wide.frames
+
+
+# ── vectorized Hermitian mirror + batched inner FFT (review 2026-08-29) ─────
+def _loop_mirror(half, n, bins):
+    """The interpreted per-bin mirror that `_hermitian_full` replaced."""
+    full = np.zeros(n, np.complex64)
+    full[:bins] = half[:bins]
+    for k in range(1, (n + 1) // 2):
+        full[n - k] = np.conj(half[k])
+    return full
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 4, 5, 63, 64, 65, 127, 128, 4096, 4097])
+def test_hermitian_mirror_is_bit_identical_to_the_per_bin_loop(n):
+    """Both parities: for even `n` the Nyquist bin at `bins-1` is its own mirror
+    and must not be written twice; for odd `n` there is no Nyquist bin at all.
+    `half[1:n-bins+1]` reversed is exactly the non-self-conjugate set."""
+    rng = np.random.default_rng(n)
+    bins = n // 2 + 1
+    half = (rng.standard_normal(bins) + 1j * rng.standard_normal(bins)
+            ).astype(np.complex64)
+    assert np.array_equal(SC._hermitian_full(half, n, bins),
+                          _loop_mirror(half, n, bins))
+
+
+@pytest.mark.parametrize("n", [64, 65, 128])
+def test_hermitian_mirror_batches_over_the_leading_axis(n):
+    rng = np.random.default_rng(n + 1)
+    bins = n // 2 + 1
+    half = (rng.standard_normal((7, bins)) + 1j * rng.standard_normal((7, bins))
+            ).astype(np.complex64)
+    got = SC._hermitian_full(half, n, bins)
+    assert got.shape == (7, n)
+    for i in range(7):
+        assert np.array_equal(got[i], _loop_mirror(half[i], n, bins))
+
+
+def test_composed_stft_resolves_its_fft_lane_once_for_the_whole_call():
+    """Each frame used to re-enter `_inner_fft`, re-enumerating candidates and
+    re-running the device `available()` probe — discovery cost more than the
+    64-point transform it selected. Count the probes: one call, one resolution.
+    """
+    region = SC.SpectralSTFTRegion(4096, 64, 32)
+    assert region.frames > 100, "need enough frames for per-frame cost to show"
+    x, w = region.probe_input(3)
+
+    probes = []
+    original = SC.CpuStockhamFFTCandidate.available
+
+    def counting(self):
+        probes.append(1)
+        return original(self)
+
+    candidate = SC.STFTCandidate()
+    candidate.target = "cpu"
+    SC.CpuStockhamFFTCandidate.available = counting
+    try:
+        out, lane = candidate.run(region, x, w)
+    finally:
+        SC.CpuStockhamFFTCandidate.available = original
+
+    assert lane.endswith("+stft") and lane != "reference"
+    np.testing.assert_allclose(out, region.reference(x, w), rtol=1e-4, atol=1e-4)
+    assert len(probes) <= 2, (
+        f"{len(probes)} availability probes for {region.frames} frames — "
+        "the lane is being rediscovered per frame")
+
+
+def test_composed_istft_resolves_its_fft_lane_once_for_the_whole_call():
+    region = SC.SpectralISTFTRegion(200, 64, 32)
+    spec, w = region.probe_input(6)
+
+    probes = []
+    original = SC.CpuStockhamFFTCandidate.available
+
+    def counting(self):
+        probes.append(1)
+        return original(self)
+
+    candidate = SC.ISTFTCandidate()
+    candidate.target = "cpu"
+    SC.CpuStockhamFFTCandidate.available = counting
+    try:
+        out, lane = candidate.run(region, spec, w)
+    finally:
+        SC.CpuStockhamFFTCandidate.available = original
+
+    assert lane.endswith("+istft") and lane != "reference"
+    reference = region.reference(spec, w)
+    assert out.shape == reference.shape and out.dtype == reference.dtype
+    np.testing.assert_allclose(out, reference, rtol=1e-4, atol=1e-4)
+    assert len(probes) <= 2, (
+        f"{len(probes)} availability probes for {region.frames} frames")
+
+
+def test_batched_inner_fft_declines_wholesale_when_the_lane_declines():
+    """A partially native batch reported under a native lane name is exactly the
+    mislabelling Decision #21 forbids: one declined row drops the whole call."""
+    rows = np.zeros((4, 64), np.complex64)
+    out, lane = SC._inner_fft_rows("no-such-target", 64, -1, rows)
+    assert lane == "reference"
+    assert out.shape == rows.shape
+
+
+def test_cpu_fft_candidate_publishes_a_row_batch_entry():
+    """`run_rows` is the seam the ROCm lane uses to collapse one host<->device
+    transfer pair per frame into one per call; the CPU lane implements it too so
+    the composed ops have a single code path."""
+    candidate = SC.CpuStockhamFFTCandidate()
+    if not candidate.available():
+        pytest.skip("CPU Stockham kernel did not build on this host")
+    region = SC.SpectralFFTRegion(n=64, sign=-1)
+    rng = np.random.default_rng(2)
+    rows = (rng.standard_normal((5, 64)) + 1j * rng.standard_normal((5, 64))
+            ).astype(np.complex64)
+    out, lane = candidate.run_rows(region, rows)
+    assert lane == "cpu_stockham"
+    np.testing.assert_allclose(out, np.fft.fft(rows, axis=-1), rtol=1e-4,
+                               atol=1e-4)
+
+
+def test_rocm_fft_candidate_declines_row_batch_without_the_batch_abi():
+    """Host-free: with no ROCm image loaded the batch entry must decline, never
+    claim `rocm_stockham` for work it did not do."""
+    out, lane = SC.RocmStockhamFFTCandidate().run_rows(
+        SC.SpectralFFTRegion(n=64, sign=-1), np.zeros((3, 64), np.complex64))
+    if lane != "reference":                    # a live gfx device is present
+        pytest.skip("live ROCm image available; host-free assertion N/A")
+    assert lane == "reference"

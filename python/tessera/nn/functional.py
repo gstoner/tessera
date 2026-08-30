@@ -179,21 +179,18 @@ def conv1d(x, weight, bias=None, stride: int = 1, padding: int = 0, dilation: in
     out_len = (length + 2 * padding - dilation * (kernel - 1) - 1) // stride + 1
     if out_len <= 0:
         raise ValueError("conv1d output length must be positive")
-    out = np.zeros((n, c_out, out_len), dtype=np.float32)
     out_per_group = c_out // groups
     in_per_group = c_in // groups
-    for b in range(n):
-        for g in range(groups):
-            in_base = g * in_per_group
-            out_base = g * out_per_group
-            for oc in range(out_per_group):
-                for pos in range(out_len):
-                    acc = 0.0
-                    start = pos * stride
-                    for ic in range(in_per_group):
-                        for k in range(kernel):
-                            acc += padded[b, in_base + ic, start + k * dilation] * w_arr[out_base + oc, ic, k]
-                    out[b, out_base + oc, pos] = acc
+    span = dilation * (kernel - 1) + 1
+    # `sliding_window_view` yields every unit-stride window; the `::stride`
+    # slice selects the `out_len` starts and `::dilation` the taps inside one
+    # window, so the window axis length must not be sliced before both steps.
+    windows = np.lib.stride_tricks.sliding_window_view(padded, span, axis=-1)
+    windows = windows[..., ::stride, ::dilation]
+    windows = windows.reshape(n, groups, in_per_group, out_len, kernel)
+    w_grouped = w_arr.reshape(groups, out_per_group, in_per_group, kernel)
+    out = np.einsum("ngilk,goik->ngol", windows, w_grouped, optimize=True)
+    out = out.reshape(n, c_out, out_len).astype(np.float32, copy=False)
     if bias is not None:
         out += _asarray(bias).reshape(1, c_out, 1)
     return out
@@ -214,20 +211,28 @@ def conv_transpose(x, weight, bias=None, stride: int = 1, padding: int = 0, outp
         raise ValueError("weight input channels and groups are inconsistent")
     c_out = c_out_per_group * groups
     out_len = (length - 1) * stride - 2 * padding + dilation * (kernel - 1) + output_padding + 1
-    out = np.zeros((n, c_out, out_len), dtype=np.float32)
+    if out_len < 0:
+        raise ValueError(
+            f"conv_transpose output length is negative ({out_len}); "
+            "padding exceeds the transposed span"
+        )
     in_per_group = c_in // groups
-    for b in range(n):
-        for g in range(groups):
-            in_base = g * in_per_group
-            out_base = g * c_out_per_group
-            for ic in range(in_per_group):
-                for pos in range(length):
-                    for k in range(kernel):
-                        out_pos = pos * stride - padding + k * dilation
-                        if 0 <= out_pos < out_len:
-                            out[b, out_base:out_base + c_out_per_group, out_pos] += (
-                                x_arr[b, in_base + ic, pos] * w_arr[in_base + ic, :, k]
-                            )
+    # Scatter into an uncropped buffer indexed by `pos*stride + k*dilation`,
+    # then crop the leading `padding`. The buffer is grown by `output_padding`
+    # because the crop window can extend past the last written tap.
+    buf_len = (length - 1) * stride + dilation * (kernel - 1) + 1 + output_padding
+    buf = np.zeros((n, groups, c_out_per_group, buf_len), dtype=np.float32)
+    contrib = np.einsum(
+        "ngip,giok->ngopk",
+        x_arr.reshape(n, groups, in_per_group, length),
+        w_arr.reshape(groups, in_per_group, c_out_per_group, kernel),
+        optimize=True,
+    )
+    for k in range(kernel):
+        start = k * dilation
+        buf[..., start:start + (length - 1) * stride + 1:stride] += contrib[..., k]
+    out = buf[..., padding:padding + out_len].reshape(n, c_out, out_len)
+    out = np.ascontiguousarray(out, dtype=np.float32)
     if bias is not None:
         out += _asarray(bias).reshape(1, c_out, 1)
     return out

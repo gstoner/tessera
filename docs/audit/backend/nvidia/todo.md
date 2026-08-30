@@ -101,11 +101,22 @@ Open, ordered by whether the design is *wrong* versus merely incomplete:
    entirely from in-budget candidates and land outside any budget with nothing
    detecting it. Needs a graph-level check, or the composition claim must be
    withdrawn.
-2. **Fusion foreclosure is not costed (algorithmic; biases the arbiter).**
-   A delegated GEMM cannot be fused into, so selecting it forecloses epilogue
-   fusion. The honest comparison is *(delegate + separate epilogue + DRAM
-   round-trip)* vs *(fused compiled kernel)*. A greedy per-op arbiter
-   over-selects delegates on exactly the graphs where fusion is the win.
+2. ~~Fusion foreclosure is not costed.~~ **Closed 2026-08-30 — and the bias
+   was worse than first described.** `arbitrate()` picks by **tier** by
+   default, and `Tier.HAND_TUNED` is the highest, so a delegate won
+   *outright, before anything was measured*; on the measured path it won
+   because the latency excluded the work it displaced. Both paths preferred
+   delegates on exactly the graphs where fusion is the win.
+
+   Fixed structurally rather than with a penalty. A delegate now declares
+   `covers` (`root_only` | `whole_region`), and `DelegatedCandidate.applies_to`
+   **declines a region it implements only part of**. A penalty would have been
+   a guess at foregone DRAM traffic that then had to outweigh a tier bonus;
+   "this candidate does not serve this region" is a fact the delegate
+   declared. If the delegate-plus-separate-epilogue plan really is faster,
+   that is a comparison of *plans* and does not belong as a peer candidate.
+   Whole-region hand-tuned kernels still compete, so the #28 governing rule
+   (never cap the leads) is preserved.
 3. **`kernel_call` does not verify operands against the callee ABI.** The op
    requires `constraints` for inline PTX on the argument that unstated
    constraints become silent miscompiles — and then leaves the symbol path

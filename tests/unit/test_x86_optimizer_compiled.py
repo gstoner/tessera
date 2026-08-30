@@ -214,7 +214,11 @@ def test_adafactor_factored_forward_and_backward():
     )
     assert forward["ok"] is True, forward.get("reason")
     expected_forward, expected_state = optim.adafactor(
-        p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        p, g, {
+            "v": {"row": row, "col": col, "factored": True},
+            "step": 1,
+            "v_representation": optim._ADAFACTOR_V_REPRESENTATION,
+        },
         lr=1e-2, beta2=0.9, eps=1e-6,
     )
     actual_p, actual_row, actual_col = (
@@ -258,7 +262,11 @@ def test_adafactor_factored_nan_gradient_propagates_like_reference():
     )
     assert forward["ok"] is True, forward.get("reason")
     expected_p, expected_state = optim.adafactor(
-        p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        p, g, {
+            "v": {"row": row, "col": col, "factored": True},
+            "step": 1,
+            "v_representation": optim._ADAFACTOR_V_REPRESENTATION,
+        },
         lr=1e-2, beta2=0.9, eps=1e-6,
     )
     actual_p, actual_row, actual_col = (
@@ -292,7 +300,11 @@ def test_adafactor_full_forward_and_backward():
     )
     assert forward["ok"] is True, forward.get("reason")
     expected_forward, expected_state = optim.adafactor(
-        p, g, {"v": {"v": moment, "factored": False}, "step": 1},
+        p, g, {
+            "v": {"v": moment, "factored": False},
+            "step": 1,
+            "v_representation": optim._ADAFACTOR_V_REPRESENTATION,
+        },
         lr=1e-2, beta2=0.9, eps=1e-6,
     )
     actual_p, actual_moment = (np.asarray(value) for value in forward["output"])

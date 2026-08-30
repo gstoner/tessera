@@ -22,7 +22,7 @@ nvidia,control_if,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue 
 nvidia,control_while,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,control_scan,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 nvidia,func,no-contract,,
-nvidia,inline_ptx,requires,accuracy arch determinism,tolerance tolerance_rel
+nvidia,inline_ptx,requires,accuracy arch covers determinism,tolerance tolerance_rel
 nvidia,profiler_probe,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
 rocm,memcpy,optional-only,,dst_space src_space
 rocm,async_copy,optional-only,,dst_space src_space

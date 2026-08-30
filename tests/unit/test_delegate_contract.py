@@ -286,14 +286,53 @@ def test_delegated_candidate_carries_both_budgets():
     assert (c.accuracy_atol, c.accuracy_rtol) == (1e-5, 1e-3)
 
 
-class _FakeRegion:
-    """Minimal stand-in carrying the fields that make a region more than a root."""
+class FusedRegion:
+    """Stand-in named for the real class, since coverage is decided by type."""
 
     def __init__(self, **fields):
         self.epilogue = fields.get("epilogue", ())
         self.reduction = fields.get("reduction")
         self.prologue = fields.get("prologue", ())
         self.residual = fields.get("residual", False)
+
+
+_FakeRegion = FusedRegion
+
+
+class AttentionRegion:
+    """Intrinsically fused: softmax(QK^T)V carries none of FusedRegion's fields."""
+
+    def __init__(self):
+        self.scale, self.causal = 1.0, False
+
+
+class GatedMatmulRegion:
+    def __init__(self):
+        self.gate_act = "silu"
+
+
+class NormChainRegion:
+    def __init__(self):
+        self.norm = "rmsnorm"
+
+
+class PointwiseReduceRegion:
+    def __init__(self):
+        self.ops, self.reduce = (("add", ("x",), "y"),), "sum"
+
+
+class PointwiseGraphRegion:
+    def __init__(self, n):
+        self.ops = tuple(("add", ("x",), "y") for _ in range(n))
+
+
+class MatmulRegion:
+    def __init__(self):
+        self.dtype = "bfloat16"
+
+
+class UnknownRegion:
+    """A region shape this module has never seen."""
 
 
 def _delegate(covers, op="matmul"):
@@ -354,3 +393,46 @@ def test_declining_beats_penalising():
     fused = _FakeRegion(epilogue=("bias",))
     assert root_only.applies_to(fused) is False
     assert root_only.tier is Tier.HAND_TUNED  # would otherwise win on tier alone
+
+
+def test_intrinsically_fused_regions_reject_a_root_only_delegate():
+    """Review finding on #650: probing FusedRegion's field names is not enough.
+
+    AttentionRegion is softmax(QK^T)V -- two matmuls and a softmax -- and
+    carries none of `epilogue`/`reduction`/`prologue`/`residual`. The first
+    version returned True for it, so a bare-GEMM delegate registered under
+    OP_ATTENTION still won on tier while implementing part of the region: the
+    exact bias this method exists to remove.
+    """
+    root_only = _delegate("root_only")
+    for region in (AttentionRegion(), GatedMatmulRegion(),
+                   NormChainRegion(), PointwiseReduceRegion()):
+        assert root_only.applies_to(region) is False, type(region).__name__
+
+
+def test_a_multi_op_pointwise_chain_rejects_a_root_only_delegate():
+    root_only = _delegate("root_only")
+    assert root_only.applies_to(PointwiseGraphRegion(1)) is True
+    assert root_only.applies_to(PointwiseGraphRegion(3)) is False
+
+
+def test_a_bare_matmul_still_admits_a_root_only_delegate():
+    """Declining must not become "delegates never apply"."""
+    assert _delegate("root_only").applies_to(MatmulRegion()) is True
+
+
+def test_an_unrecognised_region_fails_closed():
+    """Being wrong here costs a candidate its slot; the other way restores the bias."""
+    assert _delegate("root_only").applies_to(UnknownRegion()) is False
+
+
+def test_region_class_names_still_exist_in_fusion_core():
+    """The tables are declared, so a rename must fail loudly.
+
+    A renamed region would drop out of _INTRINSICALLY_FUSED and be re-admitted
+    as a bare root with no test failing -- the wrong answer is a True, not an
+    exception.
+    """
+    from tessera.compiler.emit.delegate_contract import verify_region_classes
+
+    verify_region_classes()

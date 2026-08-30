@@ -571,8 +571,10 @@ def test_canonical_sm120_request_packages_registers_launches_and_compares(shape)
     assert bundle.native_image.resource_record.metrics["spill_load_bytes"] == 0
     assert "static_shared_memory_bytes" in bundle.native_image.resource_record.metrics
     assert bundle.launch_descriptor is not None
-    assert "tessera.canonical_k_loop = true" in bundle.tile.text
-    assert "tessera.tile_k = 16 : i64" in bundle.tile.text
+    # Branch on the producer the compiler actually chose: the macro-CTA route
+    # emits `matmul_kernel` + `canonical_k_loop`, the typed-MMA route states
+    # the same k contract structurally instead. Which one runs is shape-driven.
+    _assert_canonical_k_loop(bundle, expected_k=16)
     assert "scf.for" in bundle.target_ir.text
     assert "nvvm.mma.sync" in bundle.target_ir.text
     _assert_compiled_scheduled_route(bundle, storage="f16")
@@ -635,8 +637,10 @@ def test_canonical_sm120_bf16_packages_launches_and_compares(shape) -> None:
     assert bundle.launch_descriptor is not None
     assert bundle.launch_descriptor.buffers[0].dtype == "bf16"
     assert bundle.launch_descriptor.provenance["storage"] == "bf16"
-    assert "tessera.canonical_k_loop = true" in bundle.tile.text
-    assert "tessera.tile_k = 16 : i64" in bundle.tile.text
+    # Branch on the producer the compiler actually chose: the macro-CTA route
+    # emits `matmul_kernel` + `canonical_k_loop`, the typed-MMA route states
+    # the same k contract structurally instead. Which one runs is shape-driven.
+    _assert_canonical_k_loop(bundle, expected_k=16)
     assert "scf.for" in bundle.target_ir.text
     assert "nvvm.mma.sync" in bundle.target_ir.text
     _assert_compiled_scheduled_route(bundle, storage="bf16")

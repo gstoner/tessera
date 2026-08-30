@@ -68,6 +68,16 @@ def _r_contract_consumers_csv() -> str:
     return contract_consumers.render_csv()
 
 
+def _r_bootstrap_prune() -> str:
+    from . import bootstrap_prune_audit
+    return bootstrap_prune_audit.render_markdown()
+
+
+def _r_bootstrap_prune_csv() -> str:
+    from . import bootstrap_prune_audit
+    return bootstrap_prune_audit.render_csv()
+
+
 def _r_support_table() -> str:
     from . import audit
     return audit.render_markdown()
@@ -471,6 +481,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         csv_path=_GEN / "compiler_progress.csv",
         render_csv=_r_compiler_progress_csv,
         also_gate_md=True,
+    ),
+    # ── Bootstrap-prune gap analysis (E2E-REAL-6 backend half) ──
+    GeneratedDoc(
+        "bootstrap_prune", "compiler_progress",
+        _GEN / "bootstrap_prune_gap.md", _r_bootstrap_prune,
+        csv_path=_GEN / "bootstrap_prune_gap.csv",
+        render_csv=_r_bootstrap_prune_csv,
     ),
     # ── Op / primitive coverage ──
     GeneratedDoc(

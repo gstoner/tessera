@@ -118,6 +118,49 @@ static Operation *emitAttnOp(OpBuilder &b, Location loc,
   return b.create(st);
 }
 
+// Recover the flattened (batch, query_head) instance index of a rank-2
+// FlashAttention that `DistributeRank4FlashAttn` produced, as `b*H + h`.
+//
+// The coordinates are `scf.for` induction variables, so they are SSA values and
+// cannot ride on an attribute.  Rather than thread a new operand through
+// `tessera.flash_attn`, they are DERIVED from the enclosing loops this same
+// pass annotated with `tessera.attention_distribution` (Decision #30 — derive,
+// don't ask; the annotations already exist and already have a consumer in the
+// ROCm recognizer).
+//
+// Returns a null Value when the op is not enclosed by both distribution loops,
+// which is the correct answer for a hand-written rank-2 attention: it is its
+// own single instance and gets stream base 0.
+static Value deriveDistributionInstanceIndex(OpBuilder &b, Location loc,
+                                             Operation *op) {
+  Value batchIndex;
+  Value headIndex;
+  int64_t queryHeads = 0;
+  for (Operation *parent = op->getParentOp(); parent;
+       parent = parent->getParentOp()) {
+    auto forOp = dyn_cast<scf::ForOp>(parent);
+    if (!forOp)
+      continue;
+    auto axis =
+        forOp->getAttrOfType<StringAttr>("tessera.attention_distribution");
+    if (!axis)
+      continue;
+    if (axis.getValue() == "batch" && !batchIndex) {
+      batchIndex = forOp.getInductionVar();
+    } else if (axis.getValue() == "query_head" && !headIndex) {
+      headIndex = forOp.getInductionVar();
+      if (auto count =
+              forOp->getAttrOfType<IntegerAttr>("tessera.query_head_count"))
+        queryHeads = count.getInt();
+    }
+  }
+  if (!batchIndex || !headIndex || queryHeads <= 0)
+    return Value();
+  Value heads = arith::ConstantIndexOp::create(b, loc, queryHeads);
+  return arith::AddIOp::create(
+      b, loc, arith::MulIOp::create(b, loc, batchIndex, heads), headIndex);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FlashAttn lowering pattern
 // ─────────────────────────────────────────────────────────────────────────────
@@ -631,7 +674,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
       if (dropout && dropout.getValueAsDouble() > 0.0) {
         Operation *drop = emitAttnOp(
             rewriter, loc, "tessera_attn.block_dropout",
-            {scores, boundary}, {scoresType},
+            {scores, boundary, dropoutStream}, {scoresType},
             {rewriter.getNamedAttr(
                  "dropout_p",
                  rewriter.getF32FloatAttr(

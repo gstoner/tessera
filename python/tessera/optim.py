@@ -351,6 +351,53 @@ def adam(
     )
 
 
+def adafactor_decay(beta2: float, step: int) -> float:
+    """Bias-corrected second-moment decay for the Adafactor update at ``step``.
+
+    Adafactor (Shazeer & Stern 2018) does **not** run a fixed second-moment
+    decay.  A raw EMA ``v_t = b2*v_{t-1} + (1-b2)*g^2`` started from
+    ``v_0 = 0`` is biased low by ``1 - b2**t``, so the first updates are
+    inflated by ``1/sqrt(1 - b2**t)`` — 31.6x at the default ``b2 = 0.999``,
+    and still >2x after 1000 steps.
+
+    This returns the step-dependent decay
+
+        b2_t = b2 * (1 - b2**(t-1)) / (1 - b2**t)
+
+    for which the recursion carries the *debiased* estimate directly:
+
+        v_t = b2_t*v_{t-1} + (1 - b2_t)*g_t^2  ==  EMA_t / (1 - b2**t)
+
+    (at ``t = 1``, ``b2_1 = 0`` and ``v_1 = g_1^2`` exactly).  So this is
+    algebraically the explicit ``1 - beta2**step`` correction that ``adamw``
+    already applies above, expressed as a decay rate the way the paper's own
+    ``1 - t**-0.8`` schedule is.  Expressing it as a decay rate is what makes
+    it landable: every physical Adafactor kernel (AVX-512, gfx1151, sm_120)
+    already takes ``beta2`` as a scalar, so the correction is applied
+    host-side and needs no kernel ABI change.  Unlike ``1 - t**-0.8`` it also
+    preserves the caller's ``beta2`` as the asymptotic decay instead of
+    silently discarding it (Decision #21a).
+
+    ``step`` is 1-based: it is the index of the update being computed, i.e.
+    ``state["step"] + 1``.
+    """
+    b2 = float(beta2)
+    t = int(step)
+    if not 0.0 <= b2 < 1.0:
+        raise ValueError(
+            f"adafactor beta2 must lie in [0, 1); got {beta2!r}"
+        )
+    if t < 1:
+        raise ValueError(
+            f"adafactor step is 1-based and must be >= 1; got {step!r}"
+        )
+    prev = 1.0 - b2 ** (t - 1)
+    current = 1.0 - b2**t
+    if current <= 0.0:
+        return 0.0
+    return b2 * prev / current
+
+
 def adafactor(
     params: Tree,
     grads: Tree,
@@ -372,8 +419,12 @@ def adafactor(
     base_params = _master_tree(params, state, master_dtype)
     if state is None:
         state = {"v": tree_map(lambda p: _adafactor_zero_state(_asarray(p), state_dtype=state_dtype), params), "step": 0}
+    # The tracked step is finally used: without it the zero-initialized second
+    # moment is biased low and the first updates are inflated by
+    # 1/sqrt(1 - beta2**step).  See `adafactor_decay`.
+    decay = adafactor_decay(beta2, int(state["step"]) + 1)
     new_v = _adafactor_tree_map(
-        lambda s, g: _adafactor_update_state(s, _compute_array(g, compute_dtype), beta2, state_dtype=state_dtype),
+        lambda s, g: _adafactor_update_state(s, _compute_array(g, compute_dtype), decay, state_dtype=state_dtype),
         state["v"],
         grads,
     )

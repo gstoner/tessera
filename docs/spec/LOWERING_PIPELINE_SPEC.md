@@ -580,8 +580,13 @@ The copy descriptor retains the unpadded logical K/V source extent. Dynamic
 slice coordinates are explicit index operands, so the target copy consumer can
 zero-fill the final ragged KV block without inventing a computed base pointer.
 `boundary_mask` carries causal and sliding-window policy with absolute Q/KV
-offsets. Non-zero dropout uses `block_dropout`, keyed by the absolute KV offset,
-and requires an explicit seed.
+offsets. Non-zero dropout uses `block_dropout`, keyed by the absolute KV offset
+**and a per-instance `stream_offset`**, and requires an explicit seed. The
+stream offset is the second counter axis: a rank-4 attention is distributed
+into `B*H` rank-2 instances whose KV offsets each restart at 0, so without it
+every instance would replay one identical mask (Decision #18). The producer
+passes `(b*H + h) * Sq * Sk_padded` — a disjoint counter block per instance —
+and an attention that was never distributed passes 0.
 
 For `tessera.matmul` inside a mesh region:
 ```mlir

@@ -228,6 +228,36 @@ that box probes `avx512=False` and its x86 lanes skip honestly. Princess-Luna
 `hardware_amx` must never be used to mean "x86 hardware" — see the standing
 section in `docs/audit/backend/x86/todo.md`.
 
+## Cross-backend sync `DELEGATE-CONTRACT-SYNC-2026-08-30`
+
+PR #652 changed two **shared** runtime contracts, so all four backends are
+assessed here per AGENTS.md:
+
+1. `Candidate.accuracy_budget(region)` — a new hook on the shared arbiter
+   base class. `candidate._as_runner()` now resolves the F4 oracle's budget
+   through it instead of reading `accuracy_atol` off the class.
+2. `DelegatedCandidate` gained a `name` override and a per-dtype contract
+   *family* (`variants`), so one delegate may bind a different callee per
+   storage dtype and still derive tier and budget from declared IR.
+
+**Measured blast radius (37 registered candidates: nvidia 32, rocm 3, x86 2,
+apple 0): exactly one overrides `accuracy_budget`** — `nvidia_mma_gemm_shipped`.
+Every other candidate inherits the base implementation, which returns
+`(self.accuracy_atol, self.accuracy_rtol)`: the same two values the arbiter
+previously read directly, at the same call site. That equivalence is static,
+not a measurement, so no sibling backend owes a device re-proof for change (1).
+
+**NVIDIA outcome: parity validated, on device.** The delegate is this PR's
+subject. `tests/device/nvidia/test_shipped_gemm_delegate.py` — 14 passed on
+sm_120 (RTX 5070): declared contract, both dtype callees executing, the
+declared budget holding across K=32..4096, and device-resident latency for the
+delegate and both compiled Tile lanes.
+
+**Follow-up owned here:** `nvidia_mma_gemm_emitted` still has no device timer
+(two block-index conventions, see
+`NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30`), and shape-bucketed
+measured selection is not yet wired into the `OP_MATMUL` path.
+
 ## `NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30` — measured, not argued
 
 **The first thing the delegate's device timer produced, and it contradicts the

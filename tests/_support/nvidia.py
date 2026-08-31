@@ -91,3 +91,52 @@ def assert_native_gpu(result: dict[str, Any]) -> None:
     """Require a successful result with actual NVIDIA device provenance."""
     assert result["ok"] is True, result.get("reason")
     assert result["execution_kind"] == "native_gpu", result.get("reason")
+
+
+_device_model_probe: Any = False
+
+
+def nvidia_device_model() -> str | None:
+    """The GPU's marketing model string, e.g. ``"NVIDIA GeForce RTX 5070"``.
+
+    Distinct from ``runtime._nvidia_device_name()``, which returns a compute
+    capability tag (``"sm_120"``). That tag is the right key for *code*
+    generation and for the autotune cache -- kernels are compiled per
+    capability -- but it is the wrong key for a *performance ranking*.
+    Compute capability 12.0 spans the whole consumer Blackwell line, and an
+    RTX 5070 and a 5090 differ in SM count, cache and memory bandwidth by
+    enough to reorder two kernels that sit 2-16% apart. Gating a measured
+    ranking on ``sm_120`` would therefore assert on hardware it was never
+    measured on, which is what this exists to prevent.
+
+    Returns ``None`` (never raises) when there is no usable CUDA driver, so a
+    caller can skip rather than fail on a host with no GPU.
+    """
+    global _device_model_probe
+    if _device_model_probe is not False:
+        return _device_model_probe
+    _device_model_probe = None
+    try:
+        import ctypes
+
+        ensure_nvidia_driver_on_path()
+        cu = None
+        for candidate in ("libcuda.so.1", "libcuda.so", "nvcuda.dll"):
+            try:
+                cu = ctypes.CDLL(candidate)
+                break
+            except OSError:
+                continue
+        if cu is None or cu.cuInit(0) != 0:
+            return None
+        device = ctypes.c_int(0)
+        if cu.cuDeviceGet(ctypes.byref(device), 0) != 0:
+            return None
+        buffer = ctypes.create_string_buffer(256)
+        if cu.cuDeviceGetName(buffer, ctypes.c_int(256), device) != 0:
+            return None
+        name = buffer.value.decode(errors="replace").strip()
+        _device_model_probe = name or None
+    except Exception:
+        _device_model_probe = None
+    return _device_model_probe

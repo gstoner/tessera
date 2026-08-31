@@ -45,6 +45,50 @@ sourced with `scripts/_rocm_env.sh` (a bare sweep is not a valid ROCm result).
 The Apple correctness result does not transfer — different kernels, different
 accumulation order.
 
+## Cross-backend sync `DELEGATE-CONTRACT-SYNC-2026-08-30`
+
+PR #652 changed two **shared** runtime contracts, so all four backends are
+assessed here per AGENTS.md:
+
+1. `Candidate.accuracy_budget(region)` — a new hook on the shared arbiter
+   base class. `candidate._as_runner()` now resolves the F4 oracle's budget
+   through it instead of reading `accuracy_atol` off the class.
+2. `DelegatedCandidate` gained a `name` override and a per-dtype contract
+   *family* (`variants`), so one delegate may bind a different callee per
+   storage dtype and still derive tier and budget from declared IR.
+
+**Measured blast radius (37 registered candidates: nvidia 32, rocm 3, x86 2,
+apple 0): exactly one overrides `accuracy_budget`** — `nvidia_mma_gemm_shipped`.
+Every other candidate inherits the base implementation, which returns
+`(self.accuracy_atol, self.accuracy_rtol)`: the same two values the arbiter
+previously read directly, at the same call site. That equivalence is static,
+not a measurement, so no sibling backend owes a device re-proof for change (1).
+
+**ROCm outcome: follow-up required — no device evidence is owed for the change
+itself, but ROCm has the same undeclared-delegate gap NVIDIA just closed.**
+
+Change (1) is behaviour-identical for all three ROCm candidates
+(`rocm_generic_hip` T1, `rocm_wmma_gemm` T3, `rocm_flash_attn` T3): none
+overrides the hook, so each is still gated on the `accuracy_atol` it always
+declared. No gfx1151 re-proof is owed for that.
+
+Change (2) is unused here, and that is the gap: **`rocm_wmma_gemm` and
+`rocm_flash_attn` are Tier-3 hand-tuned lanes carrying no `DelegateContract`
+at all** — precisely the state NVIDIA's shipped GEMM was in before #652. They
+win arbitration on tier priority with no declared accuracy budget, no
+determinism claim, no architecture claim and no coverage claim, and neither
+implements `measure_device_latency`, so on ROCm a Tier-3 lane still cannot be
+displaced by a faster compiled kernel — Decision #28's premise is unmet on this
+backend.
+
+Follow the NVIDIA worked example. Note two ROCm-specific facts before copying
+it: the determinism claim must be re-derived from the AMD kernels (split-K or
+atomic accumulation would make it `nondeterministic`, and that cannot be
+inferred from the CUDA result), and the `arch` claim is a WMMA capability
+statement, not `gfx1151` — RDNA3.5 has no FP8/BF8 WMMA, so the dtype envelope
+differs from sm_120's. **Exact-device proof on Princess-Luna is required and
+does not transfer from the sm_120 run.**
+
 Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
 marker vocabulary and conftest boundary changed; per-backend outcome below.**
 `hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its

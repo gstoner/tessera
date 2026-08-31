@@ -306,7 +306,7 @@ mla_decode_fused,11,9,0,20,0,,directly_tested,20 direct test references
 mobius,4,0,0,4,0,,directly_tested,4 direct test references
 mobius_from_three_points,3,0,0,3,0,,directly_tested,3 direct test references
 mod,8,0,0,8,0,bf16 f32 fp16 fp32,directly_tested,8 direct test references
-modified_delta_attention,11,0,0,11,0,f32 fp64,directly_tested,11 direct test references
+modified_delta_attention,13,0,0,13,0,f32 fp64,directly_tested,13 direct test references
 module_state_tree,3,0,0,3,0,,directly_tested,3 direct test references
 moe,33,0,0,33,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,33 direct test references
 moe_combine,10,0,0,10,0,,directly_tested,10 direct test references

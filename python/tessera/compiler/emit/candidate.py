@@ -166,6 +166,19 @@ class Candidate(ABC):
         region with a reduction epilogue it cannot fuse)."""
         return True
 
+    def accuracy_budget(self, region: Any) -> "tuple[float | None, float | None]":
+        """``(atol, rtol)`` the F4 oracle must hold this candidate to for
+        ``region``. Defaults to the flat class attributes.
+
+        A region hook rather than a constant because a candidate serving more
+        than one storage dtype does not have one budget: bf16 carries 8
+        significand bits to f16's 11, so holding both to f16's number either
+        rejects a correct bf16 kernel or accepts a bad f16 one. Backends that
+        register one candidate per dtype are unaffected -- they simply keep
+        answering with their class attributes.
+        """
+        return self.accuracy_atol, self.accuracy_rtol
+
     def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
                                warmup: int = 10) -> float | None:
         """Optional device-resident latency in milliseconds.
@@ -248,7 +261,7 @@ def candidates_for(target: str, op: str) -> list[Candidate]:
 _PROBE_NS = "candidate"
 
 
-def _as_runner(candidate: Candidate) -> Any:
+def _as_runner(candidate: Candidate, region: Any = None) -> Any:
     """Wrap a :class:`Candidate` as a :class:`KernelRunner` so the existing
     ``fusion_core.verify_synthesized_*`` oracle gates it unchanged — the whole
     point of D1's F4 reuse. Only the candidate's own op method is wired; the other
@@ -263,11 +276,14 @@ def _as_runner(candidate: Candidate) -> Any:
     from tessera.compiler.emit.kernel_emitter import KernelRunner
 
     _, method = _OP_VERIFY[candidate.op]
+    # Resolved per region so a multi-dtype candidate is gated on the budget it
+    # declared for THIS dtype rather than on a single class-level number.
+    _atol, _rtol = candidate.accuracy_budget(region)
 
     class _CandidateRunner(KernelRunner):
         target = f"{_PROBE_NS}::{candidate.target}::{candidate.name}"
-        accuracy_atol = candidate.accuracy_atol
-        accuracy_rtol = candidate.accuracy_rtol
+        accuracy_atol = _atol
+        accuracy_rtol = _rtol
         last_execution: str | None = None
 
         def run_fused_region(self, region, *a, **k):
@@ -323,7 +339,7 @@ def verify_candidate(candidate: Candidate, region: Any, *, atol: float = 1e-3,
 
     verify_name, _ = _OP_VERIFY[candidate.op]
     verify = getattr(fusion_core, verify_name)
-    adapter = _as_runner(candidate)
+    adapter = _as_runner(candidate, region)
     matched = bool(verify(region, runner=adapter, force=True, atol=atol, seed=seed))
     if not matched:
         return False

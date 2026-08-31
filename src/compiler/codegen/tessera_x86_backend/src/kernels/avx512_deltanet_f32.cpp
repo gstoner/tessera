@@ -288,15 +288,23 @@ extern "C" void tessera_x86_deltanet_bwd_f32(
                   weight * dn[d * Dv + e] * K[qk + d] *
                   target_at(g, t, old, e);
         const float norm = modified ? (1.0f / inv - 1.0f) : 0.0f;
-        const float safe_norm = std::max(norm, 1.0f);
         for (int64_t d = 0; d < Dqk; ++d)
           for (int64_t e = 0; e < Dv; ++e) {
             float value = weight * dn[d * Dv + e];
             if (modified) {
               const float update =
                   K[qk + d] * target_at(g, t, old, e);
+              // d/dA of the bound. With U = w*A*f, f = 1/(1+n), n = ||A||_F:
+              //   dL/dA_ij = w*dn_ij*f - (w * sum_de dn_de A_de) * f^2 * A_ij/n
+              // The divisor is n, NOT max(n, 1). Clamping it understated the
+              // correction by a factor of n for every n < 1 -- and with
+              // L2-normalised keys n = ||k||*||target|| is below 1 in the
+              // ordinary case, so the term was always short. No clamp is
+              // needed: the numerator is O(n^2) (both `update` and
+              // `projection` scale with A), so the quotient vanishes with n,
+              // and the `norm > 0` guard below already covers n == 0 exactly.
               const float correction =
-                  norm > 0.0f ? update * projection * inv * inv / safe_norm
+                  norm > 0.0f ? update * projection * inv * inv / norm
                               : 0.0f;
               value = value * inv - correction;
             }

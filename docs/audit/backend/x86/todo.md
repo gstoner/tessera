@@ -3128,12 +3128,40 @@ state is comparable to one taken under another. The register read is cheaper
 
 **Where that stops being negligible is this backend.** 16 ns of read overhead
 against a ~1 ms GPU dispatch is nothing; against an AVX-512 microkernel it is
-not, and the 41.67 ns tick is a *resolution floor* as well. An x86 timing lane
+not, and a tick period is a *resolution floor* as well. An x86 timing lane
 measuring individual kernels should size its region against that floor — or
 batch reps until the span clears it — rather than assume host timing is free.
-The x86 analogue of the constant counter is `rdtsc`/`rdtscp`, with the same
-caveat that its rate is fixed and unrelated to the core's current frequency.
-`CLOCK_THREAD_CPUTIME_ID` is the other half worth having here, since it
-excludes scheduler idle that a wall clock charges to the kernel under test.
+**Measure that floor on the ROCm box before designing around it**: 41.67 ns is
+Apple Silicon's figure, and the Zen 5 host's differs.
+
+**The Linux equivalents, so this is not re-derived from the Apple entry.**
+
+| need | Apple Silicon | Linux (Zen 5, the x86 host) |
+|---|---|---|
+| monotonic wall | `steady_clock` → 24 MHz `CNTVCT_EL0` | `steady_clock` → **VDSO**, so the hardware clock is read with no real syscall |
+| constant-rate raw counter | `mrs cntvct_el0` | `rdtsc` / `rdtscp` |
+| CPU time excluding idle | `clock_gettime(CLOCK_THREAD_CPUTIME_ID)` | same POSIX call, natively TSC-backed and correspondingly cheaper |
+| timeline probes | `os_signpost` → Instruments | `STAP_PROBE` (`sys/sdt.h`) → `perf`/eBPF, or Tracy |
+
+Two consequences specific to this lane. First, `high_resolution_clock` is
+usable on both hosts for the same reason — no syscall in the hot path — so a
+shared timing helper needs no per-OS branching for the wall clock, only for the
+raw-counter and probe layers.
+
+Second, and more important: **`CLOCK_THREAD_CPUTIME_ID` is the more interesting
+clock here than any wall clock.** An AVX-512 kernel timed on a shared,
+frequency-scaling host has scheduler idle charged to it by a wall measurement,
+and thread CPU time excludes exactly that — it is the closest thing this
+backend has to the *isolation* a GPU device counter provides, which is the
+property the whole three-clock discipline exists to obtain. It also gives this
+lane a witness relationship it currently cannot form at all: for a
+single-threaded region thread CPU time cannot exceed wall time, so the two
+bound each other the way a device clock and a host clock do on the GPU
+backends. That is the concrete route to an x86 acceptance rule, and it is
+available today without new hardware.
+
+`rdtsc` carries the same caveat as `cntvct_el0` — its rate is fixed and
+unrelated to the core's current frequency, which is what makes it comparable
+across power states and equally what makes it *not* a cycle count.
 
 **No AVX-512 evidence is claimed** — no x86 code changed.

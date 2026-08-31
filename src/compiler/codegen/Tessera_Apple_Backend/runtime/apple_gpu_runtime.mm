@@ -668,6 +668,62 @@ static void ts_clear_dispatch_telemetry(void) {
   g_last_dispatch_static_tg_memory = -1;
 }
 
+// RAII host witness for one dispatch.
+//
+// Construct where GPU submission begins in ANY path that will publish a device
+// time; the destructor stamps the wall if nothing already did. This is
+// structural on purpose: the first version of this witness instrumented two of
+// the six sites that publish a device number, and the four it missed reported a
+// null wall -- which `accept_apple_device_ns` reads as "no witness available"
+// and passes the device value through unchecked. That failure is silent. The
+// telemetry looks healthy, the band exists, and it validates nothing.
+//
+// `note()` exists because two callers end their measured region before their
+// scope ends: `commit_and_wait_with_timeout` stamps before an optional
+// `waitUntilCompleted` that only makes timestamp properties visible, and
+// folding that stall into the witness would inflate the wall -- which loosens
+// the bound rather than tightening it.
+//
+// The stamp must land AFTER the recorder runs, because
+// `ts_clear_dispatch_telemetry` resets this field; destruction at scope end
+// gives that ordering for free.
+namespace {
+struct DispatchWallWitness {
+  std::chrono::steady_clock::time_point begin;
+  bool armed;
+  bool noted = false;
+
+  DispatchWallWitness()
+      : begin(std::chrono::steady_clock::now()),
+        armed(g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {}
+
+  // Clear the "already stamped" flag without moving the start instant. Needed
+  // where a telemetry clear happens after the witness opens: the clear wipes
+  // the field, so the stamp has to happen again, but the region still began
+  // where it began.
+  void rearm() { noted = false; }
+
+  // Stand down permanently. Used where an inner witness already covers a WIDER
+  // region than this one: the destructor runs last and would otherwise
+  // overwrite the good span with a narrower one, which is the failure that
+  // made a cold MPSGraph dispatch report a device interval 9.18x its wall.
+  void disarm() { armed = false; noted = true; }
+
+  void note() {
+    if (!armed || noted) return;
+    noted = true;
+    g_last_dispatch_wall_time_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - begin).count();
+  }
+
+  ~DispatchWallWitness() { note(); }
+
+  DispatchWallWitness(const DispatchWallWitness &) = delete;
+  DispatchWallWitness &operator=(const DispatchWallWitness &) = delete;
+};
+}  // namespace
+
 extern "C" void tessera_apple_gpu_dispatch_telemetry_set_enabled(int32_t enabled) {
   g_dispatch_telemetry_enabled.store(enabled != 0, std::memory_order_relaxed);
   ts_clear_dispatch_telemetry();
@@ -880,21 +936,13 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                                          const char *op_name,
                                          bool prefer_command_buffer = false) {
   if (!cb) return false;
-  const bool telemetry =
-      g_dispatch_telemetry_enabled.load(std::memory_order_relaxed);
-  if (telemetry) ts_clear_dispatch_telemetry();
-  // Started at the commit below, not here, so the witness brackets the same
-  // thing the device clocks do: submission through GPU completion. The lazy
-  // shared-event creation that follows is one-time setup and would otherwise
-  // land entirely in the first dispatch's wall time, making exactly one sample
-  // per process look enormous.
-  std::chrono::steady_clock::time_point ts_wall_begin;
-  auto ts_note_wall = [&]() {
-    if (!telemetry) return;
-    g_last_dispatch_wall_time_ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now() - ts_wall_begin).count();
-  };
+  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
+    ts_clear_dispatch_telemetry();
+  // Declared below rather than here so the witness brackets the same thing the
+  // device clocks do: submission through GPU completion. The lazy shared-event
+  // creation that follows is one-time setup and would otherwise land entirely
+  // in the first dispatch's wall time, making one sample per process enormous.
+  std::optional<DispatchWallWitness> ts_wall;
   // Lazy-init the shared event under the dedicated lock.
   id<MTLSharedEvent> ev;
   uint64_t signal_val;
@@ -906,10 +954,9 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
         // Event creation failed — fall back to the pre-Pattern-4
         // ``waitUntilCompleted`` path so the caller doesn't crash.
         // No timeout protection, but at least correct.
-        ts_wall_begin = std::chrono::steady_clock::now();
+        ts_wall.emplace();
         [cb commit];
         [cb waitUntilCompleted];
-        ts_note_wall();
         ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
@@ -920,7 +967,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // Encode the signal into the command buffer; the event ticks AFTER the
   // GPU finishes everything queued before it on this cb.
   [cb encodeSignalEvent:ev value:signal_val];
-  ts_wall_begin = std::chrono::steady_clock::now();
+  ts_wall.emplace();
   [cb commit];
   bool done = [ev waitUntilSignaledValue:signal_val
                                 timeoutMS:timeout_ms];
@@ -967,7 +1014,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // work -- the event signal already proved that. Folding a
   // property-visibility stall into the witness would inflate it on exactly the
   // path that needs it most, and inflating the wall loosens the bound.
-  ts_note_wall();
+  if (ts_wall) ts_wall->note();
   if (prefer_command_buffer) [cb waitUntilCompleted];
   ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
   return true;
@@ -998,7 +1045,7 @@ struct MPSGraphTimingBracket {
   // exactly the lane the arbiter actually measures (`metal4_mpsgraph_envelope`)
   // reporting a null wall -- which `accept_apple_device_ns` reads as "no
   // witness available" and passes the device number through unchecked.
-  std::chrono::steady_clock::time_point wall_begin{};
+  std::optional<DispatchWallWitness> wall;
 
   explicit MPSGraphTimingBracket(MetalDeviceContext &context);
   bool finish(uint64_t timeout_ms);
@@ -1031,6 +1078,9 @@ static bool commit_mpsgraph_and_wait_with_timeout(
     if (ev) signal_val = ++ctx.legacy_event_val;
   }
   if (ev) [root encodeSignalEvent:ev value:signal_val];
+  // Covers the `owns_whole_dispatch` branch below, which publishes a
+  // command-buffer interval when no timing bracket is active.
+  DispatchWallWitness ts_wall;
   [mps_cb commit];
   if (ev) {
     if (![ev waitUntilSignaledValue:signal_val timeoutMS:timeout_ms]) {
@@ -1047,9 +1097,12 @@ static bool commit_mpsgraph_and_wait_with_timeout(
     return false;
   }
   if (timing && timing->active) {
-    // Do not turn a profiling limitation into a native-execution failure. A
-    // failed or unavailable bracket leaves telemetry empty, just like the old
-    // auto-flush path, while the graph result remains valid.
+    // The bracket owns the witness here: its region starts at the first heap
+    // timestamp, before MPSGraph compiles and encodes, and the device interval
+    // it reports spans exactly that. This function's own witness opens at the
+    // commit, which is strictly narrower -- letting it stamp last would report
+    // a wall shorter than the device interval it is supposed to bound.
+    ts_wall.disarm();
     (void)timing->finish(timeout_ms);
   } else if (owns_whole_dispatch) {
     ts_record_dispatch_gpu_elapsed(root);
@@ -4105,6 +4158,10 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
   id<MTL4CounterHeap> timestampHeap = captureTelemetry
       ? (id<MTL4CounterHeap>)ctx.mtl4_timestamp_heap : nil;
   if (timestampHeap) [timestampHeap invalidateCounterRange:NSMakeRange(0, 2)];
+  // Direct Metal 4 dispatches -- matmul, convolution, the session routes --
+  // publish a counter-heap interval and had no witness, so the band accepted
+  // them unchecked. Declared after the clear, which resets the wall field.
+  DispatchWallWitness ts_wall;
   if (captureTelemetry) {
     g_last_dispatch_tpg_x = static_cast<int32_t>(tpg.width);
     g_last_dispatch_tpg_y = static_cast<int32_t>(tpg.height);
@@ -4187,6 +4244,15 @@ MPSGraphTimingBracket::MPSGraphTimingBracket(MetalDeviceContext &context)
     completion_value = 1;
     done_value = 1;
     [heap invalidateCounterRange:NSMakeRange(0, 2)];
+    // The witness opens HERE, at the start timestamp -- not at the end of this
+    // constructor. Everything between the two heap writes is inside the device
+    // interval, including this command-buffer commit and the MPSGraph pipeline
+    // setup that follows, and on a cold dispatch that is milliseconds. Opening
+    // it later measured a device interval 7.17x its own wall (8.71 ms inside a
+    // 1.22 ms window), which is impossible and which the containment bound
+    // correctly refused -- the check catching the instrumentation rather than
+    // the runtime.
+    wall.emplace();
     if (!mtl4_write_timestamp(context.device, queue, heap, 0)) return;
     [queue signalEvent:start value:start_value];
 
@@ -4203,9 +4269,8 @@ MPSGraphTimingBracket::MPSGraphTimingBracket(MetalDeviceContext &context)
     completion_event = complete;
     done_event = done;
     timestamp_heap = heap;
-    ts_clear_dispatch_telemetry();
-    // After the clear, which resets the wall field.
-    wall_begin = std::chrono::steady_clock::now();
+    ts_clear_dispatch_telemetry();   // resets the wall field...
+    if (wall) wall->rearm();         // ...so re-anchor without losing the start
     active = true;
   }
 }
@@ -4226,11 +4291,7 @@ bool MPSGraphTimingBracket::finish(uint64_t timeout_ms) {
     // interval emitted by the regular MTL4 route. Keep the provenance
     // distinguishable for route selection and benchmark comparison.
     mtl4_record_dispatch_telemetry(*ctx, heap, 4);
-    if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
-      g_last_dispatch_wall_time_ns =
-          std::chrono::duration_cast<std::chrono::nanoseconds>(
-              std::chrono::steady_clock::now() - wall_begin).count();
-    }
+    if (wall) wall->note();
     return g_last_dispatch_device_time_ns > 0;
   }
   return false;
@@ -22186,6 +22247,13 @@ struct TsEncodeSession {
   id<MTLCommandBuffer> mtlcb;
   id<MTLSharedEvent> asyncEvent;
   uint64_t asyncSignal;
+  // Submission instant for the async lane, where commit and wait are separate
+  // API calls and no single scope can hold a `DispatchWallWitness`. Carrying
+  // the start on the session is what lets the witness still bracket
+  // submission-through-completion: the consumer's own work between the two
+  // calls belongs inside the envelope, because the GPU is running during it.
+  std::chrono::steady_clock::time_point submitted{};
+  bool submitted_valid = false;
 };
 
 extern "C" TsEncodeSession *ts_enc_begin(void) {
@@ -22195,7 +22263,7 @@ extern "C" TsEncodeSession *ts_enc_begin(void) {
     id<MTLCommandBuffer> mtlcb = [ctx.queue commandBuffer];
     if (!mtlcb) return nullptr;
     MPSCommandBuffer *cb = [MPSCommandBuffer commandBufferWithCommandBuffer:mtlcb];
-    return new TsEncodeSession{cb, mtlcb, nil, 0};
+    return new TsEncodeSession{cb, mtlcb, nil, 0, {}, false};
   }
 }
 
@@ -22232,6 +22300,7 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   if (ev) {
     [root encodeSignalEvent:ev value:signal_val];
   }
+  DispatchWallWitness ts_wall_session;
   [s->cb commit];
   if (ev) {
     bool done = [ev waitUntilSignaledValue:signal_val
@@ -22254,6 +22323,12 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   // command buffer is complete before this read. An MPSGraph auto-flush may
   // replace the original root; in that case this deliberately reports only the
   // live root interval rather than inventing whole-session coverage.
+  //
+  // The witness here brackets the wait, not the whole session: the encode
+  // happened across earlier calls, so a wall spanning it would compare two
+  // different regions -- the exact error that produced a wrong band in the
+  // first version of this change.
+  ts_wall_session.note();
   ts_record_dispatch_gpu_elapsed(root);
   s->cb = nil;
   s->mtlcb = nil;
@@ -22275,6 +22350,11 @@ extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
     if (s->asyncEvent) {
       s->asyncSignal = ++ctx.legacy_event_val;
       [root encodeSignalEvent:s->asyncEvent value:s->asyncSignal];
+    }
+    if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
+      ts_clear_dispatch_telemetry();
+      s->submitted = std::chrono::steady_clock::now();
+      s->submitted_valid = true;
     }
   }
   [s->cb commit];
@@ -22301,6 +22381,12 @@ extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
   // Scheduled to Completed, so the signal itself is the completion proof;
   // only an explicit command-buffer error overrides it.
   bool ok = completed && root.status != MTLCommandBufferStatusError;
+  if (s->submitted_valid &&
+      g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
+    g_last_dispatch_wall_time_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - s->submitted).count();
+  }
   ts_record_dispatch_gpu_elapsed(root);
   s->asyncEvent = nil;
   s->asyncSignal = 0;

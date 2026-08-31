@@ -11,12 +11,21 @@ no wall time at all.
 that wrong produces a wrong rule rather than an obvious failure.** Measured on
 an M1 Max:
 
-    against a Python-level wall (numpy marshalling included)   0.35 - 0.60
-    against the runtime witness (starts at GPU submission)     0.568 - 0.937
+    Python-level wall, MPSGraph matmul route          0.35  - 0.60
+    runtime witness,   MPSGraph matmul route          0.568 - 0.937
+    runtime witness,   resident session (warm)        0.037 - 0.101
 
-The first argued for a one-sided band -- 0.35 fails a 0.5x floor -- and that
-band was written before the second measurement existed. It was defending
-against an artifact of its own denominator.
+The first row is an artifact: that wall included numpy marshalling, work no GPU
+interval could contain. The second suggested the ordinary two-sided 0.5x band
+was safe. The third -- a different route family, where
+`metal_kernel_interval` is kernel execution only and legitimately excludes a
+265 us submit-to-signal window around a 25 us kernel -- shows it is not.
+
+Across routes the range is 0.037-0.937, so **no wall-derived floor can
+separate a small kernel from an under-reading clock**. The bound is therefore
+one-sided, which is what ROCm already says outright in
+`_select_rocm_latency_ms`. Two wrong answers preceded this one and both came
+from generalising a single route.
 
 Host-free: the rule is pure arithmetic and is tested directly. The live M1 Max
 numbers behind its constants are recorded in `accept_apple_device_ns`.
@@ -37,25 +46,35 @@ _WALL = 1_000_000  # 1 ms in ns
 # The measured envelope must be admitted end to end.
 # --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("ratio", [0.568, 0.60, 0.714, 0.852, 0.937])
-def test_every_measured_ratio_on_an_m1_max_is_accepted(ratio):
-    """The observed range over 100 dispatches, 8^2 through 2048^2.
+@pytest.mark.parametrize("ratio,route", [
+    (0.037, "resident session, warm"),
+    (0.101, "resident session, warm"),
+    (0.568, "MPSGraph matmul"),
+    (0.714, "MPSGraph matmul"),
+    (0.937, "MPSGraph matmul"),
+])
+def test_every_measured_ratio_on_an_m1_max_is_accepted(ratio, route):
+    """The observed range across BOTH route families.
 
-    A band that rejects real readings silently substitutes the wall clock,
-    which carries the submission overhead the device measurement exists to
-    exclude -- so a too-tight band degrades the number rather than failing.
+    A band that rejects real readings does not fail loudly -- it silently
+    substitutes the wall clock, which carries the submission overhead the
+    device measurement exists to exclude. The resident-session rows are the
+    ones that killed the two-sided version: a 0.5x floor rejects them, and
+    they are correct.
     """
     assert accept_apple_device_ns(int(ratio * _WALL), _WALL) is not None
 
 
-def test_the_python_level_ratio_that_produced_the_wrong_rule_is_below_the_floor():
-    """0.35 is what a Python-level wall reported, and it fails the floor.
+def test_no_wall_derived_floor_can_be_added_back():
+    """The regression guard for the mistake this file records twice.
 
-    Kept as a test because it is the evidence that the denominator mattered:
-    had the witness been scoped that way, this band would reject roughly every
-    dispatch and every device number would quietly become a wall number.
+    0.037 is a real resident-session reading and 0.4 is a plausible-looking
+    under-read; a wall-based floor cannot admit the first and refuse the
+    second, because they sit on the same side of every threshold. Anyone
+    reintroducing a floor to catch under-reads will break the first row above.
     """
-    assert accept_apple_device_ns(int(0.35 * _WALL), _WALL) is None
+    assert accept_apple_device_ns(int(0.037 * _WALL), _WALL) is not None
+    assert accept_apple_device_ns(int(0.40 * _WALL), _WALL) is not None
 
 
 # --------------------------------------------------------------------------
@@ -79,13 +98,24 @@ def test_the_upper_bound_leaves_room_for_clock_skew():
 # Lower bound -- the direction that gets published.
 # --------------------------------------------------------------------------
 
-def test_an_under_reading_clock_is_refused():
-    """An under-estimate inflates throughput and gets published; an
-    over-estimate makes a kernel look slow and gets investigated."""
-    assert accept_apple_device_ns(_WALL // 100, _WALL) is None
+def test_an_under_reading_clock_is_NOT_caught_here_and_that_is_recorded():
+    """The dangerous direction is deliberately unguarded, because it cannot be
+    guarded against a host clock.
+
+    An under-estimate inflates throughput and gets published; an over-estimate
+    makes a kernel look slow and gets investigated. But a genuine
+    resident-session reading sits at 0.037 of the wall, so any floor that
+    catches an under-read also rejects real work. This closes against Apple's
+    *second* device clock, not the wall -- the follow-up under
+    APPLE-TIMER-WITNESS. Asserted so the gap is visible rather than assumed
+    covered.
+    """
+    assert accept_apple_device_ns(_WALL // 100, _WALL) is not None
 
 
 def test_zero_and_negative_device_intervals_are_refused():
+    """The one under-read still caught, because a zero-length interval is not
+    a short measurement -- it is the absence of one."""
     assert accept_apple_device_ns(0, _WALL) is None
     assert accept_apple_device_ns(-1, _WALL) is None
     assert accept_apple_device_ns(None, _WALL) is None
@@ -118,7 +148,8 @@ def test_the_wall_export_is_a_freshness_sentinel():
 def test_apple_rocm_and_nvidia_keep_separate_acceptance_rules():
     """Three hosts, three failure modes: HIP events on gfx1151 lie outright,
     CUDA events on sm_120 track the wall to 0.2-0.4%, and Metal's interval
-    legitimately sits at 0.57-0.94 of a witness that includes submission.
+    legitimately sits anywhere from 0.037 to 0.937 of a witness that includes
+    submission, which is why Apple's bound is one-sided and theirs are not.
     One function would force a single rationale onto all three, and widening
     a band for one host would silently widen it for the others.
     """

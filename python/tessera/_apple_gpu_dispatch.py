@@ -703,53 +703,61 @@ def accept_apple_device_ns(device_ns: Optional[int],
 
     Apple's device numbers were previously accepted on an
     ``end >= start && end > 0`` check alone -- a sanity check, which rejects an
-    obviously broken clock and accepts any value that is merely wrong. This is
-    the same two-sided 0.5x..2.0x band ROCm and NVIDIA use, against a host
-    witness the runtime now captures around commit-and-wait.
+    obviously broken clock and accepts any value that is merely wrong. This
+    adds the missing half: a host witness the runtime captures around
+    commit-and-wait, and a bound against it.
 
-    **The band is only meaningful because the witness brackets the right
-    region, and getting that wrong once already produced a wrong rule.** An
-    earlier version of this function was one-sided, justified by a measured
-    ``device/wall`` of 0.35-0.60 that would have failed a 0.5x floor. That
-    ratio was against a *Python-level* wall including numpy marshalling and
-    array conversion -- work no GPU interval could ever contain. Measured
-    against the runtime witness, which starts at the GPU submission, the same
-    dispatches run **0.666-0.757**, and across 8^2 through 1024^2 the minimum
-    over fifteen samples per shape never fell below **0.565**. So the symmetric
-    band is safe here after all, and the one-sided version was defending
-    against an artifact of its own denominator.
+    **The bound is one-sided, and the two-sided version was measured wrong
+    twice before this settled.** The history matters because both wrong answers
+    came from the same mistake -- generalising from one route:
 
-    **Both bounds are set from the measurement, not copied.** GPU execution is
-    a strict subset of commit-and-wait, so in principle a device interval may
-    never exceed the wall -- but the two are independent clocks over nested
-    regions, and the measured maximum over 100 dispatches from 8^2 to 2048^2 is
-    **0.937**, leaving a strict ``device <= wall`` only 6.3% of margin. The
-    upper bound is therefore **1.25x**: loose enough not to reject a correct
-    reading over clock skew, tight enough that anything 25% past a physically
-    impossible bound is caught as misattribution. The **0.5x** floor rests on a
-    measured minimum of **0.568** over the same run -- about 13% of headroom,
-    which is not a lot: a noisier host or a lane with heavier submission
-    overhead could dip under it and lose a correct reading to the wall.
+    * A first pass measured ``device/wall`` at 0.35-0.60 against a *Python*
+      wall that included numpy marshalling, work no GPU interval could contain,
+      and concluded a one-sided band was needed. Right answer, wrong reason.
+    * A second pass, against a correctly scoped runtime witness, measured
+      0.568-0.937 on the MPSGraph matmul route and concluded the ordinary
+      symmetric 0.5x band was safe after all.
+    * Measuring a **second** route family -- resident batched sessions,
+      ``metal_kernel_interval`` -- gives **0.037-0.101** once warm: a 25 us
+      kernel inside a 265 us submit-to-signal window. Nothing is wrong there.
+      ``kernelStartTime``/``kernelEndTime`` is kernel execution only, and it
+      legitimately excludes the queueing and scheduling the wall must contain.
 
-    The durable fix for the floor is not a looser constant: Apple exposes
-    **two independent device clocks**
-    (``metal4_timestamp_heap`` and ``metal_kernel_interval``), and bounding one
-    against the other is strictly better than bounding either against a host
-    clock that measures a different span. ROCm reached the same conclusion --
-    see ``_select_rocm_latency_ms``, whose device clock is lower-bounded
-    against the *event* clock rather than the wall. Recorded as the follow-up
-    under ``APPLE-TIMER-WITNESS``; it needs both clocks captured in one
-    dispatch, which today they are not (each overwrites the other).
+    So across routes the honest range is **0.037-0.937**, and no wall-derived
+    floor can separate a small kernel from an under-reading clock. This is the
+    same conclusion ROCm reached and states outright in
+    ``_select_rocm_latency_ms``: *"A lower bound against the wall clock cannot
+    work: launch overhead is real, so a small kernel's device time is
+    legitimately far below it."*
+
+    **What remains is exact.** GPU execution is a strict subset of
+    commit-and-wait, so a device interval exceeding the wall is impossible and
+    means the timestamp is misattributed. The ceiling is **1.25x** rather than
+    1.0 because the two are independent clocks over nested regions and the
+    measured maximum is 0.937, which leaves a strict bound only 6.3%.
+
+    **The under-reading direction is therefore still unguarded, and that is the
+    dangerous one** -- an under-estimate inflates throughput and gets
+    published, while an over-estimate makes a kernel look slow and gets
+    investigated. It cannot be closed against a host clock. It closes against
+    Apple's *second* device clock: ``metal4_timestamp_heap`` and
+    ``metal_kernel_interval`` measure the same work independently, and bounding
+    one against the other is what ROCm does with its event clock. Today they
+    overwrite each other in ``g_last_dispatch_device_time_ns``; capturing both
+    per dispatch is the follow-up recorded under ``APPLE-TIMER-WITNESS``.
 
     A ``None`` wall disables the check rather than failing it, which is why the
     export is in ``_SENTINEL_SYMBOLS``: a stale dylib would otherwise silently
     restore the unwitnessed behaviour with every test still passing.
     """
-    if device_ns is None or device_ns < 0:
+    # `<= 0`, not `< 0`: a zero-length interval is not a short measurement,
+    # it is the absence of one, and it is the single under-read the
+    # containment bound below would otherwise wave through.
+    if device_ns is None or device_ns <= 0:
         return None
     if wall_ns is None or wall_ns <= 0:
         return device_ns
-    return device_ns if 0.5 * wall_ns <= device_ns <= 1.25 * wall_ns else None
+    return device_ns if device_ns <= 1.25 * wall_ns else None
 
 
 def read_dispatch_telemetry() -> dict[str, object]:
@@ -823,14 +831,29 @@ def read_dispatch_telemetry() -> dict[str, object]:
     wall_ns = int(wall()) if wall is not None else -1
     device_ns = device_time_ns if device_time_ns >= 0 else None
     wall_value = wall_ns if wall_ns >= 0 else None
+    accepted = accept_apple_device_ns(device_ns, wall_value)
     return {
         "capture_enabled": bool(enabled()),
-        "device_time_ns": device_ns,
+        # The BAND-CHECKED interval, and `None` when the check refused it.
+        #
+        # This is the established field every consumer reads
+        # (`benchmark_attention_routes`, `benchmark_legacy_retune`,
+        # `resident_kv`, `_Future.elapsed_ms`), so publishing the raw value here
+        # and the verdict in a new key nobody reads would have left a rejected
+        # timestamp shaping route evidence and reported latency exactly as
+        # before -- the check would exist and change nothing. Every consumer
+        # already guards this field with `is not None` / `isinstance(..., int)`,
+        # because it has always been nullable when telemetry was unavailable, so
+        # a refusal degrades to "no device number" rather than to a wrong one.
+        "device_time_ns": accepted,
+        # The unchecked value, for diagnosis. Never feed this to a benchmark:
+        # when it differs from `device_time_ns`, that difference IS the defect.
+        "device_time_raw_ns": device_ns,
         # Host wall across commit-and-wait. `None` on a runtime predating the
         # export -- which the freshness sentinel is meant to make impossible,
         # because a None wall disables the check rather than failing it.
         "wall_time_ns": wall_value,
-        "device_time_accepted_ns": accept_apple_device_ns(device_ns, wall_value),
+        "device_time_accepted_ns": accepted,
         "timing_source": _DISPATCH_TIMING_SOURCES.get(source_id),
         "counter_sampling_supported": (
             bool(counter_state) if counter_state >= 0 else None),

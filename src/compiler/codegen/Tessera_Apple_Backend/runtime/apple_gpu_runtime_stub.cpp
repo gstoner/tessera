@@ -1272,6 +1272,10 @@ extern "C" void tessera_apple_gpu_dispatch_telemetry_set_enabled(int32_t) {}
 extern "C" int32_t tessera_apple_gpu_dispatch_telemetry_enabled(void) { return 0; }
 extern "C" void tessera_apple_gpu_dispatch_telemetry_clear(void) {}
 extern "C" int64_t tessera_apple_gpu_last_dispatch_device_time_ns(void) { return -1; }
+// -1 == "no witness", which disables the acceptance band rather than failing
+// it. Correct off Darwin, where there is no dispatch to witness and
+// `device_time_ns` is -1 too, so there is nothing to check.
+extern "C" int64_t tessera_apple_gpu_last_dispatch_wall_time_ns(void) { return -1; }
 extern "C" int64_t tessera_apple_gpu_last_dispatch_counter_delta(void) { return -1; }
 extern "C" int32_t tessera_apple_gpu_last_dispatch_counter_supported(void) { return -1; }
 extern "C" int32_t tessera_apple_gpu_last_dispatch_timing_source(void) { return 0; }

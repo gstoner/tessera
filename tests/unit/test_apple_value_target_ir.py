@@ -42,62 +42,54 @@ def _find_opt() -> str | None:
 
 
 _OPT = _find_opt()
-def _apple_backend_available() -> bool:
-    """Whether EVERY driver these tests can reach carries the Apple backend.
-
-    Two resolvers are in play and they rank differently, so probing one and
-    invoking the other is a real hazard rather than a theoretical one:
-
-    * this module's `_find_opt()` -> `compiler_tool.tessera_opt_path()`, which
-      prefers the in-repo build;
-    * `driver._resolve_tessera_opt()`, which the `_front_door*` tests reach
-      through and which prefers `TESSERA_OPT` then **PATH**, falling back to the
-      in-repo build.
-
-    With a PATH `tessera-opt` configured differently from the local build they
-    select different binaries, and a guard reading only `_OPT` could skip a
-    test whose actual driver has the Apple backend, or -- worse -- let one run
-    against an Apple-disabled driver and reproduce exactly the failures this
-    guard exists to prevent.
-
-    Requiring both is the conservative resolution. On any ordinary single-build
-    setup they are the same file and this costs nothing; where they genuinely
-    diverge, one of the two lanes cannot work and skipping is the honest
-    answer.
-    """
+def _has_apple_backend(tool: object) -> bool:
+    """Whether `tool` is a resolvable driver carrying the Apple backend."""
     from tests._support.apple import apple_backend_in_tessera_opt
+    if not tool:
+        return False
+    try:
+        return bool(apple_backend_in_tessera_opt(str(tool)))
+    except Exception:
+        return False
 
+
+def _front_door_opt() -> object:
+    """The driver the front door will invoke -- a DIFFERENT resolver from
+    `_find_opt()`: it prefers `TESSERA_OPT`, then PATH, then the in-repo build,
+    where `_find_opt()` prefers the in-repo build."""
     try:
         from tessera.compiler import driver as _driver
-        front_door = _driver._resolve_tessera_opt()
+        return _driver._resolve_tessera_opt()
     except Exception:
-        front_door = None
+        return None
 
-    candidates = {tool for tool in (_OPT, front_door) if tool}
-    if not candidates:
-        return False
-    try:
-        return all(apple_backend_in_tessera_opt(str(tool)) for tool in candidates)
-    except Exception:
-        return False
+
+
 
 
 pytestmark = pytest.mark.skipif(_OPT is None, reason="tessera-opt not built")
 
-# Per-test, never module-wide: most of this file checks emitted IR text and is
-# host-free, so 110 of its assertions pass on a ROCm or CUDA box. Only the
-# tests below assert that the Apple VALUE route was actually selected -- they
-# read `metadata["compiler_path"]`, or compare the chosen route against
-# `value_target_ir` -- and that route does not exist in a driver built without
-# the Apple backend. Those failed with `KeyError: 'compiler_path'` and
-# `assert 'target_ir_artifact' == 'value_target_ir'` on both device boxes,
-# which says nothing about the code under test.
+# Resolver-specific, because the two resolvers can select different files and
+# a test is only affected by the one it actually invokes (review finding on
+# #659). A single combined predicate got this wrong in both directions: it
+# skipped `_OPT`-only tests because an unrelated PATH binary lacked the Apple
+# backend, and -- since it filtered falsey values -- let front-door tests run
+# when the front-door resolver returned nothing at all.
 _requires_apple_backend = pytest.mark.skipif(
-    _OPT is None or not _apple_backend_available(),
-    reason="tessera-opt was built without the Apple backend, so the Apple "
+    not _has_apple_backend(_OPT),
+    reason="the in-repo tessera-opt lacks the Apple backend, so the Apple "
            "value route cannot be selected (configure "
-           "-DTESSERA_BUILD_APPLE_BACKEND=ON, or point TESSERA_OPT at a "
-           "driver that has it)",
+           "-DTESSERA_BUILD_APPLE_BACKEND=ON, or set TESSERA_OPT)",
+)
+
+# NOTE the exception: `test_front_door_value_mode_works_without_environment`
+# scrubs TESSERA_OPT and PATH before resolving, so at run time the front door
+# falls through to the in-repo build. It is gated on `_OPT` with the others
+# above, not on this mark, which is evaluated at import against the real PATH.
+_requires_front_door_apple_backend = pytest.mark.skipif(
+    not _has_apple_backend(_front_door_opt()),
+    reason="the driver the front door resolves (TESSERA_OPT, then PATH, then "
+           "the in-repo build) is missing or lacks the Apple backend",
 )
 
 _GRAPH = {
@@ -599,7 +591,7 @@ def _front_door(module):
     return res.to_runtime_artifact()
 
 
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_front_door_value_mode_routes_cholesky_without_injected_ir():
     """canonical_compile value mode produces compiler_path == apple_value_target_ir
     and a value IR carrying the cholesky cpu.call — entirely from a Graph IR
@@ -791,7 +783,7 @@ class TestFrontDoorLinalgFamilyLaunch:
         assert np.all(s[:-1] >= s[1:] - 1e-4)  # descending singular values
 
 
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_value_mode_output_has_no_husk_or_tile_leftover():
     """The captured value IR from the front door is value-preserving — no
     ub.poison / tensor.empty / tile.* survive."""
@@ -896,7 +888,7 @@ def test_value_mode_failure_records_named_error(monkeypatch):
      [("tensor<4x4xf32>", (4, 4)), ("tensor<4x2xf32>", (4, 2))],
      "tensor<4x2xf32>", ["%x"], {"lower": True, "trans": False, "unit_diag": False}),
 ])
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_gpu_value_mode_linalg_is_classified_and_gated(op, result, args, rtype, returns, kwargs):
     """apple_gpu cholesky / tri_solve lower to gpu.kernel_call and route to the
     non-executable apple_gpu/apple_value_target_ir matrix row — structured
@@ -1053,7 +1045,7 @@ def test_cpu_full_matmul_symbol_on_runtime_allowlist():
     assert calls[0]["symbol"] in _APPLE_VALUE_CPU_SYMBOLS
 
 
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_front_door_matmul_routes_value_without_injection():
     """canonical_compile value mode routes a Graph IR matmul to the value lane
     (compiler_path == apple_value_target_ir, gemm symbol), no injected IR."""
@@ -1131,7 +1123,7 @@ def test_gpu_value_matmul_is_gated_no_output():
     ("f16", "fp16", "tessera_apple_cpu_gemm_f16"),
     ("bf16", "bf16", "tessera_apple_cpu_gemm_bf16"),
 ])
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_non_fp32_matmul_value_mode_lowers_to_dtype_symbol(mlir_dtype, dtype, symbol):
     """Sprint 7: f16/bf16 rank-2 matmul reaches the value lane and lowers to its
     dtype-specific GEMM symbol (replaces the Sprint 5 'non-fp32 is gated' test)."""
@@ -1189,7 +1181,7 @@ def test_bf16_matmul_executes_or_skips_cleanly():
     np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=5e-2, atol=5e-2)
 
 
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_gpu_non_fp32_matmul_value_mode_selects_tile_simdgroup_executor():
     """TILE-1 promotes rank-2 f16/bf16 value matmul to the native simdgroup
     executor; neither dtype may be represented as an Apple CPU call."""
@@ -1336,7 +1328,7 @@ def test_batched_symbol_on_runtime_allowlist():
     assert calls[0]["symbol"] in _APPLE_VALUE_CPU_SYMBOLS
 
 
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_front_door_batched_routes_value_without_injection():
     art = _front_door(_batched_module(2, 4, 8, 16))
     assert art.metadata["compiler_path"] == "apple_value_target_ir"
@@ -1467,7 +1459,7 @@ def test_non_f32_batched_is_gated():
 # cpu.call — it routes to tessera_apple.gpu.kernel_call dispatched by the
 # apple_gpu_value_target_ir executor. The "gated" assertion below now only holds
 # for the *CPU* lane (GPU batched no longer hits a CPU value call).
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_gpu_value_batched_is_not_a_cpu_value_call():
     """apple_gpu batched matmul never produces an executable CPU cpu.call — it
     is a GPU kernel_call (Sprint 8). Guards against accidental CPU mis-dispatch."""
@@ -1652,7 +1644,7 @@ def _batched_module_dt(B, M, K, N, dtype, mlir_dtype):
     ("fp16", "f16", "tessera_apple_gpu_bmm_f16"),
     ("bf16", "bf16", "tessera_apple_gpu_bmm_bf16"),
 ])
-@_requires_apple_backend
+@_requires_front_door_apple_backend
 def test_gpu_batched_value_routes_to_apple_value_target_ir(dtype, mlir, symbol):
     """Sprint 8: apple_gpu value-mode rank-3 batched matmul routes to the value
     lane with the dtype-specific bmm symbol and is marked executable."""

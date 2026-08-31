@@ -3075,3 +3075,65 @@ an unseparated device-timed row would be, and should not be read as one.
 
 **No AVX-512 evidence is claimed** — no x86 code changed, and no x86 row has
 been regenerated.
+
+---
+
+## Cross-backend sync `APPLE-TIMER-WITNESS-2026-08-31`
+
+**Owning item:** the Apple half of `NVIDIA-TIMER-DRAIN-2026-08-31`, recorded
+there as follow-up required · **synchronization key:**
+`APPLE-TIMER-WITNESS-2026-08-31`
+
+**Shared contract changed — a device latency must be checked against a clock
+that did not produce it.** ROCm and NVIDIA already did; Apple did not, and had
+no host clock at all to check against.
+
+**Two findings from the measurement, both of which changed the design.**
+
+*The witness must bracket the same region the device clock does.* The first
+version instrumented `commit_and_wait_with_timeout` only — and the lane this
+workload actually takes (`metal4_mpsgraph_envelope`) does not go through it.
+It reported a null wall, which the acceptance rule reads as "no witness
+available" and passes the device number through unchecked. The failure was
+silent: telemetry looked healthy, the band existed, and it was checking nothing.
+
+*A witness scoped to the wrong region produces a wrong rule, not an obvious
+failure.* Measured device/wall against a **Python-level** wall — which carries
+numpy marshalling and array conversion no GPU interval could contain — was
+**0.35–0.60**, and that argued for a one-sided band, since 0.35 fails a 0.5×
+floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
+over 100 samples from 8² to 2048². The symmetric band was fine all along; the
+one-sided version was defending against an artifact of its own denominator.
+
+**Both constants are set from that run, not copied.** Floor 0.5× (measured min
+0.568, ~13% headroom). Ceiling **1.25×** — containment says a device interval
+can never exceed the wall, but these are independent clocks over nested regions
+and the measured max of 0.937 leaves a strict `device <= wall` only 6.3%.
+
+**Outcome for this backend: `not applicable` — there is no second clock to
+witness.** x86 times on the host, so the wall clock is the measurement rather
+than a check on something else; the two failure modes this key is about (a
+self-reported device interval believed unchecked, and a witness scoped to the
+wrong region) both need a device clock this lane does not have.
+
+**What does apply here is the clock-selection evidence, and it is directly
+reusable.** Measured on Apple Silicon while grounding the witness:
+`std::chrono::steady_clock` **is** `high_resolution_clock` on libc++, and is
+backed by the same constant-frequency counter as `CNTVCT_EL0` — mach timebase
+125/3 ns per tick = 41.67 ns = **exactly 24.000 MHz**, confirmed against a
+direct `mrs cntvct_el0` read over the same span. Constant rate is the property
+that matters: it does not move with DVFS, so a sample taken under one power
+state is comparable to one taken under another. The register read is cheaper
+(0.3 ns vs 16.3 ns) but that is 0.00003% versus 0.0016% of a 1 ms span.
+
+**Where that stops being negligible is this backend.** 16 ns of read overhead
+against a ~1 ms GPU dispatch is nothing; against an AVX-512 microkernel it is
+not, and the 41.67 ns tick is a *resolution floor* as well. An x86 timing lane
+measuring individual kernels should size its region against that floor — or
+batch reps until the span clears it — rather than assume host timing is free.
+The x86 analogue of the constant counter is `rdtsc`/`rdtscp`, with the same
+caveat that its rate is fixed and unrelated to the core's current frequency.
+`CLOCK_THREAD_CPUTIME_ID` is the other half worth having here, since it
+excludes scheduler idle that a wall clock charges to the kernel under test.
+
+**No AVX-512 evidence is claimed** — no x86 code changed.

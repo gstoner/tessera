@@ -5550,3 +5550,56 @@ raises the noise floor and makes separation harder to reach — correctly. Do no
 read an unseparated ROCm row as "the lanes are equal" without first checking
 which clock produced it; it may mean the timer degraded, not that the kernels
 match. **Owed on Princess-Luna.**
+
+---
+
+## Cross-backend sync `APPLE-TIMER-WITNESS-2026-08-31`
+
+**Owning item:** the Apple half of `NVIDIA-TIMER-DRAIN-2026-08-31`, recorded
+there as follow-up required · **synchronization key:**
+`APPLE-TIMER-WITNESS-2026-08-31`
+
+**Shared contract changed — a device latency must be checked against a clock
+that did not produce it.** ROCm and NVIDIA already did; Apple did not, and had
+no host clock at all to check against.
+
+**Two findings from the measurement, both of which changed the design.**
+
+*The witness must bracket the same region the device clock does.* The first
+version instrumented `commit_and_wait_with_timeout` only — and the lane this
+workload actually takes (`metal4_mpsgraph_envelope`) does not go through it.
+It reported a null wall, which the acceptance rule reads as "no witness
+available" and passes the device number through unchecked. The failure was
+silent: telemetry looked healthy, the band existed, and it was checking nothing.
+
+*A witness scoped to the wrong region produces a wrong rule, not an obvious
+failure.* Measured device/wall against a **Python-level** wall — which carries
+numpy marshalling and array conversion no GPU interval could contain — was
+**0.35–0.60**, and that argued for a one-sided band, since 0.35 fails a 0.5×
+floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
+over 100 samples from 8² to 2048². The symmetric band was fine all along; the
+one-sided version was defending against an artifact of its own denominator.
+
+**Both constants are set from that run, not copied.** Floor 0.5× (measured min
+0.568, ~13% headroom). Ceiling **1.25×** — containment says a device interval
+can never exceed the wall, but these are independent clocks over nested regions
+and the measured max of 0.937 leaves a strict `device <= wall` only 6.3%.
+
+**Outcome for this backend: `parity validated` — no ROCm change; this backend
+already holds the shape Apple is converging on, and its design is now the
+target for Apple's remaining follow-up.** `_select_rocm_latency_ms` prefers the
+in-kernel `wall_clock64`, falls back to a band-checked HIP event, and falls back
+again to the host wall — and, crucially, lower-bounds the device clock against
+the **event** clock rather than the wall, because launch overhead makes a small
+kernel's device time legitimately far below the host span. Apple has just
+measured its way to the same conclusion from the opposite direction, and the
+cross-clock bound it still owes is this function's structure.
+
+**One thing this key confirms about the ROCm rule.** The gfx1151 clocks agreed
+to four significant figures, which is a *quiet-device* agreement. Apple's
+0.568–0.937 spread over the same kind of comparison shows how much the ratio
+moves once the host span carries real submission work — so a future ROCm lane
+with heavier host-side marshalling should re-measure that band rather than
+assume the four-figure agreement transfers to it.
+
+**No gfx1151 evidence is claimed** — no ROCm code changed.

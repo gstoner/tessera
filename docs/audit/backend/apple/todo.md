@@ -5682,3 +5682,74 @@ it, or the separation field will read as validated on evidence that is neither.
 
 **Owed on the M1 Max.** No Apple code changed here and no Metal evidence is
 claimed.
+
+---
+
+## Cross-backend sync `APPLE-TIMER-WITNESS-2026-08-31`
+
+**Owning item:** the Apple half of `NVIDIA-TIMER-DRAIN-2026-08-31`, recorded
+there as follow-up required · **synchronization key:**
+`APPLE-TIMER-WITNESS-2026-08-31`
+
+**Shared contract changed — a device latency must be checked against a clock
+that did not produce it.** ROCm and NVIDIA already did; Apple did not, and had
+no host clock at all to check against.
+
+**Two findings from the measurement, both of which changed the design.**
+
+*The witness must bracket the same region the device clock does.* The first
+version instrumented `commit_and_wait_with_timeout` only — and the lane this
+workload actually takes (`metal4_mpsgraph_envelope`) does not go through it.
+It reported a null wall, which the acceptance rule reads as "no witness
+available" and passes the device number through unchecked. The failure was
+silent: telemetry looked healthy, the band existed, and it was checking nothing.
+
+*A witness scoped to the wrong region produces a wrong rule, not an obvious
+failure.* Measured device/wall against a **Python-level** wall — which carries
+numpy marshalling and array conversion no GPU interval could contain — was
+**0.35–0.60**, and that argued for a one-sided band, since 0.35 fails a 0.5×
+floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
+over 100 samples from 8² to 2048². The symmetric band was fine all along; the
+one-sided version was defending against an artifact of its own denominator.
+
+**Both constants are set from that run, not copied.** Floor 0.5× (measured min
+0.568, ~13% headroom). Ceiling **1.25×** — containment says a device interval
+can never exceed the wall, but these are independent clocks over nested regions
+and the measured max of 0.937 leaves a strict `device <= wall` only 6.3%.
+
+**Outcome for this backend: `parity validated` — owed here, done here, on the
+M1 Max.** `tessera_apple_gpu_last_dispatch_wall_time_ns` is captured in both
+`commit_and_wait_with_timeout` and `MPSGraphTimingBracket`;
+`accept_apple_device_ns` owns the band and the measurement behind it. The
+export is in `_SENTINEL_SYMBOLS`, because a null wall *disables* the check
+rather than failing it — a stale dylib would otherwise restore the unwitnessed
+behaviour with every test still passing.
+
+**Correcting this plan's own `AUTOTUNE-SEPARATION-2026-08-31` entry.** That
+entry said the repeated-measurement half must land *with* the witness, or a
+single unvalidated timestamp would earn a free separation (spread of zero by
+construction). The risk is real but **not yet reachable**: `emit/apple_msl.py`
+declares **no `measure_device_latency` at all**, so no Apple candidate enters
+the device-timed arbiter path and there is no verdict to earn. The two are
+therefore *ordered*, not simultaneous — and the ordering is the other way
+round: the witness first, then a device timer, then repetition. Wiring an Apple
+`measure_device_latency` before the repeat count exists is what would create
+the free separation, so that is the pairing to enforce.
+
+**Still open here, and it is the stronger form of the floor.** Apple exposes
+**two independent device clocks** — `metal4_timestamp_heap` (MTL4 counter heap,
+`writeTimestampWithGranularity:`) and `metal_kernel_interval`
+(`cb.kernelStartTime`/`kernelEndTime`). Bounding one against the other beats
+bounding either against a host clock measuring a different span, which is the
+conclusion ROCm already reached (`_select_rocm_latency_ms` lower-bounds its
+device clock against the *event* clock, not the wall). Today the two overwrite
+each other in `g_last_dispatch_device_time_ns`; capturing both per dispatch is
+the follow-up.
+
+**Hardware note worth keeping.** This M1 Max reports **no dispatch-boundary
+counter sampling** (`MTLCounterSamplingPointAtDispatchBoundary` absent, so
+`tessera_apple_gpu_tile_counter_sampling_supported()` returns 0) but **does**
+support MTL4 counter heaps. The legacy `MTLCounterSampleBuffer` route is not
+available on this hardware; the MTL4 heap is the only independent device clock
+here, which is why the follow-up above depends on Metal 4 rather than being
+implementable on the classic API.

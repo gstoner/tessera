@@ -56,6 +56,13 @@ _CONTRACT_TERMS: tuple[str, ...] = (
     "determinism", "covers", "tolerance", "manifold", "algebra",
     "tile_m", "tile_n", "tile_k", "warps", "staging", "epilogue", "schedule",
     "abi", "space", "order",
+    # Added 2026-08-30: the Apple simdgroup primitives showed the vocabulary
+    # was missing two real contracts. `memory_scope` selects semantics (a
+    # barrier only orders the memory it names -- #21a), and `leading_dim` is
+    # the row-stride bound whose violation aliases matrix rows silently. An
+    # audit that cannot see a contract undercounts exactly the ops that carry
+    # one.
+    "scope", "stride", "leading_dim",
 )
 
 
@@ -120,7 +127,12 @@ def collect() -> tuple[OpMembership, ...]:
             continue
         text = path.read_text(encoding="utf-8")
         bases = _base_bodies(text)
-        for match in re.finditer(r"^def\s+(\w+)\s*:\s*([^{]*?)\{", text, re.M):
+        # `[^{;]` not `[^{]`: a brace-less `def X : Base<...>;` (every enum
+            # attribute) would otherwise match forward into the NEXT op's
+            # opening brace and consume that op's body as its own, so the
+            # op vanishes from the audit entirely. Silent under-count, not
+            # an error -- `simdgroup_load` disappeared this way.
+        for match in re.finditer(r"^def\s+(\w+)\s*:\s*([^{;]*?)\{", text, re.M):
             head = match.group(2)
             mnemonic = re.search(r'"([a-z0-9_.]+)"', head)
             base = re.match(r"\s*(\w+)", head)
@@ -167,6 +179,15 @@ def render_markdown() -> str:
         "",
         "Decision #19 (amended 2026-08-30) says the `tessera_<backend>` layer",
         "exists for **contract carriage**. This measures whether that holds.",
+        "",
+        "**Corrected 2026-08-30: the first published totals were wrong.**",
+        "This audit reported \"38 of 138\" before two defects were found in",
+        "its own parser: the contract vocabulary could not see `memory_scope`",
+        "or `leading_dim` (real contracts, uncounted), and a brace-less",
+        "`def X : Base<...>;` matched forward into the next operation's body",
+        "and **consumed that operation**, so ops vanished with no error.",
+        "Both produced a confident number rather than a failure, which is why",
+        "each now has a named regression test.",
         "",
         "`optional-only` is the row to read. Those ops declare their contract",
         "attributes as `OptionalAttr`, almost always inherited from the",

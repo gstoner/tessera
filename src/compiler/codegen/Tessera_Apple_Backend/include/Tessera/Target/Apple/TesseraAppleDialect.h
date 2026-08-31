@@ -22,6 +22,12 @@
 // Generated dialect declarations (cppNamespace = ::tessera::apple).
 #include "Tessera/Target/Apple/TesseraAppleDialect.h.inc"
 
+// Types before operations: the GPU machine primitives take a
+// `!tessera_apple.simdgroup_matrix<T>` operand, so the generated op classes
+// reference SimdgroupMatrixType and will not compile without it in scope.
+#define GET_TYPEDEF_CLASSES
+#include "Tessera/Target/Apple/TesseraAppleTypes.h.inc"
+
 #define GET_OP_CLASSES
 #include "Tessera/Target/Apple/TesseraAppleOps.h.inc"
 

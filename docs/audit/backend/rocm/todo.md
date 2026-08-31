@@ -7,6 +7,44 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
+
+PR #653 changes a **shared Graph IR ABI**: the delta-rule family
+(`gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention`) now
+declares its optional tensor operands in `graph_ir._KEYWORD_OPERANDS` as
+`(gate, beta, decay)` and emits `has_gate`/`has_beta`/`has_decay` presence
+flags from both frontends. All four backends consume this ABI, so all four are
+assessed here per AGENTS.md.
+
+**What was wrong.** Undeclared, the AST emitter appended keyword operands
+*sorted by name*, so `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted
+them as `(beta, decay, gate)`. Order alone would not have been enough either:
+with `[Q, K, V, %x]` the lone optional sits at index 3 whichever slot it fills.
+
+**Load-bearing fact for every backend: no producer had ever set these flags.**
+`has_gate`/`has_beta`/`has_decay` were read by four executors and written by
+none. The compiled ROCm, NVIDIA and x86 deltanet lanes all compute
+`need = 3 + has_gate + has_beta + has_decay` and raise when that disagrees with
+the operand count — so with the flags absent they accepted **only** the
+three-operand form and raised on any traced call carrying `beta`/`decay`. This
+PR is therefore what makes those lanes reachable with optionals at all. That is
+a behaviour change on three backends and each owes its own exact-device proof;
+the Apple result does not transfer to any of them.
+
+**ROCm outcome: follow-up required — exact-device proof owed on gfx1151.**
+
+`_execute_rocm_compiled_deltanet` documents this exact ABI
+(`[Q, K, V, gate?, beta?, decay?]`, presence via the three flags) and already
+fails closed on the operand count — it was the only consumer that did, and it
+is why ROCm raised instead of returning wrong numbers. With the flags now
+emitted, the compiled gfx1151 lane becomes reachable with optionals for the
+first time, along with `_execute_rocm_compiled_deltanet_backward`.
+
+Owed on Princess-Luna: forward parity per optional subset and a backward check,
+sourced with `scripts/_rocm_env.sh` (a bare sweep is not a valid ROCm result).
+The Apple correctness result does not transfer — different kernels, different
+accumulation order.
+
 Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
 marker vocabulary and conftest boundary changed; per-backend outcome below.**
 `hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its

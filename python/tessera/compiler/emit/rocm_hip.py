@@ -849,6 +849,35 @@ class RocmFlashAttnCandidate(Candidate):
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
 
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """Per-launch ms with Q/K/V resident, via the executor's `_timed_reps`.
+
+        The timing path already existed but read `hipEventElapsedTime` with no
+        validation -- not even a positivity check -- so on a host whose HIP
+        events report success while writing garbage it returned a confident
+        wrong number. It now goes through `_hip_resident_launch_latency`, which
+        cross-checks a wall clock and falls back conservatively.
+
+        Returns ``None`` when the compiled lane is unavailable or the shapes
+        are outside its envelope, because `run` declines to the reference
+        there and a latency would describe numpy rather than a kernel.
+        """
+        import numpy as np
+        if len(inputs) < 3:
+            return None
+        try:
+            from tessera import runtime as rt
+            if not rt._rocm_compiled_flash_attn_available():
+                return None
+            q, kk, v = (np.ascontiguousarray(x, np.float16) for x in inputs[:3])
+            _, device_ms = rt._rocm_flash_attn(
+                q, kk, v, scale=getattr(region, "scale", None),
+                causal=getattr(region, "causal", True), _timed_reps=int(reps))
+            return None if device_ms is None else float(device_ms)
+        except Exception:
+            return None
+
 
 # ── registration ──────────────────────────────────────────────────────────────
 register_emitter(RocmHipEmitter())

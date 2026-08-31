@@ -8031,25 +8031,17 @@ def _execute_rocm_compiled_flash_attn(
     hip.hipDeviceSynchronize()
     device_ms = None
     if _timed_reps:
-        start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-        if hip.hipEventCreate(ctypes.byref(start)) != 0 or hip.hipEventCreate(ctypes.byref(stop)) != 0:
-            for dev in dev_bufs:
-                hip.hipFree(dev)
-            raise RuntimeError("rocm flash_attn: HIP event creation failed")
-        try:
-            hip.hipEventRecord(start, None)
-            for _ in range(int(_timed_reps)):
-                if launch_once() != 0:
-                    raise RuntimeError("rocm flash_attn: timed kernel launch failed")
-            hip.hipEventRecord(stop, None)
-            hip.hipEventSynchronize(stop)
-            elapsed = ctypes.c_float()
-            if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) != 0:
-                raise RuntimeError("rocm flash_attn: HIP event timing failed")
-            device_ms = float(elapsed.value) / int(_timed_reps)
-        finally:
-            hip.hipEventDestroy(start)
-            hip.hipEventDestroy(stop)
+        # Was: record events, divide by reps, return -- with no validation at
+        # all, not even `> 0`. On this fleet's WSL2 host HIP events have been
+        # measured returning hipSuccess while writing garbage (0.0 ms in one
+        # harness, -1.28e8 ms in a direct probe), so that path could hand back
+        # 0.0 or a large negative as a device latency and the caller would
+        # divide by it. `_hip_resident_launch_latency` cross-checks against a
+        # wall clock and falls back conservatively.
+        global _rocm_last_timer_source
+        device_ms, _rocm_last_timer_source = _hip_resident_launch_latency(
+            hip, launch_once, iters=int(_timed_reps), warmup=0,
+            what="rocm flash_attn")
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * nq, 2)
     for dev in dev_bufs:
         hip.hipFree(dev)
@@ -8463,21 +8455,21 @@ def _execute_rocm_compiled_flash_attn_bwd(
     hip.hipDeviceSynchronize()
     device_ms = None
     if _timed_reps:
-        start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-        hip.hipEventCreate(ctypes.byref(start))
-        hip.hipEventCreate(ctypes.byref(stop))
-        try:
-            hip.hipEventRecord(start, None)
-            for _ in range(int(_timed_reps)):
-                _run_backward()
-            hip.hipEventRecord(stop, None)
-            hip.hipEventSynchronize(stop)
-            elapsed = ctypes.c_float()
-            hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop)
-            device_ms = float(elapsed.value) / int(_timed_reps)
-        finally:
-            hip.hipEventDestroy(start)
-            hip.hipEventDestroy(stop)
+        # Was: create events (return code discarded), record, and read
+        # `hipEventElapsedTime` with its return code ALSO discarded, then divide
+        # by reps. On a host where HIP events report success while writing
+        # garbage -- measured on this fleet -- that yields a confident wrong
+        # latency with no failure anywhere. Routed through the validated helper,
+        # which cross-checks a wall clock and falls back conservatively.
+        global _rocm_last_timer_source
+
+        def _launch_backward() -> int:
+            _run_backward()          # raises on a real launch failure
+            return 0
+
+        device_ms, _rocm_last_timer_source = _hip_resident_launch_latency(
+            hip, _launch_backward, iters=int(_timed_reps), warmup=0,
+            what="rocm flash_attn backward")
 
     dq = np.zeros((bh, sq, head_dim), np.float32)
     dk = np.zeros((bh_kv, sk, head_dim), np.float32)
@@ -30061,7 +30053,9 @@ def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
 # linear/delta lanes where possible, and DeepSeek sparse attention now lives in
 # the DK2 rocm_sparse_attn_compiled lane.
 # ─────────────────────────────────────────────────────────────────────────────
-def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None, causal: bool = True, attn_bias: Any = None) -> Any:
+def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None,
+                     causal: bool = True, attn_bias: Any = None,
+                     _timed_reps: int = 0) -> Any:
     """Run the COMPILER-GENERATED WMMA flash_attn forward on Q/K/V via the
     flash_attn executor (constructs a minimal sub-artifact). Returns the f32
     attention output shaped like Q. An optional ``attn_bias`` (additive, shape
@@ -30088,7 +30082,8 @@ def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None, causal: bool 
             "ops": [{"op_name": "tessera.flash_attn", "result": "o", "operands": operands, "kwargs": kw}],
         }
     )
-    return _execute_rocm_compiled_flash_attn(sub, call_args)
+    return _execute_rocm_compiled_flash_attn(
+        sub, call_args, _timed_reps=_timed_reps)
 
 
 def _rocm_project_last(x: Any, w: Any, store: Any) -> Any:

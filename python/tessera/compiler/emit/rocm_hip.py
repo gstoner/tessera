@@ -98,15 +98,34 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         f"__global__ void {_ENTRY}_kernel(const float* A, const float* B,\n"
         "        const float* bias, const float* residual, float* out,\n"
         "        int M, int N, int K, unsigned long long* span) {\n"
-        "    if (span && threadIdx.x == 0)\n"
-        "        atomicMin(&span[0], (unsigned long long)wall_clock64());\n"
+        # The barriers are load-bearing, not hygiene. This block is 64 threads
+        # and gfx1151 is wave32, so it spans TWO wavefronts. Thread 0 lives in
+        # wave 0 and would otherwise stamp the end time while wave 1 is still
+        # computing its rows -- an UNDER-estimate, which
+        # `_select_rocm_latency_ms` would accept (it bounds the device clock
+        # from above) and which would make this lane look faster than it is and
+        # persist the wrong autotune winner.
+        #
+        # That is the exact failure this file's own timing rule names: an
+        # over-estimate makes a kernel look slow and gets investigated; an
+        # under-estimate makes it look fast and gets published.
+        #
+        # `span` is block-uniform, so both barriers are reached by every thread.
+        "    if (span) {\n"
+        "        if (threadIdx.x == 0)\n"
+        "            atomicMin(&span[0], (unsigned long long)wall_clock64());\n"
+        "        __syncthreads();   // no wave starts work before the start stamp\n"
+        "    }\n"
         "    int m = blockIdx.x*blockDim.x + threadIdx.x;\n"
         "    if (m < M) {\n"
         "    float* row = out + (long)m * N;\n"
         f"{row_compute_body(region)}"
         "    }\n"
-        "    if (span && threadIdx.x == 0)\n"
-        "        atomicMax(&span[1], (unsigned long long)wall_clock64());\n"
+        "    if (span) {\n"
+        "        __syncthreads();   // every wave has finished before the end stamp\n"
+        "        if (threadIdx.x == 0)\n"
+        "            atomicMax(&span[1], (unsigned long long)wall_clock64());\n"
+        "    }\n"
         "}\n"
         # Every hipMalloc/hipMemcpy status is checked and turned into a non-1
         # return code, because the runner treats rc==1 as proof the device
@@ -173,7 +192,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "    unsigned long long *dSpan=0, hSpan[2];\n"
         "    hipEvent_t evStart=0, evStop=0;\n"
         "    hipStream_t stream=0;\n"
-        "    int t=64, b=0, rc=2, i=0, eventsUsable=0, rate=0;\n"
+        "    int t=64, b=0, rc=2, i=0, eventsUsable=0, rate=0, useSpan=0;\n"
         "    float ev=0.0f;\n"
         "    if (!hA||!hB||!hout||!wall_ms||!event_ms||!device_ms\n"
         "        ||iters<1||warmup<0) return 5;\n"
@@ -183,8 +202,8 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         # taken while other GPU work is in flight would be distorted by it.
         "    if (hipStreamCreateWithFlags(&stream,hipStreamNonBlocking)\n"
         "            !=hipSuccess) stream=0;\n"
-        "    if (hipMalloc(&dSpan,2*sizeof(unsigned long long))!=hipSuccess)\n"
-        "        dSpan=0;\n"
+        "    if (hipMalloc(&dSpan,2*sizeof(unsigned long long))==hipSuccess)\n"
+        "        useSpan=1;\n"
         "    if (hipMalloc(&dA,szA)!=hipSuccess) goto cleanup;\n"
         "    if (hipMalloc(&dB,szB)!=hipSuccess) goto cleanup;\n"
         "    if (hipMalloc(&dO,szO)!=hipSuccess) goto cleanup;\n"
@@ -207,10 +226,15 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "    if (hipStreamSynchronize(stream)!=hipSuccess) goto cleanup;\n"
         # The on-device span buffer: min(start) / max(end) across blocks, so
         # it has to start at the extremes rather than at zero.
-        "    if (dSpan) {\n"
+        # Disable the instrumentation with a FLAG, never by clearing the
+        # pointer: `dSpan` is the only handle to the allocation, and zeroing it
+        # on a failed init would skip `hipFree` in cleanup. Under a repeated
+        # copy failure that leaks once per autotune call until later
+        # allocations start failing.
+        "    if (useSpan) {\n"
         "        hSpan[0]=~0ull; hSpan[1]=0ull;\n"
         "        if (hipMemcpy(dSpan,hSpan,sizeof(hSpan),\n"
-        "                hipMemcpyHostToDevice)!=hipSuccess) dSpan=0;\n"
+        "                hipMemcpyHostToDevice)!=hipSuccess) useSpan=0;\n"
         "    }\n"
         "    eventsUsable = (hipEventCreate(&evStart)==hipSuccess &&\n"
         "                    hipEventCreate(&evStop)==hipSuccess &&\n"
@@ -220,7 +244,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "            std::chrono::steady_clock::now();\n"
         "        for (i=0;i<iters;++i) {\n"
         f"            hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, stream,\n"
-        "                dA,dB,dbias,dres,dO,M,N,K,dSpan);\n"
+        "                dA,dB,dbias,dres,dO,M,N,K,useSpan?dSpan:0);\n"
         "            if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
         "        }\n"
         "        if (eventsUsable)\n"
@@ -242,7 +266,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         # kernel-only span that depends on neither the host clock nor the event
         # API. It spans ALL `iters` launches (the buffer is reduced across
         # them), matching the other two numbers.
-        "    if (dSpan &&\n"
+        "    if (useSpan &&\n"
         "        hipMemcpy(hSpan,dSpan,sizeof(hSpan),\n"
         "            hipMemcpyDeviceToHost)==hipSuccess &&\n"
         "        hipDeviceGetAttribute(&rate,hipDeviceAttributeWallClockRate,0)\n"

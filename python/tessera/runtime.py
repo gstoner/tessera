@@ -7382,14 +7382,30 @@ def _select_rocm_latency_ms(*, wall_ms: float, event_ms: float | None,
        therefore only make a kernel look slower. A benchmark must not be able
        to flatter itself.
 
-    The device clock is still cross-checked against the host wall clock, from
-    *above* only: it measures a strict subset of the wall span (kernel
-    execution inside launch-to-completion), so exceeding it means the reading
-    is wrong, while being far below it is the expected result rather than a
-    fault.
+    **The device clock needs a lower bound too, and against the event clock
+    rather than the wall clock.** An earlier version bounded it only from
+    above, reasoning that it measures a strict subset of the wall span so only
+    an over-reading could be wrong. That reasoning is sound for a *correct*
+    device clock and useless against a broken one -- and it let exactly one
+    bug through: the in-kernel stamps were taken without a block barrier, so on
+    a 64-thread block over wave32 hardware the first wavefront could record the
+    end time while the second was still computing. That under-reads, passes an
+    upper bound trivially, and would have made the lane look faster than it is
+    and persisted the wrong autotune winner.
+
+    A lower bound against the *wall* clock cannot work: launch overhead is
+    real, so a small kernel's device time is legitimately far below it. The
+    event clock is the right reference because it brackets the same span on the
+    same stream -- both cover all `iters` launches including the gaps between
+    them -- so the two should agree closely, and a large gap means one of them
+    is lying. When they disagree, take the larger: a benchmark must not be able
+    to flatter itself.
     """
     if device_ms is not None and device_ms > 0.0 and device_ms <= 2.0 * wall_ms:
-        return device_ms
+        checked_event = _accept_device_event_ms(event_ms, wall_ms)
+        if checked_event is None or device_ms >= 0.5 * checked_event:
+            return device_ms
+        return checked_event
     accepted = _accept_device_event_ms(event_ms, wall_ms)
     return accepted if accepted is not None else wall_ms
 

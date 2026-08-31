@@ -147,3 +147,96 @@ def test_iteration_counts_are_validated():
     with pytest.raises(ValueError):
         _hip_resident_launch_latency(_FakeHip(5.0), lambda: 0, iters=0,
                                      warmup=0, what="test")
+
+
+# ── the device clock needs a lower bound too (PR #656 review) ────────────────
+#
+# The in-kernel stamps were taken without a block barrier. A 64-thread block on
+# wave32 hardware spans two wavefronts, so the first could record the end time
+# while the second was still computing -- an under-reading, which the original
+# upper-bound-only check accepted. That would have made the lane look faster
+# than it is and persisted the wrong autotune winner: the exact failure the
+# event-clock band exists to prevent, reintroduced through a different door.
+
+
+def test_a_device_clock_that_under_reads_is_caught_by_the_event_clock():
+    """Wall cannot be the lower reference -- launch overhead makes a small
+    kernel's device time legitimately far below it. The event clock brackets
+    the same span on the same stream, so a large gap means one is lying."""
+    from tessera.runtime import _select_rocm_latency_ms
+
+    # A barrier bug: the device clock reports a fraction of the real span.
+    chosen = _select_rocm_latency_ms(wall_ms=10.0, event_ms=9.8, device_ms=1.0)
+    assert chosen == 9.8, (
+        "an under-reading device clock must lose to the validated event clock")
+
+
+def test_a_device_clock_agreeing_with_the_event_clock_is_preferred():
+    """The healthy case measured on gfx1151: the three clocks agree to four
+    significant figures and the kernel-only reading wins."""
+    from tessera.runtime import _select_rocm_latency_ms
+
+    assert _select_rocm_latency_ms(
+        wall_ms=82.6946, event_ms=82.5909, device_ms=82.5600) == 82.5600
+
+
+def test_the_device_clock_still_wins_when_no_event_clock_is_available():
+    """With events unusable there is nothing to cross-check against, so the
+    kernel-only reading is still the best of what is left -- it is bounded from
+    above by the wall clock, which is all that can be checked."""
+    from tessera.runtime import _select_rocm_latency_ms
+
+    assert _select_rocm_latency_ms(
+        wall_ms=10.0, event_ms=None, device_ms=4.0) == 4.0
+
+
+def test_an_over_reading_device_clock_falls_back():
+    from tessera.runtime import _select_rocm_latency_ms
+
+    assert _select_rocm_latency_ms(
+        wall_ms=10.0, event_ms=9.8, device_ms=999.0) == 9.8
+    assert _select_rocm_latency_ms(
+        wall_ms=10.0, event_ms=None, device_ms=999.0) == 10.0
+
+
+def test_the_generated_kernel_barriers_bracket_the_whole_block():
+    """The fix for the under-reading, asserted where it lives.
+
+    `span` is block-uniform so both barriers are reached by every thread; a
+    barrier inside a thread-0-only branch would hang the block.
+    """
+    from tessera.compiler import fusion_core as F
+    from tessera.compiler.emit.rocm_hip import _synthesize_fused_hip
+
+    kernel = _synthesize_fused_hip(
+        F.FusedRegion(epilogue=("relu",))).split("__global__")[1].split(
+            'extern "C"')[0]
+    assert kernel.count("__syncthreads()") == 2, (
+        "both the start and end stamps need a block barrier")
+    start, end = kernel.index("atomicMin"), kernel.index("atomicMax")
+    barriers = [i for i in range(len(kernel))
+                if kernel.startswith("__syncthreads()", i)]
+    assert any(start < b < end for b in barriers), (
+        "a barrier must separate the start stamp from the end stamp, or one "
+        "wavefront can stamp the end while another is still computing")
+    assert any(b > start for b in barriers) and end > max(
+        b for b in barriers if b < end), (
+        "the end stamp must follow the barrier, not precede it")
+
+
+def test_the_span_allocation_is_freed_even_when_its_init_fails():
+    """Disabling the instrumentation must not discard the only pointer to the
+    allocation -- cleanup's `if (dSpan) hipFree(dSpan)` would then never fire,
+    leaking once per autotune call under a repeated copy failure."""
+    from tessera.compiler import fusion_core as F
+    from tessera.compiler.emit.rocm_hip import _synthesize_fused_hip
+
+    bench = _synthesize_fused_hip(
+        F.FusedRegion(epilogue=("relu",))).split("_bench(")[1]
+    assert "useSpan=0" in bench, "the instrumentation is disabled by a flag"
+    assert "hipFree(dSpan)" in bench
+    # The only assignment of 0 to the pointer is its declaration initialiser,
+    # which cleanup relies on.
+    assigns = [ln.strip() for ln in bench.splitlines()
+               if "dSpan=0" in ln.replace(" ", "")]
+    assert assigns == ["unsigned long long *dSpan=0, hSpan[2];"], assigns

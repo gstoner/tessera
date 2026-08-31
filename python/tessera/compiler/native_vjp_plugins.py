@@ -932,21 +932,34 @@ def _execute_sequence_mixer(
 
         flags = dict(source.kwargs)
         source_operands = tuple(getattr(source, "operands", ()))
-        optional_labels = {
-            str(name).lstrip("%").lower() for name in source_operands[3:]
-        }
-        for key, label in (
-            ("has_gate", "gate"),
-            ("has_beta", "beta"),
-            ("has_decay", "decay"),
-        ):
-            if key not in flags:
-                flags[key] = label in optional_labels
-        if not optional_labels.intersection({"gate", "beta", "decay"}) and len(
-            source_operands
-        ) > 3:
-            for index, key in enumerate(("has_gate", "has_beta", "has_decay")):
-                flags[key] = index < len(source_operands) - 3
+        # Presence of gate/beta/decay comes from the flags the frontend emits
+        # (`graph_ir._PRESENCE_FLAGGED_OPERANDS`), never from inspecting the
+        # operands.
+        #
+        # This used to guess twice over: first by matching the operand
+        # *variable names* against {gate, beta, decay}, then -- when no name
+        # matched -- by assuming the trailing operands fill the slots in
+        # declaration order. Both are wrong for the same reason. Operand names
+        # are whatever the user called their locals, so
+        # `gated_deltanet(q, k, v, beta=b, decay=d)` presents `b` and `d`, no
+        # name matches, the positional fallback fires, and beta binds to gate
+        # while decay binds to beta. The VJP then differentiates a different
+        # recurrence and returns gradients that are wrong but finite.
+        missing = [
+            key for key in ("has_gate", "has_beta", "has_decay")
+            if key not in flags
+        ]
+        if missing and len(source_operands) > 3:
+            raise TesseraJitError(
+                "SM120 DeltaNet backward cannot bind optional operands: the "
+                f"source op carries {len(source_operands) - 3} trailing "
+                f"operand(s) but no {', '.join(missing)}. Operand names are "
+                "the caller's local names and carry no binding information, "
+                "so there is nothing here to infer from -- re-trace with a "
+                "frontend that emits the presence flags."
+            )
+        for key in missing:
+            flags[key] = False
         expected_inputs = 3 + sum(
             int(bool(flags.get(key, False)))
             for key in ("has_gate", "has_beta", "has_decay")

@@ -29,7 +29,9 @@ import re
 import textwrap
 import typing
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, cast
+from typing import (
+    Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast,
+)
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
 from .legality import TensorContract, check_op_legality
@@ -245,7 +247,80 @@ _KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
     # operand/attribute question is about what a parameter BINDS, and has
     # nothing to do with whether it has a default.
     "tessera.moe": ("scores", "route"),
+    # Delta-rule attention family. `gate`/`beta`/`decay` are OPTIONAL tensor
+    # operands, and the ABI that every backend executor reads is
+    # `[Q, K, V, gate?, beta?, decay?]` -- see `_execute_rocm_compiled_deltanet`,
+    # which documents it and fails closed on the operand count.
+    #
+    # They were missed for the same reason `tessera.moe`'s were, one step
+    # further out: the arity gate surveys *required keyword-only* parameters,
+    # and these are optional AND positional-or-keyword, so they fall outside it
+    # twice over. Undeclared, the emitter appended them sorted by name, so
+    # `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted operands in the
+    # order (beta, decay, gate) -- every optional bound to the wrong slot by a
+    # positional reader.
+    "tessera.gated_deltanet": ("gate", "beta", "decay"),
+    "tessera.kimi_delta_attention": ("gate", "beta", "decay"),
+    "tessera.modified_delta_attention": ("gate", "beta", "decay"),
 }
+
+
+# Ops whose optional keyword operands must ALSO record their presence.
+#
+# Declaring the order above fixes only half of a variadic operand list. Given
+# `[Q, K, V, %b]` a consumer still cannot tell whether `%b` is `gate`, `beta`
+# or `decay` -- the position of the *first* optional is the same whichever it
+# is. So the IR must say which slots are filled, or the operand list is simply
+# not decodable and every consumer invents a heuristic. Three had:
+#
+#   * the Apple GPU dispatcher read `beta`/`decay` from kwargs only, found
+#     neither, and silently computed the unweighted rule;
+#   * the SM120 VJP plugin guessed from operand *variable names* and fell back
+#     to "trailing operands fill the slots in order", which mis-binds whenever
+#     a caller names its variables anything but `beta`/`decay`;
+#   * only the ROCm executor failed closed, and only on the operand *count*.
+#
+# `has_<name>` is not a new convention -- it is the one those executors already
+# read (`has_gate`/`has_beta`/`has_decay`). This makes the producer emit what
+# they were always parsing for.
+_PRESENCE_FLAGGED_OPERANDS: Dict[str, tuple[str, ...]] = {
+    "tessera.gated_deltanet": ("gate", "beta", "decay"),
+    "tessera.kimi_delta_attention": ("gate", "beta", "decay"),
+    "tessera.modified_delta_attention": ("gate", "beta", "decay"),
+}
+
+
+def apply_presence_flags(
+    graph_name: str,
+    kwargs: Dict[str, Any],
+    positional_operand_count: int,
+    keyword_operand_names: "Sequence[str]",
+) -> None:
+    """Record which optional operands are bound, in place on ``kwargs``.
+
+    Shared by both frontends deliberately. The AST emitter and the tracer are
+    held to structural parity by `certify_frontends_non_reexecuting`, so a
+    presence fact computed by one and not the other -- or computed two
+    slightly different ways -- is a frontend divergence that fails the
+    certificate. One implementation, called twice.
+
+    Both calling styles have to agree because the same op can be written
+    either way: positional arguments past the required ones fill the declared
+    slots in order, and keyword arguments bind by name. A flag the caller set
+    explicitly is left alone -- an explicit statement outranks an inference.
+    """
+    flagged = _PRESENCE_FLAGGED_OPERANDS.get(graph_name, ())
+    if not flagged:
+        return
+    from .op_catalog import get_op_spec
+
+    spec = get_op_spec(graph_name)
+    required = int(getattr(spec, "min_arity", 3)) if spec else 3
+    extra_positional = max(0, int(positional_operand_count) - required)
+    present = set(keyword_operand_names)
+    present.update(flagged[:extra_positional])
+    for name in flagged:
+        kwargs.setdefault(f"has_{name}", name in present)
 
 
 # Keyword-only ATTRIBUTES. These already emitted correctly (a scalar keyword
@@ -2088,6 +2163,8 @@ class _OpExtractor(ast.NodeVisitor):
         # the caller happened to write the keywords. Anything undeclared is
         # appended by sorted name -- deterministic, and flagged by
         # `test_keyword_operand_vocabulary` as vocabulary that needs declaring.
+        positional_operand_count = len(operands)
+        bound_optional_names: list[str] = []
         if kw_operands:
             declared = _KEYWORD_OPERANDS.get(mlir_name, ())
             ordered = [n for n in declared if n in kw_operands]
@@ -2097,6 +2174,20 @@ class _OpExtractor(ast.NodeVisitor):
                 operands.append(value)
                 operand_types.append(
                     str(self._value_types.get(value, TENSOR_OPAQUE)))
+            bound_optional_names = list(ordered)
+
+        # Presence of each optional operand, for ops whose operand list is
+        # otherwise undecodable (see `_PRESENCE_FLAGGED_OPERANDS`). Without
+        # this, `[Q, K, V, %b]` cannot be read: the first optional sits at the
+        # same index whichever slot it fills.
+        #
+        # Both calling styles have to agree, because the same op can be written
+        # either way. Positional arguments past the required ones fill the
+        # declared slots in order; keyword arguments bind by name. A flag
+        # already set explicitly by the caller is left alone rather than
+        # recomputed -- an explicit statement outranks an inference.
+        apply_presence_flags(
+            mlir_name, kwargs, positional_operand_count, bound_optional_names)
 
         inferred_operands = [
             self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands

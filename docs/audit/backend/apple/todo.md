@@ -8,6 +8,63 @@ last_updated: 2026-08-29
 
 # Apple compiler, exact-device, and performance plan
 
+## Cross-backend sync `DEVICE-CLOCK-DISCIPLINE-2026-08-31`
+
+A **shared runtime timing contract** now decides which clock a device latency
+may be read from, so all four backends are assessed here per AGENTS.md.
+
+`runtime._select_rocm_latency_ms` ranks up to three clocks for one timed loop:
+
+1. **`wall_clock64` (in-kernel)** — a device-side counter at a constant,
+   queryable rate (`hipDeviceAttributeWallClockRate`; 100 MHz / 10 ns ticks on
+   gfx1151). The only one that is both kernel-only *and* independent of the
+   host event API. Unlike `clock()`, its rate does not move with DVFS.
+2. **HIP events**, accepted only inside a two-sided band against the host wall
+   clock.
+3. **The host wall clock**, which includes launch overhead and can therefore
+   only make a kernel look slower. A benchmark must not be able to flatter
+   itself.
+
+**Measured on gfx1151, 20 launches of the generic fused kernel — all three
+agree to four significant figures:**
+
+| shape | wall | event | `wall_clock64` | device/event |
+|---|---|---|---|---|
+| 256³ | 82.6946 ms | 82.5909 ms | 82.5600 ms | 1.000 |
+| 512³ | 498.0912 ms | 497.9570 ms | 497.8904 ms | 1.000 |
+
+The ordering `wall > event > device` is exactly right: wall includes launch
+overhead, the event brackets the stream, `wall_clock64` measures the kernel
+span. This is a mutual validation with an **independent witness**, not the
+weaker "the event agrees with the host clock".
+
+**Two rules that came out of this and generalize beyond ROCm.**
+
+* **`hipEventSynchronize` is mandatory; `hipDeviceSynchronize` is not the way
+  to get it.** Launches are async, so without an event (or stream) sync the
+  wall clock times the *enqueue*, producing a catastrophically small number
+  that then drags the acceptance band down with it. A device-wide barrier does
+  work, but halts every stream — it is now kept strictly as the fallback for a
+  host whose event API is unusable.
+* **Never time on the default stream.** Stream 0 implicitly serialises against
+  every other stream, so a measurement taken while other GPU work is in flight
+  is distorted by it. The generated bench entry creates a dedicated
+  `hipStreamNonBlocking` stream and synchronises *that*.
+
+**Apple outcome: not applicable today — zero arbiter candidates — but this is
+the backend where the contract would bind hardest.**
+
+Apple registers no candidates in the Decision #28 arbiter, so there is nothing
+to time and no evidence owed.
+
+Recorded because the Apple analogue is unusually sharp. Metal's device timing
+is command-buffer `GPUStartTime`/`GPUEndTime` plus counter sampling, and Apple
+has no in-kernel constant-rate clock equivalent to `wall_clock64` — so the
+independent third witness that validated the HIP event clock here would not be
+available. An Apple lane entering the arbiter would be back to "the event
+clock agrees with the host clock", which is the weaker check this contract was
+written to move past.
+
 ## Cross-backend sync `AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`
 
 PR (this branch) changes a **shared measurement contract**: an autotune

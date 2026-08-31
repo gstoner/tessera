@@ -16,7 +16,7 @@ from tessera.speculative import advance_ssm
 
 def _rocm_ready() -> bool:
     hipcc = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
-    return os.path.isfile(hipcc) and rt._rocm_chip() == "gfx1151"
+    return os.path.isfile(hipcc) and rt._rocm_live_arch() == "gfx1151"
 
 
 def _inputs(seed: int, tokens: int, batch: int, channels: int, state_dim: int):

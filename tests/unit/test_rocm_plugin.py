@@ -388,14 +388,75 @@ def _fused_hip_source(region=None):
                                                          residual=True))
 
 
+def _fused_hip_entries() -> dict[str, str]:
+    """The generated source's `extern "C"` entries, keyed by name.
+
+    Scoped per entry rather than "everything after the first `extern \"C\"`":
+    the source now also carries a `<entry>_bench` symbol (the device-resident
+    timer the arbiter needs), and lumping the two together turned a precise
+    per-entry count into a meaningless total.
+    """
+    source = _fused_hip_source()
+    blocks = source.split('extern "C" int ')[1:]
+    return {block.split("(", 1)[0]: " ".join(block.split()) for block in blocks}
+
+
 def test_fused_hip_wrapper_checks_every_transfer_and_allocation():
-    wrapper = " ".join(_fused_hip_source().split('extern "C"', 1)[1].split())
-    calls = [stmt for stmt in wrapper.split(";")
+    entries = _fused_hip_entries()
+    assert set(entries) == {"tessera_rocm_fused", "tessera_rocm_fused_bench"}, (
+        f"unexpected generated entries: {sorted(entries)}")
+
+    calls = [stmt for stmt in entries["tessera_rocm_fused"].split(";")
              if "hipMalloc(" in stmt or "hipMemcpy(" in stmt]
     # 5 allocations (A, B, O, bias, residual) + 4 H2D copies + 1 D2H.
     assert len(calls) == 10, calls
     for call in calls:
         assert "!=hipSuccess) goto cleanup" in call, call
+
+
+def test_fused_hip_bench_entry_checks_its_transfers_too():
+    """The timing entry allocates and copies exactly like the execution entry,
+    so it needs the same discipline -- an ignored failed H2D would time a
+    kernel reading uninitialised device memory and report a latency for it."""
+    bench = _fused_hip_entries()["tessera_rocm_fused_bench"]
+    calls = [stmt for stmt in bench.split(";")
+             if "hipMalloc(" in stmt or "hipMemcpy(" in stmt]
+
+    # Operand transfers are REQUIRED: an ignored failed H2D would time a kernel
+    # reading uninitialised device memory and report a latency for it.
+    required = [c for c in calls if "dSpan" not in c]
+    assert len(required) == 9, required   # 5 allocs + 4 H2D, no result D2H
+    for call in required:
+        assert "!=hipSuccess) goto cleanup" in call, call
+
+    # The device-clock buffer is an OPTIONAL refinement and degrades instead:
+    # losing it costs one of three clocks, not the measurement. Same stance as
+    # an unusable event API.
+    optional = [c for c in calls if "dSpan" in c]
+    assert optional, "the device-clock buffer should be allocated here"
+    for call in optional:
+        assert "goto cleanup" not in call, (
+            f"an optional clock must not abort the measurement: {call}")
+
+    assert "hipMemcpy(hout" not in bench, (
+        "the timed entry must not copy results back; that is the host cost it "
+        "exists to exclude")
+
+
+def test_fused_hip_bench_reports_both_clocks_and_judges_neither():
+    """The band lives in `runtime._accept_device_event_ms`, once.
+
+    Letting the generated C decide would be a second copy of the rule, which is
+    how the ROCm timing paths diverged in the first place -- one checked a
+    two-sided band, one checked `> 0`, one checked nothing.
+    """
+    bench = _fused_hip_entries()["tessera_rocm_fused_bench"]
+    assert "*wall_ms" in bench and "*event_ms" in bench
+    assert "steady_clock" in bench, "the wall clock must always be taken"
+    assert "*event_ms=-1.0" in bench, (
+        "an unusable event clock must be reported as absent, not as a latency")
+    # No comparison between the two clocks anywhere in the generated code.
+    assert "2.0 *" not in bench and "0.5 *" not in bench
 
 
 def test_fused_hip_wrapper_distinguishes_allocation_from_transfer_failure():

@@ -111,7 +111,7 @@ def test_native_avx512_affine_normalization_product():
 @pytest.mark.hardware_rocm
 def test_native_gfx1151_affine_normalization_product():
     from tessera import runtime
-    if runtime._tessera_opt_path() is None or runtime._rocm_chip() != "gfx1151":
+    if runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1151":
         pytest.skip("exact gfx1151 compiler/device required")
     rng = np.random.default_rng(191)
     x = rng.normal(size=(3, 64)).astype(np.float32)
@@ -139,7 +139,7 @@ def test_native_compound_spectral_product_rule(compiled, marker):
     if marker == "x86" and not runtime._x86_elementwise_available():
         pytest.skip("AVX-512 spectral package unavailable")
     if marker == "rocm" and (
-        runtime._tessera_opt_path() is None or runtime._rocm_chip() != "gfx1151"
+        runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1151"
     ):
         pytest.skip("exact gfx1151 compiler/device required")
     rng = np.random.default_rng(229)
@@ -198,7 +198,7 @@ def test_native_gfx1151_istft_window_product_matches_centered_difference():
     from tessera import runtime
     from tessera.compiler.emit.spectral_candidates import _amd_composite_lib
 
-    if runtime._tessera_opt_path() is None or runtime._rocm_chip() != "gfx1151":
+    if runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1151":
         pytest.skip("exact gfx1151 compiler/device required")
     lib = _amd_composite_lib()
     if lib is None or not hasattr(lib, "ts_istft_jvp_plan_hostptr_batch_amd"):
@@ -275,7 +275,7 @@ def test_native_gfx1151_jvp_matches_oracle(compiled):
     hip = runtime._load_hip_for_launch()
     if runtime._tessera_opt_path() is None or hip is None or hip.hipInit(0) != 0:
         pytest.skip("ROCm compiler or device unavailable")
-    if runtime._rocm_chip() != "gfx1151":
+    if runtime._rocm_live_arch() != "gfx1151":
         pytest.skip("exact gfx1151 required")
     rng = np.random.default_rng(29)
     x = rng.normal(size=(5, 64)).astype(np.float32)

@@ -2520,6 +2520,129 @@ def _nvidia_gemm_device_abi(lib: Any) -> None:
         fn.argtypes, fn.restype = argtypes, restype
 
 
+#: Which clock produced the last NVIDIA resident-launch measurement:
+#: ``"device_event"`` or ``"host_wall"``. Mirrors `_rocm_last_timer_source` so a
+#: caller can tell a device number from a wall-clock fallback without knowing
+#: which backend produced it. Unlike ROCm's, this is expected to read
+#: ``"device_event"`` on every sm_120 run -- CUDA events were measured agreeing
+#: with the wall to 0.2-0.4% -- so a ``"host_wall"`` here is a signal that
+#: something is wrong, not the routine outcome it is on the WSL2 gfx1151 host.
+_nvidia_last_timer_source: list[str | None] = [None]
+
+
+def nvidia_last_timer_source() -> str | None:
+    """The clock behind the most recent NVIDIA resident-launch measurement."""
+    return _nvidia_last_timer_source[0]
+
+
+def _accept_nvidia_event_ms(event_ms: float | None, wall_ms: float) -> float | None:
+    """Whether a CUDA event value may be believed, given a wall witness.
+
+    Deliberately *not* a call into `_accept_device_event_ms`: that helper states
+    ROCm's rule, and the two hosts fail differently. HIP events on gfx1151 were
+    measured returning success while writing garbage, so there the event is the
+    suspect clock. CUDA events on sm_120 were measured agreeing with the wall to
+    **0.2-0.4%** (`event/wall` 0.996-0.998 across idle and contended runs), so
+    here the event is the *reliable* clock and the wall is the fragile one.
+    Sharing one function would force one rationale onto both.
+
+    The band itself is the same two-sided 0.5x..2x, and for the same reason: the
+    lower bound is the load-bearing half, because an under-reading clock inflates
+    throughput and gets published, while an over-reading one makes a kernel look
+    slow and gets investigated. What differs is that this band is only valid
+    once the caller has drained the device -- see
+    `_nvidia_timed_launch_ms`, which owns that precondition.
+    """
+    if event_ms is None or not (event_ms == event_ms) or event_ms <= 0.0:
+        return None
+    if not (0.5 * wall_ms <= event_ms <= 2.0 * wall_ms):
+        return None
+    return event_ms
+
+
+def _nvidia_timed_launch_ms(lib: Any, launch: Any, *, reps: int, warmup: int,
+                            what: str) -> tuple[float, str]:
+    """Per-launch ms for an already-resident CUDA kernel, plus the clock used.
+
+    **The drain between warmup and the start event is not hygiene -- it is what
+    makes the wall clock a witness at all.** Measured on sm_120 with 2500 2048^3
+    GEMMs resident on a blocking stream, timing 40 launches of a 1024^3 GEMM:
+
+    | start event recorded | wall ms/rep | event ms/rep | event/wall |
+    |---|---|---|---|
+    | without a preceding drain | 63.3338 | 0.3227 | **0.005** |
+    | after `cuCtxSynchronize`  |  0.3263 | 0.3255 | **0.998** |
+
+    The event is right in both rows. Without the drain the start event is queued
+    behind the contending work, so the *wall* spans that drain and the event does
+    not: the two clocks bracket different regions and a comparison between them
+    is meaningless. With the drain both start from the same quiet point.
+
+    **This ordering is why the band cannot be added on its own.** Applied to the
+    undrained row, the 0.5x..2x band rejects the correct 0.3227 ms event (its
+    lower bound is 31.7 ms) and falls back to the 63.33 ms wall -- a 196x
+    overstatement. Adding a wall cross-check to a timer that does not drain first
+    is strictly worse than having no cross-check, which is the opposite of how
+    this reads in review.
+
+    A separate finding, recorded so it is not "fixed" later by analogy: the ROCm
+    rule *never time on the default stream* does not transfer as stated. Legacy
+    stream 0 does serialise against a blocking stream here -- the wall inflated
+    161x and the contending stream had drained by the end of the region, both
+    signatures of it -- but the CUDA **event** was unmoved (1.01x), because the
+    event pair brackets only its own stream's span. Moving these launches to a
+    dedicated `CU_STREAM_NON_BLOCKING` stream measured 8.65x *slower*
+    (2.7667 vs 0.3199 ms), which is a truthful measurement of a kernel sharing
+    the GPU and the wrong number for an autotune verdict. For an isolated
+    latency the serialisation is a feature; a dedicated stream is required for
+    concurrency benchmarks, which these are not.
+    """
+    import time
+
+    if reps < 1 or warmup < 0:
+        raise ValueError(f"{what}: reps must be >= 1 and warmup >= 0")
+
+    ev0, ev1 = ctypes.c_void_p(), ctypes.c_void_p()
+    events: list[ctypes.c_void_p] = []
+    try:
+        for ev in (ev0, ev1):
+            if lib.tessera_nvidia_event_create(ctypes.byref(ev)) != 0:
+                raise RuntimeError(f"{what}: event_create failed")
+            events.append(ev)
+        for _ in range(warmup):
+            launch()
+        # The drain. Every launch above is async, so without this the start
+        # event below is recorded behind queued work -- see the table.
+        if lib.tessera_nvidia_event_record(ev0, None) != 0:
+            raise RuntimeError(f"{what}: event_record(start) failed")
+        if lib.tessera_nvidia_event_synchronize(ev0) != 0:
+            raise RuntimeError(f"{what}: event_synchronize(drain) failed")
+        wall0 = time.perf_counter()
+        for _ in range(reps):
+            launch()
+        if lib.tessera_nvidia_event_record(ev1, None) != 0:
+            raise RuntimeError(f"{what}: event_record(stop) failed")
+        # Mandatory: launches are async, so without this the wall below times
+        # the enqueue -- a catastrophically small number that then drags the
+        # acceptance band down with it rather than failing outright.
+        if lib.tessera_nvidia_event_synchronize(ev1) != 0:
+            raise RuntimeError(f"{what}: event_synchronize(stop) failed")
+        wall_ms = (time.perf_counter() - wall0) * 1e3
+        if not (wall_ms > 0.0 and wall_ms == wall_ms):
+            raise RuntimeError(f"{what}: wall measurement was not finite")
+        ms = ctypes.c_float()
+        event_ms = None
+        if lib.tessera_nvidia_event_elapsed_ms(ev0, ev1, ctypes.byref(ms)) == 0:
+            event_ms = _accept_nvidia_event_ms(float(ms.value), wall_ms)
+    finally:
+        for ev in events:
+            lib.tessera_nvidia_event_destroy(ev)
+
+    total = event_ms if event_ms is not None else wall_ms
+    return total / float(reps), ("device_event" if event_ms is not None
+                                 else "host_wall")
+
+
 def _nvidia_mma_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
                                     reps: int = 100, warmup: int = 10) -> float:
     """Median-free CUDA-event latency of the *shipped* GEMM, operands resident.
@@ -2536,6 +2659,12 @@ def _nvidia_mma_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
 
     A/B are uploaded and D allocated **outside** the timed region; only the
     kernel launches sit between the two events.
+
+    The clock itself is `_nvidia_timed_launch_ms`, which drains before starting
+    and cross-checks the event against a host wall witness. This function
+    previously recorded two events around the launches and returned the elapsed
+    value with no check of any kind -- there was no wall clock to compare it to
+    and no drain to make one meaningful.
     """
     import numpy as np
 
@@ -2564,9 +2693,7 @@ def _nvidia_mma_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
     _, N = Bc.shape
 
     dA, dB, dD = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    ev0, ev1 = ctypes.c_void_p(), ctypes.c_void_p()
     owned: list[ctypes.c_void_p] = []
-    events: list[ctypes.c_void_p] = []
     try:
         for buf, nbytes in ((dA, Ac.nbytes), (dB, Bc.nbytes), (dD, M * N * 4)):
             rc = lib.tessera_nvidia_device_alloc(ctypes.byref(buf), ctypes.c_size_t(nbytes))
@@ -2578,34 +2705,15 @@ def _nvidia_mma_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
                 dev, ctypes.c_void_p(host.ctypes.data), ctypes.c_size_t(nbytes), None)
             if rc != 0:
                 raise RuntimeError(f"device_upload rc={rc}")
-        for ev in (ev0, ev1):
-            rc = lib.tessera_nvidia_event_create(ctypes.byref(ev))
-            if rc != 0:
-                raise RuntimeError(f"event_create rc={rc}")
-            events.append(ev)
-
         def launch() -> None:
             rc = fn(dA, dB, dD, int(M), int(N), int(K), None)
             if rc != 0:
                 raise RuntimeError(f"shipped nvidia GEMM (device) returned rc={rc}")
 
-        for _ in range(warmup):
-            launch()
-        if lib.tessera_nvidia_event_record(ev0, None) != 0:
-            raise RuntimeError("event_record(start) failed")
-        for _ in range(reps):
-            launch()
-        if lib.tessera_nvidia_event_record(ev1, None) != 0:
-            raise RuntimeError("event_record(stop) failed")
-        if lib.tessera_nvidia_event_synchronize(ev1) != 0:
-            raise RuntimeError("event_synchronize failed")
-        ms = ctypes.c_float()
-        if lib.tessera_nvidia_event_elapsed_ms(ev0, ev1, ctypes.byref(ms)) != 0:
-            raise RuntimeError("event_elapsed_ms failed")
-        return float(ms.value) / float(reps)
+        latency, _nvidia_last_timer_source[0] = _nvidia_timed_launch_ms(
+            lib, launch, reps=reps, warmup=warmup, what="shipped nvidia GEMM")
+        return latency
     finally:
-        for ev in events:
-            lib.tessera_nvidia_event_destroy(ev)
         for buf in owned:
             lib.tessera_nvidia_device_free(buf)
 

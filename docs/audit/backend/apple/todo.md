@@ -5564,3 +5564,55 @@ defensive guard being removed: it is wrong in the *ordinary* regime
 one, since the `O(n²)` numerator makes the quotient vanish at `n → 0` and the
 `norm > 0` select covers `n == 0` exactly. Bind Apple's own M-series device
 proof; the gfx1151 and AVX-512 results under this key transfer nothing.
+
+---
+
+## Cross-backend sync `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Owning item:** the NVIDIA half of the three-clock timing discipline
+(`AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`'s recorded follow-up) ·
+**synchronization key:** `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Shared contract changed — what makes a device latency believable.** Every
+backend's autotune verdict rests on one, and the corpus compares them across
+architectures, so the rule for accepting a device clock is shared even though
+each host's clocks are not.
+
+**The finding: the drain and the cross-check are *ordered*, and adding the
+second without the first is worse than adding neither.** Measured on sm_120
+(RTX 5070) with 2500 2048³ GEMMs resident on a blocking stream, timing 40
+launches of a 1024³ GEMM:
+
+| start event recorded | wall ms/rep | event ms/rep | event/wall |
+|---|---|---|---|
+| without a preceding drain | 63.3338 | 0.3227 | **0.005** |
+| after a drain | 0.3263 | 0.3255 | **0.998** |
+
+The event is correct in both rows. Undrained, the start event is queued behind
+the contending work, so the *wall* spans that drain and the event does not —
+the two clocks bracket different regions and comparing them is meaningless.
+Apply the two-sided band to the undrained row and it rejects the correct
+0.3227 ms event (its lower bound is 31.7 ms) and falls back to the 63.33 ms
+wall: a **196× overstatement**. In review, "adds a wall cross-check" reads as
+strictly safer; here it would have been strictly worse.
+
+**Outcome for this backend: `follow-up required` — Apple believes a device
+timestamp with no independent witness, which is the gap this key exists to
+close.** `ts_record_tile_gpu_elapsed` and `ts_record_dispatch_gpu_elapsed`
+(`apple_gpu_runtime.mm`) take `cb.kernelStartTime`/`kernelEndTime`, fall back to
+`GPUStartTime`/`GPUEndTime`, and validate only `end >= start && end > 0.0`.
+That is a sanity check, not a cross-check: it rejects a clock that is obviously
+broken and accepts any value that is merely wrong.
+
+**The drain half is genuinely not applicable here, and for a real reason** —
+Metal reports a completed command buffer's own kernel interval rather than the
+span between two counters the caller places, so there is no queue for a start
+marker to sit behind. That makes the ordering constraint above moot for Apple
+and leaves the *witness* half fully owed: a `CACurrentMediaTime()` bracket
+around the committed-and-waited region, band-checked the same way, plus a
+recorded timing source so a caller can tell a device number from a fallback
+(both NVIDIA and ROCm now expose one; Apple's `g_last_dispatch_timing_source`
+distinguishes *which Metal timestamp* was used, not whether it was believed).
+
+**Owed on the M1 Max.** No Apple code changed here and no Metal evidence is
+claimed; the sm_120 numbers above say nothing about Apple's timestamps.

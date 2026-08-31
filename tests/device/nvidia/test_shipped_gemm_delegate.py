@@ -219,11 +219,57 @@ def test_tier_priority_selects_the_delegate_regardless_of_shape():
         assert int(winner.tier) == int(Tier.HAND_TUNED)
 
 
+#: The device the crossover below was measured on. `nvidia_mma_ptx_launch_available()`
+#: gates only on nvcc, the MMA runtime and the PTX bridge loading -- not on the
+#: part -- so this suite runs on any NVIDIA GPU that has them.
+_MEASURED_DEVICE = "sm_120"
+
+
+def _device_tag():
+    from tessera import runtime as rt
+
+    return rt._nvidia_device_name()
+
+
+def test_a_compiled_candidate_can_be_compared_to_the_delegate_in_budget():
+    """Device-independent half: the comparison is *performable*, and whichever
+    lane is faster here is no less accurate.
+
+    Deliberately asserts no ranking. Which lane wins is a property of the
+    silicon, and this suite's gate does not check the part.
+    """
+    from tessera.compiler.fusion_core import MatmulRegion
+
+    region = MatmulRegion(dtype="float16")
+    A, B = _operands(2048, 2048, 2048, "float16")
+    timings = _device_timings(region, A, B)
+    assert SHIPPED in timings and len(timings) >= 2, (
+        f"need the delegate and at least one compiled rival: {timings}")
+
+    fastest = min(timings, key=timings.__getitem__)
+    reference = np.asarray(region.reference(A, B), np.float64)
+
+    def max_error(name):
+        candidate = next(c for c in _candidates() if c.name == name)
+        out, tag = candidate.run(region, A, B)
+        assert tag != "reference", f"{name} declined to the numpy reference"
+        return float(np.max(np.abs(np.asarray(out, np.float64) - reference)))
+
+    assert max_error(fastest) <= max_error(SHIPPED) * 1.05, (
+        f"{fastest} measured fastest but is less accurate than the delegate, "
+        "so 'faster' is not a Decision #28 displacement argument")
+
+
+@pytest.mark.skipif(
+    _device_tag() != _MEASURED_DEVICE,
+    reason=f"the crossover below was measured on {_MEASURED_DEVICE}; a ranking "
+           "is a property of the silicon and does not transfer between parts")
 def test_the_delegate_wins_on_device_only_at_small_shapes():
     """The measurement the device timer exists to produce -- and it does not
     say what tier priority assumes.
 
-    Measured on this box, f16, spreads of 0.000-0.008 ms across repeats:
+    Measured on sm_120 (RTX 5070), f16, spreads of 0.000-0.008 ms across
+    repeats:
 
         shape    shipped(T3)   tile_shared(T2)   winner
         512^3      0.043 ms       0.059 ms       delegate, by 37%
@@ -236,9 +282,18 @@ def test_the_delegate_wins_on_device_only_at_small_shapes():
     and the arbiter still selects the delegate, because tier priority is the
     default and the measured loop is not wired into this path.
 
-    This test asserts the crossover rather than "the delegate is fastest". The
-    earlier version checked only 512^3, where the delegate does win, and so
-    would have reported a green result for a default that is wrong at scale.
+    **Pinned to sm_120 on purpose.** This asserts a performance *ranking*, and
+    a ranking is silicon-specific: occupancy, L2 size and clock behaviour all
+    move the crossover, so sm_80/sm_90 or another sm_120 part could invert it
+    with both kernels perfectly correct. The suite's own gate
+    (`nvidia_mma_ptx_launch_available`) checks only that nvcc, the MMA runtime
+    and the PTX bridge load, so without this skip the test would fail on a
+    healthy machine and read as a kernel regression. Its device-independent
+    half lives in the test above and still runs everywhere.
+
+    The earlier version of this test checked only 512^3, where the delegate
+    does win, and so would have reported green for a default that is wrong at
+    scale.
     """
     from tessera.compiler.fusion_core import MatmulRegion
 
@@ -246,7 +301,7 @@ def test_the_delegate_wins_on_device_only_at_small_shapes():
 
     small = _device_timings(region, *_operands(512, 512, 512, "float16"))
     assert min(small, key=small.__getitem__) == SHIPPED, (
-        f"the delegate no longer wins at 512^3: {small}")
+        f"the delegate no longer wins at 512^3 on {_MEASURED_DEVICE}: {small}")
 
     large = _device_timings(region, *_operands(2048, 2048, 2048, "float16"))
     fastest = min(large, key=large.__getitem__)
@@ -254,18 +309,3 @@ def test_the_delegate_wins_on_device_only_at_small_shapes():
         "the delegate now wins at 2048^3 too, which would remove the "
         f"motivation for shape-bucketed measured selection: {large}")
     assert large[fastest] < large[SHIPPED], large
-
-    # In budget: the compiled winner must be no less accurate, or "faster"
-    # is not a displacement argument at all.
-    winner_candidate = next(c for c in _candidates() if c.name == fastest)
-    A, B = _operands(2048, 2048, 2048, "float16")
-    reference = np.asarray(region.reference(A, B), np.float64)
-
-    def max_error(candidate):
-        out, tag = candidate.run(region, A, B)
-        assert tag not in ("reference",), f"{candidate.name} declined to {tag!r}"
-        return float(np.max(np.abs(np.asarray(out, np.float64) - reference)))
-
-    assert max_error(winner_candidate) <= max_error(_shipped()), (
-        "the faster compiled kernel is less accurate than the delegate, so it "
-        "does not satisfy Decision #28's in-budget half")

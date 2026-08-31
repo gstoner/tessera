@@ -9,6 +9,45 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Cross-backend sync `DELEGATE-CONTRACT-SYNC-2026-08-30`
+
+PR #652 changed two **shared** runtime contracts, so all four backends are
+assessed here per AGENTS.md:
+
+1. `Candidate.accuracy_budget(region)` — a new hook on the shared arbiter
+   base class. `candidate._as_runner()` now resolves the F4 oracle's budget
+   through it instead of reading `accuracy_atol` off the class.
+2. `DelegatedCandidate` gained a `name` override and a per-dtype contract
+   *family* (`variants`), so one delegate may bind a different callee per
+   storage dtype and still derive tier and budget from declared IR.
+
+**Measured blast radius (37 registered candidates: nvidia 32, rocm 3, x86 2,
+apple 0): exactly one overrides `accuracy_budget`** — `nvidia_mma_gemm_shipped`.
+Every other candidate inherits the base implementation, which returns
+`(self.accuracy_atol, self.accuracy_rtol)`: the same two values the arbiter
+previously read directly, at the same call site. That equivalence is static,
+not a measurement, so no sibling backend owes a device re-proof for change (1).
+
+**x86 outcome: follow-up required.**
+
+Change (1) is behaviour-identical for both x86 candidates (`x86_generic_c` T1,
+`x86_aocl_dlp` T3): neither overrides the hook. No AVX-512 re-proof is owed.
+
+Change (2) is unused, and x86 has the clearest case for it in the fleet.
+**`x86_aocl_dlp` is a Tier-3 lane into AMD's AOCL-DLP — an actual vendor
+library, so it is the canonical `provenance="vendor_library"` delegate**, the
+one arm of `DelegateContract` that no delegate exercises yet (NVIDIA's is
+`handwritten_kernel`). Declaring it would put a versioned third-party artifact
+behind the contract, which is also the case Decision #11's amendment cares
+about: a delegate's ABI/library version belongs in the autotune key, or an
+AOCL upgrade silently invalidates stored measurements without invalidating the
+cache.
+
+Do not reuse the sm_120 tolerance numbers. AOCL-DLP is a CPU library with its
+own accumulation order, and the delegate's budget must be measured on
+Princess-Luna (Zen 5, AVX-512). **AMX is not a Tessera target and no fleet box
+has it**, so x86 proof here means AVX-512 — never gate this on `hardware_amx`.
+
 ## Standing: AMX is retired, not merely unavailable (project direction, 2026-08-30)
 
 **AMX is a dead end and is not a Tessera target.** It was Intel-only, and it

@@ -8,6 +8,47 @@ last_updated: 2026-08-29
 
 # Apple compiler, exact-device, and performance plan
 
+## Cross-backend sync `DELEGATE-CONTRACT-SYNC-2026-08-30`
+
+PR #652 changed two **shared** runtime contracts, so all four backends are
+assessed here per AGENTS.md:
+
+1. `Candidate.accuracy_budget(region)` — a new hook on the shared arbiter
+   base class. `candidate._as_runner()` now resolves the F4 oracle's budget
+   through it instead of reading `accuracy_atol` off the class.
+2. `DelegatedCandidate` gained a `name` override and a per-dtype contract
+   *family* (`variants`), so one delegate may bind a different callee per
+   storage dtype and still derive tier and budget from declared IR.
+
+**Measured blast radius (37 registered candidates: nvidia 32, rocm 3, x86 2,
+apple 0): exactly one overrides `accuracy_budget`** — `nvidia_mma_gemm_shipped`.
+Every other candidate inherits the base implementation, which returns
+`(self.accuracy_atol, self.accuracy_rtol)`: the same two values the arbiter
+previously read directly, at the same call site. That equivalence is static,
+not a measurement, so no sibling backend owes a device re-proof for change (1).
+
+**Apple outcome: not applicable today, for a structural reason worth stating.**
+
+**Apple registers zero arbiter candidates.** Both changes are to the Decision
+#28 candidate/arbiter layer, and no Apple lane enters it: the ~123 hand-written
+MSL kernels in `runtime/apple_gpu_runtime.mm` are reached through
+`runtime.launch()` and the dispatcher tables, not through `arbitrate()`. So
+there is nothing on this backend for either change to alter, and no Apple
+device evidence is owed for #652.
+
+That is a gap rather than a property. Those MSL kernels are exactly the Tier-3
+population Decision #28 exists to score — hand-tuned, fast, and currently
+selected by dispatcher routing rather than by measurement. Until an Apple lane
+registers as a candidate, the arbiter cannot compare a synthesized or emitted
+Apple kernel against a hand-written one, and `emit/apple_msl.py`'s synthesized
+kernels have no path to displace them.
+
+Sequencing note: Apple is the backend where a delegate contract would bite
+hardest on `determinism`, because the MSL reduction kernels' accumulation order
+is threadgroup-dependent. Re-derive that claim from the MSL rather than
+assuming the CUDA answer; the sm_120 delegate's `deterministic` claim rests on
+one warp owning each output tile, which is not the Apple kernels' structure.
+
 Cross-backend sync `AVX512-MARKER-AND-AMX-CONSUMER-2026-08-30` — **shared
 marker vocabulary and conftest boundary changed; per-backend outcome below.**
 `hardware_avx512` joins `policy.MARKERS`, the PR marker expression and its

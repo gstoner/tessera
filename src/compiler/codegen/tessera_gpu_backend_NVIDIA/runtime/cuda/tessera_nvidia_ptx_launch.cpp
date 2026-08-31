@@ -964,7 +964,26 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
     return rc;
 }
 
-bool tileLaunchConfig(const char* name, int& tileM, int& tileN, int& threads) {
+// `columnMajorGrid` mirrors the parameter of the same name on
+// `invokeMmaGemm16`: true maps blockIdx.x to N (the Tile lowering's
+// convention, `NVIDIALowering.cpp`: mt = blockY*16, nt = blockX*8), false maps
+// blockIdx.x to M (what `ptx_emit` and the shipped AOT kernel do:
+// mt = ctaid.x*16, nt = ctaid.y*8).
+//
+// The benchmark path previously hardcoded the column-major mapping, so it
+// could only time kernels that used it. That is why `tessera_mma_gemm_f16`
+// returned rc=5 and the emitted GEMM had no device latency at all: registering
+// its geometry without this flag would have launched a transposed grid --
+// at 512x512, rows to 1024 and columns only to 256, half the output unwritten,
+// with a plausible-looking number.
+bool tileLaunchConfig(const char* name, int& tileM, int& tileN, int& threads,
+                      bool& columnMajorGrid) {
+    columnMajorGrid = true;
+    if (std::strcmp(name, kGemmF16) == 0 || std::strcmp(name, kGemmBf16) == 0) {
+        tileM = 16; tileN = 8; threads = 32;
+        columnMajorGrid = false;   // ptx_emit maps blockIdx.x to M
+        return true;
+    }
     if (std::strncmp(name, kScheduledSm120MatmulPrefix,
                      std::strlen(kScheduledSm120MatmulPrefix)) == 0) {
         const bool macro = std::strstr(name, "_macro_kernel") != nullptr;
@@ -1003,7 +1022,9 @@ int benchmarkTileGemm16(CUfunction fn, const char* name, void** buffers,
     if (M * K > (1LL << 31) || K * N > (1LL << 31) ||
         M * N > (1LL << 31)) return 5;
     int tileM = 0, tileN = 0, threads = 0;
-    if (!tileLaunchConfig(name, tileM, tileN, threads)) return 5;
+    bool columnMajorGrid = true;
+    if (!tileLaunchConfig(name, tileM, tileN, threads, columnMajorGrid))
+        return 5;
 
     size_t elementBytes = 2;
     if (std::strcmp(name, kTileDirectTf32) == 0) elementBytes = 4;
@@ -1029,8 +1050,12 @@ int benchmarkTileGemm16(CUfunction fn, const char* name, void** buffers,
             cuMemcpyHtoD(dB, buffers[1], sB) != CUDA_SUCCESS) { rc = 3; break; }
         long long MArg = M, NArg = N, KArg = K;
         void* args[] = {&dA, &dB, &dD, &MArg, &NArg, &KArg};
-        unsigned gx = (unsigned)((N + tileN - 1) / tileN);
-        unsigned gy = (unsigned)((M + tileM - 1) / tileM);
+        unsigned gx = columnMajorGrid
+            ? (unsigned)((N + tileN - 1) / tileN)
+            : (unsigned)((M + tileM - 1) / tileM);
+        unsigned gy = columnMajorGrid
+            ? (unsigned)((M + tileM - 1) / tileM)
+            : (unsigned)((N + tileN - 1) / tileN);
         auto launch = [&]() {
             return cuLaunchKernel(fn, gx, gy, 1, (unsigned)threads, 1, 1,
                                   0, 0, args, 0);

@@ -6074,6 +6074,57 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     return D
 
 
+def _nvidia_ptx_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
+                                    reps: int = 100, warmup: int = 10) -> float:
+    """CUDA-event kernel latency of the compiler-EMITTED GEMM, operands resident.
+
+    The Tier-2 counterpart to ``_nvidia_mma_gemm_device_latency``. Without it
+    the emitted lane could not be raced in device timing at all, and an
+    autotune record that silently omits an applicable candidate is refused
+    (see ``autotune._record_raced_the_live_field``) -- so its absence blocked
+    measured selection for NVIDIA matmul entirely.
+
+    The launch bridge's benchmark harness now takes the grid convention as a
+    flag (`tileLaunchConfig`'s ``columnMajorGrid``). It previously hardcoded
+    the Tile lowering's mapping (blockIdx.x -> N), which is why this returned
+    rc=5: ``ptx_emit`` maps blockIdx.x -> M.
+    """
+    import numpy as np
+    from tessera.compiler import ptx_emit as pe
+
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(
+            f"nvidia GEMM needs rank-2 A @ B with matching K; got {Aa.shape} @ {Ba.shape}")
+    if reps < 1 or warmup < 0:
+        raise ValueError(f"reps must be >= 1 and warmup >= 0; got {reps}, {warmup}")
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    edt = "f16" if dtype == "float16" else "bf16"
+    entry = pe.MMA_SYNC_GEMM_ENTRY[edt]
+    if entry not in _nvidia_ptx_registered:
+        ptx = pe.emit_mma_sync_gemm_ptx(dtype=edt)
+        if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    store = _nvidia_gemm_storage_dtype(dtype)
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.asfortranarray(np.ascontiguousarray(Ba, store))
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.empty((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 3)(Ac.ctypes.data, Bc.ctypes.data, D.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(int(M), int(N), int(K))
+    latency = ctypes.c_float()
+    rc = lib.tessera_nvidia_ptx_benchmark(
+        entry.encode(), bufs, 3, dims, 3, int(warmup), int(reps),
+        ctypes.byref(latency))
+    if rc != 0:
+        raise RuntimeError(f"emitted nvidia GEMM benchmark rc={rc}")
+    return float(latency.value)
+
+
 def _nvidia_tile_tool(name: str) -> Path | None:
     """Locate one tool in the Tile→NVVM→PTX production pipeline."""
     root = Path(__file__).resolve().parents[2]

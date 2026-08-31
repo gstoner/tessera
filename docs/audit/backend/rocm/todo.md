@@ -5580,10 +5580,24 @@ floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
 over 100 samples from 8² to 2048². The symmetric band was fine all along; the
 one-sided version was defending against an artifact of its own denominator.
 
-**Both constants are set from that run, not copied.** Floor 0.5× (measured min
-0.568, ~13% headroom). Ceiling **1.25×** — containment says a device interval
-can never exceed the wall, but these are independent clocks over nested regions
-and the measured max of 0.937 leaves a strict `device <= wall` only 6.3%.
+**Corrected after review (2026-08-31): the band is ONE-SIDED, and the two-sided
+version was wrong twice for the same reason — generalising from one route.** A
+second route family, resident batched sessions on `metal_kernel_interval`,
+measures **0.037–0.101** once warm: a 25 µs kernel inside a 265 µs
+submit-to-signal window. Nothing is wrong there — `kernelStartTime`/
+`kernelEndTime` is kernel execution only and legitimately excludes queueing.
+Across routes the honest range is **0.037–0.937**, so no wall-derived floor can
+separate a small kernel from an under-reading clock. That is exactly what ROCm
+already states in `_select_rocm_latency_ms`.
+
+What survives is containment, which is exact: GPU execution is a strict subset
+of commit-and-wait, so **`device <= 1.25 × wall`** (1.25 rather than 1.0
+because the two are independent clocks over nested regions and the measured max
+of 0.937 leaves a strict bound only 6.3%). **The under-reading direction — the
+dangerous one, since an under-estimate inflates throughput and gets published —
+is now explicitly unguarded**, and asserted as such in the tests so the gap is
+visible rather than assumed covered. It closes against Apple's *second* device
+clock, not the wall; see the follow-up below.
 
 **Outcome for this backend: `parity validated` — no ROCm change; this backend
 already holds the shape Apple is converging on, and its design is now the

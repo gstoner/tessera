@@ -5712,14 +5712,46 @@ floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
 over 100 samples from 8² to 2048². The symmetric band was fine all along; the
 one-sided version was defending against an artifact of its own denominator.
 
-**Both constants are set from that run, not copied.** Floor 0.5× (measured min
-0.568, ~13% headroom). Ceiling **1.25×** — containment says a device interval
-can never exceed the wall, but these are independent clocks over nested regions
-and the measured max of 0.937 leaves a strict `device <= wall` only 6.3%.
+**Corrected after review (2026-08-31): the band is ONE-SIDED, and the two-sided
+version was wrong twice for the same reason — generalising from one route.** A
+second route family, resident batched sessions on `metal_kernel_interval`,
+measures **0.037–0.101** once warm: a 25 µs kernel inside a 265 µs
+submit-to-signal window. Nothing is wrong there — `kernelStartTime`/
+`kernelEndTime` is kernel execution only and legitimately excludes queueing.
+Across routes the honest range is **0.037–0.937**, so no wall-derived floor can
+separate a small kernel from an under-reading clock. That is exactly what ROCm
+already states in `_select_rocm_latency_ms`.
+
+What survives is containment, which is exact: GPU execution is a strict subset
+of commit-and-wait, so **`device <= 1.25 × wall`** (1.25 rather than 1.0
+because the two are independent clocks over nested regions and the measured max
+of 0.937 leaves a strict bound only 6.3%). **The under-reading direction — the
+dangerous one, since an under-estimate inflates throughput and gets published —
+is now explicitly unguarded**, and asserted as such in the tests so the gap is
+visible rather than assumed covered. It closes against Apple's *second* device
+clock, not the wall; see the follow-up below.
 
 **Outcome for this backend: `parity validated` — owed here, done here, on the
-M1 Max.** `tessera_apple_gpu_last_dispatch_wall_time_ns` is captured in both
-`commit_and_wait_with_timeout` and `MPSGraphTimingBracket`;
+M1 Max.** `tessera_apple_gpu_last_dispatch_wall_time_ns` is captured at **all
+six** sites that publish a device time, via an RAII `DispatchWallWitness` so the
+default is "witnessed" and a new path must opt out rather than silently forget.
+
+**Review caught that the first version covered two of the six** — the four it
+missed reported a null wall, which the rule reads as "no witness" and passes
+through unchecked. The lesson is the enumeration: closing over the *commit*
+sites is the wrong set; the right one is the sites that call a telemetry
+**recorder**, because those are what publish a number. A related trap the
+containment bound then caught by itself: two witnesses were live on the
+MPSGraph path and the narrower destructed last, overwriting the wider span, so
+a cold dispatch reported a device interval **9.18× its own wall**.
+
+`device_time_ns` now carries the band-checked value, with the raw one under
+`device_time_raw_ns`. Publishing the verdict in a new key instead would have
+left every consumer using the rejected number exactly as before — the check
+would exist and change nothing. It is captured in
+`commit_and_wait_with_timeout`, `MPSGraphTimingBracket`,
+`commit_mpsgraph_and_wait_with_timeout`, `mtl4_encode_and_wait`, and both
+resident-session paths;
 `accept_apple_device_ns` owns the band and the measurement behind it. The
 export is in `_SENTINEL_SYMBOLS`, because a null wall *disables* the check
 rather than failing it — a stale dylib would otherwise restore the unwitnessed

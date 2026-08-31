@@ -42,7 +42,32 @@ def _find_opt() -> str | None:
 
 
 _OPT = _find_opt()
+def _apple_backend_available() -> bool:
+    """Whether the selected driver actually carries the Apple backend."""
+    from tests._support.apple import apple_backend_in_tessera_opt
+    try:
+        return bool(_OPT) and apple_backend_in_tessera_opt(_OPT)
+    except Exception:
+        return False
+
+
 pytestmark = pytest.mark.skipif(_OPT is None, reason="tessera-opt not built")
+
+# Per-test, never module-wide: most of this file checks emitted IR text and is
+# host-free, so 110 of its assertions pass on a ROCm or CUDA box. Only the
+# tests below assert that the Apple VALUE route was actually selected -- they
+# read `metadata["compiler_path"]`, or compare the chosen route against
+# `value_target_ir` -- and that route does not exist in a driver built without
+# the Apple backend. Those failed with `KeyError: 'compiler_path'` and
+# `assert 'target_ir_artifact' == 'value_target_ir'` on both device boxes,
+# which says nothing about the code under test.
+_requires_apple_backend = pytest.mark.skipif(
+    _OPT is None or not _apple_backend_available(),
+    reason="tessera-opt was built without the Apple backend, so the Apple "
+           "value route cannot be selected (configure "
+           "-DTESSERA_BUILD_APPLE_BACKEND=ON, or point TESSERA_OPT at a "
+           "driver that has it)",
+)
 
 _GRAPH = {
     "cholesky": 'func.func @f(%a: tensor<8x8xf32>) -> tensor<8x8xf32> {\n'
@@ -543,6 +568,7 @@ def _front_door(module):
     return res.to_runtime_artifact()
 
 
+@_requires_apple_backend
 def test_front_door_value_mode_routes_cholesky_without_injected_ir():
     """canonical_compile value mode produces compiler_path == apple_value_target_ir
     and a value IR carrying the cholesky cpu.call — entirely from a Graph IR
@@ -734,6 +760,7 @@ class TestFrontDoorLinalgFamilyLaunch:
         assert np.all(s[:-1] >= s[1:] - 1e-4)  # descending singular values
 
 
+@_requires_apple_backend
 def test_value_mode_output_has_no_husk_or_tile_leftover():
     """The captured value IR from the front door is value-preserving — no
     ub.poison / tensor.empty / tile.* survive."""
@@ -797,6 +824,7 @@ def test_resolver_precedence_env_first(monkeypatch):
 
 @pytest.mark.skipif(not _REPO_BUILT_OPT.is_file(),
                     reason="repo-built tessera-opt is absent")
+@_requires_apple_backend
 def test_front_door_value_mode_works_without_environment(monkeypatch, tmp_path):
     """canonical_compile value mode succeeds with no TESSERA_OPT and a scrubbed
     PATH — proving the front door relies on the resolver, not the environment."""
@@ -837,6 +865,7 @@ def test_value_mode_failure_records_named_error(monkeypatch):
      [("tensor<4x4xf32>", (4, 4)), ("tensor<4x2xf32>", (4, 2))],
      "tensor<4x2xf32>", ["%x"], {"lower": True, "trans": False, "unit_diag": False}),
 ])
+@_requires_apple_backend
 def test_gpu_value_mode_linalg_is_classified_and_gated(op, result, args, rtype, returns, kwargs):
     """apple_gpu cholesky / tri_solve lower to gpu.kernel_call and route to the
     non-executable apple_gpu/apple_value_target_ir matrix row — structured
@@ -993,6 +1022,7 @@ def test_cpu_full_matmul_symbol_on_runtime_allowlist():
     assert calls[0]["symbol"] in _APPLE_VALUE_CPU_SYMBOLS
 
 
+@_requires_apple_backend
 def test_front_door_matmul_routes_value_without_injection():
     """canonical_compile value mode routes a Graph IR matmul to the value lane
     (compiler_path == apple_value_target_ir, gemm symbol), no injected IR."""
@@ -1070,6 +1100,7 @@ def test_gpu_value_matmul_is_gated_no_output():
     ("f16", "fp16", "tessera_apple_cpu_gemm_f16"),
     ("bf16", "bf16", "tessera_apple_cpu_gemm_bf16"),
 ])
+@_requires_apple_backend
 def test_non_fp32_matmul_value_mode_lowers_to_dtype_symbol(mlir_dtype, dtype, symbol):
     """Sprint 7: f16/bf16 rank-2 matmul reaches the value lane and lowers to its
     dtype-specific GEMM symbol (replaces the Sprint 5 'non-fp32 is gated' test)."""
@@ -1127,6 +1158,7 @@ def test_bf16_matmul_executes_or_skips_cleanly():
     np.testing.assert_allclose(r["output"].astype(np.float32), ref, rtol=5e-2, atol=5e-2)
 
 
+@_requires_apple_backend
 def test_gpu_non_fp32_matmul_value_mode_selects_tile_simdgroup_executor():
     """TILE-1 promotes rank-2 f16/bf16 value matmul to the native simdgroup
     executor; neither dtype may be represented as an Apple CPU call."""
@@ -1273,6 +1305,7 @@ def test_batched_symbol_on_runtime_allowlist():
     assert calls[0]["symbol"] in _APPLE_VALUE_CPU_SYMBOLS
 
 
+@_requires_apple_backend
 def test_front_door_batched_routes_value_without_injection():
     art = _front_door(_batched_module(2, 4, 8, 16))
     assert art.metadata["compiler_path"] == "apple_value_target_ir"
@@ -1403,6 +1436,7 @@ def test_non_f32_batched_is_gated():
 # cpu.call — it routes to tessera_apple.gpu.kernel_call dispatched by the
 # apple_gpu_value_target_ir executor. The "gated" assertion below now only holds
 # for the *CPU* lane (GPU batched no longer hits a CPU value call).
+@_requires_apple_backend
 def test_gpu_value_batched_is_not_a_cpu_value_call():
     """apple_gpu batched matmul never produces an executable CPU cpu.call — it
     is a GPU kernel_call (Sprint 8). Guards against accidental CPU mis-dispatch."""
@@ -1587,6 +1621,7 @@ def _batched_module_dt(B, M, K, N, dtype, mlir_dtype):
     ("fp16", "f16", "tessera_apple_gpu_bmm_f16"),
     ("bf16", "bf16", "tessera_apple_gpu_bmm_bf16"),
 ])
+@_requires_apple_backend
 def test_gpu_batched_value_routes_to_apple_value_target_ir(dtype, mlir, symbol):
     """Sprint 8: apple_gpu value-mode rank-3 batched matmul routes to the value
     lane with the dtype-specific bmm symbol and is marked executable."""
@@ -2150,6 +2185,7 @@ def test_apple_value_lowering_uses_no_unregistered_dialect_flag():
                     f"{mlir.name} value RUN line still uses the flag")
 
 
+@_requires_apple_backend
 def test_value_pipeline_runs_without_unregistered_flag_positive():
     """Positive proof: the value `-full` pipeline lowers a matmul to a cpu.call
     with NO --allow-unregistered-dialect — i.e. tile.matmul is a *registered*
@@ -2162,6 +2198,7 @@ def test_value_pipeline_runs_without_unregistered_flag_positive():
     import subprocess
     proc = subprocess.run([_OPT, "-tessera-lower-to-apple_cpu-full", "-"],
                           input=body, capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode == 0, proc.stderr
     assert "tessera_apple.cpu.call" in proc.stdout
     assert "tile.matmul" not in proc.stdout  # consumed, not leaked
@@ -2180,10 +2217,12 @@ def test_registered_tile_matmul_verifier_rejects_bad_shape():
     # Plain `tessera-opt -` parses + verifies; no --allow-unregistered-dialect.
     proc = subprocess.run([_OPT, "-"],
                           input=body, capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode != 0
     assert "result row dimension must equal lhs M" in proc.stderr
 
 
+@_requires_apple_backend
 def test_value_pipeline_rejects_opaque_tile_ops_even_without_unregistered_flag():
     """Sprint 11: no `--allow-unregistered-dialect` is necessary but not
     sufficient because TileDialect still permits unknown artifact-lane ops. The
@@ -2196,10 +2235,12 @@ def test_value_pipeline_rejects_opaque_tile_ops_even_without_unregistered_flag()
     proc = subprocess.run([_OPT, "-tessera-lower-to-apple_gpu-full", "-"],
                           input=body, capture_output=True, text=True,
                           timeout=60)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode != 0
     assert "unregistered op 'tile.fake_value_op'" in proc.stderr
 
 
+@_requires_apple_backend
 def test_apple_value_tile_verifier_is_standalone_pass():
     """Stage 12: the value Tile verifier must be directly testable, not only
     reachable as an implementation detail inside the Apple -full pipelines."""
@@ -2207,6 +2248,7 @@ def test_apple_value_tile_verifier_is_standalone_pass():
 
     help_proc = subprocess.run([_OPT, "--help"], capture_output=True, text=True,
                                timeout=30)
+    skip_if_apple_pipeline_unregistered(help_proc, _OPT)
     assert help_proc.returncode == 0
     assert "tessera-verify-apple-value-tile-ir" in help_proc.stdout
 
@@ -2217,6 +2259,7 @@ def test_apple_value_tile_verifier_is_standalone_pass():
     proc = subprocess.run([_OPT, "-tessera-verify-apple-value-tile-ir", "-"],
                           input=body, capture_output=True, text=True,
                           timeout=60)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode != 0
     assert "unregistered op 'tile.fake_value_op'" in proc.stderr
 

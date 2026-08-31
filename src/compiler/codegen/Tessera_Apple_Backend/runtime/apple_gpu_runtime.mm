@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <sys/stat.h>
 #include <cstdint>
@@ -621,10 +622,41 @@ thread_local int32_t g_last_dispatch_tpg_z = -1;
 thread_local int32_t g_last_dispatch_execution_width = -1;
 thread_local int32_t g_last_dispatch_max_threads = -1;
 thread_local int64_t g_last_dispatch_static_tg_memory = -1;
+// Host wall time across commit-and-wait, in ns.
+//
+// The independent witness this backend was missing. Every device number above
+// is self-reported by Metal and was believed on an `end >= start && end > 0`
+// check alone -- a sanity check, which rejects an obviously broken clock and
+// accepts any value that is merely wrong. The wall clock cannot be distorted by
+// a driver bug in the timestamp path because it does not go through it.
+//
+// It must bracket the SAME region the device clocks do, or the comparison is
+// meaningless. That is why it starts at the commit rather than at entry: a
+// Python-level wall carries numpy marshalling and array conversion no GPU
+// interval could contain, and measuring against one produced a device/wall of
+// 0.35-0.60 that argued for a one-sided band Apple does not actually need.
+// Against this witness the same dispatches run 0.568-0.937 over 8^2..2048^2,
+// so the ordinary symmetric band applies. See `accept_apple_device_ns`, which
+// owns the constants and the measurement behind them.
+//
+// `steady_clock` (== `high_resolution_clock` on libc++, verified) is backed by
+// the same constant-frequency counter as `CNTVCT_EL0`: measured on this M1 Max
+// the mach timebase is 125/3 ns per tick = 41.67 ns = exactly 24.000 MHz, and a
+// direct `mrs cntvct_el0` read over the same span implies 24.000 MHz too. That
+// constant rate is the property that matters -- it does not move with DVFS, so
+// a witness taken under one power state is comparable to one taken under
+// another. `system_clock` would be wrong here since it can step.
+//
+// Reading the register directly is cheaper -- 0.3 ns against 16.3 ns per read --
+// but that is 0.00003% versus 0.0016% of a 1 ms dispatch, so it buys nothing at
+// this granularity and costs portability. It would start to matter for timing
+// individual CPU-backend kernels, where the 41.67 ns tick is also the floor.
+thread_local int64_t g_last_dispatch_wall_time_ns = -1;
 }  // namespace
 
 static void ts_clear_dispatch_telemetry(void) {
   g_last_dispatch_device_time_ns = -1;
+  g_last_dispatch_wall_time_ns = -1;
   g_last_dispatch_counter_delta = -1;
   g_last_dispatch_counter_supported = -1;
   g_last_dispatch_timing_source = 0;
@@ -648,6 +680,9 @@ extern "C" void tessera_apple_gpu_dispatch_telemetry_clear(void) {
 }
 extern "C" int64_t tessera_apple_gpu_last_dispatch_device_time_ns(void) {
   return g_last_dispatch_device_time_ns;
+}
+extern "C" int64_t tessera_apple_gpu_last_dispatch_wall_time_ns(void) {
+  return g_last_dispatch_wall_time_ns;
 }
 extern "C" int64_t tessera_apple_gpu_last_dispatch_counter_delta(void) {
   return g_last_dispatch_counter_delta;
@@ -845,8 +880,21 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                                          const char *op_name,
                                          bool prefer_command_buffer = false) {
   if (!cb) return false;
-  if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
-    ts_clear_dispatch_telemetry();
+  const bool telemetry =
+      g_dispatch_telemetry_enabled.load(std::memory_order_relaxed);
+  if (telemetry) ts_clear_dispatch_telemetry();
+  // Started at the commit below, not here, so the witness brackets the same
+  // thing the device clocks do: submission through GPU completion. The lazy
+  // shared-event creation that follows is one-time setup and would otherwise
+  // land entirely in the first dispatch's wall time, making exactly one sample
+  // per process look enormous.
+  std::chrono::steady_clock::time_point ts_wall_begin;
+  auto ts_note_wall = [&]() {
+    if (!telemetry) return;
+    g_last_dispatch_wall_time_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - ts_wall_begin).count();
+  };
   // Lazy-init the shared event under the dedicated lock.
   id<MTLSharedEvent> ev;
   uint64_t signal_val;
@@ -858,8 +906,10 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
         // Event creation failed — fall back to the pre-Pattern-4
         // ``waitUntilCompleted`` path so the caller doesn't crash.
         // No timeout protection, but at least correct.
+        ts_wall_begin = std::chrono::steady_clock::now();
         [cb commit];
         [cb waitUntilCompleted];
+        ts_note_wall();
         ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
@@ -870,6 +920,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // Encode the signal into the command buffer; the event ticks AFTER the
   // GPU finishes everything queued before it on this cb.
   [cb encodeSignalEvent:ev value:signal_val];
+  ts_wall_begin = std::chrono::steady_clock::now();
   [cb commit];
   bool done = [ev waitUntilSignaledValue:signal_val
                                 timeoutMS:timeout_ms];
@@ -911,6 +962,12 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // that notification by a scheduler turn.  The complete-command-buffer ABI
   // needs those timestamps specifically; this is now non-blocking in the
   // normal case and makes their visibility deterministic before recording.
+  // Noted BEFORE the optional `waitUntilCompleted` below: that wait exists to
+  // make the command-buffer timestamp properties visible, not to finish GPU
+  // work -- the event signal already proved that. Folding a
+  // property-visibility stall into the witness would inflate it on exactly the
+  // path that needs it most, and inflating the wall loosens the bound.
+  ts_note_wall();
   if (prefer_command_buffer) [cb waitUntilCompleted];
   ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
   return true;
@@ -936,6 +993,12 @@ struct MPSGraphTimingBracket {
   uint64_t completion_value = 0;
   uint64_t done_value = 0;
   bool active = false;
+  // Host witness for this lane. The MPSGraph route does not go through
+  // `commit_and_wait_with_timeout`, so instrumenting that function alone left
+  // exactly the lane the arbiter actually measures (`metal4_mpsgraph_envelope`)
+  // reporting a null wall -- which `accept_apple_device_ns` reads as "no
+  // witness available" and passes the device number through unchecked.
+  std::chrono::steady_clock::time_point wall_begin{};
 
   explicit MPSGraphTimingBracket(MetalDeviceContext &context);
   bool finish(uint64_t timeout_ms);
@@ -4141,6 +4204,8 @@ MPSGraphTimingBracket::MPSGraphTimingBracket(MetalDeviceContext &context)
     done_event = done;
     timestamp_heap = heap;
     ts_clear_dispatch_telemetry();
+    // After the clear, which resets the wall field.
+    wall_begin = std::chrono::steady_clock::now();
     active = true;
   }
 }
@@ -4161,6 +4226,11 @@ bool MPSGraphTimingBracket::finish(uint64_t timeout_ms) {
     // interval emitted by the regular MTL4 route. Keep the provenance
     // distinguishable for route selection and benchmark comparison.
     mtl4_record_dispatch_telemetry(*ctx, heap, 4);
+    if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
+      g_last_dispatch_wall_time_ns =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::steady_clock::now() - wall_begin).count();
+    }
     return g_last_dispatch_device_time_ns > 0;
   }
   return false;

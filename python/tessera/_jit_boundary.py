@@ -1409,13 +1409,35 @@ class GraphFn:
         cond_start = len(self._ops)
         pred = cond(cv)
         cond_lines = self._scopes.pop()
-        if pred.shape != (1,):
-            raise TesseraJitError("while_loop cond must return a shape-(1,) tensor")
+        # ANY single-element tensor, not literally shape (1,).
+        #
+        # The predicate is COMPUTED FROM THE CARRY inside the loop, so it is
+        # limited to what the op surface can produce -- and that surface has no
+        # reshape, flatten, squeeze or reduce. From a (1, d) carry the only
+        # scalar reduction available is `matmul((1,d), (d,1))`, which yields
+        # (1, 1). Demanding exactly (1,) therefore stated a contract no caller
+        # could satisfy for a rank-2 carry; every test in
+        # `test_production_jit_phase3_while.py` writes the matmul form.
+        #
+        # `GraphFn.cond` keeps the stricter `(1,)` rule on purpose: its flag is
+        # a function *input*, so a caller can simply declare `g.arg((1,))`.
+        # The difference is what the caller is able to hand over, not taste.
+        #
+        # Rank 0 is excluded because `_t(())` renders `tensor<xf32>`, which is
+        # not valid IR -- a real limit of the type printer, not of this rule.
+        pred_elems = 1
+        for extent in pred.shape:
+            pred_elems *= int(extent)
+        if not pred.shape or pred_elems != 1:
+            raise TesseraJitError(
+                "while_loop cond must return a single-element tensor of rank "
+                f">= 1 (e.g. (1,) or (1, 1)); got shape {tuple(pred.shape)}"
+            )
         res = self._fresh()
 
         cur = self._scopes[-1]
         T = self._t(init.shape)
-        PT = self._t((1,))
+        PT = self._t(tuple(pred.shape))
         c0 = f"%wc0_{ordinal}"
         c1 = f"%wc1_{ordinal}"
         cmax = f"%wcmax_{ordinal}"
@@ -1438,8 +1460,19 @@ class GraphFn:
         cur.append(f"  {within} = arith.cmpi ult, {wi}, {cmax} : index")
         cur.append(f"  {cont} = scf.if {within} -> i1 {{")
         cur.extend(cond_lines)
-        cur.append(f"  {pidx} = arith.constant 0 : index")
-        cur.append(f"  {pscalar} = tensor.extract {pred.ssa}[{pidx}] : {PT}")
+        # One zero index per axis: `tensor.extract` takes exactly rank
+        # indices, so a (1, 1) predicate needs two. Emitting a single index for
+        # a rank-2 value produced malformed IR, which is what the old guard was
+        # really protecting against.
+        pred_indices = []
+        for axis in range(len(pred.shape)):
+            axis_ssa = f"{pidx}_{axis}"
+            cur.append(f"  {axis_ssa} = arith.constant 0 : index")
+            pred_indices.append(axis_ssa)
+        cur.append(
+            f"  {pscalar} = tensor.extract {pred.ssa}"
+            f"[{', '.join(pred_indices)}] : {PT}"
+        )
         cur.append(f"  {pzero} = arith.constant 0.0 : {self._elem}")
         cur.append(f"  {pbool} = arith.cmpf ogt, {pscalar}, {pzero} : {self._elem}")
         cur.append(f"  scf.yield {pbool} : i1")

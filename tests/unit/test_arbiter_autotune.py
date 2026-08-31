@@ -257,3 +257,118 @@ def test_dispatch_histogram_filters_by_target():
     run_arbitrated(region, OP_MATMUL, "other_target", A, B)
     only = arbiter_dispatch_histogram(target=_TGT)
     assert set(only) == {(_TGT, OP_MATMUL)}
+
+
+# ── a verdict is only meaningful against the field it actually beat ──────────
+#
+# The committed corpus is what proved this necessary. Every device-timed row
+# was missing exactly the candidates that had no `measure_device_latency`:
+# matmul raced 2 of 4 (both GEMM lanes absent), attention 5 of 6, fused_region
+# 6 of 10. `_measure` scored an untimeable candidate `float("inf")`, so it lost
+# silently, and the record stored a `winner` with nothing to say the field had
+# been reduced. Those verdicts read as "the compiled kernel is faster" when
+# they meant "the compiled kernel was the only one that could be timed".
+
+
+def test_an_untimeable_candidate_is_recorded_as_skipped_not_as_slow():
+    """`inf` says "infinitely slow"; the truth is "not instrumented"."""
+    # A private target: `register_candidate` accumulates process-globally, so
+    # reusing `_TGT` would race candidates other tests registered.
+    target = "d2d3_skipfield"
+    cache = AT.MeasureCache()
+    for c in (_FakeCand("timed", "t", device_ms=1.0),
+              _FakeCand("untimed", "u", tier=Tier.HAND_TUNED, device_ms=None)):
+        c.target = target
+        C.register_candidate(c)
+
+    winner = AT.measured_arbitrate(
+        _FakeRegion(), OP_MATMUL, target, *_mm(), dims=(4, 4, 4),
+        dtype="bfloat16", cache=cache, reps=1, warmup=0,
+        timing=AT.TIMING_DEVICE)
+    assert winner is not None and winner.name == "timed"
+
+    rec = cache.get((AT._device_id(target), target, OP_MATMUL,
+                     (4, 4, 4), "bfloat16", AT.TIMING_DEVICE))
+    assert rec is not None
+    assert "untimed" not in rec.candidates, (
+        "an untimeable candidate must not appear as if it had a latency")
+    assert rec.unmeasured is not None and "untimed" in rec.unmeasured, (
+        f"the skipped candidate must be recorded: {rec.unmeasured}")
+
+
+def test_a_verdict_is_refused_when_a_skipped_candidate_is_now_runnable():
+    """The exact regression: a device verdict recorded without the hand-tuned
+    lane must not select once that lane becomes measurable.
+
+    This is what PR #652 changed -- the shipped NVIDIA GEMM gained a device
+    timer -- while the corpus rows predating it still named a compiled kernel
+    as winner.
+    """
+    live = {"tile": object(), "shipped": object()}
+    rec = AT.MeasureRecord(winner="tile", latency_ms=1.0,
+                           candidates={"tile": 1.0},
+                           unmeasured={"shipped": "no measure_device_latency"})
+    assert not AT._record_raced_the_live_field(rec, live, AT.TIMING_DEVICE)
+    # Once the skipped candidate is genuinely not in play, the verdict stands.
+    assert AT._record_raced_the_live_field(rec, {"tile": object()},
+                                           AT.TIMING_DEVICE)
+
+
+def test_a_device_record_that_cannot_prove_its_field_is_refused():
+    """Legacy rows carry no `unmeasured` key, so they cannot show what they
+    skipped -- and for device timing that generation is known to be incomplete.
+    `None` (undeclared) and `{}` (declared complete) must not be conflated."""
+    undeclared = AT.MeasureRecord(winner="tile", latency_ms=1.0,
+                                  candidates={"tile": 1.0})
+    declared = AT.MeasureRecord(winner="tile", latency_ms=1.0,
+                                candidates={"tile": 1.0}, unmeasured={})
+    live = {"tile": object(), "shipped": object()}
+
+    assert not undeclared.declares_its_field()
+    assert declared.declares_its_field()
+    assert not AT._record_raced_the_live_field(undeclared, live, AT.TIMING_DEVICE)
+    assert AT._record_raced_the_live_field(declared, live, AT.TIMING_DEVICE)
+
+
+def test_legacy_end_to_end_records_are_still_honoured():
+    """End-to-end timing has no instrumentation gap -- `measure_latency` just
+    calls `run()` -- so those rows did race the full field and stay usable.
+    Invalidating them too would discard real evidence to fix a device-only
+    defect."""
+    undeclared = AT.MeasureRecord(winner="shipped", latency_ms=1.0,
+                                  candidates={"shipped": 1.0, "tile": 2.0})
+    live = {"tile": object(), "shipped": object()}
+    assert AT._record_raced_the_live_field(
+        undeclared, live, AT.TIMING_END_TO_END)
+
+
+def test_an_all_untimeable_race_caches_nothing():
+    """With every candidate untimeable, `min` over all-`inf` returns the first
+    by registration order. Caching that would store an arbitrary pick as a
+    measured verdict."""
+    target = "d2d3_alluntimeable"
+    cache = AT.MeasureCache()
+    for name in ("none_a", "none_b"):
+        c = _FakeCand(name, name, device_ms=None)
+        c.target = target
+        C.register_candidate(c)
+
+    winner = AT.measured_arbitrate(
+        _FakeRegion(), OP_MATMUL, target, *_mm(), dims=(8, 8, 8),
+        dtype="bfloat16", cache=cache, reps=1, warmup=0,
+        timing=AT.TIMING_DEVICE)
+    assert winner is None, (
+        "no candidate was timed, so there is no measured winner to return")
+    assert cache.size == 0, "an unmeasured race must not be cached as a verdict"
+
+
+def test_the_unmeasured_field_round_trips_through_the_corpus():
+    """`None` (undeclared) must survive as `None`, not become `{}` -- the whole
+    distinction is between "raced everyone" and "did not say"."""
+    undeclared = AT.MeasureRecord(winner="a", latency_ms=1.0)
+    declared = AT.MeasureRecord(winner="a", latency_ms=1.0,
+                                unmeasured={"b": "no timer"})
+    assert "unmeasured" not in undeclared.as_json()
+    assert AT.MeasureRecord.from_json(undeclared.as_json()).unmeasured is None
+    assert AT.MeasureRecord.from_json(declared.as_json()).unmeasured == {
+        "b": "no timer"}

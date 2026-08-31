@@ -43,10 +43,41 @@ def _find_opt() -> str | None:
 
 _OPT = _find_opt()
 def _apple_backend_available() -> bool:
-    """Whether the selected driver actually carries the Apple backend."""
+    """Whether EVERY driver these tests can reach carries the Apple backend.
+
+    Two resolvers are in play and they rank differently, so probing one and
+    invoking the other is a real hazard rather than a theoretical one:
+
+    * this module's `_find_opt()` -> `compiler_tool.tessera_opt_path()`, which
+      prefers the in-repo build;
+    * `driver._resolve_tessera_opt()`, which the `_front_door*` tests reach
+      through and which prefers `TESSERA_OPT` then **PATH**, falling back to the
+      in-repo build.
+
+    With a PATH `tessera-opt` configured differently from the local build they
+    select different binaries, and a guard reading only `_OPT` could skip a
+    test whose actual driver has the Apple backend, or -- worse -- let one run
+    against an Apple-disabled driver and reproduce exactly the failures this
+    guard exists to prevent.
+
+    Requiring both is the conservative resolution. On any ordinary single-build
+    setup they are the same file and this costs nothing; where they genuinely
+    diverge, one of the two lanes cannot work and skipping is the honest
+    answer.
+    """
     from tests._support.apple import apple_backend_in_tessera_opt
+
     try:
-        return bool(_OPT) and apple_backend_in_tessera_opt(_OPT)
+        from tessera.compiler import driver as _driver
+        front_door = _driver._resolve_tessera_opt()
+    except Exception:
+        front_door = None
+
+    candidates = {tool for tool in (_OPT, front_door) if tool}
+    if not candidates:
+        return False
+    try:
+        return all(apple_backend_in_tessera_opt(str(tool)) for tool in candidates)
     except Exception:
         return False
 

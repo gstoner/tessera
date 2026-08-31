@@ -852,35 +852,88 @@ extern "C" int32_t tessera_apple_gpu_tile_counter_sampling_supported(void) {
   return 0;
 }
 
+// GPUStartTime/GPUEndTime is the device clock; kernelStartTime/kernelEndTime is
+// NOT, and preferring it was measured reporting ~1% of the real interval.
+//
+// The comment this replaces had it exactly backwards -- it called kernelStart/End
+// "the completed compute-kernel interval" and GPUStart/End "the broader
+// command-buffer scheduling interval". The SDK says the opposite by omission:
+// `GPUStartTime` carries an @abstract ("the host time in seconds that GPU starts
+// executing this command buffer") and `kernelStartTime` is a bare, undocumented
+// declaration.
+//
+// Measured on an M1 Max (2026-08-31) with only a kernel's loop count varying:
+//
+//   iters   kernelS/E      GPUS/E      encoder      host wall   kern/wall
+//    5,000     54,583     498,375      498,375        764,417       0.071
+//  320,000     65,833   9,390,833    9,390,792      9,833,750       0.007
+//
+// kernelStart/End is flat across a 64x workload; GPUStart/End tracks the wall
+// AND agrees with an independent stage-boundary counter-sample clock to the
+// nanosecond (9,390,833 vs 9,390,792). Two mechanisms agreeing that closely is
+// what makes this a device measurement rather than a plausible number.
+//
+// This is the failure a host-wall bound provably cannot catch: an under-read
+// looks like a small kernel. It was found by a metamorphic check -- scale the
+// work, require the time to scale -- which is now a test.
+// Read the GPU interval, forcing the properties to become visible first.
+//
+// `GPUStartTime` is documented to "return zero if it has not started" and to
+// be readable "in command buffer completion handler". Every dispatch path here
+// waits on a shared event instead, which proves the GPU finished but does NOT
+// publish these properties -- they lag by a scheduler turn. Without the wait
+// below, GPUStartTime reads 0 on every lane, the code silently falls back to
+// the undocumented kernelStartTime pair, and the whole point of preferring the
+// documented clock is lost while still looking correct.
+//
+// `waitUntilCompleted` is cheap here precisely because the caller already
+// waited: the work is done, this only synchronises the property publication.
+// Returns true when `start`/`end` hold a usable GPU interval.
+static bool ts_gpu_interval(id<MTLCommandBuffer> cb, NSTimeInterval &start,
+                            NSTimeInterval &end) {
+  start = cb.GPUStartTime;
+  end = cb.GPUEndTime;
+  if (end >= start && end > 0.0) return true;
+  [cb waitUntilCompleted];
+  start = cb.GPUStartTime;
+  end = cb.GPUEndTime;
+  return end >= start && end > 0.0;
+}
+
 static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb) {
-  // kernelStart/End are the completed compute-kernel interval. GPUStart/End
-  // describe the broader command-buffer scheduling interval and are allowed to
-  // be zero on this driver, so use them only as a fallback.
-  NSTimeInterval start = cb.kernelStartTime;
-  NSTimeInterval end = cb.kernelEndTime;
-  if (!(end >= start && end > 0.0)) {
-    start = cb.GPUStartTime;
-    end = cb.GPUEndTime;
+  NSTimeInterval start = 0.0, end = 0.0;
+  const bool gpu_clock = ts_gpu_interval(cb, start, end);
+  if (!gpu_clock) {
+    // Falling back to the undocumented pair keeps a number where there would
+    // otherwise be none; the source label says which was used, and a consumer
+    // that cares about fidelity must check it.
+    start = cb.kernelStartTime;
+    end = cb.kernelEndTime;
   }
   g_last_tile_device_time_ns = (end >= start && end > 0.0)
       ? static_cast<int64_t>((end - start) * 1.0e9)
       : -1;
   if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
     g_last_dispatch_device_time_ns = g_last_tile_device_time_ns;
-    g_last_dispatch_timing_source = g_last_tile_device_time_ns >= 0 ? 1 : 0;
+    g_last_dispatch_timing_source =
+        g_last_tile_device_time_ns >= 0 ? (gpu_clock ? 2 : 1) : 0;
   }
 }
 
 static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb,
                                            bool prefer_command_buffer = false) {
   if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
-  NSTimeInterval start = prefer_command_buffer ? cb.GPUStartTime : cb.kernelStartTime;
-  NSTimeInterval end = prefer_command_buffer ? cb.GPUEndTime : cb.kernelEndTime;
-  int32_t source = prefer_command_buffer ? 2 : 1;
-  if (!(end >= start && end > 0.0)) {
-    start = prefer_command_buffer ? cb.kernelStartTime : cb.GPUStartTime;
-    end = prefer_command_buffer ? cb.kernelEndTime : cb.GPUEndTime;
-    source = prefer_command_buffer ? 1 : 2;
+  // `prefer_command_buffer` no longer selects between the two clocks -- see the
+  // measurement above `ts_record_tile_gpu_elapsed`. GPUStart/End is always
+  // preferred because it is the only one that measures the work; the flag is
+  // kept because callers still use it to force the `waitUntilCompleted` that
+  // makes these properties visible.
+  NSTimeInterval start = 0.0, end = 0.0;
+  int32_t source = 2;
+  if (!ts_gpu_interval(cb, start, end)) {
+    start = cb.kernelStartTime;
+    end = cb.kernelEndTime;
+    source = 1;
   }
   g_last_dispatch_device_time_ns = (end >= start && end > 0.0)
       ? static_cast<int64_t>((end - start) * 1.0e9)

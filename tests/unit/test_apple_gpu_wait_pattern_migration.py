@@ -214,6 +214,17 @@ def test_only_documented_waituntilcompleted_sites_remain():
       handle with the live root used for its commit before ownership crosses
       the asynchronous boundary.
 
+    * The timestamp-visibility wait inside ``ts_gpu_interval``
+      (APPLE-DEVICE-CLOCK, 2026-08-31). ``GPUStartTime``/``GPUEndTime`` are
+      documented to read zero before the GPU starts and to be readable "in
+      command buffer completion handler"; every dispatch path here waits on a
+      shared event instead, which proves the GPU finished but does not publish
+      those properties. Without this wait the code reads zero, silently falls
+      back to the undocumented ``kernelStartTime`` pair -- measured FLAT across
+      a 64x workload -- and keeps reporting plausible numbers that are not
+      measurements. It is cheap because the caller already waited: the work is
+      done, this only synchronises property publication.
+
     Any OTHER site is a regression. This test fires loud."""
     src = _RUNTIME_SRC.read_text()
     import re
@@ -221,11 +232,13 @@ def test_only_documented_waituntilcompleted_sites_remain():
         r"\[cb waitUntilCompleted\]", src)]
     session_calls = [m for m in re.finditer(
         r"\[root waitUntilCompleted\]", src)]
-    # One generic-command-buffer fallback plus the explicit completed-buffer
-    # telemetry mode used only when an ABI owns the entire command buffer.
-    assert len(cb_calls) == 2, (
-        f"expected exactly 2 [cb waitUntilCompleted] calls (the wrapper's "
-        f"fallback and complete-command-buffer telemetry mode), found {len(cb_calls)}")
+    # One generic-command-buffer fallback, the explicit completed-buffer
+    # telemetry mode used only when an ABI owns the entire command buffer, and
+    # the timestamp-visibility wait in `ts_gpu_interval`.
+    assert len(cb_calls) == 3, (
+        f"expected exactly 3 [cb waitUntilCompleted] calls (the wrapper's "
+        f"fallback, complete-command-buffer telemetry mode, and the "
+        f"ts_gpu_interval timestamp-visibility wait), found {len(cb_calls)}")
     assert len(session_calls) == 3, (
         f"expected exactly 3 [root waitUntilCompleted] calls (the owned "
         f"MPSGraph, synchronous-session, and async-session fallbacks on live root command "

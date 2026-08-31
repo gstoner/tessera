@@ -23,7 +23,7 @@ import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from tessera.compiler.emit.candidate import (
     Candidate,
@@ -68,10 +68,37 @@ class MeasureRecord:
     #: The verdicts read as "the compiled kernel is faster" when they meant
     #: "the compiled kernel was the only one that could be timed".
     unmeasured: dict[str, str] | None = None
+    #: Whether the race separated its two fastest candidates, and the numbers
+    #: behind that call — ``{"separated", "margin", "noise", "runner_up",
+    #: "factor"}``. It describes the *measurement*, not the dispatch choice: on
+    #: an unseparated race the arbiter may keep an incumbent that was not the
+    #: fastest sample, precisely because "fastest sample" is not a fact there.
+    #:
+    #: ``None`` means the record does not state it (written before this
+    #: existed, or fewer than two candidates were timed, in which case there
+    #: was no margin to defend). As with ``unmeasured``, absence must not be
+    #: read as the favourable answer: a record with no separation is a record
+    #: that never asked, not one that passed.
+    #:
+    #: This exists because the arbiter published noise as a verdict. On sm_120
+    #: at 256³ the two NVIDIA matmul lanes measured 0.01300 ms (sd 14.5%) and
+    #: 0.01057 ms (sd 39.1%); the 18.7% gap was recorded as a clean 1.63× win.
+    #: A record that stores only medians cannot tell that apart from the 1.66×
+    #: at 2048³, where the spreads are 2.2% and 0.6%.
+    separation: dict[str, Any] | None = None
 
     def declares_its_field(self) -> bool:
         """Whether this record states which applicable candidates it skipped."""
         return self.unmeasured is not None
+
+    def is_separated(self) -> bool | None:
+        """``True``/``False`` if this record judged its margin, else ``None``.
+
+        Callers that publish a comparison ("X is 1.6× faster than Y") must
+        treat ``False`` and ``None`` alike: neither establishes a ranking."""
+        if self.separation is None:
+            return None
+        return bool(self.separation.get("separated", False))
 
     def as_json(self) -> dict[str, Any]:
         return {"winner": self.winner, "latency_ms": self.latency_ms,
@@ -80,6 +107,8 @@ class MeasureRecord:
                    if self.candidate_descriptors else {}),
                 **({} if self.unmeasured is None
                    else {"unmeasured": dict(self.unmeasured)}),
+                **({} if self.separation is None
+                   else {"separation": dict(self.separation)}),
                 **({"evidence": dict(self.evidence)} if self.evidence else {})}
 
     @classmethod
@@ -96,6 +125,8 @@ class MeasureRecord:
                    },
                    unmeasured=(None if raw is None
                                else {str(k): str(v) for k, v in dict(raw).items()}),
+                   separation=(None if d.get("separation") is None
+                               else dict(d["separation"])),
                    evidence=dict(d.get("evidence", {})))
 
 
@@ -312,6 +343,18 @@ def measure_latency(run_fn: Any, *, reps: int = 20, warmup: int = 3) -> float:
     for kernel-only A/B microbenchmarks; it drops in behind this same callback
     seam (``arbitrate(measure=…)``) without an API change. Keep ``reps`` high
     enough that the median is stable under wall-clock jitter."""
+    return statistics.median(measure_latency_samples(
+        run_fn, reps=reps, warmup=warmup))
+
+
+def measure_latency_samples(run_fn: Any, *, reps: int = 20,
+                            warmup: int = 3) -> list[float]:
+    """The individual samples behind :func:`measure_latency`.
+
+    Split out because the median alone cannot say whether a verdict is
+    *separated*: a 19% gap is decisive against a 2% spread and meaningless
+    against a 39% one, and the record used to keep only the medians. See
+    :func:`relative_spread`."""
     for _ in range(warmup):
         run_fn()
     samples = []
@@ -319,7 +362,63 @@ def measure_latency(run_fn: Any, *, reps: int = 20, warmup: int = 3) -> float:
         t0 = time.perf_counter()
         run_fn()
         samples.append((time.perf_counter() - t0) * 1e3)
-    return statistics.median(samples)
+    return samples
+
+
+def relative_spread(samples: Sequence[float]) -> float:
+    """Population sd over median, as a fraction. ``0.0`` for a single sample.
+
+    Relative rather than absolute because the arbiter compares candidates
+    across four orders of magnitude of latency, and the question is always
+    "is this gap bigger than the noise", never "is it bigger than N ms"."""
+    usable = [s for s in samples if s == s and s > 0.0]
+    if len(usable) < 2:
+        return 0.0
+    med = statistics.median(usable)
+    return (statistics.pstdev(usable) / med) if med > 0.0 else 0.0
+
+
+#: How many times the winner's margin must exceed the noise floor before the
+#: arbiter calls a verdict separated. Two is the same bar used to re-derive the
+#: sm_120 matmul ranking; it is a judgement call, not a derived constant, and it
+#: is named here so a future change to it is visible rather than inlined.
+SEPARATION_FACTOR = 2.0
+
+
+def separation_verdict(latencies: Mapping[str, float],
+                       spreads: Mapping[str, float],
+                       winner: str) -> dict[str, Any] | None:
+    """Whether ``winner``'s margin over the runner-up exceeds measurement noise.
+
+    Returns ``None`` when the question does not arise (fewer than two timed
+    candidates) -- a sole candidate is selected by applicability, not by a race,
+    so there is no margin to defend.
+
+    **This exists because the arbiter published a verdict that was noise.** On
+    sm_120 at 256x256x256 the NVIDIA matmul lanes measured 0.01300 ms (delegate,
+    sd 14.5%) against 0.01057 ms (emitted PTX, sd 39.1%). The 18.7% gap was
+    recorded as a clean 1.63x win; against a 39.1% per-lane spread it is not a
+    result at all. That shape sits at the launch-overhead floor, where run-to-run
+    variation swamps the difference between kernels -- and the arbiter had no way
+    to say so, because a `MeasureRecord` stored medians and nothing else.
+
+    A tie is not an error and does not block dispatch: something still has to
+    run. What it blocks is *claiming* one candidate is faster."""
+    timed = {n: t for n, t in latencies.items()
+             if t == t and t not in (float("inf"), float("-inf"))}
+    if winner not in timed or len(timed) < 2:
+        return None
+    ordered = sorted(timed.items(), key=lambda kv: kv[1])
+    (best_name, best), (second_name, second) = ordered[0], ordered[1]
+    margin = (second - best) / second if second > 0.0 else 0.0
+    noise = max(spreads.get(best_name, 0.0), spreads.get(second_name, 0.0))
+    return {
+        "separated": margin > SEPARATION_FACTOR * noise,
+        "margin": margin,
+        "noise": noise,
+        "runner_up": second_name,
+        "factor": SEPARATION_FACTOR,
+    }
 
 
 #: target → the ``runtime`` probe returning its live device tag (``"sm_120"`` /
@@ -461,14 +560,21 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
                        dims: tuple[int, ...] | None = None, dtype: str = "f32",
                        cache: MeasureCache | None = None, reps: int = 20,
                        warmup: int = 3, device: str | None = None,
-                       timing: str = TIMING_END_TO_END) -> Candidate | None:
+                       timing: str = TIMING_END_TO_END,
+                       device_repeats: int = 3) -> Candidate | None:
     """Pick the winning candidate by **measured latency** (measure-at-first-miss),
     or ``None`` if none apply/verify (caller uses the reference).
 
     On a cache hit for ``(device, target, op, bucket(dims), dtype)`` the recorded
     winner is returned if it is still applicable/available (no re-timing). On a
     miss, the arbiter F4-gates the candidates and times the survivors on ``inputs``
-    (median of ``reps`` after ``warmup``); the fastest is cached and returned."""
+    (median of ``reps`` after ``warmup``); the fastest is cached and returned.
+
+    ``device_repeats`` is how many times the whole device measurement is redone
+    per candidate, and exists only to give the verdict a noise floor: a single
+    ``measure_device_latency`` call returns a median with no dispersion, and a
+    median alone cannot tell a real 1.66x from a tie. It does not apply to
+    end-to-end timing, where the samples are already in hand."""
     cache = cache if cache is not None else _DEFAULT_CACHE
     _maybe_warm_start(cache)
     dev = device or _device_id(target)
@@ -495,11 +601,22 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
 
     latencies: dict[str, float] = {}
     unmeasured: dict[str, str] = {}
+    spreads: dict[str, float] = {}
 
     def _measure(cand: Candidate) -> float:
         if timing == TIMING_DEVICE:
-            measured = cand.measure_device_latency(
-                region, *inputs, reps=reps, warmup=warmup)
+            # Repeat the whole device measurement so the verdict has a noise
+            # floor to be judged against. One call returns a median with no
+            # dispersion, and a median alone cannot distinguish a real 1.66x
+            # from the 256^3 tie that was recorded as a 1.63x win.
+            device_samples = [
+                cand.measure_device_latency(
+                    region, *inputs, reps=reps, warmup=warmup)
+                for _ in range(device_repeats)
+            ]
+            usable = [float(s) for s in device_samples if s is not None]
+            spreads[cand.name] = relative_spread(usable)
+            measured = statistics.median(usable) if usable else None
             if measured is None:
                 # NOT a latency. "Cannot be timed in this mode" is a statement
                 # about instrumentation; `inf` is a statement about speed. The
@@ -511,8 +628,10 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
                 return float("inf")
             t = float(measured)
         else:
-            t = measure_latency(
+            samples = measure_latency_samples(
                 lambda: cand.run(region, *inputs), reps=reps, warmup=warmup)
+            spreads[cand.name] = relative_spread(samples)
+            t = statistics.median(samples)
         latencies[cand.name] = t
         return t
 
@@ -523,11 +642,24 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         # and `min` fell back to registration order. Caching that would store
         # an arbitrary pick as a measured verdict.
         return None
+
+    separation = separation_verdict(latencies, spreads, winner.name)
+    if (separation is not None and not separation["separated"]
+            and rec is not None and rec.winner in live
+            and rec.winner in latencies):
+        # A tie must not thrash the selection. When this race cannot tell the
+        # candidates apart and a previous run already picked one of them, keep
+        # that one: re-picking by noise would flip the cached winner between
+        # runs, invalidating downstream keys for no measured reason. The record
+        # still says the verdict was unseparated, so nothing reads it as a win.
+        winner = live[rec.winner]
+
     cache.put(key, MeasureRecord(
         winner=winner.name,
         latency_ms=latencies.get(winner.name, float("nan")),
         candidates=dict(latencies),
-        unmeasured=dict(unmeasured)))
+        unmeasured=dict(unmeasured),
+        separation=separation))
     return winner
 
 

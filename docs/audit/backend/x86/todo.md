@@ -3011,3 +3011,67 @@ discipline from the NVIDIA or ROCm plans, check which of its steps exist to
 defend against a hazard this lane actually has.
 
 **No AVX-512 evidence is claimed** — no x86 code changed.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Owning item:** the arbiter's measured-verdict contract ·
+**synchronization key:** `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Shared contract changed — a `MeasureRecord` must now say whether its ranking
+survives its own noise.** All four backends write into and read from this
+corpus, so the rule for what counts as a verdict is shared even though the
+hardware producing the numbers is not.
+
+**The defect.** `measured_arbitrate` took one median per candidate and picked
+`min`. A margin was a margin; nothing recorded how noisy the lanes were, so a
+19% gap between two lanes whose own spreads were 14.5% and 39.1% was stored
+exactly like a 40% gap between lanes spread 2.2% and 0.6%. Measured on sm_120
+at 256³:
+
+| lane | median | spread |
+|---|---|---|
+| delegate (`nvidia_mma_gemm_shipped`) | 0.01300 ms | 14.5% |
+| emitted PTX | 0.01057 ms | 39.1% |
+
+That was recorded as a clean **1.63× win**. The same *ratio* at 2048³ is real.
+The ratio is not what distinguishes them — the spread is, and the record did
+not keep it.
+
+**Measured over the committed corpus, so this is not a hypothetical:** 87 rows,
+of which **75 assert a ranking** (two or more candidates timed), **none**
+declares a separation, and **11 of the 75 — 15% — picked a winner that beat the
+runner-up by under 2%**, the tightest at **0.07%**. That is inside ordinary
+end-to-end wall jitter; those eleven verdicts record which lane was luckier.
+
+**The rule.** The margin must exceed `SEPARATION_FACTOR` (2×) the *noisier* of
+the two fastest lanes. `None` — not `True` — when fewer than two candidates were
+timed: a sole candidate is chosen by applicability, not by a race, so there is
+no margin to defend. As with `unmeasured`, absence is not the favourable
+answer, and a publisher must treat `None` and `False` alike.
+
+**A tie never blocks dispatch** — something has to run. It blocks two things:
+*claiming* one candidate is faster, and re-picking by noise on every run. An
+unseparated re-race now keeps the incumbent; a separated one still displaces it.
+
+**Outcome for this backend: `parity validated by construction` — x86 gets the
+dispersion for free, and is the one lane where the fix required no new
+measurement.** The end-to-end path already collected per-rep samples inside
+`measure_latency` and threw them away to return a median;
+`measure_latency_samples` simply stops discarding them. x86 times on the host
+through that path exclusively — there is no device-event lane here — so every
+x86 row acquires a real noise floor on its next regeneration with no extra
+timing cost. The `device_repeats` multiplier does not apply.
+
+**The one thing worth watching on this backend.** Host wall-clock timing is the
+noisiest of the fleet's clocks: no device counter isolates the kernel, so
+scheduler jitter, frequency scaling and page faults all land in the spread.
+That is not a defect of the metric — it is what the caller actually pays, which
+is why this lane times end-to-end by choice — but it does mean x86 rows will
+separate *less often* than GPU rows at the same true speed difference. An
+unseparated x86 row is therefore weaker evidence of "the lanes are equal" than
+an unseparated device-timed row would be, and should not be read as one.
+
+**No AVX-512 evidence is claimed** — no x86 code changed, and no x86 row has
+been regenerated.

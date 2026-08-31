@@ -5391,3 +5391,49 @@ The W1.1 `!tile.fragment<…, acc, …>` TYPE parameter is still populated from
 the same storage-derived inference rather than from the policy; unifying
 those two remains open, and is now a narrower job than it looked, since the
 op-level consumer above is the one that decides what executes.
+
+---
+
+## Cross-backend sync `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Owning item:** the bounded ("modified"/Kimi) DeltaNet reverse rule ·
+**PR:** #660 · **synchronization key:** `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Shared contract changed — the bounded VJP's correction term.** The bounded
+variant scales the rank-1 update by `f = 1/(1 + n)` with `A_de = k_d·target_e`
+and `n = ‖A‖_F`, so the reverse rule for `U = b·A·f` is
+
+```
+∂L/∂A_ij = b·dU_ij·f  −  b·(Σ_de dU_de·A_de)·f²·A_ij / n
+```
+
+This is a *shared numerical contract*, not a per-backend schedule: three
+backends implement the same closed form independently against one reference
+(`get_vjp("modified_delta_attention")`). Two of them divided that correction by
+**`max(n, 1)`** instead of `n`, understating it by a factor of `n` whenever
+`n < 1` — which, with L2-normalised keys, is the ordinary case rather than an
+edge case. No clamp is needed or wanted: the numerator is `O(n²)` (both
+`update` and `projection` scale with `A`), so the quotient vanishes as `n → 0`,
+and the existing `norm > 0` select already covers `n == 0` exactly.
+
+**Why the failure was silent in four of six gradients.** At `erase=False` the
+bounded update reaches only `dk` and `dv`; `dq`, `dgate`, `dbeta`, `ddecay` do
+not consume `du` and stayed exact to ~1e-9. A wrong *bound* derivative
+therefore presents as two gradients off by 19–33% while the other four are
+perfect — which is what ruled out precision loss and pointed at a missing term.
+
+**Outcome for this backend: `parity validated` — defect owned here and fixed
+here, with exact-device evidence.** `GenerateROCMDeltaNetKernel.cpp` built the
+divisor with `arith::MaximumFOp(loc, norm, one)`; it now divides by `norm`
+directly. Verified on **Princess-Luna / gfx1151**, the only fleet host with
+that device: `tests/unit/test_rocm_deltanet_compiled.py` went from **2 failed /
+32 passed** to **35 passed**. The x86 lane was rebuilt and run separately on
+the same box — the two results are independent, and neither transfers to the
+other.
+
+**Regression guard added here.** A new finite-difference test pins the
+*compiled* backward's `dk`/`dv` against central differences rather than against
+the analytic VJP. Finite differences are the right reference precisely because
+they share no code with either side; the analytic VJP already had such a check,
+but nothing pinned the compiled path — which is why a wrong bound derivative
+could only be caught by noticing that two of six gradients were off.

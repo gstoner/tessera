@@ -2916,3 +2916,49 @@ Decision #32 record/verify pair and declares `represented_in_type` /
 `re_expressed`.
 
 This backend supplied the executed evidence: the native object was built and run on the Ryzen AI Max+ 395. That is a CPU correctness result on this host's toolchain and is not a timing claim.
+
+---
+
+## Cross-backend sync `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Owning item:** the bounded ("modified"/Kimi) DeltaNet reverse rule ·
+**PR:** #660 · **synchronization key:** `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Shared contract changed — the bounded VJP's correction term.** The bounded
+variant scales the rank-1 update by `f = 1/(1 + n)` with `A_de = k_d·target_e`
+and `n = ‖A‖_F`, so the reverse rule for `U = b·A·f` is
+
+```
+∂L/∂A_ij = b·dU_ij·f  −  b·(Σ_de dU_de·A_de)·f²·A_ij / n
+```
+
+This is a *shared numerical contract*, not a per-backend schedule: three
+backends implement the same closed form independently against one reference
+(`get_vjp("modified_delta_attention")`). Two of them divided that correction by
+**`max(n, 1)`** instead of `n`, understating it by a factor of `n` whenever
+`n < 1` — which, with L2-normalised keys, is the ordinary case rather than an
+edge case. No clamp is needed or wanted: the numerator is `O(n²)` (both
+`update` and `projection` scale with `A`), so the quotient vanishes as `n → 0`,
+and the existing `norm > 0` select already covers `n == 0` exactly.
+
+**Why the failure was silent in four of six gradients.** At `erase=False` the
+bounded update reaches only `dk` and `dv`; `dq`, `dgate`, `dbeta`, `ddecay` do
+not consume `du` and stayed exact to ~1e-9. A wrong *bound* derivative
+therefore presents as two gradients off by 19–33% while the other four are
+perfect — which is what ruled out precision loss and pointed at a missing term.
+
+**Outcome for this backend: `parity validated` — defect present here and fixed
+here, with exact-device evidence.** `src/compiler/codegen/tessera_x86_backend/
+src/kernels/avx512_deltanet_f32.cpp:291` held
+`const float safe_norm = std::max(norm, 1.0f);`; the correction now divides by
+`norm`. Verified on **Princess-Luna AVX-512** (Zen 5 — no AMX here and none
+coming, so x86 proof means AVX-512): `tests/unit/test_x86_deltanet_compiled.py`
+went from **2 failed / 16 passed** to **18 passed**.
+
+**This is the two-transcription failure mode, not a copied bug.** ROCm and x86
+reached the identical wrong divisor independently, in different languages
+(MLIR builder vs C++ intrinsic kernel). A per-backend patch would have left the
+other wrong, which is why the fix landed against the shared formula in one PR
+and was re-measured on both lanes rather than inferred from one. Both lanes
+happen to live on the same host; they were still rebuilt and run separately,
+because sharing a box is not sharing evidence.

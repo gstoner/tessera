@@ -675,11 +675,15 @@ static void emitDeltaNetReverseBody(OpBuilder &b, Location loc,
                 loc, target, mulf(a, vh.getResult(0)));
           }
           Value update = mulf(ld(K, addi(qkRow, d)), target);
-          Value safeNorm =
-              b.create<arith::MaximumFOp>(loc, norm, one);
+          // Divide by `norm`, not by max(norm, 1). See the derivation in
+          // `avx512_deltanet_f32.cpp`: clamping understated the bound's
+          // correction by a factor of n for every n < 1, which is the ordinary
+          // case with L2-normalised keys. The numerator is O(n^2), so the
+          // quotient vanishes with n and the `norm > 0` select below covers
+          // n == 0 exactly.
           Value correction = b.create<arith::DivFOp>(
               loc, mulf(update, projection),
-              mulf(safeNorm, mulf(denom, denom)));
+              mulf(norm, mulf(denom, denom)));
           correction = b.create<arith::SelectOp>(
               loc, b.create<arith::CmpFOp>(
                        loc, arith::CmpFPredicate::OGT, norm, zero),

@@ -279,3 +279,78 @@ def test_deltanet_backward_executes_on_gfx1151(op_name, erase):
     )
     for actual, reference in zip(result["output"], expected):
         np.testing.assert_allclose(actual, reference, rtol=2e-3, atol=2e-3)
+
+
+def test_bounded_variant_dk_dv_match_finite_differences_on_gfx1151():
+    """Pin the COMPILED bounded backward against finite differences directly.
+
+    The analytic VJP already has a finite-difference check, but nothing pinned
+    the compiled path against one -- so a wrong bound derivative in the
+    generated kernel could only be caught by the analytic comparison, and only
+    if someone noticed that two of six gradients were off while the other four
+    were exact to 1e-9.
+
+    That is what happened: `GenerateROCMDeltaNetKernel.cpp` divided the bound's
+    correction by `max(n, 1)` instead of `n`, where `n = ||k|| * ||target||`.
+    With L2-normalised keys n is below 1 in the ordinary case, so the term was
+    understated by a factor of n on every step. Only `dk` and `dv` were wrong,
+    because at `erase=False` those are the only gradients the bounded update
+    flows into.
+
+    Finite differences are the right reference here precisely because they do
+    not share code with either side.
+    """
+    rt = _dn_or_skip()
+    import tessera as ts
+
+    rng = np.random.default_rng(20260727)
+    shape = (1, 1, 5, 3)
+    q = (rng.standard_normal(shape) * 0.3).astype(np.float32)
+    k = _l2(rng.standard_normal(shape)).astype(np.float32)
+    v = (rng.standard_normal(shape) * 0.3).astype(np.float32)
+    gate = rng.standard_normal(shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.8, shape[:-1]).astype(np.float32)
+    decay = rng.uniform(0.7, 0.95, shape[:-1]).astype(np.float32)
+    dy = rng.standard_normal(shape).astype(np.float32)
+
+    kwargs = {
+        "causal": True, "erase": False, "has_gate": True,
+        "has_beta": True, "has_decay": True, "chunk_size": 2,
+    }
+    artifact, operands = _backward_artifact(
+        rt, "tessera.modified_delta_attention",
+        [q, k, v, gate, beta, decay, dy], kwargs,
+    )
+    result = rt.launch(artifact, operands)
+    assert result["ok"] is True, result.get("reason")
+    _, dk, dv, *_ = result["output"]
+
+    # f64 forward, central differences: the bound is smooth here, so the
+    # truncation error is O(eps^2) and well under the 2e-3 bound being checked.
+    q64, k64, v64 = q.astype(np.float64), k.astype(np.float64), v.astype(np.float64)
+    gate64, beta64, decay64 = (gate.astype(np.float64), beta.astype(np.float64),
+                               decay.astype(np.float64))
+    dy64 = dy.astype(np.float64)
+
+    def loss(kk, vv):
+        out = ts.ops.modified_delta_attention(
+            q64, kk, vv, gate=gate64, beta=beta64, decay=decay64, erase=False)
+        return float(np.sum(dy64 * np.asarray(out, np.float64)))
+
+    def numeric(which, eps=1e-6):
+        base = k64 if which == "k" else v64
+        grad = np.zeros_like(base)
+        for index in np.ndindex(base.shape):
+            plus, minus = base.copy(), base.copy()
+            plus[index] += eps
+            minus[index] -= eps
+            if which == "k":
+                grad[index] = (loss(plus, v64) - loss(minus, v64)) / (2 * eps)
+            else:
+                grad[index] = (loss(k64, plus) - loss(k64, minus)) / (2 * eps)
+        return grad
+
+    np.testing.assert_allclose(np.asarray(dk, np.float64), numeric("k"),
+                               rtol=2e-3, atol=2e-3)
+    np.testing.assert_allclose(np.asarray(dv, np.float64), numeric("v"),
+                               rtol=2e-3, atol=2e-3)

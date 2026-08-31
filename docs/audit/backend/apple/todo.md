@@ -5516,3 +5516,51 @@ Decision #32 record/verify pair and declares `represented_in_type` /
 `re_expressed`.
 
 Portable Graph-level contracts. Zen 5 execution transfers no Metal or Apple-device claim; a Metal consumer of the carried accumulator must bind its own device proof.
+
+---
+
+## Cross-backend sync `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Owning item:** the bounded ("modified"/Kimi) DeltaNet reverse rule ·
+**PR:** #660 · **synchronization key:** `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Shared contract changed — the bounded VJP's correction term.** The bounded
+variant scales the rank-1 update by `f = 1/(1 + n)` with `A_de = k_d·target_e`
+and `n = ‖A‖_F`, so the reverse rule for `U = b·A·f` is
+
+```
+∂L/∂A_ij = b·dU_ij·f  −  b·(Σ_de dU_de·A_de)·f²·A_ij / n
+```
+
+This is a *shared numerical contract*, not a per-backend schedule: three
+backends implement the same closed form independently against one reference
+(`get_vjp("modified_delta_attention")`). Two of them divided that correction by
+**`max(n, 1)`** instead of `n`, understating it by a factor of `n` whenever
+`n < 1` — which, with L2-normalised keys, is the ordinary case rather than an
+edge case. No clamp is needed or wanted: the numerator is `O(n²)` (both
+`update` and `projection` scale with `A`), so the quotient vanishes as `n → 0`,
+and the existing `norm > 0` select already covers `n == 0` exactly.
+
+**Why the failure was silent in four of six gradients.** At `erase=False` the
+bounded update reaches only `dk` and `dv`; `dq`, `dgate`, `dbeta`, `ddecay` do
+not consume `du` and stayed exact to ~1e-9. A wrong *bound* derivative
+therefore presents as two gradients off by 19–33% while the other four are
+perfect — which is what ruled out precision loss and pointed at a missing term.
+
+**Outcome for this backend: `not applicable` — Apple has no delta-family
+backward lane to be wrong.** Apple declares three delta *forward* runtime ops
+(`tessera.gated_deltanet`, `tessera.kimi_delta_attention`,
+`tessera.modified_delta_attention` — `apple_runtime_ops.inc:101-104`) and no
+backward or VJP symbol for any of them; `apple_gpu_runtime.mm` has no
+`*_deltanet_backward` export, and the bounded `erase=True` forward is itself a
+documented numpy fallback ("`modified` (Kimi bounded) variant has no fused
+kernel"). The defect lives strictly in the reverse correction term, so no Metal
+kernel, MSL source, or Apple schedule is touched, and none is implied.
+
+**What an Apple lane would have to match if one is ever built.** Divide the
+correction by `n`, never by `max(n, 1)` — and note that the clamp is not a
+defensive guard being removed: it is wrong in the *ordinary* regime
+(L2-normalised keys give `n < 1` almost always) and unnecessary in the singular
+one, since the `O(n²)` numerator makes the quotient vanish at `n → 0` and the
+`norm > 0` select covers `n == 0` exactly. Bind Apple's own M-series device
+proof; the gfx1151 and AVX-512 results under this key transfer nothing.

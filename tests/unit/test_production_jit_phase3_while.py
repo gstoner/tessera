@@ -116,12 +116,40 @@ def test_while_stops_immediately_returns_init():
 # ── envelope: v1 restrictions rejected ───────────────────────────────────────
 
 
-def test_while_rejects_on_cpu_target():
+def test_while_runs_on_a_cpu_target():
+    """The v1 `apple_gpu-only` restriction is gone; this pins that it stays gone.
+
+    This test previously asserted `pytest.raises(..., match="apple_gpu-only")`.
+    No such rejection exists for `while_loop` -- the only `apple_gpu-only`
+    raise in `_jit_boundary` belongs to `scan` -- and the assertion was never
+    reached, because the predicate-shape check fired first with a message that
+    does not match. Two defects masked each other: a stale expectation behind
+    an unsatisfiable contract.
+
+    `while_loop`'s docstring is the accurate account: the canonical lane emits
+    a bounded `scf.while`, and Apple's MPSGraph `forLoop` is one physical
+    choice under the same Graph/SCF contract. Adding the guard to make the old
+    assertion pass would have broken a working, numerically correct CPU lane to
+    satisfy an obsolete restriction.
+    """
     g = GraphFn(target="cpu")
-    c, o, t = g.arg((1, 8)), g.arg((8, 1)), g.arg((1, 1))
-    with pytest.raises(TesseraJitError, match="apple_gpu-only"):
-        g.while_loop(4, cond=lambda cr: g.sub(g.matmul(cr, o), t),
-                     body=lambda cr: cr, init=c)
+    c, h, o, t = g.arg((1, 8)), g.arg((1, 8)), g.arg((8, 1)), g.arg((1, 1))
+    g.ret(g.while_loop(6, cond=lambda cr: g.sub(g.matmul(cr, o), t),
+                       body=lambda cr: g.mul(cr, h), init=c))
+
+    c0 = np.ones((1, 8), np.float32)
+    half = np.full((1, 8), 0.5, np.float32)
+    ones = np.ones((8, 1), np.float32)
+    thr = np.array([[1.0]], np.float32)
+
+    expected = c0.copy()
+    for _ in range(6):
+        if (expected @ ones - thr).item() <= 0:
+            break
+        expected = expected * half
+
+    out = np.asarray(g.run(c0, half, ones, thr))
+    np.testing.assert_allclose(out, expected, rtol=1e-6, atol=1e-6)
 
 
 def test_while_bf16_now_supported_via_host_upcast():
@@ -149,3 +177,66 @@ def test_while_rejects_init_not_an_arg():
     with pytest.raises(TesseraJitError, match="must be a function arg"):
         g.run(np.ones((1, 8), np.float32), np.ones((8, 8), np.float32),
               np.ones((8, 1), np.float32), np.ones((1, 1), np.float32))
+
+
+# ── the predicate-shape contract ─────────────────────────────────────────────
+#
+# `while_loop`'s predicate is COMPUTED FROM THE CARRY inside the loop, so it is
+# limited to what the op surface can produce -- and that surface has no
+# reshape, flatten, squeeze or reduce. From a (1, d) carry the only scalar
+# reduction available is `matmul((1,d), (d,1))`, which yields (1, 1). The old
+# `pred.shape != (1,)` rule therefore stated a contract no caller could meet
+# for a rank-2 carry, and every test above writes the matmul form.
+#
+# The rule guarded something real, though: the emitter hardcoded a single-index
+# `tensor.extract` against a rank-1 type, so a (1, 1) predicate would have
+# lowered to malformed IR. The fix is one zero index per axis, not a relaxed
+# assertion.
+
+
+def test_a_rank_two_single_element_predicate_is_accepted():
+    """(1, 1) is the natural output of a matmul-based scalar reduction."""
+    g = GraphFn(target="apple_gpu")
+    c, o, t = g.arg((1, 4)), g.arg((4, 1)), g.arg((1, 1))
+    g.ret(g.while_loop(3, cond=lambda cr: g.sub(g.matmul(cr, o), t),
+                       body=lambda cr: cr, init=c))
+    assert g.build()
+
+
+def test_a_rank_one_single_element_predicate_is_still_accepted():
+    """Generalising must not drop the shape the rule used to name."""
+    g = GraphFn(target="apple_gpu")
+    c, t = g.arg((1,)), g.arg((1,))
+    g.ret(g.while_loop(3, cond=lambda cr: g.sub(cr, t),
+                       body=lambda cr: cr, init=c))
+    assert g.build()
+
+
+def test_a_multi_element_predicate_is_still_rejected():
+    """The rule was widened to single-element, not removed. A (1, 4) predicate
+    has no single truth value and must not silently use element 0."""
+    g = GraphFn(target="apple_gpu")
+    c, t = g.arg((1, 4)), g.arg((1, 4))
+    with pytest.raises(TesseraJitError, match="single-element"):
+        g.while_loop(3, cond=lambda cr: g.sub(cr, t), body=lambda cr: cr,
+                     init=c)
+
+
+def test_the_emitted_extract_has_one_index_per_axis():
+    """The actual defect the old rule was standing in for.
+
+    A single index against a rank-2 tensor is malformed IR, so widening the
+    acceptance without fixing the emission would have traded a false rejection
+    for a broken lowering.
+    """
+    g = GraphFn(target="apple_gpu")
+    c, o, t = g.arg((1, 4)), g.arg((4, 1)), g.arg((1, 1))
+    g.ret(g.while_loop(3, cond=lambda cr: g.sub(g.matmul(cr, o), t),
+                       body=lambda cr: cr, init=c))
+    extract = next(line for line in g.build().splitlines()
+                   if "tensor.extract" in line and "wpscalar" in line)
+    subscript = extract[extract.index("[") + 1:extract.index("]")]
+    assert subscript.count(",") == 1, (
+        f"a (1, 1) predicate needs two indices, got: {extract.strip()}")
+    assert "tensor<1x1x" in extract, (
+        f"the extract must be typed at the predicate's real rank: {extract.strip()}")

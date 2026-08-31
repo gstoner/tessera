@@ -5012,3 +5012,67 @@ plus a three-sample read. The arbiter should not record a matmul winner at 256³
 without a separation check — a median difference smaller than the spread is not
 a verdict, and this is the second time a matmul ranking has been wrong at a
 shape nobody re-measured.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Owning item:** the arbiter's measured-verdict contract ·
+**synchronization key:** `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Shared contract changed — a `MeasureRecord` must now say whether its ranking
+survives its own noise.** All four backends write into and read from this
+corpus, so the rule for what counts as a verdict is shared even though the
+hardware producing the numbers is not.
+
+**The defect.** `measured_arbitrate` took one median per candidate and picked
+`min`. A margin was a margin; nothing recorded how noisy the lanes were, so a
+19% gap between two lanes whose own spreads were 14.5% and 39.1% was stored
+exactly like a 40% gap between lanes spread 2.2% and 0.6%. Measured on sm_120
+at 256³:
+
+| lane | median | spread |
+|---|---|---|
+| delegate (`nvidia_mma_gemm_shipped`) | 0.01300 ms | 14.5% |
+| emitted PTX | 0.01057 ms | 39.1% |
+
+That was recorded as a clean **1.63× win**. The same *ratio* at 2048³ is real.
+The ratio is not what distinguishes them — the spread is, and the record did
+not keep it.
+
+**Measured over the committed corpus, so this is not a hypothetical:** 87 rows,
+of which **75 assert a ranking** (two or more candidates timed), **none**
+declares a separation, and **11 of the 75 — 15% — picked a winner that beat the
+runner-up by under 2%**, the tightest at **0.07%**. That is inside ordinary
+end-to-end wall jitter; those eleven verdicts record which lane was luckier.
+
+**The rule.** The margin must exceed `SEPARATION_FACTOR` (2×) the *noisier* of
+the two fastest lanes. `None` — not `True` — when fewer than two candidates were
+timed: a sole candidate is chosen by applicability, not by a race, so there is
+no margin to defend. As with `unmeasured`, absence is not the favourable
+answer, and a publisher must treat `None` and `False` alike.
+
+**A tie never blocks dispatch** — something has to run. It blocks two things:
+*claiming* one candidate is faster, and re-picking by noise on every run. An
+unseparated re-race now keeps the incumbent; a separated one still displaces it.
+
+**Outcome for this backend: `parity validated` — the defect was found here and
+the sm_120 evidence for it is this backend's.** All eleven under-2% rows in the
+committed corpus are NVIDIA rows, which is an artifact of NVIDIA being the only
+backend with four matmul candidates racing at every bucket, not of anything
+CUDA-specific.
+
+**Consequence for the corpus: it is now under-declared, not wrong.** Every
+committed row reads `separation: None` — never asked — so no verdict has to be
+retracted, but the eleven tight rows should not be cited as rankings until
+re-raced. Re-generating them needs sm_120, and is the follow-up this key owns.
+
+**Two NVIDIA-specific notes for whoever re-races.**
+
+* The 256³ matmul bucket is at the launch-overhead floor and may simply never
+  separate. That is a legitimate outcome to record, not a measurement to keep
+  retrying at higher `reps` until one lane wins.
+* `device_repeats` (default 3) triples device-timing cost, which matters most
+  here because NVIDIA races the widest field. Three samples give a usable noise
+  floor but a poor spread *estimate*; where a bucket lands near the bar, raise
+  it for that run rather than trusting the boundary.

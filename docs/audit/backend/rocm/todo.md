@@ -5486,3 +5486,67 @@ device-wide drain is exactly the semantics wanted before a timed region.
 
 **No gfx1151 evidence is claimed or needed:** no ROCm code changed, and the
 sm_120 measurements above transfer nothing to this backend.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Owning item:** the arbiter's measured-verdict contract ·
+**synchronization key:** `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Shared contract changed — a `MeasureRecord` must now say whether its ranking
+survives its own noise.** All four backends write into and read from this
+corpus, so the rule for what counts as a verdict is shared even though the
+hardware producing the numbers is not.
+
+**The defect.** `measured_arbitrate` took one median per candidate and picked
+`min`. A margin was a margin; nothing recorded how noisy the lanes were, so a
+19% gap between two lanes whose own spreads were 14.5% and 39.1% was stored
+exactly like a 40% gap between lanes spread 2.2% and 0.6%. Measured on sm_120
+at 256³:
+
+| lane | median | spread |
+|---|---|---|
+| delegate (`nvidia_mma_gemm_shipped`) | 0.01300 ms | 14.5% |
+| emitted PTX | 0.01057 ms | 39.1% |
+
+That was recorded as a clean **1.63× win**. The same *ratio* at 2048³ is real.
+The ratio is not what distinguishes them — the spread is, and the record did
+not keep it.
+
+**Measured over the committed corpus, so this is not a hypothetical:** 87 rows,
+of which **75 assert a ranking** (two or more candidates timed), **none**
+declares a separation, and **11 of the 75 — 15% — picked a winner that beat the
+runner-up by under 2%**, the tightest at **0.07%**. That is inside ordinary
+end-to-end wall jitter; those eleven verdicts record which lane was luckier.
+
+**The rule.** The margin must exceed `SEPARATION_FACTOR` (2×) the *noisier* of
+the two fastest lanes. `None` — not `True` — when fewer than two candidates were
+timed: a sole candidate is chosen by applicability, not by a race, so there is
+no margin to defend. As with `unmeasured`, absence is not the favourable
+answer, and a publisher must treat `None` and `False` alike.
+
+**A tie never blocks dispatch** — something has to run. It blocks two things:
+*claiming* one candidate is faster, and re-picking by noise on every run. An
+unseparated re-race now keeps the incumbent; a separated one still displaces it.
+
+**Outcome for this backend: `follow-up required` — the contract applies here in
+full and no gfx1151 row has been re-raced.** Nothing ROCm-specific changed;
+`measured_arbitrate` is backend-agnostic and the new field appears on ROCm rows
+the moment they are regenerated. No ROCm row currently declares a separation.
+
+**Why this backend is more exposed than the row count suggests.** The corpus's
+tight races are all NVIDIA today only because NVIDIA races four matmul lanes at
+every bucket. ROCm's field is narrower now and will not stay that way: the
+typed-route work is adding candidates on the same buckets, and the moment two
+gfx1151 lanes are close the identical failure appears with no new code path to
+blame. The rule landing before that field widens is the point.
+
+**One ROCm-specific hazard when re-racing.** This host's HIP event clock is the
+one measured returning success while writing garbage, so `_hip_resident_launch_latency`
+already falls back to the wall clock silently (`rocm_last_timer_source()`
+reports which). A wall-clock fallback is *noisier* than a device event, so it
+raises the noise floor and makes separation harder to reach — correctly. Do not
+read an unseparated ROCm row as "the lanes are equal" without first checking
+which clock produced it; it may mean the timer degraded, not that the kernels
+match. **Owed on Princess-Luna.**

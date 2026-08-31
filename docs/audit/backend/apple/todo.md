@@ -5616,3 +5616,69 @@ distinguishes *which Metal timestamp* was used, not whether it was believed).
 
 **Owed on the M1 Max.** No Apple code changed here and no Metal evidence is
 claimed; the sm_120 numbers above say nothing about Apple's timestamps.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Owning item:** the arbiter's measured-verdict contract ·
+**synchronization key:** `AUTOTUNE-SEPARATION-2026-08-31`
+
+**Shared contract changed — a `MeasureRecord` must now say whether its ranking
+survives its own noise.** All four backends write into and read from this
+corpus, so the rule for what counts as a verdict is shared even though the
+hardware producing the numbers is not.
+
+**The defect.** `measured_arbitrate` took one median per candidate and picked
+`min`. A margin was a margin; nothing recorded how noisy the lanes were, so a
+19% gap between two lanes whose own spreads were 14.5% and 39.1% was stored
+exactly like a 40% gap between lanes spread 2.2% and 0.6%. Measured on sm_120
+at 256³:
+
+| lane | median | spread |
+|---|---|---|
+| delegate (`nvidia_mma_gemm_shipped`) | 0.01300 ms | 14.5% |
+| emitted PTX | 0.01057 ms | 39.1% |
+
+That was recorded as a clean **1.63× win**. The same *ratio* at 2048³ is real.
+The ratio is not what distinguishes them — the spread is, and the record did
+not keep it.
+
+**Measured over the committed corpus, so this is not a hypothetical:** 87 rows,
+of which **75 assert a ranking** (two or more candidates timed), **none**
+declares a separation, and **11 of the 75 — 15% — picked a winner that beat the
+runner-up by under 2%**, the tightest at **0.07%**. That is inside ordinary
+end-to-end wall jitter; those eleven verdicts record which lane was luckier.
+
+**The rule.** The margin must exceed `SEPARATION_FACTOR` (2×) the *noisier* of
+the two fastest lanes. `None` — not `True` — when fewer than two candidates were
+timed: a sole candidate is chosen by applicability, not by a race, so there is
+no margin to defend. As with `unmeasured`, absence is not the favourable
+answer, and a publisher must treat `None` and `False` alike.
+
+**A tie never blocks dispatch** — something has to run. It blocks two things:
+*claiming* one candidate is faster, and re-picking by noise on every run. An
+unseparated re-race now keeps the incumbent; a separated one still displaces it.
+
+**Outcome for this backend: `follow-up required`, and it compounds with
+`NVIDIA-TIMER-DRAIN-2026-08-31`.** The contract applies unchanged; no Apple row
+declares a separation yet.
+
+**The two open Apple items are the same gap seen from both ends.** That key
+recorded that `ts_record_tile_gpu_elapsed` believes `cb.kernelStartTime`/
+`kernelEndTime` on an `end >= start && end > 0` check alone — no independent
+witness. This key adds that a verdict needs a *noise floor*. A timer with
+neither a witness nor a dispersion produces a number that is both unvalidated
+and unqualified, and the arbiter will now record `separated: True` off it
+whenever two Apple lanes differ at all, because a single unvalidated sample has
+a spread of zero by construction.
+
+**So the ordering matters here specifically:** `relative_spread` returning
+`0.0` for a single sample is right (there is no dispersion in one number) but it
+means a backend that reports one timestamp per candidate gets a free
+separation. Apple should land the repeated-measurement half — the equivalent of
+`device_repeats` reaching the Metal path — *with* the wall witness, not after
+it, or the separation field will read as validated on evidence that is neither.
+
+**Owed on the M1 Max.** No Apple code changed here and no Metal evidence is
+claimed.

@@ -8,6 +8,56 @@ last_updated: 2026-08-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## Cross-backend sync `AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`
+
+PR (this branch) changes a **shared measurement contract**: an autotune
+`MeasureRecord` must now declare which applicable candidates it did *not* race
+(`unmeasured`), and `corpus_winner` refuses a verdict whose race was smaller
+than the one the live registry would hold. All four backends read this corpus,
+so all four are assessed here per AGENTS.md.
+
+**The defect, measured in the committed corpus.** Every device-timed row was
+missing exactly the candidates that had no `measure_device_latency`: matmul
+raced 2 of 4, attention 5 of 6, fused_region 6 of 10, gated_matmul 6 of 7.
+`_measure` scored an untimeable candidate `float("inf")`, so it lost silently,
+and the record stored a `winner` with nothing to say the field had been
+reduced. The verdicts read as "the compiled kernel is faster"; they meant "the
+compiled kernel was the only one that could be timed". End-to-end rows are
+unaffected — `measure_latency` just calls `run()`, so they raced the full field.
+
+**Why it matters more than bookkeeping (sm_120, f16, device-resident):** with
+all four NVIDIA matmul candidates raced for the first time, the
+**compiler-emitted PTX lane wins at every shape** — 0.0095 / 0.0291 / 0.1930 /
+1.4719 ms at 256/512/1024/2048³ against the hand-tuned delegate's 0.0155 /
+0.0431 / 0.3202 / 2.4509 ms, i.e. **1.5–1.7× faster**. That candidate had been
+excluded from every device measurement ever recorded. A biased corpus did not
+merely mis-rank; it hid the fastest kernel in the registry.
+
+**NVIDIA outcome: parity validated, on device (RTX 5070 / sm_120).** This
+backend owns both the defect and the fix. `tileLaunchConfig` now carries the
+block-index convention as a flag (`columnMajorGrid`, the same one
+`invokeMmaGemm16` already took), so `tessera_mma_gemm_f16` no longer returns
+rc=5 and the emitted lane has a device timer. The grid was verified
+empirically, not by construction: at 2048×128×256 and 128×2048×256 the two
+orientations time identically (0.0162 / 0.0161 ms, ~8.3 TFLOP/s), whereas a
+transposed grid would put most blocks fully out of bounds and finish much
+faster.
+
+**Consequence for `NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30`, which
+understated the case.** That entry compared the delegate against the Tile lanes
+only and concluded the compiled route wins at 1024³+ by 2.3–16%. With the
+emitted lane in the race the margin is 1.5–1.7× at *every* shape including
+256³, where the entry had the delegate winning. Read the table above, not that
+one, for the ranking.
+
+**Follow-up owned here.** `applies_to(region)` is shape-blind, so the emitted
+lane — aligned-only — cannot declare that it does not serve a ragged shape. At
+ragged dims it is applicable-but-unmeasurable, so every ragged device verdict is
+refused and selection falls back to tier priority. Safe and honest, but it
+means ragged matmul gets no measured selection. Fixing it means giving
+`applies_to` the dims, which is a shared-signature change across all four
+backends.
+
 ## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
 
 PR #653 changes a **shared Graph IR ABI**: the delta-rule family

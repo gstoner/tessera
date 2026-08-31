@@ -9,6 +9,47 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Cross-backend sync `AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`
+
+PR (this branch) changes a **shared measurement contract**: an autotune
+`MeasureRecord` must now declare which applicable candidates it did *not* race
+(`unmeasured`), and `corpus_winner` refuses a verdict whose race was smaller
+than the one the live registry would hold. All four backends read this corpus,
+so all four are assessed here per AGENTS.md.
+
+**The defect, measured in the committed corpus.** Every device-timed row was
+missing exactly the candidates that had no `measure_device_latency`: matmul
+raced 2 of 4, attention 5 of 6, fused_region 6 of 10, gated_matmul 6 of 7.
+`_measure` scored an untimeable candidate `float("inf")`, so it lost silently,
+and the record stored a `winner` with nothing to say the field had been
+reduced. The verdicts read as "the compiled kernel is faster"; they meant "the
+compiled kernel was the only one that could be timed". End-to-end rows are
+unaffected — `measure_latency` just calls `run()`, so they raced the full field.
+
+**Why it matters more than bookkeeping (sm_120, f16, device-resident):** with
+all four NVIDIA matmul candidates raced for the first time, the
+**compiler-emitted PTX lane wins at every shape** — 0.0095 / 0.0291 / 0.1930 /
+1.4719 ms at 256/512/1024/2048³ against the hand-tuned delegate's 0.0155 /
+0.0431 / 0.3202 / 2.4509 ms, i.e. **1.5–1.7× faster**. That candidate had been
+excluded from every device measurement ever recorded. A biased corpus did not
+merely mis-rank; it hid the fastest kernel in the registry.
+
+**x86 outcome: follow-up required — no committed rows today, but the same gap.**
+
+x86 has no rows in the corpus, so nothing is refused and no AVX-512 re-proof is
+owed for the change itself. The contract still applies the moment x86 records
+one, and the precondition is unmet: **neither x86 candidate implements
+`measure_device_latency`** (`x86_generic_c` T1, `x86_aocl_dlp` T3). Any x86
+device-timed row recorded today would skip both and cache an empty race — which
+the new rule now catches (an all-untimeable race caches nothing) instead of
+storing an arbitrary registration-order pick as a verdict.
+
+For a CPU backend "device latency" means a host-side timer that excludes the
+numpy marshalling, which is the same distinction that made the NVIDIA numbers
+meaningful: end-to-end there was 91% host overhead and ranked the lanes
+backwards. Owed on Princess-Luna (Zen 5, AVX-512) — **not gated on
+`hardware_amx`**, which would skip on the only host that can produce it.
+
 ## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
 
 PR #653 changes a **shared Graph IR ABI**: the delta-rule family

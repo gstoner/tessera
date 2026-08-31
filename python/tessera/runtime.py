@@ -2420,6 +2420,32 @@ def _execute_nvidia_mma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 # arbiter (emit/candidate.py) F4-gates and selects between them.
 
 
+def _nvidia_gemm_storage_dtype(dtype: str) -> Any:
+    """Numpy storage type the shipped GEMM expects for ``dtype``.
+
+    Shared by the execution and timing paths deliberately: two copies of this
+    mapping would let the timed kernel be fed a different storage type than the
+    executed one, and the latency would then describe a kernel nobody runs.
+    """
+    import numpy as np
+
+    if dtype == "float16":
+        return np.float16
+    if dtype == "bfloat16":
+        store = _bfloat16_dtype()
+        if store is None:
+            raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
+        return store
+    if dtype == "float32":
+        return np.float32
+    if dtype in ("float8_e4m3fn", "float8_e5m2"):
+        import ml_dtypes
+
+        return (ml_dtypes.float8_e4m3fn if dtype == "float8_e4m3fn"
+                else ml_dtypes.float8_e5m2)
+    raise ValueError(f"unsupported NVIDIA GEMM dtype {dtype!r}")
+
+
 def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     """Shipped ``libtessera_nvidia_gemm`` mma.sync GEMM on 2D ``A @ B`` -> f32.
     ``B`` is row-major (the shipped convention). Raises on shape mismatch / no lib
@@ -2440,21 +2466,7 @@ def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     fn = getattr(lib, sym, None) if sym else None
     if fn is None:
         raise RuntimeError(f"shipped GEMM lacks a symbol for dtype {dtype!r}")
-    store: Any
-    if dtype == "float16":
-        store = np.float16
-    elif dtype == "bfloat16":
-        store = _bfloat16_dtype()
-    elif dtype == "float32":
-        store = np.float32
-    elif dtype in ("float8_e4m3fn", "float8_e5m2"):
-        import ml_dtypes
-
-        store = ml_dtypes.float8_e4m3fn if dtype == "float8_e4m3fn" else ml_dtypes.float8_e5m2
-    else:
-        raise ValueError(f"unsupported NVIDIA GEMM dtype {dtype!r}")
-    if store is None:
-        raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
+    store = _nvidia_gemm_storage_dtype(dtype)
     Ac = np.ascontiguousarray(Aa, store)
     Bc = np.ascontiguousarray(Ba, store)
     M, K = Ac.shape
@@ -2471,6 +2483,131 @@ def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     if rc != 0:
         raise RuntimeError(f"shipped nvidia GEMM returned rc={rc}")
     return D
+
+
+#: Device-pointer variants of the shipped GEMM symbols, used only for timing.
+_NVIDIA_GEMM_DEVICE_SYMBOLS = {k: v + "_device" for k, v in _NVIDIA_GEMM_SYMBOLS.items()}
+
+
+def _nvidia_gemm_device_abi(lib: Any) -> None:
+    """Declare argtypes for the device/event ABI of ``libtessera_nvidia_gemm``.
+
+    Not optional hygiene: ``tessera_nvidia_device_alloc`` takes a ``size_t``,
+    and ctypes' default conversion is ``int`` (32-bit in the ABI). A buffer
+    above 2 GiB would be silently truncated into a *successful* small
+    allocation and the kernel would then read past it — a wrong answer rather
+    than an error, which is the failure shape this codebase keeps meeting.
+    """
+    c_vp, c_int, c_sz = ctypes.c_void_p, ctypes.c_int, ctypes.c_size_t
+    spec = {
+        "tessera_nvidia_device_alloc": ([ctypes.POINTER(c_vp), c_sz], c_int),
+        "tessera_nvidia_device_free": ([c_vp], c_int),
+        "tessera_nvidia_device_upload": ([c_vp, c_vp, c_sz, c_vp], c_int),
+        "tessera_nvidia_device_download": ([c_vp, c_vp, c_sz, c_vp], c_int),
+        "tessera_nvidia_event_create": ([ctypes.POINTER(c_vp)], c_int),
+        "tessera_nvidia_event_destroy": ([c_vp], c_int),
+        "tessera_nvidia_event_record": ([c_vp, c_vp], c_int),
+        "tessera_nvidia_event_synchronize": ([c_vp], c_int),
+        "tessera_nvidia_event_elapsed_ms":
+            ([c_vp, c_vp, ctypes.POINTER(ctypes.c_float)], c_int),
+    }
+    for name, (argtypes, restype) in spec.items():
+        fn = getattr(lib, name, None)
+        if fn is None:
+            raise RuntimeError(
+                f"shipped NVIDIA GEMM lacks {name!r}; the library predates the "
+                "device/event timing ABI and cannot be measured on device")
+        fn.argtypes, fn.restype = argtypes, restype
+
+
+def _nvidia_mma_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
+                                    reps: int = 100, warmup: int = 10) -> float:
+    """Median-free CUDA-event latency of the *shipped* GEMM, operands resident.
+
+    Why this exists at all: Decision #28 says a hand-tuned delegate is
+    displaced when a compiled kernel measures **faster and in budget**. The
+    shipped GEMM had no device timer, so it could be compared to compiled
+    candidates only end-to-end -- and end-to-end is dominated by host work.
+    Measured on sm_120 at 2048x2048x2048, the compiled Tile lane ran 2.99 ms
+    on device inside 34.0 ms of wall time: 91% host overhead. Comparing that
+    number against the delegate's wall time compares numpy conversion paths,
+    not kernels, so a delegate with no device timer is one that can never
+    honestly lose. This closes that.
+
+    A/B are uploaded and D allocated **outside** the timed region; only the
+    kernel launches sit between the two events.
+    """
+    import numpy as np
+
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(
+            f"nvidia GEMM needs rank-2 A @ B with matching K; got {Aa.shape} @ {Ba.shape}")
+    if reps < 1 or warmup < 0:
+        raise ValueError(f"reps must be >= 1 and warmup >= 0; got {reps}, {warmup}")
+    lib = _load_nvidia_gemm_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_gemm.so not loadable")
+    sym = _NVIDIA_GEMM_DEVICE_SYMBOLS.get(dtype)
+    fn = getattr(lib, sym, None) if sym else None
+    if fn is None:
+        raise RuntimeError(
+            f"shipped GEMM lacks a device-pointer symbol for dtype {dtype!r}")
+    _nvidia_gemm_device_abi(lib)
+    fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3 + [ctypes.c_void_p]
+    fn.restype = ctypes.c_int
+
+    store = _nvidia_gemm_storage_dtype(dtype)
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.ascontiguousarray(Ba, store)
+    M, K = Ac.shape
+    _, N = Bc.shape
+
+    dA, dB, dD = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    ev0, ev1 = ctypes.c_void_p(), ctypes.c_void_p()
+    owned: list[ctypes.c_void_p] = []
+    events: list[ctypes.c_void_p] = []
+    try:
+        for buf, nbytes in ((dA, Ac.nbytes), (dB, Bc.nbytes), (dD, M * N * 4)):
+            rc = lib.tessera_nvidia_device_alloc(ctypes.byref(buf), ctypes.c_size_t(nbytes))
+            if rc != 0:
+                raise RuntimeError(f"device_alloc({nbytes} bytes) rc={rc}")
+            owned.append(buf)
+        for host, dev, nbytes in ((Ac, dA, Ac.nbytes), (Bc, dB, Bc.nbytes)):
+            rc = lib.tessera_nvidia_device_upload(
+                dev, ctypes.c_void_p(host.ctypes.data), ctypes.c_size_t(nbytes), None)
+            if rc != 0:
+                raise RuntimeError(f"device_upload rc={rc}")
+        for ev in (ev0, ev1):
+            rc = lib.tessera_nvidia_event_create(ctypes.byref(ev))
+            if rc != 0:
+                raise RuntimeError(f"event_create rc={rc}")
+            events.append(ev)
+
+        def launch() -> None:
+            rc = fn(dA, dB, dD, int(M), int(N), int(K), None)
+            if rc != 0:
+                raise RuntimeError(f"shipped nvidia GEMM (device) returned rc={rc}")
+
+        for _ in range(warmup):
+            launch()
+        if lib.tessera_nvidia_event_record(ev0, None) != 0:
+            raise RuntimeError("event_record(start) failed")
+        for _ in range(reps):
+            launch()
+        if lib.tessera_nvidia_event_record(ev1, None) != 0:
+            raise RuntimeError("event_record(stop) failed")
+        if lib.tessera_nvidia_event_synchronize(ev1) != 0:
+            raise RuntimeError("event_synchronize failed")
+        ms = ctypes.c_float()
+        if lib.tessera_nvidia_event_elapsed_ms(ev0, ev1, ctypes.byref(ms)) != 0:
+            raise RuntimeError("event_elapsed_ms failed")
+        return float(ms.value) / float(reps)
+    finally:
+        for ev in events:
+            lib.tessera_nvidia_event_destroy(ev)
+        for buf in owned:
+            lib.tessera_nvidia_device_free(buf)
 
 
 def _nvidia_nvfp4_gemm_2d(A_packed: Any, B_packed: Any, scale_a: Any, scale_b: Any, M: int, N: int, K: int) -> Any:
@@ -5935,6 +6072,53 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     if rc != 0:
         raise RuntimeError(f"emitted nvidia GEMM invoke rc={rc}")
     return D
+
+
+def _nvidia_ptx_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
+                                    reps: int = 100, warmup: int = 10) -> float:
+    """CUDA-event kernel latency of the compiler-EMITTED GEMM, operands resident.
+
+    The Tier-2 counterpart to ``_nvidia_mma_gemm_device_latency``. Both lanes
+    need one, or the arbiter's comparison is not device-to-device: end-to-end
+    wall time is host-dominated here (measured 2.99 ms of device work inside
+    34.0 ms of wall time for the Tile lane at 2048^3 on sm_120), and the two
+    lanes do not share a host path, so comparing wall times compares numpy
+    conversions rather than kernels.
+    """
+    import numpy as np
+    from tessera.compiler import ptx_emit as pe
+
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(
+            f"nvidia GEMM needs rank-2 A @ B with matching K; got {Aa.shape} @ {Ba.shape}")
+    if reps < 1 or warmup < 0:
+        raise ValueError(f"reps must be >= 1 and warmup >= 0; got {reps}, {warmup}")
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    edt = "f16" if dtype == "float16" else "bf16"
+    entry = pe.MMA_SYNC_GEMM_ENTRY[edt]
+    if entry not in _nvidia_ptx_registered:
+        ptx = pe.emit_mma_sync_gemm_ptx(dtype=edt)
+        if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    store = _nvidia_gemm_storage_dtype(dtype)
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.asfortranarray(np.ascontiguousarray(Ba, store))
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.empty((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 3)(Ac.ctypes.data, Bc.ctypes.data, D.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(int(M), int(N), int(K))
+    latency = ctypes.c_float()
+    rc = lib.tessera_nvidia_ptx_benchmark(
+        entry.encode(), bufs, 3, dims, 3, int(warmup), int(reps),
+        ctypes.byref(latency))
+    if rc != 0:
+        raise RuntimeError(f"emitted nvidia GEMM benchmark rc={rc}")
+    return float(latency.value)
 
 
 def _nvidia_tile_tool(name: str) -> Path | None:

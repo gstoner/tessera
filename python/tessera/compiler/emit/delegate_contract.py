@@ -292,12 +292,58 @@ class DelegatedCandidate(Candidate):
     output rather than trusting it above.
     """
 
-    def __init__(self, contract: DelegateContract, *, target: str, op: str) -> None:
+    #: Contract fields that describe the delegate itself rather than one dtype
+    #: route. Every member of a `variants` family must agree on these, or the
+    #: representative contract misdescribes the family.
+    _FAMILY_INVARIANT = ("arch", "accuracy", "determinism", "covers",
+                         "binding", "provenance")
+
+    def __init__(self, contract: DelegateContract, *, target: str, op: str,
+                 name: str | None = None,
+                 variants: "dict[str, DelegateContract] | None" = None) -> None:
         self.delegate_contract = contract
-        self.name = contract.identity()
+        # A delegate that binds a DIFFERENT symbol per dtype has more than one
+        # identity, and `callee` is identity. The shipped NVIDIA GEMM is the
+        # first real case: one candidate reaching
+        # `tessera_nvidia_mma_gemm_f16` or `..._bf16` by dtype. Declaring one
+        # of those callees and sometimes calling the other is exactly the
+        # Python-vs-IR drift this contract exists to stop, so the family is
+        # declared instead.
+        #
+        # Callee identity is the WHOLE justification. A per-dtype *tolerance*
+        # looked like a second one -- bf16 carries 8 significand bits to f16's
+        # 11 -- and measurement on sm_120 refuted it: the two agree to within
+        # 25% at every K from 32 to 8192. The reason is that the oracle's
+        # reference rounds its operands to the storage dtype first, so input
+        # rounding cancels on both sides and the residual is f32
+        # accumulation-order error, which does not depend on the storage
+        # dtype. The hook is still per-dtype because a delegate family whose
+        # members really do differ numerically can say so; this one does not.
+        self.contract_variants = dict(variants or {})
+        for dtype, variant in self.contract_variants.items():
+            differing = [f for f in self._FAMILY_INVARIANT
+                         if getattr(variant, f) != getattr(contract, f)]
+            if differing:
+                raise DelegateContractError(
+                    f"delegate variant {dtype!r} disagrees with the family on "
+                    f"{', '.join(differing)}; those fields describe the "
+                    "delegate, not one dtype route, so a representative "
+                    "contract carrying different values would misdescribe it"
+                )
+        # `name` is a dispatch/cache key, NOT a claim -- so unlike tier and
+        # budget it is the registrant's to choose. Deriving it from `callee`
+        # is a good default and a bad requirement: the autotune corpus and the
+        # E3 `force` escape hatch key on this string, so binding it to a C
+        # symbol means renaming that symbol silently invalidates every
+        # persisted verdict and breaks `force` with no error. First use found
+        # this -- the shipped NVIDIA GEMM already had a stable name predating
+        # its contract.
+        self.name = name or contract.identity()
         self.target = target
         self.op = op
-        # Derived, never assigned by the subclass.
+        # Derived, never assigned by the subclass. These ARE claims: a delegate
+        # must not be able to assert a tier or a budget in Python that it did
+        # not declare to the verifier.
         self.tier = contract.arbiter_tier()
         self.accuracy_atol = contract.arbiter_accuracy_atol()
         self.accuracy_rtol = contract.arbiter_accuracy_rtol()
@@ -363,6 +409,26 @@ class DelegatedCandidate(Candidate):
             intrinsically_fused=self._INTRINSICALLY_FUSED,
             op_list_field=self._OP_LIST_FIELD,
         )
+
+    def contract_for(self, region: Any) -> DelegateContract:
+        """The contract governing this delegate for `region`.
+
+        Falls back to the representative when the region names no dtype or the
+        family declares no variant for it -- the representative is a real
+        declared contract, so the fallback still carries a bound rather than
+        defaulting to none (Decision #21a).
+        """
+        dtype = getattr(region, "dtype", None)
+        if isinstance(dtype, str):
+            variant = self.contract_variants.get(dtype)
+            if variant is not None:
+                return variant
+        return self.delegate_contract
+
+    def accuracy_budget(self, region: Any) -> "tuple[float | None, float | None]":
+        """`(atol, rtol)` for `region`, from that region's declared contract."""
+        c = self.contract_for(region)
+        return c.arbiter_accuracy_atol(), c.arbiter_accuracy_rtol()
 
     def render_target_ir(self, operands: str = "",
                          signature: str = "() -> ()") -> str:

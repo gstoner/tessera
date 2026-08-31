@@ -55,6 +55,10 @@ from tessera.compiler.emit.candidate import (
     Tier,
     register_candidate,
 )
+from tessera.compiler.emit.delegate_contract import (
+    DelegateContract,
+    DelegatedCandidate,
+)
 from tessera.compiler.emit.kernel_cache import build, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
@@ -124,6 +128,18 @@ _ATTN_DV_CAP = 256
 _GEMM_F16_ATOL = 5e-3
 _GEMM_BF16_ATOL = 5e-2
 _GEMM_DTYPES = ("bfloat16", "float16")
+
+#: The C symbol the shipped GEMM delegate binds per storage dtype — `callee` in
+#: its Target IR contract. Declared here rather than imported so the contract
+#: can be built without loading `tessera.runtime`, and drift-gated against
+#: `runtime._NVIDIA_GEMM_SYMBOLS` by `test_nvidia_delegate_contract.py`: a
+#: rename on one side and not the other would make the delegate declare a
+#: callee it does not call, which is the exact drift the contract exists to
+#: catch.
+_SHIPPED_GEMM_CALLEES = {
+    "float16": "tessera_nvidia_mma_gemm_f16",
+    "bfloat16": "tessera_nvidia_mma_gemm_bf16",
+}
 
 
 # ── CUDA source synthesis (generic FusedRegion lane) ──────────────────────────
@@ -5132,18 +5148,89 @@ def _aligned_2d(A: Any, B: Any) -> bool:
     return M % 16 == 0 and N % 8 == 0 and K % 16 == 0
 
 
-class NvidiaMmaGemmShippedCandidate(Candidate):
+#: Measured on the fleet's sm_120 (RTX 5070) against the oracle's
+#: dtype-rounded reference, M=N=256 with the probe's 0.4 operand scaling:
+#:
+#:     K      f16 max|err|   f16 rel      bf16 max|err|  bf16 rel
+#:     32     9.54e-07       2.44e-07     4.77e-07       1.22e-07
+#:     1024   5.15e-05       2.47e-06     3.62e-05       1.74e-06
+#:     8192   8.20e-04       1.23e-05     6.68e-04       9.98e-06
+#:
+#: The absolute error grows about K^1.2 while the relative error grows near
+#: sqrt(K), so a fixed `tolerance` is the wrong shape for this claim: 5e-3 has
+#: 6x headroom at K=8192 and would be breached somewhere past K~65536, on a
+#: kernel that is not wrong. The relative bound is the one that holds, and
+#: `tolerance_rel` is declared with ~8x headroom over the largest measured.
+#: Both are declared because the oracle combines them as
+#: `|a-b| <= atol + rtol*|ref|`, so the relative term is what carries large K.
+_SHIPPED_GEMM_TOLERANCE_REL = 1e-4
+
+#: The delegate is not sm_120-only. `tessera_nvidia_gemm.cpp` NVRTC-compiles
+#: `--gpu-architecture=compute_%d%d` for the LIVE device, and the kernel needs
+#: only `mma.sync.aligned.m16n8k16` (f16/bf16), which is sm_80 and later. The
+#: sm_120 cubin is an AOT fast path, not the envelope. `mma_arch` below stays
+#: "sm_120" for a different reason: it keys the analytical footprint model,
+#: whose `_STATIC_ISAS` currently holds exactly one NVIDIA record.
+_SHIPPED_GEMM_ARCH = "sm_80+"
+
+
+def _shipped_gemm_contract(callee: str) -> DelegateContract:
+    """The contract for one dtype route of the shipped GEMM.
+
+    `determinism` is a proof obligation, not a preference, so it is grounded
+    rather than assumed: the kernel assigns one 16x8 output tile to one warp
+    and reduces K serially into four accumulator registers
+    (`aot/tessera_nvidia_mma_f16_sm120_v1.cu`). No atomics, no split-K, no
+    cross-block reduction -- so the result is reproducible run to run and the
+    delegate may be selected inside `@jit(deterministic=True)`.
+    """
+    return DelegateContract(
+        callee=callee,
+        binding="c_abi",
+        provenance="handwritten_kernel",
+        arch=_SHIPPED_GEMM_ARCH,
+        accuracy="tolerance_bounded",
+        tolerance=_GEMM_F16_ATOL,
+        tolerance_rel=_SHIPPED_GEMM_TOLERANCE_REL,
+        determinism="deterministic",
+        # The kernel is a bare GEMM: offered a matmul+epilogue region it would
+        # implement only the root. It is registered for OP_MATMUL and checks
+        # `isinstance(region, MatmulRegion)`, so declaring this costs it
+        # nothing here -- but the contract describes the KERNEL, and claiming
+        # `whole_region` would assert an epilogue-absorbing ability it does
+        # not have.
+        covers="root_only",
+    )
+
+
+class NvidiaMmaGemmShippedCandidate(DelegatedCandidate):
     """Tier-3 (hand-tuned): the shipped ``libtessera_nvidia_gemm`` mma.sync GEMM —
     the crown-jewel lane, arbiter default until D2 measures otherwise. Serves any
-    (unaligned OK) bf16/f16 matmul; declines off an NVIDIA GPU."""
+    (unaligned OK) bf16/f16 matmul; declines off an NVIDIA GPU.
 
-    name = "nvidia_mma_gemm_shipped"
-    tier = Tier.HAND_TUNED
-    target = _TARGET
-    op = OP_MATMUL
-    accuracy_atol = _GEMM_F16_ATOL
+    **The first declared delegate.** Its tier and accuracy budget are derived
+    from the `DelegateContract` above rather than hand-set, so it cannot claim
+    in Python a budget it did not declare to the Target IR verifier. It binds a
+    different C symbol per dtype, which is why it declares a contract *family*:
+    `callee` is identity, and one candidate silently reaching two symbols under
+    one declared callee is the drift the contract exists to prevent.
+    """
+
     mma_target = "nvidia"
+    #: Footprint-model ISA key, NOT an architecture claim — see
+    #: `_SHIPPED_GEMM_ARCH`. The contract carries the real envelope.
     mma_arch = "sm_120"
+
+    def __init__(self) -> None:
+        variants = {dtype: _shipped_gemm_contract(_SHIPPED_GEMM_CALLEES[dtype])
+                    for dtype in _GEMM_DTYPES}
+        super().__init__(
+            variants["float16"], target=_TARGET, op=OP_MATMUL,
+            # Kept rather than derived from `callee`: the autotune corpus and
+            # the E3 `force` hatch key on this string and predate the contract.
+            name="nvidia_mma_gemm_shipped",
+            variants=variants,
+        )
 
     def available(self) -> bool:
         try:
@@ -5165,6 +5252,26 @@ class NvidiaMmaGemmShippedCandidate(Candidate):
             return rt._nvidia_mma_gemm_2d(An, Bn, region.dtype), "nvidia_mma_shipped"
         except Exception:
             return region.reference(A, B), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """CUDA-event kernel time, operands resident.
+
+        Without this the delegate could only be compared end-to-end, and
+        end-to-end is host-dominated: the compiled Tile lane measures 2.99 ms
+        on device inside 34.0 ms of wall time at 2048^3 on sm_120. A Tier-3
+        delegate that cannot be measured on device can never be displaced by a
+        faster compiled kernel, which is the whole of Decision #28.
+        """
+        if len(inputs) != 2:
+            return None
+        try:
+            from tessera import runtime as rt
+            An, Bn = region._natural(inputs[0], inputs[1], cast=False)
+            return rt._nvidia_mma_gemm_device_latency(
+                An, Bn, region.dtype, reps=reps, warmup=warmup)
+        except Exception:
+            return None
 
 
 class NvidiaMmaGemmEmittedCandidate(Candidate):
@@ -5204,6 +5311,27 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
             return rt._nvidia_ptx_gemm_2d(An, Bn, region.dtype), "nvidia_ptx_gemm"
         except Exception:
             return region.reference(A, B), "reference"
+
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """CUDA-event kernel time, operands resident.
+
+        Returns ``None`` for a ragged shape rather than a number: this lane
+        declines to the reference there, so a latency would describe numpy
+        rather than the emitted kernel and would be read as evidence that a
+        candidate is fast when it did not run at all.
+        """
+        if len(inputs) != 2:
+            return None
+        try:
+            from tessera import runtime as rt
+            An, Bn = region._natural(inputs[0], inputs[1], cast=False)
+            if not _aligned_2d(An, Bn):
+                return None
+            return rt._nvidia_ptx_gemm_device_latency(
+                An, Bn, region.dtype, reps=reps, warmup=warmup)
+        except Exception:
+            return None
 
 
 class NvidiaTileMatmulCandidate(Candidate):

@@ -7343,6 +7343,28 @@ def rocm_last_timer_source() -> str | None:
     return _rocm_last_timer_source
 
 
+def _accept_device_event_ms(event_ms: float | None,
+                            wall_ms: float) -> float | None:
+    """The one rule deciding whether a HIP event value may be believed.
+
+    Shared by every ROCm timing path so a second, weaker copy cannot drift into
+    existence -- which is exactly what had happened: the C++ `benchVariant`
+    checked a two-sided band, the Python attention-backward loop checked only
+    ``> 0.0``, and the flash-attn paths checked nothing at all.
+
+    The **lower** bound is the load-bearing half. A broken clock reporting
+    0.001 ms for a 10 ms loop is finite, positive, and under any upper bound,
+    and yields a wildly inflated throughput. An over-estimate makes a kernel
+    look slow and gets investigated; an under-estimate makes it look fast and
+    gets published.
+    """
+    if event_ms is None or not (event_ms == event_ms) or event_ms <= 0.0:
+        return None
+    if not (0.5 * wall_ms <= event_ms <= 2.0 * wall_ms):
+        return None
+    return event_ms
+
+
 def _hip_resident_launch_latency(hip: Any, launch: Any, *, iters: int,
                                  warmup: int, what: str) -> tuple[float, str]:
     """Per-launch ms for an already-resident kernel, plus the clock used.
@@ -7403,10 +7425,7 @@ def _hip_resident_launch_latency(hip: Any, launch: Any, *, iters: int,
         if events_ready:
             elapsed = ctypes.c_float()
             if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) == 0:
-                value = float(elapsed.value)
-                if (value == value and value > 0.0
-                        and 0.5 * wall_ms <= value <= 2.0 * wall_ms):
-                    event_ms = value
+                event_ms = _accept_device_event_ms(float(elapsed.value), wall_ms)
     finally:
         if start.value:
             hip.hipEventDestroy(start)

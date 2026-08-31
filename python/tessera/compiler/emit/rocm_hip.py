@@ -84,6 +84,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
     return (
         "#include <hip/hip_runtime.h>\n"
         "#include <math.h>\n"
+        "#include <chrono>\n"          # the wall clock the bench entry needs
         f"__global__ void {_ENTRY}_kernel(const float* A, const float* B,\n"
         "        const float* bias, const float* residual, float* out,\n"
         "        int M, int N, int K) {\n"
@@ -128,6 +129,82 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "    if (hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost)!=hipSuccess) goto cleanup;\n"
         "    rc=1;\n"
         "cleanup:\n"
+        "    if (dA) hipFree(dA);\n"
+        "    if (dB) hipFree(dB);\n"
+        "    if (dO) hipFree(dO);\n"
+        "    if (dbias) hipFree(dbias);\n"
+        "    if (dres) hipFree(dres);\n"
+        "    return rc;\n"
+        "}\n"
+        # Device-resident timing for the SAME kernel this shim executes.
+        #
+        # It has to live here rather than in a Python loop: the entry above owns
+        # its H2D/D2H, so timing it from ctypes measures transfers and numpy
+        # marshalling, not the kernel. Without this the generic lane had no
+        # device latency, was recorded as `unmeasured`, and every ROCm
+        # fused-region verdict was refused as an incomplete race.
+        #
+        # Reports wall and event separately and judges NEITHER. Python applies
+        # `runtime._accept_device_event_ms`, so one rule governs every ROCm
+        # timing path -- the divergence that let flash-attn read
+        # `hipEventElapsedTime` with no validation at all.
+        f'extern "C" int {_ENTRY}_bench(const float* hA, const float* hB,\n'
+        "        const float* hbias, const float* hresidual, float* hout,\n"
+        "        int M, int N, int K, int iters, int warmup,\n"
+        "        double* wall_ms, double* event_ms) {\n"
+        "    size_t szA=(size_t)M*K*sizeof(float), szB=(size_t)K*N*sizeof(float),\n"
+        "           szO=(size_t)M*N*sizeof(float), szBias=(size_t)N*sizeof(float);\n"
+        "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
+        "    hipEvent_t evStart=0, evStop=0;\n"
+        "    int t=64, b=0, rc=2, i=0, eventsUsable=0;\n"
+        "    float ev=0.0f;\n"
+        "    if (!hA||!hB||!hout||!wall_ms||!event_ms||iters<1||warmup<0) return 5;\n"
+        "    *wall_ms=0.0; *event_ms=-1.0;\n"
+        "    if (hipMalloc(&dA,szA)!=hipSuccess) goto cleanup;\n"
+        "    if (hipMalloc(&dB,szB)!=hipSuccess) goto cleanup;\n"
+        "    if (hipMalloc(&dO,szO)!=hipSuccess) goto cleanup;\n"
+        "    if (hbias && hipMalloc(&dbias,szBias)!=hipSuccess) goto cleanup;\n"
+        "    if (hresidual && hipMalloc(&dres,szO)!=hipSuccess) goto cleanup;\n"
+        "    rc=3;\n"
+        "    if (hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    if (hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    if (hbias && hipMemcpy(dbias,hbias,szBias,\n"
+        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    if (hresidual && hipMemcpy(dres,hresidual,szO,\n"
+        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    b=(M+t-1)/t;\n"
+        "    rc=4;\n"
+        "    for (i=0;i<warmup;++i) {\n"
+        f"        hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
+        "            dA,dB,dbias,dres,dO,M,N,K);\n"
+        "        if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
+        "    }\n"
+        "    if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
+        "    eventsUsable = (hipEventCreate(&evStart)==hipSuccess &&\n"
+        "                    hipEventCreate(&evStop)==hipSuccess &&\n"
+        "                    hipEventRecord(evStart,0)==hipSuccess);\n"
+        "    {\n"
+        "        std::chrono::steady_clock::time_point w0 =\n"
+        "            std::chrono::steady_clock::now();\n"
+        "        for (i=0;i<iters;++i) {\n"
+        f"            hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
+        "                dA,dB,dbias,dres,dO,M,N,K);\n"
+        "            if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
+        "        }\n"
+        "        if (eventsUsable)\n"
+        "            eventsUsable = (hipEventRecord(evStop,0)==hipSuccess &&\n"
+        "                            hipEventSynchronize(evStop)==hipSuccess);\n"
+        "        if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
+        "        *wall_ms = std::chrono::duration<double,std::milli>(\n"
+        "            std::chrono::steady_clock::now()-w0).count();\n"
+        "    }\n"
+        "    if (eventsUsable &&\n"
+        "        hipEventElapsedTime(&ev,evStart,evStop)==hipSuccess)\n"
+        "        *event_ms = (double)ev;\n"
+        "    rc=1;\n"
+        "cleanup:\n"
+        "    if (evStart) hipEventDestroy(evStart);\n"
+        "    if (evStop) hipEventDestroy(evStop);\n"
         "    if (dA) hipFree(dA);\n"
         "    if (dB) hipFree(dB);\n"
         "    if (dO) hipFree(dO);\n"
@@ -222,6 +299,27 @@ def _load_entry(artifact: str):
     fn = getattr(lib, _ENTRY)
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 3
+    return fn
+
+
+def _load_bench_entry(artifact: str):
+    """The generated `<entry>_bench` symbol, or ``None`` on an older artifact.
+
+    Absent rather than fatal: a cached `.so` built before the bench entry
+    existed simply has no such symbol, and the candidate must report "cannot
+    measure" instead of raising -- which the raced-field rule then records as a
+    declared skip.
+    """
+    lib = _LIB_CACHE.get(artifact)
+    if lib is None:
+        lib = ctypes.CDLL(artifact)
+        _LIB_CACHE[artifact] = lib
+    fn = getattr(lib, f"{_ENTRY}_bench", None)
+    if fn is None:
+        return None
+    fn.restype = ctypes.c_int
+    fn.argtypes = ([ctypes.c_void_p] * 5 + [ctypes.c_int] * 5
+                   + [ctypes.POINTER(ctypes.c_double)] * 2)
     return fn
 
 
@@ -732,6 +830,58 @@ class RocmGenericHipCandidate(Candidate):
         # thread it (matches the A,B,bias,residual reference ABI; PR #290 review).
         return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
                                                residual=residual)
+
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """Per-launch ms for the generated kernel, operands resident.
+
+        Goes through the generated `<entry>_bench` symbol rather than a Python
+        loop, because the ordinary entry owns its own H2D/D2H: timing it from
+        ctypes would measure transfers and numpy marshalling, not the kernel.
+
+        Without this the T1 lane was the one candidate ROCm's fused-region race
+        could not time, so every fused-region device verdict was refused as an
+        incomplete race. On NVIDIA the analogous exclusion hid the fastest
+        kernel in the registry, so the gap was not cosmetic -- and here it runs
+        the other way, since the untimed lane was the *generic* one.
+        """
+        import numpy as np
+        if len(inputs) < 2:
+            return None
+        bias = inputs[2] if len(inputs) > 2 else None
+        residual = inputs[3] if len(inputs) > 3 else None
+        if (region.has_bias and bias is None) or \
+                (region.has_residual and residual is None):
+            return None            # `run` declines here; a latency would be numpy
+        try:
+            from tessera import runtime as rt
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_bench_entry(compiled.artifact)
+            if fn is None:
+                return None
+            Af = np.ascontiguousarray(inputs[0], np.float32)
+            Bf = np.ascontiguousarray(inputs[1], np.float32)
+            M, K = Af.shape
+            _, N = Bf.shape
+            bias_arr = (np.ascontiguousarray(bias, np.float32)
+                        if bias is not None else None)
+            res_arr = (np.ascontiguousarray(residual, np.float32)
+                       if residual is not None else None)
+            out = np.zeros((M, N), np.float32)
+            wall = ctypes.c_double()
+            event = ctypes.c_double()
+            rc = fn(_ptr(Af), _ptr(Bf), _ptr(bias_arr), _ptr(res_arr), _ptr(out),
+                    M, N, K, int(reps), int(warmup),
+                    ctypes.byref(wall), ctypes.byref(event))
+            if rc != 1 or not wall.value > 0.0:
+                return None
+            # One validation rule for every ROCm timing path.
+            accepted = rt._accept_device_event_ms(
+                event.value if event.value >= 0.0 else None, wall.value)
+            total = accepted if accepted is not None else wall.value
+            return float(total) / float(reps)
+        except Exception:
+            return None
 
 
 class RocmWmmaGemmCandidate(Candidate):

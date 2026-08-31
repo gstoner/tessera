@@ -276,6 +276,13 @@ def test_mtl4_mlp_session_resident_weights_matches_reference(dtype):
     is uploaded once and reused across run() steps. Each step is the fused
     matmul2d epilogue; results must match the composed reference across the kind
     of varying-M decode steps the session is built for."""
+    # Numeric comparison against a reference, so it needs a LIVE Metal 4
+    # device: off-Apple the session returns a fallback and the assertion below
+    # measures that fallback, not the MTL4 kernel (observed 3.17 and 0.0129
+    # against a 2e-3 bound on both device boxes). The structural tests in this
+    # file stay unguarded -- they assert shape and reuse, not values.
+    from tests._support.apple import require_apple_metal4
+    require_apple_metal4()
     # f32 output + f64 reference over the *same* low-precision W/X (input
     # quantization cancels), so the residual is fp32 accumulation vs f64 (~1e-5);
     # 2e-3 is a real correctness bound (~100×), not the old 3e-2/6e-2.
@@ -324,6 +331,13 @@ def test_mtl4_mlp_session_run_dev_matches_run(dtype):
     views into the matrix-unit lane. It must produce the same values as the
     host-pointer run() and the composed reference, across decode-step shapes, and
     Y must come back as a live DeviceTensor."""
+    # Numeric comparison against a reference, so it needs a LIVE Metal 4
+    # device: off-Apple the session returns a fallback and the assertion below
+    # measures that fallback, not the MTL4 kernel (observed 3.17 and 0.0129
+    # against a 2e-3 bound on both device boxes). The structural tests in this
+    # file stay unguarded -- they assert shape and reuse, not values.
+    from tests._support.apple import require_apple_metal4
+    require_apple_metal4()
     # f32 output + f64 reference over the same low-precision inputs -> ~1e-5
     # fp32-accum residual; 2e-3 real bound (see resident_weights test).
     if dtype == "bf16":

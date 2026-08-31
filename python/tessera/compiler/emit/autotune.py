@@ -52,16 +52,39 @@ class MeasureRecord:
     #: evidence, never a selector input: a missing descriptor must not be
     #: reconstructed from a winner name after the fact.
     candidate_descriptors: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Applicable candidates that were NOT raced, name -> reason.
+    #:
+    #: ``None`` means the record does not declare its field at all (written
+    #: before this existed). ``{}`` means it declares that nothing was skipped.
+    #: The distinction is the point: a winner is only meaningful against the
+    #: set it actually beat, and "no entry" cannot be read as "raced everyone".
+    #:
+    #: This exists because the committed corpus proved it does. Every
+    #: device-timed row was missing exactly the candidates that had no
+    #: ``measure_device_latency``: matmul raced 2 of 4 (both GEMM lanes
+    #: absent), attention 5 of 6, fused_region 6 of 10. ``_measure`` scored an
+    #: unmeasurable candidate ``float("inf")``, so it lost silently, and the
+    #: record stored a `winner` with nothing to say a field had been reduced.
+    #: The verdicts read as "the compiled kernel is faster" when they meant
+    #: "the compiled kernel was the only one that could be timed".
+    unmeasured: dict[str, str] | None = None
+
+    def declares_its_field(self) -> bool:
+        """Whether this record states which applicable candidates it skipped."""
+        return self.unmeasured is not None
 
     def as_json(self) -> dict[str, Any]:
         return {"winner": self.winner, "latency_ms": self.latency_ms,
                 "candidates": dict(self.candidates),
                 **({"candidate_descriptors": dict(self.candidate_descriptors)}
                    if self.candidate_descriptors else {}),
+                **({} if self.unmeasured is None
+                   else {"unmeasured": dict(self.unmeasured)}),
                 **({"evidence": dict(self.evidence)} if self.evidence else {})}
 
     @classmethod
     def from_json(cls, d: dict[str, Any]) -> "MeasureRecord":
+        raw = d.get("unmeasured")
         return cls(winner=str(d["winner"]),
                    latency_ms=float(d["latency_ms"]),
                    candidates={str(k): float(v)
@@ -71,6 +94,8 @@ class MeasureRecord:
                        for k, v in dict(d.get("candidate_descriptors", {})).items()
                        if isinstance(v, dict)
                    },
+                   unmeasured=(None if raw is None
+                               else {str(k): str(v) for k, v in dict(raw).items()}),
                    evidence=dict(d.get("evidence", {})))
 
 
@@ -383,11 +408,53 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
     if len(winners) != 1:
         return None
     winner = next(iter(winners))
-    for candidate in candidates_for(target, op):
-        if (candidate.name == winner and candidate.applies_to(region)
-                and candidate.available()):
-            return winner
-    return None
+
+    # A verdict is only usable if it beat the field that is racing *now*.
+    live = {c.name: c for c in candidates_for(target, op)
+            if c.applies_to(region) and c.available()}
+    for rec in matches:
+        if not _record_raced_the_live_field(rec, live, timing):
+            return None
+
+    candidate = live.get(winner)
+    return winner if candidate is not None else None
+
+
+def _record_raced_the_live_field(
+    rec: MeasureRecord, live: Mapping[str, Any], timing: str,
+) -> bool:
+    """Whether ``rec``'s winner beat the candidates available here and now.
+
+    Fails closed twice, because a partial race is indistinguishable from a
+    complete one by the winner alone:
+
+    * **Undeclared field, device timing.** A record written before
+      `unmeasured` existed cannot show what it skipped, and for device timing
+      we know that generation was systematically incomplete: every committed
+      device-timed row was missing exactly the candidates that had no
+      `measure_device_latency` (matmul raced 2 of 4, attention 5 of 6,
+      fused_region 6 of 10). Serving those verdicts would select a compiled
+      kernel over a hand-tuned one that was never in the race.
+    * **A live candidate is missing from the timed field.** Every candidate
+      racing *now* must appear in `rec.candidates` -- the set that was actually
+      timed.
+
+    The second test is a subset check rather than a scan of `unmeasured`, and
+    the difference is load-bearing (review finding on PR #655). Checking only
+    the declared skips treats a candidate absent from *both* maps as having
+    been raced, and there are two ordinary ways to be absent from both: the
+    candidate was registered after the measurement, or it was applicable then
+    but failed F4 verification, so `arbitrate` filtered it out before
+    `_measure` ever saw it. In both cases the recorded winner never beat it,
+    yet the verdict would still be served. Requiring `live` to be a subset of
+    the timed set covers the declared skips too, since a skipped candidate is
+    by construction not in `rec.candidates`.
+
+    Returning False falls back to lead-safe tier priority, never to silence.
+    """
+    if timing == TIMING_DEVICE and not rec.declares_its_field():
+        return False
+    return all(name in rec.candidates for name in live)
 
 
 def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
@@ -410,20 +477,37 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         raise ValueError(f"unknown autotune timing mode {timing!r}")
     key = (dev, target, op, bucket, dtype, timing)
 
+    live = {c.name: c for c in candidates_for(target, op)
+            if c.applies_to(region) and c.available()}
+
     rec = cache.get(key)
-    if rec is not None:
-        for c in candidates_for(target, op):
-            if c.name == rec.winner and c.applies_to(region) and c.available():
-                return c
+    if rec is not None and _record_raced_the_live_field(rec, live, timing):
+        # The exact-key hit is only usable if it beat the field racing now.
+        # Validating solely that the winner is still live -- what this did
+        # before -- accepted a legacy device row, or a partial one naming a
+        # candidate that has since become runnable, and so preserved through
+        # `measured_arbitrate`/`run_measured_arbitrated` exactly the biased
+        # selection `corpus_winner` refuses (review finding on PR #655).
+        winner_candidate = live.get(rec.winner)
+        if winner_candidate is not None:
+            return winner_candidate
         # cached winner is gone/unavailable — fall through and re-measure.
 
     latencies: dict[str, float] = {}
+    unmeasured: dict[str, str] = {}
 
     def _measure(cand: Candidate) -> float:
         if timing == TIMING_DEVICE:
             measured = cand.measure_device_latency(
                 region, *inputs, reps=reps, warmup=warmup)
             if measured is None:
+                # NOT a latency. "Cannot be timed in this mode" is a statement
+                # about instrumentation; `inf` is a statement about speed. The
+                # committed corpus shows what conflating them costs: every
+                # device-timed row silently dropped the candidates without a
+                # device timer, and the survivors were recorded as winners.
+                unmeasured[cand.name] = (
+                    f"no measure_device_latency for timing={TIMING_DEVICE!r}")
                 return float("inf")
             t = float(measured)
         else:
@@ -433,13 +517,18 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         return t
 
     winner = arbitrate(region, op, target, verify=True, measure=_measure)
-    if winner is not None and winner.name in latencies:
-        cache.put(key, MeasureRecord(
-            winner=winner.name,
-            latency_ms=latencies.get(winner.name, float("nan")),
-            candidates=dict(latencies)))
-        return winner
-    return None
+    if winner is None or winner.name not in latencies:
+        # Either nothing applied/verified, or the "winner" is a candidate that
+        # was never timed -- which happens when every candidate scored `inf`
+        # and `min` fell back to registration order. Caching that would store
+        # an arbitrary pick as a measured verdict.
+        return None
+    cache.put(key, MeasureRecord(
+        winner=winner.name,
+        latency_ms=latencies.get(winner.name, float("nan")),
+        candidates=dict(latencies),
+        unmeasured=dict(unmeasured)))
+    return winner
 
 
 def run_measured_arbitrated(region: Any, op: str, target: str, *inputs: Any,

@@ -6074,6 +6074,57 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     return D
 
 
+def _nvidia_ptx_gemm_device_latency(A: Any, B: Any, dtype: str = "bfloat16", *,
+                                    reps: int = 100, warmup: int = 10) -> float:
+    """CUDA-event kernel latency of the compiler-EMITTED GEMM, operands resident.
+
+    The Tier-2 counterpart to ``_nvidia_mma_gemm_device_latency``. Without it
+    the emitted lane could not be raced in device timing at all, and an
+    autotune record that silently omits an applicable candidate is refused
+    (see ``autotune._record_raced_the_live_field``) -- so its absence blocked
+    measured selection for NVIDIA matmul entirely.
+
+    The launch bridge's benchmark harness now takes the grid convention as a
+    flag (`tileLaunchConfig`'s ``columnMajorGrid``). It previously hardcoded
+    the Tile lowering's mapping (blockIdx.x -> N), which is why this returned
+    rc=5: ``ptx_emit`` maps blockIdx.x -> M.
+    """
+    import numpy as np
+    from tessera.compiler import ptx_emit as pe
+
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(
+            f"nvidia GEMM needs rank-2 A @ B with matching K; got {Aa.shape} @ {Ba.shape}")
+    if reps < 1 or warmup < 0:
+        raise ValueError(f"reps must be >= 1 and warmup >= 0; got {reps}, {warmup}")
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    edt = "f16" if dtype == "float16" else "bf16"
+    entry = pe.MMA_SYNC_GEMM_ENTRY[edt]
+    if entry not in _nvidia_ptx_registered:
+        ptx = pe.emit_mma_sync_gemm_ptx(dtype=edt)
+        if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    store = _nvidia_gemm_storage_dtype(dtype)
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.asfortranarray(np.ascontiguousarray(Ba, store))
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.empty((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 3)(Ac.ctypes.data, Bc.ctypes.data, D.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(int(M), int(N), int(K))
+    latency = ctypes.c_float()
+    rc = lib.tessera_nvidia_ptx_benchmark(
+        entry.encode(), bufs, 3, dims, 3, int(warmup), int(reps),
+        ctypes.byref(latency))
+    if rc != 0:
+        raise RuntimeError(f"emitted nvidia GEMM benchmark rc={rc}")
+    return float(latency.value)
+
+
 def _nvidia_tile_tool(name: str) -> Path | None:
     """Locate one tool in the Tile→NVVM→PTX production pipeline."""
     root = Path(__file__).resolve().parents[2]
@@ -7280,6 +7331,93 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
     return d
 
 
+#: Which clock produced the last ROCm resident-launch measurement:
+#: ``"device_event"`` or ``"host_wall"``. Read it before quoting a number as
+#: device-resident -- on this fleet's WSL2 host HIP events are unusable and the
+#: measurement silently becomes a wall clock around resident launches.
+_rocm_last_timer_source: str | None = None
+
+
+def rocm_last_timer_source() -> str | None:
+    """The clock behind the most recent ROCm resident-launch measurement."""
+    return _rocm_last_timer_source
+
+
+def _hip_resident_launch_latency(hip: Any, launch: Any, *, iters: int,
+                                 warmup: int, what: str) -> tuple[float, str]:
+    """Per-launch ms for an already-resident kernel, plus the clock used.
+
+    **HIP events cannot be trusted on this fleet, and they fail by lying.**
+    Measured 2026-08-04 on the WSL2 / ``/dev/dxg`` gfx1151 host: every HIP event
+    call returns ``hipSuccess`` while ``hipEventElapsedTime`` writes garbage --
+    0.0 ms in one harness, -1.28e8 ms in a direct probe. A timer that cannot
+    fail is not a measurement, so the wall clock is always taken and the event
+    value has to earn its use.
+
+    The band is **two-sided** (0.5x..2x wall), and the lower bound is the one
+    that matters. An earlier version of the C++ harness bounded only from above;
+    a broken API returning 0.001 ms for a 100 ms loop passes finite, positive
+    and upper-bound, and yields a wildly *inflated* TFLOP/s. An over-estimate
+    makes a kernel look slow and gets investigated; an under-estimate makes it
+    look fast and gets published. The Python attention-backward loop still
+    validates only ``sample > 0.0``, which catches this host's particular
+    garbage by luck rather than by rule.
+
+    Falling back to the wall clock is deliberately conservative: it includes
+    launch overhead, so it can only make a kernel look slower than it is. A
+    benchmark must not be able to flatter itself.
+    """
+    import time
+
+    if iters < 1 or warmup < 0:
+        raise ValueError(f"{what}: iters must be >= 1 and warmup >= 0")
+
+    def _sync() -> None:
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(f"{what}: device synchronize failed")
+
+    for _ in range(warmup):
+        if launch() != 0:
+            raise RuntimeError(f"{what}: warmup launch failed")
+    _sync()
+
+    start = ctypes.c_void_p()
+    stop = ctypes.c_void_p()
+    events_ready = (hip.hipEventCreate(ctypes.byref(start)) == 0
+                    and hip.hipEventCreate(ctypes.byref(stop)) == 0
+                    and hip.hipEventRecord(start, None) == 0)
+    try:
+        wall0 = time.perf_counter()
+        for _ in range(iters):
+            if launch() != 0:
+                raise RuntimeError(f"{what}: timed launch failed")
+        if events_ready:
+            events_ready = (hip.hipEventRecord(stop, None) == 0
+                            and hip.hipEventSynchronize(stop) == 0)
+        _sync()
+        wall_ms = (time.perf_counter() - wall0) * 1e3
+        if not (wall_ms > 0.0 and wall_ms == wall_ms):   # finite and positive
+            raise RuntimeError(f"{what}: wall measurement was not finite")
+
+        event_ms = None
+        if events_ready:
+            elapsed = ctypes.c_float()
+            if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) == 0:
+                value = float(elapsed.value)
+                if (value == value and value > 0.0
+                        and 0.5 * wall_ms <= value <= 2.0 * wall_ms):
+                    event_ms = value
+    finally:
+        if start.value:
+            hip.hipEventDestroy(start)
+        if stop.value:
+            hip.hipEventDestroy(stop)
+
+    total = event_ms if event_ms is not None else wall_ms
+    return total / float(iters), ("device_event" if event_ms is not None
+                                  else "host_wall")
+
+
 def _rocm_wmma_fused_2d(
     a: Any,
     b: Any,
@@ -7288,6 +7426,8 @@ def _rocm_wmma_fused_2d(
     *,
     raster_order: str = "row_major",
     raster_group: int = 1,
+    time_iters: int | None = None,
+    time_warmup: int = 0,
 ) -> Any:
     """Run ONE 2-D WMMA GEMM with a **fused epilogue** — a per-column bias add
     and/or a pointwise activation (``relu``/``gelu``/``silu``) applied on the f32
@@ -7383,16 +7523,29 @@ def _rocm_wmma_fused_2d(
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
     gx = (n + 16 * nt - 1) // (16 * nt)
     gy = (m + 16 * mt - 1) // (16 * mt)
-    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
-    if rc != 0:
+
+    def _launch() -> int:
+        return hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+
+    try:
+        if time_iters is not None:
+            # Operands are already resident: the loop below times launches only,
+            # with no H2D/D2H and no numpy marshalling inside the measurement.
+            global _rocm_last_timer_source
+            latency, source = _hip_resident_launch_latency(
+                hip, _launch, iters=int(time_iters), warmup=int(time_warmup),
+                what="rocm WMMA fused")
+            _rocm_last_timer_source = source
+            return latency
+        rc = _launch()
+        if rc != 0:
+            raise RuntimeError(f"rocm WMMA fused: kernel launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
+        return d
+    finally:
         for dev in devs:
             hip.hipFree(dev)
-        raise RuntimeError(f"rocm WMMA fused: kernel launch failed rc={rc}")
-    hip.hipDeviceSynchronize()
-    hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
-    for dev in devs:
-        hip.hipFree(dev)
-    return d
 
 
 _rocm_wmma_fused_probe_ok: bool | None = None
@@ -7878,25 +8031,17 @@ def _execute_rocm_compiled_flash_attn(
     hip.hipDeviceSynchronize()
     device_ms = None
     if _timed_reps:
-        start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-        if hip.hipEventCreate(ctypes.byref(start)) != 0 or hip.hipEventCreate(ctypes.byref(stop)) != 0:
-            for dev in dev_bufs:
-                hip.hipFree(dev)
-            raise RuntimeError("rocm flash_attn: HIP event creation failed")
-        try:
-            hip.hipEventRecord(start, None)
-            for _ in range(int(_timed_reps)):
-                if launch_once() != 0:
-                    raise RuntimeError("rocm flash_attn: timed kernel launch failed")
-            hip.hipEventRecord(stop, None)
-            hip.hipEventSynchronize(stop)
-            elapsed = ctypes.c_float()
-            if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) != 0:
-                raise RuntimeError("rocm flash_attn: HIP event timing failed")
-            device_ms = float(elapsed.value) / int(_timed_reps)
-        finally:
-            hip.hipEventDestroy(start)
-            hip.hipEventDestroy(stop)
+        # Was: record events, divide by reps, return -- with no validation at
+        # all, not even `> 0`. On this fleet's WSL2 host HIP events have been
+        # measured returning hipSuccess while writing garbage (0.0 ms in one
+        # harness, -1.28e8 ms in a direct probe), so that path could hand back
+        # 0.0 or a large negative as a device latency and the caller would
+        # divide by it. `_hip_resident_launch_latency` cross-checks against a
+        # wall clock and falls back conservatively.
+        global _rocm_last_timer_source
+        device_ms, _rocm_last_timer_source = _hip_resident_launch_latency(
+            hip, launch_once, iters=int(_timed_reps), warmup=0,
+            what="rocm flash_attn")
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * nq, 2)
     for dev in dev_bufs:
         hip.hipFree(dev)
@@ -8310,21 +8455,21 @@ def _execute_rocm_compiled_flash_attn_bwd(
     hip.hipDeviceSynchronize()
     device_ms = None
     if _timed_reps:
-        start, stop = ctypes.c_void_p(), ctypes.c_void_p()
-        hip.hipEventCreate(ctypes.byref(start))
-        hip.hipEventCreate(ctypes.byref(stop))
-        try:
-            hip.hipEventRecord(start, None)
-            for _ in range(int(_timed_reps)):
-                _run_backward()
-            hip.hipEventRecord(stop, None)
-            hip.hipEventSynchronize(stop)
-            elapsed = ctypes.c_float()
-            hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop)
-            device_ms = float(elapsed.value) / int(_timed_reps)
-        finally:
-            hip.hipEventDestroy(start)
-            hip.hipEventDestroy(stop)
+        # Was: create events (return code discarded), record, and read
+        # `hipEventElapsedTime` with its return code ALSO discarded, then divide
+        # by reps. On a host where HIP events report success while writing
+        # garbage -- measured on this fleet -- that yields a confident wrong
+        # latency with no failure anywhere. Routed through the validated helper,
+        # which cross-checks a wall clock and falls back conservatively.
+        global _rocm_last_timer_source
+
+        def _launch_backward() -> int:
+            _run_backward()          # raises on a real launch failure
+            return 0
+
+        device_ms, _rocm_last_timer_source = _hip_resident_launch_latency(
+            hip, _launch_backward, iters=int(_timed_reps), warmup=0,
+            what="rocm flash_attn backward")
 
     dq = np.zeros((bh, sq, head_dim), np.float32)
     dk = np.zeros((bh_kv, sk, head_dim), np.float32)
@@ -29908,7 +30053,9 @@ def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
 # linear/delta lanes where possible, and DeepSeek sparse attention now lives in
 # the DK2 rocm_sparse_attn_compiled lane.
 # ─────────────────────────────────────────────────────────────────────────────
-def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None, causal: bool = True, attn_bias: Any = None) -> Any:
+def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None,
+                     causal: bool = True, attn_bias: Any = None,
+                     _timed_reps: int = 0) -> Any:
     """Run the COMPILER-GENERATED WMMA flash_attn forward on Q/K/V via the
     flash_attn executor (constructs a minimal sub-artifact). Returns the f32
     attention output shaped like Q. An optional ``attn_bias`` (additive, shape
@@ -29935,7 +30082,8 @@ def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None, causal: bool 
             "ops": [{"op_name": "tessera.flash_attn", "result": "o", "operands": operands, "kwargs": kw}],
         }
     )
-    return _execute_rocm_compiled_flash_attn(sub, call_args)
+    return _execute_rocm_compiled_flash_attn(
+        sub, call_args, _timed_reps=_timed_reps)
 
 
 def _rocm_project_last(x: Any, w: Any, store: Any) -> Any:

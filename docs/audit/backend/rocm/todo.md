@@ -7,6 +7,91 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## Cross-backend sync `AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`
+
+PR (this branch) changes a **shared measurement contract**: an autotune
+`MeasureRecord` must now declare which applicable candidates it did *not* race
+(`unmeasured`), and `corpus_winner` refuses a verdict whose race was smaller
+than the one the live registry would hold. All four backends read this corpus,
+so all four are assessed here per AGENTS.md.
+
+**The defect, measured in the committed corpus.** Every device-timed row was
+missing exactly the candidates that had no `measure_device_latency`: matmul
+raced 2 of 4, attention 5 of 6, fused_region 6 of 10, gated_matmul 6 of 7.
+`_measure` scored an untimeable candidate `float("inf")`, so it lost silently,
+and the record stored a `winner` with nothing to say the field had been
+reduced. The verdicts read as "the compiled kernel is faster"; they meant "the
+compiled kernel was the only one that could be timed". End-to-end rows are
+unaffected — `measure_latency` just calls `run()`, so they raced the full field.
+
+**Why it matters more than bookkeeping (sm_120, f16, device-resident):** with
+all four NVIDIA matmul candidates raced for the first time, the
+**compiler-emitted PTX lane wins at every shape** — 0.0095 / 0.0291 / 0.1930 /
+1.4719 ms at 256/512/1024/2048³ against the hand-tuned delegate's 0.0155 /
+0.0431 / 0.3202 / 2.4509 ms, i.e. **1.5–1.7× faster**. That candidate had been
+excluded from every device measurement ever recorded. A biased corpus did not
+merely mis-rank; it hid the fastest kernel in the registry.
+
+**ROCm outcome: PARTIALLY RESOLVED 2026-08-31 on gfx1151 (was: follow-up
+required).** Both Tier-3 lanes now have validated device timers and the
+attention race is complete and servable; the fused-region race is still
+refused, for a named reason. Detail at the end of this entry.
+
+ROCm has committed rows in this corpus (`fused_region` end_to_end ×4,
+`paged_kv_decode` device ×4 and end_to_end ×4), so the refusal rule applies
+here directly: **the four `paged_kv_decode` device rows are now refused** until
+re-recorded, because they predate `unmeasured` and that generation is known to
+have dropped untimeable candidates. The end-to-end rows are unaffected.
+
+Then the same question NVIDIA just answered: **which ROCm candidates lack
+`measure_device_latency`?** Neither `rocm_wmma_gemm` (T3) nor
+`rocm_flash_attn` (T3) implements it — the gap already recorded under
+`DELEGATE-CONTRACT-SYNC-2026-08-30`. So every ROCm device-timed race silently
+excludes both hand-tuned lanes, which is the *mirror* of the NVIDIA defect: on
+NVIDIA the excluded lane turned out to be the fastest by 1.5–1.7×, and nothing
+here says the ROCm exclusions are harmless.
+
+Owed on Princess-Luna: device timers for the two Tier-3 lanes, then a
+re-recorded gfx1151 corpus. **The sm_120 finding does not transfer** — RDNA3.5
+WMMA is a different instruction with a different aligned/ragged trade-off, and
+whether an emitted lane beats the hand-tuned one there is an open question, not
+an inference.
+
+---
+
+**Resolved 2026-08-31 (measured on Princess-Luna, gfx1151, ROCm 10).**
+
+| lane | tier | device latency | clock |
+|---|---|---|---|
+| `rocm_wmma_gemm` (fused relu) | 3 | 0.0194 ms @512³, 0.1623 ms @1024³ | device_event |
+| `rocm_flash_attn` | 3 | 0.0215 ms @S=128, 0.0343 ms @S=256 | device_event |
+
+* **`OP_ATTENTION` is now complete and servable** — `rocm_flash_attn` is the
+  only live candidate, `unmeasured` is empty, and the verdict passes the
+  raced-field check. This is ROCm's first usable device-timed verdict.
+* **`OP_FUSED_REGION` is still refused**, and the cause is structural rather
+  than missing effort: `rocm_generic_hip` (T1) reaches its kernel through a C
+  shim that takes **host pointers** and performs H2D / launch / D2H internally,
+  so a Python loop cannot hoist the transfers out of the timed region. Timing
+  it device-resident needs a bench entry in that shim's ABI — the same shape as
+  the existing `tessera_rocm_wmma_gemm_f16_bench`. Until then the fused-region
+  verdict correctly falls back to tier priority.
+
+**The bias here runs opposite to NVIDIA's, which is worth stating.** On NVIDIA
+the untimed lane was the *hand-tuned* one, so a naive device corpus favoured
+compiled output. On ROCm the untimed lane is the *generic synthesized* one, so
+the same defect would have favoured the hand-tuned kernel. The defect is not
+directional; the field it omits is.
+
+**The 2026-08-04 HIP-event finding needs re-dating.** That record — every HIP
+event call returning `hipSuccess` while `hipEventElapsedTime` wrote garbage
+(0.0 ms, -1.28e8 ms) — no longer reproduces on this box under Ubuntu 26.04 /
+ROCm 10: every measurement above reports `device_event`, meaning the value
+landed inside the two-sided band against a wall clock. The distrust is still
+warranted as a *mechanism* (that is why the band exists and is checked), but it
+is no longer the behaviour of this host. Do not quote the old finding as
+current.
+
 ## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
 
 PR #653 changes a **shared Graph IR ABI**: the delta-rule family

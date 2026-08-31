@@ -5312,23 +5312,32 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
         except Exception:
             return region.reference(A, B), "reference"
 
-    # No `measure_device_latency`: this lane cannot use the launch bridge's
-    # benchmark harness, and the reason is a real divergence rather than a
-    # missing table entry.
-    #
-    # `benchmarkTileGemm16` launches `gx = ceil(N/tileN)`, `gy = ceil(M/tileM)`
-    # -- x maps to N. The NVIDIA Tile lowering agrees (`NVIDIALowering.cpp`:
-    # `mt = blockY*16`, `nt = blockX*8`), which is why the two Tile candidates
-    # time correctly. The `ptx_emit` kernel uses the OPPOSITE convention
-    # (`ptx_emit.py`: `mt = ctaid.x*16`, `nt = ctaid.y*8`), as does the shipped
-    # AOT kernel, so the harness would launch it transposed: at 512x512 it
-    # would cover rows to 1024 and columns only to 256, leaving half the output
-    # unwritten while reporting a plausible latency. Registering swapped tile
-    # dims does not fix it either -- that happens to line up only when M == N.
-    #
-    # Decision #28's displacement test is still satisfiable: the delegate is
-    # measured against the two compiled Tile candidates. Unifying the grid
-    # convention is tracked in the NVIDIA backend queue.
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """CUDA-event kernel time, operands resident.
+
+        The NVIDIA backend carries two block-index conventions: `ptx_emit` and
+        the shipped AOT kernel map blockIdx.x -> M, while the Tile lowering
+        (`NVIDIALowering.cpp`) and the launch bridge map blockIdx.x -> N. The
+        harness used to hardcode the latter, so this lane returned rc=5 and had
+        no device timer at all; `tileLaunchConfig` now carries the convention
+        as a flag, the same one `invokeMmaGemm16` already took.
+
+        Returns ``None`` for a ragged shape rather than a number: this lane
+        declines to the reference there, so a latency would describe numpy and
+        be read as evidence that a candidate is fast when it never ran.
+        """
+        if len(inputs) != 2:
+            return None
+        try:
+            from tessera import runtime as rt
+            An, Bn = region._natural(inputs[0], inputs[1], cast=False)
+            if not _aligned_2d(An, Bn):
+                return None
+            return rt._nvidia_ptx_gemm_device_latency(
+                An, Bn, region.dtype, reps=reps, warmup=warmup)
+        except Exception:
+            return None
 
 
 class NvidiaTileMatmulCandidate(Candidate):

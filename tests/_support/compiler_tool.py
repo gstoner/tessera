@@ -138,6 +138,73 @@ def registered_passes(tool: Path) -> frozenset[str]:
 
 
 @lru_cache(maxsize=8)
+def registered_dialects(tool: Path) -> frozenset[str]:
+    """Dialect namespaces this binary registers (`--show-dialects`).
+
+    The companion to `registered_passes`, and it covers a failure this module
+    did not: a lean driver rejects backend IR at the *parser*, before any pass
+    runs, with
+
+        error: operation being parsed with an unregistered dialect
+
+    which is not a pass-registry miss and so slipped past every capability
+    check here. On this fleet's Mac -- `TESSERA_BUILD_ROCM_BACKEND=OFF`,
+    `NVIDIA_BACKEND=OFF` -- that accounted for 15 of 26 suite failures, none of
+    which said anything about the code under test.
+
+    The either/or is deliberate in the build, not an oversight:
+    `tools/tessera-opt/CMakeLists.txt` flips `TESSERA_OPT_LEAN_ARTIFACT_DRIVER`
+    when a backend is enabled without its toolchain, which drops core Tessera
+    IR, the solvers and Neighbors. So one driver cannot hold Apple + x86 + ROCm
+    + NVIDIA on a host with neither CUDA nor HIP, and a test that needs a
+    backend dialect must check for it rather than assume.
+    """
+    try:
+        result = subprocess.run(
+            [str(tool), "--show-dialects"], capture_output=True, text=True,
+            check=False, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return frozenset()
+    text = result.stdout or ""
+    if ":" in text:
+        text = text.split(":", 1)[1]
+    return frozenset(name.strip() for name in text.replace("\n", ",").split(",")
+                     if name.strip())
+
+
+def missing_dialects(tool: Path, *dialects: str) -> list[str]:
+    """Requested dialect namespaces, sorted, that `tool` does not register."""
+    available = registered_dialects(tool)
+    return sorted({name for name in dialects if name and name not in available})
+
+
+def require_tessera_opt_dialects(*dialects: str) -> Path:
+    """A driver registering every named dialect, else skip naming what is absent.
+
+    Same preference-then-capability rule as `require_tessera_opt`: with several
+    builds discoverable, take the first that can actually parse the IR rather
+    than the first that exists.
+    """
+    candidates = tessera_opt_candidates()
+    if not candidates:
+        pytest.skip(
+            "tessera-opt not built (ninja -C build tessera-opt) and TESSERA_OPT unset"
+        )
+    for tool in candidates:
+        if not missing_dialects(tool, *dialects):
+            return tool
+    preferred = candidates[0]
+    absent = missing_dialects(preferred, *dialects)
+    pytest.skip(
+        f"{preferred} does not register the {', '.join(absent)} dialect(s) "
+        f"(build profile: {build_profile(preferred)}). This driver cannot "
+        "parse the IR under test -- configure a build with the owning backend, "
+        "or point TESSERA_OPT at one."
+    )
+
+
+@lru_cache(maxsize=8)
 def build_profile(tool: Path) -> str:
     """`--tessera-build-info` summary, or a note that the binary predates it."""
     try:

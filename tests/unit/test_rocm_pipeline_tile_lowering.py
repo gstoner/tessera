@@ -36,7 +36,7 @@ from tessera.compiler.rocm_pipeline import (
     ROCMInputLevel,
     ROCMOutputLevel,
 )
-from tests._support.compiler_tool import tessera_opt_path
+from tests._support.compiler_tool import require_tessera_opt_dialects
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -55,9 +55,12 @@ _GEMM_DIRECTIVE = (
 
 
 def _run_opt(pipeline: str, source: str = _GEMM_DIRECTIVE):
-    tool = tessera_opt_path()
-    if tool is None:
-        pytest.skip("tessera-opt not built")
+    # The IR below is `tessera_rocm.*`, so a driver without that dialect
+    # rejects it at the PARSER -- before any pass runs. Guarding only on
+    # "tessera-opt exists" turned that into a failure reading
+    # `operation being parsed with an unregistered dialect`, which says
+    # nothing about the code under test.
+    tool = require_tessera_opt_dialects("tessera_rocm")
     return subprocess.run(
         [str(tool), "-", f"--pass-pipeline={pipeline}"],
         input=source,

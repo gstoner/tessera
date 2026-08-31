@@ -14,9 +14,22 @@ from tessera.compiler.scheduled_matmul import ScheduledMatmulArtifact
 from tests._support.nvidia import nvidia_cuda_host_ready
 
 
+from tests._support.compiler_tool import missing_dialects, tessera_opt_path
+
+# Tool presence is not capability. These lower SM120 scheduled matmul, which
+# the boundary rejects with "requires the registered NVIDIA Target IR dialect"
+# on a driver built without `TESSERA_BUILD_NVIDIA_BACKEND` -- a build-selection
+# fact, not a defect in the code under test.
+_opt = tessera_opt_path()
 requires_tessera_opt = pytest.mark.skipif(
     scheduled_matmul.find_tessera_opt() is None,
     reason="requires the production tessera-opt compiler",
+)
+requires_nvidia_target_ir = pytest.mark.skipif(
+    _opt is None or bool(missing_dialects(_opt, "tessera_nvidia")),
+    reason="tessera-opt does not register the tessera_nvidia Target IR dialect "
+           "(configure TESSERA_BUILD_NVIDIA_BACKEND, or point TESSERA_OPT at "
+           "a driver that has it)",
 )
 
 
@@ -207,6 +220,7 @@ def test_nvidia_sm120_bf16_uses_shared_scheduled_matmul_contract() -> None:
 
 
 @requires_tessera_opt
+@requires_nvidia_target_ir
 def test_nvidia_bounded_dynamic_graph_emits_strided_typed_carrier() -> None:
     artifact = scheduled_matmul.lower_scheduled_matmul(
         _dynamic_module(), target="nvidia_sm120"
@@ -238,6 +252,7 @@ def test_rocm_bounded_dynamic_graph_emits_runtime_extent_wmma_carrier() -> None:
 
 
 @requires_tessera_opt
+@requires_nvidia_target_ir
 def test_nvidia_large_bounded_dynamic_graph_selects_alignment_safe_macro_cta() -> None:
     artifact = scheduled_matmul.lower_scheduled_matmul(
         _dynamic_module(bounds=(512, 512, 256)), target="nvidia_sm120"
@@ -397,6 +412,7 @@ def test_sm120_dynamic_macro_cta_strided_matmul_exact_device() -> None:
 
 
 @requires_tessera_opt
+@requires_nvidia_target_ir
 def test_nvidia_sm120_scheduled_epilogue_and_reduced_output_are_retained() -> None:
     module = _module(
         target="nvidia_sm120", shape=(256, 256, 512), output_dtype="fp16",

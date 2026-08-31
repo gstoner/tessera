@@ -335,7 +335,7 @@ def test_predicate_region_products_execute_on_native_target(
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
     if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_chip() != "gfx1151"
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
     ):
         pytest.skip("exact gfx1151 compiler/device required")
     package = compile_physical_general_solver_from_graph(
@@ -363,7 +363,7 @@ def test_predicate_region_product_rejects_nondifferentiable_boundary(
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
     if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_chip() != "gfx1151"
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
     ):
         pytest.skip("exact gfx1151 compiler/device required")
     package = compile_physical_general_solver_from_graph(
@@ -588,7 +588,7 @@ def test_generated_nonlinear_residual_children_execute_exact_products(target: st
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
     if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_chip() != "gfx1151"
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
     ):
         pytest.skip("exact gfx1151 compiler/device required")
     shape = (7,)
@@ -661,7 +661,7 @@ def test_physical_general_solver_executes_native_matrix_free_children(target: st
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
     if target == "rocm_gfx1151" and (
-        rt._tessera_opt_path() is None or rt._rocm_chip() != "gfx1151"
+        rt._tessera_opt_path() is None or rt._rocm_live_arch() != "gfx1151"
     ):
         pytest.skip("exact gfx1151 compiler/device required")
     shape = (19,)
@@ -709,7 +709,7 @@ def test_solver_forward_product_executes_parameter_tangent(target: str) -> None:
     if target == "x86" and not rt._x86_elementwise_available():
         pytest.skip("production x86 AVX-512 image unavailable")
     if target == "rocm_gfx1151" and (
-        rt._rocm_chip() != "gfx1151" or not rt._rocm_wmma_runtime_available()
+        rt._rocm_live_arch() != "gfx1151" or not rt._rocm_wmma_runtime_available()
     ):
         pytest.skip("exact gfx1151 runtime unavailable")
     if target == "nvidia_sm120":
@@ -770,6 +770,16 @@ def test_solver_ift_compiled_package_matches_numerical_oracle(target: str) -> No
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
 def test_solver_ift_tile_artifacts_reach_architecture_owned_lowering() -> None:
+    # Covers x86 AND the SM120 route, so it needs a driver registering the
+    # NVIDIA Target IR dialect. `assert tool is not None` checked only that a
+    # binary exists, which on a lean driver produced "requires the registered
+    # NVIDIA Target IR dialect" -- a build-selection fact reported as a defect.
+    from tests._support.compiler_tool import missing_dialects, tessera_opt_path
+    probe = tessera_opt_path()
+    if probe is None or missing_dialects(probe, "tessera_nvidia"):
+        pytest.skip(
+            "tessera-opt does not register the tessera_nvidia Target IR dialect"
+        )
     tool = find_tessera_opt()
     assert tool is not None
     x86 = lower_scheduled_solver_ift(target="x86", shape=(17,))

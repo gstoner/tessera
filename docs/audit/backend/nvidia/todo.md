@@ -5076,3 +5076,69 @@ re-raced. Re-generating them needs sm_120, and is the follow-up this key owns.
   here because NVIDIA races the widest field. Three samples give a usable noise
   floor but a poor spread *estimate*; where a bucket lands near the bar, raise
   it for that run rather than trusting the boundary.
+
+---
+
+## Cross-backend sync `APPLE-TIMER-WITNESS-2026-08-31`
+
+**Owning item:** the Apple half of `NVIDIA-TIMER-DRAIN-2026-08-31`, recorded
+there as follow-up required · **synchronization key:**
+`APPLE-TIMER-WITNESS-2026-08-31`
+
+**Shared contract changed — a device latency must be checked against a clock
+that did not produce it.** ROCm and NVIDIA already did; Apple did not, and had
+no host clock at all to check against.
+
+**Two findings from the measurement, both of which changed the design.**
+
+*The witness must bracket the same region the device clock does.* The first
+version instrumented `commit_and_wait_with_timeout` only — and the lane this
+workload actually takes (`metal4_mpsgraph_envelope`) does not go through it.
+It reported a null wall, which the acceptance rule reads as "no witness
+available" and passes the device number through unchecked. The failure was
+silent: telemetry looked healthy, the band existed, and it was checking nothing.
+
+*A witness scoped to the wrong region produces a wrong rule, not an obvious
+failure.* Measured device/wall against a **Python-level** wall — which carries
+numpy marshalling and array conversion no GPU interval could contain — was
+**0.35–0.60**, and that argued for a one-sided band, since 0.35 fails a 0.5×
+floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
+over 100 samples from 8² to 2048². The symmetric band was fine all along; the
+one-sided version was defending against an artifact of its own denominator.
+
+**Corrected after review (2026-08-31): the band is ONE-SIDED, and the two-sided
+version was wrong twice for the same reason — generalising from one route.** A
+second route family, resident batched sessions on `metal_kernel_interval`,
+measures **0.037–0.101** once warm: a 25 µs kernel inside a 265 µs
+submit-to-signal window. Nothing is wrong there — `kernelStartTime`/
+`kernelEndTime` is kernel execution only and legitimately excludes queueing.
+Across routes the honest range is **0.037–0.937**, so no wall-derived floor can
+separate a small kernel from an under-reading clock. That is exactly what ROCm
+already states in `_select_rocm_latency_ms`.
+
+What survives is containment, which is exact: GPU execution is a strict subset
+of commit-and-wait, so **`device <= 1.25 × wall`** (1.25 rather than 1.0
+because the two are independent clocks over nested regions and the measured max
+of 0.937 leaves a strict bound only 6.3%). **The under-reading direction — the
+dangerous one, since an under-estimate inflates throughput and gets published —
+is now explicitly unguarded**, and asserted as such in the tests so the gap is
+visible rather than assumed covered. It closes against Apple's *second* device
+clock, not the wall; see the follow-up below.
+
+**Outcome for this backend: `not applicable` — NVIDIA closed its half under
+`NVIDIA-TIMER-DRAIN-2026-08-31` and nothing here changes it.** CUDA already
+takes a wall witness across a drained region and band-checks the event against
+it; the Apple work is the sibling item that key recorded as owed.
+
+**The one transferable lesson, and it is a scoping one.** NVIDIA's finding was
+that a band without a *drain* is worse than no band. Apple's is that a band
+without a **correctly scoped witness** is worse than no band — the first
+version measured against a Python-level wall carrying numpy marshalling, and
+concluded a one-sided band was needed when it was not. Same failure at
+different ends of the same sentence: the band is only as good as the region its
+witness covers, and both ways of getting that wrong produce a plausible rule
+rather than a visible error. Worth checking against the remaining twelve
+duplicated timing loops in `tessera_nvidia_ptx_launch.cpp` when those are
+de-duplicated — each one defines its own region.
+
+**No sm_120 evidence is claimed** — no CUDA code changed.

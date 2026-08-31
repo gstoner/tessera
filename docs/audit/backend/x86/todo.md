@@ -3075,3 +3075,107 @@ an unseparated device-timed row would be, and should not be read as one.
 
 **No AVX-512 evidence is claimed** — no x86 code changed, and no x86 row has
 been regenerated.
+
+---
+
+## Cross-backend sync `APPLE-TIMER-WITNESS-2026-08-31`
+
+**Owning item:** the Apple half of `NVIDIA-TIMER-DRAIN-2026-08-31`, recorded
+there as follow-up required · **synchronization key:**
+`APPLE-TIMER-WITNESS-2026-08-31`
+
+**Shared contract changed — a device latency must be checked against a clock
+that did not produce it.** ROCm and NVIDIA already did; Apple did not, and had
+no host clock at all to check against.
+
+**Two findings from the measurement, both of which changed the design.**
+
+*The witness must bracket the same region the device clock does.* The first
+version instrumented `commit_and_wait_with_timeout` only — and the lane this
+workload actually takes (`metal4_mpsgraph_envelope`) does not go through it.
+It reported a null wall, which the acceptance rule reads as "no witness
+available" and passes the device number through unchecked. The failure was
+silent: telemetry looked healthy, the band existed, and it was checking nothing.
+
+*A witness scoped to the wrong region produces a wrong rule, not an obvious
+failure.* Measured device/wall against a **Python-level** wall — which carries
+numpy marshalling and array conversion no GPU interval could contain — was
+**0.35–0.60**, and that argued for a one-sided band, since 0.35 fails a 0.5×
+floor. Against the **runtime** witness the same dispatches run **0.568–0.937**
+over 100 samples from 8² to 2048². The symmetric band was fine all along; the
+one-sided version was defending against an artifact of its own denominator.
+
+**Corrected after review (2026-08-31): the band is ONE-SIDED, and the two-sided
+version was wrong twice for the same reason — generalising from one route.** A
+second route family, resident batched sessions on `metal_kernel_interval`,
+measures **0.037–0.101** once warm: a 25 µs kernel inside a 265 µs
+submit-to-signal window. Nothing is wrong there — `kernelStartTime`/
+`kernelEndTime` is kernel execution only and legitimately excludes queueing.
+Across routes the honest range is **0.037–0.937**, so no wall-derived floor can
+separate a small kernel from an under-reading clock. That is exactly what ROCm
+already states in `_select_rocm_latency_ms`.
+
+What survives is containment, which is exact: GPU execution is a strict subset
+of commit-and-wait, so **`device <= 1.25 × wall`** (1.25 rather than 1.0
+because the two are independent clocks over nested regions and the measured max
+of 0.937 leaves a strict bound only 6.3%). **The under-reading direction — the
+dangerous one, since an under-estimate inflates throughput and gets published —
+is now explicitly unguarded**, and asserted as such in the tests so the gap is
+visible rather than assumed covered. It closes against Apple's *second* device
+clock, not the wall; see the follow-up below.
+
+**Outcome for this backend: `not applicable` — there is no second clock to
+witness.** x86 times on the host, so the wall clock is the measurement rather
+than a check on something else; the two failure modes this key is about (a
+self-reported device interval believed unchecked, and a witness scoped to the
+wrong region) both need a device clock this lane does not have.
+
+**What does apply here is the clock-selection evidence, and it is directly
+reusable.** Measured on Apple Silicon while grounding the witness:
+`std::chrono::steady_clock` **is** `high_resolution_clock` on libc++, and is
+backed by the same constant-frequency counter as `CNTVCT_EL0` — mach timebase
+125/3 ns per tick = 41.67 ns = **exactly 24.000 MHz**, confirmed against a
+direct `mrs cntvct_el0` read over the same span. Constant rate is the property
+that matters: it does not move with DVFS, so a sample taken under one power
+state is comparable to one taken under another. The register read is cheaper
+(0.3 ns vs 16.3 ns) but that is 0.00003% versus 0.0016% of a 1 ms span.
+
+**Where that stops being negligible is this backend.** 16 ns of read overhead
+against a ~1 ms GPU dispatch is nothing; against an AVX-512 microkernel it is
+not, and a tick period is a *resolution floor* as well. An x86 timing lane
+measuring individual kernels should size its region against that floor — or
+batch reps until the span clears it — rather than assume host timing is free.
+**Measure that floor on the ROCm box before designing around it**: 41.67 ns is
+Apple Silicon's figure, and the Zen 5 host's differs.
+
+**The Linux equivalents, so this is not re-derived from the Apple entry.**
+
+| need | Apple Silicon | Linux (Zen 5, the x86 host) |
+|---|---|---|
+| monotonic wall | `steady_clock` → 24 MHz `CNTVCT_EL0` | `steady_clock` → **VDSO**, so the hardware clock is read with no real syscall |
+| constant-rate raw counter | `mrs cntvct_el0` | `rdtsc` / `rdtscp` |
+| CPU time excluding idle | `clock_gettime(CLOCK_THREAD_CPUTIME_ID)` | same POSIX call, natively TSC-backed and correspondingly cheaper |
+| timeline probes | `os_signpost` → Instruments | `STAP_PROBE` (`sys/sdt.h`) → `perf`/eBPF, or Tracy |
+
+Two consequences specific to this lane. First, `high_resolution_clock` is
+usable on both hosts for the same reason — no syscall in the hot path — so a
+shared timing helper needs no per-OS branching for the wall clock, only for the
+raw-counter and probe layers.
+
+Second, and more important: **`CLOCK_THREAD_CPUTIME_ID` is the more interesting
+clock here than any wall clock.** An AVX-512 kernel timed on a shared,
+frequency-scaling host has scheduler idle charged to it by a wall measurement,
+and thread CPU time excludes exactly that — it is the closest thing this
+backend has to the *isolation* a GPU device counter provides, which is the
+property the whole three-clock discipline exists to obtain. It also gives this
+lane a witness relationship it currently cannot form at all: for a
+single-threaded region thread CPU time cannot exceed wall time, so the two
+bound each other the way a device clock and a host clock do on the GPU
+backends. That is the concrete route to an x86 acceptance rule, and it is
+available today without new hardware.
+
+`rdtsc` carries the same caveat as `cntvct_el0` — its rate is fixed and
+unrelated to the core's current frequency, which is what makes it comparable
+across power states and equally what makes it *not* a cycle count.
+
+**No AVX-512 evidence is claimed** — no x86 code changed.

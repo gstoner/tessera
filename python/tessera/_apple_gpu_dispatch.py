@@ -53,6 +53,7 @@ __all__ = [
     "read_profiling_capabilities",
     "read_dispatch_telemetry",
     "set_dispatch_telemetry_enabled",
+    "accept_apple_device_ns",
     "clear_dispatch_telemetry",
     "APPLE_ABI",
 ]
@@ -119,6 +120,13 @@ _SENTINEL_SYMBOLS = (
     "tessera_apple_gpu_rmsnorm_bwd_bf16",
     "tessera_apple_gpu_layer_norm_bwd_f16",
     "tessera_apple_gpu_layer_norm_bwd_bf16",
+    # Host wall witness for dispatch telemetry (APPLE-TIMER-WITNESS). Gating on
+    # it matters more than most: without this symbol `read_dispatch_telemetry`
+    # reports `wall_time_ns: None`, and a None wall makes `_accept_apple_device_ns`
+    # accept the device number unchecked. A stale dylib would therefore silently
+    # restore exactly the unwitnessed behaviour this landing removes, and every
+    # test would still pass.
+    "tessera_apple_gpu_last_dispatch_wall_time_ns",
 )
 
 
@@ -584,6 +592,7 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_dispatch_telemetry_enabled": ((), ctypes.c_int32),
     "tessera_apple_gpu_dispatch_telemetry_clear": ((), None),
     "tessera_apple_gpu_last_dispatch_device_time_ns": ((), ctypes.c_int64),
+    "tessera_apple_gpu_last_dispatch_wall_time_ns": ((), ctypes.c_int64),
     "tessera_apple_gpu_last_dispatch_counter_delta": ((), ctypes.c_int64),
     "tessera_apple_gpu_last_dispatch_counter_supported": ((), ctypes.c_int32),
     "tessera_apple_gpu_last_dispatch_timing_source": ((), ctypes.c_int32),
@@ -688,6 +697,69 @@ def clear_dispatch_telemetry() -> None:
         clear()
 
 
+def accept_apple_device_ns(device_ns: Optional[int],
+                           wall_ns: Optional[int]) -> Optional[int]:
+    """Whether a Metal-reported device interval may be believed.
+
+    Apple's device numbers were previously accepted on an
+    ``end >= start && end > 0`` check alone -- a sanity check, which rejects an
+    obviously broken clock and accepts any value that is merely wrong. This
+    adds the missing half: a host witness the runtime captures around
+    commit-and-wait, and a bound against it.
+
+    **The bound is one-sided, and the two-sided version was measured wrong
+    twice before this settled.** The history matters because both wrong answers
+    came from the same mistake -- generalising from one route:
+
+    * A first pass measured ``device/wall`` at 0.35-0.60 against a *Python*
+      wall that included numpy marshalling, work no GPU interval could contain,
+      and concluded a one-sided band was needed. Right answer, wrong reason.
+    * A second pass, against a correctly scoped runtime witness, measured
+      0.568-0.937 on the MPSGraph matmul route and concluded the ordinary
+      symmetric 0.5x band was safe after all.
+    * Measuring a **second** route family -- resident batched sessions,
+      ``metal_kernel_interval`` -- gives **0.037-0.101** once warm: a 25 us
+      kernel inside a 265 us submit-to-signal window. Nothing is wrong there.
+      ``kernelStartTime``/``kernelEndTime`` is kernel execution only, and it
+      legitimately excludes the queueing and scheduling the wall must contain.
+
+    So across routes the honest range is **0.037-0.937**, and no wall-derived
+    floor can separate a small kernel from an under-reading clock. This is the
+    same conclusion ROCm reached and states outright in
+    ``_select_rocm_latency_ms``: *"A lower bound against the wall clock cannot
+    work: launch overhead is real, so a small kernel's device time is
+    legitimately far below it."*
+
+    **What remains is exact.** GPU execution is a strict subset of
+    commit-and-wait, so a device interval exceeding the wall is impossible and
+    means the timestamp is misattributed. The ceiling is **1.25x** rather than
+    1.0 because the two are independent clocks over nested regions and the
+    measured maximum is 0.937, which leaves a strict bound only 6.3%.
+
+    **The under-reading direction is therefore still unguarded, and that is the
+    dangerous one** -- an under-estimate inflates throughput and gets
+    published, while an over-estimate makes a kernel look slow and gets
+    investigated. It cannot be closed against a host clock. It closes against
+    Apple's *second* device clock: ``metal4_timestamp_heap`` and
+    ``metal_kernel_interval`` measure the same work independently, and bounding
+    one against the other is what ROCm does with its event clock. Today they
+    overwrite each other in ``g_last_dispatch_device_time_ns``; capturing both
+    per dispatch is the follow-up recorded under ``APPLE-TIMER-WITNESS``.
+
+    A ``None`` wall disables the check rather than failing it, which is why the
+    export is in ``_SENTINEL_SYMBOLS``: a stale dylib would otherwise silently
+    restore the unwitnessed behaviour with every test still passing.
+    """
+    # `<= 0`, not `< 0`: a zero-length interval is not a short measurement,
+    # it is the absence of one, and it is the single under-read the
+    # containment bound below would otherwise wave through.
+    if device_ns is None or device_ns <= 0:
+        return None
+    if wall_ns is None or wall_ns <= 0:
+        return device_ns
+    return device_ns if device_ns <= 1.25 * wall_ns else None
+
+
 def read_dispatch_telemetry() -> dict[str, object]:
     """Read the current thread's last native dispatch record.
 
@@ -755,9 +827,33 @@ def read_dispatch_telemetry() -> dict[str, object]:
             "scratch_bytes": None,
             "spill_count": None,
         }
+    wall = bind_registered("tessera_apple_gpu_last_dispatch_wall_time_ns")
+    wall_ns = int(wall()) if wall is not None else -1
+    device_ns = device_time_ns if device_time_ns >= 0 else None
+    wall_value = wall_ns if wall_ns >= 0 else None
+    accepted = accept_apple_device_ns(device_ns, wall_value)
     return {
         "capture_enabled": bool(enabled()),
-        "device_time_ns": device_time_ns if device_time_ns >= 0 else None,
+        # The BAND-CHECKED interval, and `None` when the check refused it.
+        #
+        # This is the established field every consumer reads
+        # (`benchmark_attention_routes`, `benchmark_legacy_retune`,
+        # `resident_kv`, `_Future.elapsed_ms`), so publishing the raw value here
+        # and the verdict in a new key nobody reads would have left a rejected
+        # timestamp shaping route evidence and reported latency exactly as
+        # before -- the check would exist and change nothing. Every consumer
+        # already guards this field with `is not None` / `isinstance(..., int)`,
+        # because it has always been nullable when telemetry was unavailable, so
+        # a refusal degrades to "no device number" rather than to a wrong one.
+        "device_time_ns": accepted,
+        # The unchecked value, for diagnosis. Never feed this to a benchmark:
+        # when it differs from `device_time_ns`, that difference IS the defect.
+        "device_time_raw_ns": device_ns,
+        # Host wall across commit-and-wait. `None` on a runtime predating the
+        # export -- which the freshness sentinel is meant to make impossible,
+        # because a None wall disables the check rather than failing it.
+        "wall_time_ns": wall_value,
+        "device_time_accepted_ns": accepted,
         "timing_source": _DISPATCH_TIMING_SOURCES.get(source_id),
         "counter_sampling_supported": (
             bool(counter_state) if counter_state >= 0 else None),

@@ -85,13 +85,28 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "#include <hip/hip_runtime.h>\n"
         "#include <math.h>\n"
         "#include <chrono>\n"          # the wall clock the bench entry needs
+        # `span` is the ON-DEVICE clock, and is nullable so the production entry
+        # pays only an untaken branch. `wall_clock64()` runs at a constant rate
+        # (`hipDeviceAttributeWallClockRate`; 100 MHz / 10 ns ticks on gfx1151),
+        # unlike `clock()` which moves with DVFS.
+        #
+        # It is read once per BLOCK, not per thread, and reduced with atomicMin
+        # / atomicMax so the span is the whole kernel rather than one
+        # workgroup's slice. For the shapes this lane serves that is a handful
+        # of atomics against hundreds of thousands of MACs per thread -- the
+        # instrumentation cannot plausibly move the number it reports.
         f"__global__ void {_ENTRY}_kernel(const float* A, const float* B,\n"
         "        const float* bias, const float* residual, float* out,\n"
-        "        int M, int N, int K) {\n"
+        "        int M, int N, int K, unsigned long long* span) {\n"
+        "    if (span && threadIdx.x == 0)\n"
+        "        atomicMin(&span[0], (unsigned long long)wall_clock64());\n"
         "    int m = blockIdx.x*blockDim.x + threadIdx.x;\n"
-        "    if (m >= M) return;\n"
+        "    if (m < M) {\n"
         "    float* row = out + (long)m * N;\n"
         f"{row_compute_body(region)}"
+        "    }\n"
+        "    if (span && threadIdx.x == 0)\n"
+        "        atomicMax(&span[1], (unsigned long long)wall_clock64());\n"
         "}\n"
         # Every hipMalloc/hipMemcpy status is checked and turned into a non-1
         # return code, because the runner treats rc==1 as proof the device
@@ -123,7 +138,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
         "    b=(M+t-1)/t;\n"
         f"    hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
-        "        dA,dB,dbias,dres,dO,M,N,K);\n"
+        "        dA,dB,dbias,dres,dO,M,N,K,(unsigned long long*)0);\n"
         "    if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
         "    if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
         "    if (hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost)!=hipSuccess) goto cleanup;\n"
@@ -151,15 +166,25 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         f'extern "C" int {_ENTRY}_bench(const float* hA, const float* hB,\n'
         "        const float* hbias, const float* hresidual, float* hout,\n"
         "        int M, int N, int K, int iters, int warmup,\n"
-        "        double* wall_ms, double* event_ms) {\n"
+        "        double* wall_ms, double* event_ms, double* device_ms) {\n"
         "    size_t szA=(size_t)M*K*sizeof(float), szB=(size_t)K*N*sizeof(float),\n"
         "           szO=(size_t)M*N*sizeof(float), szBias=(size_t)N*sizeof(float);\n"
         "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
+        "    unsigned long long *dSpan=0, hSpan[2];\n"
         "    hipEvent_t evStart=0, evStop=0;\n"
-        "    int t=64, b=0, rc=2, i=0, eventsUsable=0;\n"
+        "    hipStream_t stream=0;\n"
+        "    int t=64, b=0, rc=2, i=0, eventsUsable=0, rate=0;\n"
         "    float ev=0.0f;\n"
-        "    if (!hA||!hB||!hout||!wall_ms||!event_ms||iters<1||warmup<0) return 5;\n"
-        "    *wall_ms=0.0; *event_ms=-1.0;\n"
+        "    if (!hA||!hB||!hout||!wall_ms||!event_ms||!device_ms\n"
+        "        ||iters<1||warmup<0) return 5;\n"
+        "    *wall_ms=0.0; *event_ms=-1.0; *device_ms=-1.0;\n"
+        # A dedicated NON-BLOCKING stream. Recording on the default stream
+        # implicitly serialises against every other stream, so a measurement
+        # taken while other GPU work is in flight would be distorted by it.
+        "    if (hipStreamCreateWithFlags(&stream,hipStreamNonBlocking)\n"
+        "            !=hipSuccess) stream=0;\n"
+        "    if (hipMalloc(&dSpan,2*sizeof(unsigned long long))!=hipSuccess)\n"
+        "        dSpan=0;\n"
         "    if (hipMalloc(&dA,szA)!=hipSuccess) goto cleanup;\n"
         "    if (hipMalloc(&dB,szB)!=hipSuccess) goto cleanup;\n"
         "    if (hipMalloc(&dO,szO)!=hipSuccess) goto cleanup;\n"
@@ -175,36 +200,61 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "    b=(M+t-1)/t;\n"
         "    rc=4;\n"
         "    for (i=0;i<warmup;++i) {\n"
-        f"        hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
-        "            dA,dB,dbias,dres,dO,M,N,K);\n"
+        f"        hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, stream,\n"
+        "            dA,dB,dbias,dres,dO,M,N,K,(unsigned long long*)0);\n"
         "        if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
         "    }\n"
-        "    if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
+        "    if (hipStreamSynchronize(stream)!=hipSuccess) goto cleanup;\n"
+        # The on-device span buffer: min(start) / max(end) across blocks, so
+        # it has to start at the extremes rather than at zero.
+        "    if (dSpan) {\n"
+        "        hSpan[0]=~0ull; hSpan[1]=0ull;\n"
+        "        if (hipMemcpy(dSpan,hSpan,sizeof(hSpan),\n"
+        "                hipMemcpyHostToDevice)!=hipSuccess) dSpan=0;\n"
+        "    }\n"
         "    eventsUsable = (hipEventCreate(&evStart)==hipSuccess &&\n"
         "                    hipEventCreate(&evStop)==hipSuccess &&\n"
-        "                    hipEventRecord(evStart,0)==hipSuccess);\n"
+        "                    hipEventRecord(evStart,stream)==hipSuccess);\n"
         "    {\n"
         "        std::chrono::steady_clock::time_point w0 =\n"
         "            std::chrono::steady_clock::now();\n"
         "        for (i=0;i<iters;++i) {\n"
-        f"            hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
-        "                dA,dB,dbias,dres,dO,M,N,K);\n"
+        f"            hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, stream,\n"
+        "                dA,dB,dbias,dres,dO,M,N,K,dSpan);\n"
         "            if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
         "        }\n"
         "        if (eventsUsable)\n"
-        "            eventsUsable = (hipEventRecord(evStop,0)==hipSuccess &&\n"
+        "            eventsUsable = (hipEventRecord(evStop,stream)==hipSuccess &&\n"
         "                            hipEventSynchronize(evStop)==hipSuccess);\n"
-        "        if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
+        # Sync the stream, never the device: a device-wide barrier would make
+        # every other stream wait and would falsify any concurrent measurement.
+        # Needed unconditionally here because the wall clock below must bound
+        # completed work even when the event path is unusable.
+        "        if (!eventsUsable &&\n"
+        "            hipStreamSynchronize(stream)!=hipSuccess) goto cleanup;\n"
         "        *wall_ms = std::chrono::duration<double,std::milli>(\n"
         "            std::chrono::steady_clock::now()-w0).count();\n"
         "    }\n"
         "    if (eventsUsable &&\n"
         "        hipEventElapsedTime(&ev,evStart,evStop)==hipSuccess)\n"
         "        *event_ms = (double)ev;\n"
+        # `wall_clock64` ticks at a constant, queryable rate, so this is a
+        # kernel-only span that depends on neither the host clock nor the event
+        # API. It spans ALL `iters` launches (the buffer is reduced across
+        # them), matching the other two numbers.
+        "    if (dSpan &&\n"
+        "        hipMemcpy(hSpan,dSpan,sizeof(hSpan),\n"
+        "            hipMemcpyDeviceToHost)==hipSuccess &&\n"
+        "        hipDeviceGetAttribute(&rate,hipDeviceAttributeWallClockRate,0)\n"
+        "            ==hipSuccess &&\n"
+        "        rate>0 && hSpan[1]>hSpan[0] && hSpan[0]!=~0ull)\n"
+        "        *device_ms = (double)(hSpan[1]-hSpan[0]) / (double)rate;\n"
         "    rc=1;\n"
         "cleanup:\n"
         "    if (evStart) hipEventDestroy(evStart);\n"
         "    if (evStop) hipEventDestroy(evStop);\n"
+        "    if (dSpan) hipFree(dSpan);\n"
+        "    if (stream) hipStreamDestroy(stream);\n"
         "    if (dA) hipFree(dA);\n"
         "    if (dB) hipFree(dB);\n"
         "    if (dO) hipFree(dO);\n"
@@ -319,7 +369,7 @@ def _load_bench_entry(artifact: str):
         return None
     fn.restype = ctypes.c_int
     fn.argtypes = ([ctypes.c_void_p] * 5 + [ctypes.c_int] * 5
-                   + [ctypes.POINTER(ctypes.c_double)] * 2)
+                   + [ctypes.POINTER(ctypes.c_double)] * 3)
     return fn
 
 
@@ -870,15 +920,17 @@ class RocmGenericHipCandidate(Candidate):
             out = np.zeros((M, N), np.float32)
             wall = ctypes.c_double()
             event = ctypes.c_double()
+            device = ctypes.c_double()
             rc = fn(_ptr(Af), _ptr(Bf), _ptr(bias_arr), _ptr(res_arr), _ptr(out),
                     M, N, K, int(reps), int(warmup),
-                    ctypes.byref(wall), ctypes.byref(event))
+                    ctypes.byref(wall), ctypes.byref(event),
+                    ctypes.byref(device))
             if rc != 1 or not wall.value > 0.0:
                 return None
-            # One validation rule for every ROCm timing path.
-            accepted = rt._accept_device_event_ms(
-                event.value if event.value >= 0.0 else None, wall.value)
-            total = accepted if accepted is not None else wall.value
+            total = rt._select_rocm_latency_ms(
+                wall_ms=wall.value,
+                event_ms=event.value if event.value >= 0.0 else None,
+                device_ms=device.value if device.value >= 0.0 else None)
             return float(total) / float(reps)
         except Exception:
             return None

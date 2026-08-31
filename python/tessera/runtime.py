@@ -7365,6 +7365,35 @@ def _accept_device_event_ms(event_ms: float | None,
     return event_ms
 
 
+def _select_rocm_latency_ms(*, wall_ms: float, event_ms: float | None,
+                            device_ms: float | None) -> float:
+    """Pick the most trustworthy of up to three clocks for one timed loop.
+
+    Preference order, and the reason for it:
+
+    1. **`wall_clock64` (in-kernel).** A device-side counter at a constant,
+       queryable rate (`hipDeviceAttributeWallClockRate`; 100 MHz / 10 ns ticks
+       on gfx1151). It is the only one of the three that is both kernel-only
+       *and* independent of the host event API -- which matters precisely
+       because that API has been measured on this fleet returning success while
+       writing garbage. Unlike `clock()` its rate does not move with DVFS.
+    2. **HIP events**, if they agree with the host wall clock.
+    3. **The host wall clock**, which includes launch overhead and can
+       therefore only make a kernel look slower. A benchmark must not be able
+       to flatter itself.
+
+    The device clock is still cross-checked against the host wall clock, from
+    *above* only: it measures a strict subset of the wall span (kernel
+    execution inside launch-to-completion), so exceeding it means the reading
+    is wrong, while being far below it is the expected result rather than a
+    fault.
+    """
+    if device_ms is not None and device_ms > 0.0 and device_ms <= 2.0 * wall_ms:
+        return device_ms
+    accepted = _accept_device_event_ms(event_ms, wall_ms)
+    return accepted if accepted is not None else wall_ms
+
+
 def _hip_resident_launch_latency(hip: Any, launch: Any, *, iters: int,
                                  warmup: int, what: str) -> tuple[float, str]:
     """Per-launch ms for an already-resident kernel, plus the clock used.
@@ -7413,10 +7442,20 @@ def _hip_resident_launch_latency(hip: Any, launch: Any, *, iters: int,
         for _ in range(iters):
             if launch() != 0:
                 raise RuntimeError(f"{what}: timed launch failed")
+        # Sync on the stop EVENT, not the device, when one is available.
+        # `hipEventSynchronize` is mandatory either way -- HIP launches are
+        # async, so without it the wall clock below would time the enqueue and
+        # not the execution, which is a catastrophically small number that then
+        # drags the acceptance band down with it. `hipDeviceSynchronize` also
+        # works but halts the whole device, so it is kept strictly as the
+        # fallback for a host whose event API is unusable, where there is no
+        # event to wait on and something still has to guarantee completion
+        # before the wall clock is read.
         if events_ready:
             events_ready = (hip.hipEventRecord(stop, None) == 0
                             and hip.hipEventSynchronize(stop) == 0)
-        _sync()
+        if not events_ready:
+            _sync()
         wall_ms = (time.perf_counter() - wall0) * 1e3
         if not (wall_ms > 0.0 and wall_ms == wall_ms):   # finite and positive
             raise RuntimeError(f"{what}: wall measurement was not finite")

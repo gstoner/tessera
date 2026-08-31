@@ -421,10 +421,24 @@ def test_fused_hip_bench_entry_checks_its_transfers_too():
     bench = _fused_hip_entries()["tessera_rocm_fused_bench"]
     calls = [stmt for stmt in bench.split(";")
              if "hipMalloc(" in stmt or "hipMemcpy(" in stmt]
-    assert len(calls) == 9, calls        # same as above minus the D2H
-    for call in calls:
+
+    # Operand transfers are REQUIRED: an ignored failed H2D would time a kernel
+    # reading uninitialised device memory and report a latency for it.
+    required = [c for c in calls if "dSpan" not in c]
+    assert len(required) == 9, required   # 5 allocs + 4 H2D, no result D2H
+    for call in required:
         assert "!=hipSuccess) goto cleanup" in call, call
-    assert "hipMemcpyDeviceToHost" not in bench, (
+
+    # The device-clock buffer is an OPTIONAL refinement and degrades instead:
+    # losing it costs one of three clocks, not the measurement. Same stance as
+    # an unusable event API.
+    optional = [c for c in calls if "dSpan" in c]
+    assert optional, "the device-clock buffer should be allocated here"
+    for call in optional:
+        assert "goto cleanup" not in call, (
+            f"an optional clock must not abort the measurement: {call}")
+
+    assert "hipMemcpy(hout" not in bench, (
         "the timed entry must not copy results back; that is the host cost it "
         "exists to exclude")
 

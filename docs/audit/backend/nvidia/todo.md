@@ -4931,3 +4931,84 @@ tracks, and the first found by mutating a device kernel. The cheapest general
 form of the check needs no mutation at all: compare a test's tolerance against
 the *magnitude of the quantity it asserts on*: an atol above full scale is a
 vacuous assertion on its face.
+
+---
+
+## Cross-backend sync `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Owning item:** the NVIDIA half of the three-clock timing discipline
+(`AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`'s recorded follow-up) ·
+**synchronization key:** `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Shared contract changed — what makes a device latency believable.** Every
+backend's autotune verdict rests on one, and the corpus compares them across
+architectures, so the rule for accepting a device clock is shared even though
+each host's clocks are not.
+
+**The finding: the drain and the cross-check are *ordered*, and adding the
+second without the first is worse than adding neither.** Measured on sm_120
+(RTX 5070) with 2500 2048³ GEMMs resident on a blocking stream, timing 40
+launches of a 1024³ GEMM:
+
+| start event recorded | wall ms/rep | event ms/rep | event/wall |
+|---|---|---|---|
+| without a preceding drain | 63.3338 | 0.3227 | **0.005** |
+| after a drain | 0.3263 | 0.3255 | **0.998** |
+
+The event is correct in both rows. Undrained, the start event is queued behind
+the contending work, so the *wall* spans that drain and the event does not —
+the two clocks bracket different regions and comparing them is meaningless.
+Apply the two-sided band to the undrained row and it rejects the correct
+0.3227 ms event (its lower bound is 31.7 ms) and falls back to the 63.33 ms
+wall: a **196× overstatement**. In review, "adds a wall cross-check" reads as
+strictly safer; here it would have been strictly worse.
+
+**Outcome for this backend: `parity validated` — defect owned and fixed here,
+on device.** `_nvidia_mma_gemm_device_latency` recorded two events around its
+launches and returned the elapsed value with **no validation of any kind**: no
+wall clock to compare against, and no drain that would have made a comparison
+mean anything. It now goes through `_nvidia_timed_launch_ms`, which drains,
+takes a wall witness, and band-checks. Every sm_120 shape reports
+`device_event`, as expected.
+
+**Two assumptions this plan carried by analogy did not survive measurement.**
+
+* *"Whether sm_120's event clock is trustworthy is an open question."* It is
+  trustworthy: `event/wall` measured **0.996–0.998** idle and contended. HIP's
+  lying-clock rationale does not apply, so `_accept_nvidia_event_ms` is a
+  separate function from ROCm's `_accept_device_event_ms` rather than a shared
+  one. The band is identical; merging them would force one host's rationale
+  onto the other, and the next person to widen one would silently widen both.
+* *"Never time on the default stream"* does not transfer as stated. Legacy
+  stream 0 **does** serialise against a blocking stream here — the wall
+  inflated **161×** and the contending stream had drained by the end of the
+  region, both signatures of it — but the CUDA **event was unmoved (1.01×)**,
+  because the event pair brackets only its own stream's span. Moving the timed
+  launches to a dedicated `CU_STREAM_NON_BLOCKING` stream measured **8.65×
+  slower** (2.7667 vs 0.3199 ms): a truthful measurement of a kernel sharing
+  the GPU, and the wrong number for an autotune verdict. For isolated latency
+  the serialisation is a *feature*. A dedicated stream is required for
+  concurrency benchmarks — which these timers are not.
+
+**Correction to `NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30`: "the
+compiled kernel wins at every shape" is wrong at the smallest shape.** The
+delegate half of that comparison came from the undrained timer, which
+over-reads most where the kernel is shortest — measured **−25.4%** at 256³
+against **+0.5…+2.6%** at 512³/1024³/2048³. Re-raced with the corrected timer,
+12 interleaved samples per lane at 200 reps:
+
+| shape | delegate | emitted PTX | verdict |
+|---|---|---|---|
+| 256³ | 0.01300 median (sd 14.5%) | 0.01057 median (sd 39.1%) | **not separated** — 18.7% apart against a 39.1% spread |
+| 384³ | 0.02078 (sd 7.8%) | 0.01365 (sd 5.5%) | emitted, 1.52× |
+| 512³ | 0.04402 (sd 2.2%) | 0.02695 (sd 0.6%) | emitted, 1.63× |
+| 1024³ | 0.32102 | 0.19366 | emitted, 1.66× |
+| 2048³ | 2.45369 | 1.47545 | emitted, 1.66× |
+
+So the standing claim holds from 384³ up and **256³ is a tie**: that shape sits
+at the launch-overhead floor, where a lane's own run-to-run spread exceeds the
+gap between lanes. The earlier 1.63× there was an undrained delegate number
+plus a three-sample read. The arbiter should not record a matmul winner at 256³
+without a separation check — a median difference smaller than the spread is not
+a verdict, and this is the second time a matmul ranking has been wrong at a
+shape nobody re-measured.

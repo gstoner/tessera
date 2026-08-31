@@ -2962,3 +2962,52 @@ other wrong, which is why the fix landed against the shared formula in one PR
 and was re-measured on both lanes rather than inferred from one. Both lanes
 happen to live on the same host; they were still rebuilt and run separately,
 because sharing a box is not sharing evidence.
+
+---
+
+## Cross-backend sync `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Owning item:** the NVIDIA half of the three-clock timing discipline
+(`AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`'s recorded follow-up) ·
+**synchronization key:** `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Shared contract changed — what makes a device latency believable.** Every
+backend's autotune verdict rests on one, and the corpus compares them across
+architectures, so the rule for accepting a device clock is shared even though
+each host's clocks are not.
+
+**The finding: the drain and the cross-check are *ordered*, and adding the
+second without the first is worse than adding neither.** Measured on sm_120
+(RTX 5070) with 2500 2048³ GEMMs resident on a blocking stream, timing 40
+launches of a 1024³ GEMM:
+
+| start event recorded | wall ms/rep | event ms/rep | event/wall |
+|---|---|---|---|
+| without a preceding drain | 63.3338 | 0.3227 | **0.005** |
+| after a drain | 0.3263 | 0.3255 | **0.998** |
+
+The event is correct in both rows. Undrained, the start event is queued behind
+the contending work, so the *wall* spans that drain and the event does not —
+the two clocks bracket different regions and comparing them is meaningless.
+Apply the two-sided band to the undrained row and it rejects the correct
+0.3227 ms event (its lower bound is 31.7 ms) and falls back to the 63.33 ms
+wall: a **196× overstatement**. In review, "adds a wall cross-check" reads as
+strictly safer; here it would have been strictly worse.
+
+**Outcome for this backend: `not applicable` — no device clock exists to be
+cross-checked.** The x86 lane times on the host, where the wall clock is not a
+*witness* for a separate device counter but the measurement itself. There is no
+event API, no asynchronous launch queue, and therefore neither of the two
+failure modes this key is about: nothing can be queued behind a start marker,
+and there is no second clock that could disagree.
+
+**The one thing that does carry over is the shape of the mistake, not its
+mechanism.** This key exists because a rule was ported between architectures by
+analogy and its precondition was left behind — the band travelled, the drain
+did not. x86 is the backend most exposed to that pattern, because it has the
+fewest hardware-specific constraints of its own and so is the likeliest place
+for a GPU-shaped rule to be adopted wholesale. Before importing any timing
+discipline from the NVIDIA or ROCm plans, check which of its steps exist to
+defend against a hazard this lane actually has.
+
+**No AVX-512 evidence is claimed** — no x86 code changed.

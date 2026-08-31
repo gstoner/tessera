@@ -5437,3 +5437,52 @@ the analytic VJP. Finite differences are the right reference precisely because
 they share no code with either side; the analytic VJP already had such a check,
 but nothing pinned the compiled path — which is why a wrong bound derivative
 could only be caught by noticing that two of six gradients were off.
+
+---
+
+## Cross-backend sync `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Owning item:** the NVIDIA half of the three-clock timing discipline
+(`AUTOTUNE-RACED-FIELD-SYNC-2026-08-30`'s recorded follow-up) ·
+**synchronization key:** `NVIDIA-TIMER-DRAIN-2026-08-31`
+
+**Shared contract changed — what makes a device latency believable.** Every
+backend's autotune verdict rests on one, and the corpus compares them across
+architectures, so the rule for accepting a device clock is shared even though
+each host's clocks are not.
+
+**The finding: the drain and the cross-check are *ordered*, and adding the
+second without the first is worse than adding neither.** Measured on sm_120
+(RTX 5070) with 2500 2048³ GEMMs resident on a blocking stream, timing 40
+launches of a 1024³ GEMM:
+
+| start event recorded | wall ms/rep | event ms/rep | event/wall |
+|---|---|---|---|
+| without a preceding drain | 63.3338 | 0.3227 | **0.005** |
+| after a drain | 0.3263 | 0.3255 | **0.998** |
+
+The event is correct in both rows. Undrained, the start event is queued behind
+the contending work, so the *wall* spans that drain and the event does not —
+the two clocks bracket different regions and comparing them is meaningless.
+Apply the two-sided band to the undrained row and it rejects the correct
+0.3227 ms event (its lower bound is 31.7 ms) and falls back to the 63.33 ms
+wall: a **196× overstatement**. In review, "adds a wall cross-check" reads as
+strictly safer; here it would have been strictly worse.
+
+**Outcome for this backend: `parity validated` — no ROCm change; this backend
+already had both halves, and is where the discipline came from.**
+`_hip_resident_launch_latency` calls `_sync()` between the warmup loop and
+`hipEventRecord(start, …)`, then takes the wall clock and band-checks the event
+through `_accept_device_event_ms`. That drain is precisely the step NVIDIA was
+missing, so what happened here was a **partial port**: the band travelled to the
+NVIDIA plan as a recorded follow-up and the precondition it depends on did not.
+
+**Worth keeping in view when this is next touched.** The ordering above means
+the `_sync()` here is not incidental hygiene that a future refactor may move or
+drop for a cheaper stream sync — it is what makes this backend's wall witness
+valid. It is also `hipDeviceSynchronize`, which the fleet's own timing rules
+otherwise keep as a fallback; here it is load-bearing and correct, because a
+device-wide drain is exactly the semantics wanted before a timed region.
+
+**No gfx1151 evidence is claimed or needed:** no ROCm code changed, and the
+sm_120 measurements above transfer nothing to this backend.

@@ -194,33 +194,78 @@ def test_device_latency_is_not_the_host_wall_time():
         f"{wall_ms:.3f} ms; the timer is probably including the host path")
 
 
-def test_the_delegate_is_selected_and_is_measurably_the_fastest():
-    """Tier priority picks the delegate. This asserts that choice is also the
-    right one *on device*, which is the only basis Decision #28 accepts.
+def _device_timings(region, A, B, reps=25, warmup=10):
+    out = {}
+    for c in _candidates():
+        if not (c.available() and c.applies_to(region)):
+            continue
+        latency = c.measure_device_latency(region, A, B, reps=reps, warmup=warmup)
+        if latency is not None:
+            out[c.name] = latency
+    return out
 
-    If a compiled Tier-2 lane ever measures faster here, this test failing is
-    the correct outcome: it is the signal to let measurement override tier
-    priority for this shape, not a reason to loosen the assertion.
-    """
+
+def test_tier_priority_selects_the_delegate_regardless_of_shape():
+    """The arbiter's default is tier priority, so the Tier-3 delegate is
+    selected at every shape. Pinned here as the *baseline* for the next test,
+    which is where it stops being the right answer."""
     from tessera.compiler.emit.candidate import OP_MATMUL, Tier, arbitrate
     from tessera.compiler.fusion_core import MatmulRegion
 
     region = MatmulRegion(dtype="float16")
-    A, B = _operands(512, 512, 512, "float16")
+    for M in (512, 2048):
+        winner = arbitrate(region, OP_MATMUL, "nvidia")
+        assert winner is not None and winner.name == SHIPPED, f"at {M}^3"
+        assert int(winner.tier) == int(Tier.HAND_TUNED)
 
-    winner = arbitrate(region, OP_MATMUL, "nvidia")
-    assert winner is not None and winner.name == SHIPPED
-    assert int(winner.tier) == int(Tier.HAND_TUNED)
 
-    timings = {}
-    for c in _candidates():
-        if not (c.available() and c.applies_to(region)):
-            continue
-        latency = c.measure_device_latency(region, A, B, reps=20, warmup=5)
-        if latency is not None:
-            timings[c.name] = latency
-    assert SHIPPED in timings
-    fastest = min(timings, key=timings.__getitem__)
-    assert fastest == SHIPPED, (
-        f"tier priority selected {SHIPPED} but {fastest} measured faster on "
-        f"device: {timings}")
+def test_the_delegate_wins_on_device_only_at_small_shapes():
+    """The measurement the device timer exists to produce -- and it does not
+    say what tier priority assumes.
+
+    Measured on this box, f16, spreads of 0.000-0.008 ms across repeats:
+
+        shape    shipped(T3)   tile_shared(T2)   winner
+        512^3      0.043 ms       0.059 ms       delegate, by 37%
+        1024^3     0.320 ms       0.312 ms       compiled, by 2.3%
+        2048^3     2.448 ms       2.051 ms       compiled, by 16.2%
+
+    with max|err| identical between the two lanes at every shape. So at 1024^3
+    and above a compiled kernel measures **faster and in budget**, which is
+    exactly Decision #28's condition for displacing a hand-tuned candidate --
+    and the arbiter still selects the delegate, because tier priority is the
+    default and the measured loop is not wired into this path.
+
+    This test asserts the crossover rather than "the delegate is fastest". The
+    earlier version checked only 512^3, where the delegate does win, and so
+    would have reported a green result for a default that is wrong at scale.
+    """
+    from tessera.compiler.fusion_core import MatmulRegion
+
+    region = MatmulRegion(dtype="float16")
+
+    small = _device_timings(region, *_operands(512, 512, 512, "float16"))
+    assert min(small, key=small.__getitem__) == SHIPPED, (
+        f"the delegate no longer wins at 512^3: {small}")
+
+    large = _device_timings(region, *_operands(2048, 2048, 2048, "float16"))
+    fastest = min(large, key=large.__getitem__)
+    assert fastest != SHIPPED, (
+        "the delegate now wins at 2048^3 too, which would remove the "
+        f"motivation for shape-bucketed measured selection: {large}")
+    assert large[fastest] < large[SHIPPED], large
+
+    # In budget: the compiled winner must be no less accurate, or "faster"
+    # is not a displacement argument at all.
+    winner_candidate = next(c for c in _candidates() if c.name == fastest)
+    A, B = _operands(2048, 2048, 2048, "float16")
+    reference = np.asarray(region.reference(A, B), np.float64)
+
+    def max_error(candidate):
+        out, tag = candidate.run(region, A, B)
+        assert tag not in ("reference",), f"{candidate.name} declined to {tag!r}"
+        return float(np.max(np.abs(np.asarray(out, np.float64) - reference)))
+
+    assert max_error(winner_candidate) <= max_error(_shipped()), (
+        "the faster compiled kernel is less accurate than the delegate, so it "
+        "does not satisfy Decision #28's in-budget half")

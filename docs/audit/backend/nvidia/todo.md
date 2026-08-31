@@ -183,6 +183,58 @@ that box probes `avx512=False` and its x86 lanes skip honestly. Princess-Luna
 `hardware_amx` must never be used to mean "x86 hardware" — see the standing
 section in `docs/audit/backend/x86/todo.md`.
 
+## `NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30` — measured, not argued
+
+**The first thing the delegate's device timer produced, and it contradicts the
+arbiter's default.** Decision #28 displaces a hand-tuned kernel when a compiled
+one measures **faster and in accuracy budget**. On sm_120 (RTX 5070), f16,
+square, device-resident CUDA-event timing, spreads of 0.000–0.008 ms across
+repeats:
+
+| shape | `nvidia_mma_gemm_shipped` (T3) | `nvidia_tile_matmul_shared` (T2) | faster | max\|err\| |
+|---|---|---|---|---|
+| 512³ | **0.043 ms** | 0.059 ms | delegate, by 37% | both 2.48e-05 |
+| 1024³ | 0.320 ms | **0.312 ms** | compiled, by 2.3% | both 6.10e-05 |
+| 2048³ | 2.448 ms | **2.051 ms** | compiled, by 16.2% | both 1.54e-04 |
+
+The error columns are **equal at every shape**, so the in-budget half is
+satisfied outright. The displacement condition therefore holds at 1024³ and
+above — and `arbitrate()` still returns the delegate, because tier priority is
+the default and D2's measured loop is not wired into this path.
+
+Two things follow, and neither was visible before:
+
+* **The compiled Tessera kernel beats the hand-tuned one at scale.** That is a
+  result about the compiler, not about the arbiter.
+* **The crossover is shape-dependent**, which is the concrete argument for
+  shape-bucketed measured selection rather than a single global winner. A
+  flat "measurement beats tier" switch would regress 512³ by 37%.
+
+**Do not read this as "delete the delegate."** It wins by 37% at 512³, and
+Decision #28's lead-safety exists precisely so a crown-jewel lane is displaced
+per shape by evidence rather than wholesale by policy.
+
+**Why it was invisible until now.** End-to-end wall time ranks the two the
+*other* way — 9.4 ms vs 33.1 ms at 2048³ — because it is host-dominated: the
+Tile lane spends 2.99 ms on device inside 34.0 ms of wall time, and the two
+lanes do not share a host path, so e2e compares numpy conversions. The Tier-3
+lane had no device timer at all, so the honest comparison could not be made.
+Pinned by `tests/device/nvidia/test_shipped_gemm_delegate.py`.
+
+**Open follow-ups.**
+1. Wire shape-bucketed measured selection into the `OP_MATMUL` NVIDIA path so
+   the 1024³+ crossover is acted on. The `measure` hook and the autotune
+   corpus already exist; nothing calls them for this bucket.
+2. `nvidia_mma_gemm_emitted` still has no device timer. The NVIDIA backend
+   carries **two block-index conventions**: `ptx_emit` and the shipped AOT
+   kernel map x→M, y→N, while `NVIDIALowering.cpp` and the launch bridge's
+   `benchmarkTileGemm16` map x→N, y→M. Driving the emitted kernel through the
+   harness returns rc=5, and registering its geometry would launch a
+   transposed grid (at 512×512: rows to 1024, columns only to 256 — half the
+   output unwritten, with a plausible-looking latency). Unify the convention,
+   or give the harness an explicit axis-order field. A unit test pins the
+   current mapping so "fixing" one side fails loudly.
+
 ## `SM120-BUILD-CONFIG-RESOLVED-2026-08-30` — there was no trade; use CUDA=ON
 
 **Superseded the "fleet-config decision" framing below: configuring the NVIDIA

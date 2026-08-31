@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
 import numpy as np
 
 from . import _trace_hook
-from .graph_ir import IROp
+from .graph_ir import IROp, apply_presence_flags
 from .op_catalog import graph_name_for
 
 if TYPE_CHECKING:
@@ -206,15 +206,29 @@ class TraceBuilder:
             parameter_order = tuple(kwargs)
         ordered_keys = [key for key in parameter_order if key in kwargs]
         ordered_keys.extend(key for key in kwargs if key not in ordered_keys)
+        positional_operand_count = len(tracer_args)
+        keyword_operand_names: List[str] = []
         for key in ordered_keys:
             item = kwargs[key]
             if isinstance(item, Tracer):
                 tracer_args.append(item)
                 ir_kwargs.pop(key, None)
+                keyword_operand_names.append(key)
             elif (isinstance(item, (list, tuple)) and item
                   and all(isinstance(value, Tracer) for value in item)):
                 tracer_args.extend(item)
                 ir_kwargs.pop(key, None)
+                keyword_operand_names.append(key)
+        # Presence of each optional operand, for ops whose operand list cannot
+        # be decoded from position alone (`graph_ir._PRESENCE_FLAGGED_OPERANDS`).
+        #
+        # Emitted here as well as in the AST frontend because the two are held
+        # to structural parity: a fact recorded by one and not the other is a
+        # frontend divergence, and the differential certificate rejects it --
+        # which is exactly how this omission was caught.
+        apply_presence_flags(
+            graph_name, ir_kwargs, positional_operand_count,
+            keyword_operand_names)
         # F6 concrete tracing: when every input carries a concrete value, run the
         # real numpy op to get the result's shape/dtype (works for ANY op, no
         # per-op shape rule). Falls back to the shape-rule path for value-less

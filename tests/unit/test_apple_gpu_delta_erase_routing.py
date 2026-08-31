@@ -48,6 +48,16 @@ def _delta_true(q, k, v, b, d):
     return ts.ops.gated_deltanet(q, k, v, beta=b, decay=d, erase=True)
 
 
+@ts.jit(target="apple_gpu")
+def _delta_all_optionals(q, k, v, g, b, d):
+    return ts.ops.gated_deltanet(q, k, v, gate=g, beta=b, decay=d, erase=True)
+
+
+@ts.jit(target="apple_gpu")
+def _delta_decay_only(q, k, v, d):
+    return ts.ops.gated_deltanet(q, k, v, decay=d, erase=True)
+
+
 def test_dispatcher_erase_true_is_genuine_rule():
     Q, K, V = _qkv(2)
     beta, decay = _bd(3)
@@ -151,3 +161,135 @@ def test_recurrent_envelope_dv32_is_correct():
         {"beta": beta, "decay": decay, "causal": True, "erase": True}, np)
     ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
     np.testing.assert_allclose(np.asarray(out), ref, rtol=1e-4, atol=1e-4)
+
+
+# ── the optional-operand ABI ────────────────────────────────────────────────
+#
+# `gate`/`beta`/`decay` are optional TENSOR operands, so the compiled path
+# carries them as trailing SSA values rather than attributes. Two facts have to
+# survive that, and neither did.
+#
+# ORDER. Until `tessera.gated_deltanet` was declared in
+# `graph_ir._KEYWORD_OPERANDS`, keyword operands were appended sorted by name,
+# so `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted them as
+# (beta, decay, gate) against an ABI of (gate, beta, decay) — every optional
+# bound to the wrong slot by a positional reader.
+#
+# PRESENCE. Order alone is not enough: given `[Q, K, V, %x]` the one optional
+# sits at index 3 whichever slot it fills, so the IR must also say which slots
+# are filled. That is what `has_gate`/`has_beta`/`has_decay` are for — the same
+# flags `_execute_rocm_compiled_deltanet` and the SM120 lane already read.
+#
+# These are host-free: they assert what the frontend emits, not what a GPU
+# computes.
+
+
+def _emitted_op(fn, *args):
+    fn(*args)
+    ops = ((fn.runtime_artifact().metadata or {}).get("ops")) or []
+    assert len(ops) == 1, f"expected one op, got {[o.get('op_name') for o in ops]}"
+    return ops[0]
+
+
+def _gate():
+    return np.random.default_rng(8).standard_normal((_B, _H, _S, _D)).astype(np.float32)
+
+
+def test_optional_operands_emit_in_abi_order_not_alphabetical():
+    """(gate, beta, decay) — not the (beta, decay, gate) that sorting gives."""
+    Q, K, V = _qkv(9)
+    beta, decay = _bd(10)
+    op = _emitted_op(_delta_all_optionals, Q, K, V, _gate(), beta, decay)
+    names = [str(n) for n in op.get("operands", [])]
+    assert names == ["q", "k", "v", "g", "b", "d"], (
+        f"optional operands are out of ABI order: {names}. Sorted-by-name "
+        "gives ['q','k','v','b','d','g'], which binds beta->gate, "
+        "decay->beta, gate->decay."
+    )
+
+
+def test_presence_flags_identify_which_optionals_are_bound():
+    """Position cannot carry this: one optional is at index 3 either way."""
+    Q, K, V = _qkv(9)
+    beta, decay = _bd(10)
+
+    both = _emitted_op(_delta_true, Q, K, V, beta, decay).get("kwargs") or {}
+    assert (both.get("has_gate"), both.get("has_beta"), both.get("has_decay")) \
+        == (False, True, True), both
+
+    only_decay = _emitted_op(_delta_decay_only, Q, K, V, decay).get("kwargs") or {}
+    assert (only_decay.get("has_gate"), only_decay.get("has_beta"),
+            only_decay.get("has_decay")) == (False, False, True), only_decay
+    assert len(_emitted_op(_delta_decay_only, Q, K, V, decay)
+               .get("operands", [])) == 4
+
+
+def test_dispatcher_refuses_to_guess_undecodable_operands():
+    """Trailing operands with no flags must raise, not silently drop.
+
+    This is the exact shape of the original defect: the dispatcher read the
+    optionals from kwargs only, found none, and computed the *unweighted* rule
+    while returning it as the requested one. Nothing failed — the extra
+    operands were dropped in silence.
+    """
+    Q, K, V = _qkv(9)
+    beta, decay = _bd(10)
+    with pytest.raises(ValueError, match="has_gate/has_beta/has_decay"):
+        R._apple_gpu_dispatch_delta_attn(
+            "tessera.gated_deltanet", [Q, K, V, beta, decay],
+            {"causal": True, "erase": True}, np)
+
+
+def test_dispatcher_rejects_flags_that_disagree_with_the_operands():
+    Q, K, V = _qkv(9)
+    beta, _ = _bd(10)
+    with pytest.raises(ValueError, match="flags declare"):
+        R._apple_gpu_dispatch_delta_attn(
+            "tessera.gated_deltanet", [Q, K, V, beta],
+            {"causal": True, "erase": True,
+             "has_beta": True, "has_decay": True}, np)
+
+
+def test_dispatcher_still_accepts_the_eager_kwargs_convention():
+    """The numpy path has no IR and legitimately passes optionals as kwargs."""
+    Q, K, V = _qkv(2)
+    beta, decay = _bd(3)
+    out = R._apple_gpu_dispatch_delta_attn(
+        "tessera.gated_deltanet", [Q, K, V],
+        {"beta": beta, "decay": decay, "causal": True, "erase": True}, np)
+    ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
+    np.testing.assert_allclose(np.asarray(out), ref, rtol=1e-4, atol=1e-4)
+
+
+@gpu
+def test_jit_path_threads_every_optional_end_to_end():
+    """All three optionals through @jit — the case the order bug broke."""
+    Q, K, V = _qkv(9)
+    beta, decay = _bd(10)
+    gate = _gate()
+    y = np.asarray(_delta_all_optionals(Q, K, V, gate, beta, decay))
+    ref = dr.gated_delta_rule_recurrent(
+        Q, K, V, beta=beta, decay=decay, gate=gate, erase=True)
+    np.testing.assert_allclose(y, ref, rtol=1e-4, atol=1e-4)
+
+
+@gpu
+def test_jit_path_with_one_optional_binds_the_right_slot():
+    """`decay` alone must bind to decay, not to another optional slot.
+
+    The control is the **beta** slot, not the gate slot. `gate` is
+    (B, H, S, D_v) while `beta` and `decay` are both (B, H, S), so misbinding
+    decay as gate raises a shape error and would be caught anywhere. Beta is
+    the slot that accepts it silently and returns a different recurrence —
+    the only confusion that can reach a user as wrong numbers.
+    """
+    Q, K, V = _qkv(9)
+    _, decay = _bd(10)
+    y = np.asarray(_delta_decay_only(Q, K, V, decay))
+    ref = dr.gated_delta_rule_recurrent(Q, K, V, decay=decay, erase=True)
+    np.testing.assert_allclose(y, ref, rtol=1e-4, atol=1e-4)
+    misbound = dr.gated_delta_rule_recurrent(Q, K, V, beta=decay, erase=True)
+    assert not np.allclose(y, misbound, rtol=1e-4, atol=1e-4), (
+        "decay bound into the beta slot is numerically indistinguishable for "
+        "these inputs, so this test cannot detect the defect it exists for"
+    )

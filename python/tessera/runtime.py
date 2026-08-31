@@ -40233,6 +40233,69 @@ def _apple_gpu_delta_true_rule(Q, K, V, beta, decay, gate, np: Any, out_dtype) -
     return O.astype(out_dtype)
 
 
+#: Optional tensor operands of the delta-rule family, in ABI order. Same tuple
+#: the compiled ROCm/SM120 lanes read, and the same order
+#: `graph_ir._KEYWORD_OPERANDS` pins at emission.
+_DELTA_OPTIONAL_OPERANDS = ("gate", "beta", "decay")
+
+
+def _delta_optional_operands(op_name: str, operands: list[Any], kwargs: dict
+                             ) -> tuple[Any, Any, Any]:
+    """``(gate, beta, decay)`` for a delta-rule call, from either convention.
+
+    Two callers deliver these differently and both are legitimate:
+
+    * the **eager/numpy** path passes ``operands=[Q, K, V]`` and the optionals
+      as kwargs, because there is no IR in play;
+    * the **compiled** path passes them as trailing SSA operands, because they
+      are runtime tensors and a tensor is a value edge, not an attribute.
+
+    The second was silently unhandled: this dispatcher read the optionals from
+    kwargs only, so a `@jit` call arrived with ``operands=[Q, K, V, beta,
+    decay]`` and ``kwargs={'erase': True}``, both optionals resolved to
+    ``None``, and the unweighted rule was computed and returned as if it were
+    the requested one. Nothing raised -- the extra operands were simply
+    dropped.
+
+    Presence comes from the ``has_gate``/``has_beta``/``has_decay`` flags the
+    frontend now emits, which is the same contract
+    `_execute_rocm_compiled_deltanet` documents and reads. Position alone
+    cannot carry it: with ``[Q, K, V, %x]`` the lone optional sits at index 3
+    whichever of the three slots it fills.
+
+    Fails closed on trailing operands with no flags to decode them, rather than
+    guessing. Guessing is what produced the defect this replaces, and a wrong
+    binding here returns confident wrong numbers instead of an error.
+    """
+    tail = list(operands[3:])
+    flags = [bool(kwargs.get(f"has_{name}", False))
+             for name in _DELTA_OPTIONAL_OPERANDS]
+    if not any(flags):
+        if tail:
+            raise ValueError(
+                f"{op_name}: {len(tail)} trailing operand(s) with no "
+                "has_gate/has_beta/has_decay flags to say which of "
+                f"{_DELTA_OPTIONAL_OPERANDS} they bind. Refusing to guess: the "
+                "optionals are order-sensitive and a wrong binding computes a "
+                "different recurrence without failing."
+            )
+        return (kwargs.get("gate"), kwargs.get("beta"), kwargs.get("decay"))
+
+    expected = sum(flags)
+    if len(tail) != expected:
+        raise ValueError(
+            f"{op_name}: flags declare {expected} optional operand(s) "
+            f"{tuple(n for n, f in zip(_DELTA_OPTIONAL_OPERANDS, flags) if f)} "
+            f"but {len(tail)} were supplied"
+        )
+    values: list[Any] = []
+    cursor = 0
+    for present in flags:
+        values.append(tail[cursor] if present else None)
+        cursor += 1 if present else 0
+    return (values[0], values[1], values[2])
+
+
 def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any], kwargs: dict, np: Any) -> Any:
     """Delta-rule attention family (Sub-sprint D) — gated_deltanet,
     kimi_delta_attention, modified_delta_attention.  Default (``erase=False``)
@@ -40254,9 +40317,7 @@ def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any], kwargs: di
     B, H, S, _ = Q.shape
     out_dtype = np.result_type(Q, K, V)
     modified = short == "tessera.modified_delta_attention"
-    beta = kwargs.get("beta")
-    decay = kwargs.get("decay")
-    gate = kwargs.get("gate")
+    gate, beta, decay = _delta_optional_operands(op_name, operands, kwargs)
 
     # L3.1 — the genuine delta rule (with erase) routes to the L1.1 kernel.
     # The `modified` (Kimi bounded) variant has no fused kernel → numpy.

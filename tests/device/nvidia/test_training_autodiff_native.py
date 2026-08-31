@@ -973,8 +973,15 @@ def test_erase_modified_deltanet_serial_fill_backward_executes_on_sm120() -> Non
     for name, actual, reference in zip(
         ("dq", "dk", "dv", "dgate", "dbeta", "ddecay"), got, expected, strict=True
     ):
+        # Tight on purpose (DELTANET-BOUNDED-VJP-2026-08-31).  These inputs
+        # produce gradients whose full scale is 1e-3..3e-2, and `dgate` peaks at
+        # 1.1e-03 -- so the previous atol=5e-3 exceeded two of the six
+        # gradients' entire range and would have passed on all-zero output.  The
+        # measured device-vs-reference deviation is 4.7e-10 abs / 2.0e-07 rel
+        # (f32 round-off), so this leaves ~50x margin while still catching the
+        # bounded-correction defect that ROCm and x86 carried.
         np.testing.assert_allclose(
-            actual, reference, rtol=5e-3, atol=5e-3, err_msg=name
+            actual, reference, rtol=1e-5, atol=1e-8, err_msg=name
         )
 
 
@@ -1022,7 +1029,8 @@ def test_jit_erase_modified_deltanet_routes_serial_fill_on_sm120() -> None:
         dy, q, k, v, gate, beta, decay, erase=True
     )
     for actual, reference in zip(got, expected, strict=True):
-        np.testing.assert_allclose(actual, reference, rtol=5e-3, atol=5e-3)
+        # Same tolerance rationale as the direct-package test above.
+        np.testing.assert_allclose(actual, reference, rtol=1e-5, atol=1e-8)
     assert _nvidia_modified_erase_deltanet.last_backward_execution["compiler_path"] == (
         "nvidia_deltanet_bwd_compiled"
     )

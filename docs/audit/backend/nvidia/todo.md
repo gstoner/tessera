@@ -4868,3 +4868,66 @@ Selection is now the pure function `runtime._nvidia_gemm_selection`, so its cont
 **Absent `math_mode` deliberately keeps today's TF32 behaviour**, and that is the owed decision rather than an oversight. By #21a a semantic key should fail closed on absence; changing the default would alter every existing fp32 NVIDIA program from a host that cannot execute one, which is exactly the claim the fleet rule forbids. A test pins the current behaviour so the follow-up has a fixed baseline. **Owed on NR2 Pro (RTX 5070 Ti):** execute the tf32 and f16 lanes, confirm the selection reaches the intended kernel, and decide whether absent-`math_mode` should fail closed.
 
 Also on this backend, not device-proven here: the sm_120 typed route's `!tile.fragment` accumulator now follows `selected->accum` instead of a hardcoded `"f32"` written three times beside that unused field, and a declared accum the schedule cannot provide fails closed with `MATMUL_SCHEDULE_ACCUM_UNSUPPORTED`. Byte-identical across all 169 Graph→Schedule→Tile fixtures under a before/after control.
+
+---
+
+## Cross-backend sync `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Owning item:** the bounded ("modified"/Kimi) DeltaNet reverse rule ·
+**PR:** #660 · **synchronization key:** `DELTANET-BOUNDED-VJP-2026-08-31`
+
+**Shared contract changed — the bounded VJP's correction term.** The bounded
+variant scales the rank-1 update by `f = 1/(1 + n)` with `A_de = k_d·target_e`
+and `n = ‖A‖_F`, so the reverse rule for `U = b·A·f` is
+
+```
+∂L/∂A_ij = b·dU_ij·f  −  b·(Σ_de dU_de·A_de)·f²·A_ij / n
+```
+
+This is a *shared numerical contract*, not a per-backend schedule: three
+backends implement the same closed form independently against one reference
+(`get_vjp("modified_delta_attention")`). Two of them divided that correction by
+**`max(n, 1)`** instead of `n`, understating it by a factor of `n` whenever
+`n < 1` — which, with L2-normalised keys, is the ordinary case rather than an
+edge case. No clamp is needed or wanted: the numerator is `O(n²)` (both
+`update` and `projection` scale with `A`), so the quotient vanishes as `n → 0`,
+and the existing `norm > 0` select already covers `n == 0` exactly.
+
+**Why the failure was silent in four of six gradients.** At `erase=False` the
+bounded update reaches only `dk` and `dv`; `dq`, `dgate`, `dbeta`, `ddecay` do
+not consume `du` and stayed exact to ~1e-9. A wrong *bound* derivative
+therefore presents as two gradients off by 19–33% while the other four are
+perfect — which is what ruled out precision loss and pointed at a missing term.
+
+**Outcome for this backend: `parity validated` — the formula was already
+correct, but the exact-device evidence for it was not, and that was fixed
+here.** `_deltanet_backward_source` in `python/tessera/compiler/
+nvidia_training.py:1115` already divided by `(norm * denom * denom)`, so CUDA
+never carried the defect. Confirming that by inspection is not evidence, so it
+was measured on **Super-Bear / RTX 5070 (sm_120)**, and the measurement found a
+second, separate problem.
+
+**The NVIDIA device test could not have failed.**
+`test_erase_modified_deltanet_serial_fill_backward_executes_on_sm120` asserted
+at `rtol=5e-3, atol=5e-3` over gradients whose full scale is 1e-3..3e-2. Two of
+the six — `dgate` (max 1.07e-03) and `ddecay` (max 2.20e-03) — are *entirely
+below* that atol, so those assertions would pass for any kernel output
+including all zeros.
+
+Proven by mutation rather than argued: injecting this PR's exact defect
+(`fmaxf(norm, 1.0f)`) into the CUDA source left the suite **green**. A control
+mutation (a gross 2x on `dupdate`) failed immediately, which rules out a stale
+cubin and locates the fault in the assertion rather than the toolchain. Both
+tolerances are now `rtol=1e-5, atol=1e-8`, chosen from the measured
+device-vs-reference deviation of **4.7e-10 abs / 2.0e-07 rel** (f32 round-off,
+~50x margin) rather than picked by feel. Re-verified on sm_120: correct kernel
+**2 passed**; same injected defect now **fails on `dk` at 13.6% relative**, the
+same signature ROCm and x86 showed at 19–33%.
+
+**Standing lesson.** A sibling backend that is green on a shared numerical
+contract has not been assessed until its test is shown to be capable of going
+red. This is another instance of the hollow-green pattern the fleet ledger
+tracks, and the first found by mutating a device kernel. The cheapest general
+form of the check needs no mutation at all: compare a test's tolerance against
+the *magnitude of the quantity it asserts on*: an atol above full scale is a
+vacuous assertion on its face.

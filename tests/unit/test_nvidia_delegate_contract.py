@@ -146,6 +146,31 @@ def test_the_declared_callees_match_the_runtime_symbol_table():
         assert rt._NVIDIA_GEMM_SYMBOLS[dtype] == declared
 
 
+def test_the_two_nvidia_grid_conventions_are_recorded():
+    """The NVIDIA backend carries two block-index conventions, and the split is
+    load-bearing for anything that launches a kernel it did not emit.
+
+    `ptx_emit` and the shipped AOT kernel map x->M, y->N. The Tile lowering
+    (`NVIDIALowering.cpp`) and the launch bridge's benchmark harness map
+    x->N, y->M. The harness therefore cannot time a `ptx_emit` kernel: it
+    would launch a transposed grid and still report a plausible number.
+
+    Asserted so the divergence is discovered by a failing test if someone
+    "fixes" one side, rather than by a latency that looks fine and measures a
+    grid that leaves half the output unwritten.
+    """
+    from tessera.compiler import ptx_emit as pe
+
+    ptx = pe.emit_mma_sync_gemm_ptx(dtype="f16")
+    assert "%ctaid.x" in ptx and "%ctaid.y" in ptx
+    x_line = next(ln for ln in ptx.splitlines() if "%ctaid.x" in ln)
+    # x is scaled by the M tile (16), not the N tile (8).
+    assert ", 16;" in x_line, (
+        f"ptx_emit's x axis no longer maps to M: {x_line.strip()!r}; if this "
+        "changed deliberately, the emitted lane can now use the launch "
+        "bridge's benchmark harness and should get a device timer")
+
+
 def test_the_timing_path_binds_the_same_kernel_as_the_execution_path():
     """The device-latency helper calls `<symbol>_device`. If that mapping
     drifted, the measured latency would describe a kernel the arbiter never

@@ -7331,6 +7331,93 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
     return d
 
 
+#: Which clock produced the last ROCm resident-launch measurement:
+#: ``"device_event"`` or ``"host_wall"``. Read it before quoting a number as
+#: device-resident -- on this fleet's WSL2 host HIP events are unusable and the
+#: measurement silently becomes a wall clock around resident launches.
+_rocm_last_timer_source: str | None = None
+
+
+def rocm_last_timer_source() -> str | None:
+    """The clock behind the most recent ROCm resident-launch measurement."""
+    return _rocm_last_timer_source
+
+
+def _hip_resident_launch_latency(hip: Any, launch: Any, *, iters: int,
+                                 warmup: int, what: str) -> tuple[float, str]:
+    """Per-launch ms for an already-resident kernel, plus the clock used.
+
+    **HIP events cannot be trusted on this fleet, and they fail by lying.**
+    Measured 2026-08-04 on the WSL2 / ``/dev/dxg`` gfx1151 host: every HIP event
+    call returns ``hipSuccess`` while ``hipEventElapsedTime`` writes garbage --
+    0.0 ms in one harness, -1.28e8 ms in a direct probe. A timer that cannot
+    fail is not a measurement, so the wall clock is always taken and the event
+    value has to earn its use.
+
+    The band is **two-sided** (0.5x..2x wall), and the lower bound is the one
+    that matters. An earlier version of the C++ harness bounded only from above;
+    a broken API returning 0.001 ms for a 100 ms loop passes finite, positive
+    and upper-bound, and yields a wildly *inflated* TFLOP/s. An over-estimate
+    makes a kernel look slow and gets investigated; an under-estimate makes it
+    look fast and gets published. The Python attention-backward loop still
+    validates only ``sample > 0.0``, which catches this host's particular
+    garbage by luck rather than by rule.
+
+    Falling back to the wall clock is deliberately conservative: it includes
+    launch overhead, so it can only make a kernel look slower than it is. A
+    benchmark must not be able to flatter itself.
+    """
+    import time
+
+    if iters < 1 or warmup < 0:
+        raise ValueError(f"{what}: iters must be >= 1 and warmup >= 0")
+
+    def _sync() -> None:
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError(f"{what}: device synchronize failed")
+
+    for _ in range(warmup):
+        if launch() != 0:
+            raise RuntimeError(f"{what}: warmup launch failed")
+    _sync()
+
+    start = ctypes.c_void_p()
+    stop = ctypes.c_void_p()
+    events_ready = (hip.hipEventCreate(ctypes.byref(start)) == 0
+                    and hip.hipEventCreate(ctypes.byref(stop)) == 0
+                    and hip.hipEventRecord(start, None) == 0)
+    try:
+        wall0 = time.perf_counter()
+        for _ in range(iters):
+            if launch() != 0:
+                raise RuntimeError(f"{what}: timed launch failed")
+        if events_ready:
+            events_ready = (hip.hipEventRecord(stop, None) == 0
+                            and hip.hipEventSynchronize(stop) == 0)
+        _sync()
+        wall_ms = (time.perf_counter() - wall0) * 1e3
+        if not (wall_ms > 0.0 and wall_ms == wall_ms):   # finite and positive
+            raise RuntimeError(f"{what}: wall measurement was not finite")
+
+        event_ms = None
+        if events_ready:
+            elapsed = ctypes.c_float()
+            if hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop) == 0:
+                value = float(elapsed.value)
+                if (value == value and value > 0.0
+                        and 0.5 * wall_ms <= value <= 2.0 * wall_ms):
+                    event_ms = value
+    finally:
+        if start.value:
+            hip.hipEventDestroy(start)
+        if stop.value:
+            hip.hipEventDestroy(stop)
+
+    total = event_ms if event_ms is not None else wall_ms
+    return total / float(iters), ("device_event" if event_ms is not None
+                                  else "host_wall")
+
+
 def _rocm_wmma_fused_2d(
     a: Any,
     b: Any,
@@ -7339,6 +7426,8 @@ def _rocm_wmma_fused_2d(
     *,
     raster_order: str = "row_major",
     raster_group: int = 1,
+    time_iters: int | None = None,
+    time_warmup: int = 0,
 ) -> Any:
     """Run ONE 2-D WMMA GEMM with a **fused epilogue** — a per-column bias add
     and/or a pointwise activation (``relu``/``gelu``/``silu``) applied on the f32
@@ -7434,16 +7523,29 @@ def _rocm_wmma_fused_2d(
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
     gx = (n + 16 * nt - 1) // (16 * nt)
     gy = (m + 16 * mt - 1) // (16 * mt)
-    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
-    if rc != 0:
+
+    def _launch() -> int:
+        return hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+
+    try:
+        if time_iters is not None:
+            # Operands are already resident: the loop below times launches only,
+            # with no H2D/D2H and no numpy marshalling inside the measurement.
+            global _rocm_last_timer_source
+            latency, source = _hip_resident_launch_latency(
+                hip, _launch, iters=int(time_iters), warmup=int(time_warmup),
+                what="rocm WMMA fused")
+            _rocm_last_timer_source = source
+            return latency
+        rc = _launch()
+        if rc != 0:
+            raise RuntimeError(f"rocm WMMA fused: kernel launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
+        return d
+    finally:
         for dev in devs:
             hip.hipFree(dev)
-        raise RuntimeError(f"rocm WMMA fused: kernel launch failed rc={rc}")
-    hip.hipDeviceSynchronize()
-    hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
-    for dev in devs:
-        hip.hipFree(dev)
-    return d
 
 
 _rocm_wmma_fused_probe_ok: bool | None = None

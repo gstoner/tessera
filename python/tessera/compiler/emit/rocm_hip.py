@@ -789,6 +789,44 @@ class RocmWmmaGemmCandidate(Candidate):
         except Exception:
             return region.reference(A, B, bias), "reference"
 
+    def measure_device_latency(self, region: Any, *inputs: Any, reps: int = 100,
+                               warmup: int = 10) -> float | None:
+        """Per-launch ms for the FUSED kernel, operands resident.
+
+        Times the kernel this candidate actually runs. The shipped
+        ``tessera_rocm_wmma_gemm_f16_bench`` entries were not usable for this:
+        they benchmark a plain WMMA GEMM over their own synthetic data, while
+        this lane runs a bias/activation-fused kernel, so their number would
+        describe a kernel the arbiter never dispatches.
+
+        Without a timer this candidate was excluded from every ROCm
+        device-timed race and recorded as `unmeasured`, which now refuses the
+        verdict outright. On NVIDIA that same exclusion hid the fastest kernel
+        in the registry by 1.5-1.7x, so the gap was not cosmetic.
+
+        Returns ``None`` -- never a number -- when the region has no fusable
+        epilogue or a required bias is absent, because those are the cases
+        where ``run`` declines to the numpy reference. A latency there would
+        describe numpy and read as evidence that a kernel is fast when none ran.
+        """
+        import numpy as np
+        epi = _wmma_epilogue(region)
+        if epi is None or len(inputs) < 2:
+            return None
+        has_bias, activation = epi
+        bias = inputs[2] if len(inputs) > 2 else None
+        if has_bias and bias is None:
+            return None
+        try:
+            from tessera import runtime as rt
+            return float(rt._rocm_wmma_fused_2d(
+                np.ascontiguousarray(inputs[0], np.float16),
+                np.ascontiguousarray(inputs[1], np.float16),
+                (np.ascontiguousarray(bias, np.float32) if has_bias else None),
+                activation, time_iters=int(reps), time_warmup=int(warmup)))
+        except Exception:
+            return None
+
 
 class RocmFlashAttnCandidate(Candidate):
     """Tier-3: the shipped compiled FA-2 flash-attention lane (not generically

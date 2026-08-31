@@ -434,18 +434,27 @@ def _record_raced_the_live_field(
       device-timed row was missing exactly the candidates that had no
       `measure_device_latency` (matmul raced 2 of 4, attention 5 of 6,
       fused_region 6 of 10). Serving those verdicts would select a compiled
-      kernel over a hand-tuned one that was never in the race. End-to-end rows
-      are unaffected -- `measure_latency` just calls `run()`, so they did race
-      the full field, and the committed ones list it.
-    * **A skipped candidate is now runnable.** If the record names a candidate
-      it could not time and that candidate applies and is available here, the
-      race was smaller than the one this call would hold. Re-measure instead.
+      kernel over a hand-tuned one that was never in the race.
+    * **A live candidate is missing from the timed field.** Every candidate
+      racing *now* must appear in `rec.candidates` -- the set that was actually
+      timed.
+
+    The second test is a subset check rather than a scan of `unmeasured`, and
+    the difference is load-bearing (review finding on PR #655). Checking only
+    the declared skips treats a candidate absent from *both* maps as having
+    been raced, and there are two ordinary ways to be absent from both: the
+    candidate was registered after the measurement, or it was applicable then
+    but failed F4 verification, so `arbitrate` filtered it out before
+    `_measure` ever saw it. In both cases the recorded winner never beat it,
+    yet the verdict would still be served. Requiring `live` to be a subset of
+    the timed set covers the declared skips too, since a skipped candidate is
+    by construction not in `rec.candidates`.
 
     Returning False falls back to lead-safe tier priority, never to silence.
     """
-    if not rec.declares_its_field():
-        return timing != TIMING_DEVICE
-    return not any(name in live for name in (rec.unmeasured or {}))
+    if timing == TIMING_DEVICE and not rec.declares_its_field():
+        return False
+    return all(name in rec.candidates for name in live)
 
 
 def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
@@ -468,11 +477,20 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         raise ValueError(f"unknown autotune timing mode {timing!r}")
     key = (dev, target, op, bucket, dtype, timing)
 
+    live = {c.name: c for c in candidates_for(target, op)
+            if c.applies_to(region) and c.available()}
+
     rec = cache.get(key)
-    if rec is not None:
-        for c in candidates_for(target, op):
-            if c.name == rec.winner and c.applies_to(region) and c.available():
-                return c
+    if rec is not None and _record_raced_the_live_field(rec, live, timing):
+        # The exact-key hit is only usable if it beat the field racing now.
+        # Validating solely that the winner is still live -- what this did
+        # before -- accepted a legacy device row, or a partial one naming a
+        # candidate that has since become runnable, and so preserved through
+        # `measured_arbitrate`/`run_measured_arbitrated` exactly the biased
+        # selection `corpus_winner` refuses (review finding on PR #655).
+        winner_candidate = live.get(rec.winner)
+        if winner_candidate is not None:
+            return winner_candidate
         # cached winner is gone/unavailable — fall through and re-measure.
 
     latencies: dict[str, float] = {}

@@ -132,12 +132,18 @@ def test_device_timing_is_separate_and_can_choose_a_different_winner():
 
 
 def test_persisted_corpus_drives_normal_arbitrated_dispatch():
+    # A private target. A verdict is now only served when every live candidate
+    # appears in its timed field, and `_TGT` accumulates candidates from other
+    # tests -- which would (correctly) refuse this row for a field it never
+    # raced.
+    target = "d2d3_corpusdispatch"
     measured = _FakeCand("fake_corpus_measured", "measured_real", Tier.EMITTED)
     crown = _FakeCand("fake_corpus_crown", "crown_real", Tier.HAND_TUNED)
-    register_candidate(measured)
-    register_candidate(crown)
+    for c in (measured, crown):
+        c.target = target
+        register_candidate(c)
     cache = AT.MeasureCache()
-    key = ("fakedev", _TGT, OP_MATMUL, (4, 4, 4), "bfloat16")
+    key = ("fakedev", target, OP_MATMUL, (4, 4, 4), "bfloat16")
     cache.put(key, AT.MeasureRecord(
         winner=measured.name, latency_ms=0.5,
         candidates={measured.name: 0.5, crown.name: 1.0}))
@@ -147,13 +153,13 @@ def test_persisted_corpus_drives_normal_arbitrated_dispatch():
     # No online measurement call: ordinary dispatch consumes the persisted row,
     # overriding tier priority for this exact device/workload bucket.
     _, tag = run_arbitrated(
-        region, OP_MATMUL, _TGT, A, B, verify=False,
+        region, OP_MATMUL, target, A, B, verify=False,
         autotune_cache=cache, device="fakedev")
     assert tag == "measured_real"
 
     # The E3 escape hatch remains authoritative over corpus evidence.
     _, forced_tag = run_arbitrated(
-        region, OP_MATMUL, _TGT, A, B, verify=False, force=crown.name,
+        region, OP_MATMUL, target, A, B, verify=False, force=crown.name,
         autotune_cache=cache, device="fakedev")
     assert forced_tag == "crown_real"
 
@@ -319,13 +325,15 @@ def test_a_device_record_that_cannot_prove_its_field_is_refused():
     skipped -- and for device timing that generation is known to be incomplete.
     `None` (undeclared) and `{}` (declared complete) must not be conflated."""
     undeclared = AT.MeasureRecord(winner="tile", latency_ms=1.0,
-                                  candidates={"tile": 1.0})
+                                  candidates={"tile": 1.0, "shipped": 2.0})
     declared = AT.MeasureRecord(winner="tile", latency_ms=1.0,
-                                candidates={"tile": 1.0}, unmeasured={})
+                                candidates={"tile": 1.0, "shipped": 2.0},
+                                unmeasured={})
     live = {"tile": object(), "shipped": object()}
 
     assert not undeclared.declares_its_field()
     assert declared.declares_its_field()
+    # Same timed field in both; only the declaration differs.
     assert not AT._record_raced_the_live_field(undeclared, live, AT.TIMING_DEVICE)
     assert AT._record_raced_the_live_field(declared, live, AT.TIMING_DEVICE)
 
@@ -372,3 +380,90 @@ def test_the_unmeasured_field_round_trips_through_the_corpus():
     assert AT.MeasureRecord.from_json(undeclared.as_json()).unmeasured is None
     assert AT.MeasureRecord.from_json(declared.as_json()).unmeasured == {
         "b": "no timer"}
+
+
+# ── the two gaps the PR #655 review found ───────────────────────────────────
+
+
+def test_a_candidate_absent_from_both_maps_is_not_treated_as_raced():
+    """A live candidate in neither `candidates` nor `unmeasured` was NOT raced.
+
+    Checking only the declared skips misses this, and there are two ordinary
+    ways to land here: the candidate was registered after the measurement, or
+    it was applicable then but failed F4 verification, so `arbitrate` filtered
+    it out before `_measure` ever saw it. Either way the recorded winner never
+    beat it.
+    """
+    rec = AT.MeasureRecord(winner="tile", latency_ms=1.0,
+                           candidates={"tile": 1.0}, unmeasured={})
+    assert not AT._record_raced_the_live_field(
+        rec, {"tile": object(), "registered_later": object()},
+        AT.TIMING_DEVICE)
+    # ...and end-to-end is not exempt: a newer candidate invalidates it too.
+    assert not AT._record_raced_the_live_field(
+        rec, {"tile": object(), "registered_later": object()},
+        AT.TIMING_END_TO_END)
+    assert AT._record_raced_the_live_field(
+        rec, {"tile": object()}, AT.TIMING_DEVICE)
+
+
+def test_the_cache_hit_path_validates_the_field_too():
+    """`measured_arbitrate` must apply the same rule as `corpus_winner`.
+
+    Its exact-key hit used to be returned whenever the recorded winner was
+    still live, with no field check — so a legacy device row, or a partial one
+    naming a since-runnable candidate, was served through
+    `measured_arbitrate`/`run_measured_arbitrated` and preserved precisely the
+    biased selection this change refuses.
+    """
+    target = "d2d3_cachehitfield"
+    slow_but_recorded = _FakeCand("recorded_winner", "recorded", device_ms=9.0)
+    never_raced = _FakeCand("never_raced", "fresh", tier=Tier.HAND_TUNED,
+                            device_ms=1.0)
+    for c in (slow_but_recorded, never_raced):
+        c.target = target
+        C.register_candidate(c)
+
+    cache = AT.MeasureCache()
+    key = (AT._device_id(target), target, OP_MATMUL, (4, 4, 4), "bfloat16",
+           AT.TIMING_DEVICE)
+    # A verdict that never raced `never_raced`, yet names a live winner.
+    cache.put(key, AT.MeasureRecord(
+        winner="recorded_winner", latency_ms=9.0,
+        candidates={"recorded_winner": 9.0}, unmeasured={}))
+
+    winner = AT.measured_arbitrate(
+        _FakeRegion(), OP_MATMUL, target, *_mm(), dims=(4, 4, 4),
+        dtype="bfloat16", cache=cache, reps=1, warmup=0,
+        timing=AT.TIMING_DEVICE)
+    assert winner is not None and winner.name == "never_raced", (
+        "the stale verdict was served from the cache without re-racing the "
+        "candidate it had never measured")
+
+    refreshed = cache.get(key)
+    assert set(refreshed.candidates) == {"recorded_winner", "never_raced"}, (
+        f"the re-measurement must race the full field: {refreshed.candidates}")
+
+
+def test_a_legacy_device_cache_hit_is_re_measured():
+    """An undeclared device row cannot prove its field, so even an exact-key
+    hit must be re-measured rather than served."""
+    target = "d2d3_legacycachehit"
+    fast = _FakeCand("legacy_fast", "fast", device_ms=1.0)
+    fast.target = target
+    C.register_candidate(fast)
+
+    cache = AT.MeasureCache()
+    key = (AT._device_id(target), target, OP_MATMUL, (4, 4, 4), "bfloat16",
+           AT.TIMING_DEVICE)
+    cache.put(key, AT.MeasureRecord(winner="legacy_fast", latency_ms=99.0,
+                                    candidates={"legacy_fast": 99.0}))
+    assert cache.get(key).unmeasured is None
+
+    AT.measured_arbitrate(_FakeRegion(), OP_MATMUL, target, *_mm(),
+                          dims=(4, 4, 4), dtype="bfloat16", cache=cache,
+                          reps=1, warmup=0, timing=AT.TIMING_DEVICE)
+    refreshed = cache.get(key)
+    assert refreshed.declares_its_field(), (
+        "the legacy row should have been replaced by a re-measurement")
+    assert refreshed.latency_ms != 99.0

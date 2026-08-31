@@ -219,16 +219,21 @@ def test_tier_priority_selects_the_delegate_regardless_of_shape():
         assert int(winner.tier) == int(Tier.HAND_TUNED)
 
 
-#: The device the crossover below was measured on. `nvidia_mma_ptx_launch_available()`
-#: gates only on nvcc, the MMA runtime and the PTX bridge loading -- not on the
-#: part -- so this suite runs on any NVIDIA GPU that has them.
-_MEASURED_DEVICE = "sm_120"
+#: The exact GPU the crossover below was measured on.
+#:
+#: A compute-capability tag (`sm_120`) is NOT specific enough to gate a
+#: performance ranking, which was the first fix's mistake: cc 12.0 spans the
+#: whole consumer Blackwell line, so an RTX 5070 Ti, 5080 or 5090 all pass an
+#: `sm_120` check while differing in SM count, cache and bandwidth by more than
+#: the 16% margin this test asserts. The gate has to be the model.
+_MEASURED_DEVICE = "NVIDIA GeForce RTX 5070"
 
 
-def _device_tag():
-    from tessera import runtime as rt
+def _measured_host() -> bool:
+    """Whether this is the exact GPU the ranking below was measured on."""
+    from tests._support.nvidia import nvidia_device_model
 
-    return rt._nvidia_device_name()
+    return nvidia_device_model() == _MEASURED_DEVICE
 
 
 def test_a_compiled_candidate_can_be_compared_to_the_delegate_in_budget():
@@ -261,14 +266,15 @@ def test_a_compiled_candidate_can_be_compared_to_the_delegate_in_budget():
 
 
 @pytest.mark.skipif(
-    _device_tag() != _MEASURED_DEVICE,
-    reason=f"the crossover below was measured on {_MEASURED_DEVICE}; a ranking "
-           "is a property of the silicon and does not transfer between parts")
+    not _measured_host(),
+    reason=f"the crossover below was measured on a {_MEASURED_DEVICE}; a "
+           "ranking is a property of the specific part and does not transfer "
+           "— not even to another compute-capability 12.0 GPU")
 def test_the_delegate_wins_on_device_only_at_small_shapes():
     """The measurement the device timer exists to produce -- and it does not
     say what tier priority assumes.
 
-    Measured on sm_120 (RTX 5070), f16, spreads of 0.000-0.008 ms across
+    Measured on an RTX 5070 (sm_120), f16, spreads of 0.000-0.008 ms across
     repeats:
 
         shape    shipped(T3)   tile_shared(T2)   winner
@@ -282,14 +288,24 @@ def test_the_delegate_wins_on_device_only_at_small_shapes():
     and the arbiter still selects the delegate, because tier priority is the
     default and the measured loop is not wired into this path.
 
-    **Pinned to sm_120 on purpose.** This asserts a performance *ranking*, and
-    a ranking is silicon-specific: occupancy, L2 size and clock behaviour all
-    move the crossover, so sm_80/sm_90 or another sm_120 part could invert it
-    with both kernels perfectly correct. The suite's own gate
+    Only the 512^3 and 2048^3 rows are asserted. The 1024^3 crossover is 2.3%,
+    inside the range a driver or power-limit change can move, so it is recorded
+    as the shape where the inversion begins and not used as a gate.
+
+    **Pinned to the exact GPU model, not to `sm_120`.** This asserts a
+    performance *ranking*, and a ranking belongs to the specific part:
+    occupancy, L2 size, SM count and clock behaviour all move the crossover.
+    Compute capability is the wrong key -- cc 12.0 spans the whole consumer
+    Blackwell line, so a 5070 Ti, 5080 or 5090 would pass an `sm_120` check
+    while differing by more than the 16% margin asserted here. (The first
+    version of this gate made exactly that mistake.) The suite's own gate
     (`nvidia_mma_ptx_launch_available`) checks only that nvcc, the MMA runtime
     and the PTX bridge load, so without this skip the test would fail on a
-    healthy machine and read as a kernel regression. Its device-independent
-    half lives in the test above and still runs everywhere.
+    healthy machine and read as a kernel regression.
+
+    Its device-independent half lives in the test above and still runs on every
+    NVIDIA host: that the comparison is performable at all, and that whichever
+    lane is fastest there is no less accurate.
 
     The earlier version of this test checked only 512^3, where the delegate
     does win, and so would have reported green for a default that is wrong at

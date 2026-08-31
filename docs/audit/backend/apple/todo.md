@@ -8,6 +8,42 @@ last_updated: 2026-08-29
 
 # Apple compiler, exact-device, and performance plan
 
+## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
+
+PR #653 changes a **shared Graph IR ABI**: the delta-rule family
+(`gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention`) now
+declares its optional tensor operands in `graph_ir._KEYWORD_OPERANDS` as
+`(gate, beta, decay)` and emits `has_gate`/`has_beta`/`has_decay` presence
+flags from both frontends. All four backends consume this ABI, so all four are
+assessed here per AGENTS.md.
+
+**What was wrong.** Undeclared, the AST emitter appended keyword operands
+*sorted by name*, so `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted
+them as `(beta, decay, gate)`. Order alone would not have been enough either:
+with `[Q, K, V, %x]` the lone optional sits at index 3 whichever slot it fills.
+
+**Load-bearing fact for every backend: no producer had ever set these flags.**
+`has_gate`/`has_beta`/`has_decay` were read by four executors and written by
+none. The compiled ROCm, NVIDIA and x86 deltanet lanes all compute
+`need = 3 + has_gate + has_beta + has_decay` and raise when that disagrees with
+the operand count — so with the flags absent they accepted **only** the
+three-operand form and raised on any traced call carrying `beta`/`decay`. This
+PR is therefore what makes those lanes reachable with optionals at all. That is
+a behaviour change on three backends and each owes its own exact-device proof;
+the Apple result does not transfer to any of them.
+
+**Apple outcome: parity validated, on device (M1 Max).** Apple owned the
+reported defect: `_apple_gpu_dispatch_delta_attn` read the optionals from
+kwargs only, so a `@jit` call arrived with them as trailing operands, both
+resolved to `None`, and the **unweighted** rule was computed and returned as
+the requested one — silently, with the extra operands dropped. It now decodes
+from the flags and fails closed on trailing operands it cannot bind.
+
+JIT vs the `erase=True` reference: max|d| **1.955e+00 -> 2.571e-07**.
+`test_apple_gpu_delta_erase_routing.py` 16 passed on the M1 Max, including the
+`@hardware_apple_gpu` end-to-end cases with all three optionals and with a
+single optional bound to the correct slot.
+
 ## Cross-backend sync `DELEGATE-CONTRACT-SYNC-2026-08-30`
 
 PR #652 changed two **shared** runtime contracts, so all four backends are

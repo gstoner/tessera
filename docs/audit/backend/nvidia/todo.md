@@ -8,6 +8,51 @@ last_updated: 2026-08-29
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
+
+PR #653 changes a **shared Graph IR ABI**: the delta-rule family
+(`gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention`) now
+declares its optional tensor operands in `graph_ir._KEYWORD_OPERANDS` as
+`(gate, beta, decay)` and emits `has_gate`/`has_beta`/`has_decay` presence
+flags from both frontends. All four backends consume this ABI, so all four are
+assessed here per AGENTS.md.
+
+**What was wrong.** Undeclared, the AST emitter appended keyword operands
+*sorted by name*, so `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted
+them as `(beta, decay, gate)`. Order alone would not have been enough either:
+with `[Q, K, V, %x]` the lone optional sits at index 3 whichever slot it fills.
+
+**Load-bearing fact for every backend: no producer had ever set these flags.**
+`has_gate`/`has_beta`/`has_decay` were read by four executors and written by
+none. The compiled ROCm, NVIDIA and x86 deltanet lanes all compute
+`need = 3 + has_gate + has_beta + has_decay` and raise when that disagrees with
+the operand count — so with the flags absent they accepted **only** the
+three-operand form and raised on any traced call carrying `beta`/`decay`. This
+PR is therefore what makes those lanes reachable with optionals at all. That is
+a behaviour change on three backends and each owes its own exact-device proof;
+the Apple result does not transfer to any of them.
+
+**NVIDIA outcome: follow-up required — exact-device proof owed on sm_120.**
+
+Two NVIDIA consumers change behaviour and neither has been run on hardware for
+this PR:
+
+* `_execute_nvidia_deltanet_compiled` now receives the presence flags it always
+  parsed for, so the compiled sm_120 lane becomes reachable with
+  `gate`/`beta`/`decay` for the first time.
+* `native_vjp_plugins._nvidia_sm120_deltanet_backward` **stops guessing.** It
+  previously derived presence from operand *variable names* and, when no name
+  matched, fell back to "trailing operands fill the slots in declaration
+  order" — which mis-binds whenever a caller names its locals anything but
+  `beta`/`decay`. `gated_deltanet(q, k, v, beta=b, decay=d)` presents `b` and
+  `d`, so the fallback fired and bound beta into the gate slot: the VJP
+  differentiated a different recurrence and returned gradients that were wrong
+  but finite. It now raises rather than infer.
+
+Owed on Super-Bear: forward parity for the compiled lane with each optional
+subset, and a gradient check for the backward plugin. Neither transfers from
+the Apple result.
+
 ## `NVIDIA-DELEGATE-CONTRACT-2026-08-30` — the fast-path boundary is real; NVIDIA goes first
 
 **Enabling step for the bootstrap prune, and it had to land before any

@@ -9,6 +9,41 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
+
+PR #653 changes a **shared Graph IR ABI**: the delta-rule family
+(`gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention`) now
+declares its optional tensor operands in `graph_ir._KEYWORD_OPERANDS` as
+`(gate, beta, decay)` and emits `has_gate`/`has_beta`/`has_decay` presence
+flags from both frontends. All four backends consume this ABI, so all four are
+assessed here per AGENTS.md.
+
+**What was wrong.** Undeclared, the AST emitter appended keyword operands
+*sorted by name*, so `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted
+them as `(beta, decay, gate)`. Order alone would not have been enough either:
+with `[Q, K, V, %x]` the lone optional sits at index 3 whichever slot it fills.
+
+**Load-bearing fact for every backend: no producer had ever set these flags.**
+`has_gate`/`has_beta`/`has_decay` were read by four executors and written by
+none. The compiled ROCm, NVIDIA and x86 deltanet lanes all compute
+`need = 3 + has_gate + has_beta + has_decay` and raise when that disagrees with
+the operand count — so with the flags absent they accepted **only** the
+three-operand form and raised on any traced call carrying `beta`/`decay`. This
+PR is therefore what makes those lanes reachable with optionals at all. That is
+a behaviour change on three backends and each owes its own exact-device proof;
+the Apple result does not transfer to any of them.
+
+**x86 outcome: follow-up required — exact-device proof owed on AVX-512.**
+
+`_execute_x86_compiled_deltanet` (and its backward peer) read the same three
+flags and document the same operand order, so x86 is affected identically to
+ROCm: the compiled lane accepted only the three-operand form and now becomes
+reachable with `gate`/`beta`/`decay`.
+
+Owed on Princess-Luna (Zen 5), which is the fleet's only AVX-512 host. **AMX is
+not a Tessera target and no fleet box has it** — do not gate this evidence on
+`hardware_amx`, or it will skip on the one machine that can produce it.
+
 ## Cross-backend sync `DELEGATE-CONTRACT-SYNC-2026-08-30`
 
 PR #652 changed two **shared** runtime contracts, so all four backends are

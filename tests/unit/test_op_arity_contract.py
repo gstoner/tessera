@@ -36,6 +36,7 @@ from tessera.compiler.graph_ir import (
     _KEYWORD_ATTR_PARAMS,
     _KEYWORD_OPERANDS,
     _POSITIONAL_ATTR_PARAMS,
+    _PRESENCE_FLAGGED_OPERANDS,
 )
 from tessera.compiler.op_catalog import _SPECS
 
@@ -228,3 +229,157 @@ def test_keyword_declarations_name_real_parameters():
         "keyword declarations naming parameters the reference does not have:\n  "
         + "\n  ".join(stale)
     )
+
+
+# ── the vocabulary gate graph_ir.py has always claimed to have ───────────────
+#
+# `graph_ir.py` told readers that undeclared keyword operands were "flagged by
+# `test_keyword_operand_vocabulary` as vocabulary that needs declaring". No such
+# test existed anywhere in the tree. The comment described a safety net that was
+# never built, which is why `gated_deltanet`'s optional tensor operands stayed
+# undeclared long enough to ship wrong numbers through the Apple GPU JIT path:
+# undeclared, the emitter appends keyword operands **sorted by name**, so
+# `gated_deltanet(q, k, v, gate=g, beta=b, decay=d)` emitted them in the order
+# (beta, decay, gate) against an ABI of (gate, beta, decay).
+#
+# A promised gate is worse than an absent one: reviewers read the comment and
+# assume the class is covered.
+
+
+def _optional_operand_span(spec):
+    """How many optional operands the catalog says this op accepts."""
+    lo = getattr(spec, "min_arity", None)
+    hi = getattr(spec, "max_arity", None)
+    if lo is None or hi is None:
+        return 0
+    return max(0, int(hi) - int(lo))
+
+
+#: Ops accepting several optional operands whose list is nonetheless decodable
+#: without presence flags, with the reason. Two shapes qualify:
+#:
+#: * **homogeneous variadic** — every operand plays the same role, so there are
+#:   no slots to confuse (`cat([a, b, c])`);
+#: * **scalar-valued optionals** — the trailing parameters lower to attributes,
+#:   which are already name-carrying.
+#:
+#: Everything else is tracked debt below, not an exemption.
+_DECODABLE_WITHOUT_FLAGS = {
+    "tessera.cat": "homogeneous variadic tensor list; no per-slot meaning",
+    "tessera.stack": "homogeneous variadic tensor list; no per-slot meaning",
+    "tessera.einsum": "homogeneous variadic operand list driven by the subscript",
+    "tessera.arange": "start/stop/step lower to attributes, not operands",
+}
+
+#: Ops whose optional operands are NOT decodable from position alone and do not
+#: yet emit presence flags. Each has the same latent defect the delta family
+#: had: `layer_norm(x, beta=b)` puts `beta` at the index a positional reader
+#: calls `gamma`.
+#:
+#: **This is a ratchet — it may shrink, never grow.** They are listed rather
+#: than fixed here because each needs its consumers migrated with it, and doing
+#: that blind, in the change that fixed a different op, is how a silent
+#: mis-binding gets introduced rather than removed. The delta family is the
+#: worked example to follow.
+_UNDECODABLE_OPERAND_LISTS = {
+    "tessera.adafactor",
+    "tessera.adamw",
+    "tessera.alibi",
+    "tessera.conv2d_nhwc",
+    "tessera.conv3d_ndhwc",
+    "tessera.fused_epilogue",
+    "tessera.group_norm",
+    "tessera.instance_norm",
+    "tessera.layer_norm",
+    "tessera.mla_decode",
+    "tessera.moe",
+    "tessera.rl.ppo_policy_loss",
+}
+
+
+def test_keyword_operand_vocabulary():
+    """Every op with several optional operands is classified.
+
+    An op accepting more than one optional operand has an operand list that
+    position alone cannot decode: given `[X, %a]` the lone optional sits at the
+    same index whichever slot it fills. Such an op must either emit presence
+    flags, be decodable for a stated reason, or be recorded as known debt.
+    """
+    unclassified = []
+    for spec in _SPECS:
+        name = spec.graph_name
+        if _optional_operand_span(spec) <= 1:
+            continue
+        if (name in _PRESENCE_FLAGGED_OPERANDS
+                or name in _DECODABLE_WITHOUT_FLAGS
+                or name in _UNDECODABLE_OPERAND_LISTS):
+            continue
+        unclassified.append(name)
+
+    assert not unclassified, (
+        "ops accept several optional operands but nothing says how to decode "
+        "the operand list:\n  " + "\n  ".join(sorted(set(unclassified)))
+        + "\nDeclare presence flags in graph_ir._PRESENCE_FLAGGED_OPERANDS "
+        "(and the order in _KEYWORD_OPERANDS), or record why the list is "
+        "decodable without them."
+    )
+
+
+def test_the_undecodable_ratchet_only_shrinks():
+    """The tracked-debt list may lose entries, never gain them.
+
+    Its size is the number of ops that can still silently bind an optional
+    operand to the wrong slot.
+    """
+    assert len(_UNDECODABLE_OPERAND_LISTS) <= 12, (
+        "an op was added to _UNDECODABLE_OPERAND_LISTS. Fix it instead: "
+        "declare its operand order and presence flags, and migrate its "
+        "consumers in the same change."
+    )
+    resolved = _UNDECODABLE_OPERAND_LISTS & set(_PRESENCE_FLAGGED_OPERANDS)
+    assert not resolved, (
+        "these now emit presence flags and should be removed from the debt "
+        f"list: {sorted(resolved)}"
+    )
+
+
+def test_presence_flags_agree_with_the_declared_operand_order():
+    """A flagged op must declare the same names, in the same order.
+
+    The two declarations are read by different halves of the emitter -- order
+    when appending operands, flags when recording presence -- so a divergence
+    would emit operands in one order and describe them in another.
+    """
+    for name, flagged in _PRESENCE_FLAGGED_OPERANDS.items():
+        declared = _KEYWORD_OPERANDS.get(name)
+        assert declared is not None, (
+            f"{name} declares presence flags but no operand order; the flags "
+            "would describe positions nothing pinned"
+        )
+        assert tuple(flagged) == tuple(declared), (
+            f"{name} flags {flagged} but declares operand order {declared}"
+        )
+
+
+def test_flagged_ops_name_real_optional_parameters():
+    """Each flagged name must be an actual optional parameter of the op."""
+    from tessera import ops
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for graph_name, flagged in _PRESENCE_FLAGGED_OPERANDS.items():
+            spec = next((s for s in _SPECS if s.graph_name == graph_name), None)
+            assert spec is not None, f"{graph_name} is not a catalog op"
+            fn = getattr(ops, spec.public_name, None)
+            if fn is None:
+                continue
+            params = inspect.signature(fn).parameters
+            for entry in flagged:
+                assert entry in params, (
+                    f"{graph_name} flags {entry!r}, absent from the reference "
+                    f"signature {tuple(params)}"
+                )
+                assert params[entry].default is not inspect.Parameter.empty, (
+                    f"{graph_name} flags {entry!r}, but it is required -- a "
+                    "presence flag on a mandatory operand is always True"
+                )

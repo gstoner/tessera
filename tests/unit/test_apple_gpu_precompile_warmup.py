@@ -36,6 +36,7 @@ Tests pin:
 
 from __future__ import annotations
 
+import statistics
 import time
 
 import numpy as np
@@ -149,11 +150,25 @@ def test_warmup_then_production_call_is_faster_than_cold():
     chain.warmup(X, gamma, W)
     warmup_ms = (time.perf_counter() - t0) * 1000
 
-    # Production call hits the warm cache.
-    t0 = time.perf_counter()
-    out = chain(X, gamma, W)
-    out.free()
-    prod_ms = (time.perf_counter() - t0) * 1000
+    # Production calls hit the warm cache. MEDIAN of several, not one sample.
+    #
+    # This compared a single production call against the single warmup, and it
+    # failed in the full suite while passing alone -- a scheduler hiccup in one
+    # sample is enough to push it past 2/3 of warmup, and under a loaded
+    # machine that is not rare. The claim being made is about the STEADY STATE
+    # ("post-warmup calls are cheap"), which is a property of the distribution,
+    # not of whichever call happened to run first.
+    #
+    # The warmup stays a single sample because it is genuinely one-shot: it
+    # pays the MPSGraph compile cost exactly once, and repeating it would
+    # measure the warm path instead.
+    prod_samples = []
+    for _ in range(5):
+        t0 = time.perf_counter()
+        out = chain(X, gamma, W)
+        out.free()
+        prod_samples.append((time.perf_counter() - t0) * 1000)
+    prod_ms = statistics.median(prod_samples)
 
     # The production call after warmup should be substantially
     # faster than the warmup itself (which includes the compile
@@ -161,7 +176,8 @@ def test_warmup_then_production_call_is_faster_than_cold():
     # measurement variance at small shapes.
     assert prod_ms < warmup_ms / 1.5, (
         f"production call after warmup should be <2/3 of warmup "
-        f"time; got warmup={warmup_ms:.3f}ms prod={prod_ms:.3f}ms")
+        f"time; got warmup={warmup_ms:.3f}ms prod(median of "
+        f"{len(prod_samples)})={prod_ms:.3f}ms samples={prod_samples}")
 
 
 # ---- Numerical equivalence -------------------------------------------

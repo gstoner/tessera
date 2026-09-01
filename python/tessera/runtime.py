@@ -23494,6 +23494,35 @@ _ROCM_ACT_OPS: dict[str, str] = {
 }
 
 
+def _rocm_build_env_fingerprint() -> tuple:
+    """The environment inputs that decide whether a ROCm build can succeed.
+
+    `_rocm_serializer_env` re-reads `os.environ` on every call **deliberately**,
+    so the outcome of a build is a function of the live environment, not of the
+    process. A remembered failure must therefore be scoped to the environment
+    that produced it: otherwise a notebook or long-lived service that starts
+    with `ROCM_PATH` unset, gets a refusal cached, and *then* sets a valid
+    toolkit path would keep falling back to CPU -- or keep raising under
+    `TESSERA_STRICT_DISPATCH=1` -- until the process restarts. That turns a
+    recoverable configuration error into a permanent one, which is a worse
+    failure than the cost the cache exists to avoid.
+
+    Only `os.environ` reads, no filesystem probing: this runs on every cache
+    hit, and reintroducing syscalls here would give back part of what the cache
+    saves. The consequence is a stated gap -- installing a toolkit at an
+    already-named path, changing nothing in the environment, will not invalidate
+    a cached refusal. That case needs a process restart, and is far rarer than
+    the "export ROCM_PATH and retry" one this covers.
+    """
+    return (
+        os.environ.get("ROCM_PATH"),
+        os.environ.get("TESSERA_ROCM_CHIP"),
+        # PATH decides ld.lld discovery and can be long; equality is all that
+        # is needed, so hash it rather than retaining a copy per cache entry.
+        hashlib.sha256((os.environ.get("PATH") or "").encode()).hexdigest()[:16],
+    )
+
+
 class _HsacoBuildFailure:
     """A remembered build failure, so it is not re-attempted every launch.
 
@@ -23518,10 +23547,11 @@ class _HsacoBuildFailure:
     move. Only the subprocess is skipped.
     """
 
-    __slots__ = ("reason",)
+    __slots__ = ("reason", "env")
 
     def __init__(self, reason: str) -> None:
         self.reason = reason
+        self.env = _rocm_build_env_fingerprint()
 
 
 def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tuple) -> bytes:
@@ -23532,9 +23562,16 @@ def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tupl
     """
     cached = cache.get(key)
     if isinstance(cached, _HsacoBuildFailure):
-        # Known-unbuildable on this host. Re-raise through the funnel so the
-        # fallback is still recorded, but do not fork again to be told so.
-        _rocm_compiled_failed(cached.reason)
+        if cached.env == _rocm_build_env_fingerprint():
+            # Known-unbuildable under THIS environment. Re-raise through the
+            # funnel so the fallback is still recorded, but do not fork again
+            # to be told so.
+            _rocm_compiled_failed(cached.reason)
+        # The toolchain environment changed since the refusal was recorded, so
+        # it may no longer hold. Drop it and rebuild rather than making a
+        # recoverable misconfiguration permanent for the process.
+        cache.pop(key, None)
+        cached = None
     if cached is not None:
         return cached
     opt = _tessera_opt_path()

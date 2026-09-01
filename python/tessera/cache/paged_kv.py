@@ -601,7 +601,16 @@ def _rocm_paged_attention_corpus_winner(
         bucket_key((q_len, q_heads, kv_heads, tokens, dim, page_size),
                    SpecPolicy.BUCKET),
         "f32", at.TIMING_END_TO_END))
-    if record is not None and record.winner in {"gather_fa", "direct"}:
+    # The SAME admission rules as `corpus_winner`, via the same predicate.
+    # This is a second, independent path from the committed corpus to
+    # production dispatch, and it checked only that the winner was a known
+    # name -- so it kept serving `direct` for the gfx1151 8192-token bucket on
+    # a ranking the corpus itself marks `separated: false` (6.52% margin
+    # against 5.59% noise). Falling through to a live race is the correct
+    # behaviour for a row nothing can vouch for.
+    if (record is not None
+            and at.record_is_admissible(record)
+            and record.winner in {"gather_fa", "direct"}):
         return record.winner
     return None
 

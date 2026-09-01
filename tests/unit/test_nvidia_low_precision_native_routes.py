@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -79,3 +80,86 @@ def test_committed_native_route_ratchet_has_dual_domain_resources_and_guards():
                for row in resources["rows"])
     assert {family.split(".")[0] for row in resources["rows"]
             for family in row["sass_instruction_families"]} == {"HMMA", "QMMA"}
+
+
+def test_every_committed_promotion_re_derives_from_its_own_timings():
+    """`noise_fraction` had a producer and no consumer.
+
+    The recorder applies it; the ratchet above asserts counts, presence and
+    consensus flags -- but nothing recomputed a promotion from the raw
+    `timings` the file retains, so a hand-edited or regressed artifact passed
+    as long as its counts still added up. Every recorded conclusion is now
+    recomputed from the only field that is measurement rather than verdict.
+
+    The rule is the recorder's, not a reasonable-looking substitute: a
+    candidate is promoted when it is **within `noise_fraction` of the fastest**
+    in every run of every timing domain (`_near`), tie-broken by total time --
+    NOT when it beats the runner-up by more than the noise. Reading it the
+    second way flags seven of these eleven promotions as violations, every one
+    of them correct. That near-miss is why this mirrors `_near` explicitly.
+    """
+    from tests._support.nvidia import lowp_route_promotion_violations
+
+    root = Path(__file__).parents[2]
+    payload = json.loads((root / "benchmarks/baselines"
+                          / "nvidia_sm120_low_precision_native_routes.json"
+                          ).read_text())
+    noise = payload["method"]["noise_fraction"]
+    assert isinstance(noise, float) and 0.0 < noise < 1.0
+
+    promotions = 0
+    for index, row in enumerate(payload["rows"]):
+        assert row["noise_fraction"] == noise, (
+            f"row[{index}] declares a different noise floor than `method`")
+        violations = lowp_route_promotion_violations(row, noise)
+        assert violations == [], (
+            f"row[{index}] ({row['op']} {row['dtype']}) contradicts its own "
+            f"timings: {violations}")
+        promotions += bool(row["selector_promoted"])
+    assert promotions == payload["selector_promotions"] == 11
+    assert len(payload["rows"]) == 18
+
+
+def test_the_re_derivation_catches_a_forged_promotion():
+    """A checker that only ever passes proves nothing about the artifact."""
+    from tests._support.nvidia import lowp_route_promotion_violations
+
+    root = Path(__file__).parents[2]
+    payload = json.loads((root / "benchmarks/baselines"
+                          / "nvidia_sm120_low_precision_native_routes.json"
+                          ).read_text())
+    noise = payload["method"]["noise_fraction"]
+    row = next(r for r in payload["rows"] if r["selector_promoted"])
+    assert lowp_route_promotion_violations(row, noise) == []
+
+    def forged(**changes):
+        clone = copy.deepcopy(row)
+        clone.update(changes)
+        return clone
+
+    # A promotion asserted over timings that name a different winner.
+    other = copy.deepcopy(row)
+    other["winner"] = "some_other_candidate"
+    assert "winner" in lowp_route_promotion_violations(other, noise)
+
+    # Promotion flag flipped on a row whose evidence does not support it.
+    stripped = forged(resources=[])
+    assert "selector_promoted" in lowp_route_promotion_violations(stripped, noise)
+
+    # Consensus list widened to hide a candidate that is not actually near.
+    widened = copy.deepcopy(row)
+    domain = next(iter(widened["timings"]))
+    widened["timings"][domain]["near_winner_consensus"] = ["invented_candidate"]
+    assert any("near_winner_consensus" in v for v in
+               lowp_route_promotion_violations(widened, noise))
+
+    # Timings deleted entirely -- unverifiable is not the same as fine.
+    assert lowp_route_promotion_violations(forged(timings={}), noise) == [
+        "missing_timings"]
+
+    # A run_winner that is not that run's fastest candidate.
+    lying = copy.deepcopy(row)
+    block = lying["timings"][next(iter(lying["timings"]))]
+    block["run_winners"] = ["not_a_real_winner"] + block["run_winners"][1:]
+    assert any("run_winner[0]" in v for v in
+               lowp_route_promotion_violations(lying, noise))

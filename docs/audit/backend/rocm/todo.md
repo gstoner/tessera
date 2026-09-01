@@ -5679,3 +5679,48 @@ argument for adding one — the wave32 barrier bug recorded in
 trivially, which is precisely the class a metamorphic tracking check catches
 and a bound does not. Cheap to add on Princess-Luna alongside the
 `AUTOTUNE-SEPARATION` re-race already owed there.
+
+---
+
+## Cross-backend sync `PACKET-PROVENANCE-2026-08-31`
+
+**Owning item:** exact-device evidence provenance ·
+**synchronization key:** `PACKET-PROVENANCE-2026-08-31`
+
+**Shared contract: a packet may not claim a commit it was not generated from.**
+Every lane's recorder stamps `tested_commit` from `git rev-parse HEAD` and
+**none of the four checked that HEAD is what was actually measured.** Recording
+from a modified working tree therefore produces a packet whose measurements
+came from edited sources while its `tested_commit` names the parent — false
+provenance that then propagates into `docs/audit/generated/e2e_fleet.*` as
+though it were a device result for that commit (AGENTS.md:87-90).
+
+**Found by doing it.** The Apple packet on PR #665 was sealed from a dirty tree:
+its `source_fingerprint` hashed the *edited* `apple_gpu_runtime.mm` while
+`tested_commit` named the parent, whose runtime hashes to something else. It was
+review that caught it, not any gate.
+
+**Apple is the only lane where the contradiction is visible at all**, because
+only its packet carries a `source_fingerprint` of a runtime source file. The
+other three fingerprint measured *resources*, not sources — so a packet built
+from modified kernels is internally consistent and silently wrong. **The lane
+with the strongest self-check is the one that got caught; the weaker three
+would not have surfaced it.**
+
+**Outcome for this backend: `follow-up required` — same defect, unfixed.**
+`record_rocm_gfx1151_packet.py:257` stamps `tested_commit` from `git rev-parse HEAD` with no dirtiness
+check, exactly as Apple's did.
+
+**Why it is not fixed in this PR.** The Apple guard works because that packet
+declares which file it fingerprints, so the set to check is unambiguous. This
+lane fingerprints measured resources rather than sources, so choosing the right
+file set — plausibly the HIP kernel sources and generated hsaco inputs — is a judgement about what this backend's
+measurement actually depends on, and getting it wrong fails in the worse
+direction: a too-narrow set is a guard that passes while the provenance is
+false, which reads as protection and is not. That call belongs with someone
+looking at this backend's build, on **Princess-Luna**.
+
+**The cheap interim** is the whole-tree form: refuse when `git status
+--porcelain` is non-empty for this backend's source directory. Cruder than
+Apple's and more likely to be bypassed, but it cannot be wrong in the
+dangerous direction.

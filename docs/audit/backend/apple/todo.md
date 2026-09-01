@@ -5861,3 +5861,42 @@ hardware but is not wired in — it needs a `MTLComputePassDescriptor` on each
 encoder, and none of the 120 owned encoders use one today. It is the right
 second clock if a cross-clock bound is ever wanted; `GPUStartTime` agreeing with
 it to the nanosecond is what makes the cheaper fix defensible in the meantime.
+
+---
+
+## Cross-backend sync `PACKET-PROVENANCE-2026-08-31`
+
+**Owning item:** exact-device evidence provenance ·
+**synchronization key:** `PACKET-PROVENANCE-2026-08-31`
+
+**Shared contract: a packet may not claim a commit it was not generated from.**
+Every lane's recorder stamps `tested_commit` from `git rev-parse HEAD` and
+**none of the four checked that HEAD is what was actually measured.** Recording
+from a modified working tree therefore produces a packet whose measurements
+came from edited sources while its `tested_commit` names the parent — false
+provenance that then propagates into `docs/audit/generated/e2e_fleet.*` as
+though it were a device result for that commit (AGENTS.md:87-90).
+
+**Found by doing it.** The Apple packet on PR #665 was sealed from a dirty tree:
+its `source_fingerprint` hashed the *edited* `apple_gpu_runtime.mm` while
+`tested_commit` named the parent, whose runtime hashes to something else. It was
+review that caught it, not any gate.
+
+**Apple is the only lane where the contradiction is visible at all**, because
+only its packet carries a `source_fingerprint` of a runtime source file. The
+other three fingerprint measured *resources*, not sources — so a packet built
+from modified kernels is internally consistent and silently wrong. **The lane
+with the strongest self-check is the one that got caught; the weaker three
+would not have surfaced it.**
+
+**Outcome for this backend: `parity validated` — the hole was mine and is
+closed here.** `record_apple_packet.py` now refuses to seal when a fingerprinted
+source differs from HEAD, and the packet is re-recorded against its own commit
+(`tested_commit` 8dd79bbc, runtime at that commit hashing to the packet's
+`2653a004…`).
+
+The check is scoped to the files the packet actually fingerprints rather than
+the whole tree: a dirty README does not invalidate a device measurement, a dirty
+`apple_gpu_runtime.mm` does, because the fingerprint is taken from working-tree
+bytes. Widening it to the whole tree would make the recorder unusable during
+ordinary work and would train people to bypass it.

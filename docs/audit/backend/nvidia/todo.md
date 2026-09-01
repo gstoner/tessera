@@ -5251,3 +5251,52 @@ looking at this backend's build, on **Super-Bear**.
 --porcelain` is non-empty for this backend's source directory. Cruder than
 Apple's and more likely to be bypassed, but it cannot be wrong in the
 dangerous direction.
+
+---
+
+## Cross-backend sync `SPECTRAL-CONV-RANK-2026-08-31`
+
+**Owning item:** `tessera.spectral_conv` operand contract ·
+**synchronization key:** `SPECTRAL-CONV-RANK-2026-08-31`
+
+**Shared contract enforced (not changed): `spectral_conv` takes equal ranks.**
+It was already stated in two places — the host reference in `__init__.py`, which
+raises on a mismatch, and the `conv_full` shape rule, which returns *unknown*
+rather than deriving `n + m - 1`. **No dispatch lane stated it.** Each computes
+`rfft(x) * rfft(w)` and so inherited numpy broadcasting for free, silently
+admitting a rank-1 kernel against a rank-2 signal.
+
+**The divergence was in what the lanes ADMIT, not in what they compute.** The
+broadcast and rank-matched forms are **bit-identical** (max |Δ| exactly 0.0),
+and both match `np.convolve(..., mode="full")` to 2.4e-07. That is precisely why
+it survived: nothing was ever numerically wrong, so no accuracy check could see
+it. What it produced instead was a GPU lane that accepted input the CPU
+reference rejects.
+
+**And it had already caused a hollow test.**
+`test_apple_gpu_spectral::test_composites_match_host_reference` was written
+against the permissive lane, passing a rank-1 kernel — so its
+`assert_allclose` **never executed**: the reference raised while building the
+expected value. The test had been red long enough to be repeatedly triaged as
+"pre-existing".
+
+**Fixed by stating the rule once** — `_check_spectral_conv_ranks` in
+`runtime.py`, called by every dispatch lane — rather than adding a check per
+lane. There are **three** dispatch implementations of this op
+(`_spectral_composite`, shared by NVIDIA and ROCm; `_apple_gpu_dispatch_spectral`;
+and the host reference), and a rule copied three times is a rule that will hold
+in two of them.
+
+**Outcome for this backend: `follow-up required` — the fix reaches NVIDIA's
+lane but no sm_120 evidence exists for it.** `_spectral_composite` is shared by
+NVIDIA and ROCm, so `_nvidia_fftexec` now refuses a rank mismatch too. That is
+a **behaviour change on this backend made from a Mac**, and it is host-free
+only in the sense that the check itself is pure Python — whether NVIDIA's
+spectral lane has any caller passing a rank-1 kernel is not something this host
+can answer.
+
+**What is owed on Super-Bear:** run the spectral suite against the CUDA lane and
+confirm nothing was relying on the broadcast form. The risk is low (every
+in-repo call site outside the corrected test uses equal ranks) but it is not
+zero, and a refusal that fires in production is a hard error rather than a
+degraded number.

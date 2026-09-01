@@ -272,6 +272,93 @@ def test_measured_verdicts_are_not_polluted_across_shapes():
     assert set(rec.candidates) == {"aligned_only_declared", "generic_any_shape"}
 
 
+def test_a_corpus_hint_for_a_shape_it_cannot_serve_does_not_become_a_force():
+    """The coupling between the two consumers, which is easy to break apart.
+
+    Buckets are coarse: `bucket_key` maps BOTH (24,12,20) and (32,16,32) to
+    (32,16,32), so a ragged workload really does read the aligned workload's
+    row. That row names the aligned-only lane, and `run_arbitrated` passes a
+    corpus hint to `arbitrate` as ``force`` -- which restricts to that one name
+    and raises `ArbiterError` when it is not in the field.
+
+    So making `arbitrate` shape-aware WITHOUT `corpus_winner` would convert a
+    silent degrade into a crash. `corpus_winner` withholds the hint because its
+    own `live` set excludes the lane, and that is why both had to move
+    together.
+    """
+    assert AT.bucket_key(RAGGED, AT.SpecPolicy.BUCKET) == \
+        AT.bucket_key(ALIGNED, AT.SpecPolicy.BUCKET)
+
+    C.register_candidate(_DeclinesRaggedUpFront())
+    C.register_candidate(_WorksAnyShape())
+    region = MatmulRegion(dtype="float16")
+    cache = AT.MeasureCache()
+    cache.put(("fake:dev", _TGT, OP_MATMUL,
+               AT.bucket_key(ALIGNED, AT.SpecPolicy.BUCKET), "float16",
+               AT.TIMING_END_TO_END),
+              AT.MeasureRecord(winner="aligned_only_declared", latency_ms=0.5,
+                               candidates={"aligned_only_declared": 0.5,
+                                           "generic_any_shape": 1.0},
+                               unmeasured={},
+                               separation={"separated": True, "margin": 0.5,
+                                           "noise": 0.01, "factor": 2.0,
+                                           "runner_up": "generic_any_shape"}))
+
+    A, B = _operands(RAGGED)
+    assert AT.corpus_winner(region, OP_MATMUL, _TGT, A, B, dims=RAGGED,
+                            dtype="float16", cache=cache,
+                            device="fake:dev") is None
+
+    out, tag = C.run_arbitrated(region, OP_MATMUL, _TGT, A, B, verify=False,
+                                dims=RAGGED, dtype="float16",
+                                autotune_cache=cache, device="fake:dev")
+    assert tag == "generic_real_kernel"
+    np.testing.assert_allclose(out, A @ B, rtol=1e-5, atol=1e-8)
+
+    # ...and the hint is still served at the shape it was measured on.
+    Aa, Ba = _operands(ALIGNED)
+    assert AT.corpus_winner(region, OP_MATMUL, _TGT, Aa, Ba, dims=ALIGNED,
+                            dtype="float16", cache=cache,
+                            device="fake:dev") == "aligned_only_declared"
+
+
+def test_the_force_diagnostic_names_which_gate_rejected_the_candidate():
+    """One message for four situations is a diagnostic that explains nothing.
+
+    `force` deliberately bypasses tier selection, not the gates, so an E3 user
+    who forces a lane the workload excludes gets an error -- and "not
+    available" was actively wrong for that case: the lane IS available, on a
+    host that has it, for a shape it cannot serve (Decision #21).
+    """
+    C.register_candidate(_DeclinesRaggedUpFront())
+    region = MatmulRegion(dtype="float16")
+
+    class _Unavailable(_WorksAnyShape):
+        name = "never_here"
+
+        def available(self):
+            return False
+
+    class _WrongRegion(_WorksAnyShape):
+        name = "wrong_region"
+
+        def applies_to(self, region):
+            return False
+
+    C.register_candidate(_Unavailable())
+    C.register_candidate(_WrongRegion())
+
+    for force, reason in (
+        ("no_such_lane", "not registered"),
+        ("wrong_region", "does not apply to this region"),
+        ("never_here", "not available on this host"),
+        ("aligned_only_declared", "declines this workload"),
+    ):
+        with pytest.raises(C.ArbiterError, match=reason):
+            C.arbitrate(region, OP_MATMUL, _TGT, verify=False, force=force,
+                        inputs=_operands(RAGGED))
+
+
 # --- one predicate, every consumer -------------------------------------------
 
 def test_every_race_field_consumer_honours_the_workload_exclusion():

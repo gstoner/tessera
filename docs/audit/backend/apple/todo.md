@@ -6297,3 +6297,33 @@ The one Apple-side gap is unchanged by this PR and still owed:
 `measure_device_latency` has no Apple implementation, so Apple has no
 device-timed lane to bias in the first place. When it lands it must land with
 repeated measurement, or one sample earns `separated: True` free.
+
+**Blast radius, measured: no committed corpus row is invalidated.** Every
+persisted matmul bucket is aligned (0 of 28 rows ragged) and every attention
+bucket uses head_dim 64 (0 of 18 ragged), so neither producer's decline was
+ever exercised during a recorded race. The defect was live in the *dispatch*
+path and had not yet reached the evidence.
+
+That is luck, and it points at the real gap: the recorders only ever race
+power-of-two shapes, which is why nobody hit this and also why **the ragged
+path has no measured coverage at all**. The device follow-ups above should
+add a ragged bucket rather than only re-checking an aligned one — a re-race
+of the existing buckets would pass identically before and after this change.
+
+**Two follow-on findings from the same code path, both now covered.**
+
+*The two consumers had to move together, and it is not obvious why.* Buckets
+are coarse — `bucket_key` maps both `(24,12,20)` and `(32,16,32)` to
+`(32,16,32)` — so a ragged workload genuinely reads the aligned workload's
+corpus row, and `run_arbitrated` passes a corpus hint to `arbitrate` as
+`force`, which restricts to that one name. Making `arbitrate` shape-aware
+*without* `corpus_winner` therefore converts the silent degrade into an
+`ArbiterError` (verified, not inferred). `corpus_winner` withholds the hint
+because its own `live` set excludes the lane — that coupling is now pinned by
+a regression test rather than left to be rediscovered.
+
+*The `force` diagnostic named the wrong gate.* One message — "not available" —
+covered not-registered, wrong-region and unavailable-here alike, and once a
+shape axis existed it was actively wrong for the commonest case: the lane IS
+available, on a host that has it, for a shape it cannot serve. It now names
+which of the four gates rejected the candidate (Decision #21).

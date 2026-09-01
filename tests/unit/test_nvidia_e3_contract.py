@@ -25,4 +25,8 @@ def test_e3_hand_tuned_wins_by_default_and_is_forceable():
     assert arbitrate(region, OP_MATMUL, "e3_faketarget", verify=False).name == "e3_handtuned"
     assert run_arbitrated(region, OP_MATMUL, "e3_faketarget", a, b, verify=False, force="e3_handtuned")[1] == "handtuned_real"
     assert run_arbitrated(region, OP_MATMUL, "e3_faketarget", a, b, verify=False, force="e3_synth")[1] == "synth_real"
-    with pytest.raises(ArbiterError, match="not available"): arbitrate(region, OP_MATMUL, "e3_faketarget", verify=False, force="e3_nonexistent")
+    # Assert the REASON, not a generic "unusable": one message used to cover
+    # not-registered / not-applicable / not-available alike, and once a shape
+    # axis existed it was wrong for the commonest case. See
+    # test_arbiter_workload_applicability.py for the per-reason coverage.
+    with pytest.raises(ArbiterError, match="not registered"): arbitrate(region, OP_MATMUL, "e3_faketarget", verify=False, force="e3_nonexistent")

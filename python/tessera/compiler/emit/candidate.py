@@ -103,8 +103,10 @@ def verify_by_reference(candidate: "Candidate", region: Any, inputs: "tuple",
 
 
 class ArbiterError(RuntimeError):
-    """A forced candidate does not exist / is unavailable — names the gap so the
-    caller can report rather than silently pick something else (Decision #21)."""
+    """A forced candidate cannot be used — names *which* gate rejected it (not
+    registered / wrong region / unavailable here / declines this workload) so
+    the caller can report rather than silently pick something else
+    (Decision #21)."""
 
 
 class Candidate(ABC):
@@ -430,10 +432,26 @@ def arbitrate(region: Any, op: str, target: str, *, verify: bool = True,
     if force is not None:
         forced = [c for c in cands if c.name == force]
         if not forced:
-            all_names = [c.name for c in candidates_for(target, op)]
+            # Name WHICH gate rejected it. "not available" was one message for
+            # three different situations, and with a shape axis added it is
+            # actively wrong for the commonest one: a candidate that is
+            # registered, available, and simply cannot serve this workload
+            # (Decision #21 -- a diagnostic must name the op and the reason).
+            registered = {c.name: c for c in candidates_for(target, op)}
+            if force not in registered:
+                reason = "not registered"
+            elif not registered[force].applies_to(region):
+                reason = "does not apply to this region"
+            elif not registered[force].available():
+                reason = "not available on this host"
+            elif inputs and not registered[force].applies_to_inputs(
+                    region, *inputs):
+                reason = "declines this workload (shape/alignment)"
+            else:
+                reason = "not in the arbitrated field"
             raise ArbiterError(
-                f"forced candidate {force!r} not available for ({target}, {op}); "
-                f"registered: {all_names or '<none>'}")
+                f"forced candidate {force!r} unusable for ({target}, {op}): "
+                f"{reason}; registered: {sorted(registered) or '<none>'}")
         cands = forced
     if verify:
         cands = [c for c in cands if verify_candidate(c, region)]

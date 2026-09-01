@@ -77,3 +77,79 @@ def test_committed_legacy_retune_retains_launch_collapse_and_oracles():
         assert "generated_epilogue" in resource_kinds
     assert data["transport_dependency"] == "NVIDIA-PARITY-TRANSPORT"
     assert data["retained_transport_rows"] and data["retained_kv_rows"]
+
+
+def test_committed_retune_stability_re_derives_from_its_own_runs():
+    """`noise_policy` had a producer and no consumer.
+
+    The ratchet asserted `noise_policy == 0.03` -- that the constant had not
+    changed -- and never compared it to a measurement. So a regressed recording
+    whose two runs disagree by 40% keeps `stable: true` and passes. Every
+    stability and consensus flag is now recomputed from `runs`, the only field
+    in the artifact that is measurement rather than conclusion.
+    """
+    import collections
+
+    from tests._support.nvidia import (
+        retune_stability_violations,
+        retune_winner_consensus_violations,
+    )
+
+    root = Path(__file__).parents[2]
+    payload = json.loads((root / "benchmarks/baselines"
+                          / "nvidia_sm120_legacy_retune.json").read_text())
+    noise = payload["noise_policy"]
+    assert isinstance(noise, float) and 0.0 < noise < 1.0
+
+    by_case = collections.defaultdict(list)
+    for index, row in enumerate(payload["rows"]):
+        assert retune_stability_violations(row, noise) == [], (
+            f"row[{index}] ({row['case']}/{row['candidate']}) contradicts its "
+            f"own runs")
+        by_case[row["case"]].append(row)
+    for case, rows in by_case.items():
+        assert retune_winner_consensus_violations(rows) == [], case
+    assert len(payload["rows"]) == 8 and len(by_case) == 4
+
+
+def test_the_retune_re_derivation_catches_a_forged_row():
+    """A checker that only ever passes proves nothing about the artifact."""
+    import copy
+
+    from tests._support.nvidia import (
+        retune_stability_violations,
+        retune_winner_consensus_violations,
+    )
+
+    root = Path(__file__).parents[2]
+    payload = json.loads((root / "benchmarks/baselines"
+                          / "nvidia_sm120_legacy_retune.json").read_text())
+    noise = payload["noise_policy"]
+    row = payload["rows"][0]
+    assert retune_stability_violations(row, noise) == []
+
+    # Runs pushed far apart while the flag still claims stability.
+    drifted = copy.deepcopy(row)
+    drifted["runs"][1]["device_event_ms"] = (
+        drifted["runs"][0]["device_event_ms"] * 1.4)
+    assert "device_stable" in retune_stability_violations(drifted, noise)
+
+    # The composite flag disagreeing with its own components.
+    inconsistent = copy.deepcopy(row)
+    inconsistent["stable"] = not (inconsistent["device_stable"]
+                                  and inconsistent["end_to_end_stable"])
+    assert "stable" in retune_stability_violations(inconsistent, noise)
+
+    # Runs removed entirely -- unverifiable is not the same as fine.
+    stripped = copy.deepcopy(row)
+    stripped["runs"] = []
+    assert retune_stability_violations(stripped, noise) == ["missing_paired_runs"]
+
+    # A case where the loser claims the winner consensus.
+    case = [copy.deepcopy(r) for r in payload["rows"]
+            if r["case"] == row["case"]]
+    if len(case) > 1:
+        for entry in case:
+            entry["device_winner_consensus"] = True
+        assert any("device_winner_consensus" in v
+                   for v in retune_winner_consensus_violations(case))

@@ -187,6 +187,7 @@ def _parse_utc(value: Any) -> datetime | None:
 
 def promotion_rule_violations(
     row: Mapping[str, Any], rules: Mapping[str, Any],
+    *, source_report_count: int | None = None,
 ) -> list[str]:
     """Which of the ledger's own ``promotion_rules`` a promoted row breaks.
 
@@ -232,6 +233,37 @@ def promotion_rule_violations(
         violations.append("promotion_rules_incomplete")
 
     medians = chosen.get("paired_median_speedups")
+    fractions = chosen.get("paired_win_fractions")
+
+    # The rules are spelled `*_each_run`, so a per-run metric list that is
+    # SHORTER than the run count has not been checked for every run -- and
+    # non-emptiness does not catch that. Review finding on PR #673: a promotion
+    # truncated to a single median and win fraction returns no violations
+    # today, and truncation makes the row look *better*, because
+    # `cross_run_speedup_spread` over one element is 0.0 and clears any cap.
+    # Dropping evidence must never improve a verdict.
+    #
+    # `source_report_count` is the authority when the ledger states it
+    # (`seal_strict_route_ledger` writes one report per independent run). When
+    # it does not, fall back to the sealer's own floor of two, and require the
+    # two lists to agree with each other either way.
+    expected_runs = (source_report_count
+                     if isinstance(source_report_count, int)
+                     and source_report_count >= 2 else None)
+    if isinstance(medians, list) and isinstance(fractions, list):
+        if len(medians) != len(fractions):
+            violations.append(
+                f"per_run_metric_length_mismatch:{len(medians)}!={len(fractions)}")
+        elif medians:
+            required = expected_runs if expected_runs is not None else 2
+            if len(medians) < required:
+                violations.append(
+                    f"per_run_metrics_short:{len(medians)}<{required}")
+            elif expected_runs is not None and len(medians) != expected_runs:
+                violations.append(
+                    f"per_run_metrics_exceed_reports:"
+                    f"{len(medians)}!={expected_runs}")
+
     if not isinstance(medians, list) or not medians:
         violations.append("no_paired_median_speedups")
     elif min_speedup is not None and any(
@@ -241,7 +273,6 @@ def promotion_rule_violations(
             if any(isinstance(v, (int, float)) for v in medians)
             else "speedup_below_minimum")
 
-    fractions = chosen.get("paired_win_fractions")
     if not isinstance(fractions, list) or not fractions:
         violations.append("no_paired_win_fractions")
     elif min_win is not None and any(
@@ -365,7 +396,8 @@ def load_strict_route_ledger(
         if key in routes:
             rejected.append(f"{prefix}:duplicate_key")
             continue
-        violations = promotion_rule_violations(row, promotion_rules)
+        violations = promotion_rule_violations(
+            row, promotion_rules, source_report_count=report_count)
         if violations:
             rejected.append(f"{prefix}:promotion_rule:{violations[0]}")
             continue

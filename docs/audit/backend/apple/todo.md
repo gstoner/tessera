@@ -6414,8 +6414,9 @@ mpsg_run_binary
 that the function's namesake guarantee "doesn't hold" — that
 `waitUntilSignaledValue:timeoutMS:` was ignoring its timeout. **That is false,
 and it was checked rather than assumed.** A standalone probe
-(`scratchpad/event_timeout_probe.mm`, built against the on-machine SDK per
-Decision #27) measures the API honouring its deadline precisely:
+(`tools/apple_probes/mtl_shared_event_timeout_probe.mm`, built against the
+on-machine SDK per Decision #27) measures the API honouring its deadline
+precisely:
 
 | case | timeout | returned | elapsed |
 |---|---|---|---|
@@ -6472,6 +6473,7 @@ so **any edit to that file invalidates the strict route ledger** and puts
 `test_strict_retune_ledger_admits_on_its_exact_live_apple_host` back to red.
 The fix therefore has to land together with a benchmark re-run and re-seal
 (`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`), not before or after it.
+<<<<<<< HEAD
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
@@ -6523,3 +6525,100 @@ what made the ROCm side cost no runtime predicate on the contraction axis.
 Not attempted in this change: it needs its own device proof on the Mac, and
 bundling a third backend into one PR would put three device claims behind one
 review.
+=======
+## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+**Owning item:** the NVIDIA/ROCm half of
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` ·
+**synchronization key:** `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+Apple's `promotion_rules` was a declaration nothing read; its loader now
+re-derives each promotion from the evidence the ledger retained. The same
+question was then put to the other backends' evidence artifacts, and the
+answers differ enough to be worth stating one by one.
+
+**A near-miss that shaped the whole exercise, recorded because it would have
+been convincing.** The first NVIDIA checker modelled promotion as *"the winner
+beats the runner-up by more than `noise_fraction`"* — the obvious reading — and
+it flagged **7 of 11 committed promotions as violations**, complete with a
+tidy table. Reading the producer settled it: `finalize_low_precision_native_routes._near`
+promotes a candidate that is **within** `noise_fraction` of the fastest in
+every run of every domain, tie-broken by total time. Every one of those 7 is
+correct under the rule that was actually applied. A plausible model of someone
+else's gate, checked against committed evidence, produces confident and wrong
+findings — so both checkers here mirror their producer's own predicate rather
+than a reasonable-looking substitute.
+
+**Outcome for this backend: `parity validated`, no change needed.** Apple is
+where this rule landed first (`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`): its
+`promotion_rules` block is a real threshold set and `load_strict_route_ledger`
+now refuses a decision those thresholds reject, in production rather than in a
+test. The NVIDIA and ROCm work above is the same question asked of their
+evidence artifacts; nothing here changes.
+
+Worth noting for contrast: Apple is the only one of the three whose gate is
+**machine-readable in the artifact itself**. NVIDIA carries a bare number
+(`noise_fraction` / `noise_policy`) whose meaning lives only in the recorder,
+and ROCm carries a sentence. When an evidence format is next designed, Apple's
+shape is the one to copy.
+
+## APPLE-DISPATCH-WEDGE-1: caller-side circuit breaker *(mitigated 2026-09-01; runtime-side fix still open)*
+
+A device that stopped answering kept being asked. `commit_mpsgraph_and_wait_with_timeout`
+waits 30 s (60 s at one of seven call sites) and, on expiry, reports the timeout
+and returns — correctly, and **with no memory that it happened**, so every later
+dispatch paid the full timeout again. An Apple sweep was observed stalled for
+**70 minutes** where the healthy run takes 4. Nothing accumulated by design: the
+runtime's `g_last_gpu_error_kind` is a `thread_local` *last*-error for
+reporting, and the wait helper clears the dispatch telemetry **on entry**,
+erasing the previous timeout before the next attempt.
+
+**Mitigated at the caller layer, which is where the repeated cost is paid.**
+`runtime._apple_gpu_run_checked` already arms and consumes that error channel
+for eight Apple GPU lanes — including `_apple_gpu_dispatch_mpsgraph_binary`,
+the lane that hung. After three consecutive **kind-1** (timeout) errors it stops
+dispatching and goes straight to the host path, with a stable diagnostic naming
+the op and the streak (Decision #21).
+
+Design points that are decisions, not details:
+
+* **Three, not one.** A single timeout can be a slow dispatch under load; three
+  in a row is a device that stopped answering. Tripping on the first turns a
+  hiccup into a process-wide GPU shutdown.
+* **Kind 1 only.** Both `ts_set_last_gpu_error(1, …)` sites are the
+  hung/timed-out path; kinds 2–4 are per-op failures (bad buffer, unsupported
+  shape) and say nothing about whether the device answers. Counting those would
+  open the breaker on a workload that merely uses an unsupported op a few times
+  in a row — and an interleaved op-failure resets the streak, so it can neither
+  mask a real one nor manufacture one.
+* **The asymmetry is deliberate.** Tripping wrongly costs a host-computed
+  result, which is *correct*, just slower. Not tripping costs unbounded wall
+  time and produces no evidence of why.
+* **No self-healing timer,** because there is no cheap probe for "is it
+  answering again" that does not cost another full timeout.
+  `reset_apple_gpu_dispatch_breaker()` is for a caller that knows better, and
+  `TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER` restores the old behaviour — a
+  breaker nobody can turn off is a new way to lose a working device.
+
+**Scope, stated honestly: this is a mitigation, not the complete fix.** It
+covers the eight lanes routed through `_apple_gpu_run_checked`. Other MPSGraph
+C-ABI entry points (`…_reduce_f32`, `…_argreduce_f32`, `…_scan_f32`,
+`…_topk_f32`, `…_bsmm_*`) have not been verified to route through it, and
+nothing outside Python is covered at all. The complete fix is runtime-side, in
+`apple_gpu_runtime.mm`.
+
+**And that is exactly why this landed at the caller layer first.**
+`AppleRouteContext.runtime_fingerprint` is `sha256(apple_gpu_runtime.mm)`, so
+editing that file invalidates the strict route ledger and forces a benchmark
+re-run plus re-seal in the same change. This branch leaves the `.mm`
+byte-identical (verified against `origin/main`), so the mitigation ships now
+and the runtime-side fix stays sequenced behind
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` without blocking on it.
+
+**Still unresolved** (unchanged from the investigation above): whether the 70
+minutes was one uninterruptible wait or ~140 sequential 30 s timeouts. The
+breaker addresses the second directly and bounds the damage under either.
+Host-free coverage: `tests/unit/test_apple_gpu_dispatch_breaker.py` (10 tests),
+mutation-verified — breaker never opens, every kind counts as a timeout, and
+success fails to reset the streak are each caught by a different test.
+>>>>>>> origin/main

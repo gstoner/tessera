@@ -5740,6 +5740,7 @@ explicitly guards the vacuous-pass case (`len(promoted) == selector_promotions
 promoted row. The missing piece is exactly one: **the margin is never held to
 `noise_policy`.** That is a smaller job than Apple's was, and it needs a
 decision about what "margin" means for these rows before it is written.
+<<<<<<< HEAD
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
@@ -5823,3 +5824,45 @@ regression, but against **52–58% spread**, so not a supported comparison; a
 15x3000-rep re-measure pushed the spread *worse* (85%, 73%) and the medians
 crossed over. Those shapes are unresolvable on this box and the apparent 1.4x
 was noise, exactly as its own spread warned.
+=======
+## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+**Owning item:** the NVIDIA/ROCm half of
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` ·
+**synchronization key:** `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+Apple's `promotion_rules` was a declaration nothing read; its loader now
+re-derives each promotion from the evidence the ledger retained. The same
+question was then put to the other backends' evidence artifacts, and the
+answers differ enough to be worth stating one by one.
+
+**A near-miss that shaped the whole exercise, recorded because it would have
+been convincing.** The first NVIDIA checker modelled promotion as *"the winner
+beats the runner-up by more than `noise_fraction`"* — the obvious reading — and
+it flagged **7 of 11 committed promotions as violations**, complete with a
+tidy table. Reading the producer settled it: `finalize_low_precision_native_routes._near`
+promotes a candidate that is **within** `noise_fraction` of the fastest in
+every run of every domain, tie-broken by total time. Every one of those 7 is
+correct under the rule that was actually applied. A plausible model of someone
+else's gate, checked against committed evidence, produces confident and wrong
+findings — so both checkers here mirror their producer's own predicate rather
+than a reasonable-looking substitute.
+
+**Outcome for this backend: `parity validated` — both evidence files now
+re-derive, 0 mismatches.**
+
+* `nvidia_sm120_low_precision_native_routes.json` — every recorded conclusion
+  (`near_winner_consensus`, `run_winners`, `timing_domain_consensus`, `winner`,
+  `selector_promoted`) is recomputed from `timings`, the only field that is
+  measurement rather than verdict. **18 rows, 11 promotions, 0 mismatches.**
+* `nvidia_sm120_legacy_retune.json` — `noise_policy` was asserted to *equal
+  0.03* and never compared to a measurement, so a regressed recording whose two
+  runs disagreed by 40% would keep `stable: true` and pass. Stability is now
+  `|run0 - run1| / max(run0, run1) <= noise_policy` per domain, re-derived, plus
+  cross-candidate winner consensus per case. **8 rows, 4 cases, 0 mismatches.**
+
+Both confirm their recorders rather than accusing them. Checkers live in
+`tests/_support/nvidia.py`; each is mutation-verified against forged rows
+(invented winner, stripped resources, widened consensus, lying `run_winners`,
+drifted runs, deleted timings).
+>>>>>>> origin/main

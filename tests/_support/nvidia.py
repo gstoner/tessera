@@ -140,3 +140,144 @@ def nvidia_device_model() -> str | None:
     except Exception:
         _device_model_probe = None
     return _device_model_probe
+
+
+# --- low-precision route promotions: re-derived, not trusted --------------------
+
+
+def lowp_near_winner_set(run: "dict[str, float]", noise: float) -> "set[str]":
+    """Candidates indistinguishable from the fastest in one run.
+
+    Mirrors `finalize_low_precision_native_routes._near`: everything within
+    `noise` of the floor, NOT "the winner beat the field by more than noise".
+    The distinction is the whole rule and is easy to invert -- a margin-based
+    reading of the same file reports seven promotions as violations, all of
+    them correct under the rule the recorder actually applies.
+    """
+    values = {name: float(value) for name, value in run.items()}
+    floor = min(values.values())
+    return {name for name, value in values.items()
+            if value <= floor * (1.0 + noise)}
+
+
+def lowp_route_promotion_violations(
+    row: "dict[str, Any]", noise: float,
+) -> "list[str]":
+    """Re-derive one row's promotion from the timings it retained.
+
+    `noise_fraction` is declared per row and in `method`, the recorder applies
+    it, and until now no consumer re-derived it from the committed artifact --
+    so a hand-edited or regressed file passed the ratchet as long as its counts
+    still added up. This closes that: every recorded flag is recomputed from
+    `timings`, which is the only field that is raw measurement rather than
+    conclusion.
+
+    Returns the field names that disagree with their own evidence.
+    """
+    violations: list[str] = []
+    timings = row.get("timings")
+    if not isinstance(timings, dict) or not timings:
+        return ["missing_timings"]
+
+    per_domain: dict[str, set[str]] = {}
+    for domain, block in timings.items():
+        runs = block.get("runs")
+        if not isinstance(runs, list) or not runs:
+            violations.append(f"{domain}:missing_runs")
+            continue
+        derived = set.intersection(
+            *(lowp_near_winner_set(run, noise) for run in runs))
+        per_domain[domain] = derived
+        if set(block.get("near_winner_consensus", [])) != derived:
+            violations.append(f"{domain}:near_winner_consensus")
+        # The per-run winner must be the per-run floor, or `run_winners` is
+        # describing a different measurement than `runs` holds.
+        for index, run in enumerate(runs):
+            fastest = min(run, key=lambda name: float(run[name]))
+            recorded = (block.get("run_winners") or [None] * len(runs))[index]
+            if recorded != fastest:
+                violations.append(f"{domain}:run_winner[{index}]")
+    if not per_domain:
+        return violations or ["no_domains"]
+
+    cross = set.intersection(*per_domain.values())
+    if bool(cross) != bool(row.get("timing_domain_consensus")):
+        violations.append("timing_domain_consensus")
+    derived_winner = min(
+        cross,
+        key=lambda name: (sum(float(run[name]) for block in timings.values()
+                              for run in block["runs"]), name),
+    ) if cross else None
+    if derived_winner != row.get("winner"):
+        violations.append("winner")
+    # Promotion needs a winner AND retained resource evidence for it: a route
+    # nobody can point at a cubin for is not a proven route.
+    if bool(derived_winner and row.get("resources")) != bool(
+            row.get("selector_promoted")):
+        violations.append("selector_promoted")
+    if derived_winner is not None:
+        for domain, derived in per_domain.items():
+            if derived_winner not in derived:
+                violations.append(f"{domain}:winner_not_near_best")
+    return violations
+
+
+def retune_stability_violations(
+    row: "dict[str, Any]", noise: float,
+) -> "list[str]":
+    """Re-derive one legacy-retune row's stability flags from its own runs.
+
+    `record_legacy_retune` computes, per timing domain,
+    ``|run0 - run1| / max(run0, run1) <= NOISE`` -- and `noise_policy` was
+    carried into the artifact where the ratchet asserted it **equals 0.03** and
+    nothing compared it to a measurement. A regressed recording whose runs
+    disagree by 40% keeps `stable: true` and passes, because the only thing
+    checked was that the policy constant had not changed.
+    """
+    violations: list[str] = []
+    runs = row.get("runs")
+    if not isinstance(runs, list) or len(runs) != 2:
+        return ["missing_paired_runs"]
+    for domain, field in (("device_event_ms", "device_stable"),
+                          ("end_to_end_ms", "end_to_end_stable")):
+        try:
+            first, second = float(runs[0][domain]), float(runs[1][domain])
+        except (KeyError, TypeError, ValueError):
+            violations.append(f"{domain}:unreadable")
+            continue
+        widest = max(first, second)
+        if widest <= 0.0:
+            violations.append(f"{domain}:non_positive")
+            continue
+        if (abs(first - second) / widest <= noise) != bool(row.get(field)):
+            violations.append(field)
+    if bool(row.get("stable")) != (bool(row.get("device_stable"))
+                                   and bool(row.get("end_to_end_stable"))):
+        violations.append("stable")
+    return violations
+
+
+def retune_winner_consensus_violations(
+    case_rows: "list[dict[str, Any]]",
+) -> "list[str]":
+    """Re-derive `*_winner_consensus` across the candidates of one case.
+
+    A candidate claims consensus when it is the fastest in **both** runs of
+    that domain. This needs the whole case, not one row, which is why it is
+    separate: a per-row check cannot see the field it is asserting about.
+    """
+    violations: list[str] = []
+    for domain, field in (("device_event_ms", "device_winner_consensus"),
+                          ("end_to_end_ms", "end_to_end_winner_consensus")):
+        try:
+            per_run = [min(case_rows,
+                           key=lambda row: float(row["runs"][index][domain])
+                           )["candidate"] for index in (0, 1)]
+        except (KeyError, IndexError, TypeError, ValueError):
+            violations.append(f"{domain}:unreadable")
+            continue
+        for row in case_rows:
+            derived = all(name == row["candidate"] for name in per_run)
+            if derived != bool(row.get(field)):
+                violations.append(f"{row['candidate']}:{field}")
+    return violations

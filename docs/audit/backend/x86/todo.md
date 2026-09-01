@@ -3286,3 +3286,55 @@ looking at this backend's build, on **Princess-Luna (AVX-512)**.
 --porcelain` is non-empty for this backend's source directory. Cruder than
 Apple's and more likely to be bypassed, but it cannot be wrong in the
 dangerous direction.
+
+---
+
+## Cross-backend sync `HSACO-NEGATIVE-CACHE-2026-08-31`
+
+**Owning item:** compiled-family build caching ·
+**synchronization key:** `HSACO-NEGATIVE-CACHE-2026-08-31`
+
+**`_build_rocm_family_hsaco` cached successes and not failures.** It invokes
+`tessera-opt` through `subprocess.run`, so a host that HAS the binary but
+cannot serialize ROCm — any dev box without the toolkit, and this Mac — forked
+a process, waited for it to fail, and discarded the answer **on every single
+launch**. **74 call sites** funnel through it.
+
+**Measured on an M1 Max**, `rt.launch` of a draft-block workload:
+
+| | direct | launch | ratio |
+|---|---|---|---|
+| before | 0.1042 ms | **70.5963 ms** | **677×** |
+| after | 0.1141 ms | 0.1481 ms | 1.3× |
+
+**477× faster**, and 0.347 s of a 0.354 s profile was the subprocess.
+
+**It was hidden by a test that ratified it.** Five perf baselines assert
+`launch_ms < max(75.0, direct_ms * 4.0)`. The oracle arm is ~0.4 ms, so `max()`
+always selected **75.0** and the self-calibrating comparison was dead code —
+while launch sat at **94% of that limit on an idle machine**. The constant had
+been sized to accept exactly the overhead it claimed to bound, and tipped over
+under any load, which is how it read as five flaky tests rather than one defect.
+
+**The floor is now 2.0 ms, chosen by the only criterion that makes a constant
+worth having: it FAILS on the old code.** Verified by mutation — with the
+negative cache removed, all five report `71.3 < 2.0`. The old 75.0 accepted
+70.6 ms in silence.
+
+Caching the failure is sound because the causes are host properties, fixed for
+the process. A genuinely transient failure would be remembered until exit — the
+right trade against re-forking per call, and why the stored value keeps the
+original message. Every attempt still records a dispatch fallback:
+`_rocm_compiled_failed` is re-raised through its own funnel on a cache hit, so
+`TESSERA_STRICT_DISPATCH=1` still raises. Only the subprocess is skipped.
+
+**Outcome for this backend: `follow-up required` — same question, and x86 is
+the lane where a per-call compile would be least visible.** Nothing x86-side
+changed here.
+
+x86 kernels are AOT-compiled into the extension rather than built per launch, so
+the exact defect is unlikely. What is worth confirming is the *shape*: any
+lane that attempts an expensive operation, fails deterministically on this host,
+and does not remember the failure. The x86 timing lane is host wall-clock only
+(see `APPLE-TIMER-WITNESS`), so a fixed per-call cost lands directly in every
+measurement this backend reports rather than being isolated to a device counter.

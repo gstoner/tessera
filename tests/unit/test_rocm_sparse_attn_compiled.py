@@ -191,7 +191,22 @@ def test_dk2_rocm_sparse_attention_perf_baseline_is_bounded():
         t0 = time.perf_counter()
         rt.launch(art, (Q, K, V))
         launch_vals.append((time.perf_counter() - t0) * 1000.0)
-    assert float(np.median(launch_vals)) < max(75.0, float(np.median(direct_vals)) * 4.0)
+    # Floor 2.0 ms, not 75.0. The old constant made this assertion dead: the
+    # oracle arm is ~0.4 ms here, so `max()` always selected 75.0 and the
+    # self-calibrating comparison never bound. Worse, launch overhead sat at
+    # 70.6 ms -- 94% of its own limit on an idle machine and a 677x multiple of
+    # direct execution -- so the test ratified exactly what it claimed to
+    # prevent, and tipped over on any load.
+    #
+    # Root-caused: `_build_rocm_family_hsaco` cached successes but not
+    # failures, so every launch forked `tessera-opt` to be told again that this
+    # host cannot serialize ROCm. With the failure cached, launch is 0.148 ms
+    # (1.3x direct idle, 1.37-1.66x under 10 busy cores).
+    #
+    # 2.0 ms is chosen by the only criterion that makes a constant worth
+    # having: it would have FAILED on the old code (70.6 ms), while leaving
+    # ~12x margin over the worst value measured under heavy load.
+    assert float(np.median(launch_vals)) < max(2.0, float(np.median(direct_vals)) * 4.0)
 
 
 @pytest.mark.hardware_rocm

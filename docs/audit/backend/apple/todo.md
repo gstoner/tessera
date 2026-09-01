@@ -6414,8 +6414,9 @@ mpsg_run_binary
 that the function's namesake guarantee "doesn't hold" — that
 `waitUntilSignaledValue:timeoutMS:` was ignoring its timeout. **That is false,
 and it was checked rather than assumed.** A standalone probe
-(`scratchpad/event_timeout_probe.mm`, built against the on-machine SDK per
-Decision #27) measures the API honouring its deadline precisely:
+(`tools/apple_probes/mtl_shared_event_timeout_probe.mm`, built against the
+on-machine SDK per Decision #27) measures the API honouring its deadline
+precisely:
 
 | case | timeout | returned | elapsed |
 |---|---|---|---|

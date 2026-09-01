@@ -391,6 +391,34 @@ def test_strict_loader_refuses_a_promotion_its_own_rules_reject(tmp_path):
     assert ledger.routes == {}
     assert any("missing_route_evidence" in r for r in ledger.rejected)
 
+    # Per-run metrics shorter than the declared source-report count. The rules
+    # are spelled `*_each_run`, and non-emptiness does not check "each": a
+    # promotion truncated to one median and one win fraction used to return no
+    # violations -- and truncation makes the row look BETTER, because a spread
+    # over one element is 0.0 and clears any cap. Dropping evidence must never
+    # improve a verdict (review finding on PR #673).
+    payload = _strict_payload()
+    decision = payload["decisions"][0]  # type: ignore[index]
+    decision["route_evidence"] = {"mpsgraph": promotion_evidence(  # type: ignore[index]
+        paired_median_speedups=[0.31], paired_win_fractions=[1.0],
+        cross_run_speedup_spread=0.0)}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    ledger = load_strict_route_ledger(path, context=_CONTEXT, now=now)
+    assert ledger.routes == {}
+    assert any("per_run_metrics_short" in r for r in ledger.rejected), ledger.rejected
+
+    # The two per-run lists disagreeing with each other.
+    ledger = _rejected({"paired_win_fractions": [1.0]})
+    assert ledger.routes == {}
+    assert any("per_run_metric_length_mismatch" in r for r in ledger.rejected)
+
+    # More per-run metrics than there were independent reports: the extra runs
+    # came from somewhere the ledger does not account for.
+    ledger = _rejected({"paired_median_speedups": [0.31, 0.29, 0.28],
+                        "paired_win_fractions": [1.0, 1.0, 1.0]})
+    assert ledger.routes == {}
+    assert any("per_run_metrics_exceed_reports" in r for r in ledger.rejected)
+
     # Rules block absent: nothing to hold the promotion to, so fail CLOSED.
     ledger = _rejected({}, promotion_rules={})
     assert ledger.routes == {}

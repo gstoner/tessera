@@ -5903,6 +5903,52 @@ ordinary work and would train people to bypass it.
 
 ---
 
+## Cross-backend sync `SPECTRAL-CONV-RANK-2026-08-31`
+
+**Owning item:** `tessera.spectral_conv` operand contract ·
+**synchronization key:** `SPECTRAL-CONV-RANK-2026-08-31`
+
+**Shared contract enforced (not changed): `spectral_conv` takes equal ranks.**
+It was already stated in two places — the host reference in `__init__.py`, which
+raises on a mismatch, and the `conv_full` shape rule, which returns *unknown*
+rather than deriving `n + m - 1`. **No dispatch lane stated it.** Each computes
+`rfft(x) * rfft(w)` and so inherited numpy broadcasting for free, silently
+admitting a rank-1 kernel against a rank-2 signal.
+
+**The divergence was in what the lanes ADMIT, not in what they compute.** The
+broadcast and rank-matched forms are **bit-identical** (max |Δ| exactly 0.0),
+and both match `np.convolve(..., mode="full")` to 2.4e-07. That is precisely why
+it survived: nothing was ever numerically wrong, so no accuracy check could see
+it. What it produced instead was a GPU lane that accepted input the CPU
+reference rejects.
+
+**And it had already caused a hollow test.**
+`test_apple_gpu_spectral::test_composites_match_host_reference` was written
+against the permissive lane, passing a rank-1 kernel — so its
+`assert_allclose` **never executed**: the reference raised while building the
+expected value. The test had been red long enough to be repeatedly triaged as
+"pre-existing".
+
+**Fixed by stating the rule once** — `_check_spectral_conv_ranks` in
+`runtime.py`, called by every dispatch lane — rather than adding a check per
+lane. There are **three** dispatch implementations of this op
+(`_spectral_composite`, shared by NVIDIA and ROCm; `_apple_gpu_dispatch_spectral`;
+and the host reference), and a rule copied three times is a rule that will hold
+in two of them.
+
+**Outcome for this backend: `parity validated` — found here, on the M1 Max.**
+`_apple_gpu_dispatch_spectral` now calls the shared check. The corrected test
+passes a rank-matched `(1, 5)` kernel, and its comparison now actually runs:
+Apple dispatch vs host reference agree to **1.2e-06**, and both match
+`np.convolve` full-mode ground truth to **2.4e-07**.
+
+Two tests added: one asserting the refusal (so a lane cannot quietly go
+permissive again) and one pinning the result against **numpy** rather than the
+reference — because "both Tessera lanes agree" and "both Tessera lanes are
+wrong the same way" are indistinguishable without an outside oracle, and this
+op's two lanes agreeing is exactly what hid the defect.
+
+---
 ## Cross-backend sync `HSACO-NEGATIVE-CACHE-2026-08-31`
 
 **Owning item:** compiled-family build caching ·

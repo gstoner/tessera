@@ -15501,6 +15501,36 @@ _SPECTRAL_COMPOSITE_OPS = (
 )
 
 
+def _check_spectral_conv_ranks(x: Any, w: Any) -> None:
+    """`spectral_conv` takes equal ranks. Shared by every dispatch lane.
+
+    The contract is stated by the host reference and by the `conv_full` shape
+    rule; **no dispatch path stated it**, and each inherited numpy broadcasting
+    from its `rfft(x) * rfft(w)` product instead. So a rank-1 kernel against a
+    rank-2 signal computed happily on GPU and RAISED on CPU: the lanes diverged
+    in what they *admit*, not in what they compute -- the two forms are
+    bit-identical. That is exactly why it survived, and it is how
+    `test_composites_match_host_reference` came to be written against input the
+    contract forbids, where the comparison never ran because the reference
+    raised first.
+
+    Shape inference was the quieter casualty: `_shape_conv_full` returns
+    unknown on a rank mismatch rather than deriving `n + m - 1`.
+
+    One helper rather than a check per lane, because there are three dispatch
+    implementations of this op (`_spectral_composite` for NVIDIA and ROCm,
+    `_apple_gpu_dispatch_spectral`, and the host reference) and a rule copied
+    three times is a rule that will hold in two of them.
+    """
+    if x.ndim != w.ndim:
+        raise ValueError(
+            f"tessera.spectral_conv requires equal ranks; got signal rank "
+            f"{x.ndim} {tuple(x.shape)} and kernel rank {w.ndim} "
+            f"{tuple(w.shape)}. Reshape the kernel to broadcast explicitly, "
+            f"e.g. w.reshape({(1,) * (x.ndim - w.ndim) + tuple(w.shape)})."
+        )
+
+
 def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any, np: Any) -> Any:
     """Composite spectral op over the device FFT lane. ``fftexec(sub_op, x,
     sub_kwargs)`` runs fft/ifft/rfft/irfft on the device."""
@@ -15534,6 +15564,7 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
     if op_name == "tessera.spectral_conv":  # FFT convolution
         x = np.asarray(operands[0], np.float32)
         w = np.asarray(operands[1], np.float32)
+        _check_spectral_conv_ranks(x, w)
         n = int(x.shape[-1] + w.shape[-1] - 1)
         nfft = 1 << int(np.ceil(np.log2(max(n, 1))))
         xp = np.zeros(x.shape[:-1] + (nfft,), np.float32)
@@ -36788,6 +36819,7 @@ def _apple_gpu_dispatch_spectral(op_name: Any, operands: Any, kwargs: Any, np: A
         return np.ascontiguousarray(np.real(spec[tuple(sl)] * phase))
     if bare == "spectral_conv":
         w = np.asarray(operands[1])
+        _check_spectral_conv_ranks(x, w)
         n = x.shape[-1] + w.shape[-1] - 1
         nfft = 1 << int(np.ceil(np.log2(n)))
 

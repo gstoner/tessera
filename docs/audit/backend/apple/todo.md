@@ -5785,3 +5785,118 @@ support MTL4 counter heaps. The legacy `MTLCounterSampleBuffer` route is not
 available on this hardware; the MTL4 heap is the only independent device clock
 here, which is why the follow-up above depends on Metal 4 rather than being
 implementable on the classic API.
+
+---
+
+## Cross-backend sync `APPLE-DEVICE-CLOCK-2026-08-31`
+
+**Owning item:** Apple's device clock · **synchronization key:**
+`APPLE-DEVICE-CLOCK-2026-08-31`
+
+**Shared contract changed — what makes a device clock a *measurement*.**
+`APPLE-TIMER-WITNESS` added a host witness and a containment bound. This closes
+the direction that bound provably cannot reach: a clock that under-reads looks
+exactly like a small kernel, since both sit far below the host wall.
+
+**The defect.** `ts_record_dispatch_gpu_elapsed` preferred
+`cb.kernelStartTime`/`kernelEndTime` and treated `GPUStartTime`/`GPUEndTime` as
+a fallback, on a comment asserting the first pair was "the completed
+compute-kernel interval". **The SDK says the opposite by omission**:
+`GPUStartTime` carries an `@abstract` — *"the host time in seconds that GPU
+starts executing this command buffer"* — and `kernelStartTime` is a bare,
+undocumented declaration. Measured on an M1 Max with only a kernel's loop count
+varying:
+
+| iters | `kernelS/E` | `GPUS/E` | encoder stage | host wall | kern/wall |
+|---|---|---|---|---|---|
+| 5,000 | 54,583 | 498,375 | 498,375 | 764,417 | 0.071 |
+| 320,000 | 65,833 | 9,390,833 | 9,390,792 | 9,833,750 | **0.007** |
+
+`kernelStartTime` is **flat across a 64× workload**. `GPUStartTime` tracks the
+wall *and* agrees with an independent stage-boundary counter-sample clock **to
+the nanosecond** — two mechanisms agreeing that closely is what distinguishes a
+measurement from a plausible number.
+
+**A second bug hid behind the first.** `GPUStartTime` is documented to read zero
+until the GPU starts and to be readable "in command buffer completion handler".
+Every dispatch path here waits on a *shared event*, which proves the GPU
+finished but does not publish those properties. Simply preferring the documented
+pair therefore changed nothing — it read zero and fell straight back. The
+recorder now forces publication itself (`ts_gpu_interval`), so no caller can
+forget.
+
+**The generalisable finding is the check, not the property.** No bound catches
+an under-reading clock. What caught this is **metamorphic**: vary the workload
+and require the device clock and the host wall to move *together*. They may
+diverge in magnitude — the wall carries submission overhead — but not in
+direction. Under the defect that ratio was 0.32–0.40; healthy it is 0.86–1.14.
+
+**Outcome for this backend: `parity validated` — defect found and fixed here,
+on the M1 Max.** `ts_gpu_interval` prefers `GPUStartTime`/`GPUEndTime` and
+forces the properties to publish; the undocumented pair remains only as a
+labelled fallback (`timing_source` distinguishes them, so a consumer that cares
+about fidelity can check). On the resident-attention lane, KV 19 → 1216 now
+reports **864,000 → 1,505,333 ns (1.74×)** against a wall of 1.53×, where
+before it reported **58,166 → 28,875 ns (0.50×)** against a wall of 1.55×.
+
+**What this corrects in `APPLE-TIMER-WITNESS-2026-08-31`.** That entry justified
+the one-sided band partly on resident-session ratios of 0.037–0.101 being "a
+25 µs kernel inside a 265 µs window, entirely correct". **They were not
+correct — they were this defect.** The one-sided *conclusion* stands (a wall
+floor still cannot separate a small kernel from an under-read), but that stated
+reason is withdrawn.
+
+**Recorded so it is not rediscovered.** This M1 Max supports
+`MTLCounterSamplingPointAtStageBoundary` but **not**
+`...AtDispatchBoundary` — so `tessera_apple_gpu_tile_counter_sampling_supported()`,
+which checks the dispatch point, reports 0 and makes the classic counter route
+look unavailable when a usable one exists. And the two counter domains differ:
+`sampleTimestamps:gpuTimestamp:` shows the classic sample-buffer domain is
+**1 GHz (ticks are already nanoseconds)**, while `queryTimestampFrequency`
+returns **24 MHz** and belongs to the MTL4 heap. Converting one with the other's
+frequency scales by 41.7×.
+
+**Still open here.** The stage-boundary clock is *verified good* on this
+hardware but is not wired in — it needs a `MTLComputePassDescriptor` on each
+encoder, and none of the 120 owned encoders use one today. It is the right
+second clock if a cross-clock bound is ever wanted; `GPUStartTime` agreeing with
+it to the nanosecond is what makes the cheaper fix defensible in the meantime.
+
+---
+
+## Cross-backend sync `PACKET-PROVENANCE-2026-08-31`
+
+**Owning item:** exact-device evidence provenance ·
+**synchronization key:** `PACKET-PROVENANCE-2026-08-31`
+
+**Shared contract: a packet may not claim a commit it was not generated from.**
+Every lane's recorder stamps `tested_commit` from `git rev-parse HEAD` and
+**none of the four checked that HEAD is what was actually measured.** Recording
+from a modified working tree therefore produces a packet whose measurements
+came from edited sources while its `tested_commit` names the parent — false
+provenance that then propagates into `docs/audit/generated/e2e_fleet.*` as
+though it were a device result for that commit (AGENTS.md:87-90).
+
+**Found by doing it.** The Apple packet on PR #665 was sealed from a dirty tree:
+its `source_fingerprint` hashed the *edited* `apple_gpu_runtime.mm` while
+`tested_commit` named the parent, whose runtime hashes to something else. It was
+review that caught it, not any gate.
+
+**Apple is the only lane where the contradiction is visible at all**, because
+only its packet carries a `source_fingerprint` of a runtime source file. The
+other three fingerprint measured *resources*, not sources — so a packet built
+from modified kernels is internally consistent and silently wrong. **The lane
+with the strongest self-check is the one that got caught; the weaker three
+would not have surfaced it.**
+
+**Outcome for this backend: `parity validated` — the hole was mine and is
+closed here.** `record_apple_packet.py` now refuses to seal when a fingerprinted
+source differs from HEAD, and the packet is re-recorded against its own commit
+(`tested_commit` 8dd79bbc, runtime at that commit hashing to the packet's
+`2653a004…`).
+
+The check is scoped to the files the packet actually fingerprints rather than
+the whole tree: a dirty README does not invalidate a device measurement, a dirty
+`apple_gpu_runtime.mm` does, because the fingerprint is taken from working-tree
+bytes. Widening it to the whole tree would make the recorder unusable during
+ordinary work and would train people to bypass it.

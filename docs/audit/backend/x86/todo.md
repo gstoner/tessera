@@ -3179,3 +3179,110 @@ unrelated to the core's current frequency, which is what makes it comparable
 across power states and equally what makes it *not* a cycle count.
 
 **No AVX-512 evidence is claimed** — no x86 code changed.
+
+---
+
+## Cross-backend sync `APPLE-DEVICE-CLOCK-2026-08-31`
+
+**Owning item:** Apple's device clock · **synchronization key:**
+`APPLE-DEVICE-CLOCK-2026-08-31`
+
+**Shared contract changed — what makes a device clock a *measurement*.**
+`APPLE-TIMER-WITNESS` added a host witness and a containment bound. This closes
+the direction that bound provably cannot reach: a clock that under-reads looks
+exactly like a small kernel, since both sit far below the host wall.
+
+**The defect.** `ts_record_dispatch_gpu_elapsed` preferred
+`cb.kernelStartTime`/`kernelEndTime` and treated `GPUStartTime`/`GPUEndTime` as
+a fallback, on a comment asserting the first pair was "the completed
+compute-kernel interval". **The SDK says the opposite by omission**:
+`GPUStartTime` carries an `@abstract` — *"the host time in seconds that GPU
+starts executing this command buffer"* — and `kernelStartTime` is a bare,
+undocumented declaration. Measured on an M1 Max with only a kernel's loop count
+varying:
+
+| iters | `kernelS/E` | `GPUS/E` | encoder stage | host wall | kern/wall |
+|---|---|---|---|---|---|
+| 5,000 | 54,583 | 498,375 | 498,375 | 764,417 | 0.071 |
+| 320,000 | 65,833 | 9,390,833 | 9,390,792 | 9,833,750 | **0.007** |
+
+`kernelStartTime` is **flat across a 64× workload**. `GPUStartTime` tracks the
+wall *and* agrees with an independent stage-boundary counter-sample clock **to
+the nanosecond** — two mechanisms agreeing that closely is what distinguishes a
+measurement from a plausible number.
+
+**A second bug hid behind the first.** `GPUStartTime` is documented to read zero
+until the GPU starts and to be readable "in command buffer completion handler".
+Every dispatch path here waits on a *shared event*, which proves the GPU
+finished but does not publish those properties. Simply preferring the documented
+pair therefore changed nothing — it read zero and fell straight back. The
+recorder now forces publication itself (`ts_gpu_interval`), so no caller can
+forget.
+
+**The generalisable finding is the check, not the property.** No bound catches
+an under-reading clock. What caught this is **metamorphic**: vary the workload
+and require the device clock and the host wall to move *together*. They may
+diverge in magnitude — the wall carries submission overhead — but not in
+direction. Under the defect that ratio was 0.32–0.40; healthy it is 0.86–1.14.
+
+**Outcome for this backend: `not applicable` — no device clock to mis-select.**
+x86 times on the host, so there is no pair of properties where one measures GPU
+execution and the other does not.
+
+**But the trap generalises to this lane's own clock pair, and it is the one
+already recommended here.** `APPLE-TIMER-WITNESS` recorded that
+`CLOCK_THREAD_CPUTIME_ID` is the more interesting clock for x86 because it
+excludes scheduler idle a wall measurement charges to the kernel. That is
+exactly a "two clocks, different regions" situation, and the Apple defect is
+what it looks like when the wrong one is chosen and nothing checks: a number
+that is plausible, stable, and not a measurement of the work. **Before that
+pairing is built, wire the metamorphic tracking check with it** — vary the
+problem size and require thread-CPU time and wall time to move together. It is
+a handful of lines and it is the only check that would have caught this class.
+
+**No AVX-512 evidence is claimed** — no x86 code changed.
+
+---
+
+## Cross-backend sync `PACKET-PROVENANCE-2026-08-31`
+
+**Owning item:** exact-device evidence provenance ·
+**synchronization key:** `PACKET-PROVENANCE-2026-08-31`
+
+**Shared contract: a packet may not claim a commit it was not generated from.**
+Every lane's recorder stamps `tested_commit` from `git rev-parse HEAD` and
+**none of the four checked that HEAD is what was actually measured.** Recording
+from a modified working tree therefore produces a packet whose measurements
+came from edited sources while its `tested_commit` names the parent — false
+provenance that then propagates into `docs/audit/generated/e2e_fleet.*` as
+though it were a device result for that commit (AGENTS.md:87-90).
+
+**Found by doing it.** The Apple packet on PR #665 was sealed from a dirty tree:
+its `source_fingerprint` hashed the *edited* `apple_gpu_runtime.mm` while
+`tested_commit` named the parent, whose runtime hashes to something else. It was
+review that caught it, not any gate.
+
+**Apple is the only lane where the contradiction is visible at all**, because
+only its packet carries a `source_fingerprint` of a runtime source file. The
+other three fingerprint measured *resources*, not sources — so a packet built
+from modified kernels is internally consistent and silently wrong. **The lane
+with the strongest self-check is the one that got caught; the weaker three
+would not have surfaced it.**
+
+**Outcome for this backend: `follow-up required` — same defect, unfixed.**
+`record_x86_base_packet.py:98` stamps `tested_commit` from `git rev-parse HEAD` with no dirtiness
+check, exactly as Apple's did.
+
+**Why it is not fixed in this PR.** The Apple guard works because that packet
+declares which file it fingerprints, so the set to check is unambiguous. This
+lane fingerprints measured resources rather than sources, so choosing the right
+file set — plausibly the AVX-512 kernel sources — is a judgement about what this backend's
+measurement actually depends on, and getting it wrong fails in the worse
+direction: a too-narrow set is a guard that passes while the provenance is
+false, which reads as protection and is not. That call belongs with someone
+looking at this backend's build, on **Princess-Luna (AVX-512)**.
+
+**The cheap interim** is the whole-tree form: refuse when `git status
+--porcelain` is non-empty for this backend's source directory. Cruder than
+Apple's and more likely to be bypassed, but it cannot be wrong in the
+dangerous direction.

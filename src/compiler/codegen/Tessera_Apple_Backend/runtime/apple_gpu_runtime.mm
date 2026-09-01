@@ -852,35 +852,103 @@ extern "C" int32_t tessera_apple_gpu_tile_counter_sampling_supported(void) {
   return 0;
 }
 
-static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb) {
-  // kernelStart/End are the completed compute-kernel interval. GPUStart/End
-  // describe the broader command-buffer scheduling interval and are allowed to
-  // be zero on this driver, so use them only as a fallback.
-  NSTimeInterval start = cb.kernelStartTime;
-  NSTimeInterval end = cb.kernelEndTime;
-  if (!(end >= start && end > 0.0)) {
-    start = cb.GPUStartTime;
-    end = cb.GPUEndTime;
+// GPUStartTime/GPUEndTime is the device clock; kernelStartTime/kernelEndTime is
+// NOT, and preferring it was measured reporting ~1% of the real interval.
+//
+// The comment this replaces had it exactly backwards -- it called kernelStart/End
+// "the completed compute-kernel interval" and GPUStart/End "the broader
+// command-buffer scheduling interval". The SDK says the opposite by omission:
+// `GPUStartTime` carries an @abstract ("the host time in seconds that GPU starts
+// executing this command buffer") and `kernelStartTime` is a bare, undocumented
+// declaration.
+//
+// Measured on an M1 Max (2026-08-31) with only a kernel's loop count varying:
+//
+//   iters   kernelS/E      GPUS/E      encoder      host wall   kern/wall
+//    5,000     54,583     498,375      498,375        764,417       0.071
+//  320,000     65,833   9,390,833    9,390,792      9,833,750       0.007
+//
+// kernelStart/End is flat across a 64x workload; GPUStart/End tracks the wall
+// AND agrees with an independent stage-boundary counter-sample clock to the
+// nanosecond (9,390,833 vs 9,390,792). Two mechanisms agreeing that closely is
+// what makes this a device measurement rather than a plausible number.
+//
+// This is the failure a host-wall bound provably cannot catch: an under-read
+// looks like a small kernel. It was found by a metamorphic check -- scale the
+// work, require the time to scale -- which is now a test.
+// Read the GPU interval, forcing the properties to become visible first.
+//
+// `GPUStartTime` is documented to "return zero if it has not started" and to
+// be readable "in command buffer completion handler". Every dispatch path here
+// waits on a shared event instead, which proves the GPU finished but does NOT
+// publish these properties -- they lag by a scheduler turn. Without the wait
+// below, GPUStartTime reads 0 on every lane, the code silently falls back to
+// the undocumented kernelStartTime pair, and the whole point of preferring the
+// documented clock is lost while still looking correct.
+//
+// `waitUntilCompleted` is cheap ONLY when the caller has already established
+// successful completion -- then the work is done and this merely synchronises
+// property publication. **It has no timeout.** On a hung command buffer it
+// blocks forever, so `completed` gates it: `ts_enc_commit_wait` and
+// `ts_enc_wait_destroy` both call the recorder even after their 30 s
+// shared-event wait times out, and an unconditional wait here would swallow
+// that fault-containment path at exactly the moment it matters -- turning a
+// bounded 30 s failure into a permanent hang, in code whose entire purpose is
+// telemetry.
+//
+// The parameter defaults to `false` at the recorders, so a call site that has
+// not established completion cannot hang by omission; it loses the GPU clock
+// and falls back, which is the right trade.
+//
+// Returns true when `start`/`end` hold a usable GPU interval.
+static bool ts_gpu_interval(id<MTLCommandBuffer> cb, NSTimeInterval &start,
+                            NSTimeInterval &end, bool completed) {
+  start = cb.GPUStartTime;
+  end = cb.GPUEndTime;
+  if (end >= start && end > 0.0) return true;
+  if (!completed) return false;
+  [cb waitUntilCompleted];
+  start = cb.GPUStartTime;
+  end = cb.GPUEndTime;
+  return end >= start && end > 0.0;
+}
+
+static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb,
+                                       bool completed = false) {
+  NSTimeInterval start = 0.0, end = 0.0;
+  const bool gpu_clock = ts_gpu_interval(cb, start, end, completed);
+  if (!gpu_clock) {
+    // Falling back to the undocumented pair keeps a number where there would
+    // otherwise be none; the source label says which was used, and a consumer
+    // that cares about fidelity must check it.
+    start = cb.kernelStartTime;
+    end = cb.kernelEndTime;
   }
   g_last_tile_device_time_ns = (end >= start && end > 0.0)
       ? static_cast<int64_t>((end - start) * 1.0e9)
       : -1;
   if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
     g_last_dispatch_device_time_ns = g_last_tile_device_time_ns;
-    g_last_dispatch_timing_source = g_last_tile_device_time_ns >= 0 ? 1 : 0;
+    g_last_dispatch_timing_source =
+        g_last_tile_device_time_ns >= 0 ? (gpu_clock ? 2 : 1) : 0;
   }
 }
 
 static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb,
-                                           bool prefer_command_buffer = false) {
+                                           bool prefer_command_buffer = false,
+                                           bool completed = false) {
   if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
-  NSTimeInterval start = prefer_command_buffer ? cb.GPUStartTime : cb.kernelStartTime;
-  NSTimeInterval end = prefer_command_buffer ? cb.GPUEndTime : cb.kernelEndTime;
-  int32_t source = prefer_command_buffer ? 2 : 1;
-  if (!(end >= start && end > 0.0)) {
-    start = prefer_command_buffer ? cb.kernelStartTime : cb.GPUStartTime;
-    end = prefer_command_buffer ? cb.kernelEndTime : cb.GPUEndTime;
-    source = prefer_command_buffer ? 1 : 2;
+  // `prefer_command_buffer` no longer selects between the two clocks -- see the
+  // measurement above `ts_record_tile_gpu_elapsed`. GPUStart/End is always
+  // preferred because it is the only one that measures the work; the flag is
+  // kept because callers still use it to force the `waitUntilCompleted` that
+  // makes these properties visible.
+  NSTimeInterval start = 0.0, end = 0.0;
+  int32_t source = 2;
+  if (!ts_gpu_interval(cb, start, end, completed)) {
+    start = cb.kernelStartTime;
+    end = cb.kernelEndTime;
+    source = 1;
   }
   g_last_dispatch_device_time_ns = (end >= start && end > 0.0)
       ? static_cast<int64_t>((end - start) * 1.0e9)
@@ -957,7 +1025,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
         ts_wall.emplace();
         [cb commit];
         [cb waitUntilCompleted];
-        ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
+        ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, /*completed=*/true);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
     }
@@ -1016,7 +1084,8 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // path that needs it most, and inflating the wall loosens the bound.
   if (ts_wall) ts_wall->note();
   if (prefer_command_buffer) [cb waitUntilCompleted];
-  ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer);
+  // Reached only after the shared event signalled and cb.error was nil.
+  ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, /*completed=*/true);
   return true;
 }
 
@@ -1105,7 +1174,9 @@ static bool commit_mpsgraph_and_wait_with_timeout(
     ts_wall.disarm();
     (void)timing->finish(timeout_ms);
   } else if (owns_whole_dispatch) {
-    ts_record_dispatch_gpu_elapsed(root);
+    // Past the timeout and error returns above.
+    ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,
+                                   /*completed=*/true);
   }
   return true;
 }
@@ -1174,7 +1245,7 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
     bool ok = commit_and_wait_with_timeout(ctx, cb, /*timeout_ms=*/30000,
                                             "mps_gemm_f32");
     if (!ok) return false;
-    ts_record_tile_gpu_elapsed(cb);
+    ts_record_tile_gpu_elapsed(cb, /*completed=*/true);
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -1746,7 +1817,7 @@ bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
     // wrapper so a hung f16 GEMM doesn't deadlock the test runner.
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
                                       "mps_gemm_f16")) return false;
-    ts_record_tile_gpu_elapsed(cb);
+    ts_record_tile_gpu_elapsed(cb, /*completed=*/true);
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -10391,7 +10462,7 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tile_simdgroup_gemm_f16"))
       return 0;
-    ts_record_tile_gpu_elapsed(cb);
+    ts_record_tile_gpu_elapsed(cb, /*completed=*/true);
     ts_record_tile_counter_delta(samples);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
@@ -22302,6 +22373,7 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   }
   DispatchWallWitness ts_wall_session;
   [s->cb commit];
+  bool completed = false;
   if (ev) {
     bool done = [ev waitUntilSignaledValue:signal_val
                                   timeoutMS:30000];
@@ -22312,11 +22384,13 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
               (unsigned long long)ev.signaledValue,
               (unsigned long long)signal_val);
     }
+    completed = done;
   } else {
     // Shared-event init failed — fall back to the legacy synchronous
     // wait so the caller doesn't crash. No timeout protection in this
     // path (matches the helper's own fallback).
     [root waitUntilCompleted];
+    completed = true;
   }
   // APPLE-ATTN-FWD-1: publish the complete interval for an owned resident
   // session. The shared-event signal is encoded after all session work, so the
@@ -22329,7 +22403,11 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   // different regions -- the exact error that produced a wrong band in the
   // first version of this change.
   ts_wall_session.note();
-  ts_record_dispatch_gpu_elapsed(root);
+  // `completed` is false when the 30 s wait timed out. Telemetry then declines
+  // the GPU clock rather than blocking on a hung command buffer -- losing a
+  // number is the right trade against defeating the timeout.
+  ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,
+                                 completed);
   s->cb = nil;
   s->mtlcb = nil;
   delete s;
@@ -22387,7 +22465,10 @@ extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - s->submitted).count();
   }
-  ts_record_dispatch_gpu_elapsed(root);
+  // Same rule as ts_enc_commit_wait: `completed` is false on a timed-out
+  // async wait, and the recorder must not then wait unbounded.
+  ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,
+                                 completed);
   s->asyncEvent = nil;
   s->asyncSignal = 0;
   s->mtlcb = nil;

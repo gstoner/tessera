@@ -6397,3 +6397,78 @@ hold the promotion to and the honest verdict is "unverifiable", not "fine".
 
 **Outcome for this backend: `parity validated` — measured on the Mac (M1 Max,
 macOS 26.6.2), which is the only host that can produce this evidence.**
+
+## APPLE-DISPATCH-WEDGE-1: a timed-out MPSGraph dispatch has no circuit breaker *(open, investigated 2026-09-01, M1 Max)*
+
+**Trigger.** An Apple `-k apple` sweep sat for **70 minutes** at 0.0% CPU
+(1:42 CPU time), stack-sampled entirely inside
+
+```
+mpsg_run_binary
+ -> commit_mpsgraph_and_wait_with_timeout(ctx, mps_cb, metal_cb, 30000, "mpsgraph_binary", &timing)
+   -> -[IOSurfaceSharedEvent waitUntilSignaledValue:timeoutMS:]  (in IOSurface) + 72
+     -> iokit_user_client_trap  (in IOKit) + 8
+```
+
+**Correction, recorded because the first reading was wrong.** I initially wrote
+that the function's namesake guarantee "doesn't hold" — that
+`waitUntilSignaledValue:timeoutMS:` was ignoring its timeout. **That is false,
+and it was checked rather than assumed.** A standalone probe
+(`scratchpad/event_timeout_probe.mm`, built against the on-machine SDK per
+Decision #27) measures the API honouring its deadline precisely:
+
+| case | timeout | returned | elapsed |
+|---|---|---|---|
+| never signalled | 250 ms | `NO` | 251.0 ms |
+| never signalled | 1000 ms | `NO` | 1001.0 ms |
+| never signalled | 3000 ms | `NO` | 3000.2 ms |
+| CPU signal at 100 ms | 5000 ms | `YES` | 104.2 ms |
+| GPU-encoded signal | 5000 ms | `YES` | 0.1 ms |
+| **committed buffer, unreachable value** | 1000 ms | `NO` | **1001.0 ms** |
+
+The last row is the exact shape of the failure — work committed, awaited value
+never arriving — and it times out correctly.
+
+**And the probe provably exercises the same code path**, which is the step that
+makes the above admissible rather than merely suggestive: sampling the probe
+mid-wait yields the identical frame *at the identical address* as the hung
+process — `-[IOSurfaceSharedEvent waitUntilSignaledValue:timeoutMS:] + 72
+[0x1988de184]` -> `iokit_user_client_trap + 8 [0x190604ae0]`. (`[dev
+newSharedEvent]` returns `_MTLSharedEvent`, whose wait is implemented by
+`IOSurfaceSharedEvent`; the two class names are one path, not two.)
+
+**What is NOT established.** Whether the 70 minutes was *one* uninterruptible
+wait — a driver wedge defeating the kernel-side deadline — or **~140 sequential
+30-second timeouts** (70 min / 30 s = 140, a suspiciously round fit). A `sample`
+aggregates by stack, so it cannot separate one 70-minute wait from 140
+consecutive ones; and the process was killed before forward progress could be
+checked. No GPU fault appeared in `log show --last 4h` and no hang report was
+written, so a driver wedge has **no positive evidence** either. Both remain
+open. It has not reproduced: the same sweep re-ran clean in **4:03**.
+
+**What IS established, and is a defect under either hypothesis: there is no
+circuit breaker.** Seven call sites, six at 30 000 ms and one at 60 000 ms. On
+timeout the caller correctly falls back to the host recovery path — but nothing
+records that the *device* is unusable, so every subsequent dispatch pays the
+full timeout again. Worse, `commit_mpsgraph_and_wait_with_timeout` calls
+`ts_clear_dispatch_telemetry()` **on entry**, so the previous timeout's evidence
+is erased before the next attempt. `g_last_gpu_error_kind` is a `thread_local`
+*last-error* for reporting, not accumulating state, and nothing consults it to
+short-circuit. So a device that wedges early in a suite turns a 4-minute run
+into an unbounded one, and by design leaves no accumulated trace of why.
+
+30 s is a defensible production timeout and a poor test one; the missing piece
+is not a smaller number but a state that says *stop asking*.
+
+**Proposed fix (not yet made, and it carries a sequencing constraint).** A
+process-wide sticky counter: after N consecutive dispatch timeouts, stop
+attempting GPU dispatch, go straight to the host path, and emit one stable
+diagnostic naming the op and the count (Decision #21 — never a silent no-op).
+The telemetry clear must move so it cannot erase the signal it is counting.
+
+**Sequencing.** `AppleRouteContext.runtime_fingerprint` is
+`sha256(apple_gpu_runtime.mm)` (`apple_route_selector.py::_runtime_source_fingerprint`),
+so **any edit to that file invalidates the strict route ledger** and puts
+`test_strict_retune_ledger_admits_on_its_exact_live_apple_host` back to red.
+The fix therefore has to land together with a benchmark re-run and re-seal
+(`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`), not before or after it.

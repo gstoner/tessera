@@ -112,13 +112,25 @@ emitted lane in the race the margin is 1.5–1.7× at *every* shape including
 256³, where the entry had the delegate winning. Read the table above, not that
 one, for the ranking.
 
-**Follow-up owned here.** `applies_to(region)` is shape-blind, so the emitted
-lane — aligned-only — cannot declare that it does not serve a ragged shape. At
-ragged dims it is applicable-but-unmeasurable, so every ragged device verdict is
-refused and selection falls back to tier priority. Safe and honest, but it
-means ragged matmul gets no measured selection. Fixing it means giving
-`applies_to` the dims, which is a shared-signature change across all four
-backends.
+**Follow-up owned here — CLOSED 2026-09-01, and this paragraph's own
+assessment was wrong twice.** See
+`APPLIES-TO-SHAPE-BLIND-2026-09-01` below. What it got right: `applies_to(region)`
+is shape-blind, and the emitted lane is aligned-only. What it got wrong:
+
+* *"applicable-but-unmeasurable … every ragged device verdict is refused …
+  safe and honest."* True of the **device** path only, where
+  `measure_device_latency` already returned `None` for a ragged shape. On the
+  **end-to-end** path `_measure` timed `run`, and `run` on a ragged shape
+  returns `region.reference(...)` — so the row recorded numpy's latency under
+  the kernel's name. Not unmeasurable: **mis-measured**.
+* *"selection falls back to tier priority"* — stated as the safe outcome, and
+  it is the unsafe one. Tier priority picks the aligned-only lane, which then
+  declines to numpy while a lower-tier lane that could serve the shape goes
+  untried.
+
+Fixing it also did **not** require the shared-signature change predicted here.
+An additive `applies_to_inputs(region, *inputs)` with a `True` default left all
+17 existing `applies_to` implementations untouched.
 
 ## Cross-backend sync `DELTA-OPERAND-ABI-SYNC-2026-08-30`
 
@@ -5592,3 +5604,113 @@ width: two far-apart candidates separate almost automatically, four close ones
 rarely do. A backend that adds candidates should expect its separated fraction
 to fall, and that is the field getting more honest, not the hardware getting
 worse.
+
+## Cross-backend sync `APPLIES-TO-SHAPE-BLIND-2026-09-01`
+
+**Owning item:** `applies_to(region)` shape-blind (NVIDIA plan, "Follow-up
+owned here", now closed) · **synchronization key:**
+`APPLIES-TO-SHAPE-BLIND-2026-09-01`
+
+**Shared contracts changed** — arbiter selection and autotune measurement, so
+all four backends are assessed here per AGENTS.md:
+
+* `Candidate.applies_to_inputs(region, *inputs)` — new, additive, defaults
+  `True`. Every existing `applies_to` implementation is untouched.
+* `candidate.live_candidates(region, op, target, inputs)` — one statement of
+  "who is racing", replacing the copy that `arbitrate`, `measured_arbitrate`
+  and `corpus_winner` each kept.
+* `arbitrate(..., inputs=())` — additive keyword; omitted, selection is
+  byte-for-byte what it was.
+* `autotune._measure` now reads the execution tag it was already producing.
+
+**The defect: a region carries structure, not dimensions.** `MatmulRegion` has
+a dtype and transpose flags; `FusedRegion` an epilogue chain. M/N/K arrive with
+the operands and are inferred separately. So `applies_to(region)` could not
+express "aligned shapes only", and the F4 oracle could not cover for it either
+— its probe shape is fixed (32×16×32 for matmul) and its verdict is cached
+under a key with **no shape in it**. An aligned-only lane therefore declined
+inside `run`, by returning the numpy reference, *after* it had already won.
+
+**Two harms, both reproduced against the real
+`NvidiaMmaGemmEmittedCandidate` before the fix:**
+
+| | before | after |
+|---|---|---|
+| ragged-shape winner | `nvidia_mma_gemm_emitted`, tag `reference` | the lane that can run the shape, real tag |
+| its recorded latency | `0.00525 ms` (numpy) vs a real `0.00196 ms` rival | absent from the field |
+
+The second is the one that propagates. A fabricated latency does not sit
+inert — it **ranks**. With the backstop disabled the same record comes back
+`separated: True, margin 0.59, runner_up: nvidia_mma_gemm_emitted`: the
+separation machinery from #663/#671 confidently certifies a 2.4× loss for a
+kernel that never ran. Separation judges the numbers it is given, and this is
+a second, independent mechanism for the corpus bias recorded in
+`NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30` — where a biased race hid
+the fastest kernel in the registry.
+
+**The tag was already there and nothing read it.** The D3 arbiter log has
+described this since it was written: *"the arbiter selects a candidate, but
+that candidate's `run` may still decline to the numpy reference at execution
+time (a device error, **an unsupported shape**) — a silent degrade the tag
+reveals."* Observability without a consumer, which is Decision #29 wearing a
+diagnostic's clothes.
+
+**Fix, layered deliberately.** `applies_to_inputs` fails **open** on absent or
+malformed operands — the question cannot be answered there, and refusing would
+disable every shape-anonymous caller, while a malformed pair is an operand
+error that must still raise through `run` rather than be silently excluded
+(Decision #21). The fail-**closed** backstop sits one level down: `_measure`
+refuses to record a latency for a run that came back with a reference tag,
+whether or not the candidate declared itself. A lane that never adopts the
+hook is therefore still safe from the fabricated-measurement half.
+
+**Host-free evidence:** `tests/unit/test_arbiter_workload_applicability.py`
+(10 tests). Mutation-verified — four independent mutations, each killing only
+its own tests: disabling the selection filter (3 fail), disabling the tag
+backstop (1), removing the NVIDIA producer (1), removing the ROCm producer (1).
+
+**Outcome for this backend: `follow-up required` — the producer landed, the
+device proof has not.** `NvidiaMmaGemmEmittedCandidate.applies_to_inputs` now
+states the aligned-only contract its own class docstring has always carried and
+its `measure_device_latency` already enforced; the declaration was the only
+place the three disagreed. Its 20 sibling lanes were audited and need nothing:
+their run-time guards test `ndim`/contraction agreement, which is operand
+*validity*, not shape *support*, and those correctly stay in `run`.
+
+Owed from Super-Bear (RTX 5070 / sm_120): re-race a ragged bucket and confirm
+(a) the emitted lane is absent from the field rather than present with a numpy
+latency, and (b) the ragged winner now carries a real execution tag. Neither is
+claimed here — this Mac has no CUDA, so the aligned F4 probe declines for the
+wrong reason and cannot falsify the device-present case. Harm 2 above was
+therefore reproduced under a simulated device (aligned path stubbed to succeed,
+ragged left to decline), and is labelled as such.
+
+**Blast radius, measured: no committed corpus row is invalidated.** Every
+persisted matmul bucket is aligned (0 of 28 rows ragged) and every attention
+bucket uses head_dim 64 (0 of 18 ragged), so neither producer's decline was
+ever exercised during a recorded race. The defect was live in the *dispatch*
+path and had not yet reached the evidence.
+
+That is luck, and it points at the real gap: the recorders only ever race
+power-of-two shapes, which is why nobody hit this and also why **the ragged
+path has no measured coverage at all**. The device follow-ups above should
+add a ragged bucket rather than only re-checking an aligned one — a re-race
+of the existing buckets would pass identically before and after this change.
+
+**Two follow-on findings from the same code path, both now covered.**
+
+*The two consumers had to move together, and it is not obvious why.* Buckets
+are coarse — `bucket_key` maps both `(24,12,20)` and `(32,16,32)` to
+`(32,16,32)` — so a ragged workload genuinely reads the aligned workload's
+corpus row, and `run_arbitrated` passes a corpus hint to `arbitrate` as
+`force`, which restricts to that one name. Making `arbitrate` shape-aware
+*without* `corpus_winner` therefore converts the silent degrade into an
+`ArbiterError` (verified, not inferred). `corpus_winner` withholds the hint
+because its own `live` set excludes the lane — that coupling is now pinned by
+a regression test rather than left to be rediscovered.
+
+*The `force` diagnostic named the wrong gate.* One message — "not available" —
+covered not-registered, wrong-region and unavailable-here alike, and once a
+shape axis existed it was actively wrong for the commonest case: the lane IS
+available, on a host that has it, for a shape it cannot serve. It now names
+which of the four gates rejected the candidate (Decision #21).

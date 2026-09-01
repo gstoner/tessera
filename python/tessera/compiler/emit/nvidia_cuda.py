@@ -5299,12 +5299,42 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
     def applies_to(self, region: Any) -> bool:
         return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
 
+    def applies_to_inputs(self, region: Any, *inputs: Any) -> bool:
+        """Decline a ragged workload *before* selection, not inside ``run``.
+
+        This class has always documented itself as serving aligned shapes only,
+        and `measure_device_latency` below already returns None for a ragged
+        one for exactly this reason. `applies_to` could not say it -- a
+        `MatmulRegion` carries dtype and transpose flags but no M/N/K -- so the
+        decline happened after this lane had already won on tier, handing back
+        numpy while a lower-tier lane that could serve the shape went untried.
+        """
+        import numpy as np
+        if len(inputs) != 2:
+            return True                        # cannot judge -> do not exclude
+        try:
+            An, Bn = region._natural(inputs[0], inputs[1], cast=False)
+            An, Bn = np.asarray(An), np.asarray(Bn)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return True
+        # `_aligned_2d` answers False for a malformed operand pair as well as
+        # for a merely ragged one, and those are different questions. A
+        # malformed pair is "cannot judge": defer, and let `run`'s own operand
+        # validation raise through the reference rather than have applicability
+        # quietly swallow it (Decision #21 -- never a silent no-op).
+        if An.ndim != 2 or Bn.ndim != 2 or An.shape[1] != Bn.shape[0]:
+            return True
+        return _aligned_2d(An, Bn)
+
     def run(self, region: Any, A: Any, B: Any, *a: Any, **k: Any) -> tuple[Any, str]:
         # Orient per the transpose flags first — alignment + the kernel both consume
         # the natural A(M,K)/B(K,N) operands, so a transposed raw operand is flipped
         # before the aligned-only check (the transpose contract).
         An, Bn = region._natural(A, B, cast=False)
         if not _aligned_2d(An, Bn):            # emitter is aligned-only (for now)
+            # Kept even though `applies_to_inputs` now declines earlier: `run`
+            # is reachable directly and through the E3 `force` escape hatch,
+            # which deliberately bypasses applicability.
             return region.reference(A, B), "reference"
         try:
             from tessera import runtime as rt

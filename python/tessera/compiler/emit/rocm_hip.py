@@ -1071,6 +1071,32 @@ class RocmFlashAttnCandidate(Candidate):
         except Exception:
             return False
 
+    def applies_to_inputs(self, region: Any, *inputs: Any) -> bool:
+        """Decline a head_dim the WMMA kernel cannot serve, before selection.
+
+        `run_fused_attention` has always declined `head_dim % 16 != 0` to the
+        numpy reference — correct, but it happens *after* this Tier-3 lane has
+        already won on tier. Same shape blindness as the NVIDIA emitted GEMM,
+        one op over, and worse placed: this is the highest-priority attention
+        candidate on the one AMD device that executes, so on a ragged head_dim
+        it took the dispatch and handed back numpy while `rocm_generic_hip`
+        stood by.
+
+        A mismatched Q/K head_dim is an operand error, not an unsupported
+        shape, so it defers here and still raises through `run`.
+        """
+        import numpy as np
+        if len(inputs) < 2:
+            return True
+        try:
+            Qn, Kn = region._natural(inputs[0], inputs[1])
+            Qn, Kn = np.asarray(Qn), np.asarray(Kn)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return True
+        if Qn.ndim != 2 or Kn.ndim != 2 or Kn.shape[1] != Qn.shape[1]:
+            return True                        # cannot judge / operand error
+        return Qn.shape[1] % 16 == 0           # WMMA head_dim alignment
+
     def run(self, region: Any, Q: Any, K: Any, V: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)

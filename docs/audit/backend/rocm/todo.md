@@ -5986,3 +5986,64 @@ reading one as a tie.
 **Use `--warm-start`, and diff row + evidence counts before committing.** The
 recorder writes the whole cache; a bare ROCm run would delete the 97 NVIDIA
 rows exactly as a bare NVIDIA run deleted the ROCm ones.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-ROCM-2026-09-01`
+
+**Owning item:** `AUTOTUNE-SEPARATION`, ROCm half, and the dispatch tightening
+it unblocks · **synchronization key:** `AUTOTUNE-SEPARATION-ROCM-2026-09-01`
+
+**All 16 gfx1151 rows now carry a verdict — zero never-asked**, where all 12
+previously had `separation: None`. 15 separate cleanly (margins 34–99.9%
+against 0.10–14.24% noise); the single refusal is `paged_kv_decode 8192
+end_to_end` at 6.52% margin vs 5.59% noise, which is genuinely marginal.
+
+**That is the opposite of sm_120's 82%-unsupported result, and the reason is
+structural rather than a hardware difference.** ROCm races two candidates that
+are far apart (generic HIP vs WMMA); NVIDIA races four that often sit within a
+few percent. A backend with a *narrow* field gets clean verdicts almost for
+free — which is worth knowing before reading either number as a quality signal
+about the backend.
+
+Verified the numbers come from `device_event`, not the wall-clock fallback this
+backend is prone to, so the noise floor is genuine rather than inflated.
+
+**The dispatch rule is now tightened, and it is deliberately not "reject
+`None`".** `corpus_winner` refuses a row that ranks **two or more** candidates
+and has no verdict. `separation_verdict` returns `None` when fewer than two
+were timed — a sole candidate is chosen by *applicability*, not by a race, and
+has no margin to defend. Refusing those would be a category error: 12 of the 23
+remaining `None` rows are exactly that shape. `inf` is likewise not a
+competitor (it marks "could not be timed"), so a row with one latency and one
+`inf` is a sole-candidate row wearing a pair's clothes.
+
+Committed corpus: **113 rows — 67 refused as dispatch hints, 34 with a
+supported verdict, 12 sole-candidate.**
+
+**Outcome for this backend: `parity validated` — measured on Princess-Luna.**
+
+**Two recorder defects had to be fixed first, and both were bugs in their own
+right.**
+
+`record_paged_kv_corpus` built `MeasureRecord` from a **single** measurement,
+so it had no spread and every row it wrote was unprovable *by construction* —
+`separation: None` was not an omission but the only possible outcome. It now
+measures `--repeats` times (default 7). One pass would report a spread of zero
+and earn `separated: True` on every row automatically, which is worse than
+recording nothing.
+
+The fused rows needed a new driver (`record_autotune_separation`) because
+**re-running a recorder cannot re-race them**: `load_corpus` makes every key a
+hit and `_record_raced_the_live_field` never consults `separation`, so a
+present row is returned unchanged. It evicts the rows it owns, warm-starts the
+rest, prints a before/after row-and-evidence diff, and refuses to write when
+another device's row count would drop.
+
+**One trap worth carrying: candidate registration is a side effect of importing
+the backend's emit module.** A driver that forgets it gets an empty registry
+and `measured_arbitrate` returns `None` for every shape — which prints as *"no
+verified candidate"*, i.e. it reads as *"this hardware cannot do it"* rather
+than *"the driver forgot an import"*. A confident wrong answer, not an error.
+The driver now imports `rocm_hip` explicitly and refuses to record at all when
+the registry is empty.

@@ -3542,3 +3542,48 @@ and whatever spread they yield becomes the floor every x86 separation verdict
 is judged against. Before x86 rows enter this corpus, measure how its reported
 sd moves with sample count — the NVIDIA curve (48% → 31% → 19%) took one probe
 and changed what the recorder does.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-ROCM-2026-09-01`
+
+**Owning item:** `AUTOTUNE-SEPARATION`, ROCm half, and the dispatch tightening
+it unblocks · **synchronization key:** `AUTOTUNE-SEPARATION-ROCM-2026-09-01`
+
+**All 16 gfx1151 rows now carry a verdict — zero never-asked**, where all 12
+previously had `separation: None`. 15 separate cleanly (margins 34–99.9%
+against 0.10–14.24% noise); the single refusal is `paged_kv_decode 8192
+end_to_end` at 6.52% margin vs 5.59% noise, which is genuinely marginal.
+
+**That is the opposite of sm_120's 82%-unsupported result, and the reason is
+structural rather than a hardware difference.** ROCm races two candidates that
+are far apart (generic HIP vs WMMA); NVIDIA races four that often sit within a
+few percent. A backend with a *narrow* field gets clean verdicts almost for
+free — which is worth knowing before reading either number as a quality signal
+about the backend.
+
+Verified the numbers come from `device_event`, not the wall-clock fallback this
+backend is prone to, so the noise floor is genuine rather than inflated.
+
+**The dispatch rule is now tightened, and it is deliberately not "reject
+`None`".** `corpus_winner` refuses a row that ranks **two or more** candidates
+and has no verdict. `separation_verdict` returns `None` when fewer than two
+were timed — a sole candidate is chosen by *applicability*, not by a race, and
+has no margin to defend. Refusing those would be a category error: 12 of the 23
+remaining `None` rows are exactly that shape. `inf` is likewise not a
+competitor (it marks "could not be timed"), so a row with one latency and one
+`inf` is a sole-candidate row wearing a pair's clothes.
+
+Committed corpus: **113 rows — 67 refused as dispatch hints, 34 with a
+supported verdict, 12 sole-candidate.**
+
+**Outcome for this backend: `not applicable` — no rows in this corpus.** The
+tightening cannot affect a backend with nothing recorded.
+
+**What it changes is the bar for entry.** A row that ranks two or more
+candidates must now arrive with a separation verdict or it will never be
+served. For a backend building its first device-timed rows, that makes the
+sample-count decision load-bearing at the point of writing rather than
+something to fix later: a single measurement yields a spread of zero and earns
+`separated: True` automatically — which is exactly the defect
+`record_paged_kv_corpus` had, discovered only because its rows were re-raced.

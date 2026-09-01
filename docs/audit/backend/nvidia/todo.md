@@ -5540,3 +5540,55 @@ was skipped" — which is true and misleading: the other candidate was not
 skipped, it was **contract-excluded**, and no field distinguishes "one
 candidate exists" from "a second was excluded before the race". `unmeasured`
 (#655) closed the *timing* half of this; the *applicability* half is still open.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-ROCM-2026-09-01`
+
+**Owning item:** `AUTOTUNE-SEPARATION`, ROCm half, and the dispatch tightening
+it unblocks · **synchronization key:** `AUTOTUNE-SEPARATION-ROCM-2026-09-01`
+
+**All 16 gfx1151 rows now carry a verdict — zero never-asked**, where all 12
+previously had `separation: None`. 15 separate cleanly (margins 34–99.9%
+against 0.10–14.24% noise); the single refusal is `paged_kv_decode 8192
+end_to_end` at 6.52% margin vs 5.59% noise, which is genuinely marginal.
+
+**That is the opposite of sm_120's 82%-unsupported result, and the reason is
+structural rather than a hardware difference.** ROCm races two candidates that
+are far apart (generic HIP vs WMMA); NVIDIA races four that often sit within a
+few percent. A backend with a *narrow* field gets clean verdicts almost for
+free — which is worth knowing before reading either number as a quality signal
+about the backend.
+
+Verified the numbers come from `device_event`, not the wall-clock fallback this
+backend is prone to, so the noise floor is genuine rather than inflated.
+
+**The dispatch rule is now tightened, and it is deliberately not "reject
+`None`".** `corpus_winner` refuses a row that ranks **two or more** candidates
+and has no verdict. `separation_verdict` returns `None` when fewer than two
+were timed — a sole candidate is chosen by *applicability*, not by a race, and
+has no margin to defend. Refusing those would be a category error: 12 of the 23
+remaining `None` rows are exactly that shape. `inf` is likewise not a
+competitor (it marks "could not be timed"), so a row with one latency and one
+`inf` is a sole-candidate row wearing a pair's clothes.
+
+Committed corpus: **113 rows — 67 refused as dispatch hints, 34 with a
+supported verdict, 12 sole-candidate.**
+
+**Outcome for this backend: `follow-up required` — 11 sm_120 rows are now
+inert.** The tightening refuses them: they rank two or more candidates and
+carry no verdict, at shapes the recorder's default flags do not cover
+(`attention`, `conv2d`, `ssm_replay_decode`, and a handful of matmul buckets).
+
+**They are recoverable by widening the recorder's shape flags and re-running**,
+which is a mechanical job on Super-Bear rather than a design question. Until
+then those buckets fall back to lead-safe tier priority, which is the correct
+degraded behaviour and not a regression — before this change they served a
+ranking nothing had checked.
+
+**Read the ROCm/NVIDIA contrast carefully.** 15/16 separated here against 19/74
+there is *not* evidence that gfx1151 measurements are better. It reflects field
+width: two far-apart candidates separate almost automatically, four close ones
+rarely do. A backend that adds candidates should expect its separated fraction
+to fall, and that is the field getting more honest, not the hardware getting
+worse.

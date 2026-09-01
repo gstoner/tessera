@@ -23525,6 +23525,66 @@ _ROCM_ACT_OPS: dict[str, str] = {
 }
 
 
+def _rocm_build_env_fingerprint() -> tuple:
+    """The environment inputs that decide whether a ROCm build can succeed.
+
+    `_rocm_serializer_env` re-reads `os.environ` on every call **deliberately**,
+    so the outcome of a build is a function of the live environment, not of the
+    process. A remembered failure must therefore be scoped to the environment
+    that produced it: otherwise a notebook or long-lived service that starts
+    with `ROCM_PATH` unset, gets a refusal cached, and *then* sets a valid
+    toolkit path would keep falling back to CPU -- or keep raising under
+    `TESSERA_STRICT_DISPATCH=1` -- until the process restarts. That turns a
+    recoverable configuration error into a permanent one, which is a worse
+    failure than the cost the cache exists to avoid.
+
+    Only `os.environ` reads, no filesystem probing: this runs on every cache
+    hit, and reintroducing syscalls here would give back part of what the cache
+    saves. The consequence is a stated gap -- installing a toolkit at an
+    already-named path, changing nothing in the environment, will not invalidate
+    a cached refusal. That case needs a process restart, and is far rarer than
+    the "export ROCM_PATH and retry" one this covers.
+    """
+    return (
+        os.environ.get("ROCM_PATH"),
+        os.environ.get("TESSERA_ROCM_CHIP"),
+        # PATH decides ld.lld discovery and can be long; equality is all that
+        # is needed, so hash it rather than retaining a copy per cache entry.
+        hashlib.sha256((os.environ.get("PATH") or "").encode()).hexdigest()[:16],
+    )
+
+
+class _HsacoBuildFailure:
+    """A remembered build failure, so it is not re-attempted every launch.
+
+    The success path was cached from the start; the failure path was not, and it
+    is the expensive one. `tessera-opt` is invoked through `subprocess.run`, so
+    a host that HAS the binary but cannot serialize ROCm -- any dev box without
+    the toolkit -- forked a process, waited for it to fail, and discarded the
+    result on **every single launch**. Measured on an M1 Max: 70.6 ms per
+    `rt.launch` of a draft-block workload whose direct execution is 0.104 ms.
+    A 677x overhead, entirely in a subprocess whose answer was already known.
+
+    Caching it is sound because the causes are host properties, fixed for the
+    process: no ROCm serializer compiled into `tessera-opt`, or no toolkit for
+    it to call. A genuinely transient failure (an interrupted build, an OOM)
+    would be remembered too and stay remembered until the process exits -- the
+    right trade against re-forking per call, and the reason the stored value
+    keeps the original message rather than a generic one.
+
+    Every attempt still records a dispatch fallback: `_rocm_compiled_failed`
+    is re-raised through its own funnel on a cache hit, so
+    `TESSERA_STRICT_DISPATCH=1` still raises and the fallback counters still
+    move. Only the subprocess is skipped.
+    """
+
+    __slots__ = ("reason", "env")
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        self.env = _rocm_build_env_fingerprint()
+
+
 def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tuple) -> bytes:
     """Build a promoted ROCm family through the typed executable pipeline.
 
@@ -23532,6 +23592,17 @@ def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tupl
     generator, Target-IR, wait, ROCDL, and packaging order.
     """
     cached = cache.get(key)
+    if isinstance(cached, _HsacoBuildFailure):
+        if cached.env == _rocm_build_env_fingerprint():
+            # Known-unbuildable under THIS environment. Re-raise through the
+            # funnel so the fallback is still recorded, but do not fork again
+            # to be told so.
+            _rocm_compiled_failed(cached.reason)
+        # The toolchain environment changed since the refusal was recorded, so
+        # it may no longer hold. Drop it and rebuild rather than making a
+        # recoverable misconfiguration permanent for the process.
+        cache.pop(key, None)
+        cached = None
     if cached is not None:
         return cached
     opt = _tessera_opt_path()
@@ -23553,13 +23624,17 @@ def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tupl
         env=_rocm_serializer_env(),
     )
     if result.returncode != 0 or "gpu.binary" not in result.stdout:
-        _rocm_compiled_failed(
+        reason = (
             f"tessera-opt did not serialize ROCm family {family!r} in-process "
             f"(rc={result.returncode}): {result.stderr[:400]}"
         )
+        cache[key] = _HsacoBuildFailure(reason)
+        _rocm_compiled_failed(reason)
     hsaco = _extract_hsaco_blob(result.stdout)
     if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed(f"ROCm family {family!r}: gpu.binary not an ELF hsaco")
+        reason = f"ROCm family {family!r}: gpu.binary not an ELF hsaco"
+        cache[key] = _HsacoBuildFailure(reason)
+        _rocm_compiled_failed(reason)
     cache[key] = hsaco
     return hsaco
 

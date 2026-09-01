@@ -5773,3 +5773,55 @@ that HIP path has its own rank handling, it is a **fourth** implementation of
 this contract and needs the same rule — which is the thing this key exists to
 prevent. Worth resolving on Princess-Luna before treating the contract as
 closed.
+
+---
+## Cross-backend sync `HSACO-NEGATIVE-CACHE-2026-08-31`
+
+**Owning item:** compiled-family build caching ·
+**synchronization key:** `HSACO-NEGATIVE-CACHE-2026-08-31`
+
+**`_build_rocm_family_hsaco` cached successes and not failures.** It invokes
+`tessera-opt` through `subprocess.run`, so a host that HAS the binary but
+cannot serialize ROCm — any dev box without the toolkit, and this Mac — forked
+a process, waited for it to fail, and discarded the answer **on every single
+launch**. **74 call sites** funnel through it.
+
+**Measured on an M1 Max**, `rt.launch` of a draft-block workload:
+
+| | direct | launch | ratio |
+|---|---|---|---|
+| before | 0.1042 ms | **70.5963 ms** | **677×** |
+| after | 0.1141 ms | 0.1481 ms | 1.3× |
+
+**477× faster**, and 0.347 s of a 0.354 s profile was the subprocess.
+
+**It was hidden by a test that ratified it.** Five perf baselines assert
+`launch_ms < max(75.0, direct_ms * 4.0)`. The oracle arm is ~0.4 ms, so `max()`
+always selected **75.0** and the self-calibrating comparison was dead code —
+while launch sat at **94% of that limit on an idle machine**. The constant had
+been sized to accept exactly the overhead it claimed to bound, and tipped over
+under any load, which is how it read as five flaky tests rather than one defect.
+
+**The floor is now 2.0 ms, chosen by the only criterion that makes a constant
+worth having: it FAILS on the old code.** Verified by mutation — with the
+negative cache removed, all five report `71.3 < 2.0`. The old 75.0 accepted
+70.6 ms in silence.
+
+Caching the failure is sound because the causes are host properties, fixed for
+the process. A genuinely transient failure would be remembered until exit — the
+right trade against re-forking per call, and why the stored value keeps the
+original message. Every attempt still records a dispatch fallback:
+`_rocm_compiled_failed` is re-raised through its own funnel on a cache hit, so
+`TESSERA_STRICT_DISPATCH=1` still raises. Only the subprocess is skipped.
+
+**Outcome for this backend: `parity validated` on the fix, `follow-up required`
+on the evidence.** The code is ROCm's and the fix is unambiguous, but it was
+made and measured on a **Mac**, where every build FAILS — so what is proven
+here is the negative path. On Princess-Luna the builds succeed and take the
+pre-existing success cache, which this change does not touch.
+
+**What is owed on Princess-Luna:** confirm the success path is unchanged, and —
+more interesting — check whether the five perf baselines still pass there. Their
+`launch_ms` on a real ROCm host includes an actual hsaco build on first call,
+which the 2.0 ms floor may be too tight for if the cache misses. If so the fix
+is to warm the cache in the fixture, not to raise the floor back.

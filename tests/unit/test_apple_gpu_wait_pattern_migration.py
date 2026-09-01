@@ -344,3 +344,43 @@ def test_migrated_dispatchers_no_longer_call_waituntilcompleted():
         assert "commit_and_wait_with_timeout" in body, (
             f"{fn_name}: Pattern-4 wrapper missing — migration "
             f"incomplete; body slice:\n{body[:400]}...")
+
+
+def test_the_telemetry_wait_is_gated_on_established_completion():
+    """`ts_gpu_interval`'s `waitUntilCompleted` must never run unbounded.
+
+    It has no timeout. `ts_enc_commit_wait` and `ts_enc_wait_destroy` both call
+    the recorder *even after* their 30 s shared-event wait times out, so an
+    unconditional wait inside the recorder would block forever on exactly the
+    hung command buffer the timeout exists to contain -- converting a bounded
+    failure into a permanent hang, in code whose only job is telemetry.
+
+    Source-level rather than behavioural because reproducing it needs a real
+    GPU hang. Three properties are pinned:
+
+    * the wait is preceded by an early return on `!completed`;
+    * `completed` defaults to `false` at both recorders, so a call site that has
+      not established completion cannot hang by omission -- it loses the GPU
+      clock and falls back, which is the correct trade;
+    * the two session paths pass their real completion state rather than a
+      literal `true`.
+    """
+    src = _RUNTIME_SRC.read_text()
+
+    assert "if (!completed) return false;\n  [cb waitUntilCompleted];" in src, (
+        "ts_gpu_interval must return before waiting when completion has not "
+        "been established")
+
+    for recorder in ("ts_record_tile_gpu_elapsed", "ts_record_dispatch_gpu_elapsed"):
+        head = src[src.index(f"static void {recorder}("):]
+        head = head[:head.index("{")]
+        assert "bool completed = false" in head, (
+            f"{recorder} must default `completed` to false so an unaudited "
+            f"call site fails safe; got: {head.strip()}")
+
+    # Both resident-session recorders take a variable, not a literal.
+    assert src.count(
+        "ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,\n"
+        "                                 completed);") == 2, (
+        "ts_enc_commit_wait and ts_enc_wait_destroy must forward their own "
+        "completion state; passing `true` there reintroduces the hang")

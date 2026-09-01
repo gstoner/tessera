@@ -525,6 +525,7 @@ def record(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
         capture_output=True, text=True,
     ).stdout.strip()
+    _refuse_if_fingerprinted_source_is_dirty(source_commit)
     package_native = _packager(lane)
 
     fixture_rows: list[dict] = []
@@ -718,6 +719,46 @@ def _fixture_shape(plan: FamilyPlan, fixture: dict) -> tuple[int, ...]:
         return shape
     m, k, n = shape
     return (1, m, n, k) if plan.batched else (m, n, k)
+
+
+#: Files whose bytes the packet fingerprints, and which therefore must be
+#: committed for `tested_commit` to mean anything.
+_FINGERPRINTED_SOURCES = (
+    "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm",
+)
+
+
+def _refuse_if_fingerprinted_source_is_dirty(source_commit: str) -> None:
+    """A packet may not claim a commit it was not generated from.
+
+    `tested_commit` comes from `git rev-parse HEAD`, and nothing used to check
+    that HEAD is what was actually measured. Recording from a modified working
+    tree therefore produced a packet whose `source_fingerprint` is the hash of
+    the *edited* runtime while its `tested_commit` names the parent -- evidence
+    with false provenance, which then propagates into the generated fleet
+    dashboard as though it were a device result for that commit.
+
+    Only the files the packet actually fingerprints are checked. A dirty README
+    does not invalidate a device measurement; a dirty `apple_gpu_runtime.mm`
+    does, because the fingerprint is taken from the working-tree bytes.
+
+    Land the runtime change first, then record against the committed tree
+    (AGENTS.md: exact-device evidence names the commit it was produced from).
+    """
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--", *_FINGERPRINTED_SOURCES],
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if not dirty:
+        return
+    raise SystemExit(
+        "refusing to seal a packet from a modified working tree.\n"
+        f"  tested_commit would be recorded as {source_commit}\n"
+        "  but these fingerprinted sources differ from it:\n"
+        + "\n".join(f"    {line}" for line in dirty.splitlines())
+        + "\n  Commit the runtime first, then re-run this recorder."
+    )
+
 
 
 def main(argv: Sequence[str] | None = None) -> int:

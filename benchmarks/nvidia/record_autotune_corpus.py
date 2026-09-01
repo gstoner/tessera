@@ -92,6 +92,19 @@ def main() -> int:
                         metavar="BxIHxIWxCIxKHxKWxCO")
     parser.add_argument("--reps", type=int, default=20)
     parser.add_argument("--warmup", type=int, default=3)
+    # 3 (the arbiter default) is the right cost trade for runtime selection but
+    # too few to ESTIMATE a spread, and this file writes PUBLISHED evidence.
+    # Measured on sm_120 at 128x512x64 bf16: sd 48.31% over 3 whole
+    # measurements, 30.74% over 10, 19.34% over 30. The lane really is ~19%
+    # noisy there -- so the "not separated" verdicts hold either way -- but a
+    # 3-sample estimate reports that noise as 48%, and a recorded noise floor
+    # that is 2.5x the truth is a number someone will later act on.
+    #
+    # Only the device-timed races take it: end-to-end timing already collects
+    # its samples per rep inside `measure_latency_samples`.
+    parser.add_argument("--device-repeats", type=int, default=10,
+                        help="whole device measurements per candidate, which "
+                             "set the noise floor behind each separation verdict")
     parser.add_argument("--device-reps", type=int, default=100)
     parser.add_argument("--device-warmup", type=int, default=10)
     parser.add_argument("--matmul-dtypes", nargs="+",
@@ -143,7 +156,8 @@ def main() -> int:
             device_winner = at.measured_arbitrate(
                 region, OP_MATMUL, "nvidia", a, b, dims=(m, n, k),
                 dtype=dtype, cache=cache, reps=args.device_reps,
-                warmup=args.device_warmup, timing="device")
+                warmup=args.device_warmup, timing="device",
+                device_repeats=args.device_repeats)
             if device_winner is None:
                 raise RuntimeError(
                     f"no device-timed NVIDIA {dtype} candidate for {m}x{n}x{k}")
@@ -200,7 +214,8 @@ def main() -> int:
                 winner = at.measured_arbitrate(
                     region, OP_FUSED_REGION, "nvidia", a, b, bias,
                     dims=(m, n, k), dtype=storage, cache=cache,
-                    reps=reps, warmup=warmup, timing=timing)
+                    reps=reps, warmup=warmup, timing=timing,
+                    device_repeats=args.device_repeats)
                 if winner is None:
                     raise RuntimeError(f"no {storage} fused {timing} candidate")
                 print(f"fused-{timing} {storage} {shape_text}: {winner.name}")
@@ -219,7 +234,8 @@ def main() -> int:
                 winner = at.measured_arbitrate(
                     region, OP_ATTENTION, "nvidia", q, kk, v,
                     dims=(m, nk, d, dv), dtype=storage, cache=cache,
-                    reps=reps, warmup=warmup, timing=timing)
+                    reps=reps, warmup=warmup, timing=timing,
+                    device_repeats=args.device_repeats)
                 if winner is None:
                     raise RuntimeError(f"no {storage} attention {timing} candidate")
                 print(f"attention-{timing} {storage} {shape_text}: {winner.name}")
@@ -238,7 +254,8 @@ def main() -> int:
                 winner = at.measured_arbitrate(
                     region, OP_GATED_MATMUL, "nvidia", a, wg, wu,
                     dims=(m, h, k), dtype=storage, cache=cache,
-                    reps=reps, warmup=warmup, timing=timing)
+                    reps=reps, warmup=warmup, timing=timing,
+                    device_repeats=args.device_repeats)
                 if winner is None:
                     raise RuntimeError(f"no {storage} gated {timing} candidate")
                 print(f"gated-{timing} {storage} {shape_text}: {winner.name}")
@@ -268,6 +285,14 @@ def main() -> int:
         "reps": args.reps,
         "device_warmup": args.device_warmup,
         "device_reps": args.device_reps,
+        # The count of WHOLE device measurements, which is what sets the noise
+        # floor behind every separation verdict -- distinct from `device_reps`,
+        # the launches inside one measurement. Runs at 3, 10 and 30 produce
+        # materially different verdicts (sd 48.31% / 30.74% / 19.34% at
+        # 128x512x64 bf16), so omitting it left rows whose separation cannot be
+        # reproduced or compared. Provenance for a published number has to
+        # include the sample count behind it.
+        "device_repeats": args.device_repeats,
         "measure_cache": "warm_started" if args.warm_start else "fresh",
         "cache_hits": cache.hits,
         "cache_misses": cache.misses,

@@ -6124,3 +6124,52 @@ all 154 files yields 97 candidate tests, and a static check cannot separate
 "executes and raises" from "falls back to numpy". CI's Linux lane already
 distinguishes them dynamically and is green on all 97, so a static gate would
 be ~97 false positives. The dynamic gate is the right one and it works.
+
+---
+## Cross-backend sync `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
+
+**Owning item:** `AUTOTUNE-SEPARATION`, NVIDIA half ·
+**synchronization key:** `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
+
+**The corpus was re-raced on sm_120 with #663's separation verdicts recorded,
+and 42 of 51 freshly-raced rankings (82%) turn out to be unsupported.** The
+earlier estimate — "11 rows with margins under 2%" — understated it badly,
+because a margin cannot be judged without the noise beside it. That is the
+whole content of #663, now measured rather than argued.
+
+**Two recorded verdicts are retired by evidence, not by opinion.** At 512³ and
+1024³ device-timed matmul, the compiler-**emitted** PTX lane wins by ~38%
+against **0.15–1.86%** noise, racing the full four-candidate field. The prior
+rows named a *tile* lane and pinned the 1024³ field to exactly two candidates —
+which encoded the biased race #655/#662 removed: the GEMM lanes had no device
+timer, `_measure` scored them `inf`, and they lost silently. "The tile lane
+wins" meant "the tile lanes were the only ones that could be timed".
+
+**`device_repeats=3` overstates the noise floor it reports.** Measured at
+128×512×64 bf16: sd **48.31% / 30.74% / 19.34%** over 3 / 10 / 30 whole
+measurements, with a 2.3× min–max range even at 30. The lane genuinely is ~19%
+noisy, so the *unseparated* verdicts hold either way — but a recorded floor
+2.5× the truth is a number someone will act on. The corpus recorder now uses
+10; `measured_arbitrate` keeps 3, which is the right cost trade for runtime
+selection rather than published evidence.
+
+**An independent mechanism agrees, which is what makes this trustworthy.**
+`finalize_test5_corpus` replaces a row only when **two** runs pick the same
+winner. The one row it refuses — `bfloat16 [128, 256, 64]` device — is exactly
+the row separation flags at margin 9.92% against 102.96% noise. Two checks
+built years apart, from different premises, rejecting the same ranking.
+
+**Outcome for this backend: `not applicable` — Apple has no rows in this
+corpus, and cannot have any yet.** `emit/apple_msl.py` declares no
+`measure_device_latency`, so no Apple candidate enters the device-timed
+arbiter at all.
+
+**That is the ordering already recorded under `APPLE-TIMER-WITNESS`, and this
+run supplies the missing motivation for its last step.** Witness → device timer
+→ repetition. The NVIDIA measurement shows why the third step is not optional:
+with `device_repeats=3` the reported noise floor is **2.5× the truth**
+(48.31% against a 19.34% thirty-sample estimate). An Apple lane that landed a
+device timer and left repetition at one sample would report a spread of
+**zero** — and earn `separated: True` on every row it touched, automatically.
+The free-separation risk is not theoretical; it is what a single sample
+mechanically produces.

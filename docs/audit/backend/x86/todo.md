@@ -3494,3 +3494,51 @@ and `package_x86` needs the shared image before `validate()` is ever reached.
 Mutating a genuinely-built package is stronger evidence than mutating a
 synthetic one, so the right answer is an honest skip on hosts without AVX-512 —
 not a weaker test that runs everywhere.
+
+---
+## Cross-backend sync `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
+
+**Owning item:** `AUTOTUNE-SEPARATION`, NVIDIA half ·
+**synchronization key:** `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
+
+**The corpus was re-raced on sm_120 with #663's separation verdicts recorded,
+and 42 of 51 freshly-raced rankings (82%) turn out to be unsupported.** The
+earlier estimate — "11 rows with margins under 2%" — understated it badly,
+because a margin cannot be judged without the noise beside it. That is the
+whole content of #663, now measured rather than argued.
+
+**Two recorded verdicts are retired by evidence, not by opinion.** At 512³ and
+1024³ device-timed matmul, the compiler-**emitted** PTX lane wins by ~38%
+against **0.15–1.86%** noise, racing the full four-candidate field. The prior
+rows named a *tile* lane and pinned the 1024³ field to exactly two candidates —
+which encoded the biased race #655/#662 removed: the GEMM lanes had no device
+timer, `_measure` scored them `inf`, and they lost silently. "The tile lane
+wins" meant "the tile lanes were the only ones that could be timed".
+
+**`device_repeats=3` overstates the noise floor it reports.** Measured at
+128×512×64 bf16: sd **48.31% / 30.74% / 19.34%** over 3 / 10 / 30 whole
+measurements, with a 2.3× min–max range even at 30. The lane genuinely is ~19%
+noisy, so the *unseparated* verdicts hold either way — but a recorded floor
+2.5× the truth is a number someone will act on. The corpus recorder now uses
+10; `measured_arbitrate` keeps 3, which is the right cost trade for runtime
+selection rather than published evidence.
+
+**An independent mechanism agrees, which is what makes this trustworthy.**
+`finalize_test5_corpus` replaces a row only when **two** runs pick the same
+winner. The one row it refuses — `bfloat16 [128, 256, 64]` device — is exactly
+the row separation flags at margin 9.92% against 102.96% noise. Two checks
+built years apart, from different premises, rejecting the same ranking.
+
+**Outcome for this backend: `not applicable` — x86 has no rows in this corpus
+and no device timer.** Its lane times end-to-end on the host, where
+`measure_latency_samples` already collects per-rep samples, so it gets a real
+noise floor for free and `device_repeats` does not apply.
+
+**The transferable warning is about the CONSTANT, not the clock.** This run's
+central finding is that a sample count chosen for cost (3) produces a noise
+estimate 2.5× the truth, and that the estimate is *published*. x86's timing
+constants have the same property: `reps`/`warmup` are chosen for suite speed,
+and whatever spread they yield becomes the floor every x86 separation verdict
+is judged against. Before x86 rows enter this corpus, measure how its reported
+sd moves with sample count — the NVIDIA curve (48% → 31% → 19%) took one probe
+and changed what the recorder does.

@@ -195,7 +195,8 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
                     const int64_t* dims, size_t ndim, int tileM = 16,
                     int tileN = 8, int threads = 32, bool ragged = false,
                     bool columnMajorGrid = false, bool dimensions64 = false,
-                    size_t elementBytes = 2, size_t outputBytes = 4) {
+                    size_t elementBytes = 2, size_t outputBytes = 4,
+                    bool requiresEvenK = false) {
     if (nbuf != 3 || (ndim != 3 && ndim != 6)) return 5;
     const long long M64 = dims[0], N64 = dims[1], K64 = dims[2];
     const long long LDA64 = ndim == 6 ? dims[3] : K64;
@@ -204,14 +205,16 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
     if (M64 <= 0 || N64 <= 0 || K64 <= 0) return 5;
     if (LDA64 < K64 || LDB64 < K64 || LDD64 < N64) return 5;
     if (!ragged && (M64 % 16 || N64 % 8 || K64 % 16)) return 5;
-    // The ragged kernels predicate M and N themselves, but K must stay EVEN:
-    // `ld.global.b32` needs a 4-byte-aligned address and the fragments address
-    // 2-byte elements, so `row*K + k` must be even. With K odd every odd row
-    // starts misaligned and the load faults (CUDA_ERROR_MISALIGNED_ADDRESS,
-    // measured on sm_120) -- in the main loop, not just the tail. Rejecting
-    // here keeps that a diagnosable rc rather than a device fault that poisons
-    // the context for every later launch in the process.
-    if (ragged && (K64 % 2)) return 5;
+    // `requiresEvenK` belongs to the ptx_emit fragment layout, NOT to ragged
+    // shapes in general: `ld.global.b32` needs a 4-byte-aligned address and
+    // the fragments address 2-byte elements, so `row*K + k` must be even. With
+    // K odd every odd row starts misaligned and the load faults
+    // (CUDA_ERROR_MISALIGNED_ADDRESS, measured on sm_120) -- in the main loop,
+    // not just the tail. Rejecting here keeps that a diagnosable rc rather
+    // than a device fault that poisons the context for the rest of the
+    // process. The Tile kernels mask their own boundaries and have no such
+    // constraint, so they must not inherit it.
+    if (requiresEvenK && (K64 % 2)) return 5;
     // The emitted PTX addresses elements with 32-bit signed indices, so an
     // operand's LARGEST index (element count - 1) must fit INT32_MAX. Reject only
     // shapes whose element count EXCEEDS 2^31 (a count of exactly 2^31 has max
@@ -985,19 +988,30 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
 // at 512x512, rows to 1024 and columns only to 256, half the output unwritten,
 // with a plausible-looking number.
 bool tileLaunchConfig(const char* name, int& tileM, int& tileN, int& threads,
-                      bool& columnMajorGrid, bool* ragged) {
+                      bool& columnMajorGrid, bool* ragged, bool* requiresEvenK) {
     columnMajorGrid = true;
-    if (ragged) *ragged = false;
+    // Ragged M/N is the NORM here, not the exception. Every entry the invoke
+    // dispatch routes through `invokeMmaGemm16` passes `ragged=true` -- the
+    // Tile-direct, Tile-shared and scheduled-SM120 kernels have masked their
+    // out-of-bounds loads and stores in `NVIDIALowering.cpp` since they were
+    // written. Defaulting to false here (as this did on first landing) told
+    // the benchmark path they were aligned-only, so `rc=5` came back for every
+    // ragged device measurement and BOTH live Tile candidates returned None --
+    // an incomplete field, which is the exact autotune bias
+    // `_record_raced_the_live_field` exists to refuse. Review finding on #675.
+    if (ragged) *ragged = true;
+    if (requiresEvenK) *requiresEvenK = false;
     if (std::strcmp(name, kGemmF16) == 0 || std::strcmp(name, kGemmBf16) == 0) {
         tileM = 16; tileN = 8; threads = 32;
         columnMajorGrid = false;   // ptx_emit maps blockIdx.x to M
-        // Only these two entries predicate their own M/N boundaries. Reported
-        // here rather than at each call site because this is the per-kernel
-        // capability table, and the benchmark path needs the same answer the
-        // invoke path does: it launches without going through invokeMmaGemm16,
-        // so a shape guard placed only there let an odd-K measurement fault
-        // the device and poison the context for the rest of the process.
-        if (ragged) *ragged = true;
+        // These two -- and only these two -- carry the b32 fragment-alignment
+        // constraint: `ld.global.b32` needs a 4-byte-aligned address and the
+        // fragments address 2-byte elements, so `row*K + k` must be even.
+        // It is a property of THIS emitter's fragment layout, not of ragged
+        // shapes in general, which is why it is a separate flag: folding it
+        // into `ragged` would have imposed an odd-K refusal on Tile kernels
+        // that have no such limit.
+        if (requiresEvenK) *requiresEvenK = true;
         return true;
     }
     if (std::strncmp(name, kScheduledSm120MatmulPrefix,
@@ -1039,15 +1053,16 @@ int benchmarkTileGemm16(CUfunction fn, const char* name, void** buffers,
         M * N > (1LL << 31)) return 5;
     int tileM = 0, tileN = 0, threads = 0;
     bool columnMajorGrid = true;
-    bool ragged = false;
-    if (!tileLaunchConfig(name, tileM, tileN, threads, columnMajorGrid, &ragged))
+    bool ragged = true, requiresEvenK = false;
+    if (!tileLaunchConfig(name, tileM, tileN, threads, columnMajorGrid, &ragged,
+                          &requiresEvenK))
         return 5;
-    // Same shape contract the invoke path enforces. Without it this path
-    // launched an unpredicated kernel over a ragged grid, or a ragged kernel
-    // with odd K -- either way a device fault from a *measurement*, which then
-    // poisons the context for every later launch in the process.
+    // The same shape contract the invoke path enforces, so a measurement can
+    // never fault a device the dispatch would have served -- and, just as
+    // importantly, can never REFUSE a shape the dispatch would have served,
+    // which silently shrinks the field an autotune race sees.
     if (!ragged && (M % 16 || N % 8 || K % 16)) return 5;
-    if (ragged && (K % 2)) return 5;
+    if (requiresEvenK && (K % 2)) return 5;
 
     size_t elementBytes = 2;
     if (std::strcmp(name, kTileDirectTf32) == 0) elementBytes = 4;
@@ -2011,12 +2026,18 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         // `ragged` parameter has existed since this function was written and
         // no caller had ever passed it true, so the M%16/N%8/K%16 guard below
         // rejected every unaligned shape with rc=5 and dispatch fell to the
-        // reference. The guard stays for every OTHER entry: the Tile-direct
-        // and scheduled kernels are still aligned-only, which is exactly why
-        // this belongs per-entry rather than as a global relaxation.
+        // reference.
+        //
+        // Correction (review on #675): an earlier version of this comment said
+        // "the Tile-direct and scheduled kernels are still aligned-only". They
+        // never were -- every one of them passes `ragged=true` below, having
+        // masked its boundaries in NVIDIALowering.cpp since it was written.
+        // What IS specific to these two entries is `requiresEvenK`.
         return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
                                /*tileM=*/16, /*tileN=*/8, /*threads=*/32,
-                               /*ragged=*/true);
+                               /*ragged=*/true, /*columnMajorGrid=*/false,
+                               /*dimensions64=*/false, /*elementBytes=*/2,
+                               /*outputBytes=*/4, /*requiresEvenK=*/true);
     if (std::strcmp(kernel_name, kTileDirectF16) == 0 ||
         std::strcmp(kernel_name, kTileDirectBf16) == 0)
         return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,

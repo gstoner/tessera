@@ -6187,7 +6187,61 @@ Related and already owed: the `AUTOTUNE-SEPARATION` work gave the ROCm corpus
 real `separation` verdicts and `record_is_admissible` now refuses unsupported
 rankings at every consumer. That is the same discipline in the autotune corpus;
 this entry is its counterpart in the route-ledger corpus.
-<<<<<<< HEAD
+## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+**Owning item:** the NVIDIA/ROCm half of
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` ·
+**synchronization key:** `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+Apple's `promotion_rules` was a declaration nothing read; its loader now
+re-derives each promotion from the evidence the ledger retained. The same
+question was then put to the other backends' evidence artifacts, and the
+answers differ enough to be worth stating one by one.
+
+**A near-miss that shaped the whole exercise, recorded because it would have
+been convincing.** The first NVIDIA checker modelled promotion as *"the winner
+beats the runner-up by more than `noise_fraction`"* — the obvious reading — and
+it flagged **7 of 11 committed promotions as violations**, complete with a
+tidy table. Reading the producer settled it: `finalize_low_precision_native_routes._near`
+promotes a candidate that is **within** `noise_fraction` of the fastest in
+every run of every domain, tie-broken by total time. Every one of those 7 is
+correct under the rule that was actually applied. A plausible model of someone
+else's gate, checked against committed evidence, produces confident and wrong
+findings — so both checkers here mirror their producer's own predicate rather
+than a reasonable-looking substitute.
+
+**Outcome for this backend: `follow-up required` — and the blocker is not the
+prose, it is missing data.** `method.promotion_gate` really is a sentence
+(`"correct oracle plus shape-specific repeated-median gate"`), but the earlier
+assessment stopped there and was incomplete. Measured family by family:
+
+| family | decision | checkable? |
+|---|---|---|
+| `grouped_swiglu` | promote three grouped GEMMs | **yes** — 7.64x / 4.64x device speedup, win rate 1.0 |
+| `g6b` | promote two-wave plain/causal D=128 | **yes** — 2.04x / 2.11x paired speedup, win rate 1.0 |
+| `g6c` | reject production promotion | **yes** — speedups 0.91–1.01, win rates 0.0–0.78 |
+| `f32_gemm` | promote 2x2 for square ≤256, retain 4x4 | **no — winner-only** |
+| `grouped_gemm` | tn=1 below 64k, tn=2 at 64k, tn=4 from 131k | **no — winner-only** |
+| `kv_moe_transport` | reject row-gather / weighted-scatter | **no — no `rows` at all** |
+
+Three of six are now checked, in **both directions**: a rejection is a claim
+too, and if a regressed recording showed the rejected `g6c` candidate winning
+outright, the committed verdict would be wrong and nothing would have noticed.
+
+**The two winner-only families are the real gap.** `f32_gemm` records exactly
+one tile per shape — 2x2 at (256,256,256), 4x4 at (512,512,512) — so a decision
+naming a *threshold* has no losing measurement to be checked against. The
+comparison that justified the verdict is not in the file. No amount of encoding
+the prose fixes that; it needs a **re-record on gfx1151 keeping both candidates
+per shape**, which is device work and is owed from Princess-Luna.
+
+Until then the gap is pinned by a test that names those three families as
+uncheckable, so partial coverage cannot be mistaken for full coverage.
+
+Schema note for that re-record: the speedup field is spelled `paired_speedup`
+in `g6b` and `device_speedup`/`e2e_speedup` elsewhere, and the win rate is
+`win_rate` or `device_win_rate` depending on family. Worth unifying while the
+data is being regenerated.
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
@@ -6264,60 +6318,3 @@ no kernel can absorb. Final: **12 vs 12, identical set, zero regressions**;
 
 The box was restored to exactly its prior state — same branch, only its own
 pre-existing dirty file, binaries rebuilt from its own source.
-=======
-## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
-
-**Owning item:** the NVIDIA/ROCm half of
-`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` ·
-**synchronization key:** `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
-
-Apple's `promotion_rules` was a declaration nothing read; its loader now
-re-derives each promotion from the evidence the ledger retained. The same
-question was then put to the other backends' evidence artifacts, and the
-answers differ enough to be worth stating one by one.
-
-**A near-miss that shaped the whole exercise, recorded because it would have
-been convincing.** The first NVIDIA checker modelled promotion as *"the winner
-beats the runner-up by more than `noise_fraction`"* — the obvious reading — and
-it flagged **7 of 11 committed promotions as violations**, complete with a
-tidy table. Reading the producer settled it: `finalize_low_precision_native_routes._near`
-promotes a candidate that is **within** `noise_fraction` of the fastest in
-every run of every domain, tie-broken by total time. Every one of those 7 is
-correct under the rule that was actually applied. A plausible model of someone
-else's gate, checked against committed evidence, produces confident and wrong
-findings — so both checkers here mirror their producer's own predicate rather
-than a reasonable-looking substitute.
-
-**Outcome for this backend: `follow-up required` — and the blocker is not the
-prose, it is missing data.** `method.promotion_gate` really is a sentence
-(`"correct oracle plus shape-specific repeated-median gate"`), but the earlier
-assessment stopped there and was incomplete. Measured family by family:
-
-| family | decision | checkable? |
-|---|---|---|
-| `grouped_swiglu` | promote three grouped GEMMs | **yes** — 7.64x / 4.64x device speedup, win rate 1.0 |
-| `g6b` | promote two-wave plain/causal D=128 | **yes** — 2.04x / 2.11x paired speedup, win rate 1.0 |
-| `g6c` | reject production promotion | **yes** — speedups 0.91–1.01, win rates 0.0–0.78 |
-| `f32_gemm` | promote 2x2 for square ≤256, retain 4x4 | **no — winner-only** |
-| `grouped_gemm` | tn=1 below 64k, tn=2 at 64k, tn=4 from 131k | **no — winner-only** |
-| `kv_moe_transport` | reject row-gather / weighted-scatter | **no — no `rows` at all** |
-
-Three of six are now checked, in **both directions**: a rejection is a claim
-too, and if a regressed recording showed the rejected `g6c` candidate winning
-outright, the committed verdict would be wrong and nothing would have noticed.
-
-**The two winner-only families are the real gap.** `f32_gemm` records exactly
-one tile per shape — 2x2 at (256,256,256), 4x4 at (512,512,512) — so a decision
-naming a *threshold* has no losing measurement to be checked against. The
-comparison that justified the verdict is not in the file. No amount of encoding
-the prose fixes that; it needs a **re-record on gfx1151 keeping both candidates
-per shape**, which is device work and is owed from Princess-Luna.
-
-Until then the gap is pinned by a test that names those three families as
-uncheckable, so partial coverage cannot be mistaken for full coverage.
-
-Schema note for that re-record: the speedup field is spelled `paired_speedup`
-in `g6b` and `device_speedup`/`e2e_speedup` elsewhere, and the win rate is
-`win_rate` or `device_win_rate` depending on family. Worth unifying while the
-data is being regenerated.
->>>>>>> origin/main

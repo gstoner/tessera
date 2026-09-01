@@ -6,6 +6,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tests._support.apple import (
+    STRICT_PROMOTION_RULES as _PROMOTION_RULES,
+    strict_promotion_evidence as promotion_evidence,
+)
 from tessera.compiler.apple_route_selector import (
     AppleRouteMeasurement,
     AppleRouteContext,
@@ -44,11 +48,13 @@ def _strict_payload(**overrides: object) -> dict[str, object]:
         "source_report_count": 2,
         "source_report_digests": ["sha256:" + "a" * 64,
                                   "sha256:" + "b" * 64],
+        "promotion_rules": dict(_PROMOTION_RULES),
         "decisions": [{
             "device": "apple7", "op": "softmax", "shape": "128x257",
             "dtype": "f32", "timing_domain": "end_to_end",
             "incumbent_route": "msl", "selected_route": "mpsgraph",
             "status": "promote_candidate",
+            "route_evidence": {"mpsgraph": promotion_evidence()},
             "selected_evidence": {
                 "provenance": "native_gpu", "correctness": True,
                 "device": "apple7", "timing_domain": "end_to_end",
@@ -337,3 +343,66 @@ def test_strict_loader_rejects_missing_independent_source_digests(tmp_path):
     assert load_strict_route_ledger(
         path, context=_CONTEXT, now=datetime(2026, 7, 20, tzinfo=timezone.utc),
     ).rejected == ("missing_or_invalid_source_reports",)
+
+
+def test_strict_loader_refuses_a_promotion_its_own_rules_reject(tmp_path):
+    """A `promote_candidate` status is a claim, not a credential.
+
+    The loader validated provenance exhaustively -- schema, scope, exact
+    context, freshness, source digests, native dispatch, correctness, timing
+    domain, device, duplicates -- and the promotion criteria not at all, so the
+    status string certified itself. Every case below is a ledger that passes
+    every provenance check and still must not be served.
+    """
+    path = tmp_path / "ledger.json"
+    now = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+    def _rejected(evidence_overrides=None, **payload_overrides):
+        payload = _strict_payload(**payload_overrides)
+        if evidence_overrides is not None:
+            decision = payload["decisions"][0]  # type: ignore[index]
+            decision["route_evidence"] = {  # type: ignore[index]
+                "mpsgraph": promotion_evidence(**evidence_overrides)}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return load_strict_route_ledger(path, context=_CONTEXT, now=now)
+
+    # Sanity: the fixture is admissible before each mutation, or the negatives
+    # below would pass for the wrong reason.
+    assert len(_rejected({}).routes) == 1
+
+    for overrides, expected in (
+        ({"paired_win_fractions": [0.0, 0.0]}, "paired_win_fraction_below_minimum"),
+        ({"paired_median_speedups": [0.01, 0.02]}, "speedup_below_minimum"),
+        ({"cross_run_speedup_spread": 0.9}, "speedup_spread_above_maximum"),
+        ({"placement_and_numerical_proof": False}, "requires_native_dispatch"),
+        ({"resource_evidence_retained": False}, "requires_resource_evidence"),
+        ({"paired_measurement": False}, "requires_interleaved_paired_trials"),
+    ):
+        ledger = _rejected(overrides)
+        assert ledger.routes == {}, overrides
+        assert any(expected in reason for reason in ledger.rejected), (
+            f"{overrides} -> {ledger.rejected}")
+
+    # Evidence absent entirely: unverifiable is not the same as fine.
+    payload = _strict_payload()
+    payload["decisions"][0].pop("route_evidence")  # type: ignore[index]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    ledger = load_strict_route_ledger(path, context=_CONTEXT, now=now)
+    assert ledger.routes == {}
+    assert any("missing_route_evidence" in r for r in ledger.rejected)
+
+    # Rules block absent: nothing to hold the promotion to, so fail CLOSED.
+    ledger = _rejected({}, promotion_rules={})
+    assert ledger.routes == {}
+    assert any("promotion_rules_incomplete" in r for r in ledger.rejected)
+
+    # A `retain_incumbent` row is not a promotion and is not held to the
+    # promotion thresholds -- it kept the route that was already in production.
+    payload = _strict_payload()
+    decision = payload["decisions"][0]  # type: ignore[index]
+    decision["status"] = "retain_incumbent"
+    decision["selected_route"] = "msl"
+    decision["route_evidence"] = {"msl": {"present_in_all_runs": True}}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert len(load_strict_route_ledger(
+        path, context=_CONTEXT, now=now).routes) == 1

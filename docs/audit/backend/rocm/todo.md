@@ -6163,6 +6163,30 @@ shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
 
+## Cross-backend sync `ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**Owning item:** Apple strict route ledger re-seal · **synchronization key:**
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+Apple's `promotion_rules` block turned out to be a declaration no code read;
+fixed there (see the Apple plan). Assessed here because the pattern travels.
+
+**Outcome for this backend: `follow-up required`, and this one is furthest
+from checkable.** `rocm_gfx1151_compiler_retune_2026_07_15.json` declares its
+gate as **prose**:
+
+> `"promotion_gate": "correct oracle plus shape-specific repeated-median gate"`
+
+That is unconsumable by construction — no threshold, no field name, nothing a
+loader could re-derive. NVIDIA's `noise_policy` is at least a number that
+nothing reads; this is a sentence. Closing it means first deciding the numeric
+form of "shape-specific repeated-median gate", which is a modelling question,
+not a plumbing one — so it is scoped separately rather than bundled here.
+
+Related and already owed: the `AUTOTUNE-SEPARATION` work gave the ROCm corpus
+real `separation` verdicts and `record_is_admissible` now refuses unsupported
+rankings at every consumer. That is the same discipline in the autotune corpus;
+this entry is its counterpart in the route-ledger corpus.
 ## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
 
 **Owning item:** the NVIDIA/ROCm half of

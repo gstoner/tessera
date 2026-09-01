@@ -6328,6 +6328,150 @@ shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
 
+## Cross-backend sync `ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**Owning item:** Apple strict route ledger re-seal · **synchronization key:**
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**The red lane that started this.**
+`test_strict_retune_ledger_admits_on_its_exact_live_apple_host` had been
+failing on this Mac and was reported as "pre-existing" more than once. It was
+right to fail: the ledger was rejected on **four independent axes** —
+`os_version` (26.5.2 → 26.6.2), `compiler_fingerprint`, `runtime_fingerprint`
+(this session edited `apple_gpu_runtime.mm`), and `stale_evidence` (expired
+2026-08-20, twelve days before). The gate was doing its job; the evidence was
+genuinely dead.
+
+**Re-measured, not re-stamped**, per the standing rule for this artifact:
+`benchmark_legacy_retune.py --profile extended` (2 runs × 24 rows), then sealed
+through the existing `seal_strict_route_ledger`. Zero rejections against the
+live context; 16 decisions and 8 ineligible, **identical key sets to the
+July ledger** — nothing lost, nothing invented.
+
+*Near-miss worth recording:* the first re-run used `--profile core`, which
+admitted cleanly with **8** decisions instead of 16. `rejected == ()` would
+have read as success while silently halving the Apple route evidence — the
+same shape as the corpus recorder that once produced a corpus with *less*
+evidence than it started with. Diffing the decision key sets against the
+committed ledger is what caught it, not the admission result.
+
+**One real route change, and its cause is not the obvious one.**
+`retune_mla_decode` end-to-end flips `explicit` → `absorbed` at both shapes.
+`absorbed` was never slower: in July it was **54–57% faster with 100% paired
+wins in both runs**, and was held back solely because its cross-run speedup
+spread (5.97%) missed the ledger's own 5% stability cap by ~1 point. The re-run
+measures 37–39% faster, again 100% paired wins, spread **2.3%** — so it
+promotes. The flip is "the measurement became consistent enough to conclude",
+not "the kernel got faster".
+
+**Diagnostic, deliberately not a route claim** (`promotion_rules` sets
+`absolute_time_drift_is_diagnostic_only: true`): absolute times moved the wrong
+way. `absorbed` went 518µs → 836µs at the 128-token shape and 482µs → 557µs at
+64, while `explicit` held (1.15× / 0.96×). The larger shape's regression is
+outside this harness's own run drift; the smaller one is not. Cause is
+confounded — OS 26.5.2 → 26.6.2, runtime `.mm` edits, and a new compiler
+fingerprint all landed between the two measurements — and is **not attributed
+here**. It is worth a dedicated look.
+
+**The structural finding: `promotion_rules` was a declaration with no
+consumer.** `aggregate_stable_route_reports` computes the thresholds, applies
+them, and writes them into the ledger; `seal_strict_route_ledger` copies them
+forward for audit; **twelve committed ledgers carry the block and nothing ever
+read it back**. `load_strict_route_ledger` checks provenance exhaustively —
+schema, scope, exact context, freshness, source-report digests, native
+provenance, correctness, timing domain, device, duplicates — and the promotion
+criteria not at all, so `status: "promote_candidate"` was self-certifying. A
+row naming a route that lost every paired trial would have been admitted and
+served. Decision #29, in the evidence layer rather than the IR.
+
+`promotion_rule_violations()` now re-derives each promotion from the evidence
+the ledger retained, and the **loader rejects a decision its own ledger's rules
+refuse** — a production gate, not an audit script. Applied to all 12 committed
+strict ledgers: **59 promotions checked, 0 violations**, so this confirms the
+aggregator rather than accusing it. Mutation-verified against seven forged
+rows (lost every trial / speedup under minimum / spread over maximum / no
+numerical proof / no resource evidence / evidence deleted / rules block
+removed) — each is caught, and a missing rules block fails **closed**
+(`promotion_rules_incomplete`), because without a threshold there is nothing to
+hold the promotion to and the honest verdict is "unverifiable", not "fine".
+
+**Outcome for this backend: `parity validated` — measured on the Mac (M1 Max,
+macOS 26.6.2), which is the only host that can produce this evidence.**
+
+## APPLE-DISPATCH-WEDGE-1: a timed-out MPSGraph dispatch has no circuit breaker *(open, investigated 2026-09-01, M1 Max)*
+
+**Trigger.** An Apple `-k apple` sweep sat for **70 minutes** at 0.0% CPU
+(1:42 CPU time), stack-sampled entirely inside
+
+```
+mpsg_run_binary
+ -> commit_mpsgraph_and_wait_with_timeout(ctx, mps_cb, metal_cb, 30000, "mpsgraph_binary", &timing)
+   -> -[IOSurfaceSharedEvent waitUntilSignaledValue:timeoutMS:]  (in IOSurface) + 72
+     -> iokit_user_client_trap  (in IOKit) + 8
+```
+
+**Correction, recorded because the first reading was wrong.** I initially wrote
+that the function's namesake guarantee "doesn't hold" — that
+`waitUntilSignaledValue:timeoutMS:` was ignoring its timeout. **That is false,
+and it was checked rather than assumed.** A standalone probe
+(`scratchpad/event_timeout_probe.mm`, built against the on-machine SDK per
+Decision #27) measures the API honouring its deadline precisely:
+
+| case | timeout | returned | elapsed |
+|---|---|---|---|
+| never signalled | 250 ms | `NO` | 251.0 ms |
+| never signalled | 1000 ms | `NO` | 1001.0 ms |
+| never signalled | 3000 ms | `NO` | 3000.2 ms |
+| CPU signal at 100 ms | 5000 ms | `YES` | 104.2 ms |
+| GPU-encoded signal | 5000 ms | `YES` | 0.1 ms |
+| **committed buffer, unreachable value** | 1000 ms | `NO` | **1001.0 ms** |
+
+The last row is the exact shape of the failure — work committed, awaited value
+never arriving — and it times out correctly.
+
+**And the probe provably exercises the same code path**, which is the step that
+makes the above admissible rather than merely suggestive: sampling the probe
+mid-wait yields the identical frame *at the identical address* as the hung
+process — `-[IOSurfaceSharedEvent waitUntilSignaledValue:timeoutMS:] + 72
+[0x1988de184]` -> `iokit_user_client_trap + 8 [0x190604ae0]`. (`[dev
+newSharedEvent]` returns `_MTLSharedEvent`, whose wait is implemented by
+`IOSurfaceSharedEvent`; the two class names are one path, not two.)
+
+**What is NOT established.** Whether the 70 minutes was *one* uninterruptible
+wait — a driver wedge defeating the kernel-side deadline — or **~140 sequential
+30-second timeouts** (70 min / 30 s = 140, a suspiciously round fit). A `sample`
+aggregates by stack, so it cannot separate one 70-minute wait from 140
+consecutive ones; and the process was killed before forward progress could be
+checked. No GPU fault appeared in `log show --last 4h` and no hang report was
+written, so a driver wedge has **no positive evidence** either. Both remain
+open. It has not reproduced: the same sweep re-ran clean in **4:03**.
+
+**What IS established, and is a defect under either hypothesis: there is no
+circuit breaker.** Seven call sites, six at 30 000 ms and one at 60 000 ms. On
+timeout the caller correctly falls back to the host recovery path — but nothing
+records that the *device* is unusable, so every subsequent dispatch pays the
+full timeout again. Worse, `commit_mpsgraph_and_wait_with_timeout` calls
+`ts_clear_dispatch_telemetry()` **on entry**, so the previous timeout's evidence
+is erased before the next attempt. `g_last_gpu_error_kind` is a `thread_local`
+*last-error* for reporting, not accumulating state, and nothing consults it to
+short-circuit. So a device that wedges early in a suite turns a 4-minute run
+into an unbounded one, and by design leaves no accumulated trace of why.
+
+30 s is a defensible production timeout and a poor test one; the missing piece
+is not a smaller number but a state that says *stop asking*.
+
+**Proposed fix (not yet made, and it carries a sequencing constraint).** A
+process-wide sticky counter: after N consecutive dispatch timeouts, stop
+attempting GPU dispatch, go straight to the host path, and emit one stable
+diagnostic naming the op and the count (Decision #21 — never a silent no-op).
+The telemetry clear must move so it cannot erase the signal it is counting.
+
+**Sequencing.** `AppleRouteContext.runtime_fingerprint` is
+`sha256(apple_gpu_runtime.mm)` (`apple_route_selector.py::_runtime_source_fingerprint`),
+so **any edit to that file invalidates the strict route ledger** and puts
+`test_strict_retune_ledger_admits_on_its_exact_live_apple_host` back to red.
+The fix therefore has to land together with a benchmark re-run and re-seal
+(`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`), not before or after it.
 ## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
 
 **Owning item:** the NVIDIA/ROCm half of

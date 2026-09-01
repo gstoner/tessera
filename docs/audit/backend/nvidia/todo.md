@@ -5406,3 +5406,84 @@ event times out, because the hang only occurs on a GPU that is already broken.
 **If this is ever checked on Super-Bear**, the control that made the Apple answer
 trustworthy is the one to reuse: measure dispatch variance with and without the
 change on the same box, before attributing instability to either.
+
+---
+
+## Cross-backend sync `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
+
+**Owning item:** `AUTOTUNE-SEPARATION`, NVIDIA half ·
+**synchronization key:** `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
+
+**The corpus was re-raced on sm_120 with #663's separation verdicts recorded,
+and 42 of 51 freshly-raced rankings (82%) turn out to be unsupported.** The
+earlier estimate — "11 rows with margins under 2%" — understated it badly,
+because a margin cannot be judged without the noise beside it. That is the
+whole content of #663, now measured rather than argued.
+
+**Two recorded verdicts are retired by evidence, not by opinion.** At 512³ and
+1024³ device-timed matmul, the compiler-**emitted** PTX lane wins by ~38%
+against **0.15–1.86%** noise, racing the full four-candidate field. The prior
+rows named a *tile* lane and pinned the 1024³ field to exactly two candidates —
+which encoded the biased race #655/#662 removed: the GEMM lanes had no device
+timer, `_measure` scored them `inf`, and they lost silently. "The tile lane
+wins" meant "the tile lanes were the only ones that could be timed".
+
+**`device_repeats=3` overstates the noise floor it reports.** Measured at
+128×512×64 bf16: sd **48.31% / 30.74% / 19.34%** over 3 / 10 / 30 whole
+measurements, with a 2.3× min–max range even at 30. The lane genuinely is ~19%
+noisy, so the *unseparated* verdicts hold either way — but a recorded floor
+2.5× the truth is a number someone will act on. The corpus recorder now uses
+10; `measured_arbitrate` keeps 3, which is the right cost trade for runtime
+selection rather than published evidence.
+
+**An independent mechanism agrees, which is what makes this trustworthy.**
+`finalize_test5_corpus` replaces a row only when **two** runs pick the same
+winner. The one row it refuses — `bfloat16 [128, 256, 64]` device — is exactly
+the row separation flags at margin 9.92% against 102.96% noise. Two checks
+built years apart, from different premises, rejecting the same ranking.
+
+**Outcome for this backend: `parity validated` — measured on Super-Bear
+(RTX 5070 / sm_120), and the corpus is committed.**
+
+**Two near-misses on the way, both of which would have destroyed evidence
+silently.**
+
+*Without `--warm-start`, regenerating deletes other boxes' rows.* The recorder
+writes the whole cache, so a bare run dropped **all 12 `rocm:gfx1151` rows** and
+13 NVIDIA rows at shapes the default flags do not cover — 25 rows of
+exact-device evidence, with no error. Re-run with `--warm-start`: 0 lost.
+
+*Recording is two runs plus a finalizer, not one run.* `stable_runs == 2` is
+literally two independent measurements agreeing;
+`record_autotune_corpus.py` alone produces rows with no `evidence` block at
+all. A single-run corpus therefore carries **less** evidence than the one it
+replaces (41 rows → 0) while looking like an update. Done properly the count
+goes 41 → **84** and nothing is lost.
+
+**Both traps share a shape worth naming: a regeneration that succeeds while
+producing weaker evidence than it replaced.** Nothing failed, nothing warned;
+only a before/after row-and-evidence count catches it. Any future corpus
+regeneration should print that diff before committing.
+
+**Three consumer tests were rewritten to the measured reality**, and each now
+pins a property the old assertion could not express:
+
+* the 1024³/512³ rows assert the **full four-candidate field** and that the
+  winner's margin is **separated** — not merely that a particular name won;
+* the stability matrix asserts **eligible ⟹ stable** rather than "every row is
+  stable", because reproducibility at the launch-overhead floor is not a
+  property this hardware has;
+* the fused/attention rows assert a **subset** of the known candidate pair,
+  because `applies_to` makes them mutually exclusive by contract (below).
+
+All three are mutation-verified: shrinking the field, un-separating the verdict,
+and offering an unstable row to the selector each fail.
+
+**Found on the way, and it is the `applies_to` item:**
+`NvidiaGenericCudaCandidate.applies_to` returns True only when the epilogue
+contract *selects* it, so `nvidia_generic_cuda` and `nvidia_mma_fused` are
+never competitors in one race. Such a row records `unmeasured: {}` — "nothing
+was skipped" — which is true and misleading: the other candidate was not
+skipped, it was **contract-excluded**, and no field distinguishes "one
+candidate exists" from "a second was excluded before the race". `unmeasured`
+(#655) closed the *timing* half of this; the *applicability* half is still open.

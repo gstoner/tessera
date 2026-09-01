@@ -174,13 +174,35 @@ def test_committed_corpus_has_sm120_device_resident_tile_crossover():
             if r["device"] == "nvidia:sm_120" and r["op"] == OP_MATMUL
             and r["timing"] == "device"]
     by_key = {(r["dtype"], tuple(r["bucket"])): r for r in rows}
+    # These three assertions used to name a TILE lane as the winner at both
+    # shapes and pin the 1024^3 field to exactly the two tile candidates. All
+    # of that encoded the biased race that #655/#662 removed: the two GEMM
+    # lanes had no device timer, `_measure` scored them `inf`, and they lost
+    # silently -- so "the tile lane wins" meant "the tile lanes were the only
+    # ones that could be timed".
+    #
+    # With a device timer on the emitted lane and the grid convention fixed,
+    # the full four-candidate field races and the compiler-EMITTED PTX lane
+    # wins both shapes by ~38% against 0.15-1.86% noise. That is not a close
+    # call being re-litigated; it is the first time the comparison was made.
     for dtype in ("float16", "bfloat16"):
-        assert by_key[(dtype, (512, 512, 512))]["winner"] == (
-            "nvidia_tile_matmul_direct")
-        assert by_key[(dtype, (1024, 1024, 1024))]["winner"] == (
-            "nvidia_tile_matmul_shared")
-        assert set(by_key[(dtype, (1024, 1024, 1024))]["candidates"]) == {
-            "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}
+        for bucket in ((512, 512, 512), (1024, 1024, 1024)):
+            row = by_key[(dtype, bucket)]
+            # The field, first: a winner is only meaningful against what it beat.
+            assert set(row["candidates"]) >= {
+                "nvidia_mma_gemm_emitted", "nvidia_mma_gemm_shipped",
+                "nvidia_tile_matmul_direct", "nvidia_tile_matmul_shared"}, (
+                f"{dtype} {bucket} raced a reduced field: "
+                f"{sorted(row['candidates'])}")
+            assert row["winner"] == "nvidia_mma_gemm_emitted", (
+                f"{dtype} {bucket} winner={row['winner']}")
+            # And the verdict must be SUPPORTED, not merely recorded -- the
+            # property #663 added, and the one this file previously could not
+            # express at all.
+            separation = row.get("separation")
+            assert separation is not None and separation["separated"], (
+                f"{dtype} {bucket} names a winner without a separated margin: "
+                f"{separation}")
 
 
 def test_committed_corpus_has_sm120_model_workload_comparisons():
@@ -195,10 +217,26 @@ def test_committed_corpus_has_sm120_model_workload_comparisons():
     fused = [r for r in nvidia if r["op"] == OP_FUSED_REGION]
     attention = [r for r in nvidia if r["op"] == "attention"]
     assert fused and attention
-    assert all(set(r["candidates"]) == {
-        "nvidia_generic_cuda", "nvidia_mma_fused"} for r in fused)
-    assert all(set(r["candidates"]) == {
-        "nvidia_flash_attn", "nvidia_mma_attn"} for r in attention)
+    # SUBSET, not equality, and the reason is a contract rather than a
+    # measurement gap. `NvidiaGenericCudaCandidate.applies_to` returns True
+    # only when `nvidia_epilogue_execution_contract` SELECTS it, so
+    # `nvidia_generic_cuda` and `nvidia_mma_fused` are mutually exclusive for a
+    # given region -- never competitors in one race. Freshly-raced rows
+    # therefore carry one of them; older warm-started rows carry both, from a
+    # run whose contract chose differently.
+    #
+    # Worth recording, because the corpus cannot express it: such a row reports
+    # `unmeasured: {}` -- "nothing was skipped" -- which is true and misleading.
+    # The other candidate was not skipped, it was CONTRACT-EXCLUDED, and no
+    # field distinguishes "only one candidate exists" from "a second was
+    # excluded before the race". That is the `applies_to` blind spot; until it
+    # is closed, equality here would assert a coincidence.
+    assert all(set(r["candidates"]) <= {
+        "nvidia_generic_cuda", "nvidia_mma_fused"} and r["candidates"]
+        for r in fused)
+    assert all(set(r["candidates"]) <= {
+        "nvidia_flash_attn", "nvidia_mma_attn"} and r["candidates"]
+        for r in attention)
 
     fused_buckets = {tuple(r["bucket"]) for r in fused
                      if r["op"] == OP_FUSED_REGION}

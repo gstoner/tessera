@@ -158,8 +158,18 @@ def test_attention_package_rejects_stale_parent_and_tile_lineage() -> None:
         build_native_attention_vjp_package,
     )
 
-    if find_tessera_opt() is None:
-        pytest.skip("production tessera-opt is required")
+    from tessera import runtime as rt
+
+    # The AVX-512 image check is not optional here, and its absence is why this
+    # test FAILED rather than skipped on a host without one. The package under
+    # test is built for real by `build_native_attention_vjp_package` --
+    # deliberately, since mutating a genuine package is stronger evidence than
+    # mutating a synthetic one -- and `package_x86` needs the shared image
+    # before `validate()` is ever reached. The sibling
+    # `test_public_x86_attention_vjp_consumes_exact_scheduled_package` already
+    # checks both predicates; this one checked only the first.
+    if find_tessera_opt() is None or not rt._x86_elementwise_available():
+        pytest.skip("production tessera-opt and the AVX-512 image are required")
     q, key, value, dout = _inputs(np.float32)
     source = IROp(
         result="out",

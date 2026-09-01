@@ -422,6 +422,15 @@ def test_zen5_scheduled_attention_backward_exact_mha_gqa_mqa(
 def test_gfx1151_scheduled_attention_backward_packages_exact_tile_program(monkeypatch) -> None:
     import tessera.compiler.rocm_native as rocm_native
 
+    # `native_packaging_available` exists for exactly this, and says so in its
+    # own docstring: checking tools without also checking for AMD clang yields
+    # a RuntimeError that "reads as a broken test on any host without ROCm
+    # rather than an absent toolchain". This test did not call it, so on the
+    # Mac it failed with `ROCm native packaging requires AMD clang ...` instead
+    # of skipping.
+    if not rocm_native.native_packaging_available():
+        pytest.skip("gfx1151 native packaging requires AMD clang (OCML/OCKL/OCLC)")
+
     artifact = lower_scheduled_attention_backward(
         _module(1, 4, 2, 17, 19, 16), target="rocm_gfx1151"
     )

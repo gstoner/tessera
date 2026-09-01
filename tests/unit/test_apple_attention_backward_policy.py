@@ -22,6 +22,10 @@ from tessera.compiler.apple_route_selector import (
     AppleRouteContext,
     STRICT_ROUTE_LEDGER_SCHEMA,
 )
+from tests._support.apple import (
+    STRICT_PROMOTION_RULES as _PROMOTION_RULES,
+    strict_promotion_evidence as promotion_evidence,
+)
 
 
 _CONTEXT = AppleRouteContext(
@@ -46,6 +50,13 @@ def _strict_ledger(tmp_path, *decisions):
         "source_report_count": 2,
         "source_report_digests": ["sha256:" + "a" * 64,
                                   "sha256:" + "b" * 64],
+        # A sealed ledger carries the thresholds it was promoted under, and the
+        # loader holds it to them. Without these the fixture forged a promotion
+        # -- `status: "promote_candidate"` backed by nothing -- so what it
+        # proved about route resolution rested on evidence no real ledger
+        # could lack. Shared via `tests/_support/apple.py` rather than copied,
+        # because two test files build these fixtures.
+        "promotion_rules": dict(_PROMOTION_RULES),
         "decisions": [{
             "device": "apple7",
             "op": "flash_attn_bwd",
@@ -55,6 +66,7 @@ def _strict_ledger(tmp_path, *decisions):
             "incumbent_route": SERIAL_RECOMPUTE,
             "selected_route": route,
             "status": "promote_candidate",
+            "route_evidence": {route: promotion_evidence()},
             "selected_evidence": {
                 "provenance": "native_gpu",
                 "correctness": True,

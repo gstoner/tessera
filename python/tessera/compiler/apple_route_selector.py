@@ -185,6 +185,89 @@ def _parse_utc(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
+def promotion_rule_violations(
+    row: Mapping[str, Any], rules: Mapping[str, Any],
+) -> list[str]:
+    """Which of the ledger's own ``promotion_rules`` a promoted row breaks.
+
+    **The rules were a declaration with no consumer.**
+    ``aggregate_stable_route_reports`` computes the thresholds, applies them,
+    and writes them into every sealed ledger; ``seal_strict_route_ledger``
+    copies them forward for audit; and until now nothing read them back. Twelve
+    committed strict ledgers carry this block, and a ``promote_candidate`` row
+    was admitted on the strength of its ``status`` string alone -- so a row
+    naming a route that lost every paired trial would have been served, as long
+    as its provenance fields were right. That is Decision #29 exactly: a
+    contract that reads as closed in review and carries nothing.
+
+    Re-deriving the verdict from the retained evidence is what makes the
+    ledger checkable by someone who did not run the benchmark. It is
+    deliberately a *re-derivation*, not a recomputation from raw times: the
+    aggregate's own numbers are the thing under audit.
+
+    Returns an empty list for a row that is not a promotion.
+    """
+    if row.get("status") != "promote_candidate":
+        return []
+    selected = row.get("selected_route")
+    evidence = row.get("route_evidence")
+    if not isinstance(evidence, Mapping) or not isinstance(selected, str):
+        return ["missing_route_evidence"]
+    chosen = evidence.get(selected)
+    if not isinstance(chosen, Mapping):
+        return [f"missing_evidence_for:{selected}"]
+
+    violations: list[str] = []
+
+    def _threshold(name: str) -> float | None:
+        value = rules.get(name)
+        return float(value) if isinstance(value, (int, float)) else None
+
+    min_speedup = _threshold("minimum_speedup_fraction_each_run")
+    min_win = _threshold("minimum_paired_win_fraction_each_run")
+    max_spread = _threshold("maximum_cross_run_speedup_spread")
+    # A missing threshold is not a pass. Without it there is nothing to hold
+    # the promotion to, and the honest verdict is "unverifiable", not "fine".
+    if min_speedup is None or min_win is None or max_spread is None:
+        violations.append("promotion_rules_incomplete")
+
+    medians = chosen.get("paired_median_speedups")
+    if not isinstance(medians, list) or not medians:
+        violations.append("no_paired_median_speedups")
+    elif min_speedup is not None and any(
+            not isinstance(v, (int, float)) or v < min_speedup for v in medians):
+        violations.append(
+            f"speedup_below_minimum:{min(v for v in medians if isinstance(v, (int, float)))!r}"
+            if any(isinstance(v, (int, float)) for v in medians)
+            else "speedup_below_minimum")
+
+    fractions = chosen.get("paired_win_fractions")
+    if not isinstance(fractions, list) or not fractions:
+        violations.append("no_paired_win_fractions")
+    elif min_win is not None and any(
+            not isinstance(v, (int, float)) or v < min_win for v in fractions):
+        violations.append("paired_win_fraction_below_minimum")
+
+    spread = chosen.get("cross_run_speedup_spread")
+    if not isinstance(spread, (int, float)):
+        violations.append("no_cross_run_speedup_spread")
+    elif max_spread is not None and spread > max_spread:
+        violations.append(f"speedup_spread_above_maximum:{spread!r}")
+
+    # The `requires_*` booleans name evidence that must be PRESENT, not a
+    # threshold to clear. Each maps to the field the aggregator set.
+    for rule, field in (
+        ("requires_native_dispatch", "placement_and_numerical_proof"),
+        ("requires_numerical_validation", "placement_and_numerical_proof"),
+        ("requires_repeated_measurement", "repeated_measurement"),
+        ("requires_interleaved_paired_trials", "paired_measurement"),
+        ("requires_resource_evidence", "resource_evidence_retained"),
+    ):
+        if rules.get(rule) is True and chosen.get(field) is not True:
+            violations.append(f"{rule}:unmet")
+    return violations
+
+
 def load_strict_route_ledger(
     path: str | Path,
     *,
@@ -230,6 +313,13 @@ def load_strict_route_ledger(
     decisions = payload.get("decisions")
     if not isinstance(decisions, list):
         return StrictRouteLedger({}, {}, ("missing_decisions",))
+    # The ledger carries the thresholds it was sealed under; hold it to them.
+    # Without this, `status: "promote_candidate"` was self-certifying -- the
+    # loader checked provenance thoroughly and the promotion criteria not at
+    # all, so a row naming a route that lost every trial would be served.
+    promotion_rules = payload.get("promotion_rules")
+    if not isinstance(promotion_rules, Mapping):
+        promotion_rules = {}
     routes: dict[tuple[str, str, str, str, str], str] = {}
     citations: dict[tuple[str, str, str, str, str], str] = {}
     for index, row in enumerate(decisions):
@@ -274,6 +364,10 @@ def load_strict_route_ledger(
             continue
         if key in routes:
             rejected.append(f"{prefix}:duplicate_key")
+            continue
+        violations = promotion_rule_violations(row, promotion_rules)
+        if violations:
+            rejected.append(f"{prefix}:promotion_rule:{violations[0]}")
             continue
         routes[key] = selected
         citations[key] = f"{Path(path)}#decision[{index}]"
@@ -849,6 +943,7 @@ __all__ = [
     "package_route_selected",
     "production_route_for",
     "production_route_decision",
+    "promotion_rule_violations",
     "live_apple_device_tag",
     "select_route",
     "seal_strict_route_ledger",

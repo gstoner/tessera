@@ -3693,3 +3693,20 @@ covered not-registered, wrong-region and unavailable-here alike, and once a
 shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
+
+## Cross-backend sync `ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**Owning item:** Apple strict route ledger re-seal · **synchronization key:**
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+Apple's `promotion_rules` block turned out to be a declaration no code read;
+fixed there (see the Apple plan). Assessed here because the pattern travels.
+
+**Outcome for this backend: `not applicable` — x86 has no route ledger.** The
+committed x86 baselines (`x86_avx512_e2e_*_comparison.json`, the
+`core_compiler_*_avx512.json` family) are direct measurement comparisons, not
+promotion ledgers: there is no incumbent-vs-candidate selector, so there is no
+promotion to certify and no rules block to leave unread. If an x86 route
+selector is ever added, the Apple loader's shape is the one to copy —
+**re-derive the promotion from the retained evidence at load time**, rather
+than trusting a status string and carrying the thresholds as documentation.

@@ -286,3 +286,48 @@ def skip_if_apple_pipeline_unregistered(proc: Any, opt_path: str) -> None:
         "tessera-opt was built without the Apple backend "
         "(configure -DTESSERA_BUILD_APPLE_BACKEND=ON to run this)"
     )
+
+
+#: The promotion thresholds `aggregate_stable_route_reports` seals into every
+#: Apple strict route ledger, and that `load_strict_route_ledger` now holds a
+#: promotion to. Kept here rather than in one test module because two test
+#: files build ledger fixtures and a third checks the committed ones; three
+#: copies of a threshold set is how they drift apart.
+STRICT_PROMOTION_RULES = {
+    "minimum_speedup_fraction_each_run": 0.05,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "absolute_time_drift_is_diagnostic_only": True,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "requires_native_dispatch": True,
+    "requires_numerical_validation": True,
+    "requires_repeated_measurement": True,
+    "requires_interleaved_paired_trials": True,
+    "requires_resource_evidence": True,
+}
+
+
+def strict_promotion_evidence(**overrides: object) -> dict[str, object]:
+    """Evidence a real promotion carries, clearing `STRICT_PROMOTION_RULES`.
+
+    Ledger fixtures used to assert `status: "promote_candidate"` with **no**
+    `route_evidence` and no rules block -- a forged promotion, which the loader
+    accepted because it validated provenance exhaustively and the promotion
+    criteria not at all. Building fixtures the way `seal_strict_route_ledger`
+    actually builds them is what lets a negative case mean something: the
+    rejection has to come from the field under test, not from evidence that
+    was never there.
+
+    Pass an override to forge a specific violation.
+    """
+    return {
+        "present_in_all_runs": True,
+        "placement_and_numerical_proof": True,
+        "repeated_measurement": True,
+        "paired_measurement": True,
+        "resource_evidence_retained": True,
+        "paired_median_speedups": [0.31, 0.29],
+        "paired_win_fractions": [1.0, 1.0],
+        "cross_run_speedup_spread": 0.02,
+        **overrides,
+    }

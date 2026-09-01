@@ -5714,3 +5714,29 @@ covered not-registered, wrong-region and unavailable-here alike, and once a
 shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
+
+## Cross-backend sync `ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**Owning item:** Apple strict route ledger re-seal · **synchronization key:**
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+Apple's `promotion_rules` block turned out to be a declaration no code read:
+sealed into twelve ledgers for audit, and `status: "promote_candidate"` was
+self-certifying at load. Fixed there (see the Apple plan). All four backends
+are assessed because the *pattern* is what travels, not the Apple code.
+
+**Outcome for this backend: `follow-up required` — the same gap exists here,
+in a milder form.** `nvidia_sm120_legacy_retune.json` and
+`nvidia_sm120_low_precision_native_routes.json` declare `noise_policy`
+(0.03 / 0.04) and `selector_promotions`, and the ratchets assert those values
+**equal a constant** without ever comparing a promoted row's margin against the
+policy the file declares. So a promotion inside the noise band would pass every
+existing check.
+
+Credit where due: `test_nvidia_low_precision_native_routes.py` is otherwise
+well built for this class — it cross-checks the summary count against the rows,
+explicitly guards the vacuous-pass case (`len(promoted) == selector_promotions
+> 0`), and requires timing-domain consensus plus resource fingerprints on every
+promoted row. The missing piece is exactly one: **the margin is never held to
+`noise_policy`.** That is a smaller job than Apple's was, and it needs a
+decision about what "margin" means for these rows before it is written.

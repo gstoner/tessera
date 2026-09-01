@@ -206,16 +206,46 @@ def amx_is_plausibly_present() -> bool:
 
 
 def _tool_path(env_name: str, *candidates: Path | str) -> Path | None:
+    """Resolve a host tool, requiring that it actually RUNS.
+
+    Existence was the only test here, and it is not enough. A build directory
+    left over from a previous toolchain still holds executables that link a
+    shared library which may no longer be installed; on macOS the process dies
+    in dyld before `main`. Every test that resolved such a binary then reported
+    a hard failure about a missing symbol, which reads as a broken compiler
+    rather than the stale tree it is.
+
+    That is not hypothetical: `build/.../tessera-nvidia-opt` on this fleet's Mac
+    links `libLLVM.23.1.dylib` from a prior Homebrew keg, so
+    `test_sm120_tile_fragment_lowers_to_real_nvvm_mma` failed with
+    `Symbol not found: __ZN4llvm11raw_ostreamlsERKNS_18format_object_baseE`
+    instead of skipping.
+
+    `compiler_tool.is_runnable` already existed for precisely this, with a
+    docstring describing this failure -- but it gated only `tessera_opt`
+    discovery, so its sibling resolvers kept the defect it was written to fix.
+
+    An exported selector stays final: if `$ENV` names something unrunnable we
+    return None (a clean skip) rather than quietly falling back to a different
+    binary, because silently running one the developer did not ask for is how a
+    "passing" run stops meaning anything. Unrunnable *candidates* are skipped
+    over, so a dead tree cannot outrank a live one.
+    """
+    from tests._support import compiler_tool
+
     configured = os.environ.get(env_name)
     if configured:
         path = Path(configured).expanduser()
-        return path if path.is_file() else None
+        return path if path.is_file() and compiler_tool.is_runnable(path) else None
     for candidate in candidates:
         path = Path(candidate)
-        if path.is_file():
+        if path.is_file() and compiler_tool.is_runnable(path):
             return path
     executable = shutil.which(env_name.lower().replace("_", "-"))
-    return Path(executable) if executable else None
+    if not executable:
+        return None
+    found = Path(executable)
+    return found if compiler_tool.is_runnable(found) else None
 
 
 def nvidia_cuda_tool(name: str) -> Path | None:

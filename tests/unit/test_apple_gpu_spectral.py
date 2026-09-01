@@ -109,6 +109,7 @@ def test_jit_fft_metal_runtime():
     assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
 
 
+@gpu
 def test_spectral_conv_refuses_a_rank_mismatch_instead_of_broadcasting():
     """The GPU lane must not admit inputs the host reference raises on.
 
@@ -141,6 +142,7 @@ def test_spectral_conv_refuses_a_rank_mismatch_instead_of_broadcasting():
         np.asarray(ts.ops.spectral_conv(x, w2)), rtol=1e-4, atol=1e-4)
 
 
+@gpu
 def test_spectral_conv_matches_numpy_full_convolution():
     """Ground truth outside Tessera, so 'both lanes agree' cannot mean 'both
     lanes are wrong the same way'."""

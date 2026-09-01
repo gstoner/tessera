@@ -6327,3 +6327,39 @@ covered not-registered, wrong-region and unavailable-here alike, and once a
 shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
+
+## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+**Owning item:** the NVIDIA/ROCm half of
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` ·
+**synchronization key:** `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+Apple's `promotion_rules` was a declaration nothing read; its loader now
+re-derives each promotion from the evidence the ledger retained. The same
+question was then put to the other backends' evidence artifacts, and the
+answers differ enough to be worth stating one by one.
+
+**A near-miss that shaped the whole exercise, recorded because it would have
+been convincing.** The first NVIDIA checker modelled promotion as *"the winner
+beats the runner-up by more than `noise_fraction`"* — the obvious reading — and
+it flagged **7 of 11 committed promotions as violations**, complete with a
+tidy table. Reading the producer settled it: `finalize_low_precision_native_routes._near`
+promotes a candidate that is **within** `noise_fraction` of the fastest in
+every run of every domain, tie-broken by total time. Every one of those 7 is
+correct under the rule that was actually applied. A plausible model of someone
+else's gate, checked against committed evidence, produces confident and wrong
+findings — so both checkers here mirror their producer's own predicate rather
+than a reasonable-looking substitute.
+
+**Outcome for this backend: `parity validated`, no change needed.** Apple is
+where this rule landed first (`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`): its
+`promotion_rules` block is a real threshold set and `load_strict_route_ledger`
+now refuses a decision those thresholds reject, in production rather than in a
+test. The NVIDIA and ROCm work above is the same question asked of their
+evidence artifacts; nothing here changes.
+
+Worth noting for contrast: Apple is the only one of the three whose gate is
+**machine-readable in the artifact itself**. NVIDIA carries a bare number
+(`noise_fraction` / `noise_policy`) whose meaning lives only in the recorder,
+and ROCm carries a sentence. When an evidence format is next designed, Apple's
+shape is the one to copy.

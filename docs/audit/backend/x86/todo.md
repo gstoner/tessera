@@ -3693,3 +3693,33 @@ covered not-registered, wrong-region and unavailable-here alike, and once a
 shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
+
+## Cross-backend sync `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+**Owning item:** the NVIDIA/ROCm half of
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01` ·
+**synchronization key:** `PROMOTION-EVIDENCE-REDERIVED-2026-09-01`
+
+Apple's `promotion_rules` was a declaration nothing read; its loader now
+re-derives each promotion from the evidence the ledger retained. The same
+question was then put to the other backends' evidence artifacts, and the
+answers differ enough to be worth stating one by one.
+
+**A near-miss that shaped the whole exercise, recorded because it would have
+been convincing.** The first NVIDIA checker modelled promotion as *"the winner
+beats the runner-up by more than `noise_fraction`"* — the obvious reading — and
+it flagged **7 of 11 committed promotions as violations**, complete with a
+tidy table. Reading the producer settled it: `finalize_low_precision_native_routes._near`
+promotes a candidate that is **within** `noise_fraction` of the fastest in
+every run of every domain, tie-broken by total time. Every one of those 7 is
+correct under the rule that was actually applied. A plausible model of someone
+else's gate, checked against committed evidence, produces confident and wrong
+findings — so both checkers here mirror their producer's own predicate rather
+than a reasonable-looking substitute.
+
+**Outcome for this backend: `not applicable` — no promotion artifact.** The
+committed x86 baselines are direct measurement comparisons with no
+incumbent-vs-candidate verdict, so there is no promotion to re-derive. If an
+x86 selector is added, copy Apple's shape: put the thresholds **in the
+artifact** and re-derive the verdict from retained evidence at load time, so
+the gate does not live only in the recorder that produced the file.

@@ -6068,6 +6068,64 @@ gate.
 
 ---
 
+## Cross-backend sync `CAPABILITY-GUARDS-2026-09-01`
+
+**Owning item:** host-capability gating in the unit suite ·
+**synchronization key:** `CAPABILITY-GUARDS-2026-09-01`
+
+**Three tests failed on a host that cannot evaluate them, instead of skipping.**
+CLAUDE.md's claim-integrity rule is explicit that a host lacking a device or
+toolchain must say so; these did the inverse, and one of them (`gfx1151`) had
+been carried as "pre-existing" for the whole session.
+
+| test | what it needed | what happened |
+|---|---|---|
+| `..._sm120_tile_fragment_lowers_to_real_nvvm_mma` | a runnable `tessera-nvidia-opt` | `dyld: Symbol not found` from a binary linked against a prior LLVM keg |
+| `..._attention_package_rejects_stale_parent_and_tile_lineage` | the AVX-512 shared image | `RuntimeError: X86 native packaging requires ...` |
+| `..._gfx1151_scheduled_attention_backward_packages_exact_tile_program` | AMD clang | `RuntimeError: ROCm native packaging requires AMD clang ...` |
+
+**One family: a guard that checks PRESENCE rather than USABILITY.** And in
+every case **the helper that prevents it already existed, and the caller did
+not use it** — which is the part worth carrying, because writing the helper
+felt like fixing the problem:
+
+* `compiler_tool.is_runnable`, whose docstring describes this exact dyld
+  failure, gated only `tessera_opt` discovery. `_tool_path` — which resolves
+  `mlir-opt` *and* `tessera-nvidia-opt` — checked `is_file()` alone.
+* `rocm_native.native_packaging_available`, whose docstring says checking tools
+  without AMD clang "reads as a broken test on any host without ROCm rather
+  than an absent toolchain", was not called by the gfx1151 test.
+* `rt._x86_elementwise_available` is used by a sibling test one function away.
+
+**The skip has to be proven narrow, not just present.** A guard that skips too
+much is the hollow-green pattern wearing a fix's clothes, so each was verified
+on a host that HAS the capability:
+
+| host | result |
+|---|---|
+| Princess-Luna (AVX-512 + ROCm) | both tests **PASSED**, not skipped |
+| Super-Bear (CUDA) | nvidia-opt test **PASSED**, not skipped |
+| Princess-Luna, resolver control | **771 passed / 85 skipped before and after** — the `_tool_path` change adds zero skips where tools work |
+
+**Outcome for this backend: `not applicable` to the fix, but Apple is where all
+three surfaced and the one with the most to lose from the pattern.** No Apple
+test changed here.
+
+**Apple's exposure is structural, not incidental.** Its execution tests are
+gated three different ways — a file-level allowlist in `conftest`
+(`_APPLE_GPU_EXECUTION_TESTS`), per-test `@pytest.mark.hardware_apple_gpu` in
+the **154 mixed-mode files** that are deliberately not on it, and inline
+`require_apple_metal()` calls. Three mechanisms for one property is three
+places to forget one, and this session forgot the second (`#666`, caught by
+CI's Linux lane).
+
+A static gate for that was considered and **rejected on evidence**: scanning
+all 154 files yields 97 candidate tests, and a static check cannot separate
+"executes and raises" from "falls back to numpy". CI's Linux lane already
+distinguishes them dynamically and is green on all 97, so a static gate would
+be ~97 false positives. The dynamic gate is the right one and it works.
+
+---
 ## Cross-backend sync `AUTOTUNE-SEPARATION-NVIDIA-2026-09-01`
 
 **Owning item:** `AUTOTUNE-SEPARATION`, NVIDIA half ·

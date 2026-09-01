@@ -33,10 +33,17 @@ from tessera.compiler.fusion_core import MatmulRegion
 
 _TGT = "faketarget"
 
-#: M%16 and K%16 both nonzero -> outside the emitted lane's tile alignment.
-RAGGED = (24, 12, 20)
-#: M%16, N%8, K%16 all zero -> inside it.
+#: Ragged M and N with K even -> SERVED by the emitted lane since the boundary
+#: predication landed (was declined; proven on sm_120).
+RAGGED_MN = (24, 12, 20)
+#: Odd K -> still declined: `ld.global.b32` needs a 4-byte-aligned address and
+#: the fragments address 2-byte elements, so odd K misaligns every odd row.
+ODD_K = (24, 12, 21)
+#: Fully aligned.
 ALIGNED = (32, 16, 32)
+#: The workload the generic-lane starvation cases race on. Odd K keeps the
+#: emitted lane out of the field, which is what those tests need to observe.
+RAGGED = ODD_K
 
 
 def _operands(dims: tuple[int, int, int]) -> tuple[np.ndarray, np.ndarray]:
@@ -104,20 +111,33 @@ class _DeclinesRaggedUpFront(_DeclinesRaggedInRun):
 
 # --- the real candidate ------------------------------------------------------
 
-def test_real_emitted_gemm_declines_a_ragged_workload_it_accepts_by_region():
-    """The class documents "aligned only"; until now nothing could ask it."""
+def test_real_emitted_gemm_declines_a_workload_it_accepts_by_region():
+    """The class documents its shape envelope; until #672 nothing could ask it.
+
+    **The envelope moved after this test was written, and that is the point of
+    keeping it.** When #672 landed, this lane served only M%16/N%8/K%16 and
+    declined every ragged shape to numpy. It now predicates its own M/N
+    boundaries and its K remainder -- proven on sm_120 -- so ragged M/N are
+    served and only ODD K is declined (``ld.global.b32`` needs a 4-byte-aligned
+    address; odd K misaligns every odd row).
+
+    What has not changed is the structural claim this test exists for: a region
+    carries no dimensions, so `applies_to` answers the same for every shape and
+    only `applies_to_inputs` can tell them apart.
+    """
     cand = NvidiaMmaGemmEmittedCandidate()
     region = MatmulRegion(dtype="float16")
 
-    # Region-level applicability cannot see the shape -- both answers identical.
+    # Region-level applicability cannot see the shape -- same answer either way.
     assert cand.applies_to(region) is True
 
     assert cand.applies_to_inputs(region, *_operands(ALIGNED)) is True
-    assert cand.applies_to_inputs(region, *_operands(RAGGED)) is False
+    assert cand.applies_to_inputs(region, *_operands(RAGGED_MN)) is True
+    assert cand.applies_to_inputs(region, *_operands(ODD_K)) is False
 
-    # And the contract it is now stating up front is the one `run` enforces,
-    # so the two cannot drift into disagreeing about the same workload.
-    _, tag = cand.run(region, *_operands(RAGGED))
+    # And the contract it states up front is the one `run` enforces, so the two
+    # cannot drift into disagreeing about the same workload.
+    _, tag = cand.run(region, *_operands(ODD_K))
     assert tag == "reference"
 
 
@@ -134,14 +154,21 @@ def test_shape_unknowable_workloads_fail_open_not_closed():
     assert cand.applies_to_inputs(region, "not", "arrays") is True
 
 
-def test_rocm_flash_attn_declines_a_head_dim_its_wmma_kernel_cannot_serve():
-    """The sibling instance, and the worse-placed one.
+def test_rocm_flash_attn_no_longer_declines_a_ragged_head_dim():
+    """The sibling instance -- and the limit it named is now gone.
 
-    `rocm_flash_attn` is Tier-3 on the one AMD device that executes, so on a
-    ragged head_dim it won the dispatch and returned numpy while
-    `rocm_generic_hip` stood by. Host-free here: the head_dim arithmetic is
-    numpy, above any HIP call. Device evidence for the *dispatch* is owed from
-    gfx1151 (Princess-Luna) and is not claimed by this test.
+    When #672 landed, this lane declined `head_dim % 16 != 0` to numpy while
+    holding Tier-3 priority on the one AMD device that executes, so a ragged
+    head_dim took the dispatch and returned a host result. The WMMA kernel now
+    emits a predicated remainder chunk instead: the Q@K^T fragments zero-pad
+    past D (exact -- D is the contraction there) and the P@V accumulator write
+    is guarded (D is the OUTPUT dim there, so an unguarded lane would corrupt
+    the next query's row in LDS).
+
+    Proven on gfx1151 across head_dim 8/24/40/72/88/100/120/130 at ~1e-4
+    relative error, including multi-query non-causal cases checked on every
+    output row. Host-free here: this asserts the applicability contract, not
+    the device result.
     """
     from tessera.compiler.emit.rocm_hip import RocmFlashAttnCandidate
 
@@ -155,14 +182,16 @@ def test_rocm_flash_attn_declines_a_head_dim_its_wmma_kernel_cannot_serve():
 
     assert cand.applies_to(region) is True            # region-level: blind
     assert cand.applies_to_inputs(region, *qkv(64)) is True
-    assert cand.applies_to_inputs(region, *qkv(40)) is False
+    assert cand.applies_to_inputs(region, *qkv(40)) is True   # was False
+    assert cand.applies_to_inputs(region, *qkv(72)) is True
+    assert cand.applies_to_inputs(region, *qkv(8)) is True
 
     # A Q/K head_dim mismatch is an operand error, not an unsupported shape:
     # applicability defers so `run` can report it rather than silently
     # excluding the lane (Decision #21).
     q = rng.standard_normal((16, 64)).astype(np.float32)
     k = rng.standard_normal((16, 32)).astype(np.float32)
-    assert cand.applies_to_inputs(region, q, k, k) is True
+    assert cand.applies_to_inputs(region, q, k, k) is False
 
 
 # --- harm 1: starvation ------------------------------------------------------

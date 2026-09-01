@@ -5138,14 +5138,29 @@ class NvidiaMmaGatedComposedCandidate(Candidate):
 
 
 def _aligned_2d(A: Any, B: Any) -> bool:
-    """A (M,K) @ B (K,N) with the emitted kernel's tile alignment (M%16,N%8,K%16)."""
+    """A (M,K) @ B (K,N) the emitted mma.sync GEMM can serve.
+
+    **M and N are free; K must be even.** Was ``M%16 and N%8 and K%16``: the
+    kernel now predicates its own M/N boundaries (clamped loads + suppressed
+    stores) and its K remainder, proven on sm_120 over 25 ragged shapes x 2
+    dtypes at <= 1.3e-7 relative error.
+
+    K parity is a hardware constraint, not a missing feature:
+    ``ld.global.b32`` needs a 4-byte-aligned address and the fragments address
+    2-byte elements, so ``row*K + k`` must be even. Odd K makes every odd row
+    start misaligned -- ``CUDA_ERROR_MISALIGNED_ADDRESS`` on device, in the
+    main loop rather than only the tail. See `ptx_emit.is_valid_mma_sync_gemm_shape`
+    for the two designs that would lift it.
+
+    The name is kept because five call sites and the launch bridge speak of
+    "aligned" for this lane; what counts as aligned is what changed.
+    """
     import numpy as np
     Aa, Ba = np.asarray(A), np.asarray(B)
     if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
         return False
-    M, K = Aa.shape
-    _, N = Ba.shape
-    return M % 16 == 0 and N % 8 == 0 and K % 16 == 0
+    _, K = Aa.shape
+    return K % 2 == 0
 
 
 #: Measured on the fleet's sm_120 (RTX 5070) against the oracle's
@@ -5331,10 +5346,12 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
         # the natural A(M,K)/B(K,N) operands, so a transposed raw operand is flipped
         # before the aligned-only check (the transpose contract).
         An, Bn = region._natural(A, B, cast=False)
-        if not _aligned_2d(An, Bn):            # emitter is aligned-only (for now)
-            # Kept even though `applies_to_inputs` now declines earlier: `run`
-            # is reachable directly and through the E3 `force` escape hatch,
-            # which deliberately bypasses applicability.
+        if not _aligned_2d(An, Bn):            # odd K only (see _aligned_2d)
+            # Kept even though `applies_to_inputs` declines earlier: `run` is
+            # reachable directly and through the E3 `force` escape hatch, which
+            # deliberately bypasses applicability. It also keeps a device fault
+            # off the table -- an odd-K launch faults and poisons the CUDA
+            # context for the rest of the process, so this must never reach it.
             return region.reference(A, B), "reference"
         try:
             from tessera import runtime as rt
@@ -5353,9 +5370,11 @@ class NvidiaMmaGemmEmittedCandidate(Candidate):
         no device timer at all; `tileLaunchConfig` now carries the convention
         as a flag, the same one `invokeMmaGemm16` already took.
 
-        Returns ``None`` for a ragged shape rather than a number: this lane
-        declines to the reference there, so a latency would describe numpy and
-        be read as evidence that a candidate is fast when it never ran.
+        Returns ``None`` for a shape this lane declines (odd K) rather than a
+        number: a latency would describe numpy and be read as evidence that a
+        candidate is fast when it never ran. Ragged M/N are no longer declined
+        -- the kernel predicates them -- so those now get a real measurement
+        instead of being silently absent from the race.
         """
         if len(inputs) != 2:
             return None

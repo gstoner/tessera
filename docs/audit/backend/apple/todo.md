@@ -6472,3 +6472,54 @@ so **any edit to that file invalidates the strict route ledger** and puts
 `test_strict_retune_ledger_admits_on_its_exact_live_apple_host` back to red.
 The fix therefore has to land together with a benchmark re-run and re-seal
 (`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`), not before or after it.
+
+## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**Owning item:** the matrix-core lanes decline ragged shapes ·
+**synchronization key:** `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**One gap, found three times while fixing other things.** Every backend's
+matrix-core lane — the *fast* one — declined ragged shapes and fell back to a
+much slower path:
+
+| backend | lane | gate | fallback |
+|---|---|---|---|
+| NVIDIA sm_120 | emitted `mma.sync` GEMM | `M%16, N%8, K%16` | numpy |
+| ROCm gfx1151 | WMMA flash-attention | `head_dim % 16` | numpy |
+| Apple M1 Max | coopmat `simdgroup_matrix` reduce | `N % 8` | scalar path |
+
+What made it worth doing now is the measurement from the corpus work: the
+compiler-**emitted** PTX GEMM beats the hand-tuned delegate **1.5–1.7x at every
+shape** on sm_120. The alignment gate was not costing a little — it was
+excluding the fastest kernel in the registry from every ragged workload. The
+`applies_to_inputs` declines added in #672 made that *honest*; they did not make
+it *fast*.
+
+Both fixes share one idea and split on which axis a dimension plays:
+
+* **A contraction dimension is zero-padded** — exact, because a zero operand
+  contributes nothing to the dot product.
+* **An output dimension is store-suppressed** — zero-padding is wrong there; a
+  lane past the edge would write a correct-but-zero value into someone else's
+  slot.
+
+Getting that backwards is silent corruption rather than a fault, which is why
+it is stated as the rule rather than left implicit in each kernel.
+
+**Outcome for this backend: `follow-up required` — the same gap exists here and
+is not yet closed.** `coopmat_reduce_eligible` gates the
+`simdgroup_matrix` reduce lane on `N % 8 == 0`, and the emitted comment says
+why: *"N is a multiple of 8 by eligibility, so each 8x8 store stays in bounds."*
+That is the store-suppression half of the rule above, currently solved by
+refusing the shape instead of guarding the store. A ragged N therefore falls to
+the scalar path.
+
+Apple is the best-placed of the three to fix it, for a structural reason worth
+noting: it synthesizes MSL **per shape**, so `N` is already an explicit argument
+to the eligibility predicate rather than something the kernel must discover.
+The tail bound is compile-time there, as it is for ROCm's `head_dim` — which is
+what made the ROCm side cost no runtime predicate on the contraction axis.
+
+Not attempted in this change: it needs its own device proof on the Mac, and
+bundling a third backend into one PR would put three device claims behind one
+review.

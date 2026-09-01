@@ -3710,3 +3710,46 @@ promotion to certify and no rules block to leave unread. If an x86 route
 selector is ever added, the Apple loader's shape is the one to copy —
 **re-derive the promotion from the retained evidence at load time**, rather
 than trusting a status string and carrying the thresholds as documentation.
+
+## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**Owning item:** the matrix-core lanes decline ragged shapes ·
+**synchronization key:** `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**One gap, found three times while fixing other things.** Every backend's
+matrix-core lane — the *fast* one — declined ragged shapes and fell back to a
+much slower path:
+
+| backend | lane | gate | fallback |
+|---|---|---|---|
+| NVIDIA sm_120 | emitted `mma.sync` GEMM | `M%16, N%8, K%16` | numpy |
+| ROCm gfx1151 | WMMA flash-attention | `head_dim % 16` | numpy |
+| Apple M1 Max | coopmat `simdgroup_matrix` reduce | `N % 8` | scalar path |
+
+What made it worth doing now is the measurement from the corpus work: the
+compiler-**emitted** PTX GEMM beats the hand-tuned delegate **1.5–1.7x at every
+shape** on sm_120. The alignment gate was not costing a little — it was
+excluding the fastest kernel in the registry from every ragged workload. The
+`applies_to_inputs` declines added in #672 made that *honest*; they did not make
+it *fast*.
+
+Both fixes share one idea and split on which axis a dimension plays:
+
+* **A contraction dimension is zero-padded** — exact, because a zero operand
+  contributes nothing to the dot product.
+* **An output dimension is store-suppressed** — zero-padding is wrong there; a
+  lane past the edge would write a correct-but-zero value into someone else's
+  slot.
+
+Getting that backwards is silent corruption rather than a fault, which is why
+it is stated as the rule rather than left implicit in each kernel.
+
+**Outcome for this backend: `not applicable` — no matrix-core lane to gate.**
+AVX-512 is the live x86 ISA here and its GEMM microkernel is not a
+fixed-fragment matrix unit, so there is no 16x8x16-style tile whose edges need
+predicating; the AMX ops that would have one are closed by direction (ACE
+supersedes AMX, and no fleet box has it).
+
+If an ACE matrix lane is ever added, the rule above is the one to apply from
+the start: **zero-pad a contraction dimension, suppress the store on an output
+dimension.** Getting that backwards is silent corruption rather than a fault.

@@ -6187,3 +6187,79 @@ Related and already owed: the `AUTOTUNE-SEPARATION` work gave the ROCm corpus
 real `separation` verdicts and `record_is_admissible` now refuses unsupported
 rankings at every consumer. That is the same discipline in the autotune corpus;
 this entry is its counterpart in the route-ledger corpus.
+
+## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**Owning item:** the matrix-core lanes decline ragged shapes ·
+**synchronization key:** `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**One gap, found three times while fixing other things.** Every backend's
+matrix-core lane — the *fast* one — declined ragged shapes and fell back to a
+much slower path:
+
+| backend | lane | gate | fallback |
+|---|---|---|---|
+| NVIDIA sm_120 | emitted `mma.sync` GEMM | `M%16, N%8, K%16` | numpy |
+| ROCm gfx1151 | WMMA flash-attention | `head_dim % 16` | numpy |
+| Apple M1 Max | coopmat `simdgroup_matrix` reduce | `N % 8` | scalar path |
+
+What made it worth doing now is the measurement from the corpus work: the
+compiler-**emitted** PTX GEMM beats the hand-tuned delegate **1.5–1.7x at every
+shape** on sm_120. The alignment gate was not costing a little — it was
+excluding the fastest kernel in the registry from every ragged workload. The
+`applies_to_inputs` declines added in #672 made that *honest*; they did not make
+it *fast*.
+
+Both fixes share one idea and split on which axis a dimension plays:
+
+* **A contraction dimension is zero-padded** — exact, because a zero operand
+  contributes nothing to the dot product.
+* **An output dimension is store-suppressed** — zero-padding is wrong there; a
+  lane past the edge would write a correct-but-zero value into someone else's
+  slot.
+
+Getting that backwards is silent corruption rather than a fault, which is why
+it is stated as the rule rather than left implicit in each kernel.
+
+**Outcome for this backend: `parity validated` — measured on Princess-Luna
+(gfx1151).** `GenerateWMMAFlashAttnKernel` now emits a predicated remainder
+chunk for a ragged `head_dim`. The two halves split on the axis rule above:
+
+* **Q@Kᵀ** — D is the contraction dim, so the tail fragments zero-pad past D.
+  `head_dim` is a **compile-time** attribute here, so the element mask resolves
+  while emitting: a ragged D costs **no runtime predicate at all** on the
+  contraction side.
+* **P@V** — D is the OUTPUT dim. Zero-padding would still have an out-of-range
+  lane store a correct-but-zero value one row further into the LDS accumulator,
+  silently corrupting the next query. So the V read is clamped and the
+  accumulator write is guarded by an `scf.if`.
+
+**Proven on gfx1151**: head_dim 8/24/40/72/88/100/120/130 at ~1e-4 relative
+error, plus multi-query non-causal cases checked on **every** output row —
+worst-error rows landed at 46, 5 and 32, scattered rather than clustered at a
+tile boundary, which is what rules out accumulator corruption. The family
+variants inherit it: **multi_head, GQA (4q/2kv), MQA (4q/1kv) and
+sliding_window** are all correct at ragged head_dim, verified rather than
+assumed — the alternative to "works" was not "declines" but "stops raising and
+returns wrong numbers".
+
+**The rule lived in six places.** Fixing the generator was not enough: a second
+gate in `runtime.py::_execute_rocm_compiled_flash_attn` and a third in
+`rocm_hip.py::run_fused_attention` still refused. Only the three on the forward
+path were relaxed. **Deliberately left alone:** `runtime.py` flash-attn
+*backward* (8391), `linear_attn` (9639), `paged_kv.py` (648) and
+`TileToROCM.cpp::materializeCanonicalStreamingAttention` (1366) — their kernels
+are unchanged, and relaxing a gate whose kernel still cannot do the work
+produces wrong device results rather than a decline. Those are the follow-ons.
+
+**Regression check, against a measured baseline rather than a vibe.** The
+patched run showed 15 failures; restoring the box's own sources and re-running
+gave **12 pre-existing**, so 4 were mine — all asserting the old error message.
+One is instructive: `test_flash_attn_family_op_names_accepted` used
+`head_dim=15` purely as a probe that the **op-name** gate had been passed, and
+this change removed the probe. It now uses `head_dim=0`, invalid for a reason
+no kernel can absorb. Final: **12 vs 12, identical set, zero regressions**;
+`check-tessera-rocm` 67/68 (1 unsupported).
+
+The box was restored to exactly its prior state — same branch, only its own
+pre-existing dirty file, binaries rebuilt from its own source.

@@ -84,12 +84,19 @@ def _artifact(rt, q, k, v, causal, scale, op_name="tessera.flash_attn",
 ])
 def test_flash_attn_family_op_names_accepted(op_name):
     from tessera import runtime as rt
-    # head_dim=15 (not a multiple of 16) trips the head_dim check, which is AFTER
-    # the op-name gate — so reaching it proves the op name was accepted.
-    bad = np.zeros((1, 1, 16, 15), np.float16)
+    # This probes the OP-NAME gate, not head_dim: it feeds a shape the head_dim
+    # check rejects and asserts we reach that check, which can only happen if
+    # the name was accepted first.
+    #
+    # The probe used to be head_dim=15, and that stopped working when the WMMA
+    # kernel gained a predicated remainder chunk -- ragged head_dim is now
+    # SERVED (proven on gfx1151 for multi_head/GQA/MQA/sliding_window at
+    # head_dim 40/72/100, ~1e-4), so 15 no longer raises. head_dim=0 is the
+    # replacement because it is invalid for a reason no kernel can absorb.
+    bad = np.zeros((1, 1, 16, 0), np.float16)
     art = _artifact(rt, bad, bad, bad, causal=False, scale=0.25,
                     op_name=op_name, extra_kwargs={"window": 8})
-    with pytest.raises(ValueError, match="head_dim a positive multiple of 16"):
+    with pytest.raises(ValueError, match="positive head_dim"):
         rt._execute_rocm_compiled_flash_attn(art, (bad, bad, bad))
 
 

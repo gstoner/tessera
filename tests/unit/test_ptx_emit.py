@@ -143,13 +143,43 @@ def test_mma_sync_gemm_rejects_non_16bit_dtype():
         P.emit_mma_sync_gemm_ptx(dtype="tf32")
 
 
-def test_mma_sync_gemm_shape_predicate_requires_aligned_tiles():
+def test_mma_sync_gemm_shape_predicate_frees_m_and_n_but_keeps_k_even():
+    """M and N are predicated in the kernel; K parity is a hardware limit.
+
+    Was ``M%16 and N%8 and K%16``. The kernel clamps its M/N loads and
+    suppresses the out-of-range stores, so ragged M/N cost a few instructions
+    outside the K loop and nothing inside it -- proven on sm_120 across 25
+    ragged shapes x 2 dtypes at <= 1.3e-7 relative error.
+
+    K stays even because ``ld.global.b32`` requires a 4-byte-aligned address
+    and the fragments address 2-byte elements: with K odd, ``row*K + k`` is odd
+    on every odd row and the load faults with CUDA_ERROR_MISALIGNED_ADDRESS.
+    That was measured, not assumed -- 16x8x17 faulted where 24x12x20 passed,
+    and compute-sanitizer named the misalignment rather than a bounds error.
+    """
     assert P.is_valid_mma_sync_gemm_shape(64, 64, 64)
     assert P.is_valid_mma_sync_gemm_shape(128, 8, 16)
-    assert not P.is_valid_mma_sync_gemm_shape(17, 8, 16)      # M not %16
-    assert not P.is_valid_mma_sync_gemm_shape(16, 7, 16)      # N not %8
-    assert not P.is_valid_mma_sync_gemm_shape(16, 8, 17)      # K not %16
+
+    # Ragged M / ragged N: now served.
+    assert P.is_valid_mma_sync_gemm_shape(17, 8, 16)
+    assert P.is_valid_mma_sync_gemm_shape(16, 7, 16)
+    assert P.is_valid_mma_sync_gemm_shape(1, 1, 2)
+    assert P.is_valid_mma_sync_gemm_shape(1000, 999, 1002)
+
+    # Ragged K, still even: served (the predicated remainder slab).
+    assert P.is_valid_mma_sync_gemm_shape(16, 8, 18)
+    assert P.is_valid_mma_sync_gemm_shape(24, 12, 20)
+
+    # Odd K: refused, and refused HERE so it never reaches a launch. An odd-K
+    # dispatch faults the device and poisons the CUDA context for every later
+    # launch in the process, so a late rejection is not equivalent.
+    assert not P.is_valid_mma_sync_gemm_shape(16, 8, 17)
+    assert not P.is_valid_mma_sync_gemm_shape(1, 1, 1)
+    assert not P.is_valid_mma_sync_gemm_shape(1024, 1024, 1023)
+
     assert not P.is_valid_mma_sync_gemm_shape(0, 8, 16)
+    assert not P.is_valid_mma_sync_gemm_shape(16, 0, 16)
+    assert not P.is_valid_mma_sync_gemm_shape(16, 8, 0)
 
 
 def test_mma_sync_gemm_shape_predicate_rejects_i32_index_overflow():

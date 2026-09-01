@@ -50,7 +50,12 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        bool dropout = false, bool bias = false,
                        bool twoWave = false, bool saveLse = false) {
   MLIRContext *ctx = b.getContext();
+  // Full 16-wide head-dim chunks, plus a ragged remainder. `head_dim` is a
+  // COMPILE-TIME attribute here, which is what makes the tail cheap: the
+  // element mask in the Q/K fragments below is resolved while emitting, so a
+  // ragged D costs no runtime predicate on the contraction side at all.
   int64_t DC = D / 16;
+  int64_t DTail = D % 16;
   Type f32 = b.getF32Type();
   Type idxTy = b.getIndexType();
   auto fragTy = VectorType::get({16}, storeTy);
@@ -279,16 +284,24 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     // (no LDS staging — see the sQ note above), masked on the query bound.
     Value qrow_l15 = add(q0, l15);
     Value qrInb = b.create<arith::CmpIOp>(loc, slt, qrow_l15, Sq);
-    auto qkChunk = [&](OpBuilder &bb, Value dc16, Value acc) {
+    // `validElems` < 16 marks the ragged head-dim tail: elements at or past it
+    // are not loaded at all (the load would read the NEXT row) and enter the
+    // fragment as zero. D is the contraction dimension for Q@K^T, so a zero
+    // pair contributes exactly nothing to the dot product -- this is exact,
+    // not an approximation.
+    auto qkChunk = [&](OpBuilder &bb, Value dc16, Value acc,
+                       int64_t validElems = 16) {
       Value aBase = add(add(qbase, mul(qrow_l15, cD)), dc16);
       Value aSafe = bb.create<arith::SelectOp>(loc, qrInb, aBase, c0);
-      Value aFrag = buildFrag(bb, loc, [&](int64_t i) {
+      Value aFrag = buildFrag(bb, loc, [&](int64_t i) -> Value {
+        if (i >= validElems) return storeZero;
         Value v = bb.create<memref::LoadOp>(loc, Q, ValueRange{add(aSafe, ci(i))});
         return bb.create<arith::SelectOp>(loc, qrInb, v, storeZero);
       });
       Value bBase = add(add(kbase, mul(kr_l15, cD)), dc16);
       Value bSafe = bb.create<arith::SelectOp>(loc, krInb, bBase, c0);
-      Value bFrag = buildFrag(bb, loc, [&](int64_t i) {
+      Value bFrag = buildFrag(bb, loc, [&](int64_t i) -> Value {
+        if (i >= validElems) return storeZero;
         Value v = bb.create<memref::LoadOp>(loc, Kk, ValueRange{add(bSafe, ci(i))});
         return bb.create<arith::SelectOp>(loc, krInb, v, storeZero);
       });
@@ -309,6 +322,8 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     } else {
       for (int64_t dc = 0; dc < DC; ++dc)
         cs = qkChunk(b, ci(dc * 16), cs);
+      if (DTail)
+        cs = qkChunk(b, ci(DC * 16), cs, DTail);
     }
     auto emitScore = [&](int64_t e, Value csv) {
       Value qi = add(ci(2 * e), half);
@@ -462,8 +477,20 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     // FUSED into the accumulator write below (sAcc = sAcc*corr + cpe) instead of
     // a separate rescale pass — saves a full 16*D LDS read+write pass and one
     // barrier per KV tile (each sAcc entry is written exactly once per tile).
-    auto emitPVChunk = [&](Value dc16) {
+    // `tail` marks the ragged head-dim chunk. Here D is the OUTPUT dimension
+    // of P@V, not the contraction, so zero-padding is the wrong tool: a lane
+    // whose column is past D must write NOTHING. Zeroing its V fragment would
+    // still have it store a (correct, zero) value into sAcc at an index one
+    // row further on -- silently corrupting the next query's accumulator,
+    // which is the LDS analogue of the store-past-the-edge the NVIDIA lane
+    // suppresses. So the V read is clamped and the accumulator write is
+    // guarded.
+    auto emitPVChunk = [&](Value dc16, bool tail = false) {
       Value pRow = mul(l15, c16);
+      Value dCol = add(dc16, l15);
+      // l15 < DTail  <=>  dc16 + l15 < D  for the tail chunk (dc16 == DC*16).
+      Value dInb = tail ? b.create<arith::CmpIOp>(loc, slt, l15, ci(DTail))
+                        : Value();
       Value apFrag = buildFrag(b, loc, [&](int64_t i) {
         Value s = b.create<memref::LoadOp>(loc, sS, ValueRange{add(pRow, ci(i))});
         return b.create<arith::TruncFOp>(loc, storeTy, s);
@@ -471,24 +498,34 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value bvFrag = buildFrag(b, loc, [&](int64_t i) {
         Value kr = add(k0, ci(i));
         Value inb = b.create<arith::CmpIOp>(loc, slt, kr, Sk);
-        Value idx = add(add(kbase, mul(kr, cD)), add(dc16, l15));
+        if (dInb) inb = b.create<arith::AndIOp>(loc, inb, dInb);
+        Value idx = add(add(kbase, mul(kr, cD)), dCol);
         Value safe = b.create<arith::SelectOp>(loc, inb, idx, c0);
         Value v = b.create<memref::LoadOp>(loc, V, ValueRange{safe});
         return b.create<arith::SelectOp>(loc, inb, v, storeZero);
       });
       Value cpv = wmma(b, loc, apFrag, bvFrag, accZero);
-      for (int64_t e = 0; e < 8; ++e) {
-        Value qi = add(ci(2 * e), half);
-        Value d = add(dc16, l15);
-        Value cpe = b.create<vector::ExtractOp>(loc, cpv, ArrayRef<int64_t>{e});
-        Value idx = add(mul(qi, cD), d);
-        Value cur = b.create<memref::LoadOp>(loc, sAcc, ValueRange{idx});
-        // fused rescale: sAcc = sAcc*corr + cpe (corr = this tile's per-row
-        // online-softmax correction, written to scorr by the softmax above).
-        Value sc = b.create<memref::LoadOp>(loc, scorr, ValueRange{qi});
-        Value resc = b.create<arith::MulFOp>(loc, cur, sc);
-        b.create<memref::StoreOp>(loc, b.create<arith::AddFOp>(loc, resc, cpe),
-                                  sAcc, ValueRange{idx});
+      auto emitAccum = [&](OpBuilder &sb) {
+        for (int64_t e = 0; e < 8; ++e) {
+          Value qi = add(ci(2 * e), half);
+          Value cpe = sb.create<vector::ExtractOp>(loc, cpv, ArrayRef<int64_t>{e});
+          Value idx = add(mul(qi, cD), dCol);
+          Value cur = sb.create<memref::LoadOp>(loc, sAcc, ValueRange{idx});
+          // fused rescale: sAcc = sAcc*corr + cpe (corr = this tile's per-row
+          // online-softmax correction, written to scorr by the softmax above).
+          Value sc = sb.create<memref::LoadOp>(loc, scorr, ValueRange{qi});
+          Value resc = sb.create<arith::MulFOp>(loc, cur, sc);
+          sb.create<memref::StoreOp>(loc, sb.create<arith::AddFOp>(loc, resc, cpe),
+                                     sAcc, ValueRange{idx});
+        }
+      };
+      if (dInb) {
+        auto ifOp = b.create<scf::IfOp>(loc, dInb, /*withElseRegion=*/false);
+        OpBuilder::InsertionGuard ig(b);
+        b.setInsertionPointToStart(ifOp.thenBlock());
+        emitAccum(b);
+      } else {
+        emitAccum(b);
       }
     };
     if (twoWave) {
@@ -499,6 +536,8 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     } else {
       for (int64_t dc = 0; dc < DC; ++dc)
         emitPVChunk(ci(dc * 16));
+      if (DTail)
+        emitPVChunk(ci(DC * 16), /*tail=*/true);
     }
     b.create<gpu::BarrierOp>(loc);
   }
@@ -595,9 +634,14 @@ struct GenerateWMMAFlashAttnKernelPass
         return signalPassFailure();
       }
       int64_t D = dAttr.getInt();
-      if (D <= 0 || D % 16 != 0) {
-        op->emitError("generate-wmma-flash-attn-kernel: head_dim must be a "
-                      "positive multiple of 16 (got ")
+      // A ragged head_dim is served by a predicated remainder chunk: the
+      // Q@K^T fragments zero-pad past D (exact -- D is the contraction there)
+      // and the P@V accumulator write is guarded (D is the OUTPUT dim there,
+      // so an unguarded lane would corrupt the next query's row in LDS).
+      // Only positivity is required now.
+      if (D <= 0) {
+        op->emitError("generate-wmma-flash-attn-kernel: head_dim must be "
+                      "positive (got ")
             << D << ")";
         return signalPassFailure();
       }

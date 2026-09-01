@@ -468,6 +468,42 @@ def _infer_dims(op: str, inputs: tuple[Any, ...]) -> tuple[int, ...] | None:
     return None
 
 
+def record_is_admissible(rec: MeasureRecord) -> bool:
+    """Whether a persisted record may be served as a dispatch hint.
+
+    **One predicate, because there is more than one consumer.** `corpus_winner`
+    is not the only path from the committed corpus to production dispatch:
+    `cache/paged_kv.py::_rocm_paged_attention_corpus_winner` reads the same
+    file directly for its route decision, and checked only that the winner was
+    a known name. So the admission rules landed in one consumer and the other
+    kept serving `direct` for the gfx1151 8192-token bucket on the strength of
+    a ranking the corpus itself marks `separated: false` (6.52% margin against
+    5.59% noise). Duplicating the checks would have meant two rules drifting;
+    this is the rule.
+
+    Three grounds for refusal:
+
+    * `separated is False` -- the measurement says the ranking is not real.
+    * `selector_eligible is False` -- the finalizer's two-run agreement check
+      reached the same conclusion from a different premise.
+    * an UNPROVEN RANKING: two or more candidates timed and no verdict at all.
+
+    `separation is None` alone is not a refusal. `separation_verdict` returns
+    None when fewer than two candidates were timed, because a sole candidate is
+    chosen by applicability rather than by a race and has no margin to defend;
+    refusing those would be a category error. `inf` is likewise not a
+    competitor -- it marks "could not be timed" -- so a row with one latency
+    and one `inf` is a sole-candidate row wearing a pair's clothes.
+    """
+    if rec.is_separated() is False:
+        return False
+    if rec.evidence.get("selector_eligible") is False:
+        return False
+    if rec.is_separated() is None and _ranked_candidate_count(rec) >= 2:
+        return False
+    return True
+
+
 def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
                   dims: tuple[int, ...] | None = None,
                   dtype: str | None = None,
@@ -537,23 +573,7 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
     # it False when two independent runs disagreed on the winner, which is the
     # same conclusion reached by a different mechanism.
     for rec in matches:
-        if rec.is_separated() is False:
-            return None
-        if rec.evidence.get("selector_eligible") is False:
-            return None
-        # An UNPROVEN RANKING is refused too, now that every fleet row has had
-        # the chance to earn a verdict (gfx1151 re-raced 2026-09-01, sm_120
-        # 2026-08-31). `None` used to be allowed because rejecting it would
-        # have deactivated most of the corpus before those runs existed; that
-        # reason has expired.
-        #
-        # But `None` is NOT uniformly "unproven". `separation_verdict` returns
-        # None when fewer than two candidates were timed, because a sole
-        # candidate is chosen by applicability rather than by a race and has no
-        # margin to defend. Refusing those would be a category error, not
-        # caution -- 12 of the 23 remaining None rows are exactly that shape.
-        # So the test is "ranks two or more and cannot say it separated them".
-        if rec.is_separated() is None and _ranked_candidate_count(rec) >= 2:
+        if not record_is_admissible(rec):
             return None
 
     candidate = live.get(winner)

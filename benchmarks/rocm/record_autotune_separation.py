@@ -17,7 +17,7 @@ Two rules carried from the NVIDIA half, both learned by nearly breaking them:
   SUCCEEDED while producing weaker evidence than they replaced. Nothing fails;
   only a row-and-evidence count catches it, so this prints one.
 
-ROCm-specific hazard, and the reason `--check-timer` exists:
+ROCm-specific hazard, and the reason `--check-timer` exists (on by default):
 `_hip_resident_launch_latency` falls back to the host wall clock when HIP
 events misbehave on this fleet, and a wall clock is *noisier* than a device
 event. That RAISES the noise floor and makes separation harder to reach --
@@ -32,9 +32,17 @@ from pathlib import Path
 
 import numpy as np
 
+#: The one device key this driver recreates. Eviction and the safety count
+#: both key on it exactly: matching `startswith("rocm")` would evict another
+#: ROCm device's fused rows, and `_summarise` counting every ROCm device as one
+#: bucket meant the "did another device lose rows?" guard could not see it --
+#: the guard against silent evidence loss had the same blind spot as the loss.
+DEVICE = "rocm:gfx1151"
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
+from tessera import runtime as rt                              # noqa: E402
 from tessera.compiler import fusion as F                       # noqa: E402
 from tessera.compiler.emit import autotune as at               # noqa: E402
 from tessera.compiler.emit.candidate import OP_FUSED_REGION    # noqa: E402
@@ -55,8 +63,8 @@ def _summarise(cache: at.MeasureCache) -> dict[str, int]:
               if len([v for v in r.get("candidates", {}).values() if v != inf]) >= 2]
     return {
         "rows": len(rows),
-        "rocm_rows": sum(1 for r in rows if r["device"].startswith("rocm")),
-        "other_rows": sum(1 for r in rows if not r["device"].startswith("rocm")),
+        "rocm_rows": sum(1 for r in rows if r["device"] == DEVICE),
+        "other_rows": sum(1 for r in rows if r["device"] != DEVICE),
         "ranked": len(ranked),
         "separated": sum(1 for r in ranked
                          if (r.get("separation") or {}).get("separated")),
@@ -77,6 +85,10 @@ def main() -> int:
                          "noise floor behind each separation verdict")
     ap.add_argument("--dry-run", action="store_true",
                     help="measure and report without writing the corpus")
+    ap.add_argument("--check-timer", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="refuse to write device-timed rows unless the ROCm "
+                         "timer actually used device events (default: on)")
     args = ap.parse_args()
 
     from tessera.compiler.emit.candidate import candidates_for
@@ -94,7 +106,7 @@ def main() -> int:
     # Evict only the gfx1151 fused rows this driver owns, so the re-race is a
     # measurement rather than a cache hit. Everything else is left untouched.
     evicted = [k for k in list(cache._store)
-               if str(k[0]).startswith("rocm") and k[2] == OP_FUSED_REGION]
+               if str(k[0]) == DEVICE and k[2] == OP_FUSED_REGION]
     for key in evicted:
         del cache._store[key]
     print(f"evicted {len(evicted)} gfx1151 fused_region rows for re-measurement")
@@ -123,6 +135,26 @@ def main() -> int:
             print(f"  {size}x{size} {timing:10s}: {winner.name:22s} {verdict}"
                   f"  margin={(sep.get('margin') or 0)*100:.2f}%"
                   f" noise={(sep.get('noise') or 0)*100:.2f}%")
+
+    # The gate this module's docstring promised and did not have. HIP events
+    # on this fleet have been measured returning success while writing garbage,
+    # and `_hip_resident_launch_latency` then falls back to the host wall clock
+    # -- silently. Rows recorded that way would be saved as `timing="device"`
+    # while carrying wall-clock numbers: the wrong timing domain, wearing the
+    # right label, in published evidence.
+    #
+    # Documenting a gate that does not exist is worse than not mentioning one,
+    # because a reader believes the write was checked. It was checked by hand
+    # in a separate probe, which is exactly how the claim got written.
+    source = rt.rocm_last_timer_source()
+    if args.check_timer and source != "device_event":
+        print(f"\nREFUSING TO WRITE: device rows were timed by {source!r}, not "
+              f"'device_event'. A wall-clock fallback is a different timing "
+              f"domain and must not be recorded as device timing. Re-run once "
+              f"the HIP event path is healthy, or pass --no-check-timer if you "
+              f"deliberately want wall-clock rows.")
+        return 1
+    print(f"\ndevice rows timed by: {source}")
 
     after = _summarise(cache)
     print("\n           rows  rocm  other  ranked  separated  unseparated  never_asked")

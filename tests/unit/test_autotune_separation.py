@@ -447,3 +447,59 @@ def test_an_untimed_candidate_does_not_make_a_row_a_ranking():
     assert AT.corpus_winner(
         _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
         cache=cache, device="fakedev") == "if_a"
+
+
+# --------------------------------------------------------------------------
+# One rule, and more than one consumer reads the corpus.
+# --------------------------------------------------------------------------
+
+def test_the_paged_kv_route_lookup_uses_the_same_admission_rule():
+    """`corpus_winner` is not the only path from the corpus to dispatch.
+
+    `cache/paged_kv.py::_rocm_paged_attention_corpus_winner` reads the
+    committed file directly for its route decision and checked only that the
+    winner was a known NAME. So the admission rules landed in one consumer
+    while the other kept serving `direct` for the gfx1151 8192-token bucket on
+    the strength of a ranking the corpus marks `separated: false` -- 6.52%
+    margin against 5.59% noise.
+
+    This is the same failure as the one review caught on #670 (a verdict with
+    no consumer), one level down: a rule with only *some* of its consumers.
+    Both now call `record_is_admissible`, so there is one rule rather than two
+    copies to drift apart.
+    """
+    import inspect
+
+    from tessera.cache import paged_kv
+
+    source = inspect.getsource(paged_kv._rocm_paged_attention_corpus_winner)
+    assert "record_is_admissible" in source, (
+        "the paged-KV route lookup must apply the same admission rule as "
+        "corpus_winner, not a private subset of it")
+
+
+@pytest.mark.parametrize("separated,expected", [(True, "direct"), (False, None)])
+def test_the_paged_kv_lookup_refuses_an_unsupported_route(
+        monkeypatch, separated, expected):
+    """Behavioural, not just source-level: an unsupported row must not route."""
+    from tessera.cache import paged_kv
+    from tessera.compiler.emit import autotune as at
+    from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+
+    key = ("rocm:gfx1151", "rocm", "paged_kv_decode",
+           bucket_key((1, 4, 4, 8192, 32, 16), SpecPolicy.BUCKET),
+           "f32", at.TIMING_END_TO_END)
+
+    def fake_load(cache=None, **kw):
+        cache.put(key, at.MeasureRecord(
+            winner="direct", latency_ms=1.0,
+            candidates={"direct": 1.0, "gather_fa": 1.07},
+            unmeasured={},
+            separation={"separated": separated, "margin": 0.065,
+                        "noise": 0.056, "runner_up": "gather_fa",
+                        "factor": 2.0}))
+
+    monkeypatch.setattr(at, "load_corpus", fake_load)
+    got = paged_kv._rocm_paged_attention_corpus_winner(
+        q_heads=4, kv_heads=4, q_len=1, tokens=8192, dim=32, page_size=16)
+    assert got == expected

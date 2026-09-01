@@ -6000,3 +6000,68 @@ timing-sensitive assertions after this session's work
 constant. Each should be able to answer the question this key answers: **would
 it fail on the defect it exists to catch?** The 2.0 ms floor can (71.3 vs 2.0);
 the 75.0 it replaced could not.
+
+---
+
+## Cross-backend sync `APPLE-COMPLETION-HANDLER-2026-09-01`
+
+**Owning item:** how a device timestamp is *obtained* ·
+**synchronization key:** `APPLE-COMPLETION-HANDLER-2026-09-01`
+
+**Shared lesson: when a value is only valid after an event, take it from the
+event — do not block waiting for the value.** `APPLE-DEVICE-CLOCK` established
+that `GPUStartTime`/`GPUEndTime` is the clock that measures work; it published
+those values by forcing them with `[cb waitUntilCompleted]`, which has **no
+timeout**. Both resident-session paths invoke the recorder *after* their 30 s
+shared-event wait expires, so on a hung GPU that turned a bounded failure into
+a permanent hang — in code whose only job is telemetry.
+
+The first repair gated the wait on a `completed` flag threaded through six call
+sites. That contained the hang but surrendered the clock on exactly the paths
+that had timed out, and put a correctness-critical boolean into six places
+where it could be passed wrongly (it was: one site passed a literal `true`).
+
+**`addCompletedHandler` removes the dilemma instead of containing it**, and is
+what the SDK prescribes — `GPUStartTime` is documented as readable *"in command
+buffer completion handler"*. Metal fills a slot on completion; the reader waits
+on a semaphore with a **bounded** timeout. A hung buffer never fires its
+handler, the wait expires, telemetry reports no device number. No hang, and the
+flag is gone.
+
+**Two traps worth carrying to any backend doing the same.**
+
+*The callback runs on another thread.* The slot is heap-shared and deliberately
+**not** `thread_local` like the other 15 telemetry globals — a `thread_local`
+write from Metal's callback thread lands in storage the reader never sees.
+
+*Removing a wait can silently re-route the fallback.* Three tile recorders have
+no slot of their own (they run after `commit_and_wait_with_timeout` already
+waited) and would have fallen straight through to `cb.kernelStartTime` — the
+clock measured **flat across a 64× workload**. The change would have undone
+`APPLE-DEVICE-CLOCK` on three paths while every test stayed green. A direct,
+non-blocking property read now precedes that fallback.
+
+**Outcome for this backend: `parity validated` — done here on the M1 Max.**
+Four invariants are pinned and mutation-verified: no unbounded wait in the read
+path, the semaphore wait is bounded (never `DISPATCH_TIME_FOREVER`), the direct
+read precedes the `kernelStartTime` fallback, and the slot is not
+`thread_local`.
+
+**Measured cost of the handler: +5.9% median dispatch latency** (1.3647 →
+1.4446 ms at 512²), with *lower* variance (sd 12.78% → 11.41%). That is a real
+price for a bounded, correct timestamp path, and it is stated rather than
+buried.
+
+**A gate defect found on the way.** `test_only_documented_waituntilcompleted_sites_remain`
+greps raw source text and was tallying a mention of `[cb waitUntilCompleted]`
+**inside an explanatory comment** as a third call site — it expected 3, found
+3, and passed on a wrong basis. It now strips comments and expects 2, the real
+count. A text-grep gate that counts prose is the same hollow-check pattern this
+plan has been recording all session, in the gate itself.
+
+**Still open here:** the packet recorder's 4% stability gate refused twice
+(11.1%, 20.0%) before sealing. Verified by control that this is the host, not
+the change — WindowServer at 46% and a desktop GPU process at 27% contend for
+the same GPU. Any Apple exact-device evidence recorded on this machine is
+subject to that, and the honest response is to re-measure, never to widen the
+gate.

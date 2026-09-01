@@ -541,9 +541,35 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
             return None
         if rec.evidence.get("selector_eligible") is False:
             return None
+        # An UNPROVEN RANKING is refused too, now that every fleet row has had
+        # the chance to earn a verdict (gfx1151 re-raced 2026-09-01, sm_120
+        # 2026-08-31). `None` used to be allowed because rejecting it would
+        # have deactivated most of the corpus before those runs existed; that
+        # reason has expired.
+        #
+        # But `None` is NOT uniformly "unproven". `separation_verdict` returns
+        # None when fewer than two candidates were timed, because a sole
+        # candidate is chosen by applicability rather than by a race and has no
+        # margin to defend. Refusing those would be a category error, not
+        # caution -- 12 of the 23 remaining None rows are exactly that shape.
+        # So the test is "ranks two or more and cannot say it separated them".
+        if rec.is_separated() is None and _ranked_candidate_count(rec) >= 2:
+            return None
 
     candidate = live.get(winner)
     return winner if candidate is not None else None
+
+
+def _ranked_candidate_count(rec: MeasureRecord) -> int:
+    """How many candidates this record actually timed.
+
+    `inf` is not a latency -- it is `_measure`'s marker for "could not be timed
+    in this mode" -- so it must not be counted as a competitor. Separating
+    these two is what lets `corpus_winner` refuse an unproven *ranking* while
+    still trusting a single-candidate row, which has no ranking to prove.
+    """
+    return sum(1 for value in rec.candidates.values()
+               if value == value and value not in (float("inf"), float("-inf")))
 
 
 def _record_raced_the_live_field(

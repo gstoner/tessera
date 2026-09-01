@@ -144,9 +144,15 @@ def test_persisted_corpus_drives_normal_arbitrated_dispatch():
         register_candidate(c)
     cache = AT.MeasureCache()
     key = ("fakedev", target, OP_MATMUL, (4, 4, 4), "bfloat16")
+    # A two-candidate row now needs a separation verdict to be served:
+    # `corpus_winner` refuses an unproven RANKING, because a margin nothing
+    # measured the noise against is not a result. A 2x gap at 1% noise is.
     cache.put(key, AT.MeasureRecord(
         winner=measured.name, latency_ms=0.5,
-        candidates={measured.name: 0.5, crown.name: 1.0}))
+        candidates={measured.name: 0.5, crown.name: 1.0},
+        unmeasured={},
+        separation={"separated": True, "margin": 0.5, "noise": 0.01,
+                    "runner_up": crown.name, "factor": 2.0}))
     region = _FakeRegion()
     A, B = _mm()
 

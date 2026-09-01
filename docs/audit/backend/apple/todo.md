@@ -6218,3 +6218,82 @@ sample-count decision load-bearing at the point of writing rather than
 something to fix later: a single measurement yields a spread of zero and earns
 `separated: True` automatically — which is exactly the defect
 `record_paged_kv_corpus` had, discovered only because its rows were re-raced.
+
+## Cross-backend sync `APPLIES-TO-SHAPE-BLIND-2026-09-01`
+
+**Owning item:** `applies_to(region)` shape-blind (NVIDIA plan, "Follow-up
+owned here", now closed) · **synchronization key:**
+`APPLIES-TO-SHAPE-BLIND-2026-09-01`
+
+**Shared contracts changed** — arbiter selection and autotune measurement, so
+all four backends are assessed here per AGENTS.md:
+
+* `Candidate.applies_to_inputs(region, *inputs)` — new, additive, defaults
+  `True`. Every existing `applies_to` implementation is untouched.
+* `candidate.live_candidates(region, op, target, inputs)` — one statement of
+  "who is racing", replacing the copy that `arbitrate`, `measured_arbitrate`
+  and `corpus_winner` each kept.
+* `arbitrate(..., inputs=())` — additive keyword; omitted, selection is
+  byte-for-byte what it was.
+* `autotune._measure` now reads the execution tag it was already producing.
+
+**The defect: a region carries structure, not dimensions.** `MatmulRegion` has
+a dtype and transpose flags; `FusedRegion` an epilogue chain. M/N/K arrive with
+the operands and are inferred separately. So `applies_to(region)` could not
+express "aligned shapes only", and the F4 oracle could not cover for it either
+— its probe shape is fixed (32×16×32 for matmul) and its verdict is cached
+under a key with **no shape in it**. An aligned-only lane therefore declined
+inside `run`, by returning the numpy reference, *after* it had already won.
+
+**Two harms, both reproduced against the real
+`NvidiaMmaGemmEmittedCandidate` before the fix:**
+
+| | before | after |
+|---|---|---|
+| ragged-shape winner | `nvidia_mma_gemm_emitted`, tag `reference` | the lane that can run the shape, real tag |
+| its recorded latency | `0.00525 ms` (numpy) vs a real `0.00196 ms` rival | absent from the field |
+
+The second is the one that propagates. A fabricated latency does not sit
+inert — it **ranks**. With the backstop disabled the same record comes back
+`separated: True, margin 0.59, runner_up: nvidia_mma_gemm_emitted`: the
+separation machinery from #663/#671 confidently certifies a 2.4× loss for a
+kernel that never ran. Separation judges the numbers it is given, and this is
+a second, independent mechanism for the corpus bias recorded in
+`NVIDIA-TIER-PRIORITY-IS-WRONG-AT-SCALE-2026-08-30` — where a biased race hid
+the fastest kernel in the registry.
+
+**The tag was already there and nothing read it.** The D3 arbiter log has
+described this since it was written: *"the arbiter selects a candidate, but
+that candidate's `run` may still decline to the numpy reference at execution
+time (a device error, **an unsupported shape**) — a silent degrade the tag
+reveals."* Observability without a consumer, which is Decision #29 wearing a
+diagnostic's clothes.
+
+**Fix, layered deliberately.** `applies_to_inputs` fails **open** on absent or
+malformed operands — the question cannot be answered there, and refusing would
+disable every shape-anonymous caller, while a malformed pair is an operand
+error that must still raise through `run` rather than be silently excluded
+(Decision #21). The fail-**closed** backstop sits one level down: `_measure`
+refuses to record a latency for a run that came back with a reference tag,
+whether or not the candidate declared itself. A lane that never adopts the
+hook is therefore still safe from the fabricated-measurement half.
+
+**Host-free evidence:** `tests/unit/test_arbiter_workload_applicability.py`
+(10 tests). Mutation-verified — four independent mutations, each killing only
+its own tests: disabling the selection filter (3 fail), disabling the tag
+backstop (1), removing the NVIDIA producer (1), removing the ROCm producer (1).
+
+**Outcome for this backend: `not applicable` — Apple's structure already
+threads the shape, for an architecture-specific reason.** Apple synthesizes MSL
+per shape, so its eligibility predicates take the dimension as an explicit
+argument rather than reading it off a region: `coopmat_reduce_eligible(region,
+N)` gates on `N % 8 == 0` (the simdgroup 8×8 stores) and the threadgroup-memory
+cap, both at synthesis time. There is no Apple `Candidate` that accepts a
+region and then declines a shape inside `run`, which is the defect. The shared
+seams still apply if one is added — `applies_to_inputs` and the `_measure`
+backstop are backend-agnostic.
+
+The one Apple-side gap is unchanged by this PR and still owed:
+`measure_device_latency` has no Apple implementation, so Apple has no
+device-timed lane to bias in the first place. When it lands it must land with
+repeated measurement, or one sample earns `separated: True` free.

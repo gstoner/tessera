@@ -166,6 +166,39 @@ class Candidate(ABC):
         region with a reduction epilogue it cannot fuse)."""
         return True
 
+    def applies_to_inputs(self, region: Any, *inputs: Any) -> bool:
+        """Whether this candidate can serve this *workload* — everything
+        :meth:`applies_to` covers plus the facts only the operands carry: shape,
+        alignment, raggedness.
+
+        **A region does not carry its dimensions.** ``FusedRegion`` and
+        ``MatmulRegion`` describe structure — epilogue chain, dtype, transpose
+        flags — while M/N/K arrive with the operands and are inferred separately
+        (``autotune._infer_dims``). So a candidate whose kernel is aligned-only
+        has no way to decline a ragged workload at :meth:`applies_to` time. It
+        declines inside :meth:`run` instead, by returning the numpy reference,
+        and by then it has already won the arbitration. Two things go wrong:
+
+        * **Starvation.** The declining lane wins on tier and hands back numpy,
+          while a lower-tier lane that *could* have run the shape is never
+          tried. This is the failure `RocmWmmaGemmCandidate.available` was
+          hardened against on the availability axis (PR #289 review, "starving
+          the working generic lane"); shape is the same failure, one axis over.
+        * **A fabricated measurement.** ``_measure`` times ``run``, so the
+          decline is recorded as this kernel's latency. Measured here: the
+          emitted sm_120 lane recorded 0.00525 ms of *numpy* against a real
+          0.00196 ms competitor — a number that reads as "2.7x slower" for a
+          kernel that never ran.
+
+        Default ``True``, and the default is deliberately fail-OPEN: absent
+        operands mean the question cannot be answered, and refusing there would
+        disable every shape-anonymous caller. The fail-CLOSED backstop is one
+        level down — ``_measure`` refuses to record a latency for a run that
+        came back with a reference tag, whether or not the candidate declared
+        itself here.
+        """
+        return True
+
     def accuracy_budget(self, region: Any) -> "tuple[float | None, float | None]":
         """``(atol, rtol)`` the F4 oracle must hold this candidate to for
         ``region``. Defaults to the flat class attributes.
@@ -352,9 +385,31 @@ def verify_candidate(candidate: Candidate, region: Any, *, atol: float = 1e-3,
 MeasureFn = Callable[[Candidate], float]
 
 
+def live_candidates(region: Any, op: str, target: str,
+                    inputs: "tuple[Any, ...]" = ()) -> "dict[str, Candidate]":
+    """The candidates that would actually race for this workload, by name.
+
+    **One statement of the rule, because there are three consumers.**
+    ``arbitrate`` selects from this set; ``measured_arbitrate`` and
+    ``corpus_winner`` each compare a persisted record against it. All three
+    kept their own copy of the filter. Copies drift: when applicability grew a
+    shape axis, two of the three would have kept the shape-blind field and
+    judged a verdict against a race that cannot happen.
+
+    ``inputs`` is optional and additive — omitted, this is exactly the
+    ``applies_to``/``available`` pair it replaces.
+    """
+    cands = [c for c in candidates_for(target, op)
+             if c.applies_to(region) and c.available()]
+    if inputs:
+        cands = [c for c in cands if c.applies_to_inputs(region, *inputs)]
+    return {c.name: c for c in cands}
+
+
 def arbitrate(region: Any, op: str, target: str, *, verify: bool = True,
               force: str | None = None,
-              measure: MeasureFn | None = None) -> Candidate | None:
+              measure: MeasureFn | None = None,
+              inputs: "tuple[Any, ...]" = ()) -> Candidate | None:
     """Pick the winning candidate for ``region`` among those registered for
     ``(target, op)``, or ``None`` if none apply/verify (caller uses the reference).
 
@@ -363,9 +418,15 @@ def arbitrate(region: Any, op: str, target: str, *, verify: bool = True,
     hatch — raises :class:`ArbiterError` if it is not present/available); if
     ``verify`` (default), drop any that fail the **F4 oracle**; then choose —
     by ``measure`` (a latency callback, plan D2's seam: lowest wins) if given,
-    else by **tier priority** (highest tier — crown-jewel first, lead-safe)."""
-    cands = [c for c in candidates_for(target, op)
-             if c.applies_to(region) and c.available()]
+    else by **tier priority** (highest tier — crown-jewel first, lead-safe).
+
+    ``inputs``, when supplied, additionally consults
+    :meth:`Candidate.applies_to_inputs` so a candidate can decline a workload
+    its kernel cannot serve (a ragged shape for an aligned-only emitter) rather
+    than winning and handing back the reference. Omitted, selection is exactly
+    what it was: the F4 probe shape is fixed and carries no workload dims, so
+    verification alone cannot see this."""
+    cands = list(live_candidates(region, op, target, inputs).values())
     if force is not None:
         forced = [c for c in cands if c.name == force]
         if not forced:
@@ -458,7 +519,7 @@ def run_arbitrated(region: Any, op: str, target: str, *inputs: Any,
             region, op, target, *inputs, dims=dims, dtype=dtype,
             cache=autotune_cache, device=device, timing=timing)
     winner = arbitrate(region, op, target, verify=verify, force=preferred,
-                       measure=measure)
+                       measure=measure, inputs=inputs)
     if winner is None:
         _note_arbiter_dispatch(target, op, None, "reference")
         return region.reference(*inputs), "reference"

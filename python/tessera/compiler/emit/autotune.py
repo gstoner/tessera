@@ -32,9 +32,13 @@ from tessera.compiler.emit.candidate import (
     OP_MATMUL,
     _note_arbiter_dispatch,
     arbitrate,
-    candidates_for,
+    live_candidates,
 )
-from tessera.compiler.emit.kernel_emitter import SpecPolicy, bucket_key
+from tessera.compiler.emit.kernel_emitter import (
+    REFERENCE_EXECUTIONS,
+    SpecPolicy,
+    bucket_key,
+)
 
 
 @dataclass(frozen=True)
@@ -544,9 +548,10 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
         return None
     winner = next(iter(winners))
 
-    # A verdict is only usable if it beat the field that is racing *now*.
-    live = {c.name: c for c in candidates_for(target, op)
-            if c.applies_to(region) and c.available()}
+    # A verdict is only usable if it beat the field that is racing *now* --
+    # including the shape axis, so a candidate that cannot serve THIS workload
+    # is not counted as a competitor it had to beat.
+    live = live_candidates(region, op, target, inputs)
     for rec in matches:
         if not _record_raced_the_live_field(rec, live, timing):
             return None
@@ -656,8 +661,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
         raise ValueError(f"unknown autotune timing mode {timing!r}")
     key = (dev, target, op, bucket, dtype, timing)
 
-    live = {c.name: c for c in candidates_for(target, op)
-            if c.applies_to(region) and c.available()}
+    live = live_candidates(region, op, target, inputs)
 
     rec = cache.get(key)
     if rec is not None and _record_raced_the_live_field(rec, live, timing):
@@ -701,14 +705,38 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
                 return float("inf")
             t = float(measured)
         else:
-            samples = measure_latency_samples(
-                lambda: cand.run(region, *inputs), reps=reps, warmup=warmup)
+            # Capture the execution tag, not just the wall time. A candidate
+            # may accept a region and still decline THIS workload inside `run`
+            # -- an aligned-only emitter handed a ragged shape returns
+            # `region.reference(...)` tagged "reference". Timing that records
+            # numpy's latency under a kernel's name, which is not a slow
+            # kernel, it is no kernel. The D3 log has named this "silent
+            # degrade ... an unsupported shape" since it was written; this is
+            # the measurement path finally reading the tag.
+            tags: list[str] = []
+
+            def _run_once() -> None:
+                tags.append(cand.run(region, *inputs)[1])
+
+            samples = measure_latency_samples(_run_once, reps=reps,
+                                              warmup=warmup)
+            declined = sorted({tag for tag in tags
+                               if tag in REFERENCE_EXECUTIONS})
+            if declined:
+                # Fail closed on ANY declining rep: a candidate that fell back
+                # even once did not reliably run this workload, and a median
+                # over a mix of kernel and numpy describes neither.
+                unmeasured[cand.name] = (
+                    f"declined this workload at run time (tag "
+                    f"{'/'.join(declined)}) -- no kernel ran")
+                return float("inf")
             spreads[cand.name] = relative_spread(samples)
             t = statistics.median(samples)
         latencies[cand.name] = t
         return t
 
-    winner = arbitrate(region, op, target, verify=True, measure=_measure)
+    winner = arbitrate(region, op, target, verify=True, measure=_measure,
+                       inputs=inputs)
     if winner is None or winner.name not in latencies:
         # Either nothing applied/verified, or the "winner" is a candidate that
         # was never timed -- which happens when every candidate scored `inf`

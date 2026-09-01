@@ -225,12 +225,19 @@ def test_committed_corpus_has_sm120_model_workload_comparisons():
     # therefore carry one of them; older warm-started rows carry both, from a
     # run whose contract chose differently.
     #
-    # Worth recording, because the corpus cannot express it: such a row reports
-    # `unmeasured: {}` -- "nothing was skipped" -- which is true and misleading.
-    # The other candidate was not skipped, it was CONTRACT-EXCLUDED, and no
-    # field distinguishes "only one candidate exists" from "a second was
-    # excluded before the race". That is the `applies_to` blind spot; until it
-    # is closed, equality here would assert a coincidence.
+    # Worth recording, because the corpus still cannot express it: such a row
+    # reports `unmeasured: {}` -- "nothing was skipped" -- which is true and
+    # misleading. The other candidate was not skipped, it was CONTRACT-EXCLUDED,
+    # and no field distinguishes "only one candidate exists" from "a second was
+    # excluded before the race", so equality here would assert a coincidence.
+    #
+    # The `applies_to` blind spot itself is closed on the two axes that change
+    # behaviour (`test_arbiter_workload_applicability.py`): a candidate can now
+    # decline a workload before selection, and a run-time decline can no longer
+    # be recorded as a latency. What remains is purely DESCRIPTIVE -- a record
+    # field naming the exclusion -- and it stays unbuilt on purpose: its only
+    # reader today would be this assertion, and a schema field whose sole
+    # consumer is a test is the unconsumed declaration Decision #29 refuses.
     assert all(set(r["candidates"]) <= {
         "nvidia_generic_cuda", "nvidia_mma_fused"} and r["candidates"]
         for r in fused)

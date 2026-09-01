@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <chrono>
 #include <cmath>
 #include <sys/stat.h>
@@ -901,22 +902,97 @@ extern "C" int32_t tessera_apple_gpu_tile_counter_sampling_supported(void) {
 // and falls back, which is the right trade.
 //
 // Returns true when `start`/`end` hold a usable GPU interval.
-static bool ts_gpu_interval(id<MTLCommandBuffer> cb, NSTimeInterval &start,
-                            NSTimeInterval &end, bool completed) {
-  start = cb.GPUStartTime;
-  end = cb.GPUEndTime;
-  if (end >= start && end > 0.0) return true;
-  if (!completed) return false;
-  [cb waitUntilCompleted];
+// Timestamps delivered by the command buffer's completion handler.
+//
+// `GPUStartTime`/`GPUEndTime` are documented to read zero until the GPU starts
+// and to be readable "in command buffer completion handler". Every dispatch
+// path here waits on a *shared event* instead, which proves the GPU finished
+// but does not publish those properties -- so an earlier version forced them
+// with `[cb waitUntilCompleted]`. That call has no timeout, and the two
+// resident-session paths invoke the recorder even after their 30 s wait times
+// out, so on a hung GPU it converted a bounded failure into a permanent hang.
+// Gating it on `completed` contained that but gave up the clock on exactly the
+// paths that had timed out.
+//
+// The handler removes the dilemma rather than containing it: Metal fills the
+// slot when the buffer completes, and the reader waits on a semaphore with a
+// **bounded** timeout. A hung buffer never signals, the wait expires, and the
+// caller reports no device number -- no hang, and no `completed` flag to
+// thread through six call sites and get wrong.
+//
+// The slot is heap-allocated and shared, deliberately NOT `thread_local` like
+// the rest of the telemetry: the handler runs on Metal's callback thread, so a
+// `thread_local` write there lands in storage the reader never sees.
+namespace {
+struct GpuTimestampSlot {
+  std::atomic<bool> filled{false};
+  double start = 0.0;
+  double end = 0.0;
+  dispatch_semaphore_t ready = nullptr;
+
+  GpuTimestampSlot() : ready(dispatch_semaphore_create(0)) {}
+};
+}  // namespace
+
+//: How long the reader will wait for a completion handler that has not yet
+//: fired. The buffer is already known finished (the caller waited on its
+//: event), so this covers only the scheduler turn before Metal delivers the
+//: callback -- milliseconds. It is a bound, not a budget: exceeding it means
+//: no device number, never a stall.
+static const uint64_t kGpuTimestampWaitMs = 250;
+
+static std::shared_ptr<GpuTimestampSlot> ts_attach_gpu_timestamps(
+    id<MTLCommandBuffer> cb) {
+  if (!cb || !g_dispatch_telemetry_enabled.load(std::memory_order_relaxed))
+    return nullptr;
+  auto slot = std::make_shared<GpuTimestampSlot>();
+  [cb addCompletedHandler:^(id<MTLCommandBuffer> done) {
+    slot->start = done.GPUStartTime;
+    slot->end = done.GPUEndTime;
+    slot->filled.store(true, std::memory_order_release);
+    dispatch_semaphore_signal(slot->ready);
+  }];
+  return slot;
+}
+
+// Two sources for the same documented clock, neither of which can block
+// indefinitely.
+//
+// The slot is preferred: its handler is guaranteed to see published
+// timestamps. Without one -- the tile recorders reach here after
+// `commit_and_wait_with_timeout` has already waited and recorded, so they have
+// no slot of their own -- the properties are read DIRECTLY. That read is
+// non-blocking and by then usually populated, and it matters that it comes
+// before the `kernelStartTime` fallback: that pair was measured FLAT across a
+// 64x workload, so silently preferring it would undo APPLE-DEVICE-CLOCK on
+// exactly the three tile paths.
+static bool ts_gpu_interval(id<MTLCommandBuffer> cb,
+                            const std::shared_ptr<GpuTimestampSlot> &slot,
+                            NSTimeInterval &start, NSTimeInterval &end) {
+  if (slot) {
+    if (!slot->filled.load(std::memory_order_acquire)) {
+      dispatch_semaphore_wait(
+          slot->ready,
+          dispatch_time(DISPATCH_TIME_NOW,
+                        (int64_t)kGpuTimestampWaitMs * NSEC_PER_MSEC));
+    }
+    if (slot->filled.load(std::memory_order_acquire)) {
+      start = slot->start;
+      end = slot->end;
+      if (end >= start && end > 0.0) return true;
+    }
+  }
+  if (!cb) return false;
   start = cb.GPUStartTime;
   end = cb.GPUEndTime;
   return end >= start && end > 0.0;
 }
 
-static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb,
-                                       bool completed = false) {
+static void ts_record_tile_gpu_elapsed(
+    id<MTLCommandBuffer> cb,
+    const std::shared_ptr<GpuTimestampSlot> &slot = nullptr) {
   NSTimeInterval start = 0.0, end = 0.0;
-  const bool gpu_clock = ts_gpu_interval(cb, start, end, completed);
+  const bool gpu_clock = ts_gpu_interval(cb, slot, start, end);
   if (!gpu_clock) {
     // Falling back to the undocumented pair keeps a number where there would
     // otherwise be none; the source label says which was used, and a consumer
@@ -934,9 +1010,10 @@ static void ts_record_tile_gpu_elapsed(id<MTLCommandBuffer> cb,
   }
 }
 
-static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb,
-                                           bool prefer_command_buffer = false,
-                                           bool completed = false) {
+static void ts_record_dispatch_gpu_elapsed(
+    id<MTLCommandBuffer> cb,
+    bool prefer_command_buffer = false,
+    const std::shared_ptr<GpuTimestampSlot> &slot = nullptr) {
   if (!g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) return;
   // `prefer_command_buffer` no longer selects between the two clocks -- see the
   // measurement above `ts_record_tile_gpu_elapsed`. GPUStart/End is always
@@ -945,7 +1022,7 @@ static void ts_record_dispatch_gpu_elapsed(id<MTLCommandBuffer> cb,
   // makes these properties visible.
   NSTimeInterval start = 0.0, end = 0.0;
   int32_t source = 2;
-  if (!ts_gpu_interval(cb, start, end, completed)) {
+  if (!ts_gpu_interval(cb, slot, start, end)) {
     start = cb.kernelStartTime;
     end = cb.kernelEndTime;
     source = 1;
@@ -1022,10 +1099,11 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
         // Event creation failed — fall back to the pre-Pattern-4
         // ``waitUntilCompleted`` path so the caller doesn't crash.
         // No timeout protection, but at least correct.
+        auto slot = ts_attach_gpu_timestamps(cb);
         ts_wall.emplace();
         [cb commit];
         [cb waitUntilCompleted];
-        ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, /*completed=*/true);
+        ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, slot);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
     }
@@ -1035,6 +1113,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // Encode the signal into the command buffer; the event ticks AFTER the
   // GPU finishes everything queued before it on this cb.
   [cb encodeSignalEvent:ev value:signal_val];
+  auto ts_slot = ts_attach_gpu_timestamps(cb);
   ts_wall.emplace();
   [cb commit];
   bool done = [ev waitUntilSignaledValue:signal_val
@@ -1085,7 +1164,7 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   if (ts_wall) ts_wall->note();
   if (prefer_command_buffer) [cb waitUntilCompleted];
   // Reached only after the shared event signalled and cb.error was nil.
-  ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, /*completed=*/true);
+  ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, ts_slot);
   return true;
 }
 
@@ -1149,6 +1228,7 @@ static bool commit_mpsgraph_and_wait_with_timeout(
   if (ev) [root encodeSignalEvent:ev value:signal_val];
   // Covers the `owns_whole_dispatch` branch below, which publishes a
   // command-buffer interval when no timing bracket is active.
+  auto ts_slot = ts_attach_gpu_timestamps(root);
   DispatchWallWitness ts_wall;
   [mps_cb commit];
   if (ev) {
@@ -1176,7 +1256,7 @@ static bool commit_mpsgraph_and_wait_with_timeout(
   } else if (owns_whole_dispatch) {
     // Past the timeout and error returns above.
     ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,
-                                   /*completed=*/true);
+                                   ts_slot);
   }
   return true;
 }
@@ -1245,7 +1325,7 @@ bool dispatch_mps_gemm_f32(MetalDeviceContext &ctx, const float* A,
     bool ok = commit_and_wait_with_timeout(ctx, cb, /*timeout_ms=*/30000,
                                             "mps_gemm_f32");
     if (!ok) return false;
-    ts_record_tile_gpu_elapsed(cb, /*completed=*/true);
+    ts_record_tile_gpu_elapsed(cb);
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -1817,7 +1897,7 @@ bool dispatch_mps_gemm_f16(MetalDeviceContext &ctx, const uint16_t* A,
     // wrapper so a hung f16 GEMM doesn't deadlock the test runner.
     if (!commit_and_wait_with_timeout(ctx, cb, 30000,
                                       "mps_gemm_f16")) return false;
-    ts_record_tile_gpu_elapsed(cb, /*completed=*/true);
+    ts_record_tile_gpu_elapsed(cb);
     std::memcpy(C, [bufC contents], byteCountC);
     return true;
   }
@@ -10462,7 +10542,7 @@ extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "tile_simdgroup_gemm_f16"))
       return 0;
-    ts_record_tile_gpu_elapsed(cb, /*completed=*/true);
+    ts_record_tile_gpu_elapsed(cb);
     ts_record_tile_counter_delta(samples);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
@@ -22325,6 +22405,10 @@ struct TsEncodeSession {
   // calls belongs inside the envelope, because the GPU is running during it.
   std::chrono::steady_clock::time_point submitted{};
   bool submitted_valid = false;
+  // Timestamp slot for the async lane, for the same reason `submitted` is
+  // here: `ts_enc_commit_async` registers the handler and `ts_enc_wait_destroy`
+  // reads it, so no single scope can hold it.
+  std::shared_ptr<GpuTimestampSlot> gpu_slot;
 };
 
 extern "C" TsEncodeSession *ts_enc_begin(void) {
@@ -22334,7 +22418,7 @@ extern "C" TsEncodeSession *ts_enc_begin(void) {
     id<MTLCommandBuffer> mtlcb = [ctx.queue commandBuffer];
     if (!mtlcb) return nullptr;
     MPSCommandBuffer *cb = [MPSCommandBuffer commandBufferWithCommandBuffer:mtlcb];
-    return new TsEncodeSession{cb, mtlcb, nil, 0, {}, false};
+    return new TsEncodeSession{cb, mtlcb, nil, 0, {}, false, nullptr};
   }
 }
 
@@ -22371,6 +22455,7 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   if (ev) {
     [root encodeSignalEvent:ev value:signal_val];
   }
+  auto ts_slot = ts_attach_gpu_timestamps(root);
   DispatchWallWitness ts_wall_session;
   [s->cb commit];
   bool completed = false;
@@ -22403,11 +22488,11 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   // different regions -- the exact error that produced a wrong band in the
   // first version of this change.
   ts_wall_session.note();
-  // `completed` is false when the 30 s wait timed out. Telemetry then declines
-  // the GPU clock rather than blocking on a hung command buffer -- losing a
-  // number is the right trade against defeating the timeout.
+  // A hung buffer never fires its handler, so the bounded wait inside
+  // `ts_gpu_interval` expires and telemetry simply has no device number. The
+  // 30 s fault-containment path is untouched either way.
   ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,
-                                 completed);
+                                 ts_slot);
   s->cb = nil;
   s->mtlcb = nil;
   delete s;
@@ -22431,6 +22516,7 @@ extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
     }
     if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
       ts_clear_dispatch_telemetry();
+      s->gpu_slot = ts_attach_gpu_timestamps(root);
       s->submitted = std::chrono::steady_clock::now();
       s->submitted_valid = true;
     }
@@ -22465,10 +22551,8 @@ extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - s->submitted).count();
   }
-  // Same rule as ts_enc_commit_wait: `completed` is false on a timed-out
-  // async wait, and the recorder must not then wait unbounded.
   ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,
-                                 completed);
+                                 s->gpu_slot);
   s->asyncEvent = nil;
   s->asyncSignal = 0;
   s->mtlcb = nil;

@@ -214,31 +214,31 @@ def test_only_documented_waituntilcompleted_sites_remain():
       handle with the live root used for its commit before ownership crosses
       the asynchronous boundary.
 
-    * The timestamp-visibility wait inside ``ts_gpu_interval``
-      (APPLE-DEVICE-CLOCK, 2026-08-31). ``GPUStartTime``/``GPUEndTime`` are
-      documented to read zero before the GPU starts and to be readable "in
-      command buffer completion handler"; every dispatch path here waits on a
-      shared event instead, which proves the GPU finished but does not publish
-      those properties. Without this wait the code reads zero, silently falls
-      back to the undocumented ``kernelStartTime`` pair -- measured FLAT across
-      a 64x workload -- and keeps reporting plausible numbers that are not
-      measurements. It is cheap because the caller already waited: the work is
-      done, this only synchronises property publication.
+    The timestamp-visibility wait that briefly lived in ``ts_gpu_interval`` is
+    GONE, replaced by ``addCompletedHandler`` (the pattern the SDK prescribes:
+    ``GPUStartTime`` is documented as readable "in command buffer completion
+    handler"). That removed the dilemma rather than containing it -- a handler
+    plus a BOUNDED semaphore wait cannot hang, so the ``completed`` flag that
+    had to be threaded through six call sites is gone with it.
 
     Any OTHER site is a regression. This test fires loud."""
     src = _RUNTIME_SRC.read_text()
     import re
+    # Strip line comments first. This gate counts CALL SITES, and it was
+    # counting prose: a comment in `ts_gpu_interval` that mentions
+    # `[cb waitUntilCompleted]` to explain why it no longer does that was being
+    # tallied as a third site, so the assertion passed on a wrong basis.
+    code = "\n".join(re.sub(r"//.*$", "", line) for line in src.splitlines())
     cb_calls = [m for m in re.finditer(
-        r"\[cb waitUntilCompleted\]", src)]
+        r"\[cb waitUntilCompleted\]", code)]
     session_calls = [m for m in re.finditer(
-        r"\[root waitUntilCompleted\]", src)]
-    # One generic-command-buffer fallback, the explicit completed-buffer
-    # telemetry mode used only when an ABI owns the entire command buffer, and
-    # the timestamp-visibility wait in `ts_gpu_interval`.
-    assert len(cb_calls) == 3, (
-        f"expected exactly 3 [cb waitUntilCompleted] calls (the wrapper's "
-        f"fallback, complete-command-buffer telemetry mode, and the "
-        f"ts_gpu_interval timestamp-visibility wait), found {len(cb_calls)}")
+        r"\[root waitUntilCompleted\]", code)]
+    # One generic-command-buffer fallback plus the explicit completed-buffer
+    # telemetry mode used only when an ABI owns the entire command buffer.
+    assert len(cb_calls) == 2, (
+        f"expected exactly 2 [cb waitUntilCompleted] calls (the wrapper's "
+        f"fallback and complete-command-buffer telemetry mode), found "
+        f"{len(cb_calls)}")
     assert len(session_calls) == 3, (
         f"expected exactly 3 [root waitUntilCompleted] calls (the owned "
         f"MPSGraph, synchronous-session, and async-session fallbacks on live root command "
@@ -346,41 +346,52 @@ def test_migrated_dispatchers_no_longer_call_waituntilcompleted():
             f"incomplete; body slice:\n{body[:400]}...")
 
 
-def test_the_telemetry_wait_is_gated_on_established_completion():
-    """`ts_gpu_interval`'s `waitUntilCompleted` must never run unbounded.
+def test_the_telemetry_read_path_cannot_block_indefinitely():
+    """`ts_gpu_interval` must never contain an unbounded wait.
 
-    It has no timeout. `ts_enc_commit_wait` and `ts_enc_wait_destroy` both call
-    the recorder *even after* their 30 s shared-event wait times out, so an
-    unconditional wait inside the recorder would block forever on exactly the
-    hung command buffer the timeout exists to contain -- converting a bounded
-    failure into a permanent hang, in code whose only job is telemetry.
+    History, because the shape recurs. `GPUStartTime`/`GPUEndTime` read zero
+    until the properties publish, and every dispatch path waits on a *shared
+    event* -- which proves the GPU finished but does not publish them. The
+    first fix forced them with `[cb waitUntilCompleted]`, which has no timeout;
+    since both resident-session paths call the recorder even after their 30 s
+    wait EXPIRES, that turned a bounded failure into a permanent hang, in code
+    whose only job is telemetry. Gating it on a `completed` flag contained the
+    hang but surrendered the clock on exactly the paths that had timed out, and
+    put a correctness-critical boolean through six call sites.
 
-    Source-level rather than behavioural because reproducing it needs a real
-    GPU hang. Three properties are pinned:
+    `addCompletedHandler` removes the dilemma instead of containing it -- it is
+    what the SDK prescribes ("readable in command buffer completion handler").
+    A hung buffer simply never fires its handler, the BOUNDED semaphore wait
+    expires, and telemetry reports no device number.
 
-    * the wait is preceded by an early return on `!completed`;
-    * `completed` defaults to `false` at both recorders, so a call site that has
-      not established completion cannot hang by omission -- it loses the GPU
-      clock and falls back, which is the correct trade;
-    * the two session paths pass their real completion state rather than a
-      literal `true`.
+    Four properties are pinned:
+      * no `waitUntilCompleted` anywhere in the read path;
+      * the wait is bounded -- `dispatch_time`, never `DISPATCH_TIME_FOREVER`;
+      * a direct property read precedes the `kernelStartTime` fallback, since
+        that pair was measured flat across a 64x workload and callers without a
+        slot (the three tile recorders) would otherwise land on it;
+      * the slot is heap-shared, not `thread_local`, because the handler runs
+        on Metal's callback thread and a `thread_local` write there lands in
+        storage the reader never sees.
     """
     src = _RUNTIME_SRC.read_text()
+    body = src[src.index("static bool ts_gpu_interval("):]
+    body = body[:body.index("\nstatic void ts_record_tile_gpu_elapsed")]
 
-    assert "if (!completed) return false;\n  [cb waitUntilCompleted];" in src, (
-        "ts_gpu_interval must return before waiting when completion has not "
-        "been established")
+    assert "waitUntilCompleted" not in body, (
+        "the telemetry read path must not block on a command buffer; use the "
+        "completion handler and a bounded wait")
+    assert "dispatch_semaphore_wait" in body and "dispatch_time" in body, (
+        "the slot wait must be bounded")
+    assert "DISPATCH_TIME_FOREVER" not in body, (
+        "an unbounded semaphore wait is the same hang wearing a different API")
+    assert "cb.GPUStartTime" in body, (
+        "without a slot the documented clock must still be read directly; "
+        "falling straight through to kernelStartTime undoes APPLE-DEVICE-CLOCK "
+        "on the three tile paths that have no slot of their own")
 
-    for recorder in ("ts_record_tile_gpu_elapsed", "ts_record_dispatch_gpu_elapsed"):
-        head = src[src.index(f"static void {recorder}("):]
-        head = head[:head.index("{")]
-        assert "bool completed = false" in head, (
-            f"{recorder} must default `completed` to false so an unaudited "
-            f"call site fails safe; got: {head.strip()}")
-
-    # Both resident-session recorders take a variable, not a literal.
-    assert src.count(
-        "ts_record_dispatch_gpu_elapsed(root, /*prefer_command_buffer=*/false,\n"
-        "                                 completed);") == 2, (
-        "ts_enc_commit_wait and ts_enc_wait_destroy must forward their own "
-        "completion state; passing `true` there reintroduces the hang")
+    assert "addCompletedHandler" in src, "the handler must be registered"
+    assert "thread_local" not in src[src.index("struct GpuTimestampSlot"):
+                                     src.index("kGpuTimestampWaitMs")], (
+        "the slot is written from Metal's callback thread; thread_local "
+        "storage there is invisible to the reader")

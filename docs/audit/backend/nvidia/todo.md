@@ -5780,3 +5780,86 @@ Both confirm their recorders rather than accusing them. Checkers live in
 `tests/_support/nvidia.py`; each is mutation-verified against forged rows
 (invented winner, stripped resources, widened consensus, lying `run_winners`,
 drifted runs, deleted timings).
+
+## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**Owning item:** the matrix-core lanes decline ragged shapes ·
+**synchronization key:** `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
+
+**One gap, found three times while fixing other things.** Every backend's
+matrix-core lane — the *fast* one — declined ragged shapes and fell back to a
+much slower path:
+
+| backend | lane | gate | fallback |
+|---|---|---|---|
+| NVIDIA sm_120 | emitted `mma.sync` GEMM | `M%16, N%8, K%16` | numpy |
+| ROCm gfx1151 | WMMA flash-attention | `head_dim % 16` | numpy |
+| Apple M1 Max | coopmat `simdgroup_matrix` reduce | `N % 8` | scalar path |
+
+What made it worth doing now is the measurement from the corpus work: the
+compiler-**emitted** PTX GEMM beats the hand-tuned delegate **1.5–1.7x at every
+shape** on sm_120. The alignment gate was not costing a little — it was
+excluding the fastest kernel in the registry from every ragged workload. The
+`applies_to_inputs` declines added in #672 made that *honest*; they did not make
+it *fast*.
+
+Both fixes share one idea and split on which axis a dimension plays:
+
+* **A contraction dimension is zero-padded** — exact, because a zero operand
+  contributes nothing to the dot product.
+* **An output dimension is store-suppressed** — zero-padding is wrong there; a
+  lane past the edge would write a correct-but-zero value into someone else's
+  slot.
+
+Getting that backwards is silent corruption rather than a fault, which is why
+it is stated as the rule rather than left implicit in each kernel.
+
+**Outcome for this backend: `parity validated` — measured on Super-Bear
+(RTX 5070 / sm_120).** `emit_mma_sync_gemm_ptx` now clamps its M/N load index
+and suppresses the out-of-range store, so the hot K loop is byte-for-byte the
+proven aligned kernel: no per-iteration predicate, no divergence, cost confined
+to a few instructions outside the loop. The K remainder is a genuinely
+predicated extra slab.
+
+**25 ragged shapes x 2 dtypes, 0 failures, <= 1.3e-7 relative error**; both
+dtypes assemble under `ptxas --gpu-name=sm_120a`.
+
+**K must stay EVEN, and that is hardware, not laziness.** The first run faulted
+and `compute-sanitizer` named it: `CUDA_ERROR_MISALIGNED_ADDRESS`, not an
+out-of-bounds. `ld.global.b32` needs a 4-byte-aligned address while the
+fragments address 2-byte elements, so `row*K + k` must be even — with K odd,
+every odd row starts misaligned, in the **main loop** and not only the tail.
+Every data point fits once that is known: 24x12x20 passed (K even), 16x8x17
+faulted (K odd), 1x1x7 passed (row 0 only). Lifting it needs a padded row
+stride (the strided ABI could already carry it) or a paired `ld.global.u16`
+slow path; both are real designs and neither is a one-line change, so K%2 is
+recorded as the boundary rather than claimed as working.
+
+**A dead seam turned out to be exactly this work.** `invokeMmaGemm16` has had a
+`bool ragged = false` parameter since it was written that **no caller ever
+passed true**, so the guard behind it rejected every unaligned shape with rc=5.
+Decision #29's unconsumed declaration, in C++.
+
+**The benchmark path needed the same guard, separately** — it does not route
+through `invokeMmaGemm16`, so a first fix placed only there let an odd-K
+*measurement* fault the device, which then poisons the CUDA context for every
+later launch in the process. The autotuner calls that path. The capability now
+lives in `tileLaunchConfig`, the per-kernel geometry table, so both paths get
+one answer; the Tile-direct and scheduled kernels stay aligned-only, which is
+why it is per-entry rather than a global relaxation.
+
+**Aligned-path regression, measured rather than asserted** (A/B against the
+unmodified emitter and launcher, same box, same session):
+
+| shape | baseline ms | ragged ms | spread |
+|---|---|---|---|
+| 512³ | 0.02678 | 0.02762 | 1.1–1.5% |
+| 1024³ | 0.19358 | 0.19764 | 0.3–0.5% |
+| 2048³ | 1.48253 | 1.49670 | 0.3–0.5% |
+
+**1–3% at large shapes** — real, outside noise, and the price of ragged shapes
+going from numpy to full speed. At 64³/256³ the first sample looked like a 1.4x
+regression, but against **52–58% spread**, so not a supported comparison; a
+15x3000-rep re-measure pushed the spread *worse* (85%, 73%) and the medians
+crossed over. Those shapes are unresolvable on this box and the apparent 1.4x
+was noise, exactly as its own spread warned.

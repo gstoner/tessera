@@ -823,7 +823,7 @@ class RocmHipRunner(KernelRunner):
             Vn = np.asarray(V, np.float32)
             M, D = Qn.shape
             Nk, Dk = Kn.shape
-            if D % 16 != 0 or Dk != D:              # WMMA needs head_dim % 16 == 0
+            if Dk != D:            # Q/K head_dim mismatch is an operand error
                 return region.reference(Q, K, V), "reference"
             q = np.ascontiguousarray(Qn.reshape(1, 1, M, D), np.float16)
             kk = np.ascontiguousarray(Kn.reshape(1, 1, Nk, D), np.float16)
@@ -1072,18 +1072,19 @@ class RocmFlashAttnCandidate(Candidate):
             return False
 
     def applies_to_inputs(self, region: Any, *inputs: Any) -> bool:
-        """Decline a head_dim the WMMA kernel cannot serve, before selection.
+        """Q/K head_dim agreement -- the only workload fact left to check.
 
-        `run_fused_attention` has always declined `head_dim % 16 != 0` to the
-        numpy reference — correct, but it happens *after* this Tier-3 lane has
-        already won on tier. Same shape blindness as the NVIDIA emitted GEMM,
-        one op over, and worse placed: this is the highest-priority attention
-        candidate on the one AMD device that executes, so on a ragged head_dim
-        it took the dispatch and handed back numpy while `rocm_generic_hip`
-        stood by.
+        **This used to decline `head_dim % 16 != 0`, and that limit is gone.**
+        The WMMA kernel now emits a predicated remainder chunk for a ragged
+        head_dim: the Q@K^T fragments zero-pad past D (exact, since D is the
+        contraction there) and the P@V accumulator write is guarded (D is the
+        OUTPUT dim there, so an unguarded lane would corrupt the next query's
+        row in LDS). Proven on gfx1151 across head_dim 8/24/40/72/88/100/120/130
+        at ~1e-4 relative error, including multi-query non-causal cases checked
+        on every output row.
 
-        A mismatched Q/K head_dim is an operand error, not an unsupported
-        shape, so it defers here and still raises through `run`.
+        A mismatched Q/K head_dim is still an operand error rather than an
+        unsupported shape, so it defers here and raises through `run`.
         """
         import numpy as np
         if len(inputs) < 2:
@@ -1093,9 +1094,9 @@ class RocmFlashAttnCandidate(Candidate):
             Qn, Kn = np.asarray(Qn), np.asarray(Kn)
         except (AttributeError, IndexError, TypeError, ValueError):
             return True
-        if Qn.ndim != 2 or Kn.ndim != 2 or Kn.shape[1] != Qn.shape[1]:
-            return True                        # cannot judge / operand error
-        return Qn.shape[1] % 16 == 0           # WMMA head_dim alignment
+        if Qn.ndim != 2 or Kn.ndim != 2:
+            return True                        # cannot judge
+        return Kn.shape[1] == Qn.shape[1]
 
     def run(self, region: Any, Q: Any, K: Any, V: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:

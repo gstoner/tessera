@@ -204,6 +204,14 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
     if (M64 <= 0 || N64 <= 0 || K64 <= 0) return 5;
     if (LDA64 < K64 || LDB64 < K64 || LDD64 < N64) return 5;
     if (!ragged && (M64 % 16 || N64 % 8 || K64 % 16)) return 5;
+    // The ragged kernels predicate M and N themselves, but K must stay EVEN:
+    // `ld.global.b32` needs a 4-byte-aligned address and the fragments address
+    // 2-byte elements, so `row*K + k` must be even. With K odd every odd row
+    // starts misaligned and the load faults (CUDA_ERROR_MISALIGNED_ADDRESS,
+    // measured on sm_120) -- in the main loop, not just the tail. Rejecting
+    // here keeps that a diagnosable rc rather than a device fault that poisons
+    // the context for every later launch in the process.
+    if (ragged && (K64 % 2)) return 5;
     // The emitted PTX addresses elements with 32-bit signed indices, so an
     // operand's LARGEST index (element count - 1) must fit INT32_MAX. Reject only
     // shapes whose element count EXCEEDS 2^31 (a count of exactly 2^31 has max
@@ -977,11 +985,19 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
 // at 512x512, rows to 1024 and columns only to 256, half the output unwritten,
 // with a plausible-looking number.
 bool tileLaunchConfig(const char* name, int& tileM, int& tileN, int& threads,
-                      bool& columnMajorGrid) {
+                      bool& columnMajorGrid, bool* ragged) {
     columnMajorGrid = true;
+    if (ragged) *ragged = false;
     if (std::strcmp(name, kGemmF16) == 0 || std::strcmp(name, kGemmBf16) == 0) {
         tileM = 16; tileN = 8; threads = 32;
         columnMajorGrid = false;   // ptx_emit maps blockIdx.x to M
+        // Only these two entries predicate their own M/N boundaries. Reported
+        // here rather than at each call site because this is the per-kernel
+        // capability table, and the benchmark path needs the same answer the
+        // invoke path does: it launches without going through invokeMmaGemm16,
+        // so a shape guard placed only there let an odd-K measurement fault
+        // the device and poison the context for the rest of the process.
+        if (ragged) *ragged = true;
         return true;
     }
     if (std::strncmp(name, kScheduledSm120MatmulPrefix,
@@ -1023,8 +1039,15 @@ int benchmarkTileGemm16(CUfunction fn, const char* name, void** buffers,
         M * N > (1LL << 31)) return 5;
     int tileM = 0, tileN = 0, threads = 0;
     bool columnMajorGrid = true;
-    if (!tileLaunchConfig(name, tileM, tileN, threads, columnMajorGrid))
+    bool ragged = false;
+    if (!tileLaunchConfig(name, tileM, tileN, threads, columnMajorGrid, &ragged))
         return 5;
+    // Same shape contract the invoke path enforces. Without it this path
+    // launched an unpredicated kernel over a ragged grid, or a ragged kernel
+    // with odd K -- either way a device fault from a *measurement*, which then
+    // poisons the context for every later launch in the process.
+    if (!ragged && (M % 16 || N % 8 || K % 16)) return 5;
+    if (ragged && (K % 2)) return 5;
 
     size_t elementBytes = 2;
     if (std::strcmp(name, kTileDirectTf32) == 0) elementBytes = 4;
@@ -1982,7 +2005,18 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokeMma(fn, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kGemmBf16) == 0 ||
         std::strcmp(kernel_name, kGemmF16) == 0)
-        return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim);
+        // ragged=true: these two entries are the general mma.sync GEMM, whose
+        // kernel now predicates its own boundaries -- M/N by clamping the load
+        // and suppressing the store, K by a predicated remainder slab. The
+        // `ragged` parameter has existed since this function was written and
+        // no caller had ever passed it true, so the M%16/N%8/K%16 guard below
+        // rejected every unaligned shape with rc=5 and dispatch fell to the
+        // reference. The guard stays for every OTHER entry: the Tile-direct
+        // and scheduled kernels are still aligned-only, which is exactly why
+        // this belongs per-entry rather than as a global relaxation.
+        return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
+                               /*tileM=*/16, /*tileN=*/8, /*threads=*/32,
+                               /*ragged=*/true);
     if (std::strcmp(kernel_name, kTileDirectF16) == 0 ||
         std::strcmp(kernel_name, kTileDirectBf16) == 0)
         return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,

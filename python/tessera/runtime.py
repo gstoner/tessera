@@ -8039,8 +8039,8 @@ def _execute_rocm_compiled_flash_attn(
     if q.ndim < 2 or k.ndim < 2 or v.ndim < 2:
         raise ValueError("flash_attn Q/K/V must be at least rank 2 ([..., S, D])")
     head_dim = int(q.shape[-1])
-    if head_dim <= 0 or head_dim % 16 != 0:
-        raise ValueError(f"rocm flash_attn lane needs head_dim a positive multiple of 16; got {head_dim}")
+    if head_dim <= 0:
+        raise ValueError(f"rocm flash_attn lane needs a positive head_dim; got {head_dim}")
     sq = int(q.shape[-2])
     sk = int(k.shape[-2])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1

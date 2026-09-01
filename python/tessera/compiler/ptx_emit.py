@@ -345,17 +345,36 @@ _MMA_GEMM_MAX_ELEMS = 1 << 31
 
 
 def is_valid_mma_sync_gemm_shape(m: int, n: int, k: int) -> bool:
-    """The shape constraint for :func:`emit_mma_sync_gemm_ptx`: aligned tiles
-    (``M%16 == N%8 == K%16 == 0``, all positive) **and** every operand's element
-    count within :data:`_MMA_GEMM_MAX_ELEMS`. The emitted kernel indexes in
-    ``.s32``, so an operand's largest index (``count - 1``) must fit ``INT32_MAX``
-    — ``M*K`` / ``K*N`` / ``M*N`` may *equal* ``2**31`` (max index ``2**31 - 1``)
-    but not exceed it; the launch bridge enforces the same (Decision #21).
-    Unaligned (ragged) M/N/K need boundary predication, and 64-bit index math lifts
-    the size cap — both follow-ons."""
+    """The shape constraint for :func:`emit_mma_sync_gemm_ptx`: **M and N are
+    now free**; K must be positive and EVEN; element counts must fit
+    :data:`_MMA_GEMM_MAX_ELEMS`.
+
+    Was ``M%16 == N%8 == K%16 == 0``. The emitted kernel now predicates its own
+    M/N boundaries, which matters because this lane is the fastest NVIDIA
+    matmul in the registry -- measured 1.5-1.7x over the hand-tuned delegate at
+    every shape on sm_120 -- and the alignment gate was excluding it from every
+    ragged workload, where dispatch then fell to the reference.
+
+    **K%2, and it is a hardware constraint rather than a missing feature.**
+    ``ld.global.b32`` requires a 4-byte-aligned address, and the fragment loads
+    address 2-byte elements, so the element index ``row*K + k`` must be even.
+    With K odd, every odd row starts at an odd index and the load faults --
+    ``CUDA_ERROR_MISALIGNED_ADDRESS``, measured on sm_120, in the *main loop*
+    and not only the tail. Relaxing K to fully arbitrary therefore needs one of:
+    a padded row stride (LDA/LDB even, which the launcher's strided ABI could
+    already carry), or a paired ``ld.global.u16`` slow path for odd K. Both are
+    real designs; neither is a one-line change, so K%2 is the honest boundary
+    for this step rather than a claim that ragged K works.
+
+    The element-count cap stays: the kernel indexes in ``.s32``, so an
+    operand's largest index (``count - 1``) must fit ``INT32_MAX`` -- ``M*K`` /
+    ``K*N`` / ``M*N`` may *equal* ``2**31`` but not exceed it, and the launch
+    bridge enforces the same (Decision #21). 64-bit index math lifting that cap
+    remains a separate follow-on.
+    """
     if not (m > 0 and n > 0 and k > 0):
         return False
-    if m % 16 or n % 8 or k % 16:
+    if k % 2:
         return False
     lim = _MMA_GEMM_MAX_ELEMS
     return m * k <= lim and k * n <= lim and m * n <= lim
@@ -406,16 +425,17 @@ def emit_mma_sync_gemm_ptx(
     .param .u32 p_K
 )
 {{
-    .reg .pred %p;
-    .reg .b32  %r<40>;
+    .reg .pred %p, %pfa, %pha, %pfb, %phb, %pq;
+    .reg .b32  %r<48>;
     .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1;
     .reg .f32  %d0,%d1,%d2,%d3;
-    .reg .b32  %N,%K,%k0;
+    .reg .b32  %M,%N,%K,%k0,%kf;
     .reg .b64  %A,%B,%D,%off,%addr;
 
     ld.param.u64 %A, [p_A];  cvta.to.global.u64 %A, %A;
     ld.param.u64 %B, [p_B];  cvta.to.global.u64 %B, %B;
     ld.param.u64 %D, [p_D];  cvta.to.global.u64 %D, %D;
+    ld.param.u32 %M, [p_M];
     ld.param.u32 %N, [p_N];
     ld.param.u32 %K, [p_K];
 
@@ -427,11 +447,32 @@ def emit_mma_sync_gemm_ptx(
     mov.u32 %r5, %ctaid.x;  mul.lo.s32 %r5, %r5, 16;   // mt = ctaid.x*16
     mov.u32 %r6, %ctaid.y;  mul.lo.s32 %r6, %r6, 8;    // nt = ctaid.y*8
 
+    // ---- ragged M/N: CLAMP the load index, suppress the store ----------------
+    // The M and N tails need no work inside the K loop. A warp tile whose row
+    // or column is past the edge reads a valid in-range line instead (clamped
+    // to M-1 / N-1) and accumulates garbage that the predicated store below
+    // never writes. That keeps the hot loop byte-for-byte the proven aligned
+    // kernel -- no per-iteration predicate, no divergence -- and confines the
+    // cost to a few instructions outside it.
+    //
+    // Clamping is only sound because the K dimension is handled the other way:
+    // a clamped K would add a WRONG product into a VALID output element, so
+    // the K tail is genuinely predicated below.
+    add.s32 %r40, %M, -1;         // M-1 (M >= 1, enforced by the caller)
+    add.s32 %r41, %N, -1;         // N-1
+
     add.s32 %r7, %r5, %r2;        // rowA0 = mt+gid
     add.s32 %r8, %r7, 8;          // rowA1 = mt+gid+8
+    add.s32 %r42, %r6, %r2;       // colB  = nt+gid   (col-major B: column index)
+    // Keep the UNCLAMPED indices for the store predicates.
+    mov.u32 %r43, %r7;            // rowA0 (unclamped)
+    mov.u32 %r44, %r8;            // rowA1 (unclamped)
+    min.s32 %r7,  %r7,  %r40;     // clamped rowA0
+    min.s32 %r8,  %r8,  %r40;     // clamped rowA1
+    min.s32 %r11, %r42, %r41;     // clamped colB
+
     mul.lo.s32 %r9,  %r7, %K;     // rowA0*K  (loop-invariant)
     mul.lo.s32 %r10, %r8, %K;     // rowA1*K
-    add.s32 %r11, %r6, %r2;       // colB = nt+gid (col-major B: column index)
     mul.lo.s32 %r12, %r11, %K;    // colB*K   (loop-invariant)
 
     mov.f32 %d0, 0f00000000;
@@ -439,7 +480,11 @@ def emit_mma_sync_gemm_ptx(
     mov.f32 %d2, 0f00000000;
     mov.f32 %d3, 0f00000000;
 
+    // Full 16-wide K slabs only; the remainder runs once, predicated, below.
+    and.b32 %kf, %K, -16;         // kf = K & ~15
     mov.u32 %k0, 0;
+    setp.ge.s32 %p, %k0, %kf;
+    @%p bra $Ktail_{entry};
 $Lk_{entry}:
     // ---- A fragment (elem 2 bytes): rows {{rowA0,rowA1}} x cols {{k0+2tig, +8}} ----
     add.s32 %r20, %r9,  %k0;  add.s32 %r20, %r20, %r4;   // rowA0*K + k0 + 2tig
@@ -459,17 +504,87 @@ $Lk_{entry}:
         {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}};
 
     add.s32 %k0, %k0, 16;
-    setp.lt.s32 %p, %k0, %K;
+    setp.lt.s32 %p, %k0, %kf;
     @%p bra $Lk_{entry};
 
+$Ktail_{entry}:
+    // ---- ragged K: one predicated slab for the K %% 16 remainder -------------
+    // K cannot be clamped the way M/N are: an out-of-range k would add a wrong
+    // product into a VALID output element. Each b32 load covers TWO adjacent
+    // k values, so a load is either fully in range, half in range (load 16
+    // bits, which zero-extends -- and 0x0000 is +0.0 in both bf16 and f16, so
+    // the packed high half contributes nothing), or entirely out of range
+    // (leave the register zeroed).
+    setp.ge.s32 %p, %k0, %K;
+    @%p bra $Kdone_{entry};
+
+    add.s32 %r20, %k0, %r4;       // kA = k0 + 2tig
+    add.s32 %r22, %r20, 8;        // kB = kA + 8
+    add.s32 %r21, %r20, 1;
+    add.s32 %r23, %r22, 1;
+    setp.lt.s32 %pfa, %r21, %K;   // kA+1 < K  -> both halves valid
+    setp.lt.s32 %pha, %r20, %K;   // kA   < K  -> at least the low half
+    setp.lt.s32 %pfb, %r23, %K;   // kB+1 < K
+    setp.lt.s32 %phb, %r22, %K;   // kB   < K
+
+    mov.b32 %a0, 0;  mov.b32 %a1, 0;  mov.b32 %a2, 0;  mov.b32 %a3, 0;
+    mov.b32 %b0, 0;  mov.b32 %b1, 0;
+
+    // A row0 / row1 at kA, then at kB.
+    add.s32 %r24, %r9, %r20;   mul.wide.s32 %off, %r24, 2;  add.s64 %addr, %A, %off;
+    @%pfa ld.global.b32 %a0, [%addr];
+    not.pred %pq, %pfa;  and.pred %pq, %pq, %pha;
+    @%pq ld.global.u16 %a0, [%addr];
+
+    add.s32 %r25, %r10, %r20;  mul.wide.s32 %off, %r25, 2;  add.s64 %addr, %A, %off;
+    @%pfa ld.global.b32 %a1, [%addr];
+    @%pq ld.global.u16 %a1, [%addr];
+
+    add.s32 %r26, %r9, %r22;   mul.wide.s32 %off, %r26, 2;  add.s64 %addr, %A, %off;
+    @%pfb ld.global.b32 %a2, [%addr];
+    not.pred %pq, %pfb;  and.pred %pq, %pq, %phb;
+    @%pq ld.global.u16 %a2, [%addr];
+
+    add.s32 %r27, %r10, %r22;  mul.wide.s32 %off, %r27, 2;  add.s64 %addr, %A, %off;
+    @%pfb ld.global.b32 %a3, [%addr];
+    @%pq ld.global.u16 %a3, [%addr];
+
+    // B column at kA, then at kB.
+    add.s32 %r28, %r12, %r20;  mul.wide.s32 %off, %r28, 2;  add.s64 %addr, %B, %off;
+    @%pfa ld.global.b32 %b0, [%addr];
+    not.pred %pq, %pfa;  and.pred %pq, %pq, %pha;
+    @%pq ld.global.u16 %b0, [%addr];
+
+    add.s32 %r29, %r12, %r22;  mul.wide.s32 %off, %r29, 2;  add.s64 %addr, %B, %off;
+    @%pfb ld.global.b32 %b1, [%addr];
+    not.pred %pq, %pfb;  and.pred %pq, %pq, %phb;
+    @%pq ld.global.u16 %b1, [%addr];
+
+    {mma}
+        {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}};
+
+$Kdone_{entry}:
     // ---- D store (row-major, elem 4 bytes): d0 idx = (mt+gid)*N + (nt+2tig) ----
+    // Predicated on the UNCLAMPED row/col: this is what makes the M/N clamp
+    // above sound. A lane whose row or column is past the edge accumulated
+    // garbage from a clamped read and must write none of it.
     add.s32 %r30, %r6, %r4;       // nt + 2tig
-    mul.lo.s32 %r31, %r7, %N;  add.s32 %r31, %r31, %r30;   // (mt+gid)*N + nt+2tig
-    mul.wide.s32 %off, %r31, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d0;
-    add.s32 %r32, %r31, 1;    mul.wide.s32 %off, %r32, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d1;
-    mul.lo.s32 %r33, %r8, %N;  add.s32 %r33, %r33, %r30;   // (mt+gid+8)*N + nt+2tig
-    mul.wide.s32 %off, %r33, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d2;
-    add.s32 %r34, %r33, 1;    mul.wide.s32 %off, %r34, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d3;
+    add.s32 %r45, %r30, 1;        // nt + 2tig + 1
+    setp.lt.s32 %pfa, %r43, %M;   // rowA0 < M   (unclamped)
+    setp.lt.s32 %pfb, %r44, %M;   // rowA1 < M
+    setp.lt.s32 %pha, %r30, %N;   // col0  < N
+    setp.lt.s32 %phb, %r45, %N;   // col1  < N
+
+    mul.lo.s32 %r31, %r43, %N;  add.s32 %r31, %r31, %r30;  // (mt+gid)*N + nt+2tig
+    and.pred %pq, %pfa, %pha;
+    mul.wide.s32 %off, %r31, 4;  add.s64 %addr, %D, %off;  @%pq st.global.f32 [%addr], %d0;
+    and.pred %pq, %pfa, %phb;
+    add.s32 %r32, %r31, 1;    mul.wide.s32 %off, %r32, 4;  add.s64 %addr, %D, %off;  @%pq st.global.f32 [%addr], %d1;
+    mul.lo.s32 %r33, %r44, %N;  add.s32 %r33, %r33, %r30;  // (mt+gid+8)*N + nt+2tig
+    and.pred %pq, %pfb, %pha;
+    mul.wide.s32 %off, %r33, 4;  add.s64 %addr, %D, %off;  @%pq st.global.f32 [%addr], %d2;
+    and.pred %pq, %pfb, %phb;
+    add.s32 %r34, %r33, 1;    mul.wide.s32 %off, %r34, 4;  add.s64 %addr, %D, %off;  @%pq st.global.f32 [%addr], %d3;
 
     ret;
 }}

@@ -34190,17 +34190,120 @@ def _apple_gpu_consume_gpu_error() -> "str | None":
     return detail or "GPU dispatch reported an error"
 
 
+#: `ts_set_last_gpu_error` kind reserved for "the device never signalled".
+#: Both sites that raise it are the hung/timed-out path; kinds 2-4 are ordinary
+#: per-op failures and must NOT trip the breaker below.
+_APPLE_GPU_ERROR_KIND_TIMEOUT = 1
+
+#: Consecutive dispatch timeouts before the breaker opens. Three, not one: a
+#: single timeout can be a genuinely slow dispatch under load, three in a row
+#: is a device that stopped answering.
+_APPLE_GPU_DISPATCH_TIMEOUT_LIMIT = 3
+
+_apple_gpu_consecutive_dispatch_timeouts = 0
+
+
+def _apple_gpu_peek_gpu_error_kind() -> int:
+    """The last-error kind WITHOUT clearing it.
+
+    Separate from :func:`_apple_gpu_consume_gpu_error`, which returns only the
+    detail string and is monkeypatched by several tests; widening its return
+    type would rewrite their contract to add a signal only one caller needs.
+    """
+    try:
+        rt = _load_apple_gpu_runtime()
+    except Exception:
+        return 0
+    kind_fn = getattr(rt, "tessera_apple_gpu_last_error_kind", None)
+    if kind_fn is None:
+        return 0
+    kind_fn.argtypes = []
+    kind_fn.restype = ctypes.c_int32
+    try:
+        return int(kind_fn())
+    except Exception:
+        return 0
+
+
+def apple_gpu_dispatch_breaker_state() -> "dict[str, Any]":
+    """Consecutive dispatch timeouts, the limit, and whether the breaker is open."""
+    return {
+        "consecutive_timeouts": _apple_gpu_consecutive_dispatch_timeouts,
+        "limit": _APPLE_GPU_DISPATCH_TIMEOUT_LIMIT,
+        "open": (_apple_gpu_consecutive_dispatch_timeouts
+                 >= _APPLE_GPU_DISPATCH_TIMEOUT_LIMIT),
+        "disabled": bool(os.environ.get("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER")),
+    }
+
+
+def reset_apple_gpu_dispatch_breaker() -> None:
+    """Close the breaker and forget the timeout streak.
+
+    The breaker does not self-heal on a timer, because there is no cheap probe
+    for "is the device answering again" that does not cost another full
+    timeout. A caller that knows the device recovered says so here.
+    """
+    global _apple_gpu_consecutive_dispatch_timeouts
+    _apple_gpu_consecutive_dispatch_timeouts = 0
+
+
 def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -> Any:
     """Run a GPU kernel through the last-error channel: arm (clear) before,
     consume (read+clear) after. On a reported internal failure, funnel
     (strict mode raises) and return ``host_fallback()`` instead of the kernel's
     untouched/garbage output. ``kernel_call`` runs the dispatch and returns the
-    GPU result; ``host_fallback`` recomputes on host. Audit 2026-06-10 1d #3."""
+    GPU result; ``host_fallback`` recomputes on host. Audit 2026-06-10 1d #3.
+
+    **Also the circuit breaker for a device that stopped answering
+    (APPLE-DISPATCH-WEDGE-1).** `commit_mpsgraph_and_wait_with_timeout` waits
+    30 s (60 s at one site) and, on expiry, reports kind
+    ``_APPLE_GPU_ERROR_KIND_TIMEOUT`` and returns — correctly, and with no
+    memory that it happened. So every subsequent dispatch paid the full timeout
+    again: an Apple sweep was observed stalled for **70 minutes** where the
+    healthy run takes 4 minutes. Nothing accumulated, because the runtime's
+    `g_last_gpu_error_kind` is a thread-local *last*-error for reporting and
+    `commit_mpsgraph_and_wait_with_timeout` clears the dispatch telemetry on
+    entry — erasing the previous timeout before the next attempt.
+
+    After ``_APPLE_GPU_DISPATCH_TIMEOUT_LIMIT`` consecutive timeouts this stops
+    dispatching and goes straight to the host path, with a stable diagnostic
+    naming the op and the streak (Decision #21 — never a silent no-op). Any
+    successful dispatch closes it again, and only kind
+    ``_APPLE_GPU_ERROR_KIND_TIMEOUT`` counts: an ordinary per-op failure says
+    nothing about whether the device is answering.
+
+    The asymmetry is deliberate. Tripping wrongly costs a host-computed result,
+    which is correct, just slower. Not tripping costs unbounded wall time and
+    produces no evidence of why. Set ``TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER``
+    to keep the old behaviour.
+    """
+    global _apple_gpu_consecutive_dispatch_timeouts
+    breaker_enabled = not os.environ.get("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER")
+    if (breaker_enabled
+            and _apple_gpu_consecutive_dispatch_timeouts
+            >= _APPLE_GPU_DISPATCH_TIMEOUT_LIMIT):
+        _note_dispatch_fallback(
+            op_name,
+            f"Apple GPU dispatch breaker open after "
+            f"{_apple_gpu_consecutive_dispatch_timeouts} consecutive dispatch "
+            f"timeouts; computed on host without dispatching. Call "
+            f"tessera.runtime.reset_apple_gpu_dispatch_breaker() once the "
+            f"device is known good.")
+        return host_fallback()
     _apple_gpu_arm_gpu_error()
     result = kernel_call()
+    kind = _apple_gpu_peek_gpu_error_kind() if breaker_enabled else 0
     err = _apple_gpu_consume_gpu_error()
     if err is None:
+        _apple_gpu_consecutive_dispatch_timeouts = 0
         return result
+    if breaker_enabled and kind == _APPLE_GPU_ERROR_KIND_TIMEOUT:
+        _apple_gpu_consecutive_dispatch_timeouts += 1
+    elif breaker_enabled:
+        # A per-op failure is not evidence about the device. Reset, so an
+        # interleaved unsupported-shape decline cannot mask a real streak --
+        # and cannot manufacture one either.
+        _apple_gpu_consecutive_dispatch_timeouts = 0
     _note_dispatch_fallback(op_name, f"GPU kernel reported failure ({err}); recomputed on host")
     return host_fallback()
 

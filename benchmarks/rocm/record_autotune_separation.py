@@ -39,6 +39,14 @@ from tessera.compiler import fusion as F                       # noqa: E402
 from tessera.compiler.emit import autotune as at               # noqa: E402
 from tessera.compiler.emit.candidate import OP_FUSED_REGION    # noqa: E402
 
+# Candidate registration is a side effect of importing the backend's emit
+# module. Without this the registry is EMPTY and `measured_arbitrate` returns
+# None for every shape -- which prints as "no verified candidate", i.e. it
+# reads as "this hardware cannot do it" rather than "the driver forgot an
+# import". A missing import here produces a confident wrong answer, not an
+# error, so it is imported explicitly rather than relied upon transitively.
+from tessera.compiler.emit import rocm_hip as _rocm_hip        # noqa: E402,F401
+
 
 def _summarise(cache: at.MeasureCache) -> dict[str, int]:
     rows = cache.to_dict()["records"]
@@ -70,6 +78,14 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true",
                     help="measure and report without writing the corpus")
     args = ap.parse_args()
+
+    from tessera.compiler.emit.candidate import candidates_for
+    registered = [c.name for c in candidates_for("rocm", OP_FUSED_REGION)]
+    if not registered:
+        print("no rocm fused_region candidates are registered -- refusing to "
+              "record a corpus that would claim this hardware has none")
+        return 1
+    print(f"racing {len(registered)} candidates: {', '.join(sorted(registered))}")
 
     cache = at.MeasureCache()
     at.load_corpus(cache=cache)          # warm-start: never drop other devices

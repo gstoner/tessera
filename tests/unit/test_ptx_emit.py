@@ -229,3 +229,43 @@ def test_nvfp4_block_scale_ptx_assembles_for_sm120a():
     and non-uniform scale numerics; this test intentionally covers only assembly."""
     res = P.ptxas_assemble(P.emit_nvfp4_block_scale_mma_ptx(), arch="sm_120a")
     assert res.assembled, f"ptxas rejected the NVFP4 block-scale kernel: {res.detail}"
+
+
+def test_ragged_capability_and_even_k_are_separate_launcher_flags():
+    """Review finding on #675: one bool was doing two jobs.
+
+    `tileLaunchConfig` defaulted `ragged` to false and set it true only for the
+    two PTX GEMM entries -- but EVERY entry the invoke dispatch routes through
+    `invokeMmaGemm16` passes `ragged=true`, because the Tile-direct,
+    Tile-shared and scheduled kernels have masked their boundaries in
+    `NVIDIALowering.cpp` since they were written. The benchmark path therefore
+    returned rc=5 for every ragged device measurement of a Tile kernel, so both
+    live Tile candidates measured `None` and left the race -- the exact corpus
+    bias `_record_raced_the_live_field` exists to refuse.
+
+    The even-K requirement is NOT a property of ragged shapes: it belongs to
+    this emitter's fragment layout (`ld.global.b32` needs 4-byte alignment
+    while the fragments address 2-byte elements). The Tile kernels declare
+    element alignment (2) on their masked loads, so an odd element offset is
+    legal for them. Folding the two into one flag would have imposed an odd-K
+    refusal on kernels that have no such limit.
+
+    Asserted on the source because the C++ is the contract and there is no
+    host-free way to reach it; the device A/B is recorded in the NVIDIA plan.
+    """
+    from pathlib import Path
+
+    launcher = (Path(__file__).resolve().parents[2]
+                / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda"
+                / "tessera_nvidia_ptx_launch.cpp").read_text(encoding="utf-8")
+
+    # The capability table reports both, and ragged now DEFAULTS to true.
+    assert "bool* ragged, bool* requiresEvenK" in launcher
+    assert "if (ragged) *ragged = true;" in launcher, (
+        "ragged must default true: every invokeMmaGemm16 caller passes it")
+
+    # The even-K gate keys on requiresEvenK, never on ragged.
+    assert "if (requiresEvenK && (K % 2)) return 5;" in launcher
+    assert "if (requiresEvenK && (K64 % 2)) return 5;" in launcher
+    assert "if (ragged && (K % 2))" not in launcher
+    assert "if (ragged && (K64 % 2))" not in launcher

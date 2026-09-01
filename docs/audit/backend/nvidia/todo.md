@@ -5863,3 +5863,51 @@ regression, but against **52–58% spread**, so not a supported comparison; a
 15x3000-rep re-measure pushed the spread *worse* (85%, 73%) and the medians
 crossed over. Those shapes are unresolvable on this box and the apparent 1.4x
 was noise, exactly as its own spread warned.
+
+## NVIDIA-RAGGED-TIMING-FIELD-2026-09-01: the ragged flag was doing two jobs *(fixed)*
+
+**Review finding on #675, verified rather than accepted — and it is a
+regression that PR introduced.** `tileLaunchConfig` defaulted `ragged` to false
+and set it true only for the two PTX GEMM entries. But **every** entry the
+invoke dispatch routes through `invokeMmaGemm16` passes `ragged=true`: the
+Tile-direct, Tile-shared and scheduled-SM120 kernels have masked their
+out-of-bounds loads and stores in `NVIDIALowering.cpp` since they were written.
+The comment #675 added — *"the Tile-direct and scheduled kernels are still
+aligned-only"* — was simply false.
+
+**Measured A/B on Super-Bear**, same PTX, same shapes, two libraries:
+
+| kernel | shape | merged main | fixed |
+|---|---|---|---|
+| `tile_matmul_direct_f16` | 256×256×256 | accepted | accepted |
+| `tile_matmul_direct_f16` | 255×129×258 | **rc=5 refused** | accepted + timed |
+| `tile_matmul_shared_f16` | 255×129×258 | **rc=5 refused** | accepted + timed |
+
+A refused measurement is a candidate that returns `None` and leaves the race —
+the exact corpus bias `_record_raced_the_live_field` exists to refuse, and the
+one this session spent PRs #655/#662/#670 removing. #675 put a small version of
+it back on the ragged path.
+
+**Two capabilities, not one.** Even-K is a property of *this emitter's fragment
+layout*, not of ragged shapes: `ld.global.b32` needs a 4-byte-aligned address
+while the fragments address 2-byte elements. The Tile kernels declare
+**element alignment (2)** on their masked loads
+(`unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;`), so an odd
+element offset is legal for them. Folding the two into one flag would have
+imposed an odd-K refusal on kernels that have no such limit — trading one
+regression for another. `tileLaunchConfig` now reports `ragged` (default
+**true**) and `requiresEvenK` (true only for `kGemmF16`/`kGemmBf16`).
+
+**One honest limit on the evidence.** The A/B above proves the *gate* changed,
+using real PTX that JITs — a first probe used a stub that failed to compile,
+and rc=3 (JIT failure) happens *before* the shape guard, which made that run
+silently inconclusive rather than informative. What is **not** separately
+device-proven here is that the real Tile kernels compute correctly at odd K;
+that rests on the alignment-2 masked loads above **and** on the fact that
+merged main's own invoke path already dispatches them at odd K. This change
+makes the benchmark path agree with the invoke path rather than making a new
+claim about the kernels.
+
+Follow-up: a ragged-bucket device re-race is still owed here (recorded under
+`MATRIX-LANE-RAGGED-SHAPES-2026-09-01`), and it should now include the Tile
+lanes, which this fix returns to the field.

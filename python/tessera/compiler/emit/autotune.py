@@ -515,6 +515,33 @@ def corpus_winner(region: Any, op: str, target: str, *inputs: Any,
         if not _record_raced_the_live_field(rec, live, timing):
             return None
 
+    # ...and only if the verdict is SUPPORTED. Without this, `separation` was
+    # an unconsumed declaration (Decision #29): recorded, documented, and read
+    # by nothing, while `run_arbitrated` kept dispatching on rows the corpus
+    # itself marks as noise. The sm_120 corpus holds a float16 device row whose
+    # 2.16% margin sits under 148.55% noise; before this check that row still
+    # changed a production route.
+    #
+    # `separated is False` is refused outright -- a ranking the measurement
+    # says is not real must never become a dispatch hint.
+    #
+    # `separation is None` is ALLOWED, and the asymmetry is deliberate. None
+    # means the row predates the field and was never asked, which is exactly
+    # the state every row was in before #663; rejecting it would silently
+    # deactivate most of the committed corpus as a side effect of adding a
+    # check. A row that is *known* unsupported is strictly worse than one that
+    # is merely unproven, and only the first is a regression to allow.
+    # Re-racing is what moves a None row to a real verdict.
+    #
+    # `evidence.selector_eligible` is honoured the same way: the finalizer sets
+    # it False when two independent runs disagreed on the winner, which is the
+    # same conclusion reached by a different mechanism.
+    for rec in matches:
+        if rec.is_separated() is False:
+            return None
+        if rec.evidence.get("selector_eligible") is False:
+            return None
+
     candidate = live.get(winner)
     return winner if candidate is not None else None
 

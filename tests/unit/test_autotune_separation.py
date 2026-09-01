@@ -309,3 +309,96 @@ def test_a_separated_rerace_does_replace_the_incumbent():
     assert win.name == "dis_b"
     assert AT.MeasureRecord.from_json(
         cache.to_dict()["records"][0]).is_separated() is True
+
+
+# --------------------------------------------------------------------------
+# The consumer. A verdict nothing reads is a declaration, not a check.
+# --------------------------------------------------------------------------
+
+def test_corpus_winner_refuses_an_unseparated_verdict():
+    """`separation` was recorded, documented -- and read by nothing.
+
+    Review on #670 caught it: `corpus_winner` validated that a record raced the
+    live field (#655) and never asked whether the verdict was supported, so
+    `run_arbitrated` kept dispatching on rows the corpus itself marks as noise.
+    The committed sm_120 corpus holds a float16 device row whose 2.16% margin
+    sits under 148.55% noise; before this check that row still changed a
+    production route.
+
+    Decision #29 names this exactly: a declaration with no consumer is worse
+    than a missing one, because it reads as a closed contract in review.
+    """
+    tgt = "consumer_unsep_target"
+    register_candidate(_Cand("cu_a", tgt, [1.0, 1.0, 1.0]))
+    register_candidate(_Cand("cu_b", tgt, [1.2, 1.2, 1.2]))
+    cache = AT.MeasureCache()
+    key = ("fakedev", tgt, OP_MATMUL,
+           AT.bucket_key((4, 4, 4), AT.SpecPolicy.BUCKET), "bfloat16",
+           AT.TIMING_END_TO_END)
+    rec = lambda sep: AT.MeasureRecord(                       # noqa: E731
+        winner="cu_a", latency_ms=1.0,
+        candidates={"cu_a": 1.0, "cu_b": 1.2}, unmeasured={}, separation=sep)
+
+    A, B = _mm()
+    ask = lambda: AT.corpus_winner(                            # noqa: E731
+        _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4),
+        dtype="bfloat16", cache=cache, device="fakedev")
+
+    cache.put(key, rec({"separated": True, "margin": 0.4, "noise": 0.01}))
+    assert ask() == "cu_a", "a supported verdict must still be usable"
+
+    cache.put(key, rec({"separated": False, "margin": 0.02, "noise": 1.48}))
+    assert ask() is None, (
+        "a verdict the measurement says is noise must never become a dispatch "
+        "hint")
+
+
+def test_corpus_winner_refuses_a_selector_ineligible_row():
+    """The finalizer's own signal, reached by a different mechanism.
+
+    `finalize_test5_corpus` sets `selector_eligible` False when two independent
+    runs disagree on the winner. That is the same conclusion `separation`
+    reaches from a single run's spread, and it must bind the consumer too.
+    """
+    tgt = "consumer_ineligible_target"
+    register_candidate(_Cand("ci_a", tgt, [1.0, 1.0, 1.0]))
+    register_candidate(_Cand("ci_b", tgt, [1.2, 1.2, 1.2]))
+    cache = AT.MeasureCache()
+    key = ("fakedev", tgt, OP_MATMUL,
+           AT.bucket_key((4, 4, 4), AT.SpecPolicy.BUCKET), "bfloat16",
+           AT.TIMING_END_TO_END)
+    cache.put(key, AT.MeasureRecord(
+        winner="ci_a", latency_ms=1.0,
+        candidates={"ci_a": 1.0, "ci_b": 1.2}, unmeasured={},
+        separation={"separated": True, "margin": 0.4, "noise": 0.01},
+        evidence={"selector_eligible": False, "stable_winner": False}))
+    A, B = _mm()
+    assert AT.corpus_winner(
+        _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
+        cache=cache, device="fakedev") is None
+
+
+def test_a_legacy_row_without_a_verdict_is_still_usable():
+    """`None` is allowed where `False` is refused, and the asymmetry is the
+    point.
+
+    None means the row predates the field and was never asked -- the state
+    every row was in before #663. Rejecting it would silently deactivate most
+    of the committed corpus as a side effect of adding a check. A row that is
+    KNOWN unsupported is strictly worse than one that is merely unproven, and
+    only the first is a regression to allow.
+    """
+    tgt = "consumer_legacy_target"
+    register_candidate(_Cand("lg_a", tgt, [1.0, 1.0, 1.0]))
+    register_candidate(_Cand("lg_b", tgt, [1.2, 1.2, 1.2]))
+    cache = AT.MeasureCache()
+    cache.put(("fakedev", tgt, OP_MATMUL,
+               AT.bucket_key((4, 4, 4), AT.SpecPolicy.BUCKET), "bfloat16",
+               AT.TIMING_END_TO_END),
+              AT.MeasureRecord(winner="lg_a", latency_ms=1.0,
+                               candidates={"lg_a": 1.0, "lg_b": 1.2},
+                               unmeasured={}))
+    A, B = _mm()
+    assert AT.corpus_winner(
+        _Region(), OP_MATMUL, tgt, A, B, dims=(4, 4, 4), dtype="bfloat16",
+        cache=cache, device="fakedev") == "lg_a"

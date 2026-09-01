@@ -285,6 +285,14 @@ def main() -> int:
         "reps": args.reps,
         "device_warmup": args.device_warmup,
         "device_reps": args.device_reps,
+        # The count of WHOLE device measurements, which is what sets the noise
+        # floor behind every separation verdict -- distinct from `device_reps`,
+        # the launches inside one measurement. Runs at 3, 10 and 30 produce
+        # materially different verdicts (sd 48.31% / 30.74% / 19.34% at
+        # 128x512x64 bf16), so omitting it left rows whose separation cannot be
+        # reproduced or compared. Provenance for a published number has to
+        # include the sample count behind it.
+        "device_repeats": args.device_repeats,
         "measure_cache": "warm_started" if args.warm_start else "fresh",
         "cache_hits": cache.hits,
         "cache_misses": cache.misses,

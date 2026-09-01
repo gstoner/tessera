@@ -6327,3 +6327,73 @@ covered not-registered, wrong-region and unavailable-here alike, and once a
 shape axis existed it was actively wrong for the commonest case: the lane IS
 available, on a host that has it, for a shape it cannot serve. It now names
 which of the four gates rejected the candidate (Decision #21).
+
+## Cross-backend sync `ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**Owning item:** Apple strict route ledger re-seal · **synchronization key:**
+`ROUTE-LEDGER-RULES-UNCONSUMED-2026-09-01`
+
+**The red lane that started this.**
+`test_strict_retune_ledger_admits_on_its_exact_live_apple_host` had been
+failing on this Mac and was reported as "pre-existing" more than once. It was
+right to fail: the ledger was rejected on **four independent axes** —
+`os_version` (26.5.2 → 26.6.2), `compiler_fingerprint`, `runtime_fingerprint`
+(this session edited `apple_gpu_runtime.mm`), and `stale_evidence` (expired
+2026-08-20, twelve days before). The gate was doing its job; the evidence was
+genuinely dead.
+
+**Re-measured, not re-stamped**, per the standing rule for this artifact:
+`benchmark_legacy_retune.py --profile extended` (2 runs × 24 rows), then sealed
+through the existing `seal_strict_route_ledger`. Zero rejections against the
+live context; 16 decisions and 8 ineligible, **identical key sets to the
+July ledger** — nothing lost, nothing invented.
+
+*Near-miss worth recording:* the first re-run used `--profile core`, which
+admitted cleanly with **8** decisions instead of 16. `rejected == ()` would
+have read as success while silently halving the Apple route evidence — the
+same shape as the corpus recorder that once produced a corpus with *less*
+evidence than it started with. Diffing the decision key sets against the
+committed ledger is what caught it, not the admission result.
+
+**One real route change, and its cause is not the obvious one.**
+`retune_mla_decode` end-to-end flips `explicit` → `absorbed` at both shapes.
+`absorbed` was never slower: in July it was **54–57% faster with 100% paired
+wins in both runs**, and was held back solely because its cross-run speedup
+spread (5.97%) missed the ledger's own 5% stability cap by ~1 point. The re-run
+measures 37–39% faster, again 100% paired wins, spread **2.3%** — so it
+promotes. The flip is "the measurement became consistent enough to conclude",
+not "the kernel got faster".
+
+**Diagnostic, deliberately not a route claim** (`promotion_rules` sets
+`absolute_time_drift_is_diagnostic_only: true`): absolute times moved the wrong
+way. `absorbed` went 518µs → 836µs at the 128-token shape and 482µs → 557µs at
+64, while `explicit` held (1.15× / 0.96×). The larger shape's regression is
+outside this harness's own run drift; the smaller one is not. Cause is
+confounded — OS 26.5.2 → 26.6.2, runtime `.mm` edits, and a new compiler
+fingerprint all landed between the two measurements — and is **not attributed
+here**. It is worth a dedicated look.
+
+**The structural finding: `promotion_rules` was a declaration with no
+consumer.** `aggregate_stable_route_reports` computes the thresholds, applies
+them, and writes them into the ledger; `seal_strict_route_ledger` copies them
+forward for audit; **twelve committed ledgers carry the block and nothing ever
+read it back**. `load_strict_route_ledger` checks provenance exhaustively —
+schema, scope, exact context, freshness, source-report digests, native
+provenance, correctness, timing domain, device, duplicates — and the promotion
+criteria not at all, so `status: "promote_candidate"` was self-certifying. A
+row naming a route that lost every paired trial would have been admitted and
+served. Decision #29, in the evidence layer rather than the IR.
+
+`promotion_rule_violations()` now re-derives each promotion from the evidence
+the ledger retained, and the **loader rejects a decision its own ledger's rules
+refuse** — a production gate, not an audit script. Applied to all 12 committed
+strict ledgers: **59 promotions checked, 0 violations**, so this confirms the
+aggregator rather than accusing it. Mutation-verified against seven forged
+rows (lost every trial / speedup under minimum / spread over maximum / no
+numerical proof / no resource evidence / evidence deleted / rules block
+removed) — each is caught, and a missing rules block fails **closed**
+(`promotion_rules_incomplete`), because without a threshold there is nothing to
+hold the promotion to and the honest verdict is "unverifiable", not "fine".
+
+**Outcome for this backend: `parity validated` — measured on the Mac (M1 Max,
+macOS 26.6.2), which is the only host that can produce this evidence.**

@@ -6,10 +6,10 @@
       "context": {
         "device": "apple7",
         "physical_device": "Apple M1 Max",
-        "os_version": "26.5.2",
+        "os_version": "26.6.2",
         "sdk_version": "26.5",
-        "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
-        "runtime_fingerprint": "sha256:74eb6e951d8ec7f4b1c453060878ca8239ed39bc37d3c11d4c0b50402bc5bc7a"
+        "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+        "runtime_fingerprint": "sha256:2a7a2aa67888482a35109ec6f1c32fdf150e1cbeddfa6f2b1a4a5d467e11f514"
       },
       "runs": [
         {
@@ -24,17 +24,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 282542,
-            "device_time_median_ns": 23333,
+            "end_to_end_median_ns": 343667,
+            "device_time_median_ns": 87208,
             "paired_trial_end_to_end_medians_ns": [
-              325792,
-              281917,
-              282542
+              357667,
+              343667,
+              343166
             ],
             "paired_trial_device_medians_ns": [
-              35125,
-              23333,
-              18791
+              87208,
+              93750,
+              85958
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -46,7 +46,7 @@
               "logical_input_bytes": 73856,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 82048,
-              "end_to_end_logical_bandwidth_gb_s": 0.2903922248727623,
+              "end_to_end_logical_bandwidth_gb_s": 0.2387427364279957,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -63,12 +63,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1079542,
+            "end_to_end_median_ns": 1097709,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              1079542,
-              1190333,
-              851334
+              1053000,
+              1186833,
+              1097709
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -81,7 +81,7 @@
               "logical_input_bytes": 73856,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 82048,
-              "end_to_end_logical_bandwidth_gb_s": 0.07600260110306037,
+              "end_to_end_logical_bandwidth_gb_s": 0.07474476386729087,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -98,12 +98,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 2043833,
+            "end_to_end_median_ns": 2080875,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2485417,
-              2022625,
-              2043833
+              2105542,
+              2080875,
+              2018875
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -116,7 +116,7 @@
               "logical_input_bytes": 100384,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 102432,
-              "end_to_end_logical_bandwidth_gb_s": 0.05011759767065117,
+              "end_to_end_logical_bandwidth_gb_s": 0.04922544602631105,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -133,17 +133,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1110292,
-            "device_time_median_ns": 32500,
+            "end_to_end_median_ns": 1715458,
+            "device_time_median_ns": 1283249,
             "paired_trial_end_to_end_medians_ns": [
-              1987334,
-              1110292,
-              992834
+              2590208,
+              1260083,
+              1715458
             ],
             "paired_trial_device_medians_ns": [
-              31916,
-              32500,
-              40499
+              2317541,
+              1003374,
+              1283249
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -155,7 +155,7 @@
               "logical_input_bytes": 100384,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 102432,
-              "end_to_end_logical_bandwidth_gb_s": 0.09225681172160116,
+              "end_to_end_logical_bandwidth_gb_s": 0.05971116751328217,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -172,12 +172,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 332792,
+            "end_to_end_median_ns": 339792,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              332792,
-              425125,
-              307208
+              331958,
+              339792,
+              395667
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -190,7 +190,7 @@
               "logical_input_bytes": 65792,
               "logical_output_bytes": 256,
               "logical_total_bytes": 66048,
-              "end_to_end_logical_bandwidth_gb_s": 0.19846630928628092,
+              "end_to_end_logical_bandwidth_gb_s": 0.1943777369684984,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -207,12 +207,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 5542,
+            "end_to_end_median_ns": 6000,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              5958,
-              5458,
-              5542
+              6166,
+              5625,
+              6000
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -225,7 +225,7 @@
               "logical_input_bytes": 65792,
               "logical_output_bytes": 256,
               "logical_total_bytes": 66048,
-              "end_to_end_logical_bandwidth_gb_s": 11.917719234933237,
+              "end_to_end_logical_bandwidth_gb_s": 11.008,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -242,12 +242,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 3167,
+            "end_to_end_median_ns": 3459,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              3583,
-              3167,
-              3042
+              3708,
+              3459,
+              3083
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -260,7 +260,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 16384,
               "logical_total_bytes": 16384,
-              "end_to_end_logical_bandwidth_gb_s": 5.17335017366593,
+              "end_to_end_logical_bandwidth_gb_s": 4.736629083550159,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -277,12 +277,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 1000,
+            "end_to_end_median_ns": 1083,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              1125,
-              917,
-              1000
+              1375,
+              1042,
+              1083
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -295,7 +295,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 16384,
               "logical_total_bytes": 16384,
-              "end_to_end_logical_bandwidth_gb_s": 16.384,
+              "end_to_end_logical_bandwidth_gb_s": 15.128347183748845,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -312,17 +312,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1202125,
-            "device_time_median_ns": 633458,
+            "end_to_end_median_ns": 1110500,
+            "device_time_median_ns": 569000,
             "paired_trial_end_to_end_medians_ns": [
-              1260625,
-              1098917,
-              1202125
+              1091542,
+              1152667,
+              1110500
             ],
             "paired_trial_device_medians_ns": [
-              633458,
-              598833,
-              641791
+              553041,
+              569000,
+              591375
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -334,7 +334,7 @@
               "logical_input_bytes": 29088,
               "logical_output_bytes": 256,
               "logical_total_bytes": 29344,
-              "end_to_end_logical_bandwidth_gb_s": 0.02441010710200686,
+              "end_to_end_logical_bandwidth_gb_s": 0.026424133273300315,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -351,12 +351,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 436291,
+            "end_to_end_median_ns": 581958,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              436291,
-              422250,
-              475708
+              654208,
+              581958,
+              579708
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -369,7 +369,7 @@
               "logical_input_bytes": 29088,
               "logical_output_bytes": 256,
               "logical_total_bytes": 29344,
-              "end_to_end_logical_bandwidth_gb_s": 0.0672578622983284,
+              "end_to_end_logical_bandwidth_gb_s": 0.050422882750988905,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -386,17 +386,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 309709,
-            "device_time_median_ns": 34291,
+            "end_to_end_median_ns": 347000,
+            "device_time_median_ns": 56208,
             "paired_trial_end_to_end_medians_ns": [
-              282875,
-              334125,
-              309709
+              370416,
+              342625,
+              347000
             ],
             "paired_trial_device_medians_ns": [
-              27999,
-              35374,
-              34291
+              69499,
+              51375,
+              56208
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -422,7 +422,7 @@
               "logical_input_bytes": 3200,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 5248,
-              "end_to_end_logical_bandwidth_gb_s": 0.016944938635945355,
+              "end_to_end_logical_bandwidth_gb_s": 0.015123919308357348,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -439,12 +439,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 2342750,
+            "end_to_end_median_ns": 2652000,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2218667,
-              2342750,
-              2369208
+              2627750,
+              2652000,
+              2677250
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -471,7 +471,7 @@
               "logical_input_bytes": 3200,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 5248,
-              "end_to_end_logical_bandwidth_gb_s": 0.002240102443709316,
+              "end_to_end_logical_bandwidth_gb_s": 0.0019788838612368022,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -488,17 +488,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 300750,
-            "device_time_median_ns": 24625,
+            "end_to_end_median_ns": 319875,
+            "device_time_median_ns": 57041,
             "paired_trial_end_to_end_medians_ns": [
-              290416,
-              300750,
-              314584
+              365167,
+              319875,
+              315875
             ],
             "paired_trial_device_medians_ns": [
-              19833,
-              25250,
-              24625
+              71541,
+              55250,
+              57041
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -510,7 +510,7 @@
               "logical_input_bytes": 295168,
               "logical_output_bytes": 32768,
               "logical_total_bytes": 327936,
-              "end_to_end_logical_bandwidth_gb_s": 1.0903940149625935,
+              "end_to_end_logical_bandwidth_gb_s": 1.025200468933177,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -527,12 +527,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1105375,
+            "end_to_end_median_ns": 1090667,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              1105375,
-              1154791,
-              1030792
+              1103625,
+              1090667,
+              965417
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -545,7 +545,7 @@
               "logical_input_bytes": 295168,
               "logical_output_bytes": 32768,
               "logical_total_bytes": 327936,
-              "end_to_end_logical_bandwidth_gb_s": 0.2966739794187493,
+              "end_to_end_logical_bandwidth_gb_s": 0.3006747247326636,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -562,12 +562,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 2275125,
+            "end_to_end_median_ns": 2131666,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2275125,
-              2297083,
-              2219333
+              2152333,
+              2131666,
+              2012250
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -580,7 +580,7 @@
               "logical_input_bytes": 401440,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 409632,
-              "end_to_end_logical_bandwidth_gb_s": 0.18004812922366903,
+              "end_to_end_logical_bandwidth_gb_s": 0.19216518910561034,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -597,17 +597,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 3815792,
-            "device_time_median_ns": 38374,
+            "end_to_end_median_ns": 3413709,
+            "device_time_median_ns": 3112625,
             "paired_trial_end_to_end_medians_ns": [
-              3815792,
-              3927000,
-              3479375
+              3413709,
+              3408125,
+              3450541
             ],
             "paired_trial_device_medians_ns": [
-              34916,
-              38374,
-              41125
+              3112625,
+              3110666,
+              3115125
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -619,7 +619,7 @@
               "logical_input_bytes": 401440,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 409632,
-              "end_to_end_logical_bandwidth_gb_s": 0.10735176340848768,
+              "end_to_end_logical_bandwidth_gb_s": 0.11999616839045156,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -636,12 +636,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 357584,
+            "end_to_end_median_ns": 309375,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              357584,
-              337875,
-              495500
+              309375,
+              316375,
+              285208
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -654,7 +654,7 @@
               "logical_input_bytes": 263168,
               "logical_output_bytes": 512,
               "logical_total_bytes": 263680,
-              "end_to_end_logical_bandwidth_gb_s": 0.7373931719540024,
+              "end_to_end_logical_bandwidth_gb_s": 0.8522989898989899,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -671,12 +671,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 14500,
+            "end_to_end_median_ns": 14000,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              14500,
-              14291,
-              15125
+              14084,
+              13792,
+              14000
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -689,7 +689,7 @@
               "logical_input_bytes": 263168,
               "logical_output_bytes": 512,
               "logical_total_bytes": 263680,
-              "end_to_end_logical_bandwidth_gb_s": 18.184827586206897,
+              "end_to_end_logical_bandwidth_gb_s": 18.834285714285713,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -706,12 +706,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 3208,
+            "end_to_end_median_ns": 3167,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              3833,
-              3208,
-              2958
+              3875,
+              3167,
+              3042
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -724,7 +724,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 65536,
               "logical_total_bytes": 65536,
-              "end_to_end_logical_bandwidth_gb_s": 20.428927680798004,
+              "end_to_end_logical_bandwidth_gb_s": 20.69340069466372,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -741,12 +741,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 2042,
+            "end_to_end_median_ns": 2458,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2250,
-              2042,
-              2042
+              2541,
+              2334,
+              2458
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -759,7 +759,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 65536,
               "logical_total_bytes": 65536,
-              "end_to_end_logical_bandwidth_gb_s": 32.09402546523017,
+              "end_to_end_logical_bandwidth_gb_s": 26.66232709519935,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -776,17 +776,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1131958,
-            "device_time_median_ns": 614625,
+            "end_to_end_median_ns": 1406000,
+            "device_time_median_ns": 617875,
             "paired_trial_end_to_end_medians_ns": [
-              1190375,
-              1115750,
-              1131958
+              1406000,
+              1461958,
+              1337500
             ],
             "paired_trial_device_medians_ns": [
-              631958,
-              614625,
-              579083
+              617875,
+              648750,
+              543375
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -798,7 +798,7 @@
               "logical_input_bytes": 115520,
               "logical_output_bytes": 512,
               "logical_total_bytes": 116032,
-              "end_to_end_logical_bandwidth_gb_s": 0.10250556999464644,
+              "end_to_end_logical_bandwidth_gb_s": 0.08252631578947368,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -815,12 +815,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 482541,
+            "end_to_end_median_ns": 884875,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              533708,
-              482541,
-              480375
+              891917,
+              846375,
+              884875
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -833,7 +833,7 @@
               "logical_input_bytes": 115520,
               "logical_output_bytes": 512,
               "logical_total_bytes": 116032,
-              "end_to_end_logical_bandwidth_gb_s": 0.2404603961114185,
+              "end_to_end_logical_bandwidth_gb_s": 0.13112812544144653,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -850,17 +850,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 409917,
-            "device_time_median_ns": 34458,
+            "end_to_end_median_ns": 455958,
+            "device_time_median_ns": 150250,
             "paired_trial_end_to_end_medians_ns": [
-              408916,
-              446792,
-              409917
+              680375,
+              432292,
+              455958
             ],
             "paired_trial_device_medians_ns": [
-              34458,
-              30875,
-              35166
+              400583,
+              129499,
+              150250
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -886,7 +886,7 @@
               "logical_input_bytes": 12544,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 20736,
-              "end_to_end_logical_bandwidth_gb_s": 0.050585850306281516,
+              "end_to_end_logical_bandwidth_gb_s": 0.04547787296198334,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -903,12 +903,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 6119708,
+            "end_to_end_median_ns": 5501917,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              6405666,
-              6107209,
-              6119708
+              5502125,
+              5320792,
+              5501917
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -935,7 +935,7 @@
               "logical_input_bytes": 12544,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 20736,
-              "end_to_end_logical_bandwidth_gb_s": 0.0033883969627309016,
+              "end_to_end_logical_bandwidth_gb_s": 0.0037688681963032157,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -973,10 +973,10 @@
       "context": {
         "device": "apple7",
         "physical_device": "Apple M1 Max",
-        "os_version": "26.5.2",
+        "os_version": "26.6.2",
         "sdk_version": "26.5",
-        "compiler_fingerprint": "sha256:50e9925be13062648f0b049fd25bc5a508f6eebf9114dddc151cc11d1c2d9c81",
-        "runtime_fingerprint": "sha256:74eb6e951d8ec7f4b1c453060878ca8239ed39bc37d3c11d4c0b50402bc5bc7a"
+        "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+        "runtime_fingerprint": "sha256:2a7a2aa67888482a35109ec6f1c32fdf150e1cbeddfa6f2b1a4a5d467e11f514"
       },
       "runs": [
         {
@@ -991,17 +991,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 283334,
-            "device_time_median_ns": 21416,
+            "end_to_end_median_ns": 283541,
+            "device_time_median_ns": 37999,
             "paired_trial_end_to_end_medians_ns": [
-              296667,
-              283334,
-              267500
+              262750,
+              290125,
+              283541
             ],
             "paired_trial_device_medians_ns": [
-              22416,
-              20333,
-              21416
+              37708,
+              38291,
+              37999
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1013,7 +1013,7 @@
               "logical_input_bytes": 73856,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 82048,
-              "end_to_end_logical_bandwidth_gb_s": 0.2895804951047174,
+              "end_to_end_logical_bandwidth_gb_s": 0.28936908595229616,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1030,12 +1030,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 992958,
+            "end_to_end_median_ns": 987750,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              992958,
-              973750,
-              997042
+              987750,
+              961375,
+              997917
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1048,7 +1048,7 @@
               "logical_input_bytes": 73856,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 82048,
-              "end_to_end_logical_bandwidth_gb_s": 0.08262987961222931,
+              "end_to_end_logical_bandwidth_gb_s": 0.08306555302455075,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1065,12 +1065,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 2138042,
+            "end_to_end_median_ns": 1977708,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2245541,
-              2138042,
-              2124875
+              1933500,
+              1977708,
+              1979750
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1083,7 +1083,7 @@
               "logical_input_bytes": 100384,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 102432,
-              "end_to_end_logical_bandwidth_gb_s": 0.0479092552905883,
+              "end_to_end_logical_bandwidth_gb_s": 0.05179328798791328,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1100,17 +1100,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1006708,
-            "device_time_median_ns": 33250,
+            "end_to_end_median_ns": 982792,
+            "device_time_median_ns": 728458,
             "paired_trial_end_to_end_medians_ns": [
-              1006708,
-              1043042,
-              978000
+              973583,
+              982792,
+              984542
             ],
             "paired_trial_device_medians_ns": [
-              33250,
-              34375,
-              33124
+              725125,
+              728749,
+              728458
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1122,7 +1122,7 @@
               "logical_input_bytes": 100384,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 102432,
-              "end_to_end_logical_bandwidth_gb_s": 0.10174946459152008,
+              "end_to_end_logical_bandwidth_gb_s": 0.10422551262118536,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1139,12 +1139,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 322333,
+            "end_to_end_median_ns": 306292,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              294375,
-              322333,
-              414833
+              312458,
+              306292,
+              302792
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1157,7 +1157,7 @@
               "logical_input_bytes": 65792,
               "logical_output_bytes": 256,
               "logical_total_bytes": 66048,
-              "end_to_end_logical_bandwidth_gb_s": 0.20490610641789703,
+              "end_to_end_logical_bandwidth_gb_s": 0.21563736565107805,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1174,12 +1174,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 5542,
+            "end_to_end_median_ns": 5417,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              5542,
-              5542,
-              5583
+              5958,
+              5417,
+              5333
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1192,7 +1192,7 @@
               "logical_input_bytes": 65792,
               "logical_output_bytes": 256,
               "logical_total_bytes": 66048,
-              "end_to_end_logical_bandwidth_gb_s": 11.917719234933237,
+              "end_to_end_logical_bandwidth_gb_s": 12.192726601439912,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1209,12 +1209,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 2875,
+            "end_to_end_median_ns": 2792,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              3500,
-              2875,
-              2709
+              3458,
+              2792,
+              2666
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1227,7 +1227,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 16384,
               "logical_total_bytes": 16384,
-              "end_to_end_logical_bandwidth_gb_s": 5.698782608695653,
+              "end_to_end_logical_bandwidth_gb_s": 5.868194842406877,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1244,12 +1244,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 1000,
+            "end_to_end_median_ns": 1042,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              1125,
+              1083,
               1000,
-              959
+              1042
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1262,7 +1262,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 16384,
               "logical_total_bytes": 16384,
-              "end_to_end_logical_bandwidth_gb_s": 16.384,
+              "end_to_end_logical_bandwidth_gb_s": 15.723608445297504,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1279,17 +1279,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1055292,
-            "device_time_median_ns": 576958,
+            "end_to_end_median_ns": 1052958,
+            "device_time_median_ns": 482208,
             "paired_trial_end_to_end_medians_ns": [
-              1032958,
-              1083042,
-              1055292
+              1067000,
+              1052958,
+              939750
             ],
             "paired_trial_device_medians_ns": [
-              573958,
-              581250,
-              576958
+              517666,
+              482208,
+              423458
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1301,7 +1301,7 @@
               "logical_input_bytes": 29088,
               "logical_output_bytes": 256,
               "logical_total_bytes": 29344,
-              "end_to_end_logical_bandwidth_gb_s": 0.02780652179681074,
+              "end_to_end_logical_bandwidth_gb_s": 0.027868158084178096,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1318,12 +1318,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 528583,
+            "end_to_end_median_ns": 532584,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              528583,
-              502667,
-              597750
+              532584,
+              524375,
+              533958
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1336,7 +1336,7 @@
               "logical_input_bytes": 29088,
               "logical_output_bytes": 256,
               "logical_total_bytes": 29344,
-              "end_to_end_logical_bandwidth_gb_s": 0.055514460359111055,
+              "end_to_end_logical_bandwidth_gb_s": 0.055097411863668455,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1353,17 +1353,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 313708,
-            "device_time_median_ns": 33874,
+            "end_to_end_median_ns": 320333,
+            "device_time_median_ns": 42208,
             "paired_trial_end_to_end_medians_ns": [
-              320750,
-              313708,
-              310583
+              325750,
+              320333,
+              307583
             ],
             "paired_trial_device_medians_ns": [
-              33874,
-              40666,
-              33416
+              42208,
+              43041,
+              41500
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1389,7 +1389,7 @@
               "logical_input_bytes": 3200,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 5248,
-              "end_to_end_logical_bandwidth_gb_s": 0.01672893263799457,
+              "end_to_end_logical_bandwidth_gb_s": 0.01638295149110457,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1406,12 +1406,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 2469875,
+            "end_to_end_median_ns": 2327834,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2469875,
-              2453291,
-              2607833
+              2327834,
+              2504000,
+              2301167
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1438,7 +1438,7 @@
               "logical_input_bytes": 3200,
               "logical_output_bytes": 2048,
               "logical_total_bytes": 5248,
-              "end_to_end_logical_bandwidth_gb_s": 0.0021248038868363784,
+              "end_to_end_logical_bandwidth_gb_s": 0.002254456288549785,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1455,17 +1455,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 303042,
-            "device_time_median_ns": 25875,
+            "end_to_end_median_ns": 323417,
+            "device_time_median_ns": 60625,
             "paired_trial_end_to_end_medians_ns": [
-              301167,
-              304333,
-              303042
+              289583,
+              341708,
+              323417
             ],
             "paired_trial_device_medians_ns": [
-              24500,
-              25875,
-              30874
+              60625,
+              61875,
+              58999
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1477,7 +1477,7 @@
               "logical_input_bytes": 295168,
               "logical_output_bytes": 32768,
               "logical_total_bytes": 327936,
-              "end_to_end_logical_bandwidth_gb_s": 1.0821470291246758,
+              "end_to_end_logical_bandwidth_gb_s": 1.0139726730505818,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1494,12 +1494,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1036833,
+            "end_to_end_median_ns": 1046750,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              1031833,
-              1036833,
-              1175166
+              1022583,
+              1073292,
+              1046750
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1512,7 +1512,7 @@
               "logical_input_bytes": 295168,
               "logical_output_bytes": 32768,
               "logical_total_bytes": 327936,
-              "end_to_end_logical_bandwidth_gb_s": 0.31628622931561784,
+              "end_to_end_logical_bandwidth_gb_s": 0.31328970623358016,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1529,12 +1529,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 2248209,
+            "end_to_end_median_ns": 2054959,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2296125,
-              2248209,
-              2157500
+              2054959,
+              2216125,
+              1890542
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1547,7 +1547,7 @@
               "logical_input_bytes": 401440,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 409632,
-              "end_to_end_logical_bandwidth_gb_s": 0.1822037008125134,
+              "end_to_end_logical_bandwidth_gb_s": 0.19933828363485598,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1564,17 +1564,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 3852875,
-            "device_time_median_ns": 43458,
+            "end_to_end_median_ns": 3413375,
+            "device_time_median_ns": 3114249,
             "paired_trial_end_to_end_medians_ns": [
-              3852875,
-              3583250,
-              4066583
+              3413375,
+              3387125,
+              3458792
             ],
             "paired_trial_device_medians_ns": [
-              39250,
-              43458,
-              46541
+              3114833,
+              3113291,
+              3114249
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1586,7 +1586,7 @@
               "logical_input_bytes": 401440,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 409632,
-              "end_to_end_logical_bandwidth_gb_s": 0.10631852837167051,
+              "end_to_end_logical_bandwidth_gb_s": 0.12000791005969165,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1603,12 +1603,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 346083,
+            "end_to_end_median_ns": 310084,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              346083,
-              349834,
-              345000
+              351250,
+              310084,
+              290750
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1621,7 +1621,7 @@
               "logical_input_bytes": 263168,
               "logical_output_bytes": 512,
               "logical_total_bytes": 263680,
-              "end_to_end_logical_bandwidth_gb_s": 0.7618981573784324,
+              "end_to_end_logical_bandwidth_gb_s": 0.8503502276802415,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1638,12 +1638,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 14125,
+            "end_to_end_median_ns": 13750,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              14125,
-              14458,
-              13958
+              14042,
+              13709,
+              13750
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1656,7 +1656,7 @@
               "logical_input_bytes": 263168,
               "logical_output_bytes": 512,
               "logical_total_bytes": 263680,
-              "end_to_end_logical_bandwidth_gb_s": 18.667610619469027,
+              "end_to_end_logical_bandwidth_gb_s": 19.176727272727273,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1673,12 +1673,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 3917,
+            "end_to_end_median_ns": 2958,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              3917,
-              3917,
-              3042
+              3625,
+              2958,
+              2667
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1691,7 +1691,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 65536,
               "logical_total_bytes": 65536,
-              "end_to_end_logical_bandwidth_gb_s": 16.731171815164668,
+              "end_to_end_logical_bandwidth_gb_s": 22.15551048005409,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1708,12 +1708,12 @@
           "numerically_validated": true,
           "execution_kind": "reference_cpu",
           "telemetry": {
-            "end_to_end_median_ns": 2583,
+            "end_to_end_median_ns": 2083,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              2709,
-              2583,
-              2208
+              2166,
+              2042,
+              2083
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1726,7 +1726,7 @@
               "logical_input_bytes": 0,
               "logical_output_bytes": 65536,
               "logical_total_bytes": 65536,
-              "end_to_end_logical_bandwidth_gb_s": 25.372048006194348,
+              "end_to_end_logical_bandwidth_gb_s": 31.462313970235236,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1743,17 +1743,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 1206167,
-            "device_time_median_ns": 586291,
+            "end_to_end_median_ns": 1288917,
+            "device_time_median_ns": 510875,
             "paired_trial_end_to_end_medians_ns": [
-              1282958,
-              1206167,
-              1087750
+              1282959,
+              1288917,
+              1399375
             ],
             "paired_trial_device_medians_ns": [
-              668083,
-              586291,
-              576541
+              502666,
+              510875,
+              562083
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1765,7 +1765,7 @@
               "logical_input_bytes": 115520,
               "logical_output_bytes": 512,
               "logical_total_bytes": 116032,
-              "end_to_end_logical_bandwidth_gb_s": 0.0961989508915432,
+              "end_to_end_logical_bandwidth_gb_s": 0.09002286415649728,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1782,12 +1782,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 553292,
+            "end_to_end_median_ns": 787708,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              480458,
-              593666,
-              553292
+              785041,
+              787708,
+              831542
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1800,7 +1800,7 @@
               "logical_input_bytes": 115520,
               "logical_output_bytes": 512,
               "logical_total_bytes": 116032,
-              "end_to_end_logical_bandwidth_gb_s": 0.2097120507796968,
+              "end_to_end_logical_bandwidth_gb_s": 0.14730331544176267,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1817,17 +1817,17 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 445375,
-            "device_time_median_ns": 36208,
+            "end_to_end_median_ns": 416959,
+            "device_time_median_ns": 138958,
             "paired_trial_end_to_end_medians_ns": [
-              445375,
-              433250,
-              457292
+              437334,
+              416959,
+              370209
             ],
             "paired_trial_device_medians_ns": [
-              33458,
-              39958,
-              36208
+              138958,
+              142791,
+              122875
             ],
             "device_time_coverage": 1.0,
             "device_time_scope": "complete_route_command_buffer",
@@ -1853,7 +1853,7 @@
               "logical_input_bytes": 12544,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 20736,
-              "end_to_end_logical_bandwidth_gb_s": 0.04655851810272243,
+              "end_to_end_logical_bandwidth_gb_s": 0.049731508373724996,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }
@@ -1870,12 +1870,12 @@
           "numerically_validated": true,
           "execution_kind": "native_gpu",
           "telemetry": {
-            "end_to_end_median_ns": 6071292,
+            "end_to_end_median_ns": 5327625,
             "device_time_median_ns": null,
             "paired_trial_end_to_end_medians_ns": [
-              5908083,
-              6071292,
-              6464375
+              5173667,
+              5327625,
+              5711000
             ],
             "paired_trial_device_medians_ns": null,
             "device_time_coverage": 0.0,
@@ -1902,7 +1902,7 @@
               "logical_input_bytes": 12544,
               "logical_output_bytes": 8192,
               "logical_total_bytes": 20736,
-              "end_to_end_logical_bandwidth_gb_s": 0.003415418003284968,
+              "end_to_end_logical_bandwidth_gb_s": 0.003892165833743929,
               "scope": "logical_host_visible_io_not_device_bandwidth"
             }
           }

@@ -174,10 +174,66 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
         "apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32",
         "end_to_end",
     )] == "composed"
+    # Re-measured 2026-09-01 on this Mac (macOS 26.6.2) and CHANGED, for a
+    # reason worth keeping: `absorbed` was never the slower route. In the July
+    # run it was 54-57% faster and won 100% of paired trials in both runs --
+    # and was held at `explicit` because its cross-run speedup spread, 5.97%,
+    # missed the ledger's own 5% stability cap by ~1 point. The re-run measures
+    # 37-39% faster, again 100% paired wins, with a 2.3% spread. So the flip is
+    # not "the kernel got faster"; it is "the measurement got consistent enough
+    # for the gate to conclude". The gate was working both times.
+    #
+    # Absolute times moved the other way and that is diagnostic, not a route
+    # claim (`absolute_time_drift_is_diagnostic_only`): `absorbed` went 518us
+    # -> 836us at 128-token and 482us -> 557us at 64, while `explicit` held
+    # (1.15x / 0.96x). The larger shape's regression is outside this harness's
+    # own run drift; the smaller one is not. Cause is confounded (OS 26.5.2 ->
+    # 26.6.2, runtime .mm edits, new compiler fingerprint) and is NOT
+    # attributed here.
     assert admitted.routes[(
         "apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32",
         "end_to_end",
-    )] == "explicit"
+    )] == "absorbed"
+
+
+def test_every_committed_promotion_obeys_its_own_ledgers_rules():
+    """`promotion_rules` was a declaration with no consumer (Decision #29).
+
+    Every sealed ledger carries the thresholds it was promoted under, for
+    audit -- and nothing read them back, so `status: "promote_candidate"` was
+    self-certifying: the loader checked provenance exhaustively and the
+    promotion criteria not at all. A row naming a route that lost every paired
+    trial would have been admitted and served.
+
+    This re-derives each promotion from the evidence the ledger retained, over
+    every committed strict ledger rather than the one this file owns -- a rule
+    checked in one place is how it ends up applied in fewer places than it
+    holds.
+    """
+    from tessera.compiler.apple_route_selector import promotion_rule_violations
+
+    root = Path(__file__).resolve().parents[2]
+    checked = 0
+    for path in sorted((root / "benchmarks/baselines").glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            continue
+        rules = payload.get("promotion_rules")
+        decisions = payload.get("decisions")
+        if not isinstance(rules, dict) or not isinstance(decisions, list):
+            continue
+        for index, row in enumerate(decisions):
+            if not isinstance(row, dict):
+                continue
+            if row.get("status") != "promote_candidate":
+                continue
+            checked += 1
+            assert promotion_rule_violations(row, rules) == [], (
+                f"{path.name}#decision[{index}] "
+                f"({row.get('op')} {row.get('shape')} {row.get('timing_domain')}) "
+                f"claims a promotion its own ledger's rules refuse")
+    # A vacuous pass would be indistinguishable from a real one.
+    assert checked >= 50, f"only {checked} promotions checked"
 
 
 def test_committed_low_precision_moe_corpus_has_complete_native_intervals():

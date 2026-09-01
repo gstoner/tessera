@@ -8731,74 +8731,6 @@
     },
     {
       "bucket": [
-        1024,
-        1024
-      ],
-      "candidates": {
-        "rocm_generic_hip": 194.6889825001108,
-        "rocm_wmma_gemm": 10.273367999843686
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 10.273367999843686,
-      "op": "fused_region",
-      "target": "rocm",
-      "timing": "end_to_end",
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        256,
-        256
-      ],
-      "candidates": {
-        "rocm_generic_hip": 4.946317500071018,
-        "rocm_wmma_gemm": 2.0263615001567814
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 2.0263615001567814,
-      "op": "fused_region",
-      "target": "rocm",
-      "timing": "end_to_end",
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        512,
-        512
-      ],
-      "candidates": {
-        "rocm_generic_hip": 28.146600000127364,
-        "rocm_wmma_gemm": 3.305532000013045
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 3.305532000013045,
-      "op": "fused_region",
-      "target": "rocm",
-      "timing": "end_to_end",
-      "winner": "rocm_wmma_gemm"
-    },
-    {
-      "bucket": [
-        64,
-        64
-      ],
-      "candidates": {
-        "rocm_generic_hip": 0.7648844998584536,
-        "rocm_wmma_gemm": 1.8077209997500177
-      },
-      "device": "rocm:gfx1151",
-      "dtype": "f16",
-      "latency_ms": 0.7648844998584536,
-      "op": "fused_region",
-      "target": "rocm",
-      "timing": "end_to_end",
-      "winner": "rocm_generic_hip"
-    },
-    {
-      "bucket": [
         1,
         4,
         4,
@@ -8964,6 +8896,206 @@
       "target": "rocm",
       "timing": "end_to_end",
       "winner": "direct"
+    },
+    {
+      "bucket": [
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.8028074953472242,
+        "rocm_wmma_gemm": 1.8965625058626756
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 0.8028074953472242,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.5767039088532139,
+        "noise": 0.03789899459006265,
+        "runner_up": "rocm_wmma_gemm",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_generic_hip"
+    },
+    {
+      "bucket": [
+        64,
+        64
+      ],
+      "candidates": {
+        "rocm_generic_hip": 0.23031166666666664,
+        "rocm_wmma_gemm": 0.0157260832687219
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 0.0157260832687219,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.931718251635587,
+        "noise": 0.0041522955763763315,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 6.902259978232905,
+        "rocm_wmma_gemm": 4.077442019479349
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 4.077442019479349,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.4092598609240965,
+        "noise": 0.04844846914728871,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        256,
+        256
+      ],
+      "candidates": {
+        "rocm_generic_hip": 4.227566666666666,
+        "rocm_wmma_gemm": 0.02022462524473667
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 0.02022462524473667,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9952160126996452,
+        "noise": 0.03209313905371289,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 29.12316551373806,
+        "rocm_wmma_gemm": 5.346177495084703
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 5.346177495084703,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.8164286951374572,
+        "noise": 0.061571384789963,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        512,
+        512
+      ],
+      "candidates": {
+        "rocm_generic_hip": 24.89819,
+        "rocm_wmma_gemm": 0.030188916871945064
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 0.030188916871945064,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.998787505562776,
+        "noise": 0.01834338491153988,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 191.9887465046486,
+        "rocm_wmma_gemm": 10.28570999915246
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 10.28570999915246,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9464254536455166,
+        "noise": 0.04039156350290258,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "end_to_end",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
+    },
+    {
+      "bucket": [
+        1024,
+        1024
+      ],
+      "candidates": {
+        "rocm_generic_hip": 185.94304,
+        "rocm_wmma_gemm": 0.1713915765285492
+      },
+      "device": "rocm:gfx1151",
+      "dtype": "f16",
+      "latency_ms": 0.1713915765285492,
+      "op": "fused_region",
+      "separation": {
+        "factor": 2.0,
+        "margin": 0.9990782576399281,
+        "noise": 0.005111896438386597,
+        "runner_up": "rocm_generic_hip",
+        "separated": true
+      },
+      "target": "rocm",
+      "timing": "device",
+      "unmeasured": {},
+      "winner": "rocm_wmma_gemm"
     }
   ],
   "version": 3

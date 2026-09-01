@@ -11,6 +11,8 @@ import json
 import sys
 from pathlib import Path
 
+import statistics
+
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +28,9 @@ def main() -> int:
     parser.add_argument("--dim", type=int, default=32)
     parser.add_argument("--page-size", type=int, default=16)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--repeats", type=int, default=7,
+                        help="whole measurements per shape; sets the noise "
+                             "floor behind each separation verdict")
     parser.add_argument("--no-save-corpus", action="store_true")
     args = parser.parse_args()
 
@@ -60,22 +65,43 @@ def main() -> int:
         # Reverse chunks to cover arbitrary ordering and every page crossing.
         indices = np.arange(tokens, dtype=np.int64).reshape(
             -1, args.page_size)[:, ::-1].reshape(-1)
-        _rocm_paged_attention_route_evidence.clear()
-        _, execution = _paged_attention_rocm(
-            q, abi, indices, args.dim ** -.5, True, _force_measure=True)
-        if execution != "native_gpu":
-            raise RuntimeError(f"native ROCm route measurement failed at T={tokens}")
-        evidence = next(iter(_rocm_paged_attention_route_evidence.values()))
+        # Measure REPEATEDLY. A single pass gives one latency per candidate and
+        # therefore no spread, so every row it wrote carried `separation: None`
+        # -- "never asked" -- which `corpus_winner` accepts as a dispatch hint
+        # on trust. Under AUTOTUNE-SEPARATION those rows have to earn a verdict
+        # like any other, and a verdict needs a noise floor.
+        samples: list[dict[str, dict[str, float]]] = []
+        for _ in range(args.repeats):
+            _rocm_paged_attention_route_evidence.clear()
+            _, execution = _paged_attention_rocm(
+                q, abi, indices, args.dim ** -.5, True, _force_measure=True)
+            if execution != "native_gpu":
+                raise RuntimeError(
+                    f"native ROCm route measurement failed at T={tokens}")
+            samples.append(next(iter(_rocm_paged_attention_route_evidence.values())))
+        evidence = samples[-1]
         bucket = bucket_key(
             (1, args.heads, args.kv_heads, tokens, args.dim, args.page_size),
             SpecPolicy.BUCKET)
         for timing, field in ((at.TIMING_DEVICE, "device_ms"),
                               (at.TIMING_END_TO_END, "end_to_end_ms")):
-            candidates = dict(evidence[field])
+            # Median per candidate across the repeats, and the spread beside it
+            # -- the pair `separation_verdict` needs. Taking one pass would
+            # report a spread of zero and earn `separated: True` on every row
+            # automatically, which is worse than recording nothing.
+            per_candidate: dict[str, list[float]] = {}
+            for sample in samples:
+                for name, value in sample[field].items():
+                    per_candidate.setdefault(name, []).append(float(value))
+            candidates = {n: statistics.median(v) for n, v in per_candidate.items()}
+            spreads = {n: at.relative_spread(v) for n, v in per_candidate.items()}
             winner = min(candidates, key=candidates.__getitem__)
             cache.put(("rocm:gfx1151", "rocm", "paged_kv_decode", bucket,
                        "f32", timing), at.MeasureRecord(
-                           winner, candidates[winner], candidates))
+                           winner, candidates[winner], candidates,
+                           unmeasured={},
+                           separation=at.separation_verdict(
+                               candidates, spreads, winner)))
         rows.append({"backend": "rocm", "device": chip,
                      "op": "paged_kv_decode", "tokens": tokens,
                      "heads": args.heads, "kv_heads": args.kv_heads,

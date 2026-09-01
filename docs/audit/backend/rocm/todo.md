@@ -5825,3 +5825,57 @@ more interesting — check whether the five perf baselines still pass there. The
 `launch_ms` on a real ROCm host includes an actual hsaco build on first call,
 which the 2.0 ms floor may be too tight for if the cache misses. If so the fix
 is to warm the cache in the fixture, not to raise the floor back.
+
+---
+
+## Cross-backend sync `APPLE-COMPLETION-HANDLER-2026-09-01`
+
+**Owning item:** how a device timestamp is *obtained* ·
+**synchronization key:** `APPLE-COMPLETION-HANDLER-2026-09-01`
+
+**Shared lesson: when a value is only valid after an event, take it from the
+event — do not block waiting for the value.** `APPLE-DEVICE-CLOCK` established
+that `GPUStartTime`/`GPUEndTime` is the clock that measures work; it published
+those values by forcing them with `[cb waitUntilCompleted]`, which has **no
+timeout**. Both resident-session paths invoke the recorder *after* their 30 s
+shared-event wait expires, so on a hung GPU that turned a bounded failure into
+a permanent hang — in code whose only job is telemetry.
+
+The first repair gated the wait on a `completed` flag threaded through six call
+sites. That contained the hang but surrendered the clock on exactly the paths
+that had timed out, and put a correctness-critical boolean into six places
+where it could be passed wrongly (it was: one site passed a literal `true`).
+
+**`addCompletedHandler` removes the dilemma instead of containing it**, and is
+what the SDK prescribes — `GPUStartTime` is documented as readable *"in command
+buffer completion handler"*. Metal fills a slot on completion; the reader waits
+on a semaphore with a **bounded** timeout. A hung buffer never fires its
+handler, the wait expires, telemetry reports no device number. No hang, and the
+flag is gone.
+
+**Two traps worth carrying to any backend doing the same.**
+
+*The callback runs on another thread.* The slot is heap-shared and deliberately
+**not** `thread_local` like the other 15 telemetry globals — a `thread_local`
+write from Metal's callback thread lands in storage the reader never sees.
+
+*Removing a wait can silently re-route the fallback.* Three tile recorders have
+no slot of their own (they run after `commit_and_wait_with_timeout` already
+waited) and would have fallen straight through to `cb.kernelStartTime` — the
+clock measured **flat across a 64× workload**. The change would have undone
+`APPLE-DEVICE-CLOCK` on three paths while every test stayed green. A direct,
+non-blocking property read now precedes that fallback.
+
+**Outcome for this backend: `not applicable` — nothing changed here, and the
+specific API is Apple's.** Recorded because the *reasoning* transfers and the
+question is cheap to ask of HIP: `hipStreamAddCallback` / `hipLaunchHostFunc`, against the event pair and in-kernel `wall_clock64`.
+
+**The test worth applying, whatever the API.** Does the timestamp read path
+contain a wait that has no timeout? On Apple the answer was yes, twice — once
+outright, once behind a flag that six call sites had to pass correctly. Neither
+was visible as a failure until a reviewer traced what happens when the shared
+event times out, because the hang only occurs on a GPU that is already broken.
+
+**If this is ever checked on Princess-Luna**, the control that made the Apple answer
+trustworthy is the one to reuse: measure dispatch variance with and without the
+change on the same box, before attributing instability to either.

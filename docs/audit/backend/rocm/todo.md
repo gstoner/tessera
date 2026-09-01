@@ -5879,3 +5879,55 @@ event times out, because the hang only occurs on a GPU that is already broken.
 **If this is ever checked on Princess-Luna**, the control that made the Apple answer
 trustworthy is the one to reuse: measure dispatch variance with and without the
 change on the same box, before attributing instability to either.
+
+---
+
+## Cross-backend sync `CAPABILITY-GUARDS-2026-09-01`
+
+**Owning item:** host-capability gating in the unit suite ·
+**synchronization key:** `CAPABILITY-GUARDS-2026-09-01`
+
+**Three tests failed on a host that cannot evaluate them, instead of skipping.**
+CLAUDE.md's claim-integrity rule is explicit that a host lacking a device or
+toolchain must say so; these did the inverse, and one of them (`gfx1151`) had
+been carried as "pre-existing" for the whole session.
+
+| test | what it needed | what happened |
+|---|---|---|
+| `..._sm120_tile_fragment_lowers_to_real_nvvm_mma` | a runnable `tessera-nvidia-opt` | `dyld: Symbol not found` from a binary linked against a prior LLVM keg |
+| `..._attention_package_rejects_stale_parent_and_tile_lineage` | the AVX-512 shared image | `RuntimeError: X86 native packaging requires ...` |
+| `..._gfx1151_scheduled_attention_backward_packages_exact_tile_program` | AMD clang | `RuntimeError: ROCm native packaging requires AMD clang ...` |
+
+**One family: a guard that checks PRESENCE rather than USABILITY.** And in
+every case **the helper that prevents it already existed, and the caller did
+not use it** — which is the part worth carrying, because writing the helper
+felt like fixing the problem:
+
+* `compiler_tool.is_runnable`, whose docstring describes this exact dyld
+  failure, gated only `tessera_opt` discovery. `_tool_path` — which resolves
+  `mlir-opt` *and* `tessera-nvidia-opt` — checked `is_file()` alone.
+* `rocm_native.native_packaging_available`, whose docstring says checking tools
+  without AMD clang "reads as a broken test on any host without ROCm rather
+  than an absent toolchain", was not called by the gfx1151 test.
+* `rt._x86_elementwise_available` is used by a sibling test one function away.
+
+**The skip has to be proven narrow, not just present.** A guard that skips too
+much is the hollow-green pattern wearing a fix's clothes, so each was verified
+on a host that HAS the capability:
+
+| host | result |
+|---|---|
+| Princess-Luna (AVX-512 + ROCm) | both tests **PASSED**, not skipped |
+| Super-Bear (CUDA) | nvidia-opt test **PASSED**, not skipped |
+| Princess-Luna, resolver control | **771 passed / 85 skipped before and after** — the `_tool_path` change adds zero skips where tools work |
+
+**Outcome for this backend: `parity validated` — fixed and verified on
+Princess-Luna, where the test PASSES rather than skips.** The gfx1151 packaging
+test now calls `native_packaging_available()`, the predicate this backend
+already owns for the purpose.
+
+**Worth a sweep here.** That predicate distinguishes "ROCm tools present" from
+"AMD clang present", and the gap between them is invisible on a box that has
+both. Any other ROCm test that checks `tools_available()` alone has the same
+latent defect and will only show it on a host with a partial toolkit — which is
+where this one surfaced.

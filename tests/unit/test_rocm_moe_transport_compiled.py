@@ -7,6 +7,11 @@ import tessera as ts
 from tessera import runtime as rt
 from tessera.stdlib import moe
 
+from tests._support.launch_overhead import (
+    assert_launch_overhead_bounded,
+    launch_execution_kind,
+)
+
 
 def _artifact(op_name, arg_names):
     return rt.RuntimeArtifact(metadata={
@@ -165,23 +170,23 @@ def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     # of the median does not rescue it either (min is over the bound 11/12
     # under load) -- the statistic was never the problem.
     #
-    # So the bound is per lane. The fallback keeps 2.0 ms unchanged, which is
-    # the lane CI actually runs -- this test has no GPU skip, and the
-    # fork-per-launch bug it was written for is itself a no-GPU bug, so
-    # marking it `slow` (the obvious "de-flake") would have deleted the
-    # coverage that matters most while leaving the real finding buried.
+    # Marking this `slow` -- what the sibling ratchet test got in 2026-08-03 --
+    # would have been wrong: that test skips without an AMD GPU, this one has
+    # NO GPU skip and falls back to reference_cpu, so it runs on CI, and the
+    # fork-per-launch bug it guards is itself a no-GPU bug.
     #
-    # 8.0 ms for the native lane, by the same criterion as the original: it
-    # still FAILS on the 70.6 ms pathology (8.8x below it) while leaving 3x
-    # margin over the worst value measured under a 32-worker sweep (2.67 ms).
-    # It is a launch-overhead ceiling, not a performance target -- ~1.9 ms of
-    # it is per-call transfer and module-load cost that the residency work is
-    # separately reducing.
-    bound_ms = 8.0 if _expect_native() else 2.0
-    assert launch_ms < max(bound_ms, direct_ms * 4.0), (
-        f"{'native' if _expect_native() else 'fallback'} launch {launch_ms:.4f} ms "
-        f"exceeded {max(bound_ms, direct_ms * 4.0):.4f} ms "
-        f"(direct {direct_ms:.4f} ms)"
+    # This is the FIFTH `*_perf_baseline_is_bounded` row and it was missed when
+    # the other four moved to the shared bound. It uses that one rather than a
+    # second lane-gated constant of its own: two ceilings that disagree is
+    # worse than one, and the shared helper keys on the execution_kind the
+    # launch REPORTS rather than on a prediction of which lane will run -- an
+    # executor that falls back internally would otherwise be judged against a
+    # device ceiling it never touched.
+    assert_launch_overhead_bounded(
+        launch_ms=launch_ms,
+        direct_ms=direct_ms,
+        execution_kind=launch_execution_kind(rt.launch(art, (x, plan))),
+        what="dk3 moe dispatch",
     )
 
 

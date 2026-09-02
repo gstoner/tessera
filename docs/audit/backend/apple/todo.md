@@ -6723,6 +6723,13 @@ a stale dylib is refused up front; the standing rule to rebuild before an Apple
 sweep is a convention, and this entry is what a convention costs when it is
 missed. (3) Consider `--timeout-method=signal` for the Apple lanes as a backstop.
 
+**Confirmed end-to-end (2026-09-01).** With the rebuilt dylib the FULL sweep now
+finishes on this Mac: `16199 passed, 3235 skipped, 0 failed in 12 m 44 s`
+(`pytest tests/unit/ -m "not slow"`). That is the run which previously hung
+twice without completing, and it closes the correction: there is no
+Apple-specific dispatch defect blocking the gate, and the Mac's clean sweep is
+now the baseline this host never had.
+
 **A second, distinct phenomenon — do not confuse them (measured 2026-09-01).**
 With the fresh dylib the full sweep is still very slow, and sampling shows the
 parent at 0.0% CPU again — but blocked in `select_poll_poll` → `poll`, waiting

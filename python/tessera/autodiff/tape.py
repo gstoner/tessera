@@ -107,6 +107,19 @@ class Tape:
     #: is definitively over, so a nested tape opened from a VJP rule (which is
     #: what `rematerialize` legitimately does) must NOT set the flag above.
     _forward_closed: bool = False
+    #: Buffer ids that received a cotangent during `backward` but had no
+    #: producing entry on THIS tape and are known to have been consumed by a
+    #: nested tape -- i.e. the reverse sweep ran into the shadowed region and
+    #: stopped there.
+    #:
+    #: **Why the parameter's own id is not enough** (review on #679). A nested
+    #: tape can swallow an INTERMEDIATE rather than the differentiated input:
+    #: `y = ops.mul(x, x)` on the outer tape, `z = ops.sin(y)` inside an inner
+    #: one, `ops.sum(z)` back on the outer. Then `shadowed_buffer_ids` holds
+    #: y and z but NOT x, the sweep dies at z, and x's missing cotangent was
+    #: reported as a zero gradient. The question is where the PATH broke, not
+    #: whether the parameter itself was touched.
+    truncated_at_shadow: set[int] = field(default_factory=set)
 
     def consumed_buffer_ids(self) -> set[int]:
         """Buffer ids this tape read as a differentiable input.
@@ -334,6 +347,15 @@ class Tape:
         # grad, jacrev). `_consumed` is set to True regardless — but
         # `retain_graph=True` lets a future backward bypass the consumed
         # check at call time.
+        # Where did the sweep stop? A leftover cotangent whose id no entry on
+        # this tape produced is a leaf. A leaf that a nested tape consumed is
+        # not a leaf at all -- it is a severed edge, and every input upstream
+        # of it is now unprovable rather than zero.
+        produced = {e.output_id for e in self.entries}
+        self.truncated_at_shadow = {
+            i for i in cotan
+            if i not in produced and i in self.shadowed_buffer_ids
+        }
         self.cotangent = cotan
         self._consumed = True
 
@@ -394,6 +416,25 @@ def tape():
             # not tracking, swallowed no gradient path and must not turn a
             # legitimate zero into a refusal.
             outer.shadowed_buffer_ids |= t.consumed_buffer_ids()
+
+
+def shadow_blocks_zero_claim(t: "Tape", buf_id: int) -> bool:
+    """Whether a missing cotangent for `buf_id` is unprovable rather than zero.
+
+    Two ways a nested tape invalidates the zero:
+
+    1. It consumed this buffer directly -- the value's own path was swallowed.
+    2. It severed the chain somewhere upstream (`truncated_at_shadow`) and this
+       buffer took part in the surviving forward pass. The sweep never reached
+       it, so "no cotangent" says nothing about its gradient.
+
+    A buffer that appears in neither -- never recorded here, never swallowed --
+    is genuinely unused, and its zero is provable. That distinction is the whole
+    point: refusing everything is as wrong as returning zeros for everything.
+    """
+    if buf_id in t.shadowed_buffer_ids:
+        return True
+    return bool(t.truncated_at_shadow) and buf_id in t.consumed_buffer_ids()
 
 
 def raise_nested_tape_shadowed(surface: str) -> NoReturn:

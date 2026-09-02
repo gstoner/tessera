@@ -224,3 +224,73 @@ def test_the_guard_still_fires_for_a_genuinely_swallowed_path():
     """
     with pytest.raises(TesseraAutodiffError, match="inner tape"):
         jacrev(grad(f))(X)
+
+
+# ── the shadow can sever the chain anywhere, not just at the parameter ───────
+#
+# Second review round (#679). The first guard asked "was THIS parameter's buffer
+# consumed by an inner tape?" — which is only the narrowest instance. A nested
+# tape can swallow an INTERMEDIATE, leaving the differentiated input untouched
+# and the reverse sweep severed upstream of it. Both cases below returned a
+# silent zero with the parameter-only test in place.
+
+
+def test_nested_tape_swallowing_an_intermediate_raises():
+    """`shadowed_buffer_ids` holds y and z but NOT x; the sweep dies at z."""
+    def f_mid(a):
+        y = ops.mul(a, a)          # outer tape
+        with tape():
+            z = ops.sin(y)         # inner tape swallows y -> z
+        return ops.sum(z)          # outer tape again
+
+    truth = np.cos(X * X) * 2 * X
+    assert np.all(np.abs(truth) > 1e-3), "the refused answer must not be zero"
+    with pytest.raises(TesseraAutodiffError, match="inner tape"):
+        grad(f_mid)(X)
+
+
+def test_jacrev_raises_when_an_outer_op_records_the_output_after_a_nest():
+    """`out` IS tape-produced here, so the not-tape-produced branch is skipped
+    entirely — the zero row has to be refused on the normal sweep path."""
+    def f_j(a):
+        with tape():
+            y = ops.sin(a)
+        return ops.sum(y)
+
+    with pytest.raises(TesseraAutodiffError, match="inner tape"):
+        jacrev(f_j)(X)
+
+
+def test_truncation_is_recorded_on_the_tape_that_lost_the_edge():
+    def f_mid(a):
+        y = ops.mul(a, a)
+        with tape():
+            z = ops.sin(y)
+        return ops.sum(z)
+
+    with tape() as t:
+        out = f_mid(X)
+        t.backward(out)
+    assert t.truncated_at_shadow, "the severed edge must be recorded"
+    assert t.truncated_at_shadow <= t.shadowed_buffer_ids
+
+
+def test_a_severed_sweep_does_not_condemn_an_untouched_argument():
+    """The severed edge makes upstream values unprovable — it must NOT make a
+    never-recorded argument unprovable too, or the guard is back to the coarse
+    bool this design replaced."""
+    def f(a, b):
+        y = ops.mul(a, a)
+        with tape():
+            z = ops.sin(y)
+        return ops.sum(z)          # `b` never appears anywhere
+
+    with pytest.raises(TesseraAutodiffError):
+        grad(f, argnums=0)(X, np.ones_like(X))
+    np.testing.assert_array_equal(grad(f, argnums=1)(X, np.ones_like(X)),
+                                  np.zeros_like(X))
+
+
+def test_vector_valued_jacrev_is_unaffected():
+    np.testing.assert_allclose(jacrev(lambda z: ops.mul(z, z))(X),
+                               np.diag(2 * X), atol=1e-9)

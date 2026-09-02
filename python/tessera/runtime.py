@@ -1421,11 +1421,19 @@ def _rocm_dspark_draft_block_native(
     # to 2. Measured: 9 separate input uploads 0.956 ms -> 1 coalesced 0.119 ms.
     inputs = [th, pt, anc, emb, hp, tp, op, cp, mk]
     outputs = [logits, conf, tokens, hidden]
-    in_base, in_ptrs = _rocm_dev_pack(hip, inputs)
-    out_base, out_ptrs, out_offsets = _rocm_dev_region(hip, outputs)
-    d_th, d_pt, d_anc, d_emb, d_hp, d_tp, d_op, d_cp, d_mk = in_ptrs
-    d_logits, d_conf, d_tokens, d_hidden = out_ptrs
+    # Both allocations are acquired INSIDE the try, appended as they succeed
+    # (review on #690). Allocating the input region outside it leaked that
+    # region whenever the output allocation failed -- which is precisely the
+    # out-of-memory case, where leaking makes the retry fail too. The old
+    # per-buffer loop had this right; coalescing must not lose it.
+    bases: list[Any] = []
     try:
+        in_base, in_ptrs = _rocm_dev_pack(hip, inputs)
+        bases.append(in_base)
+        out_base, out_ptrs, out_offsets = _rocm_dev_region(hip, outputs)
+        bases.append(out_base)
+        d_th, d_pt, d_anc, d_emb, d_hp, d_tp, d_op, d_cp, d_mk = in_ptrs
+        d_logits, d_conf, d_tokens, d_hidden = out_ptrs
         _rocm_sparse_launch(
             hsaco,
             b"ds",
@@ -1449,10 +1457,11 @@ def _rocm_dspark_draft_block_native(
         )
         _rocm_dev_unpack(hip, out_base, outputs, out_offsets)
     finally:
-        # Only the two BASE allocations are freed. Every d_* above is an
-        # interior pointer into one of them and must never reach hipFree.
-        hip.hipFree(in_base)
-        hip.hipFree(out_base)
+        # Only BASE allocations are freed, and only those that succeeded. Every
+        # d_* above is an interior pointer into one of them and must never
+        # reach hipFree.
+        for base in bases:
+            hip.hipFree(base)
 
     return {
         "logits": logits,

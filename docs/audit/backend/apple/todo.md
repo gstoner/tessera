@@ -6673,11 +6673,35 @@ family table) so the walker can see them. Until then Apple's real routes are
 invisible to the prune plan, which is a coverage gap in the plan rather than in
 the backend.
 
-## APPLE-MLPKG-HANG-1 — the ML-package dispatch wait never returns (P0, opened 2026-09-01)
+## APPLE-MLPKG-HANG-1 — a stale runtime dylib hangs the dispatch instead of failing (P1, opened 2026-09-01)
 
-**The full `pytest tests/unit/ -m "not slow"` sweep does not finish on the Mac.**
-It is not slow — after 16 minutes the process had accumulated 1:22 of CPU and
-sat at 0.0%. Sampled:
+> **Corrected 2026-09-01, same day it was filed. The original root cause was
+> wrong and the severity is reduced from P0.** This was opened as "the ML-package
+> dispatch wait never returns", blaming `tessera_apple_gpu_mlpkg_dispatch` for
+> ignoring its own timeout. It was not the dispatch. The Mac's
+> `libTesseraAppleRuntime.dylib` was **two days stale** — the rebuild took 320
+> targets — and against a fresh dylib the same selection is
+> `115 passed in 32.03 s`, where it had previously hung twice, for 16 and 14
+> minutes, at 0.0% CPU. The entry's own "next steps" listed checking for a stale
+> dylib as step 1, and it was filed without doing it.
+>
+> **What that invalidates.** The "Linux control" argument below concluded
+> *"the sweep is healthy and finite; it is this host's Apple GPU dispatch that
+> does not return."* The Linux measurement was real, but the Mac half of that
+> comparison was a stale binary, so the comparison did not show what it claimed.
+> Do not cite it as evidence of an Apple-specific dispatch defect.
+>
+> **What survives, and why this stays open.** A stale dylib must produce a clean
+> load-or-ABI error, not an **uninterruptible** wait. The hang is real and its
+> properties are unchanged: `pytest --timeout --timeout-method=thread` cannot
+> preempt it, because the block is a C call that never re-enters the
+> interpreter, so the lane cannot fail — it can only stop, and CI sees an
+> unattributed job timeout. A mismatched runtime is an ordinary developer state;
+> reaching it should cost a diagnostic, not the whole gate.
+
+**Reproduction (the corrected one).** With a `libTesseraAppleRuntime.dylib`
+older than the Python/ABI surface that calls it, `pytest tests/unit/ -k mlpkg`
+blocks indefinitely in:
 
 ```
 tessera_apple_gpu_mlpkg_dispatch  (libTesseraAppleRuntime.dylib) + 2416
@@ -6685,37 +6709,43 @@ tessera_apple_gpu_mlpkg_dispatch  (libTesseraAppleRuntime.dylib) + 2416
     iokit_user_client_trap  (IOKit) + 8
 ```
 
-The timeout plumbing is sound and is not the bug: `MLPackagePipeline.dispatch`
-defaults to `timeout_ms=30_000`, the composite path rejects a non-positive
-timeout, and `apple_gpu_runtime.mm` prints a named diagnostic on the
-not-signalled branch. The wait simply does not return within its timeout.
+The GPU never signals the shared event, and the wait does not honour
+`timeout_ms` from that state. The timeout plumbing itself is sound:
+`MLPackagePipeline.dispatch` defaults to `timeout_ms=30_000`, the composite path
+rejects a non-positive timeout, and `apple_gpu_runtime.mm` prints a named
+diagnostic on the not-signalled branch — none of which is reached.
 
-**Why this is P0 rather than a slow test.** A second run scoped to `-k mlpkg`
-with `--timeout=90 --timeout-method=thread` **also hung**, for 14 minutes, until
-killed. pytest-timeout's thread method cannot preempt a blocking C call that
-never re-enters the interpreter. So this lane cannot fail — it can only stop,
-and CI sees an unattributed job timeout. That is strictly worse than a red test:
-it is the hollow-green pattern with the sign flipped, and it makes the full unit
-sweep unusable as a gate on this host.
+**Open work.** (1) Make the dispatch bound its own wait so a non-signalling GPU
+returns a diagnostic rather than blocking — the caller's `timeout_ms` should be
+enforced on the Tessera side, not delegated to an IOKit trap that can outlive
+it. (2) Give the runtime a version/ABI stamp the Python side checks at load, so
+a stale dylib is refused up front; the standing rule to rebuild before an Apple
+sweep is a convention, and this entry is what a convention costs when it is
+missed. (3) Consider `--timeout-method=signal` for the Apple lanes as a backstop.
 
-**Not caused by the autodiff work in PR #679** — that change is pure Python, and
-the 1561-test autodiff surface completes in 115 s.
+**Confirmed end-to-end (2026-09-01).** With the rebuilt dylib the FULL sweep now
+finishes on this Mac: `16199 passed, 3235 skipped, 0 failed in 12 m 44 s`
+(`pytest tests/unit/ -m "not slow"`). That is the run which previously hung
+twice without completing, and it closes the correction: there is no
+Apple-specific dispatch defect blocking the gate, and the Mac's clean sweep is
+now the baseline this host never had.
 
-**Linux control (2026-09-01) — this is Apple-specific, measured, not inferred.**
-The same `pytest tests/unit/ -m "not slow"` invocation on Princess-Luna
-(gfx1151, ROCm env sourced) **completes in 8 m 29 s**: 17033 passed, 18 failed,
-2309 skipped. So the sweep itself is healthy and finite; it is this host's
-Apple GPU dispatch that does not return. Anyone reproducing should use a Linux
-box as the control rather than assuming the suite is simply long.
+**A second, distinct phenomenon — do not confuse them (measured 2026-09-01).**
+With the fresh dylib the full sweep is still very slow, and sampling shows the
+parent at 0.0% CPU again — but blocked in `select_poll_poll` → `poll`, waiting
+on a **child process**, not in `iokit_user_client_trap`. The child is
+`clang++ -shared -x objective-c++ … apple_gpu_runtime.mm` building a
+**test-local** copy of the ~27k-line Apple runtime into a pytest tmpdir
+(`test_ebt_sweep_emits_pair_per_0/libtessera_apple_gpu_runtime.dylib`). That is
+progress, not a hang, and it is why "0.0% CPU" alone is not a hang diagnosis —
+sample the stack and look for the child before concluding. Whether recompiling
+the whole runtime inside a test is the right cost is a separate question worth
+asking, but it is not this entry's defect.
 
-(Those 18 Linux failures are a separate, pre-existing matter on `main` — mostly
-`*_perf_baseline_is_bounded` timing rows plus a few ROCm/x86 execution rows —
-and are not owned by this entry.)
+**Standing lesson (the reason to keep this entry at all).** A stale build is not
+a benign starting state — it produced an unfalsifiable hang here, and the same
+staleness was fleet-wide when checked: the Mac 2 days behind (320 targets), The
+Super-Bear 2-3 days, Princess-Luna 7 hours. Measure the build's age before
+trusting any sweep, and rebuild before treating a hang or a failure as a code
+defect.
 
-**Next steps.** (1) Check whether a stale `TesseraAppleRuntimeShared` is
-implicated — the standing rule is to rebuild before an Apple sweep, though a
-stale dylib is documented to *fail*, not hang. (2) Establish whether
-`waitUntilSignaledValue:timeoutMS:` is being called with the value the Python
-side passes (log it at the boundary). (3) Until it is root-caused, the lane
-needs a hard external bound — `--timeout-method=signal`, or a watchdog around
-the dispatch — so the suite reports rather than stalls.

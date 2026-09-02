@@ -38,6 +38,7 @@ from tessera.ga import (
     reverse,
     vec_deriv,
 )
+from tessera.ga.types import TesseraAlgebraError
 
 
 # ---------------------------------------------------------------------------
@@ -385,3 +386,90 @@ def test_integral_rejects_non_manifold() -> None:
     a = Cl(3, 0)
     with pytest.raises(TesseraAlgebraError, match="requires a Manifold"):
         integral(lambda p: Multivector.scalar(1.0, a), "not a manifold")
+
+
+# ── MSW-4a: codiff is the codifferential, not just ⋆d⋆ ──────────────────────
+#
+# Before 2026-09-02 `codiff` applied the ⋆d⋆ composition with no sign and told
+# callers to supply it themselves. That is impossible for the mixed-grade
+# fields it accepts: the sign depends on the grade of each input component, so
+# no single scalar corrects a field carrying several. These pin the property
+# the operator is named for.
+
+def _bump_field(algebra, grade, seed, n=24, L=6.0):
+    """A compactly-supported field of one grade, so boundary terms vanish."""
+    h = L / n
+    axis = (np.arange(n) - n / 2) * h
+    X, Y, Z = np.meshgrid(axis, axis, axis, indexing="ij")
+    bump = np.exp(-(X**2 + Y**2 + Z**2) / 0.6)
+    rng = np.random.default_rng(seed)
+    values = np.zeros((n, n, n, algebra.dim))
+    for i, blade in enumerate(algebra.blades()):
+        if blade.grade == grade:
+            values[..., i] = bump * (np.sin(X * 1.3 + i) + rng.standard_normal())
+    return MultivectorField(values, algebra, spacing=(h, h, h)), h
+
+
+def _l2(a, b, h):
+    return float(np.sum(a.values * b.values) * h**3)
+
+
+@pytest.mark.parametrize("k", [1, 2, 3])
+def test_codiff_is_adjoint_to_ext_deriv(k: int) -> None:
+    """Stokes: ⟨dα, β⟩ == ⟨α, δβ⟩ for a compactly-supported field."""
+    algebra = Cl(3, 0)
+    alpha, h = _bump_field(algebra, k - 1, 100 + k)
+    beta, _ = _bump_field(algebra, k, 200 + k)
+    lhs = _l2(ext_deriv(alpha), beta, h)
+    rhs = _l2(alpha, codiff(beta), h)
+    assert abs(lhs - rhs) <= 2e-3 * max(abs(lhs), 1e-12), (
+        f"grade {k}: <da,b>={lhs} but <a,codiff b>={rhs}"
+    )
+
+
+def test_codiff_is_adjoint_on_a_mixed_grade_field() -> None:
+    """The case that proved a scalar correction could not work.
+
+    With the unsigned composition, neither +1 nor -1 reconciled a grade-1 +
+    grade-2 field (0.9433 vs 1.3866) — the sign is per-grade or it is nothing.
+    """
+    algebra = Cl(3, 0)
+    g1, h = _bump_field(algebra, 1, 301)
+    g2, _ = _bump_field(algebra, 2, 302)
+    beta = MultivectorField(g1.values + g2.values, algebra, spacing=g1.spacing)
+    a0, _ = _bump_field(algebra, 0, 303)
+    a1, _ = _bump_field(algebra, 1, 304)
+    alpha = MultivectorField(a0.values + a1.values, algebra, spacing=g1.spacing)
+    lhs = _l2(ext_deriv(alpha), beta, h)
+    rhs = _l2(alpha, codiff(beta), h)
+    assert abs(lhs - rhs) <= 2e-3 * max(abs(lhs), 1e-12)
+
+
+def test_codiff_of_a_vector_field_is_minus_divergence() -> None:
+    """δ on a 1-form in R^3 is -div. It returned +div before the fix."""
+    algebra = Cl(3, 0)
+    n, L = 24, 6.0
+    h = L / n
+    axis = (np.arange(n) - n / 2) * h
+    X, Y, Z = np.meshgrid(axis, axis, axis, indexing="ij")
+    bump = np.exp(-(X**2 + Y**2 + Z**2) / 0.8)
+    vx, vy, vz = X * bump, (Y**2) * bump, np.sin(Z) * bump
+    ones = [i for i, b in enumerate(algebra.blades()) if b.grade == 1]
+    values = np.zeros((n, n, n, algebra.dim))
+    values[..., ones[0]], values[..., ones[1]], values[..., ones[2]] = vx, vy, vz
+    divergence = (
+        np.gradient(vx, h, axis=0, edge_order=2)
+        + np.gradient(vy, h, axis=1, edge_order=2)
+        + np.gradient(vz, h, axis=2, edge_order=2)
+    )
+    got = codiff(MultivectorField(values, algebra, spacing=(h, h, h))).values[..., 0]
+    interior = (slice(3, -3),) * 3
+    np.testing.assert_allclose(got[interior], -divergence[interior], atol=1e-12)
+
+
+def test_codiff_refuses_a_signature_it_cannot_verify() -> None:
+    """Fail closed rather than guess the (-1)^q metric-determinant factor."""
+    algebra = Cl(1, 3)
+    values = np.zeros((4,) * algebra.n + (algebra.dim,))
+    with pytest.raises(TesseraAlgebraError, match="Euclidean"):
+        codiff(MultivectorField(values, algebra, spacing=1.0))

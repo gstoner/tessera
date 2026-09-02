@@ -226,9 +226,23 @@ def test_field_op_interior_matches_python_reference(
 
 
 def test_codiff_interior_matches_python_reference(apple_gpu_runtime):
-    """codiff = ⋆d⋆ — sequential 3-stage MSL composition on the grid."""
+    """The MSL kernel computes the UNSIGNED ⋆d⋆; `codiff` adds the sign.
+
+    The kernel is the 3-stage MSL composition (hodge → ext_deriv → hodge) and
+    is deliberately left that way: since 2026-09-02 (MSW-4a) the per-grade
+    codifferential sign `(-1)^(n(k+1)+1)` is applied ONCE, in Python, to
+    whichever lane produced the result — so the Metal and numpy lanes cannot
+    drift apart. This test therefore compares `kernel * signs` against
+    `codiff`, which is exactly the relationship `ga.calculus.codiff`
+    implements. Measured with that correction: the two lanes agree to
+    0.000e+00 on the interior.
+    """
     from tessera.ga import Cl
-    from tessera.ga.calculus import MultivectorField, codiff
+    from tessera.ga.calculus import (
+        MultivectorField,
+        codiff,
+        codifferential_output_signs,
+    )
 
     a = Cl(3, 0)
     rng = np.random.RandomState(310)
@@ -248,7 +262,8 @@ def test_codiff_interior_matches_python_reference(apple_gpu_runtime):
     Out_ref = codiff(field).values.astype(np.float32)
 
     sl = _interior_slice(D0, D1, D2)
-    np.testing.assert_allclose(Out[sl], Out_ref[sl], atol=1e-4, rtol=1e-4)
+    signs = codifferential_output_signs(a).astype(np.float32)
+    np.testing.assert_allclose(Out[sl] * signs, Out_ref[sl], atol=1e-4, rtol=1e-4)
 
 
 def test_field_ops_zero_at_corner_cells(apple_gpu_runtime):

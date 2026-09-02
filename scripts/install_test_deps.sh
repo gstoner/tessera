@@ -35,13 +35,31 @@ warn() { printf '\033[1;33m[install-test-deps] WARN:\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[install-test-deps] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Runtime numerics the tests import. numpy is capped <2.2: numpy>=2.2 ships
-# stubs that break the mypy ratchet under python_version=3.10 (matches the macOS
-# env and setup_ubuntu.sh). Bump only with a baseline refresh.
-RUNTIME=( "numpy>=2.0,<2.2" scipy ml_dtypes pyyaml click rich tqdm )
+# Runtime numerics the tests import.
+#
+# **The `<2.2` numpy cap was removed 2026-09-01, and it was not cosmetic.** It
+# existed because numpy>=2.2 ships PEP 695 `type` statements in its stubs that
+# broke the mypy ratchet under python_version=3.10 — a reason that stopped
+# applying on 2026-08-28, when the ratchet was fixed with `follow_imports`
+# overrides in pyproject instead (CLAUDE.md records the lift; this file was
+# never updated). Every Ubuntu box provisioned in between got numpy 2.1.3.
+#
+# Measured cost of that gap: on Princess-Luna, same commit and same build, only
+# numpy differing — 16 failed at 2.1.3, 9 failed at 2.5.2. Nine failures were
+# the pin, including a family that presented as an empty reference array
+# (`operands could not be broadcast together with shapes (524288,) (0,)`) and
+# read like a compiler defect. The floor is 2.5 because that is the version
+# actually verified; the macOS box, which never runs this script, is on 2.5.2
+# and sweeps clean.
+RUNTIME=( "numpy>=2.5" scipy ml_dtypes pyyaml click rich tqdm )
 # Test + lint + type tooling — mirrors pyproject [project.optional-dependencies]
 # dev, plus `lit` (the LLVM test runner) for the MLIR fixtures under tests/.
-TOOLING=( pytest pytest-cov pytest-timeout pytest-xdist hypothesis mypy ruff black isort flake8 lit )
+#
+# `lit` is bounded to the LLVM major we build against. It is pip-installed, so
+# an old resolution SHADOWS the correct `/usr/lib/llvm-<N>/bin/lit`: The
+# Super-Bear was running pip lit 18.1.8 in its venv against LLVM 23 fixtures
+# while the matching 23.1.0 runner sat unused on disk.
+TOOLING=( pytest pytest-cov pytest-timeout pytest-xdist hypothesis mypy ruff black isort flake8 "lit>=23,<24" )
 
 # ---------------------------------------------------------------------------
 if [[ $USE_VENV -eq 1 ]]; then
@@ -59,7 +77,14 @@ if [[ $CHECK_ONLY -eq 0 ]]; then
   say "Upgrading pip"
   "$PY" -m pip install --upgrade pip >/dev/null
   say "Installing runtime numerics + test tooling (${#RUNTIME[@]}+${#TOOLING[@]} packages)"
-  "$PY" -m pip install "${RUNTIME[@]}" "${TOOLING[@]}"
+  # --upgrade is load-bearing, not tidiness. Without it pip leaves an
+  # already-satisfied unpinned package alone, so two boxes provisioned by this
+  # same script weeks apart drift permanently and never re-converge. Measured
+  # 2026-09-01: Princess-Luna and The Super-Bear disagreed on isort (9.0.1 vs
+  # 8.0.1), ruff (0.16.5 vs 0.16.4), scipy (1.18.1 vs 1.18.0) and lit (23.1.0
+  # vs 18.1.8) with identical LLVM/MLIR and an identical invocation of this
+  # file. Re-running it must actually converge an existing env.
+  "$PY" -m pip install --upgrade "${RUNTIME[@]}" "${TOOLING[@]}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -82,12 +107,35 @@ import numpy, scipy, ml_dtypes
 print(f"  ok: numpy {numpy.__version__}, scipy {scipy.__version__}, "
       f"ml_dtypes {ml_dtypes.__version__}")
 print("  ok: pytest + cov + timeout + xdist + lit importable")
+# Print the versions that have actually drifted between fleet boxes, so a
+# mismatch is visible in the provisioning log instead of being discovered
+# later as a test failure. A silent install tells you nothing; this is the
+# cheapest place to make two machines comparable.
+import importlib.metadata as md
+# pip-managed only. The lint/type tools are reported below from the BINARY
+# that will actually run, because on macOS they come from Homebrew rather
+# than pip and would read as MISSING here while being perfectly present.
+drifty = ("numpy", "scipy", "pytest", "hypothesis", "lit", "coverage")
+seen = []
+for name in drifty:
+    try:
+        seen.append(f"{name} {md.version(name)}")
+    except md.PackageNotFoundError:
+        seen.append(f"{name} MISSING")
+print("  versions: " + ", ".join(seen))
 PYV
 then PY_OK=1; else PY_OK=0; fi
 
-# CLI lint/type tools (installed as console scripts).
+# CLI lint/type tools (installed as console scripts, or from the system package
+# manager on macOS). Report the version of the binary that will actually run —
+# these are the tools that drifted between fleet boxes, and a version in the
+# provisioning log is what makes two machines comparable after the fact.
 for tool in ruff mypy black isort flake8; do
-  command -v "$tool" >/dev/null 2>&1 || warn "$tool not on PATH (pip installed it; ensure the env's bin/ is on PATH)"
+  if command -v "$tool" >/dev/null 2>&1; then
+    say "  $tool $("$tool" --version 2>&1 | head -1) ($(command -v "$tool"))"
+  else
+    warn "$tool not on PATH (pip installed it; ensure the env's bin/ is on PATH)"
+  fi
 done
 
 # ---------------------------------------------------------------------------

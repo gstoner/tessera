@@ -329,7 +329,29 @@ def momentum(
     master_dtype: str | None = None,
     cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Tree]]:
-    """SGD with classical momentum."""
+    """SGD with classical momentum — `def:momentum_two`.
+
+    MSW-3 audit. The source gives FOUR distinct momentum recursions, all
+    sharing the same parameter update `Theta_n = Theta_{n-1} - gamma_n m_n`
+    and differing only in how the gradient enters:
+
+        def:momentum        m_n = alpha m_{n-1} + (1 - alpha) g
+        def:momentum_two    m_n = alpha m_{n-1} + g              <- this one
+        def:momentum_three  m_n = alpha m_{n-1} + (1 - alpha) gamma g
+        def:momentum_four   m_n = alpha m_{n-1} + gamma g
+
+    Tessera implements the second: an unnormalized accumulation, with the
+    learning rate applied at the update rather than folded into the moment.
+    The distinction is not cosmetic -- the four differ in the effective step
+    size by a factor of `(1 - alpha)`, which is 10x at the default
+    `alpha = 0.9`, so reading a hyper-parameter from a paper that uses a
+    different convention silently mis-scales training by an order of
+    magnitude.
+
+    `test_recorded_momentum_formulation_is_the_one_implemented` pins this
+    against all four, so the claim fails rather than rots if the recursion
+    changes.
+    """
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
         state, optimizer="momentum", master_dtype=master_dtype, required=("velocity",),
@@ -357,7 +379,12 @@ def nesterov(
     master_dtype: str | None = None,
     cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Tree]]:
-    """Nesterov momentum update."""
+    """Nesterov momentum — the `def:momentum_two` accumulation, look-ahead update.
+
+    Shares `momentum`'s recursion `m_n = alpha m_{n-1} + g` (see the audit
+    note there) and differs in the applied direction: `g + alpha m_n` rather
+    than `m_n`.
+    """
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
         state, optimizer="nesterov", master_dtype=master_dtype, required=("velocity",),
@@ -839,6 +866,340 @@ def lamb(
         return p_arr - lr * trust * update
 
     return tree_map2(apply, params, adam_update), adam_state
+
+
+
+# --- MSW-3 optimizer breadth -------------------------------------------------
+#
+# Each of these is transcribed from a numbered definition in Jentzen, Kuckuck &
+# von Wurstemberger, *Mathematical Introduction to Deep Learning* (arXiv
+# 2310.20360v3), and the docstring names the label. Two transcription details
+# recur and are easy to get silently wrong, so they are stated once here:
+#
+#   * **eps sits OUTSIDE the square root** in Adagrad and RMSprop -- the
+#     definitions read `(eps + M^(1/2))^-1`, not `(M + eps)^(-1/2)` and not
+#     `M^(1/2) + eps` applied to a shifted M. Adadelta is the exception: there
+#     eps is inside, appearing in BOTH the numerator and denominator of a
+#     single square root over a ratio.
+#   * **the bias adjustment is a PRODUCT of the decay factors**,
+#     `1 - prod(beta_k)`, not `1 - beta^n`. They coincide only for a constant
+#     beta, which is the common case but not the definition; these take a
+#     scalar beta and so use the closed form, and say so.
+
+
+def adagrad(
+    params: Tree,
+    grads: Tree,
+    state: dict[str, Any] | None = None,
+    *,
+    lr: float = 1e-2,
+    eps: float = 1e-8,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
+) -> tuple[Tree, dict[str, Any]]:
+    """Adagrad, per `def:determ_adagrad` eq. (1).
+
+        M_n     = sum_{k<n} |g_k|^2
+        Theta_n = Theta_{n-1} - gamma_n (eps + M_n^(1/2))^-1 g(Theta_{n-1})
+
+    The accumulator is a plain running SUM with no decay, which is what
+    separates Adagrad from RMSprop below: the effective step size is
+    monotonically non-increasing and can stall on long runs. That is a
+    property of the method, not a defect to be tuned away here.
+    """
+    base_params = _master_tree(params, state, master_dtype)
+    state = _resolve_state(
+        state, optimizer="adagrad", master_dtype=master_dtype, required=("m",),
+        fresh=lambda: {"m": zeros_like_tree(params, state_dtype)})
+    m = tree_map2(
+        lambda m_, g: _state_array(
+            _compute_array(m_, compute_dtype) + _compute_array(g, compute_dtype) ** 2,
+            state_dtype),
+        state["m"], grads)
+    new_master = tree_map3(
+        lambda p, m_, g: _compute_array(p, compute_dtype) - float(lr) * (
+            _compute_array(g, compute_dtype)
+            / (float(eps) + np.sqrt(_compute_array(m_, compute_dtype)))),
+        base_params, m, grads)
+    new_params = tree_map2(
+        lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype),
+        new_master, params)
+    return new_params, _attach_master_state({"m": m}, new_master, master_dtype)
+
+
+def rmsprop(
+    params: Tree,
+    grads: Tree,
+    state: dict[str, Any] | None = None,
+    *,
+    lr: float = 1e-3,
+    beta: float = 0.9,
+    eps: float = 1e-8,
+    bias_adjusted: bool = False,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
+) -> tuple[Tree, dict[str, Any]]:
+    """RMSprop, per `def:determ_RMSprop` eq. (1)-(2).
+
+        M_n     = beta M_{n-1} + (1 - beta) |g|^2
+        Theta_n = Theta_{n-1} - gamma_n (eps + M_n^(1/2))^-1 g
+
+    `bias_adjusted=True` selects `def:determ_RMSprop_bias` eq. (1)-(2)
+    instead, which divides the second moment by `1 - prod_{k<=n} beta_k`
+    before the root:
+
+        Theta_n = Theta_{n-1} - gamma_n (eps + (M_n / (1 - prod beta_k))^(1/2))^-1 g
+
+    Both variants live in one function because they share the accumulator
+    exactly and differ only in that divisor -- two functions would be two
+    copies of the same recursion (#31), and the `step` slot they need is
+    identical.
+
+    `beta` is a scalar here, so `prod_{k<=n} beta_k` is `beta**n`. The
+    definition admits a per-step sequence `(beta_n)`; if that is ever wanted,
+    the state must carry the running product rather than the step count,
+    because the closed form stops being valid.
+    """
+    base_params = _master_tree(params, state, master_dtype)
+    state = _resolve_state(
+        state, optimizer="rmsprop", master_dtype=master_dtype, required=("m", "step"),
+        fresh=lambda: {"m": zeros_like_tree(params, state_dtype), "step": 0})
+    step = int(state["step"]) + 1
+    m = tree_map2(
+        lambda m_, g: _state_array(
+            float(beta) * _compute_array(m_, compute_dtype)
+            + (1.0 - float(beta)) * _compute_array(g, compute_dtype) ** 2,
+            state_dtype),
+        state["m"], grads)
+    correction = (1.0 - float(beta) ** step) if bias_adjusted else 1.0
+
+    def update(p, m_, g):
+        second = _compute_array(m_, compute_dtype) / correction
+        return _compute_array(p, compute_dtype) - float(lr) * (
+            _compute_array(g, compute_dtype) / (float(eps) + np.sqrt(second)))
+
+    new_master = tree_map3(update, base_params, m, grads)
+    new_params = tree_map2(
+        lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype),
+        new_master, params)
+    return new_params, _attach_master_state({"m": m, "step": step}, new_master, master_dtype)
+
+
+def adadelta(
+    params: Tree,
+    grads: Tree,
+    state: dict[str, Any] | None = None,
+    *,
+    beta: float = 0.9,
+    delta: float = 0.9,
+    eps: float = 1e-6,
+    lr: float = 1.0,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
+) -> tuple[Tree, dict[str, Any]]:
+    """Adadelta, per `def:determ_adadelta` eq. (1)-(4).
+
+        M_n     = beta M_{n-1} + (1 - beta) |g|^2
+        Theta_n = Theta_{n-1} - ((eps + Delta_{n-1}) / (eps + M_n))^(1/2) g
+        Delta_n = delta Delta_{n-1} + (1 - delta) |Theta_n - Theta_{n-1}|^2
+
+    Note the shape of the step: ONE square root over a ratio, with eps in
+    both the numerator and the denominator. It is not `sqrt(Delta + eps) /
+    (sqrt(M) + eps)`, and the difference is not cosmetic -- eps in the
+    numerator is what gives the very first step (where `Delta_0 = 0`) a
+    non-zero size.
+
+    **`lr` is NOT in the definition.** Adadelta is deliberately learning-rate
+    free: the `Delta` accumulator makes the step self-scaling, which is the
+    whole point of the method. `lr=1.0` reproduces the definition exactly and
+    is the default; other values are a Tessera extension, not the source's
+    method, and are recorded as such rather than presented as a parameter of
+    Adadelta.
+    """
+    base_params = _master_tree(params, state, master_dtype)
+    state = _resolve_state(
+        state, optimizer="adadelta", master_dtype=master_dtype, required=("m", "delta"),
+        fresh=lambda: {"m": zeros_like_tree(params, state_dtype),
+                       "delta": zeros_like_tree(params, state_dtype)})
+    m = tree_map2(
+        lambda m_, g: _state_array(
+            float(beta) * _compute_array(m_, compute_dtype)
+            + (1.0 - float(beta)) * _compute_array(g, compute_dtype) ** 2,
+            state_dtype),
+        state["m"], grads)
+
+    def step_size(d_prev, m_now, g):
+        ratio = (float(eps) + _compute_array(d_prev, compute_dtype)) / (
+            float(eps) + _compute_array(m_now, compute_dtype))
+        return float(lr) * np.sqrt(ratio) * _compute_array(g, compute_dtype)
+
+    delta_step = tree_map3(step_size, state["delta"], m, grads)
+    new_master = tree_map2(
+        lambda p, s: _compute_array(p, compute_dtype) - s, base_params, delta_step)
+    new_delta = tree_map2(
+        lambda d_prev, s: _state_array(
+            float(delta) * _compute_array(d_prev, compute_dtype)
+            + (1.0 - float(delta)) * s ** 2, state_dtype),
+        state["delta"], delta_step)
+    new_params = tree_map2(
+        lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype),
+        new_master, params)
+    return new_params, _attach_master_state(
+        {"m": m, "delta": new_delta}, new_master, master_dtype)
+
+
+def _inverse_fourth_root(a: np.ndarray, *, eps: float) -> np.ndarray:
+    """`A^(-1/4)` for a symmetric positive-definite `A`, via its spectrum.
+
+    Shampoo's preconditioners are sums of Gram matrices plus `eps*I`, so they
+    are symmetric PSD by construction and `eigh` is both correct and cheaper
+    than a general matrix function. Eigenvalues are floored at `eps` rather
+    than at zero: a zero eigenvalue is a division by zero in a method whose
+    whole purpose is to divide by this matrix, and the definition's
+    `L_0 = eps*I` says the floor is `eps`.
+    """
+    w, v = np.linalg.eigh((a + a.T) * 0.5)
+    w = np.maximum(w, float(eps))
+    return (v * (w ** -0.25)) @ v.T
+
+
+def _shampoo_matrix(x: Any) -> np.ndarray:
+    """The `d1 x d2` view Shampoo preconditions, or a refusal.
+
+    Validated on every call rather than only when state is created, so a
+    resumed run cannot smuggle in a rank the method cannot express.
+    """
+    arr = _asarray(x)
+    if arr.ndim == 0 or arr.ndim > 2:
+        raise ValueError(
+            f"shampoo: parameter of rank {arr.ndim} (shape {arr.shape}) is not "
+            "a matrix. Shampoo preconditions a d1 x d2 parameter on both sides; "
+            "rank-1 is accepted as the d x 1 matrix it already is, but rank 0 "
+            "and rank >= 3 have no canonical (d1, d2) split, and choosing one "
+            "would silently change the method. Reshape explicitly, or use a "
+            "diagonal method such as adagrad/rmsprop for this parameter.")
+    return arr.reshape(arr.shape[0], -1)
+
+
+def shampoo(
+    params: Tree,
+    grads: Tree,
+    state: dict[str, Any] | None = None,
+    *,
+    lr: float = 1e-3,
+    eps: float = 1e-4,
+    compute_dtype: str = "fp32",
+    state_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
+) -> tuple[Tree, dict[str, Any]]:
+    """Shampoo, per `def:determ_Shampoo` eq. (1)-(4).
+
+        L_0 = eps I,  R_0 = eps I
+        L_n = L_{n-1} + G G*,   R_n = R_{n-1} + G* G
+        Theta_n = Theta_{n-1} - gamma_n L_n^(-1/4) G R_n^(-1/4)
+
+    Full-matrix preconditioning on both sides, so this is defined for a
+    parameter that IS a matrix. A rank-1 parameter is handled as the `d x 1`
+    matrix it already is -- the same definition, not a special case -- and
+    rank 0 or rank >= 3 is refused (#21a) rather than silently flattened,
+    because there is no canonical choice of which axes become `d_1` and
+    `d_2`.
+
+    The two preconditioners are kept as SEPARATE state trees (`left`,
+    `right`) rather than one tree of `{left, right}` pairs. The pair form
+    reads better but is wrong here: `tree_map2` treats a dict as a pytree
+    node, so a per-parameter dict is indistinguishable from a nesting level
+    and the mapper tries to index the gradient by `"left"`.
+    """
+    base_params = _master_tree(params, state, master_dtype)
+    state = _resolve_state(
+        state, optimizer="shampoo", master_dtype=master_dtype,
+        required=("left", "right"),
+        fresh=lambda: {
+            "left": tree_map(
+                lambda p: _state_array(float(eps) * np.eye(_shampoo_matrix(p).shape[0]), state_dtype),
+                params),
+            "right": tree_map(
+                lambda p: _state_array(float(eps) * np.eye(_shampoo_matrix(p).shape[1]), state_dtype),
+                params),
+        })
+
+    left = tree_map2(
+        lambda l_, g: _state_array(
+            _compute_array(l_, compute_dtype)
+            + (lambda m: m @ m.T)(_shampoo_matrix(g).astype(_np_dtype(compute_dtype))),
+            state_dtype),
+        state["left"], grads)
+    right = tree_map2(
+        lambda r_, g: _state_array(
+            _compute_array(r_, compute_dtype)
+            + (lambda m: m.T @ m)(_shampoo_matrix(g).astype(_np_dtype(compute_dtype))),
+            state_dtype),
+        state["right"], grads)
+
+    def precondition(g, l_, r_):
+        mat = _shampoo_matrix(g).astype(_np_dtype(compute_dtype))
+        return (_inverse_fourth_root(_compute_array(l_, compute_dtype), eps=eps)
+                @ mat
+                @ _inverse_fourth_root(_compute_array(r_, compute_dtype), eps=eps))
+
+    steps = tree_map3(precondition, grads, left, right)
+    new_master = tree_map2(
+        lambda p, s: _compute_array(p, compute_dtype) - float(lr) * s.reshape(_asarray(p).shape),
+        base_params, steps)
+    new_params = tree_map2(
+        lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype),
+        new_master, params)
+    return new_params, _attach_master_state(
+        {"left": left, "right": right}, new_master, master_dtype)
+
+
+def midpoint_sgd(
+    params: Tree,
+    grad_fn: Callable[[Tree], Tree],
+    state: dict[str, Any] | None = None,
+    *,
+    lr: float,
+    compute_dtype: str = "fp32",
+) -> tuple[Tree, dict[str, Any]]:
+    """Explicit midpoint SGD, per `def:midpointSGD` eq. (1).
+
+        Theta_n = Theta_{n-1} - gamma_n g(Theta_{n-1} - (gamma_n / 2) g(Theta_{n-1}))
+
+    **This takes a gradient FUNCTION, not a gradient**, and that asymmetry
+    with every other optimizer here is forced by the method rather than
+    chosen. The midpoint step evaluates the gradient a second time at a probe
+    point that does not exist until the first gradient is known, so a
+    `(params, grads)` signature cannot express it: anything that fits that
+    mould is not this method. Bending it to match -- reusing `grads` at the
+    probe point -- would silently degrade it to plain SGD with a half-step,
+    which is the failure worth refusing rather than hiding.
+
+    It is stateless: `state` is accepted and returned empty so the call shape
+    matches its siblings, and is validated so a caller who passes real state
+    is told it is unused rather than having it silently dropped.
+    """
+    if state:
+        raise ValueError(
+            f"midpoint_sgd is stateless but was given state with slots "
+            f"{sorted(state)!r}. The midpoint method carries nothing between "
+            "steps; state here is almost certainly meant for a different "
+            "optimizer, and dropping it silently would lose it.")
+    probe = tree_map2(
+        lambda p, g: _compute_array(p, compute_dtype)
+        - 0.5 * float(lr) * _compute_array(g, compute_dtype),
+        params, grad_fn(params))
+    new_params = tree_map2(
+        lambda p, g: _compute_array(p, compute_dtype) - float(lr) * _compute_array(g, compute_dtype),
+        params, grad_fn(probe))
+    return new_params, {}
 
 
 def constant_lr(value: float) -> Callable[[int], float]:

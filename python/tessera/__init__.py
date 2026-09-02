@@ -1115,6 +1115,32 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             cast_updates_to_param_dtype=cast_updates_to_param_dtype,
         )
 
+    # MSW-3 optimizer breadth. Thin pass-throughs: the reference lives in
+    # `tessera.optim`, and duplicating the recursions here would be a second
+    # implementation of each method (#31). They exist so `tessera.ops` exposes
+    # every name `op_catalog` registers, which the operator-registry gate
+    # requires and which is how a caller reaches them through `ops.*`.
+    def adagrad(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.adagrad(params, grads, state, **kwargs)
+
+    def rmsprop(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.rmsprop(params, grads, state, **kwargs)
+
+    def adadelta(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.adadelta(params, grads, state, **kwargs)
+
+    def shampoo(params, grads, state=None, **kwargs):
+        from . import optim as _optim
+        return _optim.shampoo(params, grads, state, **kwargs)
+
+    def midpoint_sgd(params, grad_fn, state=None, **kwargs):
+        """Second operand is a gradient FUNCTION -- see `optim.midpoint_sgd`."""
+        from . import optim as _optim
+        return _optim.midpoint_sgd(params, grad_fn, state, **kwargs)
+
     def nesterov(
         params,
         grads,
@@ -5069,6 +5095,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "nesterov": nesterov,
         "adafactor": adafactor,
         "lion": lion,
+        "adagrad": adagrad,
+        "rmsprop": rmsprop,
+        "adadelta": adadelta,
+        "shampoo": shampoo,
+        "midpoint_sgd": midpoint_sgd,
         "gated_attention": gated_attention,
         "hybrid_attention": hybrid_attention,
         "deepseek_sparse_attention": deepseek_sparse_attention,
@@ -5441,6 +5472,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         nesterov=nesterov,
         adafactor=adafactor,
         lion=lion,
+        adagrad=adagrad,
+        rmsprop=rmsprop,
+        adadelta=adadelta,
+        shampoo=shampoo,
+        midpoint_sgd=midpoint_sgd,
         transpose=transpose,
         stop_gradient=stop_gradient,
         cast=cast,

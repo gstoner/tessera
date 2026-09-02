@@ -14,11 +14,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 416 | backend_pathway_owned=401, multi_gpu_deferred=15 | backend_codegen=401, distributed_validation=15 |
+| `backend_kernel` | 421 | backend_pathway_owned=406, multi_gpu_deferred=15 | backend_codegen=406, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 59 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=49, single_device_identity=7 | compiler_middle_end=1, distributed_validation=2, primitive_registry=56 |
-| `target_ir` | 20 | architecture_evidence_gated=16, multi_gpu_deferred=4 | backend_codegen=16, distributed_validation=4 |
-| `tile_ir` | 16 | architecture_evidence_gated=16 | backend_codegen=16 |
+| `target_ir` | 25 | architecture_evidence_gated=16, multi_gpu_deferred=4, single_gpu_promote=5 | backend_codegen=21, distributed_validation=4 |
+| `tile_ir` | 21 | architecture_evidence_gated=16, single_gpu_closeable=5 | backend_codegen=16, compiler_middle_end=5 |
 
 ## Rows
 
@@ -145,13 +145,18 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `sub` | elementwise | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tan` | elementwise | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tanh` | elementwise | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `adadelta` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `adafactor` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `adagrad` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `adam` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `adamw` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `lion` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `midpoint_sgd` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `momentum` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `nesterov` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rmsprop` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `sgd` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `shampoo` | functional_optimizer_step | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `fused_epilogue` | fused_epilogue | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `clifford_codiff` | geometric_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `clifford_conjugate` | geometric_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -508,6 +513,11 @@ test, ABI, and surface dashboards.
 | `target_ir` | `game_boltzmann_value` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_excess` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_semivalue` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `adadelta` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `adagrad` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `midpoint_sgd` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `rmsprop` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `shampoo` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `vec` | layout_transform | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `eigh` | linalg_decomposition | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `det` | linalg_function | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
@@ -524,6 +534,11 @@ test, ABI, and surface dashboards.
 | `tile_ir` | `game_boltzmann_value` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_excess` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_semivalue` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `adadelta` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `adagrad` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `midpoint_sgd` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `rmsprop` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `shampoo` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `vec` | layout_transform | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `eigh` | linalg_decomposition | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `det` | linalg_function | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |

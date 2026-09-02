@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 295 |
-| ``runnable_reference`` | 20 |
+| ``runnable_reference`` | 25 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **349** |
+| **total** | **354** |
 
 ## complete (295)
 
@@ -331,7 +331,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (20)
+## runnable_reference (25)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -343,6 +343,11 @@ each row into a single E2E tier.
 | ``game_boltzmann_value`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_excess`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_semivalue`` | contraction | public | public | registered | partial | reference | ready | none |
+| ``adadelta`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
+| ``adagrad`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
+| ``midpoint_sgd`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
+| ``rmsprop`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
+| ``shampoo`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
 | ``vec`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``eigh`` | linalg_decomposition | public | public | registered | partial | reference | ready | none |
 | ``det`` | linalg_function | public | public | registered | partial | reference | ready | none |

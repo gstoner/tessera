@@ -6,12 +6,12 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **515** ops in `primitive_coverage` registry.
-- **5898** total Python-test references, **1470** total lit-fixture references.
+- **520** ops in `primitive_coverage` registry.
+- **5914** total Python-test references, **1470** total lit-fixture references.
 - **70** ops have **zero** references in either test surface.
-- **113** ops have ≤1 reference ("thinly tested").
+- **114** ops have ≤1 reference ("thinly tested").
 - **190** ops have ≥10 references ("well tested").
-- **189** ops have at least one associated `pytest.raises` negative test.
+- **191** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -40,10 +40,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **113** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **114** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
+| `adagrad` |    1 |    0 |    1 |
 | `aot_export` |    0 |    0 |    0 |
 | `aot_load` |    0 |    0 |    0 |
 | `associative_scan` |    0 |    0 |    0 |
@@ -103,9 +104,8 @@ These **113** ops have at most one test reference across the whole test surface.
 | `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
 | `ema_update` |    1 |    0 |    1 |
-| `entmax15` |    1 |    0 |    1 |
 
-_(53 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(54 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,23 +117,24 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**113** ops have ≤1 direct test reference.  They break down as:
+**114** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   26 | Tested via a parent op or family wrapper |
 | `structural_only`        |   76 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
+| `needs_direct_test`      |    1 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 | `directly_tested`         |    7 | Direct proof exists; parameterization/defining surfaces keep the lexical count ≤1 |
 
 ## Actionable: `needs_direct_test` ops
 
-These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **1** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
+| `adagrad` |   1 |   0 | category default for 'functional_optimizer_step' |
 
 ## Hardware-gated ops
 

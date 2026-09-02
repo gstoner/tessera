@@ -2,7 +2,9 @@ op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants
 abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
+adadelta,3,0,0,3,0,fp64,directly_tested,3 direct test references
 adafactor,39,0,1,39,0,fp32 fp64,directly_tested,39 direct test references
+adagrad,1,0,0,1,1,fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adam,22,5,1,27,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,27 direct test references
 adamw,23,5,1,28,0,fp32 fp64,directly_tested,28 direct test references
 adaptive_pool,7,0,0,7,0,fp32,directly_tested,7 direct test references
@@ -298,6 +300,7 @@ memory_index_select,4,0,1,4,0,,directly_tested,4 direct test references
 memory_index_select_ste,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 memory_read,26,0,1,26,0,fp16,directly_tested,26 direct test references
 memory_write,6,0,0,6,0,,directly_tested,6 direct test references
+midpoint_sgd,3,0,1,3,0,fp64,directly_tested,3 direct test references
 min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,5,0,0,5,0,fp32,directly_tested,5 direct test references
 minimum,16,0,1,16,0,bf16 f32 fp16 fp32,directly_tested,16 direct test references
@@ -312,7 +315,7 @@ moe,33,0,0,33,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,33 direct 
 moe_combine,10,0,0,10,0,,directly_tested,10 direct test references
 moe_dispatch,9,3,0,12,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,12 direct test references
 moe_swiglu_block,14,19,1,33,0,bf16 fp8_e4m3 nvfp4,directly_tested,33 direct test references
-momentum,12,1,0,13,0,fp32 fp64,directly_tested,13 direct test references
+momentum,13,1,0,14,0,fp32 fp64,directly_tested,14 direct test references
 mor_partition,9,3,1,12,0,fp16 fp32,directly_tested,12 direct test references
 mor_router,10,4,1,14,0,fp16,directly_tested,14 direct test references
 mor_scatter,10,2,1,12,0,fp16 fp32,directly_tested,12 direct test references
@@ -324,7 +327,7 @@ msa_sparse_attention,48,11,1,59,0,,directly_tested,59 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
 mul,166,41,14,207,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,207 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
-muon,15,0,0,15,0,fp32,directly_tested,15 direct test references
+muon,17,0,0,17,0,fp32 fp64,directly_tested,17 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,3,1,0,4,0,bf16 f32 fp32 int32 int64 int8,directly_tested,4 direct test references
 nesterov,12,3,0,15,0,fp32 fp64,directly_tested,15 direct test references
@@ -380,6 +383,7 @@ retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,24,2,2,26,0,fp32 fp64 int32 int64 int8,directly_tested,26 direct test references
 rmsnorm,121,20,6,141,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,141 direct test references
 rmsnorm_safe,10,5,1,15,0,bf16 f16 f32,directly_tested,15 direct test references
+rmsprop,3,0,0,3,0,fp64,directly_tested,3 direct test references
 rng_bernoulli,6,0,0,6,0,,directly_tested,6 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references
 rng_categorical,3,0,0,3,0,,directly_tested,3 direct test references
@@ -423,6 +427,7 @@ select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 selective_ssm,72,10,4,82,0,bf16 f16 fp16 fp32,directly_tested,82 direct test references
 seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,22,10,0,32,0,fp32 fp64,directly_tested,32 direct test references
+shampoo,3,0,1,3,0,fp64,directly_tested,3 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
 sigmoid,17,9,1,26,0,bf16 f16 f32 fp32,directly_tested,26 direct test references

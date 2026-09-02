@@ -817,6 +817,14 @@ _MEMORY_INDEX_SELECT_HARDENED: dict[str, str] = {
     "masking_effect_rule": "not_applicable",
     "tests": "complete",
 }
+# MSW-3. Shampoo's state is the Gram matrices L (d1 x d1) and R (d2 x d2),
+# not param-shaped moments, so `op_catalog` deliberately declares no shape
+# rule for it (see DELIBERATELY_UNDECLARED there). The `optimizer` category
+# default would otherwise report `complete` and claim a contract the catalog
+# withdrew -- the more flattering of two answers, which is exactly what the
+# shape-rule gate exists to catch.
+_EXISTING_CONTRACT_OVERRIDES["shampoo"] = {"shape_rule": "partial"}
+
 _EXISTING_CONTRACT_OVERRIDES["memory_index_select"] = _MEMORY_INDEX_SELECT_HARDENED
 
 # MiniMax Sparse Attention (MSA, arXiv:2606.13392). Three primitives:
@@ -3042,6 +3050,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "lion": ("optimizer", "functional Lion — S10 landed 2026-05-10"),
         "muon": ("optimizer", "functional Muon-style orthogonalized update — S10 landed 2026-05-10"),
         "lamb": ("optimizer", "functional LAMB — S10 landed 2026-05-10"),
+        "adagrad": ("optimizer", "functional Adagrad — MSW-3, def:determ_adagrad"),
+        "rmsprop": ("optimizer", "functional RMSprop, plain and bias-adjusted — MSW-3, def:determ_RMSprop / def:determ_RMSprop_bias"),
+        "adadelta": ("optimizer", "functional Adadelta — MSW-3, def:determ_adadelta"),
+        "shampoo": ("optimizer", "functional Shampoo, full-matrix two-sided preconditioning — MSW-3, def:determ_Shampoo"),
+        "midpoint_sgd": ("optimizer", "explicit midpoint SGD, takes a gradient function — MSW-3, def:midpointSGD"),
         "constant_lr": ("schedule", "constant learning-rate schedule — S10 landed 2026-05-10"),
         "cosine_lr": ("schedule", "cosine decay schedule — S10 landed 2026-05-10"),
         "cosine_warmup_lr": ("schedule", "warmup plus cosine decay schedule — S10 landed 2026-05-10"),

@@ -12,7 +12,7 @@ The `dtype_layout_rule` axis below means that a semantic dtype/layout contract e
 
 ## Per-axis status counts (TSOL slice only)
 
-Counts below are restricted to the 51 TSOL canonical names.  The full 515-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
+Counts below are restricted to the 51 TSOL canonical names.  The full 520-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
 
 | Axis | complete | partial | planned | by-design | other |
 |------|----------|---------|---------|-----|-------|

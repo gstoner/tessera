@@ -7,6 +7,11 @@ import tessera as ts
 from tessera import runtime as rt
 from tessera.stdlib import moe
 
+from tests._support.launch_overhead import (
+    assert_launch_overhead_bounded,
+    launch_execution_kind,
+)
+
 
 def _artifact(op_name, arg_names):
     return rt.RuntimeArtifact(metadata={
@@ -146,7 +151,43 @@ def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     # 2.0 ms is chosen by the only criterion that makes a constant worth
     # having: it would have FAILED on the old code (70.6 ms), while leaving
     # ~12x margin over the worst value measured under heavy load.
-    assert launch_ms < max(2.0, direct_ms * 4.0)
+    #
+    # BUT 2.0 ms describes the FALLBACK lane, and only the fallback lane. The
+    # 0.148 ms above was measured on a host that could not serialize ROCm at
+    # all: the negative cache made `launch` a host-side no-op with no device
+    # work in it. gfx1151 execution is live on this box since ROCm 10, so the
+    # same call now returns `native_gpu` and does real device work -- and the
+    # constant was silently re-purposed as a bound on a lane that did not
+    # exist when it was chosen (measured 2026-09-02, Princess-Luna/ROCm 10).
+    #
+    #   idle        median typ 1.94, worst 2.09  -- over the bound 3/12
+    #   under load  median typ 2.17-2.44, worst 2.67  -- over 12/12
+    #
+    # That reads as flakiness and is not: at ~97% of its bound on an IDLE
+    # machine it is the same pathology the constant was lowered to fix, one
+    # lane over. Load contributes only ~0.3-0.5 ms of the excess; the other
+    # ~1.9 ms is what a native launch costs. Taking the fastest of N instead
+    # of the median does not rescue it either (min is over the bound 11/12
+    # under load) -- the statistic was never the problem.
+    #
+    # Marking this `slow` -- what the sibling ratchet test got in 2026-08-03 --
+    # would have been wrong: that test skips without an AMD GPU, this one has
+    # NO GPU skip and falls back to reference_cpu, so it runs on CI, and the
+    # fork-per-launch bug it guards is itself a no-GPU bug.
+    #
+    # This is the FIFTH `*_perf_baseline_is_bounded` row and it was missed when
+    # the other four moved to the shared bound. It uses that one rather than a
+    # second lane-gated constant of its own: two ceilings that disagree is
+    # worse than one, and the shared helper keys on the execution_kind the
+    # launch REPORTS rather than on a prediction of which lane will run -- an
+    # executor that falls back internally would otherwise be judged against a
+    # device ceiling it never touched.
+    assert_launch_overhead_bounded(
+        launch_ms=launch_ms,
+        direct_ms=direct_ms,
+        execution_kind=launch_execution_kind(rt.launch(art, (x, plan))),
+        what="dk3 moe dispatch",
+    )
 
 
 def test_rocm_grouped_gemm_uses_one_native_offsets_argument():

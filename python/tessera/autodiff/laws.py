@@ -524,7 +524,7 @@ def vector_identity_checks() -> list[LawResult]:
     try:
         from tessera.ga import Cl
         from tessera.ga.calculus import (
-            MultivectorField, codiff, ext_deriv, hodge_star_field,
+            MultivectorField, codiff, ext_deriv,
         )
     except Exception as e:  # noqa: BLE001 — a sweep must survive a missing extra
         return [LawResult("<ga-field-calculus>", _FIELD_LAW_REGISTRY,

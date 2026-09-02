@@ -60,7 +60,6 @@ def test_selected_block_attention_outputs_are_write_only():
         rt._ROCM_DEV_POISON = saved
 
 
-@pytest.mark.hardware_rocm
 def test_poison_hook_reports_a_missing_hipmemset():
     """The hook fails loudly rather than silently not poisoning.
 
@@ -110,3 +109,81 @@ def test_poison_actually_reaches_the_device_region():
         f"{int((probe != 0xA5).sum())} of {probe.size} bytes unset -- the "
         "write-only assertions in this file would pass vacuously"
     )
+
+
+class _StubHip:
+    """A HIP stand-in that lets each post-allocation step be made to fail.
+
+    These paths need no GPU -- they are about what happens to an allocation
+    the caller never receives -- so they run on every host, including CI,
+    which has no AMD device at all.
+    """
+
+    def __init__(self, *, memcpy_rc: int = 0, has_memset: bool = True,
+                 memset_rc: int = 0):
+        self.freed: list = []
+        self.allocated = 0
+        self._memcpy_rc = memcpy_rc
+        self._memset_rc = memset_rc
+        if has_memset:
+            self.hipMemset = self._memset
+
+    def hipMalloc(self, _ref, _size):
+        self.allocated += 1
+        return 0
+
+    def hipMemcpy(self, *_a):
+        return self._memcpy_rc
+
+    def _memset(self, *_a):
+        return self._memset_rc
+
+    def hipFree(self, ptr):
+        self.freed.append(ptr)
+        return 0
+
+
+def test_pack_frees_when_the_upload_fails():
+    """A failed host->device copy must not strand the allocation."""
+    from tessera import runtime as rt
+
+    hip = _StubHip(memcpy_rc=1)
+    with pytest.raises(RuntimeError, match="host->device copy failed"):
+        rt._rocm_dev_pack(hip, [np.zeros(16, dtype=np.float32)])
+    assert hip.allocated == 1
+    assert len(hip.freed) == 1, (
+        "the caller never receives this base, so nothing else can free it"
+    )
+
+
+def test_region_frees_when_the_allocation_is_unusable():
+    from tessera import runtime as rt
+
+    hip = _StubHip()
+    with pytest.raises(RuntimeError, match="null base pointer"):
+        rt._rocm_dev_region(hip, [np.zeros(16, dtype=np.float32)])
+    assert hip.allocated == 1 and len(hip.freed) == 1
+
+
+@pytest.mark.parametrize("kwargs,match", [
+    ({"has_memset": False}, "no hipMemset"),
+    ({"memset_rc": 1}, "hipMemset failed"),
+])
+def test_alloc_frees_when_poisoning_fails(kwargs, match):
+    """Poisoning is diagnostic; failing it must not cost device memory.
+
+    Without this the poison hook would be self-defeating: enabling it to
+    validate an adoption would leak a region per attempt, and a long
+    validation run would exhaust the device it was meant to be checking.
+    """
+    from tessera import runtime as rt
+
+    hip = _StubHip(**kwargs)
+    saved = rt._ROCM_DEV_POISON
+    try:
+        rt._ROCM_DEV_POISON = 0xFF
+        with pytest.raises(RuntimeError, match=match):
+            rt._rocm_dev_alloc(hip, 128)
+    finally:
+        rt._ROCM_DEV_POISON = saved
+    assert hip.allocated == 1 and len(hip.freed) == 1

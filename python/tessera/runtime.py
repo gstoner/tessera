@@ -27504,7 +27504,7 @@ _rocm_spmm_hsaco_cache: dict[tuple[str], bytes] = {}
 _rocm_sddmm_hsaco_cache: dict[tuple[str], bytes] = {}
 
 
-_rocm_module_cache: "dict[tuple[int, bytes, bytes], Any]" = {}
+_rocm_module_cache: "dict[tuple[Any, int, bytes, bytes], Any]" = {}
 _rocm_module_keepalive: "list[Any]" = []
 
 
@@ -27522,12 +27522,21 @@ def _rocm_module_function(hip: Any, hsaco: bytes, sym: bytes) -> Any:
     Neither sparse launcher unloaded the module, so the repeated load was
     also leaking one code object per launch; caching fixes both.
 
-    Keyed on `(device, code object, symbol)`. A module handle is only valid
-    on the device whose context loaded it, so the ordinal is part of the
-    identity, not an optimisation detail. The code object is the key rather
-    than a hash of it: these are a few KB each and bounded by the number of
-    distinct kernels, and a hash collision here would launch the WRONG
-    kernel silently.
+    Keyed on `(context, device, code object, symbol)`. A module handle is
+    owned by the context that loaded it, and the device ordinal alone does
+    not separate two contexts on one device -- so a cache keyed on the
+    ordinal could hand back a function belonging to a context that is no
+    longer current (review on #691). Measured on this fleet: `hipCtxCreate`
+    returns success but yields the SAME context pointer as the primary, so
+    HIP collapses to one context per device here and the situation cannot
+    currently be constructed. `hipCtxGetCurrent` costs 0.300 us against a
+    2.6 ms call, so the key includes it anyway: correct by construction
+    beats correct by an argument about a vendor runtime's context model,
+    and the argument is what would silently stop holding.
+
+    The code object is the key rather than a hash of it: these are a few KB
+    each and bounded by the number of distinct kernels, and a hash collision
+    here would launch the WRONG kernel silently.
 
     Modules are deliberately never unloaded -- they live for the process,
     which is what makes the second launch free.
@@ -27535,7 +27544,15 @@ def _rocm_module_function(hip: Any, hsaco: bytes, sym: bytes) -> Any:
     dev = ctypes.c_int(0)
     if hip.hipGetDevice(ctypes.byref(dev)) != 0:
         raise _RocmCompiledUnavailable("rocm sparse: hipGetDevice failed")
-    key = (int(dev.value), hsaco, bytes(sym))
+    ctx = ctypes.c_void_p()
+    get_ctx = getattr(hip, "hipCtxGetCurrent", None)
+    if get_ctx is not None and get_ctx(ctypes.byref(ctx)) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: hipCtxGetCurrent failed")
+    # A HIP without the (deprecated) context API cannot report which context
+    # is current, so it cannot be keyed on. `None` is a distinct key value,
+    # not a pretend context: every entry then shares one bucket, which is
+    # exactly the old device-only behaviour and no worse than it.
+    key = (ctx.value, int(dev.value), hsaco, bytes(sym))
     cached = _rocm_module_cache.get(key)
     if cached is not None:
         return cached
@@ -27684,12 +27701,26 @@ def _rocm_dev_pack(hip: Any, arrays: "list[Any]") -> "tuple[Any, list[Any]]":
     base = ctypes.c_void_p()
     if hip.hipMalloc(ctypes.byref(base), total) != 0:
         raise RuntimeError("rocm sparse: hipMalloc failed")
-    hip.hipMemcpy(base, staging.ctypes.data_as(ctypes.c_void_p), total, 1)
-    # hipMalloc returning success with a null pointer would make every interior
-    # pointer below silently wrong, so refuse rather than compute from None.
-    if base.value is None:
-        raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
-    origin = int(base.value)
+    # Everything after a SUCCESSFUL hipMalloc runs under the guard: whatever
+    # fails here, the caller never receives the base and so can never free it
+    # (review on #691). Leaking on the failure path is worst exactly when the
+    # failure is exhaustion, because it starves the retry.
+    try:
+        # An unchecked upload is worse than a leak: the kernel then runs on
+        # whatever the allocation happened to contain and returns a confident
+        # wrong answer.
+        rc = hip.hipMemcpy(base, staging.ctypes.data_as(ctypes.c_void_p), total, 1)
+        if rc != 0:
+            raise RuntimeError(f"rocm sparse: host->device copy failed rc={rc}")
+        # hipMalloc returning success with a null pointer would make every
+        # interior pointer below silently wrong, so refuse rather than compute
+        # from None.
+        if base.value is None:
+            raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
+        origin = int(base.value)
+    except BaseException:
+        hip.hipFree(base)
+        raise
     return base, [ctypes.c_void_p(origin + offset) for offset in offsets]
 
 
@@ -27712,10 +27743,14 @@ def _rocm_dev_region(hip: Any, arrays: "list[Any]") -> "tuple[Any, list[Any], li
     base = ctypes.c_void_p()
     if hip.hipMalloc(ctypes.byref(base), total) != 0:
         raise RuntimeError("rocm sparse: hipMalloc failed")
-    if base.value is None:
-        raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
-    _rocm_dev_poison(hip, base, total)
-    origin = int(base.value)
+    try:
+        if base.value is None:
+            raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
+        _rocm_dev_poison(hip, base, total)
+        origin = int(base.value)
+    except BaseException:
+        hip.hipFree(base)
+        raise
     return base, [ctypes.c_void_p(origin + o) for o in offsets], offsets
 
 
@@ -27728,7 +27763,9 @@ def _rocm_dev_unpack(hip: Any, base: Any, arrays: "list[Any]",
     for array in arrays:
         total += (int(array.nbytes) + _ROCM_DEV_ALIGN - 1) // _ROCM_DEV_ALIGN * _ROCM_DEV_ALIGN
     staging = np.empty(total, dtype=np.uint8)
-    hip.hipMemcpy(staging.ctypes.data_as(ctypes.c_void_p), base, total, 2)
+    rc = hip.hipMemcpy(staging.ctypes.data_as(ctypes.c_void_p), base, total, 2)
+    if rc != 0:
+        raise RuntimeError(f"rocm sparse: device->host copy failed rc={rc}")
     for array, offset in zip(arrays, offsets):
         span = int(array.nbytes)
         array.reshape(-1).view(np.uint8)[:span] = staging[offset:offset + span]
@@ -27754,7 +27791,11 @@ def _rocm_dev_alloc(hip: Any, nbytes: int) -> Any:
     d = ctypes.c_void_p()
     if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
         raise RuntimeError("rocm sparse: hipMalloc failed")
-    _rocm_dev_poison(hip, d, nbytes)
+    try:
+        _rocm_dev_poison(hip, d, nbytes)
+    except BaseException:
+        hip.hipFree(d)
+        raise
     return d
 
 

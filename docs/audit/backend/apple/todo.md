@@ -6701,6 +6701,17 @@ sweep unusable as a gate on this host.
 **Not caused by the autodiff work in PR #679** — that change is pure Python, and
 the 1561-test autodiff surface completes in 115 s.
 
+**Linux control (2026-09-01) — this is Apple-specific, measured, not inferred.**
+The same `pytest tests/unit/ -m "not slow"` invocation on Princess-Luna
+(gfx1151, ROCm env sourced) **completes in 8 m 29 s**: 17033 passed, 18 failed,
+2309 skipped. So the sweep itself is healthy and finite; it is this host's
+Apple GPU dispatch that does not return. Anyone reproducing should use a Linux
+box as the control rather than assuming the suite is simply long.
+
+(Those 18 Linux failures are a separate, pre-existing matter on `main` — mostly
+`*_perf_baseline_is_bounded` timing rows plus a few ROCm/x86 execution rows —
+and are not owned by this entry.)
+
 **Next steps.** (1) Check whether a stale `TesseraAppleRuntimeShared` is
 implicated — the standing rule is to rebuild before an Apple sweep, though a
 stale dylib is documented to *fail*, not hang. (2) Establish whether

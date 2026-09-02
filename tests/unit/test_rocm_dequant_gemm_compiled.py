@@ -6,6 +6,10 @@ import pytest
 from tessera import runtime as rt
 from tessera.stdlib import quant
 from tests._support.compiler_tool import run_tessera_opt
+from tests._support.launch_overhead import (
+    assert_launch_overhead_bounded,
+    launch_execution_kind,
+)
 
 
 def _artifact(op_name, arg_names):
@@ -110,7 +114,12 @@ def test_dk4_rocm_dequant_gemm_perf_baseline_is_bounded():
     # 2.0 ms is chosen by the only criterion that makes a constant worth
     # having: it would have FAILED on the old code (70.6 ms), while leaving
     # ~12x margin over the worst value measured under heavy load.
-    assert launch_ms < max(2.0, direct_ms * 4.0)
+    assert_launch_overhead_bounded(
+        launch_ms=launch_ms,
+        direct_ms=direct_ms,
+        execution_kind=launch_execution_kind(rt.launch(art, (x, packed))),
+        what="dk4 dequant gemm",
+    )
 
 
 @pytest.mark.hardware_rocm

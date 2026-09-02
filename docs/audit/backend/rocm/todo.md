@@ -6355,3 +6355,18 @@ classified. It is the only target that legitimately carries the
 `depth_attention` compiled route, and the two false `min`/`amin` bootstrap rows
 are gone — `rocm_native`'s reduction contract names `sum/mean/max/amax` and no
 more.
+
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**ROCm — parity validated, no native change required.** gfx1151 reaches
+`clifford_codiff` through `_clifford_ops.clifford_codiff` →
+`ga.calculus.codiff`, the signed Python operator, so the corrected contract
+applies with no kernel work: there is no ROCm `codiff` symbol to sign. The
+composed X86/ROCm Clifford lanes consume the same wrapper. Verified on
+Princess-Luna: 1454 passed across the GA/Clifford/EBM/autodiff surface, 0
+failed, including the `clifford_codiff` adjoint law at 3.4e-16.

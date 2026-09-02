@@ -15128,14 +15128,35 @@ extern "C" void tessera_apple_gpu_clifford_vec_deriv_cl30_f32(
   reference_clifford_vec_deriv_cl30_f32(F, Out, D0, D1, D2, h0, h1, h2);
 }
 
+// Per-blade codifferential sign for Cl(3,0): delta = (-1)^(n(k+1)+1) * star-d-star
+// on a k-form, and star-d-star lowers grade by one, so an OUTPUT blade of grade
+// j carries the sign of input grade j+1. With n = 3 that is (-1)^(j+1), giving
+// the table below over the blade order {1, e1, e2, e12, e3, e13, e23, e123}.
+static const float kCliffordCodiffSignCl30[8] = {
+    -1.0f, +1.0f, +1.0f, -1.0f, +1.0f, -1.0f, -1.0f, +1.0f,
+};
+
 extern "C" void tessera_apple_gpu_clifford_codiff_cl30_f32(
     const float* F, float* Out,
     int32_t D0, int32_t D1, int32_t D2,
     float h0, float h1, float h2) {
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_clifford_codiff_cl30_f32_msl(
-          ctx, F, Out, D0, D1, D2, h0, h1, h2)) return;
-  reference_clifford_codiff_cl30_f32(F, Out, D0, D1, D2, h0, h1, h2);
+  if (!(ctx.ok && dispatch_clifford_codiff_cl30_f32_msl(
+            ctx, F, Out, D0, D1, D2, h0, h1, h2))) {
+    reference_clifford_codiff_cl30_f32(F, Out, D0, D1, D2, h0, h1, h2);
+  }
+  // The MSL shader and the C++ reference both compute the UNSIGNED star-d-star,
+  // which is what their names say. This exported symbol is named `codiff`, so it
+  // owes callers the codifferential -- applied here, once, over whichever path
+  // ran (MSW-4a review on #688). Doing it at the boundary rather than inside
+  // each kernel keeps a single sign table on this side of the ABI, and keeps the
+  // composition helpers honest about what they are.
+  const size_t voxels = static_cast<size_t>(D0) * static_cast<size_t>(D1)
+                      * static_cast<size_t>(D2);
+  for (size_t v = 0; v < voxels; ++v) {
+    float* blade = Out + v * 8u;
+    for (int b = 0; b < 8; ++b) blade[b] *= kCliffordCodiffSignCl30[b];
+  }
 }
 
 extern "C" void tessera_apple_gpu_clifford_integral_cl30_f32(

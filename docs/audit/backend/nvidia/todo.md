@@ -5998,3 +5998,18 @@ Three guards now make that class of error mechanical rather than editorial:
 classified by the audit. Its rows were corrected: `depth_attn` is no longer
 claimed here (rocm-only dispatch), while `min`/`amin` legitimately remain —
 `nvidia_native` is the one reduction contract that names them.
+
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**NVIDIA — not applicable; there is no NVIDIA codiff to correct.** No
+`clifford_codiff` entry exists for this backend in `backend_manifest.py` and no
+CUDA kernel implements the operator; a JIT'd Clifford program on NVIDIA
+executes `tessera.ga.*`, which is the signed Python path. If a native NVIDIA
+codiff is ever added it must apply the sign at its ABI boundary the way the
+Apple symbol now does — the exported name promises δ, and the mistake this
+entry records is precisely a symbol named `codiff` returning `⋆d⋆`.

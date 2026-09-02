@@ -146,7 +146,43 @@ def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     # 2.0 ms is chosen by the only criterion that makes a constant worth
     # having: it would have FAILED on the old code (70.6 ms), while leaving
     # ~12x margin over the worst value measured under heavy load.
-    assert launch_ms < max(2.0, direct_ms * 4.0)
+    #
+    # BUT 2.0 ms describes the FALLBACK lane, and only the fallback lane. The
+    # 0.148 ms above was measured on a host that could not serialize ROCm at
+    # all: the negative cache made `launch` a host-side no-op with no device
+    # work in it. gfx1151 execution is live on this box since ROCm 10, so the
+    # same call now returns `native_gpu` and does real device work -- and the
+    # constant was silently re-purposed as a bound on a lane that did not
+    # exist when it was chosen (measured 2026-09-02, Princess-Luna/ROCm 10).
+    #
+    #   idle        median typ 1.94, worst 2.09  -- over the bound 3/12
+    #   under load  median typ 2.17-2.44, worst 2.67  -- over 12/12
+    #
+    # That reads as flakiness and is not: at ~97% of its bound on an IDLE
+    # machine it is the same pathology the constant was lowered to fix, one
+    # lane over. Load contributes only ~0.3-0.5 ms of the excess; the other
+    # ~1.9 ms is what a native launch costs. Taking the fastest of N instead
+    # of the median does not rescue it either (min is over the bound 11/12
+    # under load) -- the statistic was never the problem.
+    #
+    # So the bound is per lane. The fallback keeps 2.0 ms unchanged, which is
+    # the lane CI actually runs -- this test has no GPU skip, and the
+    # fork-per-launch bug it was written for is itself a no-GPU bug, so
+    # marking it `slow` (the obvious "de-flake") would have deleted the
+    # coverage that matters most while leaving the real finding buried.
+    #
+    # 8.0 ms for the native lane, by the same criterion as the original: it
+    # still FAILS on the 70.6 ms pathology (8.8x below it) while leaving 3x
+    # margin over the worst value measured under a 32-worker sweep (2.67 ms).
+    # It is a launch-overhead ceiling, not a performance target -- ~1.9 ms of
+    # it is per-call transfer and module-load cost that the residency work is
+    # separately reducing.
+    bound_ms = 8.0 if _expect_native() else 2.0
+    assert launch_ms < max(bound_ms, direct_ms * 4.0), (
+        f"{'native' if _expect_native() else 'fallback'} launch {launch_ms:.4f} ms "
+        f"exceeded {max(bound_ms, direct_ms * 4.0):.4f} ms "
+        f"(direct {direct_ms:.4f} ms)"
+    )
 
 
 def test_rocm_grouped_gemm_uses_one_native_offsets_argument():

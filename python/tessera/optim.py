@@ -101,12 +101,42 @@ def _attach_master_state(state: dict[str, Any], master_params: Tree, master_dtyp
     return out
 
 
+def attach_master_params(
+    state: dict[str, Any],
+    params: Tree,
+    *,
+    master_dtype: str,
+) -> dict[str, Any]:
+    """Turn state from an fp32 run into state a mixed-precision run accepts.
+
+    Enabling `master_dtype` mid-run is legitimate, but it cannot happen
+    silently: the optimizer needs a master copy of the weights, and the only
+    thing available at the moment of the switch is the low-precision
+    parameter storage. Upcasting it is exactly right ONCE, there — nothing
+    has accumulated yet — and exactly wrong on every step afterwards, where
+    it would throw away the master weights the run has been maintaining.
+    This function is the one place that upcast is allowed, so that the same
+    operation on step 5000 stays an error.
+
+    Mirrors `migrate_adafactor_state`, which exists for the same reason: a
+    representation change a checkpoint cannot infer for itself.
+    """
+    if "master_params" in state:
+        return dict(state)
+    return _attach_master_state(
+        dict(state),
+        tree_map(lambda p: _asarray(p).astype(_np_dtype(master_dtype), copy=True), params),
+        master_dtype,
+    )
+
+
 def _resolve_state(
     state: "dict[str, Any] | None",
     *,
     optimizer: str,
     required: "tuple[str, ...]",
     fresh: Callable[[], dict[str, Any]],
+    master_dtype: str | None = None,
 ) -> dict[str, Any]:
     """Resolve optimizer state, or refuse with a diagnostic that names the slot.
 
@@ -123,11 +153,25 @@ def _resolve_state(
     -- an exception that names neither the optimizer, nor the contract, nor
     the fix (MSW-3 / correctness-audit finding M-4).
 
-    `master_params` is intentionally never `required`: it exists only when
-    `master_dtype` is set, so demanding it would refuse valid fp32 state.
+    `master_params` is required **exactly when `master_dtype` is set** — pass
+    it as `master_dtype` rather than listing it in `required`. The first
+    version of this helper excluded the slot unconditionally, reasoning that
+    demanding it would refuse valid fp32 state. That conflated two different
+    situations (review on #693). With no `master_dtype` the slot legitimately
+    does not exist; with one set it is mandatory, because `_master_tree`
+    falls back to **upcasting the rounded parameter storage** when the slot
+    is absent and calls the result master weights. Resuming a bf16 run from
+    state that lost that slot would silently discard exactly the accumulated
+    precision mixed-precision training exists to keep — the same silent
+    restart this contract refuses for the moments, and a worse one.
+
+    Enabling `master_dtype` on a run that did not have it is a real
+    migration rather than an error, so it gets an explicit door:
+    `attach_master_params`.
     """
     if state is None:
         return fresh()
+    required = tuple(required) + (("master_params",) if master_dtype is not None else ())
     missing = [slot for slot in required if slot not in state]
     if missing:
         raise ValueError(
@@ -137,6 +181,17 @@ def _resolve_state(
             f"because silently restarting would discard the accumulated "
             f"moments and quietly degrade training. "
             f"Slots present: {sorted(state)!r}; required: {list(required)!r}."
+            + (
+                " 'master_params' is required because master_dtype is set: "
+                "without it the master weights would be rebuilt by upcasting "
+                "the rounded parameter storage, silently discarding the "
+                "accumulated precision. To ENABLE mixed precision on a run "
+                "that did not have it, pass the state through "
+                "optim.attach_master_params(state, params, master_dtype=...) "
+                "once."
+                if master_dtype is not None and "master_params" in missing
+                else ""
+            )
         )
     return state
 
@@ -277,7 +332,7 @@ def momentum(
     """SGD with classical momentum."""
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
-        state, optimizer="momentum", required=("velocity",),
+        state, optimizer="momentum", master_dtype=master_dtype, required=("velocity",),
         fresh=lambda: {"velocity": zeros_like_tree(params, state_dtype)})
     velocity = state["velocity"]
     new_velocity = tree_map2(
@@ -305,7 +360,7 @@ def nesterov(
     """Nesterov momentum update."""
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
-        state, optimizer="nesterov", required=("velocity",),
+        state, optimizer="nesterov", master_dtype=master_dtype, required=("velocity",),
         fresh=lambda: {"velocity": zeros_like_tree(params, state_dtype)})
     velocity = state["velocity"]
     new_velocity = tree_map2(
@@ -341,7 +396,7 @@ def adamw(
     """AdamW with decoupled weight decay."""
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
-        state, optimizer="adamw", required=("m", "v", "step"),
+        state, optimizer="adamw", master_dtype=master_dtype, required=("m", "v", "step"),
         fresh=lambda: {"m": zeros_like_tree(params, state_dtype),
                        "v": zeros_like_tree(params, state_dtype), "step": 0})
     step = int(state["step"]) + 1
@@ -385,6 +440,14 @@ def adam(
     cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
     """Adam without decoupled weight decay."""
+    # Validated under the PUBLIC name before delegating (review on #693).
+    # `adam` forwards to `adamw`, so without this the caller is told that
+    # `adamw` rejected their state -- an optimizer they never called -- which
+    # defeats the point of a diagnostic that names the optimizer. `fresh=dict`
+    # is safe here: a None state short-circuits before the check, and the
+    # real fresh state is built by the delegate.
+    _resolve_state(state, optimizer="adam", master_dtype=master_dtype,
+                   required=("m", "v", "step"), fresh=dict)
     return adamw(
         params,
         grads,
@@ -553,7 +616,7 @@ def adafactor(
     """
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
-        state, optimizer="adafactor", required=("v", "step"),
+        state, optimizer="adafactor", master_dtype=master_dtype, required=("v", "step"),
         fresh=lambda: {
             "v": tree_map(lambda p: _adafactor_zero_state(_asarray(p), state_dtype=state_dtype), params),
             "step": 0,
@@ -685,7 +748,7 @@ def lion(
 ) -> tuple[Tree, dict[str, Any]]:
     base_params = _master_tree(params, state, master_dtype)
     state = _resolve_state(
-        state, optimizer="lion", required=("m", "step"),
+        state, optimizer="lion", master_dtype=master_dtype, required=("m", "step"),
         fresh=lambda: {"m": zeros_like_tree(params, state_dtype), "step": 0})
     update = tree_map2(
         lambda m, g: beta1 * _compute_array(m, compute_dtype) + (1.0 - beta1) * _compute_array(g, compute_dtype),
@@ -747,6 +810,14 @@ def lamb(
     eps: float = 1e-6,
     weight_decay: float = 0.0,
 ) -> tuple[Tree, dict[str, Any]]:
+    # Validated under the PUBLIC name before delegating (review on #693).
+    # `lamb` forwards to `adamw`, so without this the caller is told that
+    # `adamw` rejected their state -- an optimizer they never called -- which
+    # defeats the point of a diagnostic that names the optimizer. `fresh=dict`
+    # is safe here: a None state short-circuits before the check, and the
+    # real fresh state is built by the delegate.
+    _resolve_state(state, optimizer="lamb", master_dtype=None,
+                   required=("m", "v", "step"), fresh=dict)
     next_params, adam_state = adamw(
         params,
         grads,

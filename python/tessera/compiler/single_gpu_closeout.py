@@ -163,6 +163,28 @@ _PHASED_REFERENCE_RATIONALE.update({
                "kron", "vec", "matrix_power", "norm")
 })
 
+# MSW-3 optimizer breadth. These four are Python reference optimizers with a
+# compiler-visible flat tensor ABI and no device lowering, exactly like the
+# adafactor/lion tier they sit beside. Without an explicit rationale they land
+# in `single_gpu_closeable` / `single_gpu_promote` and read as newly created
+# single-GPU debt -- which would be wrong twice over: no Tile IR lowering was
+# removed, and none is planned by MSW-3, whose scope is the mathematical
+# surface. A device lane for any of them is a backend decision with its own
+# evidence, not a loose end of this change.
+_MSW3_OPTIMIZER_RATIONALE = (
+    "Reference tier by plan: MSW-3 ships the mathematical surface (each method "
+    "transcribed from its source definition and checked against it); a Tile IR "
+    "lowering is a separate backend decision with its own device evidence.",
+    "Reference tier by plan: no Target IR lane is claimed. The flat tensor ABI "
+    "exists so the op is compiler-visible, not because a per-target kernel has "
+    "been proven; Shampoo in particular needs a matrix-state ABI that the "
+    "shared m/v optimizer kernel signature cannot express.",
+)
+_PHASED_REFERENCE_RATIONALE.update({
+    op: _MSW3_OPTIMIZER_RATIONALE
+    for op in ("adagrad", "rmsprop", "adadelta", "shampoo")
+})
+
 _PHASED_REFERENCE_OPS = frozenset(_PHASED_REFERENCE_RATIONALE)
 
 

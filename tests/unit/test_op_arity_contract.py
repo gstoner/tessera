@@ -269,6 +269,14 @@ _DECODABLE_WITHOUT_FLAGS = {
     "tessera.stack": "homogeneous variadic tensor list; no per-slot meaning",
     "tessera.einsum": "homogeneous variadic operand list driven by the subscript",
     "tessera.arange": "start/stop/step lower to attributes, not operands",
+    # MSW-3. Both state tensors are all-or-nothing: the flat ABI takes
+    # `(p, g, m, delta)` / `(p, g, L, R)` or the tree form takes `(p, g)`, and
+    # the wrappers require BOTH state operands together. So the only valid
+    # lengths are 2 and 4 -- there is no 3-operand form for position to be
+    # ambiguous about. If a one-state variant is ever added, this entry stops
+    # being true and the op needs presence flags instead.
+    "tessera.adadelta": "two all-or-nothing state operands; arity is 2 or 4, never 3",
+    "tessera.shampoo": "two all-or-nothing state operands; arity is 2 or 4, never 3",
 }
 
 #: Ops whose optional operands are NOT decodable from position alone and do not

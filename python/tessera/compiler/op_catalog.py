@@ -128,6 +128,30 @@ _SPECS = [
     OpSpec("nesterov", "tessera.nesterov", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("adafactor", "tessera.adafactor", 2, 4, lowering="functional_optimizer_step"),
     OpSpec("lion", "tessera.lion", 2, 3, lowering="functional_optimizer_step"),
+    # MSW-3 optimizer breadth. Same (params, grads, [state]) arity as the
+    # single-slot optimizers above; each is transcribed from a numbered
+    # definition in arXiv 2310.20360v3 and cites the label in its docstring.
+    # Arities follow each method's FLAT ABI -- state as explicit tensor
+    # operands, the convention adafactor records as "compiler-visible flat ABIs
+    # keep optimizer state as explicit tensor operands". Adadelta and Shampoo
+    # each carry TWO state tensors, so their maximum is 4, not 3 (review on
+    # #695): declaring 3 made the only call that can actually execute exceed
+    # the declared arity.
+    OpSpec("adagrad", "tessera.adagrad", 2, 3, lowering="functional_optimizer_step"),
+    OpSpec("rmsprop", "tessera.rmsprop", 2, 3, lowering="functional_optimizer_step"),
+    OpSpec("adadelta", "tessera.adadelta", 2, 4, lowering="functional_optimizer_step"),
+    OpSpec("shampoo", "tessera.shampoo", 2, 4, lowering="functional_optimizer_step"),
+    #
+    # `midpoint_sgd` is deliberately ABSENT from this catalog. Its second
+    # operand is a gradient FUNCTION -- the method re-evaluates the gradient at
+    # a probe point that does not exist until the first is known -- and
+    # `TraceBuilder.record_op` requires every positional Graph operand to be a
+    # Tracer, so every compiled use would fail by construction (review on
+    # #695). Declaring it as an ordinary operand would advertise a Graph
+    # boundary it cannot honour, which is worse than not declaring it (#29).
+    # It remains a `tessera.optim` function with a `primitive_coverage` row.
+    # Giving it a real Graph representation means a higher-order/region op, not
+    # an operand slot, and that is a feature rather than a registration.
     # `ebm_energy_quadratic` is canonicalized to the flat-lane graph name
     # `tessera.ebm_energy_quadratic` below; the dotted Graph IR ODS spelling
     # `tessera.ebm.energy_quadratic` is a LEGACY_GRAPH_OP_ALIASES entry so it
@@ -865,6 +889,14 @@ OP_SHAPE_RULE: dict = {
     # rounding its state DOWN to the param dtype.
     **{f"tessera.{n}": "optimizer_step" for n in ("adam", "adamw")},
     **{f"tessera.{n}": "optimizer_pair_step" for n in ("momentum", "nesterov")},
+    # MSW-3. Same operand shapes as the momentum pair: one param-shaped moment
+    # (`m`) alongside the param. `rmsprop`'s `step` slot is a scalar counter,
+    # not a tensor operand, so it does not change the rule.
+    **{f"tessera.{n}": "optimizer_pair_step" for n in ("adagrad", "rmsprop")},
+    # Two param-shaped moments (`m` and `delta`), like adam/adamw.
+    "tessera.adadelta": "optimizer_step",
+    # (`tessera.midpoint_sgd` has no entry: it is not a catalog op -- see the
+    # note beside the optimizer OpSpecs above.)
     "tessera.sgd": "same_as_first",
     # Lion's flat compiler ABI returns exactly (new_param, new_moment).  It is
     # not the three-result Adam-style contract used by optimizer_step.
@@ -1154,6 +1186,20 @@ SHAPE_RULE_NAMES = frozenset({
 #: force wrong behavior. Answering "why is this unclassified?" is what makes the
 #: remaining count meaningful.
 DELIBERATELY_UNDECLARED: dict = {
+    # MSW-3. Shampoo's state is NOT param-shaped: its two preconditioners are
+    # the Gram matrices `L` (d1 x d1) and `R` (d2 x d2) built from the
+    # parameter's two axes, so a d1 x d2 parameter carries state of two
+    # entirely different shapes. `optimizer_step` and `optimizer_pair_step`
+    # both assert param-shaped moments and would be FALSE contracts here --
+    # the same mistake the comment above records for `same_as_first` on the
+    # quantize family. Adding an `optimizer_preconditioned_step` rule instead
+    # would declare a vocabulary no pass consumes (#29), so this is recorded
+    # as examined-and-undeclared until something needs to read it.
+    "tessera.shampoo": (
+        "two-sided full-matrix preconditioning: state is the Gram matrices "
+        "L (d1 x d1) and R (d2 x d2), not param-shaped moments, so every "
+        "existing optimizer shape rule would assert a false contract"),
+
     # W1.4 -- a genuinely new category, and the first exemption reason in this
     # registry that survives examination rather than dissolving under it.
     #

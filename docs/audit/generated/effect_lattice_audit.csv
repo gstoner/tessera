@@ -2,7 +2,9 @@ name,declared_effect,expected_effect,matches_anchor,has_numeric_policy,determini
 abs,pure,,1,1,0
 absolute,pure,,1,1,0
 acos,pure,,1,1,0
+adadelta,pure,,1,1,0
 adafactor,pure,,1,1,0
+adagrad,pure,,1,1,0
 adam,pure,,1,1,0
 adamw,pure,,1,1,0
 add,pure,,1,1,0
@@ -263,6 +265,7 @@ retention,state,,1,1,0
 rfft,pure,pure,1,1,0
 rmsnorm,pure,pure,1,1,0
 rmsnorm_safe,pure,,1,1,0
+rmsprop,pure,,1,1,0
 rng_normal,random,random,1,1,0
 rng_philox_normal,pure,,1,1,0
 rng_philox_uniform,pure,,1,1,0
@@ -283,6 +286,7 @@ segment_reduce,pure,,1,1,0
 select,pure,,1,1,0
 selective_ssm,state,,1,1,0
 sgd,pure,,1,1,0
+shampoo,pure,,1,1,0
 sigmoid,pure,,1,1,0
 sigmoid_safe,pure,,1,1,0
 sign,pure,,1,1,0

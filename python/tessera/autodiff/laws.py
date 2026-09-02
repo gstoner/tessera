@@ -31,6 +31,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+import math
 import numpy as np
 
 __all__ = [
@@ -474,6 +475,212 @@ def chain_check(op: str, spec, jvp_fn: Callable,
 # ── The sweep ────────────────────────────────────────────────────────────────
 
 
+# ── Law 7: vector/tensor identities over the GA field calculus ───────────────
+#
+# MSW-4. These are **reference-free**: each is an identity the field operators
+# must satisfy exactly, with no external oracle to disagree with. They are the
+# GA-native form of the classical vector-calculus identities — `d∘d = 0` IS
+# both `∇×(∇f) = 0` and `∇·(∇×A) = 0`, which is why proving it once covers
+# both — plus the Stokes pairing that MSW-4a made statable by giving `codiff`
+# its sign, and the Leibniz rule that no single-operator law can reach.
+#
+# Why these are worth having when `d∘d = 0` looks trivial: the operators are
+# built from a product table, a Hodge involution and a finite-difference stencil
+# that each have their own sign conventions. An error in any one of them
+# survives every per-op adjoint check (a wrong-but-self-consistent operator has
+# a perfectly good adjoint) and is caught here, because these identities relate
+# operators to EACH OTHER.
+
+# **What this family does NOT cover, established by mutation test rather than
+# assumed.** Corrupting `codiff`'s sign fails two of these laws and scaling
+# `ext_deriv` by 1.5x fails the analytic-gradient law — but negating
+# `hodge_star_field` fails NONE of them, and that is not a gap to close here.
+# `⋆` appears in this family only in even powers (`codiff = ⋆d⋆`, and `⋆⋆`
+# itself is invariant under a global sign), so a uniform sign on `⋆` is
+# genuinely unobservable through `d`, `δ` and their compositions. Pinning it
+# needs an ODD application against a known blade, which
+# `test_hodge_star_of_scalar_one_is_pseudoscalar_in_cl30` already does
+# (`⋆1 = +e123`). Recorded so nobody reads a green sweep here as covering the
+# Hodge convention.
+
+_FIELD_LAW_REGISTRY = "field_calculus"
+
+
+def _vector_identity_grid(n: int = 20, extent: float = 6.0):
+    """A compactly-supported grid: boundary terms vanish, so the identities
+    hold on the whole array rather than only the interior."""
+    h = extent / n
+    axis = (np.arange(n) - n / 2) * h
+    X, Y, Z = np.meshgrid(axis, axis, axis, indexing="ij")
+    return X, Y, Z, h, np.exp(-(X**2 + Y**2 + Z**2) / 0.6)
+
+
+def _rel(residual: float, scale: float) -> float:
+    return float(residual) / max(float(scale), 1e-30)
+
+
+def vector_identity_checks() -> list[LawResult]:
+    """Evaluate the field-calculus identities. One `LawResult` per identity."""
+    try:
+        from tessera.ga import Cl
+        from tessera.ga.calculus import (
+            MultivectorField, codiff, ext_deriv, hodge_star_field,
+        )
+    except Exception as e:  # noqa: BLE001 — a sweep must survive a missing extra
+        return [LawResult("<ga-field-calculus>", _FIELD_LAW_REGISTRY,
+                          "vector_identity", "rule_error", 0, None,
+                          f"{type(e).__name__}: {e}")]
+
+    algebra = Cl(3, 0)
+    grades = [b.grade for b in algebra.blades()]
+    X, Y, Z, h, bump = _vector_identity_grid()
+    shape = X.shape + (algebra.dim,)
+    rng = np.random.default_rng(20260902)
+
+    def field(values):
+        return MultivectorField(values, algebra, spacing=(h, h, h))
+
+    def of_grade(grade, seed):
+        gen = np.random.default_rng(seed)
+        values = np.zeros(shape)
+        for i, g in enumerate(grades):
+            if g == grade:
+                values[..., i] = bump * (np.sin(X * 1.3 + i) + gen.standard_normal())
+        return field(values)
+
+    def l2(a, b):
+        return float(np.sum(a.values * b.values) * h**3)
+
+    results: list[LawResult] = []
+
+    def record(name, residual, scale, probes, detail=""):
+        rel = _rel(residual, scale)
+        status = "pass" if rel < 2e-3 else "fail"
+        results.append(LawResult(name, _FIELD_LAW_REGISTRY, "vector_identity",
+                                 status, probes, rel, detail))
+
+    # d∘d = 0 — simultaneously ∇×(∇f) = 0 and ∇·(∇×A) = 0.
+    worst = 0.0
+    scale = 0.0
+    for grade in (0, 1):
+        f = of_grade(grade, 11 + grade)
+        once = ext_deriv(f)
+        twice = ext_deriv(once)
+        worst = max(worst, float(np.max(np.abs(twice.values))))
+        scale = max(scale, float(np.max(np.abs(once.values))))
+    record("d_squared_is_zero", worst, scale, 2,
+           "covers curl(grad f) = 0 and div(curl A) = 0 in one identity")
+
+    # δ∘δ = 0 — the dual statement, and it exercises codiff's sign twice.
+    worst = 0.0
+    scale = 0.0
+    for grade in (2, 3):
+        f = of_grade(grade, 21 + grade)
+        once = codiff(f)
+        twice = codiff(once)
+        worst = max(worst, float(np.max(np.abs(twice.values))))
+        scale = max(scale, float(np.max(np.abs(once.values))))
+    record("codiff_squared_is_zero", worst, scale, 2)
+
+    # Stokes: ⟨dα, β⟩ == ⟨α, δβ⟩ on a compactly-supported field.
+    worst = 0.0
+    scale = 0.0
+    for k in (1, 2, 3):
+        alpha = of_grade(k - 1, 100 + k)
+        beta = of_grade(k, 200 + k)
+        lhs, rhs = l2(ext_deriv(alpha), beta), l2(alpha, codiff(beta))
+        worst = max(worst, abs(lhs - rhs))
+        scale = max(scale, abs(lhs))
+    record("codiff_is_adjoint_to_ext_deriv", worst, scale, 3,
+           "Stokes; statable only since codiff carries its sign (MSW-4a)")
+
+    # Absolute scale: ext_deriv of a known scalar IS its analytic gradient.
+    #
+    # **Added because the mutation test found the other four blind to it.**
+    # Every identity above is homogeneous in `ext_deriv` — `d∘d = 0` stays zero
+    # under any scaling, and Stokes scales both pairings equally — so a uniform
+    # 1.5x error in the operator (a mis-scaled grid spacing, say) passed all of
+    # them. An identity relating operators to each other cannot pin the scale
+    # of the family; only an external oracle can, so this one compares against
+    # a closed-form gradient. It is second-order accurate, hence the h^2
+    # tolerance rather than machine precision.
+    def _gradient_error(n):
+        gh = 6.0 / n
+        ax = (np.arange(n) - n / 2) * gh
+        gx, gy, gz = np.meshgrid(ax, ax, ax, indexing="ij")
+        values = np.zeros(gx.shape + (algebra.dim,))
+        values[..., 0] = np.sin(gx) * np.cos(gy) + np.sin(2 * gz)
+        exact = [np.cos(gx) * np.cos(gy), -np.sin(gx) * np.sin(gy), 2 * np.cos(2 * gz)]
+        got = ext_deriv(MultivectorField(values, algebra, spacing=(gh, gh, gh))).values
+        slots = [i for i, g in enumerate(grades) if g == 1]
+        inner = (slice(2, -2),) * 3
+        err = max(float(np.max(np.abs(got[..., s][inner] - e[inner])))
+                  for s, e in zip(slots, exact))
+        scale = max(float(np.max(np.abs(e[inner]))) for e in exact)
+        return err / max(scale, 1e-30)
+
+    g_coarse, g_fine = _gradient_error(24), _gradient_error(48)
+    g_order = (math.log(g_coarse / g_fine) / math.log(2.0)
+               if g_fine > 0 else float("inf"))
+    results.append(LawResult(
+        "ext_deriv_matches_analytic_gradient", _FIELD_LAW_REGISTRY,
+        "vector_identity", "pass" if g_order >= 1.7 else "fail", 2,
+        float(g_coarse),
+        f"external oracle; the only law here that pins the operator's SCALE "
+        f"(observed order {g_order:.2f}, expect ~2)"))
+
+
+    # Leibniz: ∇·(fA) == f∇·A + A·∇f, related through codiff and ext_deriv.
+    #
+    # **Stated as an order-of-accuracy check, not an equality** — and that is
+    # the honest form, not a weakened one. The identity is exact in the
+    # continuum but a central-difference product rule is not: differentiating
+    # the product and combining differentiated factors agree only to O(h^2).
+    # Measured residuals fall 2.30x / 1.71x / 2.26x / 1.79x across
+    # n = 16, 24, 32, 48, 64, against the 2.25 / 1.78 / 2.25 / 1.78 that second
+    # order predicts. Asserting equality at one grid would need a tolerance
+    # loose enough to admit a genuinely wrong operator; asserting the RATE
+    # admits only a consistent discretization, which is the real claim.
+    def _leibniz_residual(n):
+        gh = 6.0 / n
+        ax = (np.arange(n) - n / 2) * gh
+        gx, gy, gz = np.meshgrid(ax, ax, ax, indexing="ij")
+        gb = np.exp(-(gx**2 + gy**2 + gz**2) / 0.6)
+        gshape = gx.shape + (algebra.dim,)
+        sc = gb * (np.sin(gx) + 2.0)
+        vs = [gb * v for v in (gx, gy**2, np.sin(gz))]
+        fa = np.zeros(gshape)
+        a_only = np.zeros(gshape)
+        s_only = np.zeros(gshape)
+        s_only[..., 0] = sc
+        for slot, comp in zip(ones, vs):
+            a_only[..., slot] = comp
+            fa[..., slot] = sc * comp
+        gf = MultivectorField(fa, algebra, spacing=(gh, gh, gh))
+        ga_ = MultivectorField(a_only, algebra, spacing=(gh, gh, gh))
+        gs = MultivectorField(s_only, algebra, spacing=(gh, gh, gh))
+        div_fa = -codiff(gf).values[..., 0]
+        div_a = -codiff(ga_).values[..., 0]
+        grad_f = ext_deriv(gs).values
+        dot = sum(grad_f[..., slot] * comp for slot, comp in zip(ones, vs))
+        res = div_fa - (sc * div_a + dot)
+        inner = (slice(3, -3),) * 3
+        return (float(np.max(np.abs(res[inner])))
+                / max(float(np.max(np.abs(div_fa[inner]))), 1e-30))
+
+    ones = [i for i, g in enumerate(grades) if g == 1]
+    coarse, fine = _leibniz_residual(24), _leibniz_residual(48)
+    order = math.log(coarse / fine) / math.log(2.0) if fine > 0 else float("inf")
+    # Second order, with room for the boundary stencil: 1.7 admits a consistent
+    # discretization and rejects a first-order or inconsistent one.
+    results.append(LawResult(
+        "divergence_product_rule", _FIELD_LAW_REGISTRY, "vector_identity",
+        "pass" if order >= 1.7 else "fail", 2, float(coarse),
+        f"∇·(fA) = f∇·A + A·∇f; observed order {order:.2f} (expect ~2)"))
+
+    return results
+
+
 def run_law_sweep() -> list[LawResult]:
     """Evaluate Laws 1 and 3 over every op in the derivative registries.
 
@@ -554,6 +761,10 @@ def run_law_sweep() -> list[LawResult]:
     except Exception as e:  # noqa: BLE001 — geometric import must not sink the sweep
         results.append(LawResult("<geometric-registry>", "geometric", "adjoint",
                                  "rule_error", 0, None, f"{type(e).__name__}: {e}"))
+
+    # Law 7 — field-calculus identities (MSW-4). Reference-free, so they run
+    # unconditionally; a missing GA extra is reported, not silently skipped.
+    results.extend(vector_identity_checks())
 
     return results
 

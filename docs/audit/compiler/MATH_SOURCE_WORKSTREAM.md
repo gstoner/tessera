@@ -114,7 +114,7 @@ routed by owner:
 | # | Finding | Routed to |
 |---|---|---|
 | M-1 | `codiff` is not the codifferential — off by a grade-dependent (−1)^k | **MSW-4a** above |
-| M-2 | The full `-m "not slow"` sweep **hangs uninterruptibly** in `tessera_apple_gpu_mlpkg_dispatch` → `waitUntilSignaledValue:timeoutMS:` → `iokit_user_client_trap`. The 30 s timeout is passed and validated, and the wait does not return; `pytest --timeout --timeout-method=thread` cannot preempt a blocking C call, so the lane cannot fail — only stop. | [`../backend/apple/todo.md`](../backend/apple/todo.md) — backend-owned |
+| M-2 | **Root cause corrected 2026-09-01 (same day).** The full sweep hung uninterruptibly in `tessera_apple_gpu_mlpkg_dispatch` → `waitUntilSignaledValue:timeoutMS:` → `iokit_user_client_trap` — but the cause was a **two-day-stale `libTesseraAppleRuntime.dylib`**, not the dispatch. Against a fresh dylib the same selection is 115 passed in 32 s, where it had hung twice for 16 and 14 minutes. What survives is that a stale runtime must fail cleanly rather than block unpreemptably. | [`../backend/apple/todo.md`](../backend/apple/todo.md) — backend-owned, reduced to P1 |
 | M-3 | 20 of 34 loss functions carry no docstring, including `kl_divergence`, whose argument order is the **inverse** of PyTorch's `kl_div` (Tessera computes KL(p‖q) from `p_log_probs`, verified exact) | folded into MSW-3's docstring obligation |
 | M-4 | Every optimizer raises a raw `KeyError` on `state={}`; `None` is the documented init | folded into MSW-3 |
 

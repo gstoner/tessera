@@ -16386,14 +16386,19 @@ def _execute_x86_compiled_adafactor(
     operand_names = [str(name) for name in ops[0].get("operands", [])]
     values = _bind_launch_args(args, names)
     kwargs = ops[0].get("kwargs") or {}
-    from .optim import adafactor_decay
+    from .optim import adafactor_effective_decay
 
     parameters = {
         "lr": float(kwargs.get("lr", 1e-3)),
         # The AVX-512 kernel takes a scalar decay, so the step-dependent bias
         # correction is applied here — the kernel ABI is unchanged.
-        "beta2": adafactor_decay(
-            float(kwargs.get("beta2", 0.999)), int(kwargs.get("step", 1))
+        #
+        # A MISSING step means no correction, not step 1 (fixed 2026-09-02).
+        # This read `int(kwargs.get("step", 1))`, and `adafactor_decay(b2, 1)`
+        # is exactly 0, so every compiled call that omitted a step discarded
+        # the incoming second moment while the eager `ops.adafactor` kept it.
+        "beta2": adafactor_effective_decay(
+            float(kwargs.get("beta2", 0.999)), kwargs.get("step")
         ),
         "eps": float(kwargs.get("eps", 1e-30)),
     }
@@ -28975,14 +28980,15 @@ def _execute_rocm_compiled_adafactor(
         )
     values = _bind_launch_args(args, arg_names)
     kwargs = ops[0].get("kwargs") or {}
-    from .optim import adafactor_decay
+    from .optim import adafactor_effective_decay
 
     parameters = dict(
         lr=float(kwargs.get("lr", 1e-3)),
         # gfx1151 adafactor_row/col/update take a scalar decay, so the
         # step-dependent bias correction is applied here (kernel ABI unchanged).
-        beta2=adafactor_decay(
-            float(kwargs.get("beta2", 0.999)), int(kwargs.get("step", 1))
+        # A MISSING step means no correction, not step 1 — see the x86 twin.
+        beta2=adafactor_effective_decay(
+            float(kwargs.get("beta2", 0.999)), kwargs.get("step")
         ),
         eps=float(kwargs.get("eps", 1e-30)),
     )

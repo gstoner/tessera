@@ -1173,10 +1173,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 raise ValueError("flat Adafactor parameter and gradient must match")
             lr = np.float32(float(kwargs.get("lr", 1.0e-3)))
             nominal_beta2 = float(kwargs.get("beta2", 0.999))
+            # One implementation of the absent-step rule, shared with the
+            # compiled x86/ROCm forwards and the VJP state contract.
             beta2 = np.float32(
-                _optim.adafactor_decay(nominal_beta2, int(kwargs["step"]))
-                if "step" in kwargs
-                else nominal_beta2
+                _optim.adafactor_effective_decay(nominal_beta2, kwargs.get("step"))
             )
             eps = np.float32(float(kwargs.get("eps", 1.0e-30)))
             grad2 = grad * grad

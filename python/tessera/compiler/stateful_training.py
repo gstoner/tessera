@@ -172,7 +172,7 @@ def build_adafactor_vjp_state_contract(
         raise ValueError("factored Adafactor requires rank-2+ parameter state")
     if topology == "full" and len(shape) >= 2:
         raise ValueError("full Adafactor requires rank-0/1 parameter state")
-    from tessera.optim import adafactor_decay
+    from tessera.optim import adafactor_effective_decay
 
     # `beta2` is the caller's nominal asymptotic decay and `step` its 1-based
     # update index; `beta2_effective` is the decay the forward ACTUALLY applied,
@@ -202,11 +202,9 @@ def build_adafactor_vjp_state_contract(
         "beta2": nominal_beta2,
         "eps": float(kwargs.get("eps", 1.0e-30)),
         "step": step,
-        "beta2_effective": (
-            adafactor_decay(nominal_beta2, step)
-            if step is not None
-            else nominal_beta2
-        ),
+        # Same helper the compiled x86/ROCm forwards use, so the adjoint can
+        # never again differentiate a decay the forward did not apply.
+        "beta2_effective": adafactor_effective_decay(nominal_beta2, step),
     }
     # `step` is deliberately allowed to be None (the forward supplied none, so
     # no bias correction was applied); every actual coefficient must still be a

@@ -6749,3 +6749,29 @@ Super-Bear 2-3 days, Princess-Luna 7 hours. Measure the build's age before
 trusting any sweep, and rebuild before treating a hang or a failure as a code
 defect.
 
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**Apple — PARITY VALIDATED, and this backend carried the only native work.**
+`tessera_apple_gpu_clifford_codiff_cl30_f32` is an exported ABI named `codiff`,
+so it now applies the sign at the C boundary rather than returning `⋆d⋆` —
+otherwise a caller binding the symbol directly (or reaching it through the
+manifest's `symbol_prefix`) would get `+div` on a vector field where δ is
+`-div`. The MSL shader and the C++ reference are unchanged and still compute
+the unsigned composition, which is what their names say; the sign is applied
+once, in the exported entry point, over whichever path ran. The Python wrapper
+therefore signs ONLY the numpy composition — re-signing the Metal result would
+double-apply it.
+
+Measured after the change: Metal and numpy agree to **0.000e+00** on the
+interior; the Metal lane returns `-div` on a vector field (9.0e-08, fp32
+noise). The parity test compares the raw symbol against `ga.calculus.codiff`
+with **no correction**, restoring a real conformance check — an earlier
+revision post-multiplied the native output by the sign table, which made the
+assertion true by construction and tested nothing about the kernel. 56 GA/MSL
+tests and 134 benchmark tests pass. Requires a rebuilt
+`TesseraAppleRuntimeShared`.

@@ -8,8 +8,10 @@ status: MSW-1 LANDED (2026-09-01, PR #679) — reverse-over-reverse autodiff
         `_forward_closed` gate; consumed per-argument by `grad` and `jacrev`;
         16 regression tests (tests/unit/test_autodiff_nested_tape_guard.py).
         mypy clean (484 files); generated-doc drift gate green.
-        MSW-4a OPENED 2026-09-01 by the correctness audit (`codiff` is not the
-        codifferential) and now blocks MSW-4. All other items open.
+        MSW-4a LANDED 2026-09-02 (PR #688) — `codiff` applies the per-grade
+        codifferential sign, the Apple exported symbol returns δ at the ABI
+        boundary, and the `clifford_codiff` VJP carries the matching adjoint.
+        MSW-4 is unblocked: its Stokes law is statable. All other items open.
 source: T. Sochi, "Principles of Tensor Calculus" (189pp) and "Introduction to
         Tensor Calculus" (its condensed sibling); A. Jentzen, B. Kuckuck,
         P. von Wurstemberger, "Mathematical Introduction to Deep Learning:

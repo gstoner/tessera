@@ -384,10 +384,15 @@ def codiff(field: MultivectorField) -> MultivectorField:
 
     **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route through
     ``tessera_apple_gpu_clifford_codiff_cl30_f32``, which composes three MSL
-    dispatches (hodge → ext_deriv → hodge). That kernel computes the unsigned
-    ``⋆d⋆`` and is left alone: the sign is applied HERE, to whichever path
-    produced the result, so the numpy and Metal lanes cannot drift apart. They
-    were measured to agree before this change and must keep agreeing.
+    dispatches (hodge → ext_deriv → hodge). Its MSL shader and C++ reference both
+    compute the unsigned ``⋆d⋆``, and the exported C symbol applies the sign at
+    the ABI boundary — so a caller binding
+    ``tessera_apple_gpu_clifford_codiff_cl30_f32`` directly gets the
+    codifferential its name promises, not `+div` on a vector field (review on
+    #688). This function therefore signs only the numpy composition; re-signing
+    the Metal result would double-apply it. The parity test compares the raw
+    symbol against this function with no correction, which is what makes the
+    two lanes' agreement a real conformance check rather than an identity.
     """
     algebra = field.algebra
     if algebra.r != 0:
@@ -407,11 +412,11 @@ def codiff(field: MultivectorField) -> MultivectorField:
         )
     gpu_out = _try_apple_gpu_field_op_cl30_f32(
         field, "tessera_apple_gpu_clifford_codiff_cl30_f32")
-    raw = (
-        gpu_out
-        if gpu_out is not None
-        else hodge_star_field(ext_deriv(hodge_star_field(field)))
-    )
+    if gpu_out is not None:
+        # The exported Apple symbol is named `codiff` and returns the
+        # codifferential, sign included (review on #688) — do NOT re-apply it.
+        return gpu_out
+    raw = hodge_star_field(ext_deriv(hodge_star_field(field)))
     signs = codifferential_output_signs(algebra).astype(raw.values.dtype)
     return MultivectorField(raw.values * signs, algebra, spacing=raw.spacing)
 

@@ -314,21 +314,15 @@ def _py_ref_grade_projection(A: np.ndarray, grades: set[int]) -> np.ndarray:
 
 
 def _py_ref_field_op(op_name: str, F: np.ndarray) -> np.ndarray:
-    """Reference for the MSL kernel of `op_name`, in the KERNEL's convention.
+    """Reference for the MSL kernel of `op_name`.
 
-    `clifford_codiff`'s kernel is the unsigned ⋆d⋆ composition; since MSW-4a
-    (2026-09-02) `ga.calculus.codiff` additionally applies the per-grade
-    codifferential sign in Python, so that one lane cannot drift from the
-    other. This gate compares against the raw kernel, so the reference is
-    brought back to the kernel's convention — the signs are their own inverse,
-    so re-applying them removes them.
+    A plain comparison: since the #688 review the exported `clifford_codiff`
+    symbol applies the codifferential sign at the ABI boundary, so the kernel
+    and `ga.calculus.codiff` compute the same operator and no correction
+    belongs here.
     """
     from tessera.ga.calculus import (
-        MultivectorField,
-        codiff,
-        codifferential_output_signs,
-        ext_deriv,
-        vec_deriv,
+        MultivectorField, codiff, ext_deriv, vec_deriv,
     )
     fn = {
         "clifford_ext_deriv": ext_deriv,
@@ -336,10 +330,7 @@ def _py_ref_field_op(op_name: str, F: np.ndarray) -> np.ndarray:
         "clifford_codiff": codiff,
     }[op_name]
     field = MultivectorField(F.astype(np.float64), _CL30, spacing=_SPACING)
-    out = fn(field).values
-    if op_name == "clifford_codiff":
-        out = out * codifferential_output_signs(_CL30)
-    return out.astype(np.float32)
+    return fn(field).values.astype(np.float32)
 
 
 # ---------------------------------------------------------------------------

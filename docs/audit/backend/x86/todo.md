@@ -3820,3 +3820,16 @@ is the only classifier of the `elementwise` family. Its two false rows
 `sum` route is the reason the literal check accepts both spellings:
 `x86_native` names `tessera.sum` while coverage records the canonical
 `tessera.reduce`.
+
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**x86 — parity validated, no native change required.** Same shape as ROCm: the
+AVX-512 Clifford lanes call `_clifford_ops.clifford_codiff`, which delegates to
+the signed `ga.calculus.codiff`; no x86 symbol implements the codifferential
+directly, so nothing carries the old convention. Covered by the same
+Princess-Luna sweep (that host runs both the ROCm and AVX-512 lanes).

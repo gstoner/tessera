@@ -226,23 +226,17 @@ def test_field_op_interior_matches_python_reference(
 
 
 def test_codiff_interior_matches_python_reference(apple_gpu_runtime):
-    """The MSL kernel computes the UNSIGNED ⋆d⋆; `codiff` adds the sign.
+    """The exported symbol must return the codifferential, sign included.
 
-    The kernel is the 3-stage MSL composition (hodge → ext_deriv → hodge) and
-    is deliberately left that way: since 2026-09-02 (MSW-4a) the per-grade
-    codifferential sign `(-1)^(n(k+1)+1)` is applied ONCE, in Python, to
-    whichever lane produced the result — so the Metal and numpy lanes cannot
-    drift apart. This test therefore compares `kernel * signs` against
-    `codiff`, which is exactly the relationship `ga.calculus.codiff`
-    implements. Measured with that correction: the two lanes agree to
-    0.000e+00 on the interior.
+    A DIRECT comparison on purpose (review on #688). An earlier revision
+    post-multiplied the native output by the sign table before comparing, which
+    made the assertion true by construction and stopped testing the kernel's
+    sign behaviour at all. `tessera_apple_gpu_clifford_codiff_cl30_f32` is an
+    exported ABI named `codiff`; it owes callers δ, not ⋆d⋆, or a consumer
+    binding it directly gets `+div` on a vector field where δ is `-div`.
     """
     from tessera.ga import Cl
-    from tessera.ga.calculus import (
-        MultivectorField,
-        codiff,
-        codifferential_output_signs,
-    )
+    from tessera.ga.calculus import MultivectorField, codiff
 
     a = Cl(3, 0)
     rng = np.random.RandomState(310)
@@ -262,8 +256,7 @@ def test_codiff_interior_matches_python_reference(apple_gpu_runtime):
     Out_ref = codiff(field).values.astype(np.float32)
 
     sl = _interior_slice(D0, D1, D2)
-    signs = codifferential_output_signs(a).astype(np.float32)
-    np.testing.assert_allclose(Out[sl] * signs, Out_ref[sl], atol=1e-4, rtol=1e-4)
+    np.testing.assert_allclose(Out[sl], Out_ref[sl], atol=1e-4, rtol=1e-4)
 
 
 def test_field_ops_zero_at_corner_cells(apple_gpu_runtime):

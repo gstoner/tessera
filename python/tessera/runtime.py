@@ -1414,34 +1414,26 @@ def _rocm_dspark_draft_block_native(
         hidden.reshape(-1),
     ]
     i64_arrays = [pt, anc, tokens.reshape(-1)]
-    devs: list[Any] = []
+    # One upload and one download instead of thirteen and four. The transfer
+    # cost here is ~84 us per hipMemcpy call regardless of size (WSL2 /dev/dxg
+    # boundary crossings), so 17 crossings dominated this launch; staging the
+    # inputs into a single buffer and the outputs into a single region takes it
+    # to 2. Measured: 9 separate input uploads 0.956 ms -> 1 coalesced 0.119 ms.
+    inputs = [th, pt, anc, emb, hp, tp, op, cp, mk]
+    outputs = [logits, conf, tokens, hidden]
+    # Both allocations are acquired INSIDE the try, appended as they succeed
+    # (review on #690). Allocating the input region outside it leaked that
+    # region whenever the output allocation failed -- which is precisely the
+    # out-of-memory case, where leaking makes the retry fail too. The old
+    # per-buffer loop had this right; coalescing must not lose it.
+    bases: list[Any] = []
     try:
-        d_th = _rocm_dev_in(hip, f32_arrays[0], 4 * f32_arrays[0].size)
-        devs.append(d_th)
-        d_pt = _rocm_dev_in(hip, i64_arrays[0], 8 * i64_arrays[0].size)
-        devs.append(d_pt)
-        d_anc = _rocm_dev_in(hip, i64_arrays[1], 8 * i64_arrays[1].size)
-        devs.append(d_anc)
-        d_emb = _rocm_dev_in(hip, f32_arrays[1], 4 * f32_arrays[1].size)
-        devs.append(d_emb)
-        d_hp = _rocm_dev_in(hip, f32_arrays[2], 4 * f32_arrays[2].size)
-        devs.append(d_hp)
-        d_tp = _rocm_dev_in(hip, f32_arrays[3], 4 * f32_arrays[3].size)
-        devs.append(d_tp)
-        d_op = _rocm_dev_in(hip, f32_arrays[4], 4 * f32_arrays[4].size)
-        devs.append(d_op)
-        d_cp = _rocm_dev_in(hip, f32_arrays[5], 4 * f32_arrays[5].size)
-        devs.append(d_cp)
-        d_mk = _rocm_dev_in(hip, f32_arrays[6], 4 * f32_arrays[6].size)
-        devs.append(d_mk)
-        d_logits = _rocm_dev_in(hip, f32_arrays[7], 4 * f32_arrays[7].size)
-        devs.append(d_logits)
-        d_conf = _rocm_dev_in(hip, f32_arrays[8], 4 * f32_arrays[8].size)
-        devs.append(d_conf)
-        d_tokens = _rocm_dev_in(hip, i64_arrays[2], 8 * i64_arrays[2].size)
-        devs.append(d_tokens)
-        d_hidden = _rocm_dev_in(hip, f32_arrays[9], 4 * f32_arrays[9].size)
-        devs.append(d_hidden)
+        in_base, in_ptrs = _rocm_dev_pack(hip, inputs)
+        bases.append(in_base)
+        out_base, out_ptrs, out_offsets = _rocm_dev_region(hip, outputs)
+        bases.append(out_base)
+        d_th, d_pt, d_anc, d_emb, d_hp, d_tp, d_op, d_cp, d_mk = in_ptrs
+        d_logits, d_conf, d_tokens, d_hidden = out_ptrs
         _rocm_sparse_launch(
             hsaco,
             b"ds",
@@ -1463,13 +1455,13 @@ def _rocm_dspark_draft_block_native(
             [B, S, H, A, D, V, 1 if has_markov else 0],
             B * A,
         )
-        hip.hipMemcpy(logits.ctypes.data_as(ctypes.c_void_p), d_logits, 4 * logits.size, 2)
-        hip.hipMemcpy(conf.ctypes.data_as(ctypes.c_void_p), d_conf, 4 * conf.size, 2)
-        hip.hipMemcpy(tokens.ctypes.data_as(ctypes.c_void_p), d_tokens, 8 * tokens.size, 2)
-        hip.hipMemcpy(hidden.ctypes.data_as(ctypes.c_void_p), d_hidden, 4 * hidden.size, 2)
+        _rocm_dev_unpack(hip, out_base, outputs, out_offsets)
     finally:
-        for dev in devs:
-            hip.hipFree(dev)
+        # Only BASE allocations are freed, and only those that succeeded. Every
+        # d_* above is an interior pointer into one of them and must never
+        # reach hipFree.
+        for base in bases:
+            hip.hipFree(base)
 
     return {
         "logits": logits,
@@ -27593,6 +27585,113 @@ def _rocm_dev_in(hip: Any, host: Any, nbytes: int) -> Any:
     if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
         raise RuntimeError("rocm sparse: hipMalloc failed")
     hip.hipMemcpy(d, host.ctypes.data_as(ctypes.c_void_p), nbytes, 1)
+    return d
+
+
+_ROCM_DEV_ALIGN = 256
+
+
+def _rocm_dev_pack(hip: Any, arrays: "list[Any]") -> "tuple[Any, list[Any]]":
+    """Upload several host arrays in ONE `hipMemcpy`, returning offset pointers.
+
+    The transfer cost on this fleet is per CALL, not per byte. Measured on
+    gfx1151 under WSL2: ~84 us per `hipMemcpy` flat from 4 KB to 64 KB and flat
+    across 1, 4, 13 and 26 calls, because each call crosses the `/dev/dxg`
+    paravirtualisation boundary. So nine separate uploads of the dspark inputs
+    cost 0.956 ms while the same bytes staged into one buffer cost 0.119 ms —
+    an 8x reduction that no amount of caching individual buffers can match.
+
+    Each region is padded to `_ROCM_DEV_ALIGN` so every returned pointer keeps
+    the alignment `hipMalloc` would have given it. Verified: an offset pointer
+    into a single allocation round-trips host->device->host exactly.
+
+    Returns `(base, ptrs)`. The caller frees `base` — and ONLY `base`; the
+    returned pointers are interior and must never be passed to `hipFree`.
+    """
+    import numpy as np
+
+    spans = [int(a.nbytes) for a in arrays]
+    offsets: list[int] = []
+    total = 0
+    for span in spans:
+        offsets.append(total)
+        total += (span + _ROCM_DEV_ALIGN - 1) // _ROCM_DEV_ALIGN * _ROCM_DEV_ALIGN
+    staging = np.empty(total, dtype=np.uint8)
+    for array, offset, span in zip(arrays, offsets, spans):
+        staging[offset:offset + span] = np.frombuffer(
+            np.ascontiguousarray(array).tobytes(), dtype=np.uint8)
+    base = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(base), total) != 0:
+        raise RuntimeError("rocm sparse: hipMalloc failed")
+    hip.hipMemcpy(base, staging.ctypes.data_as(ctypes.c_void_p), total, 1)
+    # hipMalloc returning success with a null pointer would make every interior
+    # pointer below silently wrong, so refuse rather than compute from None.
+    if base.value is None:
+        raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
+    origin = int(base.value)
+    return base, [ctypes.c_void_p(origin + offset) for offset in offsets]
+
+
+def _rocm_dev_region(hip: Any, arrays: "list[Any]") -> "tuple[Any, list[Any], list[int]]":
+    """Allocate one device region for several write-only outputs.
+
+    Same reasoning as `_rocm_dev_pack`, applied to the readback: four separate
+    device->host copies cost four boundary crossings, one region costs one.
+    Nothing is uploaded — these buffers are fully written by the kernel, which
+    is verified rather than assumed (see `_rocm_dev_alloc`).
+
+    Returns `(base, ptrs, offsets)`; `_rocm_dev_unpack` fills the arrays back.
+    """
+    spans = [int(a.nbytes) for a in arrays]
+    offsets: list[int] = []
+    total = 0
+    for span in spans:
+        offsets.append(total)
+        total += (span + _ROCM_DEV_ALIGN - 1) // _ROCM_DEV_ALIGN * _ROCM_DEV_ALIGN
+    base = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(base), total) != 0:
+        raise RuntimeError("rocm sparse: hipMalloc failed")
+    if base.value is None:
+        raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
+    origin = int(base.value)
+    return base, [ctypes.c_void_p(origin + o) for o in offsets], offsets
+
+
+def _rocm_dev_unpack(hip: Any, base: Any, arrays: "list[Any]",
+                     offsets: "list[int]") -> None:
+    """Read one device region back and scatter it into the output arrays."""
+    import numpy as np
+
+    total = 0
+    for array in arrays:
+        total += (int(array.nbytes) + _ROCM_DEV_ALIGN - 1) // _ROCM_DEV_ALIGN * _ROCM_DEV_ALIGN
+    staging = np.empty(total, dtype=np.uint8)
+    hip.hipMemcpy(staging.ctypes.data_as(ctypes.c_void_p), base, total, 2)
+    for array, offset in zip(arrays, offsets):
+        span = int(array.nbytes)
+        array.reshape(-1).view(np.uint8)[:span] = staging[offset:offset + span]
+
+
+def _rocm_dev_alloc(hip: Any, nbytes: int) -> Any:
+    """Device allocation with NO host->device copy — for write-only outputs.
+
+    Uploading a freshly zeroed output buffer costs a full `hipMemcpy`, and on
+    this fleet that is not a bandwidth cost but a fixed per-call one. Measured
+    on gfx1151 under WSL2: ~84 us per `hipMemcpy` regardless of size from 4 KB
+    to 64 KB, flat across 1, 4, 13 and 26 calls. The dspark draft block moved
+    47 KB across 13 uploads in 1.27 ms, of which allocation was 1.5% (0.019 ms)
+    and transfer 87% (1.10 ms) — so the lever is the NUMBER of calls, and an
+    allocation pool would have saved essentially nothing.
+
+    Only safe for a buffer the kernel fully writes and never reads. That is
+    verified, not assumed: filling the four dspark outputs with -12345.0/999
+    instead of zeros produces bit-identical results, so the kernel overwrites
+    every element. A buffer the kernel accumulates into still needs its
+    initial value.
+    """
+    d = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
+        raise RuntimeError("rocm sparse: hipMalloc failed")
     return d
 
 

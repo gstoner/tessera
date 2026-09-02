@@ -6385,3 +6385,47 @@ applies with no kernel work: there is no ROCm `codiff` symbol to sign. The
 composed X86/ROCm Clifford lanes consume the same wrapper. Verified on
 Princess-Luna: 1454 passed across the GA/Clifford/EBM/autodiff surface, 0
 failed, including the `clifford_codiff` adjoint law at 3.4e-16.
+
+## ROCM-TRANSFER-RESIDENCY-1 — the launch cost is boundary crossings, not bytes
+
+**Measured on gfx1151 under WSL2 (2026-09-02).** `hipMemcpy` costs a fixed
+**~84 us per call** here, not per byte: 82.1 us at 4 KB, 89.2 us at 64 KB, and
+flat across 1, 4, 13 and 26 calls (only at 1 MB does bandwidth appear, 856 us).
+That is the `/dev/dxg` paravirtualisation boundary, and it means the lever on
+launch overhead is the NUMBER of transfers.
+
+The dspark draft block moved 47 KB across 13 uploads plus 4 downloads. Split
+measured on those exact buffer sizes:
+
+    malloc + copy + free (as shipped)   1.2698 ms
+    malloc + free only                  0.0187 ms   <- allocation: 1.5%
+    copy only, pre-allocated            1.1044 ms   <- transfer: 87%
+
+**An allocation pool would have saved nothing**, which is worth recording
+because it was the obvious first idea. Two changes that do work, both landed
+for dspark:
+
+1. **Do not upload write-only outputs.** Four of the thirteen uploads were
+   freshly zeroed output buffers. Verified rather than assumed: filling them
+   with `-12345.0`/`999` instead of zeros gives bit-identical results, so the
+   kernel overwrites every element. 3.40 -> 3.02 ms.
+2. **Coalesce the rest.** Nine separate input uploads cost 0.956 ms; the same
+   bytes staged into one buffer with 256-byte-aligned interior pointers cost
+   0.119 ms — 8x. Applied to the four downloads too. 3.02 -> 2.04 ms.
+
+Net **3.40 -> 2.04 ms, a 40% reduction**, with the oracle deltas bit-identical
+before and after (1.863e-08 / 7.451e-09 / 8.941e-08, tokens exact).
+
+**Follow-up: the same pattern is everywhere.** `_rocm_dev_in` has 103 call
+sites. Highest-count executors, and therefore the best next targets:
+`_rocm_selective_ssm_bwd` (13), `_rocm_selective_ssm` (7),
+`_rocm_optimizer_kernel` (7), `_rocm_mla_decode_step_native` (7 — this is the
+`dk1` perf row), `_rocm_svd_mn` (6),
+`_rocm_selected_block_attention_native` (6). `_rocm_dev_pack`,
+`_rocm_dev_region`, `_rocm_dev_unpack` and `_rocm_dev_alloc` are written to be
+reused; each adoption needs its own write-only verification for the output
+buffers, since that is the one part that is not mechanical.
+
+**Not an NVIDIA problem.** The sm_120 measurement (LAUNCH-OVERHEAD-BOUND-1)
+puts that backend's per-launch cost in host-side emission, not transfers, and
+it is load-insensitive where ROCm degrades 42%. This is a ROCm-lane finding.

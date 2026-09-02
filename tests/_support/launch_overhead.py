@@ -42,11 +42,26 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-#: Flat ceiling for a launch that executed on the device. See the module note.
+#: Flat ceiling for a launch that dispatched to a GPU. See the module note.
+#:
+#: **GPU only, deliberately** (narrowed 2026-09-02, review on #686). This
+#: number is 3.6x the worst gfx1151 dispatch measured over WSL2's
+#: paravirtualised `/dev/dxg`. It says nothing about any other lane, and
+#: applying it to one would be a hollow bound: `native_cpu` is reachable
+#: (`runtime.py` picks it for `target == "x86"`), and an AVX-512 launch that
+#: regressed from ~0.15 ms to 19 ms would sail past a 20 ms ceiling.
 NATIVE_LAUNCH_CEILING_MS = 20.0
 
-#: Execution kinds that mean real device/host work rather than an oracle.
-_NATIVE_KINDS = frozenset({"native_gpu", "native_cpu"})
+#: Kinds that get the flat ceiling: a device dispatch has no meaningful ratio
+#: to a host-side oracle, because the two do not run on the same silicon.
+#:
+#: `native_cpu` is deliberately NOT here. A native CPU lane executes on the
+#: same hardware as the `direct` oracle arm, so the self-calibrating
+#: `max(2.0, direct_ms*4)` remains the meaningful comparison for it -- and is
+#: far tighter than any flat ceiling derived from GPU dispatch would be. If a
+#: CPU lane ever needs its own floor, measure it on an AVX-512 host and give it
+#: a separate constant rather than widening this one.
+_NATIVE_KINDS = frozenset({"native_gpu"})
 
 
 def launch_execution_kind(result: Any) -> str:

@@ -3821,6 +3821,24 @@ is the only classifier of the `elementwise` family. Its two false rows
 `x86_native` names `tessera.sum` while coverage records the canonical
 `tessera.reduce`.
 
+## LAUNCH-OVERHEAD-BOUND-1 — cross-backend assessment (recorded 2026-09-02)
+
+`tests/_support/launch_overhead.py` (PR #686) is shared test infrastructure: it
+bounds `rt.launch` overhead against the `execution_kind` the launch reports.
+A device dispatch gets a flat ceiling; every other lane keeps the
+self-calibrating `max(2.0, direct_ms*4)` against the oracle arm. Review on #686
+asked for a per-backend verdict, and the four are NOT the same.
+
+**x86 — not applicable by construction, and deliberately so.** `native_cpu` is
+reachable (`runtime.py` selects it for `target == "x86"`) but is excluded from
+the flat-ceiling set. A native CPU lane executes on the same silicon as the
+`direct` oracle arm, so the self-calibrating ratio stays meaningful and is far
+tighter than any GPU-derived ceiling: at the first cut `native_cpu` was inside
+the ceiling set, and an AVX-512 launch regressing from ~0.15 ms to 19 ms would
+have passed a 20 ms bound. That hole is closed. If an x86 row ever needs a flat
+floor it must be measured on an AVX-512 host and given its own constant --
+never by widening the GPU one.
+
 ## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
 
 `ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true

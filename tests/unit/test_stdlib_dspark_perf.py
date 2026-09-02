@@ -5,6 +5,10 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.stdlib import dspark
+from tests._support.launch_overhead import (
+    assert_launch_overhead_bounded,
+    launch_execution_kind,
+)
 
 
 def _weights(vocab=64, hidden=32, seed=0):
@@ -92,4 +96,9 @@ def test_ds2_runtime_launch_overhead_is_bounded_against_ds1_oracle():
     # 2.0 ms is chosen by the only criterion that makes a constant worth
     # having: it would have FAILED on the old code (70.6 ms), while leaving
     # ~12x margin over the worst value measured under heavy load.
-    assert launch_ms < max(2.0, direct_ms * 4.0)
+    assert_launch_overhead_bounded(
+        launch_ms=launch_ms,
+        direct_ms=direct_ms,
+        execution_kind=launch_execution_kind(rt.launch(art, (target_hidden, prev_tokens, anchors, weights))),
+        what="ds2 dspark draft block",
+    )

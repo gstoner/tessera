@@ -6,6 +6,10 @@ import pytest
 from tessera import runtime as rt
 from tessera.stdlib import attention
 from tests._support.compiler_tool import run_tessera_opt
+from tests._support.launch_overhead import (
+    assert_launch_overhead_bounded,
+    launch_execution_kind,
+)
 
 
 def _artifact(op_name, arg_names, kwargs):
@@ -206,7 +210,12 @@ def test_dk2_rocm_sparse_attention_perf_baseline_is_bounded():
     # 2.0 ms is chosen by the only criterion that makes a constant worth
     # having: it would have FAILED on the old code (70.6 ms), while leaving
     # ~12x margin over the worst value measured under heavy load.
-    assert float(np.median(launch_vals)) < max(2.0, float(np.median(direct_vals)) * 4.0)
+    assert_launch_overhead_bounded(
+        launch_ms=float(np.median(launch_vals)),
+        direct_ms=float(np.median(direct_vals)),
+        execution_kind=launch_execution_kind(rt.launch(art, (Q, K, V))),
+        what="dk2 sparse attention",
+    )
 
 
 @pytest.mark.hardware_rocm

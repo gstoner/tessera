@@ -6749,3 +6749,19 @@ Super-Bear 2-3 days, Princess-Luna 7 hours. Measure the build's age before
 trusting any sweep, and rebuild before treating a hang or a failure as a code
 defect.
 
+## LAUNCH-OVERHEAD-BOUND-1 — cross-backend assessment (recorded 2026-09-02)
+
+`tests/_support/launch_overhead.py` (PR #686) is shared test infrastructure: it
+bounds `rt.launch` overhead against the `execution_kind` the launch reports.
+A device dispatch gets a flat ceiling; every other lane keeps the
+self-calibrating `max(2.0, direct_ms*4)` against the oracle arm. Review on #686
+asked for a per-backend verdict, and the four are NOT the same.
+
+**Apple — follow-up required before any Metal row adopts this.** Same shape as
+the NVIDIA entry: Apple GPU launches report `native_gpu` and would inherit a
+gfx1151-derived ceiling. Apple's dispatch profile is its own -- unified memory
+removes the host-to-device copies that are 35% of the measured ROCm per-launch
+cost, so the honest expectation is that Apple's floor is LOWER and a 20 ms
+ceiling would be slack rather than tight. No Apple test uses the helper today.
+Measure on the M1 Max before adopting, and note that APPLE-MLPKG-HANG-1 must be
+settled first or a stale-runtime hang will be measured as dispatch cost.

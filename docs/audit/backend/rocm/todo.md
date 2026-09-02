@@ -6355,3 +6355,18 @@ classified. It is the only target that legitimately carries the
 `depth_attention` compiled route, and the two false `min`/`amin` bootstrap rows
 are gone — `rocm_native`'s reduction contract names `sum/mean/max/amax` and no
 more.
+
+## LAUNCH-OVERHEAD-BOUND-1 — cross-backend assessment (recorded 2026-09-02)
+
+`tests/_support/launch_overhead.py` (PR #686) is shared test infrastructure: it
+bounds `rt.launch` overhead against the `execution_kind` the launch reports.
+A device dispatch gets a flat ceiling; every other lane keeps the
+self-calibrating `max(2.0, direct_ms*4)` against the oracle arm. Review on #686
+asked for a per-backend verdict, and the four are NOT the same.
+
+**ROCm — parity validated.** This is the backend the constant was measured on.
+All four adopting rows (`dk1`, `dk2`, `dk4`, `ds2`) take the `native_gpu` branch
+at 1.93 / 3.31 / 3.66 / 3.99 ms; the worst dispatch measured was 4.703 ms idle
+and 5.541 ms under ten busy cores, over WSL2's paravirtualised `/dev/dxg`.
+`NATIVE_LAUNCH_CEILING_MS = 20.0` is ~3.6x that worst case and still fails the
+70.6 ms regression class with 3.5x to spare. Nothing further owed here.

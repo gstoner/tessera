@@ -5998,3 +5998,22 @@ Three guards now make that class of error mechanical rather than editorial:
 classified by the audit. Its rows were corrected: `depth_attn` is no longer
 claimed here (rocm-only dispatch), while `min`/`amin` legitimately remain —
 `nvidia_native` is the one reduction contract that names them.
+
+## LAUNCH-OVERHEAD-BOUND-1 — cross-backend assessment (recorded 2026-09-02)
+
+`tests/_support/launch_overhead.py` (PR #686) is shared test infrastructure: it
+bounds `rt.launch` overhead against the `execution_kind` the launch reports.
+A device dispatch gets a flat ceiling; every other lane keeps the
+self-calibrating `max(2.0, direct_ms*4)` against the oracle arm. Review on #686
+asked for a per-backend verdict, and the four are NOT the same.
+
+**NVIDIA — follow-up required before any sm_120 row adopts this.** NVIDIA
+launches report `native_gpu`, so they would inherit `NATIVE_LAUNCH_CEILING_MS`
+unchanged -- a number measured on gfx1151 over WSL2 `/dev/dxg`, on a different
+interconnect and a different driver stack. It is not evidence for sm_120 in
+either direction: it could be far too loose on a PCIe discrete part, or too
+tight. No NVIDIA test uses the helper today, so nothing is currently wrong;
+the debt is that adopting it without measuring would import a ROCm constant as
+if it were an NVIDIA one. Measure on The Super-Bear (RTX 5070, sm_120) and give
+NVIDIA its own constant before the first adoption. Evidence never transfers
+between architectures.

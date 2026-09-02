@@ -155,6 +155,20 @@ def test_generic_wsl_gpu_node_implies_no_vendor():
         mp.setattr(env, "NVIDIA_DRIVER_DIRS", ())
         mp.setattr(env.Path, "exists", lambda self: str(self) == "/dev/dxg")
         mp.setattr(env.shutil, "which", lambda _name: None)
+        # `rocm_gpu_is_plausibly_present` reaches `rocminfo` by THREE routes,
+        # and patching two of them left the third live: after `shutil.which`
+        # returns None it falls back to `Path(root) / "bin/rocminfo"` filtered
+        # by **`is_file()`**, which `exists` does not cover. On Princess-Luna
+        # both `/opt/rocm/bin/rocminfo` and `/opt/rocm/core/bin/rocminfo` are
+        # real files, so the probe found one, actually ran it, saw a GPU agent
+        # and returned True.
+        #
+        # The failure mode is the one this fleet keeps relearning inverted:
+        # the test passed on every host WITHOUT ROCm — where the fallback file
+        # is simply absent — and could only fail on the single box the
+        # assertion is about. A simulated-absence test has to neutralise every
+        # route to the signal, not the first two.
+        mp.setattr(env.Path, "is_file", lambda self: False)
         assert env.nvidia_gpu_is_plausibly_present() is False
         env.rocm_gpu_is_plausibly_present.cache_clear()
         try:

@@ -120,9 +120,17 @@ int main() {
 }
 
 
-// Pipeline kernel
-extern "C" void wmma_bf16_pipeline_kernel(const __nv_bfloat16*, const __nv_bfloat16*, float*,
-                                          int,int,int,int,int,int,float,float);
+// Pipeline kernel.
+//
+// `__global__` is REQUIRED here and its absence is not cosmetic: without it
+// nvcc reads this as a host function and rejects the `<<<>>>` launches below
+// with "a host function call cannot be configured", failing the whole
+// build-nvidia-cuda tree. The definition in
+// src/kernels/wmma_bf16_pipeline.cu carries `extern "C" __global__`; a
+// declaration that disagrees with its definition on the execution space is a
+// contradiction the compiler cannot resolve in the caller's favour.
+extern "C" __global__ void wmma_bf16_pipeline_kernel(const __nv_bfloat16*, const __nv_bfloat16*, float*,
+                                                     int,int,int,int,int,int,float,float);
 
 // Add timing for pipeline (correctness-checked)
 static void run_wgmma_pipeline(int M,int N,int K) {

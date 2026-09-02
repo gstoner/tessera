@@ -412,6 +412,32 @@ def _warn_if_adafactor_state_unmarked(state: dict[str, Any]) -> None:
     )
 
 
+def adafactor_effective_decay(beta2: float, step: int | None) -> float:
+    """The decay an Adafactor update actually applies, given an optional step.
+
+    One implementation of a rule that was previously written out three times
+    and disagreed with itself (fixed 2026-09-02): the eager `ops.adafactor`
+    used the nominal decay when no step was supplied, while the compiled x86
+    and ROCm forward executors and the VJP state contract each substituted
+    `step=1`. `adafactor_decay(b2, 1)` is exactly 0, so those three silently
+    discarded the incoming second moment on any call that omitted a step —
+    turning a stateful optimizer into a stateless one, which is precisely the
+    failure `ops.adafactor` documents as the reason ABSENT must not mean 1.
+
+    `step is None` therefore means "the caller applied no bias correction" and
+    returns the nominal decay unchanged. A supplied step is 1-based.
+    """
+    if step is None:
+        return float(beta2)
+    index = int(step)
+    if index < 1:
+        raise ValueError(
+            f"adafactor step is the 1-based update index; got {index}. Pass "
+            "None for an update that applied no bias correction."
+        )
+    return adafactor_decay(float(beta2), index)
+
+
 def adafactor_decay(beta2: float, step: int) -> float:
     """Bias-corrected second-moment decay for the Adafactor update at ``step``.
 
@@ -958,6 +984,7 @@ __all__ = [
     "OptaxStyleChain",
     "Optimizer",
     "adafactor",
+    "adafactor_effective_decay",
     "adam",
     "adamw",
     "add_decoupled_weight_decay",

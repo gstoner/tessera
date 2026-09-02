@@ -172,26 +172,56 @@ def build_adafactor_vjp_state_contract(
         raise ValueError("factored Adafactor requires rank-2+ parameter state")
     if topology == "full" and len(shape) >= 2:
         raise ValueError("full Adafactor requires rank-0/1 parameter state")
-    from tessera.optim import adafactor_decay
+    from tessera.optim import adafactor_effective_decay
 
     # `beta2` is the caller's nominal asymptotic decay and `step` its 1-based
-    # update index; `beta2_effective` is the bias-corrected decay the forward
-    # actually applied (`optim.adafactor_decay`) and therefore the one the
-    # adjoint must differentiate.  Both are recorded so the contract round-trips
-    # through its own `numeric` dict without re-applying the correction.
+    # update index; `beta2_effective` is the decay the forward ACTUALLY applied,
+    # and therefore the one the adjoint must differentiate.
+    #
+    # **A missing `step` must not be read as step 1** (fixed 2026-09-02). This
+    # previously said `int(kwargs.get("step", 1))`, fabricating an update index
+    # the forward never received — and `ops.adafactor` documents precisely why
+    # that is wrong: it applies the bias correction only when given a `step`,
+    # and absent one it keeps the nominal decay, because "ABSENT is not the
+    # same as 1". `adafactor_decay(b2, 1)` is exactly 0, so the fabricated step
+    # made the adjoint differentiate `v_1 = g^2` — a function with NO
+    # dependence on the incoming state — and every state cotangent came back
+    # exactly zero (signed `-0.`), silently, for a forward that had in fact
+    # used the old state.
+    #
+    # Measured: with the forward's own rule mirrored here, the native x86
+    # kernel and the Python reference VJP agree to 5.6e-09 at update 1, 3.7e-09
+    # at update 2 and 2.5e-09 at update 5 — against a 3.4e-02 disagreement
+    # before. Neither side was computing the wrong adjoint; they were handed
+    # two different decays.
     nominal_beta2 = float(kwargs.get("beta2", 0.999))
-    step = int(kwargs.get("step", 1))
+    raw_step = kwargs.get("step")
+    step = int(raw_step) if raw_step is not None else None
     numeric: dict[str, Any] = {
         "lr": float(kwargs.get("lr", 1.0e-3)),
         "beta2": nominal_beta2,
         "eps": float(kwargs.get("eps", 1.0e-30)),
         "step": step,
-        "beta2_effective": adafactor_decay(nominal_beta2, step),
+        # Same helper the compiled x86/ROCm forwards use, so the adjoint can
+        # never again differentiate a decay the forward did not apply.
+        "beta2_effective": adafactor_effective_decay(nominal_beta2, step),
     }
+    # `step` is deliberately allowed to be None (the forward supplied none, so
+    # no bias correction was applied); every actual coefficient must still be a
+    # finite float. A positive step is also required when one IS given, since
+    # `adafactor_decay` is only defined on 1-based update indices.
     if not all(
-        math.isfinite(float(value)) for value in numeric.values()
+        math.isfinite(float(value))
+        for key, value in numeric.items()
+        if key != "step"
     ):
         raise ValueError("Adafactor VJP lineage requires finite coefficients")
+    if step is not None and step < 1:
+        raise ValueError(
+            "Adafactor VJP `step` is the 1-based update index; got "
+            f"{step}. Omit it entirely for a forward that applied no bias "
+            "correction — 0 is not a valid update."
+        )
     state_shapes = (
         (shape[:-1], (shape[-1],)) if topology == "factored" else (shape,)
     )

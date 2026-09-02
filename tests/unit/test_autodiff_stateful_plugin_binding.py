@@ -16,7 +16,7 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt
 @ts.jit(target="x86", autodiff="reverse", wrt=("p", "g", "state"))
 def _x86_adafactor_full(p, g, state):
     updated, _new_state = ts.ops.adafactor(
-        p, g, state, lr=0.003, beta2=0.91, eps=1.0e-7
+        p, g, state, lr=0.003, beta2=0.91, eps=1.0e-7, step=3
     )
     return updated
 
@@ -24,7 +24,7 @@ def _x86_adafactor_full(p, g, state):
 @ts.jit(target="x86", autodiff="reverse", wrt=("p", "g", "row", "col"))
 def _x86_adafactor_factored(p, g, row, col):
     updated, _new_row, _new_col = ts.ops.adafactor(
-        p, g, row, col, lr=0.003, beta2=0.91, eps=1.0e-7
+        p, g, row, col, lr=0.003, beta2=0.91, eps=1.0e-7, step=3
     )
     return updated
 
@@ -32,7 +32,7 @@ def _x86_adafactor_factored(p, g, row, col):
 @ts.jit(target="rocm", autodiff="reverse", wrt=("p", "g", "state"))
 def _rocm_adafactor_full(p, g, state):
     updated, _new_state = ts.ops.adafactor(
-        p, g, state, lr=0.003, beta2=0.91, eps=1.0e-7
+        p, g, state, lr=0.003, beta2=0.91, eps=1.0e-7, step=3
     )
     return updated
 
@@ -40,7 +40,7 @@ def _rocm_adafactor_full(p, g, state):
 @ts.jit(target="rocm", autodiff="reverse", wrt=("p", "g", "row", "col"))
 def _rocm_adafactor_factored(p, g, row, col):
     updated, _new_row, _new_col = ts.ops.adafactor(
-        p, g, row, col, lr=0.003, beta2=0.91, eps=1.0e-7
+        p, g, row, col, lr=0.003, beta2=0.91, eps=1.0e-7, step=3
     )
     return updated
 
@@ -171,7 +171,7 @@ def test_factored_adafactor_plugin_executes_and_records_topology_certificate() -
         dy,
         p,
         g,
-        {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        {"v": {"row": row, "col": col, "factored": True}, "step": 2},
         lr=0.003,
         beta2=0.91,
         eps=1.0e-7,
@@ -230,7 +230,7 @@ def test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
             dy,
             p,
             g,
-            {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+            {"v": {"row": row, "col": col, "factored": True}, "step": 2},
             lr=0.003,
             beta2=0.91,
             eps=1.0e-7,
@@ -251,7 +251,7 @@ def test_rocm_adafactor_topologies_record_exact_gfx1151_certificates(
             dy,
             p,
             g,
-            {"v": {"v": state, "factored": False}, "step": 1},
+            {"v": {"v": state, "factored": False}, "step": 2},
             lr=0.003,
             beta2=0.91,
             eps=1.0e-7,

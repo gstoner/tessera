@@ -14,7 +14,7 @@ import contextvars
 import inspect
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 import numpy as np
 
@@ -85,6 +85,58 @@ class Tape:
     #: (reverse-over-forward), so liveness alone cannot detect the nesting —
     #: without this flag that case reported the generic "raw numpy" message.
     diverted_to_forward_mode: bool = False
+    #: Set when an inner `tape()` opened while THIS tape's forward pass was
+    #: still running. `_ACTIVE_TAPE` is a single contextvar, so an inner tape
+    #: shadows the outer one completely: every `ops.*` call goes to the inner
+    #: tape and the outer records nothing for that stretch. This is the
+    #: reverse-mode twin of `diverted_to_forward_mode` above, and it exists for
+    #: the same reason — without it, an input whose path was swallowed by a
+    #: nested tape is indistinguishable from an input the function genuinely
+    #: does not use, and the zero-gradient answer is reported as fact.
+    #:
+    #: **Per buffer id, not a bare flag** (review on #678). Setting a single
+    #: bool on context-manager ENTRY made any nested tape poison the whole
+    #: outer pass: a function that opens an inner tape for an unrelated
+    #: diagnostic and genuinely ignores one of its arguments had that
+    #: argument's legitimate ZERO gradient turned into a refusal. The question
+    #: the zero branch actually needs to ask is narrower -- "was *this*
+    #: value's path swallowed?" -- so record the ids the inner tape consumed
+    #: and let each parameter be judged on its own evidence.
+    shadowed_buffer_ids: set[int] = field(default_factory=set)
+    #: Set the first time `backward()` is entered. After that the forward pass
+    #: is definitively over, so a nested tape opened from a VJP rule (which is
+    #: what `rematerialize` legitimately does) must NOT set the flag above.
+    _forward_closed: bool = False
+    #: Buffer ids that received a cotangent during `backward` but had no
+    #: producing entry on THIS tape and are known to have been consumed by a
+    #: nested tape -- i.e. the reverse sweep ran into the shadowed region and
+    #: stopped there.
+    #:
+    #: **Why the parameter's own id is not enough** (review on #679). A nested
+    #: tape can swallow an INTERMEDIATE rather than the differentiated input:
+    #: `y = ops.mul(x, x)` on the outer tape, `z = ops.sin(y)` inside an inner
+    #: one, `ops.sum(z)` back on the outer. Then `shadowed_buffer_ids` holds
+    #: y and z but NOT x, the sweep dies at z, and x's missing cotangent was
+    #: reported as a zero gradient. The question is where the PATH broke, not
+    #: whether the parameter itself was touched.
+    truncated_at_shadow: set[int] = field(default_factory=set)
+
+    def consumed_buffer_ids(self) -> set[int]:
+        """Buffer ids this tape read as a differentiable input.
+
+        Literal operands are excluded: a python scalar carries no gradient, so
+        an inner tape that only touched literals swallowed nothing. Outputs are
+        included too -- a value the inner tape PRODUCED is equally unreachable
+        from the outer tape, and an outer op consuming it would have recorded
+        there instead.
+        """
+        ids: set[int] = set()
+        for entry in self.entries:
+            for desc in entry.inputs:
+                if not desc.is_literal:
+                    ids.add(desc.array_id)
+            ids.add(entry.output_id)
+        return ids
 
     def record(
         self,
@@ -138,6 +190,10 @@ class Tape:
             ``Parameter.grad`` slots — useful when ``grad()`` wants the
             cotangent map without mutating user-visible state.
         """
+        # The forward pass is over for good once backward is entered — true
+        # even if this call raises, and even under retain_graph. Nested tapes
+        # opened from here on are VJP-internal (`rematerialize`) and legitimate.
+        self._forward_closed = True
         if self._consumed and not retain_graph:
             raise TesseraAutodiffError(
                 "tape.backward() called twice on the same tape; open a new "
@@ -291,6 +347,15 @@ class Tape:
         # grad, jacrev). `_consumed` is set to True regardless — but
         # `retain_graph=True` lets a future backward bypass the consumed
         # check at call time.
+        # Where did the sweep stop? A leftover cotangent whose id no entry on
+        # this tape produced is a leaf. A leaf that a nested tape consumed is
+        # not a leaf at all -- it is a severed edge, and every input upstream
+        # of it is now unprovable rather than zero.
+        produced = {e.output_id for e in self.entries}
+        self.truncated_at_shadow = {
+            i for i in cotan
+            if i not in produced and i in self.shadowed_buffer_ids
+        }
         self.cotangent = cotan
         self._consumed = True
 
@@ -334,11 +399,75 @@ def tape():
     recorded. Outside, ops behave normally.
     """
     t = Tape()
+    outer = _ACTIVE_TAPE.get()
+    # `_forward_closed` distinguishes a nested tape opened from a VJP rule
+    # (which `rematerialize` legitimately does, after the forward pass is over)
+    # from one that shadows a running forward pass.
+    shadows_outer = outer is not None and not outer._forward_closed
     token = _ACTIVE_TAPE.set(t)
     try:
         yield t
     finally:
         _ACTIVE_TAPE.reset(token)
+        if shadows_outer and outer is not None:
+            # Decided on EXIT, from what the inner tape actually consumed --
+            # not on entry from the mere fact that a tape opened. An inner tape
+            # that recorded nothing, or touched only values the outer pass was
+            # not tracking, swallowed no gradient path and must not turn a
+            # legitimate zero into a refusal.
+            outer.shadowed_buffer_ids |= t.consumed_buffer_ids()
+
+
+def shadow_blocks_zero_claim(t: "Tape", buf_id: int) -> bool:
+    """Whether a missing cotangent for `buf_id` is unprovable rather than zero.
+
+    Two ways a nested tape invalidates the zero:
+
+    1. It consumed this buffer directly -- the value's own path was swallowed.
+    2. It severed the chain somewhere upstream (`truncated_at_shadow`) and this
+       buffer took part in the surviving forward pass. The sweep never reached
+       it, so "no cotangent" says nothing about its gradient.
+
+    A buffer that appears in neither -- never recorded here, never swallowed --
+    is genuinely unused, and its zero is provable. That distinction is the whole
+    point: refusing everything is as wrong as returning zeros for everything.
+    """
+    if buf_id in t.shadowed_buffer_ids:
+        return True
+    return bool(t.truncated_at_shadow) and buf_id in t.consumed_buffer_ids()
+
+
+def raise_nested_tape_shadowed(surface: str) -> NoReturn:
+    """Refuse to report a zero gradient that a nested tape is responsible for.
+
+    Called from the zero-gradient branch of `grad` / `jacrev` when the tape was
+    shadowed during its forward pass (`Tape.shadowed_by_nested_tape`). At that
+    point the honest answer is not zero and not a guess — it is that this lane
+    cannot compose the two reverse passes, which is exactly what the sibling
+    forward-mode message in `Tape.backward` already says.
+    """
+    raise TesseraAutodiffError(
+        f"{surface} cannot resolve this gradient: an inner tape() opened while "
+        "the outer forward pass was still running, so every tessera.ops.* call "
+        "in that stretch was recorded on the inner tape and the outer tape "
+        "never saw this input.\n"
+        "\n"
+        "This is what blocks reverse-over-reverse (`grad(grad(f))`, "
+        "`jacrev(grad(f))`). It is the mirror of the forward-mode nesting "
+        "error raised by tape.backward(): each mode's rules are numpy "
+        "functions rather than `ops.*` calls, so neither mode can trace "
+        "through the other's. Composing them needs one derivative datum "
+        "evaluated in a higher-order algebra (AUTODIFF_NEXTGEN_PLAN.md "
+        "AD-WEIL-1), not a deeper tape.\n"
+        "\n"
+        "Returning zeros here would report that the function is constant in "
+        "this input, which is a different and false statement.\n"
+        "\n"
+        "Available today: `tessera.autodiff.hvp(f, x, v)` for Hessian-vector "
+        "products (central difference of the gradient), or "
+        "`JitFn.compiled_hvp_ir` for the exact compiled forward-over-reverse "
+        "path."
+    )
 
 
 def record_custom_vjp_call(

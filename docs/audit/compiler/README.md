@@ -46,7 +46,8 @@ ten were `open`; no live plan satisfied the lifecycle rule for moving to
 `plan_state`, so plans have landed since without this paragraph being
 updated); trust the tables below for membership and the files' own
 frontmatter for state, and recount at the next re-index. Added since:
-`INTRA_KERNEL_FEEDBACK_PLAN.md` (2026-08-27).
+`INTRA_KERNEL_FEEDBACK_PLAN.md` (2026-08-27) and
+`MATH_SOURCE_WORKSTREAM.md` (2026-09-01).
 
 | Class | Count | What it may decide |
 |---|---:|---|
@@ -150,6 +151,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | How should sequence/stateful programs lower? | [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) | [`SEQUENCE_MIXER_ENGINEERING_PLAN.md`](SEQUENCE_MIXER_ENGINEERING_PLAN.md) |
 | How should solver/geometry differentiation land? | [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md) | [`AUTODIFF_ARCHITECTURE_REVIEW.md`](AUTODIFF_ARCHITECTURE_REVIEW.md) |
 | How should game-theoretic operators land? | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) for the oracle rows |
+| Where do higher-order derivatives, coordinate-aware calculus, and contraction algebra land? | [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md) | [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) owns AD-WEIL-1, the capability MSW-2 reaches for; [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) owns MSW-5 |
 | What is the LSE identity contract? | [`LSE_CHECKPOINT_CONTRACT.md`](LSE_CHECKPOINT_CONTRACT.md) | architecture-owned attention plans |
 | When may a consumer fuse into its producer's tiled epilogue? | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) for the arbiter, [`TARGET_IR_REVIEW.md`](TARGET_IR_REVIEW.md) for the emitter seam |
 | When may an effectful op enter a differentiated region? | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) queue order 2 for the ordering; `CONTROL_FLOW_CONTRACT.md` for the region carrier |
@@ -181,6 +183,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | FORGE (arXiv:2606.22932) assessment and the residency-aware epilogue-fusion track it opens: locality lattice, static materialization proof, `matmul → optimizer` fusion, fail-closed clipping/routing keys, and the precision-realizability oracle. Numeric contract in `tests/unit/test_fused_wgrad_optimizer_contract.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | Coalition-lattice / equilibrium operator family: subset zeta/Möbius butterfly, semivalues, differentiable equilibria, regret/CFR dynamics, and the numerically verified oracle set (`research/game_theory/`). Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`INTRA_KERNEL_FEEDBACK_PLAN.md`](INTRA_KERNEL_FEEDBACK_PLAN.md) | IKF-1: intra-kernel measurement as compiler training data (assessment of CUTLASS IKET, 2026-08-27). Per-instance indexed-slot records keyed by schedule coordinates, constant-clock contract with fail-closed validity rules, offline stall classification + realized critical path, cost-model coefficient fitting with roofline prior bands and paired-instance statistics, the explain-vs-decide (`instr_level`) arbiter guard, and delivery phases IKF-P0..P6 (ROCm gfx1151 first). Global order defers to `INTEGRATED_COMPILER_PLAN.md`; not yet bound to a queue entry (plan §13). |
+| [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md) | MSW-1..MSW-9: a host-free reference-lane workstream derived from two tensor-calculus texts (Sochi) and a deep-learning theory book (Jentzen/Kuckuck/von Wurstemberger, arXiv:2310.20360v3). Higher-order autodiff fail-closed guard (landed) and exact jet path, optimizer breadth, a vector-identity law family, coordinate-aware field calculus, contraction normal form, two samples, and ANN-calculus fusion laws. Orthogonal to the integrated queue's physical-execution items rather than competing with them; global order still defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis and backend-lift details. |
 | [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) | PDE-operator semantics, symbol classification, discrete-stability certificates, and the stencil/halo contract queue. |
 | [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md) | Geometry/implicit-differentiation consumer and acceptance workload. |

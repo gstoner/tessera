@@ -6,9 +6,9 @@ Reference date for staleness: **2026-09-01**.
 
 ## Headline
 
-- **150** docs catalogued across the canonical doc tree.
-- **149** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **57** updated within the last 30 days.
+- **151** docs catalogued across the canonical doc tree.
+- **150** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **58** updated within the last 30 days.
 - **22** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -181,6 +181,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-08-27 | 5 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 30 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 36 | ✓ |
+| `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-01 | 0 | ✓ |
 | `compiler/MATRIX_CALCULUS_REVIEW.md` | - | 2026-08-20 | 12 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 24 | ✓ |
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-08-14 | 18 | ✓ |

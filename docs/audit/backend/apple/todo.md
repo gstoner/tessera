@@ -6672,3 +6672,50 @@ Two follow-ups, in order: add `apple_gpu` to `_BACKEND_MODULES`, and give
 family table) so the walker can see them. Until then Apple's real routes are
 invisible to the prune plan, which is a coverage gap in the plan rather than in
 the backend.
+
+## APPLE-MLPKG-HANG-1 — the ML-package dispatch wait never returns (P0, opened 2026-09-01)
+
+**The full `pytest tests/unit/ -m "not slow"` sweep does not finish on the Mac.**
+It is not slow — after 16 minutes the process had accumulated 1:22 of CPU and
+sat at 0.0%. Sampled:
+
+```
+tessera_apple_gpu_mlpkg_dispatch  (libTesseraAppleRuntime.dylib) + 2416
+  -[IOSurfaceSharedEvent waitUntilSignaledValue:timeoutMS:]  (IOSurface) + 72
+    iokit_user_client_trap  (IOKit) + 8
+```
+
+The timeout plumbing is sound and is not the bug: `MLPackagePipeline.dispatch`
+defaults to `timeout_ms=30_000`, the composite path rejects a non-positive
+timeout, and `apple_gpu_runtime.mm` prints a named diagnostic on the
+not-signalled branch. The wait simply does not return within its timeout.
+
+**Why this is P0 rather than a slow test.** A second run scoped to `-k mlpkg`
+with `--timeout=90 --timeout-method=thread` **also hung**, for 14 minutes, until
+killed. pytest-timeout's thread method cannot preempt a blocking C call that
+never re-enters the interpreter. So this lane cannot fail — it can only stop,
+and CI sees an unattributed job timeout. That is strictly worse than a red test:
+it is the hollow-green pattern with the sign flipped, and it makes the full unit
+sweep unusable as a gate on this host.
+
+**Not caused by the autodiff work in PR #679** — that change is pure Python, and
+the 1561-test autodiff surface completes in 115 s.
+
+**Linux control (2026-09-01) — this is Apple-specific, measured, not inferred.**
+The same `pytest tests/unit/ -m "not slow"` invocation on Princess-Luna
+(gfx1151, ROCm env sourced) **completes in 8 m 29 s**: 17033 passed, 18 failed,
+2309 skipped. So the sweep itself is healthy and finite; it is this host's
+Apple GPU dispatch that does not return. Anyone reproducing should use a Linux
+box as the control rather than assuming the suite is simply long.
+
+(Those 18 Linux failures are a separate, pre-existing matter on `main` — mostly
+`*_perf_baseline_is_bounded` timing rows plus a few ROCm/x86 execution rows —
+and are not owned by this entry.)
+
+**Next steps.** (1) Check whether a stale `TesseraAppleRuntimeShared` is
+implicated — the standing rule is to rebuild before an Apple sweep, though a
+stale dylib is documented to *fail*, not hang. (2) Establish whether
+`waitUntilSignaledValue:timeoutMS:` is being called with the value the Python
+side passes (log it at the boundary). (3) Until it is root-caused, the lane
+needs a hard external bound — `--timeout-method=signal`, or a watchdog around
+the dispatch — so the suite reports rather than stalls.

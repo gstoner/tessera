@@ -27,7 +27,12 @@ import numpy as np
 
 from .grad import _wrap_as_parameter
 from .jvp import jvp
-from .tape import TesseraAutodiffError, tape
+from .tape import (
+    TesseraAutodiffError,
+    raise_nested_tape_shadowed,
+    shadow_blocks_zero_claim,
+    tape,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +225,22 @@ def jacrev(
             # tape-produced no matter what `fn` did. Reusing one tape removed
             # that accidental shield.
             if not any(entry.output_id == id(out) for entry in t.entries):
+                # Before the two provable cases below: a tape that was shadowed
+                # during its forward pass recorded nothing for a reason that has
+                # nothing to do with `fn` being constant. `t.entries` is empty
+                # here for the same reason it is empty for a genuine constant,
+                # so the structural test below cannot tell them apart — this
+                # flag is what does.
+                # A returned ARGUMENT is an identity Jacobian by structure --
+                # provable without consulting any tape, so it must be decided
+                # before the shadow evidence is considered. Checking the flag
+                # first rejected `lambda a, b: a` merely because an unrelated
+                # nested tape had opened (review on #678).
+                if any(_returns_this_parameter(out, p) for p, _, _ in jacobians):
+                    pass
+                elif any(shadow_blocks_zero_claim(t, id(p._data._data))
+                         for p, _, _ in jacobians):
+                    raise_nested_tape_shadowed("jacrev(fn)")
                 # Only two situations make a zero/identity Jacobian provable:
                 # `fn` returned one of its own arguments, or it recorded nothing
                 # at all (a genuine constant). If the tape DID record ops and
@@ -266,9 +287,19 @@ def jacrev(
 
                 out_idx = np.unravel_index(k, out_shape)
                 for p, jac_buf, ai_shape in jacobians:
-                    g = t.cotangent.get(id(p._data._data))
+                    buf_id = id(p._data._data)
+                    g = t.cotangent.get(buf_id)
                     if g is None:
-                        # This arg is not on the gradient path → zero row.
+                        # A zero row is a CLAIM that this output does not depend
+                        # on this argument. It is only honest when the sweep
+                        # actually reached the argument -- a sweep severed by a
+                        # nested tape proves nothing (review on #679). Checking
+                        # only the not-tape-produced branch above missed this:
+                        # an outer op recording the final output skips it
+                        # entirely, and the zero row was returned silently.
+                        if shadow_blocks_zero_claim(t, buf_id):
+                            raise_nested_tape_shadowed("jacrev(fn)")
+                        # Genuinely not on the gradient path → zero row.
                         continue
                     jac_buf[out_idx] = np.asarray(g).reshape(ai_shape)
 

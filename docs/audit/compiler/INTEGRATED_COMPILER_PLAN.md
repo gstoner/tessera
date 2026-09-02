@@ -1133,6 +1133,34 @@ gfx1151 stencil+halo packet; x86 owns the CPU/AVX-512 packet. Apple and NVIDIA
 remain independent follow-ups. Acceptance criteria live in
 [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md).
 
+### MATH-SOURCE-WORKSTREAM-1 — host-free reference-lane completeness
+
+Owned by [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md), derived from
+two tensor-calculus texts and a deep-learning theory book supplied 2026-09-01.
+**It is recorded here rather than given an Order row because it does not compete
+with the ordered queue**: every item is host-free reference-lane or contract
+work, while Orders 1-14 are physical-execution evidence. It contends for no
+queue position, no box, and no architecture proof.
+
+MSW-1 landed 2026-09-01 and is the reason the rest is queued: `grad(grad(f))`
+and `jacrev(grad(f))` were returning a **silent zero gradient** for functions
+with a nonzero second derivative. `_ACTIVE_TAPE` is a single contextvar, so an
+inner `tape()` shadows the outer completely; the outer then walks a tape the
+differentiated input never reached, and `grad`'s zero branch read "no
+cotangent" as "constant in this argument". Every existing guard checked the
+OUTPUT side; nothing checked the input side. The forward-mode twin was already
+caught via `active_jvp_trace()`, so the fix restores symmetry rather than
+inventing a rule. This is a fail-open path of exactly the class W0.5/W0.8 are
+listed as "what never to cut".
+
+Two boundaries this workstream must respect, both already owned elsewhere:
+MSW-5 (coordinate-aware field calculus) routes through
+**PDE-STENCIL-FOUNDATION-1**, whose "none is manufactured by legalization" rule
+is the precedent it applies to `ga/calculus.py`; and MSW-2's exact higher-order
+path reaches for the capability **W6.3 / AD-WEIL-1** owns, without claiming it.
+MSW-7 may not add a `tessera.einsum` ODS op ahead of a consuming pass (#29) or
+as a second lowering authority (#31).
+
 ### BLOCK-ATTNRES-1 — ROCm-first depth-attention residuals
 
 Synchronization key `BLOCK-ATTNRES-ROCM-2026-08-12` owns this project. The

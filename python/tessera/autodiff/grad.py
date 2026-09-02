@@ -27,7 +27,12 @@ from typing import Any, Callable, Sequence, Tuple, Union
 
 import numpy as np
 
-from .tape import TesseraAutodiffError, tape
+from .tape import (
+    TesseraAutodiffError,
+    raise_nested_tape_shadowed,
+    shadow_blocks_zero_claim,
+    tape,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -120,6 +125,11 @@ def grad(
             buf_id = id(p._data._data)
             g = t.cotangent.get(buf_id)
             if g is None:
+                if shadow_blocks_zero_claim(t, buf_id):
+                    # THIS argument's path was swallowed by a nested tape --
+                    # not the same as being unused. Fail closed for it alone;
+                    # a genuinely unused sibling still gets its honest zero.
+                    raise_nested_tape_shadowed("grad(fn)")
                 # Argument wasn't on the gradient path → zero grad.
                 g = np.zeros_like(p._data._data)
             grads.append(g)

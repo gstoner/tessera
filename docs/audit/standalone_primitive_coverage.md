@@ -20,6 +20,19 @@ For historical audit narrative, see `docs/audit/coverage/COVERAGE_AUDIT.md`.
 For current cross-layer support state, use
 `docs/audit/generated/support_table.md` and the registry source.
 
+`lowering_rule` answers whether a lowering rule is *specified*, and it is
+**route-blind**: a primitive served only by the Python bootstrap packager scores
+the same as one that descends Graph → Schedule → Tile → Target through
+`tessera-opt`. Which compiler actually serves a primitive is the join surface
+[`generated/primitive_route_map.md`](generated/primitive_route_map.md), whose
+family membership is verified in both directions against
+`bootstrap_prune_audit`.
+
+`backend_kernel` is **not** that question either. It means hardware proofs
+across every declared target; its count of complete entries is an honest
+statement of how many primitives have met that bar, and a route existing does
+not move it (see `runtime_execution_matrix.md`, Decision #26).
+
 The `dtype_layout_rule` count in this document answers only whether each
 primitive has a semantic dtype/layout contract. It does **not** say which
 logical dtypes have physical kernels on each target. The sole generated

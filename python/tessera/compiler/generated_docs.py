@@ -88,6 +88,16 @@ def _r_bootstrap_prune_csv() -> str:
     return bootstrap_prune_audit.render_csv()
 
 
+def _r_primitive_route_map() -> str:
+    from . import primitive_route_map
+    return primitive_route_map.render_markdown()
+
+
+def _r_primitive_route_map_csv() -> str:
+    from . import primitive_route_map
+    return primitive_route_map.render_csv()
+
+
 def _r_support_table() -> str:
     from . import audit
     return audit.render_markdown()
@@ -505,6 +515,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "bootstrap_prune_gap.md", _r_bootstrap_prune,
         csv_path=_GEN / "bootstrap_prune_gap.csv",
         render_csv=_r_bootstrap_prune_csv,
+    ),
+    # ── The join between per-primitive coverage and the MLIR/LLVM route ──
+    GeneratedDoc(
+        "primitive_route_map", "compiler_progress",
+        _GEN / "primitive_route_map.md", _r_primitive_route_map,
+        csv_path=_GEN / "primitive_route_map.csv",
+        render_csv=_r_primitive_route_map_csv,
     ),
     # ── Op / primitive coverage ──
     GeneratedDoc(

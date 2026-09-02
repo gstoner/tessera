@@ -3970,6 +3970,29 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
 )
 
 
+def primitive_graph_names() -> dict[str, "str | None"]:
+    """Raw ``name -> graph_name``, with **no** contract derivation applied.
+
+    `primitive_route_map` needs the primitive names and their Graph IR names
+    and nothing else, so this exposes exactly that.
+
+    Correct layering rather than convenience: a route map has no business
+    reading contract statuses, and keeping the dependency one-directional means
+    a future derivation that *does* flow the other way (coverage consulting the
+    route map) cannot close a cycle. An earlier draft of this work did exactly
+    that -- deriving `backend_kernel` from route existence -- and it was
+    reverted for a different reason: `backend_kernel` means hardware proofs
+    across every declared target, so a route existing must not move it
+    (`test_no_tsol_op_claims_backend_kernel_complete`).
+    """
+    names: dict[str, str | None] = {}
+    for entry in _existing_coverage().values():
+        names[entry.name] = entry.graph_name
+    for entry in _PLANNED_ENTRIES:
+        names.setdefault(entry.name, entry.graph_name)
+    return names
+
+
 def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     entries = _existing_coverage()
     # Consult the live autodiff registries so a `_planned`/`_partial` entry whose
@@ -4347,6 +4370,7 @@ __all__ = [
     "is_contract_closed",
     "PrimitiveCoverage",
     "all_primitive_coverages",
+    "primitive_graph_names",
     "coverage_for",
     "coverage_summary",
     "primitives_for_model_family",

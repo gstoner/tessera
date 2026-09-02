@@ -141,21 +141,51 @@ def test_rocm_lane_serializes_an_hsaco_without_a_gpu(tmp_path: Path) -> None:
     assert blob[18] == 0xE0, f"ELF e_machine is not EM_AMDGPU: {blob[18]:#x}"
 
 
-def test_missing_rocm_path_is_the_diagnosed_failure(tmp_path: Path) -> None:
-    """Negative control: without ROCM_PATH the lane fails as PR #619 saw it.
+def _linkerless_shim(tmp_path: Path) -> Path:
+    """A ROCM_PATH whose ``llvm/bin`` exists but holds no ``ld.lld``."""
+    root = tmp_path / "rocm-linkerless"
+    (root / "llvm" / "bin").mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def test_a_rocm_path_without_a_linker_is_the_diagnosed_failure(tmp_path: Path) -> None:
+    """Negative control: no linker under ROCM_PATH fails as PR #619 saw it.
 
     This is what makes the positive test meaningful -- it shows the check can
     actually observe the regression rather than passing for an unrelated
-    reason. Note MLIR does NOT fall back to ``PATH`` for ``ld.lld``: measured,
-    the serializer still fails with ld.lld on PATH but ROCM_PATH unset, which
-    is exactly why a non-interactive shell broke every compiled lane."""
-    env = {k: v for k, v in os.environ.items() if k not in ("ROCM_PATH", "HIP_PATH")}
+    reason.
+
+    **It points ROCM_PATH at a linker-less shim rather than unsetting it
+    (rewritten 2026-09-02), because unsetting is not a control.** MLIR's ROCDL
+    serializer carries a compiled-in default root -- ``/opt/rocm`` is a literal
+    inside ``libLLVM`` -- and falls back to it whenever ROCM_PATH is absent. So
+    the outcome of unsetting depends entirely on what happens to be installed
+    at that path, which is a property of the host, not of the serializer.
+
+    That is not hypothetical: this test began passing on Princess-Luna when
+    ROCm 10 created ``/opt/rocm/llvm/bin/ld.lld`` (2026-08-20). It had held
+    only because TheRock installs under ``/opt/rocm/core``, leaving the default
+    root linker-less. Measured after the change: with ROCM_PATH unset the
+    serializer emits a ``gpu.binary`` even with ``PATH=/usr/bin:/bin``, where
+    ``ld.lld`` is unreachable -- the compiled-in default, not PATH, is what
+    resolves it. So the original assertion's own guess was wrong twice over:
+    MLIR gained no fallback (it always had one), and the production ROCM_PATH
+    plumbing is *more* necessary, not less, since it is what reaches a toolkit
+    that is NOT at the default root.
+
+    A shim keeps the control in the test's hands: it asserts the serializer
+    needs a linker where it was told to look, on any host, whatever is
+    installed at ``/opt/rocm``."""
+    env = dict(os.environ)
+    env.pop("HIP_PATH", None)
+    env["ROCM_PATH"] = str(_linkerless_shim(tmp_path))
     proc = _serialize(env)
 
     assert proc.returncode != 0, (
-        "expected serialization to fail without ROCM_PATH; if this now passes, "
-        "MLIR gained a fallback and the production env plumbing in "
-        "runtime.py/_rocm_serializer_env may no longer be required"
+        "expected serialization to fail when ROCM_PATH holds no linker; if "
+        "this now passes, the serializer stopped honouring ROCM_PATH and is "
+        "resolving ld.lld some other way -- find out which before trusting "
+        "the positive test above"
     )
     assert "lld invocation failed" in proc.stderr
 

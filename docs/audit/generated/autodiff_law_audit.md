@@ -11,6 +11,15 @@ itself (a matched-wrong pair passes). Law 1 (chain vs finite
 differences) is the derivative-correctness complement. `no_spec` rows
 are real unswept debt, not exclusions.
 
+Law 7 (`field_calculus` registry, MSW-4) is a different kind of check:
+reference-free identities relating the GA field operators to **each
+other** — `d∘d = 0`, `δ∘δ = 0`, Stokes, the Leibniz rule — plus one
+external-oracle law. It catches what a per-op adjoint cannot: a
+wrong-but-self-consistent operator has a perfectly good adjoint. Two of
+its rows are order-of-accuracy checks rather than equalities, because a
+central-difference product rule is exact only to O(h²); the residual for
+those is the coarse-grid relative error, not a tolerance.
+
 ## `tensor` registry
 
 | Law | Status | Ops |
@@ -26,6 +35,12 @@ are real unswept debt, not exclusions.
 | Law | Status | Ops |
 |---|---|---:|
 | adjoint | pass | 16 |
+
+## `field_calculus` registry
+
+| Law | Status | Ops |
+|---|---|---:|
+| vector_identity | pass | 5 |
 
 ## Checked tensor ops
 

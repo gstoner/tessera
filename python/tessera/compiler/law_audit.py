@@ -43,6 +43,15 @@ _HEADER = (
     "itself (a matched-wrong pair passes). Law 1 (chain vs finite\n"
     "differences) is the derivative-correctness complement. `no_spec` rows\n"
     "are real unswept debt, not exclusions.\n"
+    "\n"
+    "Law 7 (`field_calculus` registry, MSW-4) is a different kind of check:\n"
+    "reference-free identities relating the GA field operators to **each\n"
+    "other** — `d∘d = 0`, `δ∘δ = 0`, Stokes, the Leibniz rule — plus one\n"
+    "external-oracle law. It catches what a per-op adjoint cannot: a\n"
+    "wrong-but-self-consistent operator has a perfectly good adjoint. Two of\n"
+    "its rows are order-of-accuracy checks rather than equalities, because a\n"
+    "central-difference product rule is exact only to O(h²); the residual for\n"
+    "those is the coarse-grid relative error, not a tolerance.\n"
 )
 
 
@@ -66,7 +75,11 @@ def render_markdown() -> str:
     out = io.StringIO()
     out.write(_HEADER)
 
-    for registry in ("tensor", "geometric"):
+    # `field_calculus` (Law 7, MSW-4) renders like the others. It was omitted
+    # at first, putting five results in the CSV and none in the Markdown — a
+    # dashboard that silently drops a registry is worse than one that never had
+    # it, because the green page reads as complete coverage (review on #689).
+    for registry in ("tensor", "geometric", "field_calculus"):
         sub = [r for r in rows if r.registry == registry]
         if not sub:
             continue

@@ -36,14 +36,35 @@ def _log_softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 def mse_loss(pred, target, reduction: str = "mean"):
+    """Mean squared error, `(pred - target)**2`, reduced by `reduction`.
+
+    No 1/2 factor: `score_matching_loss` supplies its own where its
+    definition needs one.
+    """
     return _reduce((_asarray(pred) - _asarray(target)) ** 2, reduction)
 
 
 def mae_loss(pred, target, reduction: str = "mean"):
+    """Mean absolute error, `|pred - target|`, reduced by `reduction`.
+
+    Not differentiable at `pred == target`.
+    """
     return _reduce(np.abs(_asarray(pred) - _asarray(target)), reduction)
 
 
 def huber_loss(pred, target, delta: float = 1.0, reduction: str = "mean"):
+    """Huber loss with knee at `delta`.
+
+        0.5 * e**2                for |e| <= delta
+        delta * (|e| - 0.5*delta) otherwise
+
+    **Not the same function as `smooth_l1_loss`,** though they are related:
+    `huber(delta=d) == d * smooth_l1(beta=d)` exactly (pinned in the tests).
+    Huber keeps the quadratic branch unscaled, so its curvature near zero is
+    independent of `delta`; smooth-L1 divides by `beta`, so the two agree
+    only at `delta = beta = 1`. The branch boundary also differs: `<= delta`
+    here, `< beta` there.
+    """
     err = _asarray(pred) - _asarray(target)
     abs_err = np.abs(err)
     d = float(delta)
@@ -52,6 +73,14 @@ def huber_loss(pred, target, delta: float = 1.0, reduction: str = "mean"):
 
 
 def smooth_l1_loss(pred, target, beta: float = 1.0, reduction: str = "mean"):
+    """Smooth L1 loss with transition at `beta`.
+
+        0.5 * e**2 / beta   for |e| < beta
+        |e| - 0.5*beta      otherwise
+
+    Equals `huber_loss(delta=beta) / beta` -- see the note there for why the
+    two are not interchangeable.
+    """
     err = np.abs(_asarray(pred) - _asarray(target))
     b = float(beta)
     loss = np.where(err < b, 0.5 * err * err / b, err - 0.5 * b)
@@ -62,6 +91,13 @@ def log_cosh_loss(pred, target, reduction: str = "mean"):
     # log(cosh(e)) = |e| + log1p(exp(-2|e|)) - log 2. The |e| form is required,
     # not cosmetic: writing it on the raw error makes exp(-2e) overflow float64
     # for e < -354.9 and return inf, while log_cosh is even in e.
+    """`log(cosh(pred - target))`, reduced by `reduction`.
+
+    A smooth approximation to L1 that stays twice differentiable at zero.
+    Computed as `|e| + log1p(exp(-2|e|)) - log 2` on the ABSOLUTE error --
+    the even form is required, not cosmetic: on the raw error `exp(-2e)`
+    overflows float64 for `e < -354.9` and returns `inf`.
+    """
     err = np.abs(_asarray(pred) - _asarray(target))
     loss = err + np.log1p(np.exp(-2.0 * err)) - np.log(2.0)
     return _reduce(loss, reduction)
@@ -76,6 +112,19 @@ def cross_entropy_loss(
     ignore_index: int = -100,
     label_smoothing: float = 0.0,
 ):
+    """Softmax cross-entropy over `axis`, from LOGITS.
+
+    Accepts either integer class indices (shape = logits with `axis`
+    removed) or a soft target distribution the same shape as `logits`.
+    `ignore_index` drops positions from both the sum and the `mean`
+    denominator, so masked tokens do not dilute the average.
+    `label_smoothing` in [0, 1) mixes the one-hot target with the uniform
+    distribution.
+
+    Takes logits, never probabilities: it applies `log_softmax` itself.
+    Passing probabilities computes a finite, wrong number rather than
+    raising, because a probability vector is a perfectly valid logit vector.
+    """
     logits = _asarray(logits).astype(np.float64, copy=False)
     targets = _asarray(targets)
     axis = int(axis)
@@ -130,6 +179,16 @@ def cross_entropy_loss(
 
 
 def binary_cross_entropy_loss(logits, targets, reduction: str = "mean"):
+    """Binary cross-entropy from LOGITS (i.e. BCE-with-logits).
+
+    Computed in the numerically stable form
+    `max(x, 0) - x*t + log1p(exp(-|x|))`, which stays exact for large |x|
+    where `log(sigmoid(x))` underflows.
+
+    The name omits "with_logits" but the behaviour does not: this applies
+    the sigmoid itself. Handing it probabilities in [0, 1] silently computes
+    the loss of `sigmoid(p)` -- finite, plausible, and wrong.
+    """
     logits = _asarray(logits).astype(np.float64, copy=False)
     targets = _asarray(targets).astype(np.float64, copy=False)
     loss = np.maximum(logits, 0.0) - logits * targets + np.log1p(np.exp(-np.abs(logits)))
@@ -259,6 +318,12 @@ def label_smoothed_cross_entropy(
     axis: int = -1,
     ignore_index: int = -100,
 ):
+    """`cross_entropy_loss` with `label_smoothing=smoothing`.
+
+    A thin alias kept because the smoothing variant is named separately in
+    much of the literature; it is one implementation, not two (#31). Note
+    `smoothing` is positional here and keyword-only there.
+    """
     return cross_entropy_loss(
         logits, targets, reduction=reduction, axis=axis,
         ignore_index=ignore_index, label_smoothing=smoothing)
@@ -268,6 +333,23 @@ def kl_divergence(
     p_log_probs, q_probs, reduction: str = "mean", *,
     axis: int = -1, epsilon: float = 1e-12,
 ):
+    """`KL(p || q) = sum p * (log p - log q)` over `axis`.
+
+    **The argument order is the INVERSE of PyTorch's `F.kl_div`, and getting
+    it wrong is silent.** Here `p_log_probs` is the FIRST distribution of
+    `KL(p||q)`, in log space, and `q_probs` is the second, in probability
+    space. PyTorch takes `kl_div(input, target)` where `input` is the log of
+    the SECOND argument and `target` is the first -- so porting an argument
+    list across computes `KL(q||p)`. KL is asymmetric, so that is a
+    different number rather than a rounding difference: for
+    `p = (.1,.2,.7)`, `q = (.3,.3,.4)` it returns 0.2274 instead of 0.2008.
+    Both are finite and neither raises. The tests pin both directions.
+
+    Zero-probability entries are dropped rather than propagated: `p log p`
+    at `p = 0` is `0 * -inf = NaN` in floating point while its limit is 0,
+    and `-inf` arrives routinely from `log_softmax` over masked logits.
+    `epsilon` floors `q` only.
+    """
     p_log = _asarray(p_log_probs).astype(np.float64, copy=False)
     q = _asarray(q_probs).astype(np.float64, copy=False)
     if p_log.shape != q.shape:
@@ -294,6 +376,13 @@ def js_divergence(
     p_probs, q_probs, reduction: str = "mean", *,
     axis: int = -1, epsilon: float = 1e-12,
 ):
+    """Jensen-Shannon divergence, `0.5*KL(p||m) + 0.5*KL(q||m)`, `m = (p+q)/2`.
+
+    Symmetric and bounded, unlike `kl_divergence` -- and unlike it, BOTH
+    arguments are probabilities, not log-probabilities. Natural log, so the
+    range is [0, ln 2]; this is the divergence, not its square root (the JS
+    *distance*). `epsilon` floors every log argument.
+    """
     p = _asarray(p_probs).astype(np.float64, copy=False)
     q = _asarray(q_probs).astype(np.float64, copy=False)
     if p.shape != q.shape:
@@ -313,12 +402,27 @@ def js_divergence(
 
 
 def wasserstein_distance(x, y, reduction: str = "mean"):
+    """1-D Wasserstein-1 distance between empirical samples on the last axis.
+
+    `mean(|sort(x) - sort(y)|)` -- the closed form for W1 in one dimension,
+    where the optimal transport plan is the order-statistic matching. It
+    therefore requires `x` and `y` to have the SAME number of samples and
+    reads the last axis as the sample axis, not as a feature vector. This is
+    not a general optimal-transport solve and does not become one in higher
+    dimensions.
+    """
     x_sorted = np.sort(_asarray(x), axis=-1)
     y_sorted = np.sort(_asarray(y), axis=-1)
     return _reduce(np.mean(np.abs(x_sorted - y_sorted), axis=-1), reduction)
 
 
 def cosine_embedding_loss(x1, x2, target, margin: float = 0.0, reduction: str = "mean"):
+    """`1 - cos` for similar pairs, `max(0, cos - margin)` for dissimilar.
+
+    `target` is read as `target > 0`, so the usual +1/-1 convention works
+    and so does 1/0. The cosine denominator carries a 1e-12 floor, so a zero
+    vector yields cos 0 rather than NaN.
+    """
     a = _asarray(x1).astype(np.float64, copy=False)
     b = _asarray(x2).astype(np.float64, copy=False)
     t = _asarray(target)
@@ -328,6 +432,15 @@ def cosine_embedding_loss(x1, x2, target, margin: float = 0.0, reduction: str = 
 
 
 def contrastive_loss(x1, x2, target, margin: float = 1.0, reduction: str = "mean"):
+    """Hadsell-Chopra contrastive loss on Euclidean distance.
+
+        target * d**2 + (1 - target) * max(0, margin - d)**2
+
+    `target = 1` means the pair is SIMILAR (pulled together). Both branches
+    are squared, so this is not `triplet_loss`'s hinge on raw distance. And
+    `target` is used arithmetically rather than as a predicate, so a -1/+1
+    encoding is wrong here even though it works in `cosine_embedding_loss`.
+    """
     dist = np.linalg.norm(_asarray(x1) - _asarray(x2), axis=-1)
     t = _asarray(target)
     loss = t * dist * dist + (1.0 - t) * np.maximum(0.0, float(margin) - dist) ** 2
@@ -335,12 +448,26 @@ def contrastive_loss(x1, x2, target, margin: float = 1.0, reduction: str = "mean
 
 
 def triplet_loss(anchor, positive, negative, margin: float = 1.0, reduction: str = "mean"):
+    """`max(0, d(a, p) - d(a, n) + margin)` on Euclidean distances.
+
+    Raw distances, not squared -- the other common formulation squares them,
+    which changes the gradient scale but not the sign.
+    """
     pos = np.linalg.norm(_asarray(anchor) - _asarray(positive), axis=-1)
     neg = np.linalg.norm(_asarray(anchor) - _asarray(negative), axis=-1)
     return _reduce(np.maximum(0.0, pos - neg + float(margin)), reduction)
 
 
 def nt_xent_loss(embeddings, labels, temperature: float = 0.5, reduction: str = "mean"):
+    """NT-Xent (SimCLR) loss over an L2-normalised batch.
+
+    Similarities are `z z^T / temperature` with the diagonal set to `-inf`,
+    so a sample is never its own positive. Supports MORE THAN ONE positive
+    per anchor -- positives are all same-label pairs and their
+    log-probabilities are averaged -- which the original two-view
+    formulation does not. An anchor with no positive contributes 0 (the
+    denominator is floored at 1) rather than NaN.
+    """
     z = _asarray(embeddings).astype(np.float64, copy=False)
     z = z / (np.linalg.norm(z, axis=-1, keepdims=True) + 1e-12)
     logits = z @ z.T / float(temperature)
@@ -355,6 +482,13 @@ def nt_xent_loss(embeddings, labels, temperature: float = 0.5, reduction: str = 
 
 
 def info_nce_loss(query, positive, negatives, temperature: float = 0.1, reduction: str = "mean"):
+    """InfoNCE: cross-entropy over `[positive, *negatives] / temperature`.
+
+    The positive is concatenated at index 0 and the target is always class
+    0, so `negatives` is `(batch, k, dim)` while query and positive are
+    `(batch, dim)`. Scores are dot products on the raw vectors: normalise
+    beforehand if cosine similarity is intended.
+    """
     q = _asarray(query).astype(np.float64, copy=False)
     p = _asarray(positive).astype(np.float64, copy=False)
     n = _asarray(negatives).astype(np.float64, copy=False)
@@ -365,18 +499,44 @@ def info_nce_loss(query, positive, negatives, temperature: float = 0.1, reductio
 
 
 def ddpm_noise_pred_loss(pred_noise, true_noise, reduction: str = "mean"):
+    """DDPM simplified objective: MSE between predicted and true noise.
+
+    Exactly `mse_loss` -- named separately because it is the `L_simple` term
+    of the diffusion objective, and the name is what makes a training loop
+    readable. No 1/2 factor.
+    """
     return mse_loss(pred_noise, true_noise, reduction=reduction)
 
 
 def score_matching_loss(score, target_score, reduction: str = "mean"):
+    """`0.5 * ||score - target_score||**2`, reduced by `reduction`.
+
+    The 1/2 IS part of this definition, unlike `mse_loss` which carries
+    none -- so this is `0.5 * mse_loss`, not an alias for it.
+    """
     return 0.5 * mse_loss(score, target_score, reduction=reduction)
 
 
 def vlb_loss(terms, reduction: str = "mean"):
+    """Reduce PRE-COMPUTED variational-bound terms; it computes no bound.
+
+    A carrier, not a derivation: `terms` already holds the per-element
+    KL/NLL contributions and this only applies `reduction`. It exists so a
+    training loop can name the quantity it reduces, and so the term appears
+    in the op catalog under the same reduction contract as every other loss.
+    """
     return _reduce(_asarray(terms), reduction)
 
 
 def seq2seq_loss(logits, targets, mask=None, reduction: str = "mean"):
+    """Token-level cross-entropy with an optional mask.
+
+    With a mask and `reduction="mean"` the denominator is the SUM OF THE
+    MASK, not the element count -- a per-token mean over real tokens, which
+    is what makes the value comparable across batches with different
+    padding. Without a mask it is plain `cross_entropy_loss`. The mask
+    multiplies the loss, so float weights are allowed, not only 0/1.
+    """
     loss = cross_entropy_loss(logits, targets, reduction="none")
     if mask is not None:
         loss = loss * _asarray(mask)

@@ -208,8 +208,8 @@ if [[ $DO_PYTHON -eq 1 ]]; then
   . "${REPO_ROOT}/.venv/bin/activate"
   # Runtime numerics + test/lint/type tooling — delegated to the single source
   # of truth so this script and install_test_deps.sh never drift (the latter
-  # also carries pytest-timeout / pytest-xdist and the numpy<2.2 mypy-ratchet
-  # cap, and verifies the install).
+  # also carries pytest-timeout / pytest-xdist, bounds `lit` to the LLVM major,
+  # and verifies the install, printing the drift-prone versions).
   PYTHON=python bash "${REPO_ROOT}/scripts/install_test_deps.sh"
 else
   warn "skipping Python venv (--no-python)"

@@ -101,6 +101,46 @@ def _attach_master_state(state: dict[str, Any], master_params: Tree, master_dtyp
     return out
 
 
+def _resolve_state(
+    state: "dict[str, Any] | None",
+    *,
+    optimizer: str,
+    required: "tuple[str, ...]",
+    fresh: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    """Resolve optimizer state, or refuse with a diagnostic that names the slot.
+
+    `None` is the documented fresh-start value and stays the ONLY one. An
+    empty or partial dict is deliberately NOT treated as a fresh start: in
+    practice it is state that got dropped between steps -- a checkpoint that
+    saved parameters but not slots, a tree rebuilt by name, a dict
+    comprehension that filtered. Silently restarting there discards the
+    accumulated moments and degrades training with no error at all, which is
+    the failure mode worth refusing (#21a: a key that selects semantics fails
+    closed).
+
+    What this replaces is a raw `KeyError('velocity')` from inside a tree map
+    -- an exception that names neither the optimizer, nor the contract, nor
+    the fix (MSW-3 / correctness-audit finding M-4).
+
+    `master_params` is intentionally never `required`: it exists only when
+    `master_dtype` is set, so demanding it would refuse valid fp32 state.
+    """
+    if state is None:
+        return fresh()
+    missing = [slot for slot in required if slot not in state]
+    if missing:
+        raise ValueError(
+            f"{optimizer}: optimizer state is missing {missing!r}. "
+            f"Pass state=None to start fresh -- a dict that is empty or has "
+            f"lost slots is treated as dropped state, not as a fresh start, "
+            f"because silently restarting would discard the accumulated "
+            f"moments and quietly degrade training. "
+            f"Slots present: {sorted(state)!r}; required: {list(required)!r}."
+        )
+    return state
+
+
 def tree_map(fn: Callable[[Any], Any], tree: Tree) -> Tree:
     if isinstance(tree, dict):
         return {k: tree_map(fn, v) for k, v in tree.items()}
@@ -236,7 +276,10 @@ def momentum(
 ) -> tuple[Tree, dict[str, Tree]]:
     """SGD with classical momentum."""
     base_params = _master_tree(params, state, master_dtype)
-    velocity = zeros_like_tree(params, state_dtype) if state is None else state["velocity"]
+    state = _resolve_state(
+        state, optimizer="momentum", required=("velocity",),
+        fresh=lambda: {"velocity": zeros_like_tree(params, state_dtype)})
+    velocity = state["velocity"]
     new_velocity = tree_map2(
         lambda v, g: _state_array(float(momentum) * _compute_array(v, compute_dtype) + _compute_array(g, compute_dtype), state_dtype),
         velocity,
@@ -261,7 +304,10 @@ def nesterov(
 ) -> tuple[Tree, dict[str, Tree]]:
     """Nesterov momentum update."""
     base_params = _master_tree(params, state, master_dtype)
-    velocity = zeros_like_tree(params, state_dtype) if state is None else state["velocity"]
+    state = _resolve_state(
+        state, optimizer="nesterov", required=("velocity",),
+        fresh=lambda: {"velocity": zeros_like_tree(params, state_dtype)})
+    velocity = state["velocity"]
     new_velocity = tree_map2(
         lambda v, g: _state_array(float(momentum) * _compute_array(v, compute_dtype) + _compute_array(g, compute_dtype), state_dtype),
         velocity,
@@ -294,8 +340,10 @@ def adamw(
 ) -> tuple[Tree, dict[str, Any]]:
     """AdamW with decoupled weight decay."""
     base_params = _master_tree(params, state, master_dtype)
-    if state is None:
-        state = {"m": zeros_like_tree(params, state_dtype), "v": zeros_like_tree(params, state_dtype), "step": 0}
+    state = _resolve_state(
+        state, optimizer="adamw", required=("m", "v", "step"),
+        fresh=lambda: {"m": zeros_like_tree(params, state_dtype),
+                       "v": zeros_like_tree(params, state_dtype), "step": 0})
     step = int(state["step"]) + 1
     m = tree_map2(
         lambda m_, g: _state_array(beta1 * _compute_array(m_, compute_dtype) + (1.0 - beta1) * _compute_array(g, compute_dtype), state_dtype),
@@ -504,12 +552,13 @@ def adafactor(
     fall back to full second moments.
     """
     base_params = _master_tree(params, state, master_dtype)
-    if state is None:
-        state = {
+    state = _resolve_state(
+        state, optimizer="adafactor", required=("v", "step"),
+        fresh=lambda: {
             "v": tree_map(lambda p: _adafactor_zero_state(_asarray(p), state_dtype=state_dtype), params),
             "step": 0,
             "v_representation": _ADAFACTOR_V_REPRESENTATION,
-        }
+        })
     # `v` changed meaning when the bias correction landed: the step-dependent
     # decay makes the recursion carry the DEBIASED estimate directly, where it
     # previously carried the raw EMA. A checkpoint written before that holds
@@ -635,8 +684,9 @@ def lion(
     cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
     base_params = _master_tree(params, state, master_dtype)
-    if state is None:
-        state = {"m": zeros_like_tree(params, state_dtype), "step": 0}
+    state = _resolve_state(
+        state, optimizer="lion", required=("m", "step"),
+        fresh=lambda: {"m": zeros_like_tree(params, state_dtype), "step": 0})
     update = tree_map2(
         lambda m, g: beta1 * _compute_array(m, compute_dtype) + (1.0 - beta1) * _compute_array(g, compute_dtype),
         state["m"],
@@ -667,7 +717,10 @@ def muon(
     lr: float = 1e-3,
     momentum: float = 0.95,
 ) -> tuple[Tree, dict[str, Any]]:
-    velocity = zeros_like_tree(params) if state is None else state["velocity"]
+    state = _resolve_state(
+        state, optimizer="muon", required=("velocity",),
+        fresh=lambda: {"velocity": zeros_like_tree(params)})
+    velocity = state["velocity"]
     new_velocity = tree_map2(lambda v, g: momentum * _asarray(v) + _asarray(g), velocity, grads)
     updates = tree_map(_orthogonalize_if_matrix, new_velocity)
     return sgd(params, updates, lr), {"velocity": new_velocity}

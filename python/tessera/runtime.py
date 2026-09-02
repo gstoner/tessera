@@ -1422,8 +1422,8 @@ def _rocm_dspark_draft_block_native(
     inputs = [th, pt, anc, emb, hp, tp, op, cp, mk]
     outputs = [logits, conf, tokens, hidden]
     # Both allocations are acquired INSIDE the try, appended as they succeed
-    # (review on #690). Allocating the input region outside it leaked that
-    # region whenever the output allocation failed -- which is precisely the
+    # (review on #690). Allocating the input buffer outside it leaked that
+    # region whenever the output allocation failed — which is precisely the
     # out-of-memory case, where leaking makes the retry fail too. The old
     # per-buffer loop had this right; coalescing must not lose it.
     bases: list[Any] = []
@@ -27504,6 +27504,55 @@ _rocm_spmm_hsaco_cache: dict[tuple[str], bytes] = {}
 _rocm_sddmm_hsaco_cache: dict[tuple[str], bytes] = {}
 
 
+_rocm_module_cache: "dict[tuple[int, bytes, bytes], Any]" = {}
+_rocm_module_keepalive: "list[Any]" = []
+
+
+def _rocm_module_function(hip: Any, hsaco: bytes, sym: bytes) -> Any:
+    """Resolve a kernel symbol, loading each code object at most once.
+
+    `hipModuleLoadData` was being called on EVERY launch. Measured on
+    gfx1151 under WSL2 for the 13400-byte sparse-attention code object:
+    load + getFunction + unload = 1.547 ms, against 0.0005 ms to fetch the
+    symbol from an already-loaded module. That fixed 1.5 ms was 37% of the
+    whole call at the block-sparse ratchet's shape -- and because it is paid
+    identically by both the tiled and scalar paths, it did not just slow the
+    row down, it compressed the ratio between them that the ratchet gates.
+
+    Neither sparse launcher unloaded the module, so the repeated load was
+    also leaking one code object per launch; caching fixes both.
+
+    Keyed on `(device, code object, symbol)`. A module handle is only valid
+    on the device whose context loaded it, so the ordinal is part of the
+    identity, not an optimisation detail. The code object is the key rather
+    than a hash of it: these are a few KB each and bounded by the number of
+    distinct kernels, and a hash collision here would launch the WRONG
+    kernel silently.
+
+    Modules are deliberately never unloaded -- they live for the process,
+    which is what makes the second launch free.
+    """
+    dev = ctypes.c_int(0)
+    if hip.hipGetDevice(ctypes.byref(dev)) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: hipGetDevice failed")
+    key = (int(dev.value), hsaco, bytes(sym))
+    cached = _rocm_module_cache.get(key)
+    if cached is not None:
+        return cached
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, sym) != 0:
+        # Unloaded and NOT cached: a missing symbol is a build/ABI error, and
+        # caching the failure would resurface it later as a different message.
+        hip.hipModuleUnload(mod)
+        raise RuntimeError(f"rocm sparse: kernel symbol {sym!r} not found")
+    _rocm_module_cache[key] = fn
+    _rocm_module_keepalive.append(mod)
+    return fn
+
+
 def _rocm_sparse_launch(hsaco: bytes, sym: bytes, buffers: list, scalars: list, grid_total: int) -> None:
     """Launch a sparse kernel: ``buffers`` = list of (device_ptr, elem_count)
     memref args; ``scalars`` = trailing index args; grid sized to grid_total."""
@@ -27512,12 +27561,7 @@ def _rocm_sparse_launch(hsaco: bytes, sym: bytes, buffers: list, scalars: list, 
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm sparse: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm sparse: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, sym) != 0:
-        raise RuntimeError(f"rocm sparse: kernel symbol {sym!r} not found")
+    fn = _rocm_module_function(hip, hsaco, sym)
 
     def _mr(p, size):
         return [
@@ -27551,12 +27595,7 @@ def _rocm_sparse_launch_custom(
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm sparse: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm sparse: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, sym) != 0:
-        raise RuntimeError(f"rocm sparse: kernel symbol {sym!r} not found")
+    fn = _rocm_module_function(hip, hsaco, sym)
 
     def _mr(p, size):
         return [
@@ -27589,6 +27628,28 @@ def _rocm_dev_in(hip: Any, host: Any, nbytes: int) -> Any:
 
 
 _ROCM_DEV_ALIGN = 256
+
+
+# Set to a byte value (0..255) to fill every write-only device region with that
+# byte before the kernel runs. `_rocm_dev_region`/`_rocm_dev_alloc` are only
+# sound for buffers the kernel FULLY writes, and #690 established that by a
+# one-off manual experiment recorded in a docstring. A claim checked once by
+# hand is not a contract: this makes it executable, so each of the remaining
+# ~100 adoptions can prove its own outputs instead of inheriting someone
+# else's evidence (Decision #29 -- a declaration needs a consumer).
+_ROCM_DEV_POISON: "int | None" = None
+
+
+def _rocm_dev_poison(hip: Any, base: Any, total: int) -> None:
+    """Fill a freshly allocated write-only region with `_ROCM_DEV_POISON`."""
+    if _ROCM_DEV_POISON is None:
+        return
+    memset = getattr(hip, "hipMemset", None)
+    if memset is None:  # older HIP: no hook, so make the absence visible
+        raise RuntimeError("poison requested but libamdhip64 has no hipMemset")
+    if memset(base, ctypes.c_int(int(_ROCM_DEV_POISON)),
+              ctypes.c_size_t(int(total))) != 0:
+        raise RuntimeError("rocm sparse: hipMemset failed")
 
 
 def _rocm_dev_pack(hip: Any, arrays: "list[Any]") -> "tuple[Any, list[Any]]":
@@ -27653,6 +27714,7 @@ def _rocm_dev_region(hip: Any, arrays: "list[Any]") -> "tuple[Any, list[Any], li
         raise RuntimeError("rocm sparse: hipMalloc failed")
     if base.value is None:
         raise RuntimeError("rocm sparse: hipMalloc returned a null base pointer")
+    _rocm_dev_poison(hip, base, total)
     origin = int(base.value)
     return base, [ctypes.c_void_p(origin + o) for o in offsets], offsets
 
@@ -27692,6 +27754,7 @@ def _rocm_dev_alloc(hip: Any, nbytes: int) -> Any:
     d = ctypes.c_void_p()
     if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
         raise RuntimeError("rocm sparse: hipMalloc failed")
+    _rocm_dev_poison(hip, d, nbytes)
     return d
 
 
@@ -27852,30 +27915,43 @@ def _rocm_selected_block_attention_native(
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm block_sparse_attention: hipInit failed")
     out = np.zeros((B, Hq, Sq, Dv), dtype=np.float32)
-    devs: list[Any] = []
+    # Six uploads cost six crossings of the /dev/dxg boundary, and that cost is
+    # per CALL, not per byte. Measured at the ratchet's own shape (Sq=128):
+    # 6x malloc+memcpy+free = 4.14 ms, of which allocation is only 0.53 ms; the
+    # same bytes staged as one region cost 1.69 ms. The 2.4 ms sat on BOTH the
+    # tiled and scalar paths, so it did not merely slow this row down -- it
+    # drowned the comparison BETWEEN them, which is what the ratchet gates.
+    # Fitted over Sq: ~6 ms fixed vs ~0.5 ms of kernel work at Sq=128, so the
+    # measured speedup fell to 1.14 while the kernel still wins 1.63x at
+    # Sq=2048, matching the recorded 1.6048.
+    bases: list[Any] = []
     try:
-        d_q = _rocm_dev_in(hip, q.reshape(-1), 4 * q.size)
-        devs.append(d_q)
-        d_k = _rocm_dev_in(hip, k.reshape(-1), 4 * k.size)
-        devs.append(d_k)
-        d_v = _rocm_dev_in(hip, v.reshape(-1), 4 * v.size)
-        devs.append(d_v)
-        d_sel = _rocm_dev_in(hip, sel.reshape(-1), 8 * sel.size)
-        devs.append(d_sel)
-        d_qpos = _rocm_dev_in(hip, qpos.reshape(-1), 8 * qpos.size)
-        devs.append(d_qpos)
-        d_o = _rocm_dev_in(hip, out.reshape(-1), 4 * out.size)
-        devs.append(d_o)
+        in_base, in_ptrs = _rocm_dev_pack(
+            hip,
+            [q.reshape(-1), k.reshape(-1), v.reshape(-1),
+             sel.reshape(-1), qpos.reshape(-1)],
+        )
+        bases.append(in_base)
+        # `out` was being UPLOADED as zeros before a kernel that overwrites
+        # every element -- a seventh crossing carrying no information. It is
+        # write-only, proven by poisoning rather than assumed: see
+        # `_ROCM_DEV_POISON` and the write-only test.
+        out_base, out_ptrs, out_offsets = _rocm_dev_region(hip, [out.reshape(-1)])
+        bases.append(out_base)
+        d_q, d_k, d_v, d_sel, d_qpos = in_ptrs
+        (d_o,) = out_ptrs
         buffers = [(d_q, q.size), (d_k, k.size), (d_v, v.size), (d_sel, sel.size), (d_qpos, qpos.size), (d_o, out.size)]
         scalars = [B, Hq, Hkv, Sq, Sk, D, Dv, int(block_size), Ksel, 1 if causal else 0]
         if use_tiled:
             _rocm_sparse_launch_custom(hsaco, b"bsat", buffers, scalars, B * Hq * Sq, 256)
         else:
             _rocm_sparse_launch(hsaco, b"bsa", buffers, scalars, out.size)
-        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 4 * out.size, 2)
+        _rocm_dev_unpack(hip, out_base, [out.reshape(-1)], out_offsets)
     finally:
-        for dev in devs:
-            hip.hipFree(dev)
+        # Only BASE allocations are freed, and only those that succeeded; every
+        # d_* above is an interior pointer and must never reach hipFree.
+        for base in bases:
+            hip.hipFree(base)
     return out
 
 

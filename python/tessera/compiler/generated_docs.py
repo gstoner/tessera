@@ -522,6 +522,12 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "primitive_route_map.md", _r_primitive_route_map,
         csv_path=_GEN / "primitive_route_map.csv",
         render_csv=_r_primitive_route_map_csv,
+        # The Markdown carries semantics the CSV does not: the family-membership
+        # table, the classified-backend list, the unclassifiable-target reasons
+        # and the summary counts. Adding a non-pattern family changes the
+        # rendered page without changing one CSV row, so gating only the CSV
+        # would let `--check` pass over a stale dashboard (review on #677).
+        also_gate_md=True,
     ),
     # ── Op / primitive coverage ──
     GeneratedDoc(

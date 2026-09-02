@@ -3782,3 +3782,41 @@ supersedes AMX, and no fleet box has it).
 If an ACE matrix lane is ever added, the rule above is the one to apply from
 the start: **zero-pad a contraction dimension, suppress the store on an output
 dimension.** Getting that backwards is silent corruption rather than a fault.
+
+## Cross-backend sync `PRIMITIVE-ROUTE-MAP-2026-09-01`
+
+**Owning item:** the coverage ↔ MLIR/LLVM route join
+(`generated/primitive_route_map.md`) · **synchronization key:**
+`PRIMITIVE-ROUTE-MAP-2026-09-01`
+
+A shared registry and generated dashboard reporting, per primitive and per
+target, whether the mainline compiler or the Python bootstrap packager serves
+it. All four backends are assessed here per AGENTS.md — the first landing
+(#677) updated only the NVIDIA plan, which is the omission this entry closes.
+
+**It shipped with six false rows, and how they got there is the useful part.**
+`depth_attn` was published `compiled` on NVIDIA and x86 although `driver.py`
+dispatches it only under `target_kind == "rocm_gfx1151"`; `min`/`amin` were
+published as ROCm and x86 reduction routes although both contracts accept only
+`sum/mean/max/amax`. Both came from the same mistake: a membership that was
+described as "grounded in the `tessera.*` literals each backend names" but was
+actually one global tuple applied to every target, plus a compiled-route
+fan-out whose comment claimed it "keeps the claim no stronger than the source"
+when the source is target-aware and the fan-out made it strictly stronger.
+
+Three guards now make that class of error mechanical rather than editorial:
+
+* **membership is per target**, and every declared member is cross-checked
+  against the `tessera.*` literals of that target's own native module (either
+  the canonical Graph IR name or the public alias — `sum` is `tessera.reduce`
+  in coverage and `tessera.sum` in `x86_native`, and both are real);
+* **a compiled route is claimed only where `driver.py` dispatches it**
+  (`COMPILED_ROUTE_TARGETS`), never fanned across targets;
+* **a target that cannot be classified says so** rather than vanishing.
+
+**Outcome for this backend: `parity validated`.** `x86` is fully classified and
+is the only classifier of the `elementwise` family. Its two false rows
+(`min`/`amin`) and the false `depth_attn` compiled claim are removed. Its
+`sum` route is the reason the literal check accepts both spellings:
+`x86_native` names `tessera.sum` while coverage records the canonical
+`tessera.reduce`.

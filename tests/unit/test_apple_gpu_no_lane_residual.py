@@ -148,6 +148,11 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "target_verify",
         # Misc.
         "conv3d_ndhwc", "einsum", "fused_epilogue",
+        # MSW-3 optimizer breadth. Python reference optimizers with a
+        # compiler-visible flat tensor ABI and no Metal lane -- the same tier
+        # as `adafactor` above, which is already here. Added with the ops
+        # rather than after, so the residual never silently absorbs them.
+        "adagrad", "rmsprop", "adadelta", "shampoo",
     }
 )
 

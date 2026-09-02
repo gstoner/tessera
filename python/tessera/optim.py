@@ -1168,6 +1168,7 @@ def midpoint_sgd(
     *,
     lr: float,
     compute_dtype: str = "fp32",
+    cast_updates_to_param_dtype: bool = True,
 ) -> tuple[Tree, dict[str, Any]]:
     """Explicit midpoint SGD, per `def:midpointSGD` eq. (1).
 
@@ -1196,9 +1197,16 @@ def midpoint_sgd(
         lambda p, g: _compute_array(p, compute_dtype)
         - 0.5 * float(lr) * _compute_array(g, compute_dtype),
         params, grad_fn(params))
-    new_params = tree_map2(
+    stepped = tree_map2(
         lambda p, g: _compute_array(p, compute_dtype) - float(lr) * _compute_array(g, compute_dtype),
         params, grad_fn(probe))
+    # Cast back to the parameter's storage dtype like every other optimizer
+    # here (review on #695). Without it, fp16 parameters came back fp32 after
+    # one step -- the tree silently widens, which contradicts the storage-dtype
+    # contract and is invisible until memory or a dtype assertion notices.
+    new_params = tree_map2(
+        lambda p_new, p_orig: _cast_like_param(p_new, p_orig, cast_updates_to_param_dtype),
+        stepped, params)
     return new_params, {}
 
 

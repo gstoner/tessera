@@ -131,15 +131,27 @@ _SPECS = [
     # MSW-3 optimizer breadth. Same (params, grads, [state]) arity as the
     # single-slot optimizers above; each is transcribed from a numbered
     # definition in arXiv 2310.20360v3 and cites the label in its docstring.
+    # Arities follow each method's FLAT ABI -- state as explicit tensor
+    # operands, the convention adafactor records as "compiler-visible flat ABIs
+    # keep optimizer state as explicit tensor operands". Adadelta and Shampoo
+    # each carry TWO state tensors, so their maximum is 4, not 3 (review on
+    # #695): declaring 3 made the only call that can actually execute exceed
+    # the declared arity.
     OpSpec("adagrad", "tessera.adagrad", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("rmsprop", "tessera.rmsprop", 2, 3, lowering="functional_optimizer_step"),
-    OpSpec("adadelta", "tessera.adadelta", 2, 3, lowering="functional_optimizer_step"),
-    OpSpec("shampoo", "tessera.shampoo", 2, 3, lowering="functional_optimizer_step"),
-    # `midpoint_sgd` takes a gradient FUNCTION, not a gradient tensor, because
-    # the method evaluates the gradient a second time at a probe point that
-    # does not exist until the first is known. Its second operand is therefore
-    # not a value operand like the others'.
-    OpSpec("midpoint_sgd", "tessera.midpoint_sgd", 2, 3, lowering="functional_optimizer_step"),
+    OpSpec("adadelta", "tessera.adadelta", 2, 4, lowering="functional_optimizer_step"),
+    OpSpec("shampoo", "tessera.shampoo", 2, 4, lowering="functional_optimizer_step"),
+    #
+    # `midpoint_sgd` is deliberately ABSENT from this catalog. Its second
+    # operand is a gradient FUNCTION -- the method re-evaluates the gradient at
+    # a probe point that does not exist until the first is known -- and
+    # `TraceBuilder.record_op` requires every positional Graph operand to be a
+    # Tracer, so every compiled use would fail by construction (review on
+    # #695). Declaring it as an ordinary operand would advertise a Graph
+    # boundary it cannot honour, which is worse than not declaring it (#29).
+    # It remains a `tessera.optim` function with a `primitive_coverage` row.
+    # Giving it a real Graph representation means a higher-order/region op, not
+    # an operand slot, and that is a feature rather than a registration.
     # `ebm_energy_quadratic` is canonicalized to the flat-lane graph name
     # `tessera.ebm_energy_quadratic` below; the dotted Graph IR ODS spelling
     # `tessera.ebm.energy_quadratic` is a LEGACY_GRAPH_OP_ALIASES entry so it
@@ -883,8 +895,8 @@ OP_SHAPE_RULE: dict = {
     **{f"tessera.{n}": "optimizer_pair_step" for n in ("adagrad", "rmsprop")},
     # Two param-shaped moments (`m` and `delta`), like adam/adamw.
     "tessera.adadelta": "optimizer_step",
-    # Stateless: params in, params out.
-    "tessera.midpoint_sgd": "same_as_first",
+    # (`tessera.midpoint_sgd` has no entry: it is not a catalog op -- see the
+    # note beside the optimizer OpSpecs above.)
     "tessera.sgd": "same_as_first",
     # Lion's flat compiler ABI returns exactly (new_param, new_moment).  It is
     # not the three-result Adam-style contract used by optimizer_step.

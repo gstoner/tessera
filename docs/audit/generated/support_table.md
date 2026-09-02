@@ -113,7 +113,6 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `adam` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `adamw` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `lion` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `midpoint_sgd` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
 | `momentum` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `nesterov` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `rmsprop` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
@@ -381,7 +380,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | contraction | 4 | PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
-| functional_optimizer_step | 12 | PPGCpRN· PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· |
+| functional_optimizer_step | 11 | PPGCpRN· PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |

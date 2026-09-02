@@ -1115,31 +1115,113 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             cast_updates_to_param_dtype=cast_updates_to_param_dtype,
         )
 
-    # MSW-3 optimizer breadth. Thin pass-throughs: the reference lives in
-    # `tessera.optim`, and duplicating the recursions here would be a second
-    # implementation of each method (#31). They exist so `tessera.ops` exposes
-    # every name `op_catalog` registers, which the operator-registry gate
-    # requires and which is how a caller reaches them through `ops.*`.
+    # MSW-3 optimizer breadth. Each carries the compiler-visible FLAT ABI the
+    # other catalog optimizers have -- state as explicit tensor operands,
+    # returning `(new_param, *new_state)` -- alongside the tree form (review on
+    # #695). The first version forwarded straight to `tessera.optim`, so a flat
+    # call handed an ndarray to `_resolve_state`, which reads dictionary slots
+    # and rejected it: a catalog entry whose declared operands could not
+    # actually be passed.
+    #
+    # `midpoint_sgd` is deliberately NOT here; see the note in `op_catalog`.
+
     def adagrad(params, grads, state=None, **kwargs):
+        if isinstance(state, np.ndarray):
+            p_ = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            m = np.asarray(state, dtype=np.float32) + g * g
+            lr = float(kwargs.get("lr", 1.0e-2))
+            eps = float(kwargs.get("eps", 1.0e-8))
+            new_p = p_.astype(np.float32) - lr * (g / (eps + np.sqrt(m)))
+            return new_p.astype(p_.dtype, copy=False), m
         from . import optim as _optim
         return _optim.adagrad(params, grads, state, **kwargs)
 
     def rmsprop(params, grads, state=None, **kwargs):
+        if isinstance(state, np.ndarray):
+            p_ = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            beta = float(kwargs.get("beta", 0.9))
+            eps = float(kwargs.get("eps", 1.0e-8))
+            lr = float(kwargs.get("lr", 1.0e-3))
+            m = beta * np.asarray(state, dtype=np.float32) + (1.0 - beta) * g * g
+            second = m
+            if kwargs.get("bias_adjusted", False):
+                # ABSENT is not 1, for the reason recorded on the flat adafactor
+                # ABI: a stateful caller that never passes `step` would take the
+                # step-1 correction forever, inflating every update by
+                # 1/(1 - beta) -- 10x at the default beta. Refuse instead.
+                if "step" not in kwargs:
+                    raise ValueError(
+                        "flat rmsprop with bias_adjusted=True needs an explicit "
+                        "1-based `step`: the flat ABI carries no state dict to "
+                        "read it from, and defaulting to 1 would apply the "
+                        "first-step correction on every call, inflating updates "
+                        f"by 1/(1 - beta) = {1.0 / (1.0 - beta):.1f}x forever.")
+                second = m / (1.0 - beta ** int(kwargs["step"]))
+            new_p = p_.astype(np.float32) - lr * (g / (eps + np.sqrt(second)))
+            return new_p.astype(p_.dtype, copy=False), m
         from . import optim as _optim
         return _optim.rmsprop(params, grads, state, **kwargs)
 
-    def adadelta(params, grads, state=None, **kwargs):
+    def adadelta(params, grads, state=None, delta_state=None, **kwargs):
+        # All-or-nothing: the flat ABI's two state tensors arrive together or
+        # not at all, which is what makes the operand list decodable from
+        # position (arity 2 or 4, never 3). Falling through to the tree form
+        # with one ndarray produced a diagnostic about a missing DICT slot and
+        # pointed at `state=None` -- true of the tree API, useless to a flat
+        # caller whose actual mistake was omitting the second tensor.
+        if isinstance(state, np.ndarray) != isinstance(delta_state, np.ndarray):
+            raise ValueError(
+                "flat adadelta takes BOTH state tensors (state, delta_state) or "
+                "neither; got only one. The two accumulators advance together, "
+                "so a call carrying one of them has no defined meaning."
+            )
+        if isinstance(state, np.ndarray) and isinstance(delta_state, np.ndarray):
+            p_ = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            beta = float(kwargs.get("beta", 0.9))
+            delta = float(kwargs.get("delta", 0.9))
+            eps = float(kwargs.get("eps", 1.0e-6))
+            lr = float(kwargs.get("lr", 1.0))
+            m = beta * np.asarray(state, dtype=np.float32) + (1.0 - beta) * g * g
+            d_prev = np.asarray(delta_state, dtype=np.float32)
+            s = lr * np.sqrt((eps + d_prev) / (eps + m)) * g
+            new_p = p_.astype(np.float32) - s
+            d_new = delta * d_prev + (1.0 - delta) * s * s
+            return new_p.astype(p_.dtype, copy=False), m, d_new
         from . import optim as _optim
         return _optim.adadelta(params, grads, state, **kwargs)
 
-    def shampoo(params, grads, state=None, **kwargs):
+    def shampoo(params, grads, state=None, right_state=None, **kwargs):
+        # All-or-nothing: the flat ABI's two state tensors arrive together or
+        # not at all, which is what makes the operand list decodable from
+        # position (arity 2 or 4, never 3). Falling through to the tree form
+        # with one ndarray produced a diagnostic about a missing DICT slot and
+        # pointed at `state=None` -- true of the tree API, useless to a flat
+        # caller whose actual mistake was omitting the second tensor.
+        if isinstance(state, np.ndarray) != isinstance(right_state, np.ndarray):
+            raise ValueError(
+                "flat shampoo takes BOTH state tensors (state, right_state) or "
+                "neither; got only one. The two accumulators advance together, "
+                "so a call carrying one of them has no defined meaning."
+            )
+        if isinstance(state, np.ndarray) and isinstance(right_state, np.ndarray):
+            from . import optim as _optim
+
+            p_ = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            mat = _optim._shampoo_matrix(g).astype(np.float32)
+            eps = float(kwargs.get("eps", 1.0e-4))
+            lr = float(kwargs.get("lr", 1.0e-3))
+            left = np.asarray(state, dtype=np.float32) + mat @ mat.T
+            right = np.asarray(right_state, dtype=np.float32) + mat.T @ mat
+            step = (_optim._inverse_fourth_root(left, eps=eps) @ mat
+                    @ _optim._inverse_fourth_root(right, eps=eps))
+            new_p = p_.astype(np.float32) - lr * step.reshape(p_.shape)
+            return new_p.astype(p_.dtype, copy=False), left, right
         from . import optim as _optim
         return _optim.shampoo(params, grads, state, **kwargs)
-
-    def midpoint_sgd(params, grad_fn, state=None, **kwargs):
-        """Second operand is a gradient FUNCTION -- see `optim.midpoint_sgd`."""
-        from . import optim as _optim
-        return _optim.midpoint_sgd(params, grad_fn, state, **kwargs)
 
     def nesterov(
         params,
@@ -5099,7 +5181,6 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "rmsprop": rmsprop,
         "adadelta": adadelta,
         "shampoo": shampoo,
-        "midpoint_sgd": midpoint_sgd,
         "gated_attention": gated_attention,
         "hybrid_attention": hybrid_attention,
         "deepseek_sparse_attention": deepseek_sparse_attention,
@@ -5476,7 +5557,6 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         rmsprop=rmsprop,
         adadelta=adadelta,
         shampoo=shampoo,
-        midpoint_sgd=midpoint_sgd,
         transpose=transpose,
         stop_gradient=stop_gradient,
         cast=cast,

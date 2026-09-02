@@ -18,7 +18,7 @@
 | `transpose_rule` | 0 | 520 |
 | `sharding_rule` | 59 | 461 |
 | `lowering_rule` | 0 | 520 |
-| `backend_kernel` | 421 | 99 |
+| `backend_kernel` | 420 | 100 |
 
 ## Backend Proof By Target
 
@@ -26,9 +26,9 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `cpu` | 371 | 0 | 0 | 371 | 0 | 0 | 149 |
+| `cpu` | 370 | 0 | 0 | 370 | 0 | 0 | 150 |
 | `x86` | 349 | 294 | 49 | 6 | 0 | 0 | 171 |
-| `apple_cpu` | 403 | 0 | 4 | 399 | 0 | 0 | 117 |
+| `apple_cpu` | 402 | 0 | 4 | 398 | 0 | 0 | 118 |
 | `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 313 |
 | `rocm` | 352 | 346 | 0 | 2 | 4 | 0 | 168 |
 | `nvidia_sm80` | 72 | 0 | 0 | 0 | 72 | 0 | 448 |
@@ -50,7 +50,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S7 | `normalization` | 12 | — | — | — | — | 12 |
 | S7 | `memory` | 3 | — | — | — | — | 1 |
 | S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
-| S10 | `optimizer` | 4 | — | — | — | — | 4 |
+| S10 | `optimizer` | 5 | — | — | — | — | 4 |
 | S10 | `schedule` | 8 | — | — | — | — | — |
 | S10 | `grad_transform` | 7 | — | — | — | — | — |
 | S11 | `loss` | 29 | — | — | — | — | 29 |
@@ -67,7 +67,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `diffusion_schedule` | 2 | — | — | — | — | — |
 | other | `elementwise` | 51 | — | — | — | — | 51 |
 | other | `extension` | 6 | — | — | — | — | — |
-| other | `functional_optimizer_step` | 12 | — | — | — | — | 12 |
+| other | `functional_optimizer_step` | 11 | — | — | — | — | 11 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 15 | — | — | — | — | 15 |
 | other | `layout_transform` | 18 | — | — | — | — | 17 |
@@ -111,11 +111,11 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S2 | 56 | 0 | 0 | 0 | 49 |
 | S5 | 7 | 0 | 0 | 0 | 0 |
 | S7 | 65 | 0 | 0 | 16 | 63 |
-| S10 | 19 | 0 | 0 | 0 | 4 |
+| S10 | 20 | 0 | 0 | 0 | 4 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 310 | 0 | 0 | 37 | 258 |
+| other | 309 | 0 | 0 | 37 | 257 |
 
 ## Closure trajectory
 

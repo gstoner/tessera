@@ -35,7 +35,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `ebm` | 14 | 4 | 10 | `eligible` |
 | `elementwise` | 51 | 35 | 16 | `eligible` |
 | `extension` | 6 | 0 | 0 | `host` |
-| `functional_optimizer_step` | 12 | 5 | 7 | `eligible` |
+| `functional_optimizer_step` | 11 | 5 | 6 | `eligible` |
 | `fused_epilogue` | 1 | 0 | 1 | `eligible` |
 | `geometric_algebra` | 17 | 16 | 1 | `eligible` |
 | `grad_transform` | 7 | 0 | 7 | `eligible` |
@@ -55,7 +55,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `normalization` | 12 | 6 | 6 | `eligible` |
 | `numeric_helper` | 15 | 15 | 0 | `eligible` |
 | `numerics` | 1 | 0 | 1 | `eligible` |
-| `optimizer` | 4 | 0 | 4 | `eligible` |
+| `optimizer` | 5 | 0 | 5 | `eligible` |
 | `pooling` | 4 | 0 | 4 | `eligible` |
 | `position_encoding` | 3 | 0 | 3 | `eligible` |
 | `projection` | 1 | 1 | 0 | `eligible` |

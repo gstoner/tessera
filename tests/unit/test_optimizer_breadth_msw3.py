@@ -222,6 +222,37 @@ def test_midpoint_sgd_refuses_state_it_would_silently_drop():
                            {"velocity": 1}, lr=0.05)
 
 
+def test_midpoint_sgd_preserves_parameter_storage_dtype():
+    """fp16 in, fp16 out (review on #695).
+
+    The step is computed in fp32; returning it uncast silently widens the
+    whole parameter tree after one step, which nothing notices until memory
+    or a dtype assertion does.
+    """
+    params = {"w": np.array([1.0, -2.0, 0.5], dtype=np.float16)}
+    out, _ = optim.midpoint_sgd(
+        params, lambda q: {"w": np.asarray(q["w"], dtype=np.float64) * 0.1},
+        None, lr=0.1)
+    assert out["w"].dtype == np.float16
+
+
+def test_midpoint_sgd_is_not_a_graph_op():
+    """It must not be advertised at a Graph boundary it cannot honour.
+
+    Its second operand is a callable, and `TraceBuilder.record_op` requires
+    every positional Graph operand to be a Tracer — so a catalog entry would
+    fail by construction on every compiled use. Pinned so a later "the
+    registries should agree" sweep re-adds it deliberately rather than by
+    reflex.
+    """
+    from tessera.compiler.op_catalog import OP_SPECS
+    import tessera
+
+    assert "midpoint_sgd" not in OP_SPECS
+    assert getattr(tessera.ops, "midpoint_sgd", None) is None
+    assert callable(optim.midpoint_sgd)
+
+
 def test_new_optimizers_honour_the_state_contract():
     """The MSW-3 state contract (#693) covers the new arrivals too."""
     for name, slots in (("adagrad", ("m",)), ("rmsprop", ("m", "step")),
@@ -379,3 +410,113 @@ def test_recorded_momentum_formulation_is_the_one_implemented():
             matched.append(label)
     assert matched == ["def:momentum_two"], (
         f"momentum matched {matched}, expected exactly ['def:momentum_two']")
+
+
+# --- the flat (compiler-visible) ABIs --------------------------------------
+#
+# Catalog optimizers carry state as explicit TENSOR operands, not as a Python
+# dict — adafactor states the convention: "compiler-visible flat ABIs keep
+# optimizer state as explicit tensor operands". The first version of this PR
+# registered these four in the catalog while the wrappers forwarded straight
+# to the tree API, so the flat call the catalog advertised handed an ndarray
+# to `_resolve_state` and was rejected (review on #695).
+
+
+def test_flat_abis_agree_with_the_tree_form():
+    """The flat ABI must be the SAME method, not a second implementation.
+
+    This is the property that keeps two entry points from drifting into two
+    optimizers (#31): one step of each, from identical inputs, must agree.
+    """
+    import tessera
+
+    p0 = np.array([1.0, -2.0, 0.5], dtype=np.float32)
+    g0 = np.array([0.1, 0.2, -0.3], dtype=np.float32)
+    z = np.zeros(3, dtype=np.float32)
+
+    flat_p, flat_m = tessera.ops.adagrad(p0, g0, z, lr=0.1, eps=1e-8)
+    tree_p, tree_s = optim.adagrad({"w": p0}, {"w": g0}, None, lr=0.1, eps=1e-8)
+    np.testing.assert_allclose(flat_p, tree_p["w"], rtol=0, atol=1e-6)
+    np.testing.assert_allclose(flat_m, tree_s["m"]["w"], rtol=0, atol=1e-6)
+
+    flat_p, flat_m = tessera.ops.rmsprop(p0, g0, z, lr=0.05, beta=0.9, eps=1e-8)
+    tree_p, tree_s = optim.rmsprop({"w": p0}, {"w": g0}, None, lr=0.05,
+                                   beta=0.9, eps=1e-8)
+    np.testing.assert_allclose(flat_p, tree_p["w"], rtol=0, atol=1e-6)
+
+    flat_p, flat_m, flat_d = tessera.ops.adadelta(p0, g0, z, z, beta=0.9,
+                                                  delta=0.9, eps=1e-6)
+    tree_p, tree_s = optim.adadelta({"w": p0}, {"w": g0}, None, beta=0.9,
+                                    delta=0.9, eps=1e-6)
+    np.testing.assert_allclose(flat_p, tree_p["w"], rtol=0, atol=1e-6)
+    np.testing.assert_allclose(flat_d, tree_s["delta"]["w"], rtol=0, atol=1e-6)
+
+    m0 = np.eye(3, dtype=np.float32) * 1e-4
+    r0 = np.eye(1, dtype=np.float32) * 1e-4
+    flat_p, _l, _r = tessera.ops.shampoo(p0, g0, m0, r0, lr=0.05, eps=1e-4)
+    tree_p, _ = optim.shampoo({"w": p0}, {"w": g0}, None, lr=0.05, eps=1e-4)
+    np.testing.assert_allclose(flat_p, tree_p["w"], rtol=0, atol=1e-5)
+
+
+def test_flat_abi_arities_match_the_catalog():
+    """Every state tensor must fit inside the declared operand count.
+
+    Adadelta and Shampoo carry TWO state tensors; declaring max-arity 3 made
+    the only executable flat call exceed the catalog's own declaration.
+    """
+    from tessera.compiler.op_catalog import OP_SPECS
+
+    for name, expected_max in (("adagrad", 3), ("rmsprop", 3),
+                               ("adadelta", 4), ("shampoo", 4)):
+        spec = OP_SPECS[name]
+        assert spec.max_arity == expected_max, (
+            f"{name} declares max {spec.max_arity} operands but its flat "
+            f"ABI passes {expected_max}")
+
+
+def test_flat_rmsprop_refuses_bias_adjustment_without_a_step():
+    """ABSENT is not 1 — the lesson the flat adafactor ABI already records.
+
+    A stateful caller that never passes `step` would take the first-step
+    correction forever, inflating every update by 1/(1 - beta): 10x at the
+    default. Refusing is the only option that cannot silently mis-train.
+    """
+    import tessera
+
+    p0 = np.array([1.0, -2.0, 0.5], dtype=np.float32)
+    g0 = np.array([0.1, 0.2, -0.3], dtype=np.float32)
+    with pytest.raises(ValueError, match="step"):
+        tessera.ops.rmsprop(p0, g0, np.zeros(3, dtype=np.float32),
+                            bias_adjusted=True)
+
+
+def test_flat_abis_preserve_parameter_storage_dtype():
+    import tessera
+
+    p0 = np.array([1.0, -2.0, 0.5], dtype=np.float16)
+    g0 = np.array([0.1, 0.2, -0.3], dtype=np.float16)
+    z = np.zeros(3, dtype=np.float32)
+    assert tessera.ops.adagrad(p0, g0, z, lr=0.1)[0].dtype == np.float16
+    assert tessera.ops.rmsprop(p0, g0, z, lr=0.1)[0].dtype == np.float16
+    assert tessera.ops.adadelta(p0, g0, z, z)[0].dtype == np.float16
+
+
+def test_two_state_flat_abis_refuse_half_a_state():
+    """Arity 2 or 4, never 3 — enforced, not just asserted in the catalog.
+
+    `test_op_arity_contract` records these as decodable from position
+    *because* the two state tensors are all-or-nothing. Before this guard a
+    three-operand call fell through to the tree form and complained about a
+    missing dictionary slot, pointing at `state=None` — true of the tree API
+    and useless to a flat caller whose actual mistake was omitting the second
+    tensor.
+    """
+    import tessera
+
+    p0 = np.array([1.0, -2.0, 0.5], dtype=np.float32)
+    g0 = np.array([0.1, 0.2, -0.3], dtype=np.float32)
+    z = np.zeros(3, dtype=np.float32)
+    for fn, name in ((tessera.ops.adadelta, "adadelta"),
+                     (tessera.ops.shampoo, "shampoo")):
+        with pytest.raises(ValueError, match="BOTH state tensors"):
+            fn(p0, g0, z)

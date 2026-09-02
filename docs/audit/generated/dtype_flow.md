@@ -10,10 +10,10 @@ physical backend row says so. Accumulators are listed separately from
 logical tensor dtype. Complex logical values display their physical
 interleaved-component ABI explicitly.
 
-- Operators: **354**
+- Operators: **353**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **950**
-- Rows retaining at least one compiler/evidence gap: **373**
+- Operator/logical-dtype rows: **948**
+- Rows retaining at least one compiler/evidence gap: **371**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -135,7 +135,6 @@ for the complete per-dtype and per-target matrix.
 | `adam` | functional_optimizer_step | no | bf16,fp16,fp32 | direct_test |
 | `adamw` | functional_optimizer_step | no | bf16,fp16,fp32 | direct_test |
 | `lion` | functional_optimizer_step | no | bf16,fp32 | direct_test,physical,tile |
-| `midpoint_sgd` | functional_optimizer_step | no | bf16,fp32 | direct_test,physical,tile |
 | `momentum` | functional_optimizer_step | no | bf16,fp16,fp32 | direct_test |
 | `nesterov` | functional_optimizer_step | no | bf16,fp16,fp32 | direct_test |
 | `rmsprop` | functional_optimizer_step | no | bf16,fp32 | direct_test,physical,tile |

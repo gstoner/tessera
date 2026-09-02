@@ -825,6 +825,17 @@ _MEMORY_INDEX_SELECT_HARDENED: dict[str, str] = {
 # shape-rule gate exists to catch.
 _EXISTING_CONTRACT_OVERRIDES["shampoo"] = {"shape_rule": "partial"}
 
+# MSW-3. `midpoint_sgd` is a Python reference primitive and deliberately not an
+# `op_catalog` Graph op -- its second operand is a gradient FUNCTION, and
+# `TraceBuilder.record_op` requires every positional operand to be a Tracer, so
+# a Graph declaration would fail on every compiled use (review on #695). With
+# no catalog entry it has no backend manifest either, and the closeout audit
+# then reports it as an UNOWNED backend-kernel row: work someone is expected to
+# finish. There is none to finish. `not_applicable` is the accurate status --
+# a device kernel here would need a higher-order/region representation first,
+# which is a feature, not a missing manifest entry.
+_EXISTING_CONTRACT_OVERRIDES["midpoint_sgd"] = {"backend_kernel": "not_applicable"}
+
 _EXISTING_CONTRACT_OVERRIDES["memory_index_select"] = _MEMORY_INDEX_SELECT_HARDENED
 
 # MiniMax Sparse Attention (MSA, arXiv:2606.13392). Three primitives:
@@ -3054,7 +3065,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "rmsprop": ("optimizer", "functional RMSprop, plain and bias-adjusted — MSW-3, def:determ_RMSprop / def:determ_RMSprop_bias"),
         "adadelta": ("optimizer", "functional Adadelta — MSW-3, def:determ_adadelta"),
         "shampoo": ("optimizer", "functional Shampoo, full-matrix two-sided preconditioning — MSW-3, def:determ_Shampoo"),
-        "midpoint_sgd": ("optimizer", "explicit midpoint SGD, takes a gradient function — MSW-3, def:midpointSGD"),
+        "midpoint_sgd": ("optimizer", "explicit midpoint SGD, takes a gradient function — MSW-3, def:midpointSGD; Python reference only, deliberately not an op_catalog Graph op (its operand is a callable)"),
         "constant_lr": ("schedule", "constant learning-rate schedule — S10 landed 2026-05-10"),
         "cosine_lr": ("schedule", "cosine decay schedule — S10 landed 2026-05-10"),
         "cosine_warmup_lr": ("schedule", "warmup plus cosine decay schedule — S10 landed 2026-05-10"),

@@ -3838,3 +3838,16 @@ the ceiling set, and an AVX-512 launch regressing from ~0.15 ms to 19 ms would
 have passed a 20 ms bound. That hole is closed. If an x86 row ever needs a flat
 floor it must be measured on an AVX-512 host and given its own constant --
 never by widening the GPU one.
+
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**x86 — parity validated, no native change required.** Same shape as ROCm: the
+AVX-512 Clifford lanes call `_clifford_ops.clifford_codiff`, which delegates to
+the signed `ga.calculus.codiff`; no x86 symbol implements the codifferential
+directly, so nothing carries the old convention. Covered by the same
+Princess-Luna sweep (that host runs both the ROCm and AVX-512 lanes).

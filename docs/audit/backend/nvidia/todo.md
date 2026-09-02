@@ -6043,3 +6043,18 @@ backend; on ROCm they were not.
 Deliberately NOT added to `tests/_support/launch_overhead.py` yet: no NVIDIA row
 consumes it, and an unconsumed constant is Decision #29's case. Add it with the
 first adopting row, not before.
+
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**NVIDIA — not applicable; there is no NVIDIA codiff to correct.** No
+`clifford_codiff` entry exists for this backend in `backend_manifest.py` and no
+CUDA kernel implements the operator; a JIT'd Clifford program on NVIDIA
+executes `tessera.ga.*`, which is the signed Python path. If a native NVIDIA
+codiff is ever added it must apply the sign at its ABI boundary the way the
+Apple symbol now does — the exported name promises δ, and the mistake this
+entry records is precisely a symbol named `codiff` returning `⋆d⋆`.

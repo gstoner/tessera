@@ -3303,7 +3303,14 @@ def vjp_clifford_vec_deriv(dout, field, *, spacing=None, **_):
 
 @_vjp("clifford_codiff")
 def vjp_clifford_codiff(dout, field, *, spacing=None, **_):
-    # codiff = hodge ∘ ext ∘ hodge ⇒ adjoint = hodge* ∘ ext* ∘ hodge*.
+    # codiff = S ∘ hodge ∘ ext ∘ hodge, where S is the per-grade codifferential
+    # sign (MSW-4a, 2026-09-02). S is diagonal and real, hence self-adjoint, so
+    # the adjoint is hodge* ∘ ext* ∘ hodge* ∘ S — the SAME signs, applied to the
+    # incoming cotangent first. Omitting them here while the forward applies
+    # them breaks the adjoint identity outright: measured 24.55 vs -37.08.
+    from tessera.ga import Cl
+    from tessera.ga.calculus import codifferential_output_signs
+    dout = np.asarray(dout, dtype=np.float64) * codifferential_output_signs(Cl(3, 0))
     g = _clifford_hodge_adjoint(dout)
     g = _clifford_field_adjoint(g, spacing, "wedge")
     return (_clifford_hodge_adjoint(g),)

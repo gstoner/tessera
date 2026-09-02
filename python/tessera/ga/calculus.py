@@ -336,23 +336,89 @@ def hodge_star_field(field: MultivectorField) -> MultivectorField:
     return MultivectorField(out, algebra, spacing=field.spacing)
 
 
-def codiff(field: MultivectorField) -> MultivectorField:
-    """Codifferential ``d*ω = ±⋆d⋆ω`` for a sampled field.
+def _codifferential_sign(n: int, grade: int) -> int:
+    """``(-1)^(n(k+1)+1)`` — the sign relating ``δ`` to ``⋆d⋆`` on a k-form."""
+    return -1 if (n * (grade + 1) + 1) % 2 else 1
 
-    The sign is grade- and signature-dependent; for v1 we apply the
-    ``⋆ ∘ d ∘ ⋆`` composition without inserting the explicit sign —
-    callers that need the strict ``d*`` sign convention should apply
-    it themselves.
 
-    **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route
-    through ``tessera_apple_gpu_clifford_codiff_cl30_f32``, which
-    composes three MSL dispatches (hodge → ext_deriv → hodge).
+def codifferential_output_signs(algebra: Cl) -> np.ndarray:
+    """Per-blade sign relating ``⋆d⋆`` to ``δ``, indexed by OUTPUT blade.
+
+    ``⋆d⋆`` lowers grade by one, so an output blade of grade j receives from
+    input grade j+1 and carries that grade's sign. Exposed because the
+    `clifford_codiff` VJP needs the identical array: `δ = S ∘ ⋆d⋆` with `S`
+    diagonal and real, so `δ* = (⋆d⋆)* ∘ S` — the adjoint applies the SAME
+    signs to the incoming cotangent. Two copies of this table would be two
+    chances to disagree.
     """
+    return np.array(
+        [_codifferential_sign(algebra.n, blade.grade + 1) for blade in algebra.blades()],
+        dtype=np.float64,
+    )
+
+
+def codiff(field: MultivectorField) -> MultivectorField:
+    """Codifferential ``δω = (-1)^(n(k+1)+1) ⋆d⋆ω`` for a sampled field.
+
+    **The sign is applied (fixed 2026-09-02, MSW-4a). It previously was not**,
+    and the docstring told callers to "apply it themselves" — which cannot be
+    done for the mixed-grade fields this function accepts, because the sign
+    depends on the grade of each input component and no single scalar corrects
+    a field carrying several. Measured on a compactly-supported field, the old
+    composition gave ⟨dα, β⟩ / ⟨α, codiff β⟩ = exactly (-1)^k for k = 1, 2, 3;
+    on a vector field it returned **+div** where δ is **-div**; and on a mixed
+    grade-1 + grade-2 field neither +1 nor -1 reconciled it (0.9433 vs 1.3866).
+    So the operator did not satisfy the one property it is named for.
+
+    ``⋆d⋆`` maps a k-form to a (k-1)-form, so each output grade j receives from
+    exactly one input grade j+1 and the correction is a per-output-grade scale.
+
+    **Restricted to non-degenerate Euclidean signatures, and it fails closed
+    elsewhere.** For ``q > 0`` the textbook formula carries an extra
+    ``(-1)^q`` from the metric determinant, and the adjointness that would
+    verify it needs the indefinite pairing rather than the coefficient dot
+    product used here — so that factor is unproven and is refused rather than
+    guessed (Decision #21a). For ``r > 0`` the Hodge star is not invertible and
+    ``⋆d⋆`` is not a codifferential at all. `codiff` is exercised only on
+    Cl(3,0) fields today, so nothing is lost by declining the rest.
+
+    **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route through
+    ``tessera_apple_gpu_clifford_codiff_cl30_f32``, which composes three MSL
+    dispatches (hodge → ext_deriv → hodge). Its MSL shader and C++ reference both
+    compute the unsigned ``⋆d⋆``, and the exported C symbol applies the sign at
+    the ABI boundary — so a caller binding
+    ``tessera_apple_gpu_clifford_codiff_cl30_f32`` directly gets the
+    codifferential its name promises, not `+div` on a vector field (review on
+    #688). This function therefore signs only the numpy composition; re-signing
+    the Metal result would double-apply it. The parity test compares the raw
+    symbol against this function with no correction, which is what makes the
+    two lanes' agreement a real conformance check rather than an identity.
+    """
+    algebra = field.algebra
+    if algebra.r != 0:
+        raise TesseraAlgebraError(
+            f"codiff is undefined for a degenerate algebra Cl({algebra.p},"
+            f"{algebra.q},{algebra.r}): the Hodge star is not invertible when "
+            "r > 0, so ⋆d⋆ is not a codifferential."
+        )
+    if algebra.q != 0:
+        raise TesseraAlgebraError(
+            f"codiff currently supports Euclidean signatures only; got "
+            f"Cl({algebra.p},{algebra.q},{algebra.r}). The codifferential "
+            "carries an additional (-1)^q metric-determinant factor there, "
+            "and verifying it needs the indefinite pairing rather than the "
+            "coefficient inner product this module uses — so it is refused "
+            "rather than guessed."
+        )
     gpu_out = _try_apple_gpu_field_op_cl30_f32(
         field, "tessera_apple_gpu_clifford_codiff_cl30_f32")
     if gpu_out is not None:
+        # The exported Apple symbol is named `codiff` and returns the
+        # codifferential, sign included (review on #688) — do NOT re-apply it.
         return gpu_out
-    return hodge_star_field(ext_deriv(hodge_star_field(field)))
+    raw = hodge_star_field(ext_deriv(hodge_star_field(field)))
+    signs = codifferential_output_signs(algebra).astype(raw.values.dtype)
+    return MultivectorField(raw.values * signs, algebra, spacing=raw.spacing)
 
 
 # ---------------------------------------------------------------------------

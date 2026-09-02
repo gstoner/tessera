@@ -226,7 +226,15 @@ def test_field_op_interior_matches_python_reference(
 
 
 def test_codiff_interior_matches_python_reference(apple_gpu_runtime):
-    """codiff = ⋆d⋆ — sequential 3-stage MSL composition on the grid."""
+    """The exported symbol must return the codifferential, sign included.
+
+    A DIRECT comparison on purpose (review on #688). An earlier revision
+    post-multiplied the native output by the sign table before comparing, which
+    made the assertion true by construction and stopped testing the kernel's
+    sign behaviour at all. `tessera_apple_gpu_clifford_codiff_cl30_f32` is an
+    exported ABI named `codiff`; it owes callers δ, not ⋆d⋆, or a consumer
+    binding it directly gets `+div` on a vector field where δ is `-div`.
+    """
     from tessera.ga import Cl
     from tessera.ga.calculus import MultivectorField, codiff
 

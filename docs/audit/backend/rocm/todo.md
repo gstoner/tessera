@@ -6370,3 +6370,18 @@ at 1.93 / 3.31 / 3.66 / 3.99 ms; the worst dispatch measured was 4.703 ms idle
 and 5.541 ms under ten busy cores, over WSL2's paravirtualised `/dev/dxg`.
 `NATIVE_LAUNCH_CEILING_MS = 20.0` is ~3.6x that worst case and still fails the
 70.6 ms regression class with 3.5x to spare. Nothing further owed here.
+
+## MSW-4A-CODIFF-SIGN-1 — cross-backend assessment (recorded 2026-09-02)
+
+`ga.calculus.codiff` changed from the unsigned `⋆d⋆` composition to the true
+codifferential `δ = (-1)^(n(k+1)+1) ⋆d⋆` (PR #688), and its `clifford_codiff`
+VJP changed with it. That is a shared numerical contract, so each backend gets
+an explicit verdict.
+
+**ROCm — parity validated, no native change required.** gfx1151 reaches
+`clifford_codiff` through `_clifford_ops.clifford_codiff` →
+`ga.calculus.codiff`, the signed Python operator, so the corrected contract
+applies with no kernel work: there is no ROCm `codiff` symbol to sign. The
+composed X86/ROCm Clifford lanes consume the same wrapper. Verified on
+Princess-Luna: 1454 passed across the GA/Clifford/EBM/autodiff surface, 0
+failed, including the `clifford_codiff` adjoint law at 3.4e-16.

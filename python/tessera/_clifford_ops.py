@@ -150,7 +150,7 @@ def clifford_vec_deriv(field: Any, *, spacing=None) -> np.ndarray:
 
 
 def clifford_codiff(field: Any, *, spacing=None) -> np.ndarray:
-    """Codifferential ``d*ω = ⋆d⋆ω`` on a sampled Cl(3,0) field."""
+    """Codifferential ``δω = (-1)^(n(k+1)+1) ⋆d⋆ω`` on a Cl(3,0) field."""
     from tessera.ga import calculus as cal
     return np.asarray(cal.codiff(_field(field, spacing)).values)
 

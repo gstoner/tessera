@@ -314,7 +314,16 @@ def _py_ref_grade_projection(A: np.ndarray, grades: set[int]) -> np.ndarray:
 
 
 def _py_ref_field_op(op_name: str, F: np.ndarray) -> np.ndarray:
-    from tessera.ga.calculus import MultivectorField, ext_deriv, vec_deriv, codiff
+    """Reference for the MSL kernel of `op_name`.
+
+    A plain comparison: since the #688 review the exported `clifford_codiff`
+    symbol applies the codifferential sign at the ABI boundary, so the kernel
+    and `ga.calculus.codiff` compute the same operator and no correction
+    belongs here.
+    """
+    from tessera.ga.calculus import (
+        MultivectorField, codiff, ext_deriv, vec_deriv,
+    )
     fn = {
         "clifford_ext_deriv": ext_deriv,
         "clifford_vec_deriv": vec_deriv,

@@ -14,6 +14,11 @@ algebra,W4,quotient,pass,6
 algebra,hutchinson,unbiasedness,pass,2
 algebra,hvp,hessian_second_difference,pass,2
 algebra,hvp,hessian_symmetry,pass,2
+field_calculus,codiff_is_adjoint_to_ext_deriv,vector_identity,pass,3
+field_calculus,codiff_squared_is_zero,vector_identity,pass,2
+field_calculus,d_squared_is_zero,vector_identity,pass,2
+field_calculus,divergence_product_rule,vector_identity,pass,2
+field_calculus,ext_deriv_matches_analytic_gradient,vector_identity,pass,2
 geometric,add,adjoint,pass,4
 geometric,conjugate,adjoint,pass,4
 geometric,geometric_product,adjoint,pass,4

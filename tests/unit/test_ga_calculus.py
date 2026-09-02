@@ -473,3 +473,52 @@ def test_codiff_refuses_a_signature_it_cannot_verify() -> None:
     values = np.zeros((4,) * algebra.n + (algebra.dim,))
     with pytest.raises(TesseraAlgebraError, match="Euclidean"):
         codiff(MultivectorField(values, algebra, spacing=1.0))
+
+
+# ── MSW-4: the vector-identity law family ───────────────────────────────────
+
+def test_vector_identity_law_family_passes() -> None:
+    """Law 7 — every field-calculus identity holds on the shipped operators."""
+    from tessera.autodiff.laws import vector_identity_checks
+
+    results = vector_identity_checks()
+    assert {r.op for r in results} == {
+        "d_squared_is_zero",
+        "codiff_squared_is_zero",
+        "codiff_is_adjoint_to_ext_deriv",
+        "ext_deriv_matches_analytic_gradient",
+        "divergence_product_rule",
+    }
+    failed = [(r.op, r.status, r.max_rel_residual) for r in results if r.status != "pass"]
+    assert not failed, f"field-calculus identities failed: {failed}"
+
+
+def test_vector_identity_laws_detect_a_corrupted_operator() -> None:
+    """The family must be able to FAIL. A law nothing can break proves nothing.
+
+    Two mutations with known reach: dropping `codiff`'s per-grade sign (the
+    MSW-4a defect) must break the Stokes pairing, and scaling `ext_deriv` must
+    break the analytic-gradient law — the only one here that pins absolute
+    scale, since every other identity is homogeneous in `ext_deriv`.
+    """
+    import tessera.ga.calculus as cal
+    from tessera.autodiff.laws import vector_identity_checks
+
+    saved_signs, saved_ext = cal.codifferential_output_signs, cal.ext_deriv
+    try:
+        cal.codifferential_output_signs = lambda algebra: np.ones(algebra.dim)
+        broken = {r.op for r in vector_identity_checks() if r.status != "pass"}
+        assert "codiff_is_adjoint_to_ext_deriv" in broken
+    finally:
+        cal.codifferential_output_signs = saved_signs
+
+    try:
+        cal.ext_deriv = lambda f: MultivectorField(
+            saved_ext(f).values * 1.5, f.algebra, spacing=f.spacing
+        )
+        broken = {r.op for r in vector_identity_checks() if r.status != "pass"}
+        assert "ext_deriv_matches_analytic_gradient" in broken
+    finally:
+        cal.ext_deriv = saved_ext
+
+    assert all(r.status == "pass" for r in vector_identity_checks())

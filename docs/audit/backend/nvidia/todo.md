@@ -6007,13 +6007,39 @@ A device dispatch gets a flat ceiling; every other lane keeps the
 self-calibrating `max(2.0, direct_ms*4)` against the oracle arm. Review on #686
 asked for a per-backend verdict, and the four are NOT the same.
 
-**NVIDIA — follow-up required before any sm_120 row adopts this.** NVIDIA
-launches report `native_gpu`, so they would inherit `NATIVE_LAUNCH_CEILING_MS`
-unchanged -- a number measured on gfx1151 over WSL2 `/dev/dxg`, on a different
-interconnect and a different driver stack. It is not evidence for sm_120 in
-either direction: it could be far too loose on a PCIe discrete part, or too
-tight. No NVIDIA test uses the helper today, so nothing is currently wrong;
-the debt is that adopting it without measuring would import a ROCm constant as
-if it were an NVIDIA one. Measure on The Super-Bear (RTX 5070, sm_120) and give
-NVIDIA its own constant before the first adoption. Evidence never transfers
-between architectures.
+**NVIDIA — MEASURED 2026-09-02; sm_120 needs its own constant, and inheriting
+the ROCm one would have been hollow.** The follow-up this entry asked for is
+done. Mirroring the ROCm methodology exactly, on The Super-Bear (RTX 5070,
+sm_120, WSL2), using `nvidia_dequant_gemm_compiled` — the direct analogue of the
+ROCm `dk4` row:
+
+| | gfx1151 (the constant's origin) | sm_120 |
+|---|---|---|
+| direct oracle median | 0.078 ms | 0.072 ms |
+| first launch (one-time compile) | 642 ms | **2320 ms** |
+| steady median, idle | 3.343 ms (max 4.703) | **0.965 ms** (max 1.379) |
+| steady median, 10 busy cores | 4.752 ms (max 5.541) | **0.951 ms** (max 1.245) |
+| dominant per-launch cost | `_rocm_dev_in`, 13 H2D copies | `compiler/emit/nvidia_cuda.py`, host-side |
+
+`execution_kind` is `native_gpu` on both, so the lane gate itself needs no
+change.
+
+**Three findings.** sm_120 dispatch is **3.5x faster** than gfx1151, so
+inheriting `NATIVE_LAUNCH_CEILING_MS = 20.0` would have been 14.5x the worst
+value ever observed here — a bound that could not fail, which is exactly the
+hollow-gate shape the lane gate exists to prevent. Second, NVIDIA is essentially
+**load-insensitive** (0.965 -> 0.951 ms under ten busy cores) where ROCm
+degrades 42% (3.343 -> 4.752): the ROCm cost is host-to-device transfer that
+contends for CPU, while NVIDIA's is host-side emission. Third, the one-time
+compile is 3.6x *longer* on NVIDIA (2320 ms vs 642 ms), which matters for any
+row that times a cold launch instead of steady state.
+
+**The constant to use on adoption is 5.0 ms**, by the same criterion as the ROCm
+one: 3.6x the worst observed (1.379 ms) while still failing the 70.6 ms
+regression class — and here with **14x** margin below it, where ROCm could only
+manage 3.5x. Both of the original row's criteria are satisfiable on this
+backend; on ROCm they were not.
+
+Deliberately NOT added to `tests/_support/launch_overhead.py` yet: no NVIDIA row
+consumes it, and an unconsumed constant is Decision #29's case. Add it with the
+first adopting row, not before.

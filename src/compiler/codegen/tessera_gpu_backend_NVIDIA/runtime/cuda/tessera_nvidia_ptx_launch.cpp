@@ -92,6 +92,51 @@ std::map<std::string, CUmodule>    g_modules;        // kernel name -> JIT'd mod
 std::map<std::string, CUfunction>  g_funcs;          // kernel name -> entry fn
 bool g_ctx_ready = false;
 
+// The bridge retains device 0's primary context and serializes every invoke
+// under g_mu through cuCtxSynchronize. A single grow-only staging region is
+// therefore safe for the synchronous host-buffer GEMM ABIs below. This is not
+// a CUDA async mempool: streams and concurrent leases need a different
+// ownership contract before they can share this storage.
+constexpr size_t kStagingAlignment = 256;
+struct StagingArena {
+    CUdeviceptr base = 0;
+    size_t capacity = 0;
+};
+StagingArena g_staging;
+
+// Assign aligned slices of the retained staging region. Caller holds g_mu and
+// has made the bridge primary context current. On growth, preserve the old
+// allocation until the replacement succeeds, so an OOM leaves the working arena
+// usable for the next smaller request.
+bool stagingPointersLocked(const size_t* sizes, size_t count,
+                           CUdeviceptr* pointers) {
+    if (!sizes || !pointers || count == 0) return false;
+    size_t total = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (sizes[i] == 0 || total > SIZE_MAX - (kStagingAlignment - 1))
+            return false;
+        const size_t offset =
+            (total + kStagingAlignment - 1) & ~(kStagingAlignment - 1);
+        if (sizes[i] > SIZE_MAX - offset) return false;
+        total = offset + sizes[i];
+    }
+    if (!g_staging.base || g_staging.capacity < total) {
+        CUdeviceptr replacement = 0;
+        if (cuMemAlloc(&replacement, total) != CUDA_SUCCESS) return false;
+        const CUdeviceptr previous = g_staging.base;
+        g_staging.base = replacement;
+        g_staging.capacity = total;
+        if (previous) cuMemFree(previous);
+    }
+    total = 0;
+    for (size_t i = 0; i < count; ++i) {
+        total = (total + kStagingAlignment - 1) & ~(kStagingAlignment - 1);
+        pointers[i] = g_staging.base + total;
+        total += sizes[i];
+    }
+    return true;
+}
+
 // Ensure a current CUDA context on device 0 (lazy, once). Returns false when no
 // usable GPU is present — the caller maps that to rc 2 (skip-clean upstream).
 bool ensureContext() {
@@ -146,10 +191,10 @@ int invokeMma(CUfunction fn, void** buffers, size_t nbuf,
     const size_t sA = (size_t)kMmaM * kMmaK * 2;   // bf16
     const size_t sB = (size_t)kMmaK * kMmaN * 2;   // bf16
     const size_t sD = (size_t)kMmaM * kMmaN * 4;   // f32
-    CUdeviceptr dA = 0, dB = 0, dD = 0;
-    if (cuMemAlloc(&dA, sA) != CUDA_SUCCESS) return 3;
-    if (cuMemAlloc(&dB, sB) != CUDA_SUCCESS) { cuMemFree(dA); return 3; }
-    if (cuMemAlloc(&dD, sD) != CUDA_SUCCESS) { cuMemFree(dA); cuMemFree(dB); return 3; }
+    CUdeviceptr device[3] = {};
+    const size_t sizes[] = {sA, sB, sD};
+    if (!stagingPointersLocked(sizes, 3, device)) return 3;
+    CUdeviceptr dA = device[0], dB = device[1], dD = device[2];
     int rc = 0;
     do {
         if (cuMemcpyHtoD(dA, A, sA) != CUDA_SUCCESS) { rc = 3; break; }
@@ -161,7 +206,6 @@ int invokeMma(CUfunction fn, void** buffers, size_t nbuf,
         if (cuCtxSynchronize() != CUDA_SUCCESS) { rc = 3; break; }
         if (cuMemcpyDtoH(D, dD, sD) != CUDA_SUCCESS) { rc = 3; break; }
     } while (0);
-    cuMemFree(dA); cuMemFree(dB); cuMemFree(dD);
     return rc;
 }
 
@@ -239,10 +283,10 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
     const size_t sA = (size_t)aElems * elementBytes;
     const size_t sB = (size_t)bElems * elementBytes;  // B is col-major
     const size_t sD = (size_t)dElems * outputBytes;
-    CUdeviceptr dA = 0, dB = 0, dD = 0;
-    if (cuMemAlloc(&dA, sA) != CUDA_SUCCESS) return 3;
-    if (cuMemAlloc(&dB, sB) != CUDA_SUCCESS) { cuMemFree(dA); return 3; }
-    if (cuMemAlloc(&dD, sD) != CUDA_SUCCESS) { cuMemFree(dA); cuMemFree(dB); return 3; }
+    CUdeviceptr device[3] = {};
+    const size_t sizes[] = {sA, sB, sD};
+    if (!stagingPointersLocked(sizes, 3, device)) return 3;
+    CUdeviceptr dA = device[0], dB = device[1], dD = device[2];
     int rc = 0;
     do {
         if (cuMemcpyHtoD(dA, A, sA) != CUDA_SUCCESS) { rc = 3; break; }
@@ -269,7 +313,6 @@ int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
         rc = copyLogicalRowsDtoH(D, dD, M64, N64, LDD64, outputBytes);
         if (rc) break;
     } while (0);
-    cuMemFree(dA); cuMemFree(dB); cuMemFree(dD);
     return rc;
 }
 
@@ -606,11 +649,7 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
     sizes[sizeIndex++] = static_cast<size_t>(dSpan) * outputBytes;
     if (sizeIndex != nbuf) return 5;
     CUdeviceptr device[5] = {};
-    int rc = 0;
-    for (size_t i = 0; i < nbuf; ++i) {
-        size_t bytes = sizes[i];
-        if (cuMemAlloc(&device[i], bytes) != CUDA_SUCCESS) { rc = 3; break; }
-    }
+    int rc = stagingPointersLocked(sizes, nbuf, device) ? 0 : 3;
     const size_t outputIndex = nbuf - 1;
     if (!rc) {
         for (size_t i = 0; i < outputIndex; ++i)
@@ -645,8 +684,6 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
                 buffers[outputIndex], device[outputIndex], M, N, LDD,
                 outputBytes);
     }
-    for (CUdeviceptr ptr : device)
-        if (ptr) cuMemFree(ptr);
     return rc;
 }
 

@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-29
+last_updated: 2026-09-02
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -3308,6 +3308,16 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
   All eight rows pass 3% (maximum device/end-to-end deltas 2.47%/0.77%). TF32
   and the launch-collapsed grouped routes win both retained runs, but this
   evidence intentionally leaves selectors unchanged.
+- **NVIDIA-PTX-STAGING-ARENA — landed in the legacy-retune bridge slice
+  (2026-09-02).** The synchronous host-buffer PTX GEMM bridge now maps regular
+  and fused GEMM operands into aligned slices of one retained primary-context
+  allocation, growing only when a larger request arrives. On The-Super-Bear
+  (RTX 5070 / sm_120, CUDA 13.3), the emitted f16 512-cube GEMM bridge median
+  fell from **0.9666 ms** to **0.3967 ms** (2.44x) over matched warm calls;
+  CUDA-event kernel time was unchanged within noise (**0.0274 → 0.0272 ms**).
+  The shipped bridge integration still executes and matches the oracle. This is
+  a NVIDIA-private launch-bridge change: Apple, ROCm, and x86 have no shared
+  ABI, registry, or physical-schedule change. It does not promote a selector.
 - **NVIDIA-PARITY-ATTN-FWD — stable complete; CUDA 4-warp candidate leads kernel time.**
   CUDA-owned 4- and 8-warp CTA candidates now cover D=128 MHA, causal sequence
   1009, ragged GQA windowing, and MQA bias+softcap. Each warp owns one query,

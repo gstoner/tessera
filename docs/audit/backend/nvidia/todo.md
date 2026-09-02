@@ -5911,3 +5911,54 @@ claim about the kernels.
 Follow-up: a ragged-bucket device re-race is still owed here (recorded under
 `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`), and it should now include the Tile
 lanes, which this fix returns to the field.
+
+## MATRIX-LANE-RAGGED-SHAPES device evidence *(sm_120, 2026-09-01)*
+
+The re-race owed by `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`, run on Super-Bear
+against `origin/main` at #676's merge. Two claims were owed and they are
+different: that the emitted lane now *measures* at ragged shapes (it declined
+before #675), and that the Tile lanes are still *in the field* (#676 — the
+benchmark path refused them as #675 landed it).
+
+**The field is complete at every shape: 4 timed / 0 absent.** At odd K the
+emitted lane is not *absent* from the race but not *live* — `applies_to_inputs`
+excludes it, which is the honest form: 3 live, 3 timed, 0 absent.
+
+**And three of the four shapes have no supportable winner.** Nine whole-device
+repeats per candidate, medians with spread beside them:
+
+| shape | fastest | margin | noise | separated |
+|---|---|---:|---:|---|
+| 256³ aligned | `mma_gemm_emitted` | 14.9% | 14.6% | **no** |
+| 255×129×258 ragged | `mma_gemm_emitted` | 7.6% | 17.9% | **no** |
+| 100×50×70 ragged | `tile_matmul_direct` | 3.6% | 13.2% | **no** |
+| 1000×999×1002 ragged | `mma_gemm_emitted` | **19.9%** | **0.1%** | **yes** |
+
+So the only ranking this run supports is the large ragged one: at
+1000×999×1002 the compiler-**emitted** PTX GEMM beats `tile_matmul_direct` by
+19.9% (0.18343 vs 0.22910 ms) and the shipped delegate by 34%, at 0.1% spread.
+The small shapes are launch-overhead dominated and unresolved — the same
+conclusion the 64³/256³ A/B reached under `MATRIX-LANE-RAGGED-SHAPES`, reached
+again by a different route.
+
+**Why the field composition mattered, concretely.** At 100×50×70 the ordering
+puts `tile_matmul_direct` first. Under #675-as-merged both Tile lanes were
+refused by the benchmark path, so that shape would have raced two candidates
+instead of four and recorded the emitted lane as winner with no visible
+competitor. The verdict would not have been provably wrong — it is unseparated
+either way — but it would have been drawn from a field missing the candidate
+that happens to lead it.
+
+**Method notes, because two of them nearly produced a false result.** The first
+run reported `0 timed / 0 absent of 0 live` — an empty registry, not a device
+answer: the scratch worktree lacked `libtessera_nvidia_gemm.so`, so every
+candidate probed unavailable. The second run had 2 of 4 live because the Tile
+lanes additionally require `tessera-nvidia-opt`, `mlir-opt`, `mlir-translate`
+and `llc`; pointing `TESSERA_NVIDIA_OPT` at the box's existing build (my changes
+touch no MLIR pass) completed the field. **An empty or partial field reports as
+a clean-looking table**, which is exactly why the harness prints
+`N timed / M absent of L live` rather than just the winner.
+
+Run from a detached `git worktree` at `origin/main` so the box's own checkout,
+branch and 16 untracked study files were never touched; the worktree was
+removed afterwards and the box verified back to `verify/sep` with the same 16.

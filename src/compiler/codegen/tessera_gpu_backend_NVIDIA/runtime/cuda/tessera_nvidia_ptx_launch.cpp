@@ -105,9 +105,9 @@ struct StagingArena {
 StagingArena g_staging;
 
 // Assign aligned slices of the retained staging region. Caller holds g_mu and
-// has made the bridge primary context current. On growth, preserve the old
-// allocation until the replacement succeeds, so an OOM leaves the working arena
-// usable for the next smaller request.
+// has made the bridge primary context current. Prefer retaining the old arena
+// until growth succeeds. If that transient double-residency is the only reason
+// an allocation reports OOM, release the idle old arena and retry once.
 bool stagingPointersLocked(const size_t* sizes, size_t count,
                            CUdeviceptr* pointers) {
     if (!sizes || !pointers || count == 0) return false;
@@ -122,11 +122,21 @@ bool stagingPointersLocked(const size_t* sizes, size_t count,
     }
     if (!g_staging.base || g_staging.capacity < total) {
         CUdeviceptr replacement = 0;
-        if (cuMemAlloc(&replacement, total) != CUDA_SUCCESS) return false;
         const CUdeviceptr previous = g_staging.base;
+        CUresult allocation = cuMemAlloc(&replacement, total);
+        if (allocation == CUDA_ERROR_OUT_OF_MEMORY && previous) {
+            if (cuMemFree(previous) != CUDA_SUCCESS) return false;
+            g_staging = {};
+            allocation = cuMemAlloc(&replacement, total);
+        }
+        if (allocation != CUDA_SUCCESS) return false;
+        if (previous && g_staging.base &&
+            cuMemFree(previous) != CUDA_SUCCESS) {
+            cuMemFree(replacement);
+            return false;
+        }
         g_staging.base = replacement;
         g_staging.capacity = total;
-        if (previous) cuMemFree(previous);
     }
     total = 0;
     for (size_t i = 0; i < count; ++i) {

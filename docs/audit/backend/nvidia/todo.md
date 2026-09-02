@@ -3311,7 +3311,10 @@ winner. An AMD wave shape, LDS strategy, or VGPR result is never a CUDA default.
 - **NVIDIA-PTX-STAGING-ARENA — landed in the legacy-retune bridge slice
   (2026-09-02).** The synchronous host-buffer PTX GEMM bridge now maps regular
   and fused GEMM operands into aligned slices of one retained primary-context
-  allocation, growing only when a larger request arrives. On The-Super-Bear
+  allocation, growing only when a larger request arrives. If retaining the old
+  arena makes a growth request OOM, the bridge releases that idle region and
+  retries once, so a call that fits alone is not rejected for transient peak
+  residency. On The-Super-Bear
   (RTX 5070 / sm_120, CUDA 13.3), the emitted f16 512-cube GEMM bridge median
   fell from **0.9666 ms** to **0.3967 ms** (2.44x) over matched warm calls;
   CUDA-event kernel time was unchanged within noise (**0.0274 → 0.0272 ms**).

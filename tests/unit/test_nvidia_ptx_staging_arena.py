@@ -19,7 +19,9 @@ def test_gemm_host_buffer_handlers_share_one_retained_staging_arena():
     assert "struct StagingArena" in source
     assert "bool stagingPointersLocked" in source
     assert "CUdeviceptr replacement" in source
-    assert "if (previous) cuMemFree(previous);" in source
+    assert "allocation == CUDA_ERROR_OUT_OF_MEMORY && previous" in source
+    assert "g_staging = {};" in source
+    assert "allocation = cuMemAlloc(&replacement, total);" in source
 
     mma = _body(source, "int invokeMma(", "// Launch the general aligned")
     gemm = _body(source, "int invokeMmaGemm16(", "// Compiler-owned launch-level")

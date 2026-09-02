@@ -27,7 +27,7 @@ import numpy as np
 
 from .grad import _wrap_as_parameter
 from .jvp import jvp
-from .tape import TesseraAutodiffError, tape
+from .tape import TesseraAutodiffError, raise_nested_tape_shadowed, tape
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +220,22 @@ def jacrev(
             # tape-produced no matter what `fn` did. Reusing one tape removed
             # that accidental shield.
             if not any(entry.output_id == id(out) for entry in t.entries):
+                # Before the two provable cases below: a tape that was shadowed
+                # during its forward pass recorded nothing for a reason that has
+                # nothing to do with `fn` being constant. `t.entries` is empty
+                # here for the same reason it is empty for a genuine constant,
+                # so the structural test below cannot tell them apart — this
+                # flag is what does.
+                # A returned ARGUMENT is an identity Jacobian by structure --
+                # provable without consulting any tape, so it must be decided
+                # before the shadow evidence is considered. Checking the flag
+                # first rejected `lambda a, b: a` merely because an unrelated
+                # nested tape had opened (review on #678).
+                if any(_returns_this_parameter(out, p) for p, _, _ in jacobians):
+                    pass
+                elif any(id(np.asarray(p._data._data)) in t.shadowed_buffer_ids
+                         for p, _, _ in jacobians):
+                    raise_nested_tape_shadowed("jacrev(fn)")
                 # Only two situations make a zero/identity Jacobian provable:
                 # `fn` returned one of its own arguments, or it recorded nothing
                 # at all (a genuine constant). If the tape DID record ops and

@@ -322,7 +322,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,48,11,1,59,0,,directly_tested,59 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
-mul,155,41,13,196,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,196 direct test references
+mul,162,41,14,203,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,203 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,15,0,0,15,0,fp32,directly_tested,15 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -431,7 +431,7 @@ sign,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 silu,91,8,6,99,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,99 direct test references
 silu_mul,18,13,1,31,0,bf16 fp32,directly_tested,31 direct test references
 simple_rnn_cell,10,0,0,10,0,bf16 f16 f32 fp16,directly_tested,10 direct test references
-sin,9,1,1,10,0,bf16 f16 f32,directly_tested,10 direct test references
+sin,14,1,2,15,0,bf16 f16 f32,directly_tested,15 direct test references
 sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,12,0,0,12,0,fp32,directly_tested,12 direct test references
 smooth_l1_loss,9,0,0,9,0,f32,directly_tested,9 direct test references
@@ -467,7 +467,7 @@ stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,72,8,4,80,0,bf16 f16 f32 fp16 fp32 fp64 int32 int64 int8,directly_tested,80 direct test references
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
 sub,35,7,4,42,0,bf16 f16 f32 fp16 fp32,directly_tested,42 direct test references
-sum,28,0,3,28,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,28 direct test references
+sum,37,0,4,37,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,37 direct test references
 svd,24,5,1,29,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,29 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

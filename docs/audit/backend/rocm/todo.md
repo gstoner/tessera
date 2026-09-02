@@ -6318,3 +6318,40 @@ no kernel can absorb. Final: **12 vs 12, identical set, zero regressions**;
 
 The box was restored to exactly its prior state — same branch, only its own
 pre-existing dirty file, binaries rebuilt from its own source.
+
+## Cross-backend sync `PRIMITIVE-ROUTE-MAP-2026-09-01`
+
+**Owning item:** the coverage ↔ MLIR/LLVM route join
+(`generated/primitive_route_map.md`) · **synchronization key:**
+`PRIMITIVE-ROUTE-MAP-2026-09-01`
+
+A shared registry and generated dashboard reporting, per primitive and per
+target, whether the mainline compiler or the Python bootstrap packager serves
+it. All four backends are assessed here per AGENTS.md — the first landing
+(#677) updated only the NVIDIA plan, which is the omission this entry closes.
+
+**It shipped with six false rows, and how they got there is the useful part.**
+`depth_attn` was published `compiled` on NVIDIA and x86 although `driver.py`
+dispatches it only under `target_kind == "rocm_gfx1151"`; `min`/`amin` were
+published as ROCm and x86 reduction routes although both contracts accept only
+`sum/mean/max/amax`. Both came from the same mistake: a membership that was
+described as "grounded in the `tessera.*` literals each backend names" but was
+actually one global tuple applied to every target, plus a compiled-route
+fan-out whose comment claimed it "keeps the claim no stronger than the source"
+when the source is target-aware and the fan-out made it strictly stronger.
+
+Three guards now make that class of error mechanical rather than editorial:
+
+* **membership is per target**, and every declared member is cross-checked
+  against the `tessera.*` literals of that target's own native module (either
+  the canonical Graph IR name or the public alias — `sum` is `tessera.reduce`
+  in coverage and `tessera.sum` in `x86_native`, and both are real);
+* **a compiled route is claimed only where `driver.py` dispatches it**
+  (`COMPILED_ROUTE_TARGETS`), never fanned across targets;
+* **a target that cannot be classified says so** rather than vanishing.
+
+**Outcome for this backend: `parity validated`.** `rocm_gfx1151` is fully
+classified. It is the only target that legitimately carries the
+`depth_attention` compiled route, and the two false `min`/`amin` bootstrap rows
+are gone — `rocm_native`'s reduction contract names `sum/mean/max/amax` and no
+more.

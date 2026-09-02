@@ -6619,3 +6619,56 @@ what made the ROCm side cost no runtime predicate on the contraction axis.
 Not attempted in this change: it needs its own device proof on the Mac, and
 bundling a third backend into one PR would put three device claims behind one
 review.
+
+## Cross-backend sync `PRIMITIVE-ROUTE-MAP-2026-09-01`
+
+**Owning item:** the coverage ↔ MLIR/LLVM route join
+(`generated/primitive_route_map.md`) · **synchronization key:**
+`PRIMITIVE-ROUTE-MAP-2026-09-01`
+
+A shared registry and generated dashboard reporting, per primitive and per
+target, whether the mainline compiler or the Python bootstrap packager serves
+it. All four backends are assessed here per AGENTS.md — the first landing
+(#677) updated only the NVIDIA plan, which is the omission this entry closes.
+
+**It shipped with six false rows, and how they got there is the useful part.**
+`depth_attn` was published `compiled` on NVIDIA and x86 although `driver.py`
+dispatches it only under `target_kind == "rocm_gfx1151"`; `min`/`amin` were
+published as ROCm and x86 reduction routes although both contracts accept only
+`sum/mean/max/amax`. Both came from the same mistake: a membership that was
+described as "grounded in the `tessera.*` literals each backend names" but was
+actually one global tuple applied to every target, plus a compiled-route
+fan-out whose comment claimed it "keeps the claim no stronger than the source"
+when the source is target-aware and the fan-out made it strictly stronger.
+
+Three guards now make that class of error mechanical rather than editorial:
+
+* **membership is per target**, and every declared member is cross-checked
+  against the `tessera.*` literals of that target's own native module (either
+  the canonical Graph IR name or the public alias — `sum` is `tessera.reduce`
+  in coverage and `tessera.sum` in `x86_native`, and both are real);
+* **a compiled route is claimed only where `driver.py` dispatches it**
+  (`COMPILED_ROUTE_TARGETS`), never fanned across targets;
+* **a target that cannot be classified says so** rather than vanishing.
+
+**Outcome for this backend: `follow-up required` — Apple was missing from the
+map entirely, and now says so.** Neither Apple target can be classified by
+`bootstrap_prune_audit` today:
+
+* `apple_cpu` **is** in its `_BACKEND_MODULES`, but
+  `apple_cpu_native.native_package_kind` returns a computed expression
+  (`op.op_name.removeprefix(...)`) rather than string literals, so the AST
+  walker derives no families;
+* `apple_gpu` is **not in that audit at all**, although `driver.py` has a live
+  scheduled dispatch for it (`target_kind == "apple_gpu"` at the
+  `package_native` branch).
+
+Both now render as `❔ unclassified` with the reason, not as `—`. That
+distinction is the point: a dash means measured and nothing serves it, and
+absent columns read as unserved — the `unmeasured` failure in a new place.
+
+Two follow-ups, in order: add `apple_gpu` to `_BACKEND_MODULES`, and give
+`apple_cpu_native.native_package_kind` literal family names (or an explicit
+family table) so the walker can see them. Until then Apple's real routes are
+invisible to the prune plan, which is a coverage gap in the plan rather than in
+the backend.

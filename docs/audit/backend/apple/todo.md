@@ -3212,6 +3212,76 @@ remain Apple-owned.
   selection. APPLE-RETUNE-1 stays active for wider shapes/dtypes, grouped
   SwiGLU/transport byte-bandwidth rows, and complete command-buffer intervals
   for the remaining composed routes.
+- **2026-09-02 APPLE-RETUNE-1 promotion decisions made reproducible:** re-running
+  `benchmark_legacy_retune.py --profile extended` twelve times on this M1 Max
+  from one unchanged binary — same `runtime_fingerprint`, so only measurement
+  noise differed — flipped two of the sixteen decisions
+  (`retune_mla_decode` promoted `absorbed` in 7/12 recordings at
+  `1x4x1x128x32x16x32x64` and 10/12 at `1x4x1x64x16x8x16x32`). Since every
+  `apple_gpu_runtime.mm` edit forces a re-seal, a re-seal was close to a coin
+  flip, and the obvious response — re-record until it passes — is selection on
+  noise. **Root cause: two promotion gates that could not converge.**
+  `maximum_cross_run_speedup_spread` capped `max - min` of the per-run
+  speedups, and a range never shrinks as runs are added, so a route that was
+  32–55% faster in all 24 runs and won 144/144 paired trials promoted 69% of
+  the time at two runs and 7% at eight — *more evidence made a true winner less
+  promotable*. `minimum_paired_win_fraction_each_run` was applied as
+  `all(runs)` over a fraction that three trials quantise to {0, ⅓, ⅔, 1}, so
+  0.75 meant "win all three" and one lost trial in fifteen flipped a route.
+  Both are replaced by consistent estimators: a one-sided 95% lower confidence
+  bound on the mean per-run speedup, and a win fraction pooled over every
+  paired trial with a per-run floor that no run may lose on balance. Defaults
+  move to `--runs 5` (a promotion needs ≥3 runs; two runs carry a t multiplier
+  of 6.31) and `--trials 9`. Eight fresh recordings at the new defaults produce
+  all sixteen routes identically (0/16 flips), versus 2/16 before. Decisions
+  additionally carry `stability_verdict` and the new
+  `retain_incumbent_unstable_candidate` status so "we could not tell" is no
+  longer recorded as the same thing as "the candidate is slower".
+  **Second root cause, and the more serious one — the corpus was measuring its
+  own previous output.** The `moe` incumbent calls
+  `rt._apple_gpu_dispatch_moe_swiglu_block`, which asks `production_route_for`
+  which route to take — consulting the committed ledger this same script
+  writes. So "composed" stopped meaning the composed lane the moment the ledger
+  promoted `single_fused`: measured here, the incumbent runs **1995 µs with no
+  ledger present and 1080 µs once the ledger promotes**, while the candidate
+  holds at ~995 µs either way, swinging the recorded speedup **+50.3% → +7.7%**
+  with neither kernel changing. That is a two-cycle oscillator no statistic can
+  fix — a retaining ledger makes the incumbent look slow, which promotes; the
+  promotion makes the incumbent *be* the candidate, which retains — and it also
+  silently inverts the comparison, since a promoted row measures the candidate
+  against itself. `run_report` now points the selector at a path that cannot
+  exist for the duration of measurement, so every dispatcher falls back to the
+  incumbent it declares and the corpus compares implementations. After the fix
+  the incumbent measures ~2050–2230 µs whether or not the ledger promotes.
+  **Route change:** the re-recorded ledger promotes `single_fused` for
+  `retune_moe_swiglu 16x32x64x32_e4` — against the *real* composed lane it is
+  ~52% faster and wins 96–100% of 45 paired trials. The promotion is
+  exact-shape; `32x64x128x64_e4` still retains `composed`, where the fused
+  kernel really is slower. **A load hypothesis was tested and refuted:** an
+  earlier reading that this row was host-load sensitive was itself an artifact
+  of the loop. With the loop fixed, eight busy cores slow both routes together
+  and the verdict is unchanged (+50.6% loaded vs +52% quiet) — the paired
+  interleaved design handles contention exactly as intended. NVIDIA and ROCm
+  are unaffected: this is the Apple route ledger's own aggregation, and no
+  parity is claimed for them. Two sibling lanes (`flash_attn_mha`, `softmax`)
+  consult the same ledger from their dispatchers; their corpora are not part of
+  this change and should be checked for the same self-reference.
+  **Third root cause — warmup.** One warmup call per route left a process's
+  *first* run cold: the fused MoE candidate measured ~2250 µs for all of run 0
+  and ~990 µs in every run after, dragging that row's interval down in 2 of 8
+  recordings. The paired design cannot cancel this, because the two routes
+  reach steady state at different rates. `_WARMUP_CALLS = 12`, interleaved.
+  **Residual, and deliberately not papered over:** after all three fixes, 10
+  fresh recordings give 15/16 rows identical; `retune_moe_swiglu`
+  16x32x64x32_e4 refused once, when a single run hit an external stall
+  (2538 µs against ~1000 µs either side) on a host carrying background load.
+  The cross-run bound is a mean ± t·sd and is not robust to one outlier run, so
+  a transient stall reads as instability and the row is refused. That is the
+  safe direction — it errs toward the incumbent, never toward a promotion — and
+  the row is recorded as `retain_incumbent_unstable_candidate` rather than as
+  a settled loss. Making the cross-run aggregate robust (a trimmed or
+  median-based bound) would trade that safety for stability and is a separate
+  call, not made here.
 - **2026-07-27 APPLE-RETUNE-1 ledger invalidated by a runtime-source edit:**
   `benchmarks/baselines/apple_strict_route_ledger.json` pins
   `context.runtime_fingerprint = sha256:74eb6e95…`, a whole-file hash of

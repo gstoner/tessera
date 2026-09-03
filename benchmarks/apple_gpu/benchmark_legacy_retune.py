@@ -9,11 +9,14 @@ its final subdispatch.
 from __future__ import annotations
 
 import argparse
+import contextlib
 from dataclasses import dataclass
 import json
 import math
+import os
 from pathlib import Path
 import statistics
+import tempfile
 import time
 from typing import Any, Callable
 
@@ -30,10 +33,50 @@ from tessera.cache import SSMStateHandle
 from tessera.cache.resident_kv import ResidentLatentKVCache
 from tessera.compiler.apple_route_selector import (
     ROUTE_REPORT_SCHEMA_VERSION,
+    _cached_strict_route_ledger,
     aggregate_stable_route_reports,
     live_apple_route_context,
     seal_strict_route_ledger,
 )
+
+
+@contextlib.contextmanager
+def _measure_implementations_not_the_ledgers_choice() -> Any:
+    """Detach the measured routes from the ledger this recorder produces.
+
+    **Without this the corpus measures its own previous output.** The `moe`
+    incumbent calls ``rt._apple_gpu_dispatch_moe_swiglu_block``, and that
+    dispatcher asks ``production_route_for`` which route to take -- consulting
+    the committed ledger that this very script writes. So "composed" stopped
+    meaning the composed lane the moment the ledger promoted `single_fused`:
+    measured on this M1 Max, the incumbent runs 1995us with no ledger present
+    and 1080us once the ledger promotes, while the candidate holds at ~995us
+    either way. The recorded speedup swings +50.3% -> +7.7% with nothing about
+    either kernel changing.
+
+    That is a two-cycle oscillator, and no amount of statistical care fixes it:
+    a ledger that retains makes the incumbent look slow, which promotes; the
+    promotion makes the incumbent *be* the candidate, which retains; and so on
+    forever. It also silently inverts the comparison, since a promoted row
+    measures the candidate against itself.
+
+    Pointing the selector at a path that cannot exist makes every dispatcher
+    fall back to the incumbent it declares in its own signature, which is the
+    neutral baseline a retuning corpus is supposed to compare against.
+    """
+    key = "TESSERA_APPLE_ROUTE_LEDGER"
+    previous = os.environ.get(key)
+    with tempfile.TemporaryDirectory(prefix="tessera-retune-neutral-") as empty:
+        os.environ[key] = str(Path(empty) / "no-such-route-ledger.json")
+        _cached_strict_route_ledger.cache_clear()
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
+            _cached_strict_route_ledger.cache_clear()
 
 
 @dataclass(frozen=True)
@@ -388,45 +431,63 @@ def low_precision_candidate_status() -> list[dict[str, str]]:
     ]
 
 
+# Enough calls to outlast first-dispatch pipeline creation and the clock ramp
+# at process start; measured sufficient on an M1 Max, where the ramp costs the
+# fused MoE route a ~2.3x penalty for roughly the first twenty dispatches.
+_WARMUP_CALLS = 12
+
+
 def run_report(*, reps: int, trials: int, seed: int = 1701,
                profile: str = "core") -> dict[str, Any]:
     if reps < 1 or trials < 3:
         raise ValueError("retune requires reps >= 1 and at least three paired trials")
     context = live_apple_route_context()
     rows: list[dict[str, Any]] = []
-    set_dispatch_telemetry_enabled(True)
-    try:
-        if profile == "core":
-            cases = _cases(seed)
-        elif profile == "extended":
-            # A second, independently seeded larger-shape pass.  It is not a
-            # dtype claim: f16/bf16 are measured by ``low_precision`` below.
-            cases = _cases(seed) + _cases(seed + 10_000, scale=2)
-        elif profile == "low_precision":
-            cases = (_low_precision_moe_cases(seed) +
-                     _low_precision_moe_cases(seed + 10_000, scale=2))
-        else:
-            raise ValueError(f"unknown retune profile {profile!r}")
-        for case in cases:
-            case.incumbent.call()
-            case.candidate.call()
-            measured: dict[str, list[dict[str, Any]]] = {
-                case.incumbent.name: [], case.candidate.name: []}
-            for trial in range(trials):
-                order: tuple[Route, ...] = (case.incumbent, case.candidate)
-                if trial % 2:
-                    order = tuple(reversed(order))
-                for route in order:
-                    measured[route.name].append(_measure(
-                        route, case.oracle, reps=reps, rtol=case.rtol, atol=case.atol))
-            rows.extend([
-                _row(case, case.incumbent, measured[case.incumbent.name],
-                     device=context.device, reps=reps),
-                _row(case, case.candidate, measured[case.candidate.name],
-                     device=context.device, reps=reps),
-            ])
-    finally:
-        set_dispatch_telemetry_enabled(False)
+    with _measure_implementations_not_the_ledgers_choice():
+        set_dispatch_telemetry_enabled(True)
+        try:
+            if profile == "core":
+                cases = _cases(seed)
+            elif profile == "extended":
+                # A second, independently seeded larger-shape pass.  It is not a
+                # dtype claim: f16/bf16 are measured by ``low_precision`` below.
+                cases = _cases(seed) + _cases(seed + 10_000, scale=2)
+            elif profile == "low_precision":
+                cases = (_low_precision_moe_cases(seed) +
+                         _low_precision_moe_cases(seed + 10_000, scale=2))
+            else:
+                raise ValueError(f"unknown retune profile {profile!r}")
+            for case in cases:
+                # One warmup call each was not enough to reach steady state.
+                # With a single call, `retune_moe_swiglu` 16x32x64x32_e4
+                # measured its candidate at ~2250us for the whole of a
+                # process's first run and ~990us in every run after -- so two
+                # of eight recordings dragged that row's confidence interval
+                # down far enough to refuse a promotion the other six granted.
+                # A cold pipeline and an unramped clock are not route
+                # properties, and the paired design cannot cancel them because
+                # the two routes reach steady state at different rates. Warm
+                # both, interleaved, until the ramp is spent.
+                for _ in range(_WARMUP_CALLS):
+                    case.incumbent.call()
+                    case.candidate.call()
+                measured: dict[str, list[dict[str, Any]]] = {
+                    case.incumbent.name: [], case.candidate.name: []}
+                for trial in range(trials):
+                    order: tuple[Route, ...] = (case.incumbent, case.candidate)
+                    if trial % 2:
+                        order = tuple(reversed(order))
+                    for route in order:
+                        measured[route.name].append(_measure(
+                            route, case.oracle, reps=reps, rtol=case.rtol, atol=case.atol))
+                rows.extend([
+                    _row(case, case.incumbent, measured[case.incumbent.name],
+                         device=context.device, reps=reps),
+                    _row(case, case.candidate, measured[case.candidate.name],
+                         device=context.device, reps=reps),
+                ])
+        finally:
+            set_dispatch_telemetry_enabled(False)
     return {
         "schema_version": ROUTE_REPORT_SCHEMA_VERSION,
         "context": context.as_mapping(),
@@ -452,8 +513,18 @@ def build_strict_ledger(reports: list[dict[str, Any]], *, valid_days: int = 30) 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reps", type=int, default=5)
-    parser.add_argument("--trials", type=int, default=3)
-    parser.add_argument("--runs", type=int, default=2)
+    # Nine, not three. The win-rate gate is a proportion, and three trials can
+    # only ever measure it as 0, 1/3, 2/3 or 1 -- so a 0.75 threshold was a
+    # synonym for "win all three", and one lost trial out of fifteen flipped a
+    # route. Nine trials per run resolve the proportion finely enough that the
+    # sixteen committed decisions reproduce across re-recordings.
+    parser.add_argument("--trials", type=int, default=9)
+    # Five, not two. The promotion gate needs enough independent runs to
+    # measure its own dispersion: at two runs the 95% bound carries a t
+    # multiplier of 6.31, so two runs can retain a route but essentially never
+    # promote one. Five runs cost about eight seconds on an M1 Max and make the
+    # sixteen committed decisions reproduce across re-recordings.
+    parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--profile", choices=("core", "extended", "low_precision"),
                         default="core")
     parser.add_argument("--output", type=Path, required=True)

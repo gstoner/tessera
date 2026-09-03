@@ -1,8 +1,8 @@
 {
   "schema": "tessera.apple.route-ledger.v2",
   "selection_scope": "runtime_route",
-  "measured_at": "2026-09-02T21:12:56.063414Z",
-  "expires_at": "2026-10-02T21:12:56.063414Z",
+  "measured_at": "2026-09-03T03:24:09.454594Z",
+  "expires_at": "2026-10-03T03:24:09.454594Z",
   "context": {
     "device": "apple7",
     "physical_device": "Apple M1 Max",
@@ -11,16 +11,24 @@
     "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
     "runtime_fingerprint": "sha256:2ede77bb159e6096f6b8951d0abfdd5613185e257278075c476dbaf2b2347cc6"
   },
-  "source_report_count": 2,
+  "source_report_count": 5,
   "source_report_digests": [
-    "sha256:7d856fa3e164122dbc9b10276b3fdea6476fc1cf12d20a8dcb42f626a3522d55",
-    "sha256:c7072199da8fbb7a1abba9c9049cb72311488aaf5b0ab80828ce08e614722ca7"
+    "sha256:5b6e833936031c927e5d49c1253ea4654bc888b5efc4f91c98ad85e29b55e1db",
+    "sha256:01555eed68a729545785310ae523a3e12d280ab7797f0568d03bbfedfaa0eeca",
+    "sha256:208c3362d453cc36188345031c0397cffbeb6b33ff3e88f53ba1619e3f578765",
+    "sha256:c49d87114e3c71d2727e8bb327d353265a352c45d8bb5756b6f6f5c65b660202",
+    "sha256:e453aea6a89a546971df61df88fd3c7ab8016a45dc90fc6430e7efdd0709845d"
   ],
   "promotion_rules": {
     "minimum_speedup_fraction_each_run": 0.05,
     "maximum_cross_run_drift_fraction": 0.15,
     "absolute_time_drift_is_diagnostic_only": true,
-    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_pooled_paired_win_fraction": 0.75,
+    "minimum_paired_win_fraction_each_run": 0.5,
+    "minimum_speedup_lower_confidence_bound": 0.05,
+    "speedup_confidence_level": 0.95,
+    "minimum_promotion_runs": 3,
+    "cross_run_speedup_spread_is_diagnostic_only": true,
     "maximum_cross_run_speedup_spread": 0.05,
     "requires_native_dispatch": true,
     "requires_numerical_validation": true,
@@ -51,40 +59,109 @@
             },
             {
               "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            326667,
-            258125
+            264250,
+            272917,
+            286292,
+            285500,
+            282458
           ],
-          "run_drift_fraction": 0.26553801452784503,
-          "absolute_time_stable": false,
+          "run_drift_fraction": 0.08341343424787133,
+          "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              330000,
-              326667,
-              316667
+              324584,
+              286083,
+              250083,
+              292542,
+              264250,
+              259666,
+              283250,
+              257292,
+              246333
             ],
             [
-              236584,
-              259417,
-              258125
+              286833,
+              272917,
+              270125,
+              234000,
+              260166,
+              279458,
+              275584,
+              266708,
+              279875
+            ],
+            [
+              333292,
+              280041,
+              295416,
+              286292,
+              306833,
+              268041,
+              263125,
+              276000,
+              298417
+            ],
+            [
+              281500,
+              309208,
+              269000,
+              310292,
+              299250,
+              285500,
+              293917,
+              254125,
+              246250
+            ],
+            [
+              285750,
+              301041,
+              292250,
+              266416,
+              282458,
+              280667,
+              296792,
+              270916,
+              282375
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -101,69 +178,201 @@
             },
             {
               "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            1089542,
-            895209
+            964875,
+            1022542,
+            1022000,
+            1022250,
+            1047750
           ],
-          "run_drift_fraction": 0.21708115088208452,
-          "absolute_time_stable": false,
+          "run_drift_fraction": 0.08589195491643996,
+          "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              1044667,
-              1089542,
-              1125417
+              986916,
+              911167,
+              996625,
+              964875,
+              919083,
+              968625,
+              975167,
+              891083,
+              918791
             ],
             [
-              1003833,
-              881292,
-              895209
+              1022542,
+              1033417,
+              937500,
+              973583,
+              950458,
+              988292,
+              1140958,
+              1034917,
+              1089000
+            ],
+            [
+              1040500,
+              1062625,
+              949334,
+              1022000,
+              1008208,
+              1070084,
+              1018708,
+              971875,
+              1054750
+            ],
+            [
+              999208,
+              1011917,
+              1050667,
+              1071709,
+              1067209,
+              1114458,
+              976375,
+              998792,
+              1022250
+            ],
+            [
+              1091791,
+              1047750,
+              1121250,
+              1118625,
+              947375,
+              1019583,
+              1022000,
+              989042,
+              1169291
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            -2.335329249664031,
-            -2.468122033898305
+            -2.651371807000946,
+            -2.74671420248647,
+            -2.5697819009961855,
+            -2.5805604203152366,
+            -2.709401043694992
           ],
           "paired_speedups_vs_incumbent": [
             [
-              -2.165657575757576,
-              -2.335329249664031,
-              -2.5539446800582315
+              -2.0405565277401227,
+              -2.1849742906778804,
+              -2.985176921262141,
+              -2.298244354656767,
+              -2.478081362346263,
+              -2.730272734974929,
+              -2.4427784642541925,
+              -2.463314055625515,
+              -2.7298737887331375
             ],
             [
-              -3.2430299597605923,
-              -2.3972021879830545,
-              -2.468122033898305
+              -2.5649384833683713,
+              -2.786561482062312,
+              -2.4706154558074966,
+              -3.1606111111111113,
+              -2.6532752165924833,
+              -2.5364598615892193,
+              -3.1401460171853226,
+              -2.8803372977188535,
+              -2.8910227780259046
+            ],
+            [
+              -2.1218871140021363,
+              -2.79453365757157,
+              -2.213549706177052,
+              -2.5697819009961855,
+              -2.285852564750206,
+              -2.9922399931353785,
+              -2.871574346793349,
+              -2.521286231884058,
+              -2.5344836252626357
+            ],
+            [
+              -2.5495843694493785,
+              -2.2726093762127757,
+              -2.905825278810409,
+              -2.4538724814046122,
+              -2.56627903091061,
+              -2.9035306479859897,
+              -2.3219412283059504,
+              -2.930317757009346,
+              -3.151269035532995
+            ],
+            [
+              -2.8207909011373578,
+              -2.480422932424487,
+              -2.8366124893071003,
+              -3.198790613176386,
+              -2.3540384765168625,
+              -2.632714212928488,
+              -2.4434890428313434,
+              -2.650733068552614,
+              -3.1409154493138556
             ]
           ],
           "paired_median_speedups": [
-            -2.335329249664031,
-            -2.468122033898305
+            -2.463314055625515,
+            -2.786561482062312,
+            -2.5344836252626357,
+            -2.56627903091061,
+            -2.650733068552614
           ],
           "paired_win_fractions": [
             0.0,
+            0.0,
+            0.0,
+            0.0,
             0.0
           ],
-          "cross_run_speedup_spread": 0.1327927842342742
+          "cross_run_speedup_spread": 0.32324742643679727,
+          "speedup_lower_confidence_bound": -2.7184909141734033,
+          "pooled_paired_win_fraction": 0.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            -2.7184909141734033,
+            -2.482057590792071
+          ],
+          "stability_verdict": "not_a_stable_win",
+          "promotable": false
         }
       },
       "selected_evidence": {
@@ -195,40 +404,109 @@
             },
             {
               "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            90999,
-            30833
+            34666,
+            38583,
+            30708,
+            34208,
+            30875
           ],
-          "run_drift_fraction": 1.9513508254143288,
+          "run_drift_fraction": 0.2564478311840563,
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              90999,
-              84791,
-              91208
+              90166,
+              31083,
+              30625,
+              37333,
+              38041,
+              30375,
+              34666,
+              35874,
+              32208
             ],
             [
+              55250,
+              44125,
+              42875,
+              32124,
+              38874,
+              37833,
+              38583,
+              31291,
+              32000
+            ],
+            [
+              30708,
+              30666,
+              30499,
+              30541,
+              32000,
+              34041,
+              30416,
+              30875,
+              31624
+            ],
+            [
+              30708,
+              37125,
+              37999,
+              35000,
+              30750,
+              31958,
+              34208,
               34250,
+              32583
+            ],
+            [
+              30541,
+              30458,
+              32708,
+              31250,
               30833,
-              30541
+              30416,
+              30875,
+              33624,
+              38125
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -245,21 +523,42 @@
             },
             {
               "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
+            null,
+            null,
+            null,
             null,
             null
           ],
@@ -267,10 +566,16 @@
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "paired_measurement": false,
           "timing_coverage": [
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0
           ],
@@ -306,40 +611,109 @@
             },
             {
               "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            291333,
-            295334
+            305416,
+            421875,
+            295166,
+            327791,
+            305042
           ],
-          "run_drift_fraction": 0.013733425324285268,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.4292804726831681,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              283708,
-              316333,
-              291333
+              300208,
+              293417,
+              282000,
+              309250,
+              302666,
+              320000,
+              305416,
+              317583,
+              320125
             ],
             [
-              308083,
-              295334,
-              287084
+              441125,
+              393666,
+              439625,
+              421875,
+              402291,
+              612250,
+              376958,
+              424666,
+              386208
+            ],
+            [
+              326500,
+              303291,
+              298209,
+              284750,
+              287875,
+              290208,
+              277000,
+              298000,
+              295166
+            ],
+            [
+              327791,
+              319833,
+              337250,
+              344125,
+              373291,
+              309125,
+              308000,
+              332959,
+              298292
+            ],
+            [
+              330834,
+              289542,
+              288833,
+              305042,
+              309291,
+              323667,
+              329958,
+              289125,
+              283167
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -356,69 +730,201 @@
             },
             {
               "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            973959,
-            973250
+            1059458,
+            1165416,
+            993000,
+            1097084,
+            1017458
           ],
-          "run_drift_fraction": 0.0007284870279989725,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.17363141993957704,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              980500,
-              918792,
-              973959
+              1036167,
+              1026208,
+              997042,
+              1056125,
+              1060083,
+              1068084,
+              1075750,
+              1059458,
+              1200458
             ],
             [
-              1088334,
-              973250,
-              964750
+              1259667,
+              1169875,
+              1215083,
+              1165416,
+              1153792,
+              1159584,
+              1165292,
+              1219833,
+              1130750
+            ],
+            [
+              1072375,
+              934000,
+              962375,
+              993000,
+              1043750,
+              936084,
+              992834,
+              1011959,
+              1098833
+            ],
+            [
+              1075209,
+              1224208,
+              1093375,
+              1190292,
+              1134958,
+              1202292,
+              1097084,
+              1089833,
+              1044167
+            ],
+            [
+              1007000,
+              1017458,
+              989791,
+              1015583,
+              1119208,
+              1055125,
+              1037416,
+              980708,
+              1035167
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            -2.343112520723708,
-            -2.2954214550305756
+            -2.4689014327998535,
+            -1.7624675555555556,
+            -2.3642086148133594,
+            -2.3469009216238397,
+            -2.33546855842802
           ],
           "paired_speedups_vs_incumbent": [
             [
-              -2.4560181595161223,
-              -1.9045088561737156,
-              -2.343112520723708
+              -2.451496962106273,
+              -2.4974387987062783,
+              -2.535609929078014,
+              -2.4151172190784154,
+              -2.5024845869704557,
+              -2.3377625,
+              -2.5222450690206144,
+              -2.3360035014468656,
+              -2.7499664193674347
             ],
             [
-              -2.5325999811739046,
-              -2.2954214550305756,
-              -2.3605146925638487
+              -1.8555783508075943,
+              -1.9717450833955688,
+              -1.763907876030708,
+              -1.7624675555555556,
+              -1.8680532251529365,
+              -0.8939714169048592,
+              -2.09130460157365,
+              -1.8724527040073846,
+              -1.927826456210125
+            ],
+            [
+              -2.2844563552833077,
+              -2.0795506625649955,
+              -2.227182948871429,
+              -2.4872695346795433,
+              -2.625705601389492,
+              -2.2255623552762156,
+              -2.5842382671480144,
+              -2.3958355704697984,
+              -2.7227627843315285
+            ],
+            [
+              -2.2801663254939886,
+              -2.827647553567018,
+              -2.242031134173462,
+              -2.4588942971304033,
+              -2.040410832299734,
+              -2.889339264051759,
+              -2.561961038961039,
+              -2.273174775272631,
+              -2.5004861008676063
+            ],
+            [
+              -2.0438225817177194,
+              -2.5140255990495333,
+              -2.426862581491727,
+              -2.329321863874483,
+              -2.618624531589991,
+              -2.2599091041100885,
+              -2.1440850047581814,
+              -2.3919861651534804,
+              -2.6556766854894813
             ]
           ],
           "paired_median_speedups": [
-            -2.343112520723708,
-            -2.3605146925638487
+            -2.4974387987062783,
+            -1.8680532251529365,
+            -2.3958355704697984,
+            -2.4588942971304033,
+            -2.3919861651534804
           ],
           "paired_win_fractions": [
             0.0,
+            0.0,
+            0.0,
+            0.0,
             0.0
           ],
-          "cross_run_speedup_spread": 0.017402171840140923
+          "cross_run_speedup_spread": 0.6293855735533418,
+          "speedup_lower_confidence_bound": -2.568285929976785,
+          "pooled_paired_win_fraction": 0.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            -2.568285929976785,
+            -2.0765972926683736
+          ],
+          "stability_verdict": "not_a_stable_win",
+          "promotable": false
         }
       },
       "selected_evidence": {
@@ -450,40 +956,109 @@
             },
             {
               "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
+            },
+            {
+              "api": "MSL.grouped_gemm"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            56541,
-            54708
+            58291,
+            145166,
+            56624,
+            56000,
+            59499
           ],
-          "run_drift_fraction": 0.03350515463917526,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 1.59225,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
+              55750,
+              55833,
+              56791,
+              62375,
+              59833,
+              60541,
+              58125,
+              59999,
+              58291
+            ],
+            [
+              142458,
+              147958,
+              140958,
+              145166,
+              140124,
+              147708,
+              145416,
+              146291,
+              141749
+            ],
+            [
+              55083,
+              59583,
+              59749,
+              57958,
+              56750,
+              55375,
+              56624,
+              55624,
+              56208
+            ],
+            [
+              55958,
+              56249,
+              55874,
+              54374,
+              55250,
+              56000,
+              58624,
+              56249,
+              56499
+            ],
+            [
+              70208,
+              58541,
+              70458,
+              59499,
+              60374,
+              58208,
+              62500,
               54666,
-              56541,
-              58625
-            ],
-            [
-              54750,
-              54708,
-              53750
+              55541
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -500,21 +1075,42 @@
             },
             {
               "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
+            },
+            {
+              "api": "MPS.matmul_loop"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
+            null,
+            null,
+            null,
             null,
             null
           ],
@@ -522,10 +1118,16 @@
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "paired_measurement": false,
           "timing_coverage": [
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0
           ],
@@ -561,69 +1163,201 @@
             },
             {
               "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            826042,
-            873125
+            790708,
+            964750,
+            909625,
+            883708,
+            811250
           ],
-          "run_drift_fraction": 0.0569983124344767,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.2201090668110099,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              809542,
-              826042,
-              857458
+              806292,
+              785292,
+              785583,
+              834041,
+              794583,
+              790708,
+              780916,
+              787709,
+              893375
             ],
             [
-              873125,
-              830416,
-              875250
+              952792,
+              934792,
+              966291,
+              954500,
+              1001708,
+              1174000,
+              966250,
+              961542,
+              964750
+            ],
+            [
+              818333,
+              810000,
+              907291,
+              909625,
+              934875,
+              940666,
+              983625,
+              881916,
+              925667
+            ],
+            [
+              871334,
+              894833,
+              883708,
+              811875,
+              942084,
+              810417,
+              905791,
+              865416,
+              934041
+            ],
+            [
+              830917,
+              775041,
+              839625,
+              765917,
+              823125,
+              822750,
+              805917,
+              811250,
+              802125
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            0.39239279146745126,
-            0.4029571613002046
+            0.39201655924991274,
+            0.3993306872130127,
+            0.3952295185837484,
+            0.39466872163712646,
+            0.40515078923383424
           ],
           "paired_speedups_vs_incumbent": [
             [
-              0.46208332724235496,
-              0.38756902472731153,
-              0.36928429569694743
+              0.3800338628048921,
+              0.3733330673316708,
+              0.41016762083528857,
+              0.4608944704324202,
+              0.4348289655996518,
+              0.38231969534225174,
+              0.41313942556627614,
+              0.38488251054402567,
+              0.30795318366711416
             ],
             [
-              0.4244396835860251,
-              0.42871098520001955,
-              0.40150408638855156
+              0.4607092118296307,
+              0.4532580786664717,
+              0.4377805886747487,
+              0.32394864984506416,
+              0.32812624713515237,
+              0.2643534111380904,
+              0.3761601162133807,
+              0.4507435915744377,
+              0.3993306872130127
+            ],
+            [
+              0.4302790009572709,
+              0.42094588846559955,
+              0.39353908513263663,
+              0.3952295185837484,
+              0.3980521324359355,
+              0.3970252082956741,
+              0.4031249582817038,
+              0.44852986695297486,
+              0.3636387385064879
+            ],
+            [
+              0.3921458513986099,
+              0.3049392698713781,
+              0.3527925901025108,
+              0.4438736193167223,
+              0.39443391690471474,
+              0.44882077733411413,
+              0.39757831792458415,
+              0.4549274803679266,
+              0.3493084790300524
+            ],
+            [
+              0.33440112145789525,
+              0.43937465007978543,
+              0.45277560166169817,
+              0.41562807333975754,
+              0.45731003791000496,
+              0.3967184121320642,
+              0.3948436268068331,
+              0.3875625176936869,
+              0.413222384784199
             ]
           ],
           "paired_median_speedups": [
-            0.38756902472731153,
-            0.4244396835860251
+            0.38488251054402567,
+            0.3993306872130127,
+            0.3980521324359355,
+            0.39443391690471474,
+            0.413222384784199
           ],
           "paired_win_fractions": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
-          "cross_run_speedup_spread": 0.036870658858713545
+          "cross_run_speedup_spread": 0.028339874240173313,
+          "speedup_lower_confidence_bound": 0.3882343160746018,
+          "pooled_paired_win_fraction": 1.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            0.3882343160746018,
+            0.4077343366781533
+          ],
+          "stability_verdict": "stable_win",
+          "promotable": true
         },
         "explicit": {
           "present_in_all_runs": true,
@@ -636,40 +1370,109 @@
             },
             {
               "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            1359500,
-            1462416
+            1300542,
+            1606125,
+            1504083,
+            1459875,
+            1363791
           ],
-          "run_drift_fraction": 0.07570136079440971,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.23496588345474426,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              1504958,
-              1348792,
-              1359500
+              1300542,
+              1253125,
+              1331875,
+              1547083,
+              1405916,
+              1280125,
+              1330667,
+              1280583,
+              1290917
             ],
             [
-              1517000,
-              1453583,
-              1462416
+              1766750,
+              1709750,
+              1718708,
+              1411875,
+              1490917,
+              1595875,
+              1548875,
+              1750625,
+              1606125
+            ],
+            [
+              1436375,
+              1398833,
+              1496042,
+              1504083,
+              1553083,
+              1560042,
+              1647958,
+              1599209,
+              1454625
+            ],
+            [
+              1433459,
+              1287417,
+              1365417,
+              1459875,
+              1555708,
+              1470333,
+              1503583,
+              1587708,
+              1435459
+            ],
+            [
+              1248375,
+              1382458,
+              1534334,
+              1310667,
+              1516750,
+              1363791,
+              1331750,
+              1324625,
+              1367000
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -705,21 +1508,42 @@
             },
             {
               "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
+            null,
+            null,
+            null,
             null,
             null
           ],
@@ -727,10 +1551,16 @@
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "paired_measurement": false,
           "timing_coverage": [
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0
           ],
@@ -747,138 +1577,339 @@
             },
             {
               "api": "MSL.mla_decode_rope"
-            }
-          ],
-          "timing_sources": [
-            null,
-            null
-          ],
-          "counter_sampling_supported": [
-            null,
-            null
-          ],
-          "counter_timestamp_deltas": [
-            null,
-            null
-          ],
-          "times_ns": [
-            567666,
-            576166
-          ],
-          "run_drift_fraction": 0.014973593627238553,
-          "absolute_time_stable": true,
-          "paired_trial_times_ns": [
-            [
-              601166,
-              527583,
-              567666
-            ],
-            [
-              576166,
-              597916,
-              492791
-            ]
-          ],
-          "paired_measurement": true,
-          "timing_coverage": [
-            1.0,
-            1.0
-          ],
-          "eligible": true
-        }
-      },
-      "selected_evidence": {
-        "provenance": "native_gpu",
-        "correctness": true,
-        "device": "apple7",
-        "timing_domain": "device"
-      }
-    },
-    {
-      "op": "retune_mla_decode",
-      "shape": "1x4x1x64x16x8x16x32",
-      "dtype": "f32",
-      "device": "apple7",
-      "timing_domain": "end_to_end",
-      "incumbent_route": "explicit",
-      "selected_route": "absorbed",
-      "status": "promote_candidate",
-      "reason": "candidate met paired stable-win gates in every run",
-      "route_evidence": {
-        "absorbed": {
-          "present_in_all_runs": true,
-          "placement_and_numerical_proof": true,
-          "repeated_measurement": true,
-          "resource_evidence_retained": true,
-          "resource_records": [
-            {
-              "api": "MSL.mla_absorb_decode"
             },
             {
-              "api": "MSL.mla_absorb_decode"
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            570208,
-            571875
+            551041,
+            645000,
+            620541,
+            586083,
+            548041
           ],
-          "run_drift_fraction": 0.0029234945844323476,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.17691924509297663,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              566459,
-              570208,
-              619916
-            ],
-            [
-              571875,
+              516916,
+              519208,
+              569375,
               577458,
-              547875
+              582666,
+              519083,
+              562166,
+              525375,
+              551041
+            ],
+            [
+              709208,
+              645000,
+              723875,
+              604875,
+              590000,
+              626958,
+              627541,
+              693666,
+              713791
+            ],
+            [
+              605291,
+              604833,
+              605625,
+              649666,
+              620541,
+              626041,
+              697666,
+              671416,
+              602375
+            ],
+            [
+              551041,
+              529083,
+              537458,
+              578458,
+              650916,
+              604666,
+              603708,
+              615583,
+              586083
+            ],
+            [
+              475958,
+              585625,
+              591541,
+              552500,
+              622875,
+              537875,
+              511625,
+              519125,
+              548041
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "eligible": true
+        }
+      },
+      "selected_evidence": {
+        "provenance": "native_gpu",
+        "correctness": true,
+        "device": "apple7",
+        "timing_domain": "device"
+      }
+    },
+    {
+      "op": "retune_mla_decode",
+      "shape": "1x4x1x64x16x8x16x32",
+      "dtype": "f32",
+      "device": "apple7",
+      "timing_domain": "end_to_end",
+      "incumbent_route": "explicit",
+      "selected_route": "absorbed",
+      "status": "promote_candidate",
+      "reason": "candidate met paired stable-win gates in every run",
+      "route_evidence": {
+        "absorbed": {
+          "present_in_all_runs": true,
+          "placement_and_numerical_proof": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            }
+          ],
+          "timing_sources": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "counter_sampling_supported": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "times_ns": [
+            562208,
+            559500,
+            513208,
+            578625,
+            550125
+          ],
+          "run_drift_fraction": 0.12746683605867407,
+          "absolute_time_stable": true,
+          "paired_trial_times_ns": [
+            [
+              585959,
+              616333,
+              601500,
+              513125,
+              628916,
+              535958,
+              542458,
+              519625,
+              562208
+            ],
+            [
+              585333,
+              544750,
+              499125,
+              559500,
+              548708,
+              619417,
+              596542,
+              553875,
+              571208
+            ],
+            [
+              536833,
+              513208,
+              523125,
+              491292,
+              542292,
+              504541,
+              497583,
+              495917,
+              571166
+            ],
+            [
+              578625,
+              570791,
+              630625,
+              548000,
+              618667,
+              527125,
+              512792,
+              649875,
+              599750
+            ],
+            [
+              509667,
+              550125,
+              595083,
+              565875,
+              512625,
+              508083,
+              553917,
+              517667,
+              564083
+            ]
+          ],
+          "paired_measurement": true,
+          "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            0.5199764284962644,
-            0.523867606262343
+            0.5360523918296209,
+            0.5141470480199865,
+            0.5355407173847332,
+            0.5267517647895952,
+            0.5080482897384306
           ],
           "paired_speedups_vs_incumbent": [
             [
-              0.5543202202989772,
-              0.5015302683673728,
-              0.4781302746501105
+              0.47484925505829045,
+              0.48733247491282705,
+              0.47589281202022193,
+              0.6059828410086532,
+              0.48936080381609665,
+              0.5738332173740185,
+              0.5644072709869569,
+              0.5632790484042719,
+              0.5360523918296209
             ],
             [
-              0.5499998819671822,
-              0.4850061224071182,
-              0.5438495559011692
+              0.5019502233567326,
+              0.47980725892086384,
+              0.5665748799695723,
+              0.510623707679228,
+              0.48447868467410454,
+              0.5070298448070035,
+              0.45092953432162125,
+              0.5559230306674684,
+              0.5177811489851343
+            ],
+            [
+              0.5225498610339078,
+              0.55654407012232,
+              0.5265657156199602,
+              0.6041957703927493,
+              0.4804388023952096,
+              0.5267893319127225,
+              0.5105939955228049,
+              0.5395210031208245,
+              0.5061074418612695
+            ],
+            [
+              0.4881689517912428,
+              0.5331590694768077,
+              0.49096962970436886,
+              0.5535492427852987,
+              0.42782242774566476,
+              0.5650184472612976,
+              0.5593150714362445,
+              0.5106057080374752,
+              0.5121834174083214
+            ],
+            [
+              0.571843326682768,
+              0.5448185645350261,
+              0.46784439973172365,
+              0.47674854062890965,
+              0.5132344213649852,
+              0.5361916785566598,
+              0.4852273424271543,
+              0.5607251170597509,
+              0.5050640119539286
             ]
           ],
           "paired_median_speedups": [
-            0.5015302683673728,
-            0.5438495559011692
+            0.5360523918296209,
+            0.5070298448070035,
+            0.5265657156199602,
+            0.5121834174083214,
+            0.5132344213649852
           ],
           "paired_win_fractions": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
-          "cross_run_speedup_spread": 0.042319287533796435
+          "cross_run_speedup_spread": 0.029022547022617418,
+          "speedup_lower_confidence_bound": 0.507621257897519,
+          "pooled_paired_win_fraction": 1.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            0.507621257897519,
+            0.5304050585144375
+          ],
+          "stability_verdict": "stable_win",
+          "promotable": true
         },
         "explicit": {
           "present_in_all_runs": true,
@@ -891,40 +1922,109 @@
             },
             {
               "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            1187875,
-            1201084
+            1211792,
+            1151583,
+            1104958,
+            1222667,
+            1118250
           ],
-          "run_drift_fraction": 0.011119856887298748,
+          "run_drift_fraction": 0.1065280309296824,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              1271000,
-              1143917,
-              1187875
+              1115792,
+              1202208,
+              1147666,
+              1302291,
+              1231625,
+              1257625,
+              1245333,
+              1189833,
+              1211792
             ],
             [
-              1270833,
-              1121291,
-              1201084
+              1175250,
+              1047208,
+              1151583,
+              1143292,
+              1064375,
+              1256500,
+              1086458,
+              1247250,
+              1184541
+            ],
+            [
+              1124375,
+              1157292,
+              1104958,
+              1241250,
+              1043750,
+              1066208,
+              1016708,
+              1076959,
+              1156458
+            ],
+            [
+              1130500,
+              1222667,
+              1238875,
+              1227459,
+              1081250,
+              1211833,
+              1163625,
+              1327917,
+              1229458
+            ],
+            [
+              1190375,
+              1208584,
+              1118250,
+              1081459,
+              1053125,
+              1095459,
+              1076042,
+              1178458,
+              1139709
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -960,21 +2060,42 @@
             },
             {
               "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
+            },
+            {
+              "api": "MSL.mla_absorb_decode"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
+            null,
+            null,
+            null,
             null,
             null
           ],
@@ -982,10 +2103,16 @@
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "paired_measurement": false,
           "timing_coverage": [
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0
           ],
@@ -1002,40 +2129,109 @@
             },
             {
               "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
+            },
+            {
+              "api": "MSL.mla_decode_rope"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            579958,
-            553375
+            591416,
+            553083,
+            523958,
+            583125,
+            521166
           ],
-          "run_drift_fraction": 0.04803794894962729,
+          "run_drift_fraction": 0.13479390443735778,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              579958,
-              551000,
-              592666
+              528166,
+              591583,
+              626250,
+              591416,
+              654666,
+              585916,
+              681833,
+              567500,
+              567250
             ],
             [
-              553375,
-              391125,
-              609041
+              642791,
+              495875,
+              635250,
+              505125,
+              521708,
+              622166,
+              551500,
+              576000,
+              553083
+            ],
+            [
+              523958,
+              591291,
+              542500,
+              582208,
+              480041,
+              519500,
+              513041,
+              518375,
+              648750
+            ],
+            [
+              516875,
+              509583,
+              583125,
+              591500,
+              515958,
+              593166,
+              567291,
+              614166,
+              586916
+            ],
+            [
+              521083,
+              563875,
+              487166,
+              557833,
+              499125,
+              521166,
+              506750,
+              575500,
+              553166
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1056,9 +2252,9 @@
       "device": "apple7",
       "timing_domain": "end_to_end",
       "incumbent_route": "composed",
-      "selected_route": "composed",
-      "status": "retain_incumbent",
-      "reason": "no candidate met the per-run stable-win threshold",
+      "selected_route": "single_fused",
+      "status": "promote_candidate",
+      "reason": "candidate met paired stable-win gates in every run",
       "route_evidence": {
         "composed": {
           "present_in_all_runs": true,
@@ -1071,40 +2267,109 @@
             },
             {
               "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            2135250,
-            1821500
+            1882167,
+            1952167,
+            1900709,
+            1829166,
+            2132792
           ],
-          "run_drift_fraction": 0.17224814713148504,
+          "run_drift_fraction": 0.16599149557776605,
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              2342125,
-              1896958,
-              2135250
+              1840292,
+              2052125,
+              1954000,
+              1938000,
+              1807209,
+              1879625,
+              1882167,
+              1806250,
+              1895250
             ],
             [
-              1776291,
-              1891250,
-              1821500
+              1933666,
+              1849250,
+              1952167,
+              2012291,
+              1915125,
+              2020584,
+              1857625,
+              1981458,
+              1982708
+            ],
+            [
+              2075166,
+              1896166,
+              1900458,
+              1900709,
+              1999125,
+              2082167,
+              1867375,
+              1924250,
+              1865416
+            ],
+            [
+              1831417,
+              1821667,
+              1708167,
+              1804167,
+              1829166,
+              1878167,
+              2002042,
+              1848208,
+              1743750
+            ],
+            [
+              2132792,
+              2112834,
+              2111584,
+              2114167,
+              2234250,
+              2387250,
+              2239750,
+              2196000,
+              2008292
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1121,69 +2386,201 @@
             },
             {
               "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            1003208,
-            975500
+            986000,
+            988042,
+            997500,
+            979625,
+            1001167
           ],
-          "run_drift_fraction": 0.028403895438236803,
+          "run_drift_fraction": 0.021990047211943347,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              2564875,
-              994666,
-              1003208
+              973541,
+              968458,
+              976750,
+              1014333,
+              969875,
+              986000,
+              993708,
+              1007750,
+              993542
             ],
             [
-              980666,
-              975500,
-              956916
+              972791,
+              1002667,
+              1030500,
+              976209,
+              991916,
+              982375,
+              974708,
+              988042,
+              991708
+            ],
+            [
+              1028542,
+              982875,
+              997500,
+              1006167,
+              991542,
+              987375,
+              1010792,
+              977709,
+              1014542
+            ],
+            [
+              962459,
+              967000,
+              964083,
+              979625,
+              1012583,
+              984625,
+              993708,
+              986667,
+              973833
+            ],
+            [
+              1001167,
+              991375,
+              978834,
+              1015458,
+              1025375,
+              1066375,
+              1000791,
+              1012958,
+              994833
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            0.5301683643601451,
-            0.4644523744166895
+            0.47613575203475567,
+            0.4938742433408617,
+            0.47519583481742866,
+            0.4644417182475511,
+            0.5305838544030548
           ],
           "paired_speedups_vs_incumbent": [
             [
-              -0.09510594011848214,
-              0.47565207031468276,
-              0.5301683643601451
+              0.4709855827227418,
+              0.5280706584637875,
+              0.5001279426816786,
+              0.47660835913312694,
+              0.46332991922904326,
+              0.47542727937753543,
+              0.4720404724979239,
+              0.442076124567474,
+              0.47577258936815725
             ],
             [
-              0.44791365829134977,
-              0.48420356906807666,
-              0.4746549547076585
+              0.4969188060399262,
+              0.45779802622684873,
+              0.47212507946297627,
+              0.5148768244751878,
+              0.4820620063964493,
+              0.5138163026135019,
+              0.47529345266132833,
+              0.501356072144855,
+              0.49982145631126723
+            ],
+            [
+              0.5043567598929435,
+              0.481651395500183,
+              0.4751265221330858,
+              0.4706359574243085,
+              0.5040120052522978,
+              0.5257945208045272,
+              0.4587096860566303,
+              0.4919012602312589,
+              0.45613096488933297
+            ],
+            [
+              0.47447304464248174,
+              0.4691675262273511,
+              0.43560377878743706,
+              0.45702088553886644,
+              0.446423670678331,
+              0.4757521562246595,
+              0.5036527705212978,
+              0.4661493727978669,
+              0.4415294623655914
+            ],
+            [
+              0.5305838544030548,
+              0.5307842452364928,
+              0.5364456256535378,
+              0.5196888419883576,
+              0.5410652344187087,
+              0.5533040108911927,
+              0.5531684339770063,
+              0.5387258652094717,
+              0.5046372738625658
             ]
           ],
           "paired_median_speedups": [
-            0.47565207031468276,
-            0.4746549547076585
+            0.47542727937753543,
+            0.4969188060399262,
+            0.481651395500183,
+            0.4661493727978669,
+            0.5364456256535378
           ],
           "paired_win_fractions": [
-            0.6666666666666666,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
-          "cross_run_speedup_spread": 0.000997115607024257
+          "cross_run_speedup_spread": 0.07029625285567093,
+          "speedup_lower_confidence_bound": 0.46500193875362505,
+          "pooled_paired_win_fraction": 1.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            0.46500193875362505,
+            0.5176350529939947
+          ],
+          "stability_verdict": "stable_win",
+          "promotable": true
         }
       },
       "selected_evidence": {
@@ -1215,40 +2612,109 @@
             },
             {
               "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
+            },
+            {
+              "api": "3xMSL.grouped+MSL.silu"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            1960916,
-            2122584
+            1931208,
+            2247167,
+            2156417,
+            2297667,
+            2185958
           ],
-          "run_drift_fraction": 0.08244514298419718,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.1897563597499596,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              1960916,
-              2011791,
-              1863000
+              1994666,
+              2072792,
+              1931208,
+              1838708,
+              1888000,
+              1930125,
+              2060750,
+              2040791,
+              1929250
             ],
             [
-              2179541,
-              1857333,
-              2122584
+              2253042,
+              2534584,
+              2372333,
+              2247167,
+              2284375,
+              2155167,
+              2200541,
+              2114292,
+              2209041
+            ],
+            [
+              1975208,
+              2159417,
+              2077500,
+              2260708,
+              2156417,
+              2216208,
+              2136291,
+              2149958,
+              2212250
+            ],
+            [
+              2387417,
+              2679792,
+              2297667,
+              2452750,
+              2204542,
+              2403667,
+              2121125,
+              2283875,
+              2282500
+            ],
+            [
+              2185958,
+              2501292,
+              2162583,
+              2252209,
+              2315791,
+              2246750,
+              2058875,
+              1905000,
+              1918959
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1265,69 +2731,201 @@
             },
             {
               "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
+            },
+            {
+              "api": "MSL.moe_swiglu"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            3379208,
-            3459417
+            3392833,
+            3467250,
+            3418041,
+            3443916,
+            3444542
           ],
-          "run_drift_fraction": 0.023736035189310632,
+          "run_drift_fraction": 0.021933587653739515,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              3379208,
-              3375375,
-              3411375
+              3412542,
+              3365750,
+              3392917,
+              3359375,
+              3364042,
+              3392833,
+              3383541,
+              3466709,
+              3421458
             ],
             [
-              4414000,
-              3429291,
-              3459417
+              4599708,
+              3467250,
+              3485500,
+              3437000,
+              3434125,
+              3441583,
+              3487042,
+              3458083,
+              3469083
+            ],
+            [
+              3408667,
+              3439250,
+              3403208,
+              3394583,
+              3453542,
+              3556834,
+              3418041,
+              3482833,
+              3412083
+            ],
+            [
+              5102708,
+              3480208,
+              3454333,
+              3450833,
+              3427125,
+              3423292,
+              3443916,
+              3441167,
+              3441875
+            ],
+            [
+              3444542,
+              3463541,
+              3447167,
+              3424416,
+              3453458,
+              3481167,
+              3421708,
+              3371333,
+              3421208
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            -0.7232803444920639,
-            -0.6298139437591163
+            -0.7568449385048115,
+            -0.5429427363431378,
+            -0.5850556733692973,
+            -0.49887516337223803,
+            -0.5757585461385809
           ],
           "paired_speedups_vs_incumbent": [
             [
-              -0.7232803444920639,
-              -0.6777960533673727,
-              -0.8311191626409018
+              -0.7108337937278723,
+              -0.6237760469936202,
+              -0.756888434596377,
+              -0.8270301755363005,
+              -0.781801906779661,
+              -0.7578307104462146,
+              -0.641897852723523,
+              -0.698708490972373,
+              -0.7734653362705715
             ],
             [
-              -1.0251970483693584,
-              -0.8463522696253176,
-              -0.6298139437591163
+              -1.0415544850029428,
+              -0.36797596765386353,
+              -0.4692288139987093,
+              -0.5294813425081447,
+              -0.5033105335157319,
+              -0.5968985234090908,
+              -0.5846294161299426,
+              -0.6355749347772209,
+              -0.5704022695821399
+            ],
+            [
+              -0.7257255944690382,
+              -0.5926752452166487,
+              -0.6381265944645006,
+              -0.5015574766842954,
+              -0.6015186302092776,
+              -0.6049188523820869,
+              -0.5999884847148633,
+              -0.6199539711938559,
+              -0.5423586845971297
+            ],
+            [
+              -1.1373341984244898,
+              -0.2986858681569316,
+              -0.503408892585392,
+              -0.4069240648251962,
+              -0.5545746009828799,
+              -0.42419561445075377,
+              -0.6236270846838352,
+              -0.5067230036670133,
+              -0.5079408543263965
+            ],
+            [
+              -0.5757585461385809,
+              -0.38470078663346785,
+              -0.5940044844521575,
+              -0.5204699031040192,
+              -0.4912649716662687,
+              -0.549423389340158,
+              -0.6619309088701354,
+              -0.7697286089238845,
+              -0.7828458033756844
             ]
           ],
           "paired_median_speedups": [
-            -0.7232803444920639,
-            -0.8463522696253176
+            -0.756888434596377,
+            -0.5704022695821399,
+            -0.6015186302092776,
+            -0.5067230036670133,
+            -0.5757585461385809
           ],
           "paired_win_fractions": [
             0.0,
+            0.0,
+            0.0,
+            0.0,
             0.0
           ],
-          "cross_run_speedup_spread": 0.12307192513325371
+          "cross_run_speedup_spread": 0.2501654309293637,
+          "speedup_lower_confidence_bound": -0.6911335090292483,
+          "pooled_paired_win_fraction": 0.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            -0.6911335090292483,
+            -0.5133828446481072
+          ],
+          "stability_verdict": "not_a_stable_win",
+          "promotable": false
         }
       },
       "selected_evidence": {
@@ -1359,40 +2957,109 @@
             },
             {
               "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            323291,
-            322292
+            295250,
+            305458,
+            324334,
+            320500,
+            293583
           ],
-          "run_drift_fraction": 0.0030996735879264764,
+          "run_drift_fraction": 0.10474380328561259,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              292125,
-              331041,
-              323291
+              315542,
+              291250,
+              295250,
+              270458,
+              312125,
+              345709,
+              301000,
+              291875,
+              291416
             ],
             [
-              349625,
-              310875,
-              322292
+              309084,
+              313084,
+              294625,
+              304084,
+              318750,
+              325375,
+              305458,
+              297917,
+              299042
+            ],
+            [
+              294833,
+              354792,
+              302708,
+              324334,
+              292125,
+              286333,
+              327167,
+              357209,
+              354417
+            ],
+            [
+              373000,
+              320500,
+              304584,
+              312625,
+              390458,
+              319916,
+              323084,
+              307625,
+              366292
+            ],
+            [
+              308500,
+              293583,
+              287750,
+              300000,
+              288791,
+              304125,
+              286542,
+              311292,
+              282958
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1409,40 +3076,109 @@
             },
             {
               "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            14000,
-            14750
+            13791,
+            14291,
+            14542,
+            13917,
+            13750
           ],
-          "run_drift_fraction": 0.05357142857142857,
+          "run_drift_fraction": 0.0576,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              14000,
-              13667,
-              14416
+              13917,
+              13833,
+              14041,
+              13625,
+              13791,
+              13625,
+              14167,
+              13708,
+              13709
             ],
             [
-              15083,
-              14750,
-              13959
+              14291,
+              14125,
+              14208,
+              14000,
+              14916,
+              14791,
+              14500,
+              14042,
+              14375
+            ],
+            [
+              14792,
+              14708,
+              14250,
+              14083,
+              14542,
+              14541,
+              14875,
+              14459,
+              15667
+            ],
+            [
+              13917,
+              13708,
+              14084,
+              13708,
+              14542,
+              13542,
+              14125,
+              13667,
+              13917
+            ],
+            [
+              14334,
+              13625,
+              13791,
+              13667,
+              13750,
+              13708,
+              13750,
+              13708,
+              13791
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1478,40 +3214,109 @@
             },
             {
               "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
+            },
+            {
+              "api": "MPSGraph.reductionSum"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            297333,
-            302292
+            318333,
+            317250,
+            295041,
+            299959,
+            309709
           ],
-          "run_drift_fraction": 0.016678269818688137,
+          "run_drift_fraction": 0.07894496019197332,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              312875,
-              297333,
-              276917
+              306333,
+              353708,
+              318333,
+              289958,
+              320958,
+              404584,
+              311875,
+              327042,
+              301166
             ],
             [
-              302292,
-              327667,
-              250000
+              376541,
+              317250,
+              339000,
+              324417,
+              319250,
+              300917,
+              287417,
+              282334,
+              301916
+            ],
+            [
+              279916,
+              284209,
+              280125,
+              326625,
+              281792,
+              312000,
+              297041,
+              295041,
+              312584
+            ],
+            [
+              292167,
+              280209,
+              296459,
+              299959,
+              287708,
+              331833,
+              340208,
+              309542,
+              314958
+            ],
+            [
+              321000,
+              305584,
+              305625,
+              330459,
+              316583,
+              294333,
+              317875,
+              309709,
+              298166
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1528,40 +3333,109 @@
             },
             {
               "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
+            },
+            {
+              "api": "reference_cpu"
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "times_ns": [
             5375,
-            5750
+            5250,
+            5125,
+            5416,
+            5500
           ],
-          "run_drift_fraction": 0.06976744186046512,
+          "run_drift_fraction": 0.07317073170731707,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              5542,
-              5083,
-              5375
+              5834,
+              5334,
+              5500,
+              5292,
+              5375,
+              4959,
+              6209,
+              5250,
+              5500
             ],
             [
+              5541,
+              5083,
+              5500,
+              5250,
+              5500,
+              5083,
+              5167,
+              5000,
+              5541
+            ],
+            [
+              5292,
+              5000,
+              5208,
+              4958,
+              5125,
+              5042,
+              5208,
+              5250,
+              5084
+            ],
+            [
+              5458,
+              5375,
+              5166,
+              5125,
+              5458,
+              6458,
+              5625,
+              5416,
+              5250
+            ],
+            [
+              5708,
+              5125,
+              5708,
+              5375,
+              5791,
+              5125,
               5750,
-              5750,
-              5791
+              5500,
+              5375
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1625,40 +3499,151 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            323834,
-            302666
+            305292,
+            397584,
+            308167,
+            307875,
+            348708
           ],
-          "run_drift_fraction": 0.06993848004070494,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.302307299241382,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              429750,
-              323834,
-              301416
+              329041,
+              327416,
+              310667,
+              305292,
+              301375,
+              311084,
+              303125,
+              299459,
+              290208
             ],
             [
-              337375,
-              287834,
-              302666
+              348959,
+              398833,
+              383958,
+              408333,
+              385167,
+              401291,
+              389875,
+              413875,
+              397584
+            ],
+            [
+              319125,
+              317750,
+              302250,
+              318917,
+              282250,
+              308167,
+              313167,
+              304459,
+              301166
+            ],
+            [
+              340666,
+              308834,
+              302667,
+              307875,
+              312000,
+              305625,
+              306459,
+              338667,
+              306042
+            ],
+            [
+              337959,
+              352041,
+              348708,
+              307791,
+              402083,
+              315167,
+              315083,
+              402584,
+              428459
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1703,69 +3688,243 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            2271917,
-            2180833
+            2318834,
+            2822500,
+            2334500,
+            2279791,
+            2549541
           ],
-          "run_drift_fraction": 0.04176569228363657,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.23805208459898297,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              2504083,
-              2225500,
-              2271917
+              2304334,
+              2388875,
+              2379917,
+              2393125,
+              2308583,
+              2318834,
+              2280666,
+              2263208,
+              2404459
             ],
             [
-              2180833,
-              1991291,
-              2480959
+              2433875,
+              2569167,
+              2984167,
+              2822500,
+              2631875,
+              2494542,
+              3157125,
+              3378167,
+              3645833
+            ],
+            [
+              2350333,
+              2354792,
+              2322333,
+              2387542,
+              2334500,
+              2323000,
+              2420417,
+              2273625,
+              2291792
+            ],
+            [
+              2492459,
+              2218625,
+              2380292,
+              2246667,
+              2412541,
+              2272167,
+              2279791,
+              2259708,
+              2364500
+            ],
+            [
+              2411500,
+              2467625,
+              2550458,
+              2479709,
+              2545458,
+              2549541,
+              2696750,
+              2894667,
+              2699416
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            -6.015683961535848,
-            -6.205411245399219
+            -6.595462704558259,
+            -6.0991287375749526,
+            -6.575437993036243,
+            -6.404924076329679,
+            -6.311392339722634
           ],
           "paired_speedups_vs_incumbent": [
             [
-              -4.826836532867946,
-              -5.872348178387693,
-              -6.537479762189134
+              -6.00318197428284,
+              -6.296146187113641,
+              -6.660668819024872,
+              -6.838806781704074,
+              -6.660167565325591,
+              -6.454044566740816,
+              -6.523846597938144,
+              -6.557655639002334,
+              -7.285295374352189
             ],
             [
-              -5.464121526491293,
-              -5.9181924303591655,
-              -7.19701915642986
+              -5.974673242415298,
+              -5.441711192403838,
+              -6.7721183046062325,
+              -5.912250540612686,
+              -5.833075003829507,
+              -5.2162919178351865,
+              -7.097787752484771,
+              -7.162288130474177,
+              -8.169969113445209
+            ],
+            [
+              -6.36492910301606,
+              -6.410832415420928,
+              -6.683483870967742,
+              -6.4864055537961285,
+              -7.271036315323295,
+              -6.538120564499119,
+              -6.728837968240588,
+              -6.467754278901264,
+              -6.609730182025859
+            ],
+            [
+              -6.316430169139275,
+              -6.183875480031344,
+              -6.864392219832357,
+              -6.2973349573690625,
+              -6.732503205128205,
+              -6.434493251533742,
+              -6.439138677604508,
+              -5.672359574449238,
+              -6.726063742884963
+            ],
+            [
+              -6.135480931118863,
+              -6.009481850125412,
+              -6.314022047099579,
+              -7.056470137203492,
+              -5.330677994344451,
+              -7.0894922374487175,
+              -7.558855920503486,
+              -6.19021868728017,
+              -5.300290109438709
             ]
           ],
           "paired_median_speedups": [
-            -5.872348178387693,
-            -5.9181924303591655
+            -6.557655639002334,
+            -5.974673242415298,
+            -6.538120564499119,
+            -6.434493251533742,
+            -6.19021868728017
           ],
           "paired_win_fractions": [
             0.0,
+            0.0,
+            0.0,
+            0.0,
             0.0
           ],
-          "cross_run_speedup_spread": 0.045844251971472794
+          "cross_run_speedup_spread": 0.5829823965870364,
+          "speedup_lower_confidence_bound": -6.578086483013299,
+          "pooled_paired_win_fraction": 0.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            -6.578086483013299,
+            -6.099978070878966
+          ],
+          "stability_verdict": "not_a_stable_win",
+          "promotable": false
         }
       },
       "selected_evidence": {
@@ -1825,40 +3984,151 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            37625,
-            35249
+            42166,
+            99249,
+            41041,
+            39374,
+            39999
           ],
-          "run_drift_fraction": 0.0674061675508525,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 1.520673540915325,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              97625,
-              35083,
-              37625
+              39750,
+              40375,
+              43291,
+              42249,
+              39874,
+              42166,
+              42125,
+              42291,
+              42499
             ],
             [
-              35249,
-              35625,
-              34749
+              99125,
+              97166,
+              97000,
+              99249,
+              99249,
+              99249,
+              99125,
+              99249,
+              99333
+            ],
+            [
+              41041,
+              41833,
+              42208,
+              38750,
+              36375,
+              41458,
+              35958,
+              42166,
+              40500
+            ],
+            [
+              35750,
+              39875,
+              42291,
+              42625,
+              39374,
+              38666,
+              42291,
+              35875,
+              35749
+            ],
+            [
+              39999,
+              35791,
+              40249,
+              40208,
+              38541,
+              35166,
+              35458,
+              107041,
+              99249
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -1903,21 +4173,84 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 1,
+              "threadgroup_capacity_fraction": 0.03125,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
+            null,
+            null,
+            null,
             null,
             null
           ],
@@ -1925,10 +4258,16 @@
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "paired_measurement": false,
           "timing_coverage": [
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0
           ],
@@ -1992,40 +4331,151 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            417708,
-            454833
+            427459,
+            534708,
+            423833,
+            445625,
+            415875
           ],
-          "run_drift_fraction": 0.08887787641127294,
-          "absolute_time_stable": true,
+          "run_drift_fraction": 0.2857421100090171,
+          "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              411541,
-              417708,
-              437041
+              405833,
+              405125,
+              417500,
+              418292,
+              427459,
+              585542,
+              631708,
+              626541,
+              695250
             ],
             [
-              469541,
-              432125,
-              454833
+              425417,
+              505500,
+              429250,
+              642166,
+              656334,
+              633792,
+              646583,
+              518167,
+              534708
+            ],
+            [
+              497542,
+              417084,
+              407916,
+              473750,
+              419625,
+              439750,
+              423833,
+              426542,
+              412375
+            ],
+            [
+              650333,
+              503584,
+              441042,
+              437916,
+              451458,
+              429625,
+              432250,
+              447125,
+              445625
+            ],
+            [
+              442250,
+              401208,
+              402250,
+              405667,
+              425875,
+              421334,
+              415875,
+              447875,
+              408250
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -2070,69 +4520,243 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            5145459,
-            5357458
+            5564458,
+            6273250,
+            5592875,
+            5808667,
+            5513667
           ],
-          "run_drift_fraction": 0.04120118341240305,
+          "run_drift_fraction": 0.13776366980450577,
           "absolute_time_stable": true,
           "paired_trial_times_ns": [
             [
-              5062291,
-              5145459,
-              5414375
+              5523166,
+              5373250,
+              5255458,
+              5388000,
+              5564458,
+              6255666,
+              6637750,
+              6930791,
+              6799542
             ],
             [
-              5850916,
-              5357458,
-              5220958
+              5152708,
+              5164584,
+              6273250,
+              6554250,
+              6128208,
+              6732917,
+              6986709,
+              6605333,
+              5848875
+            ],
+            [
+              5592875,
+              5742666,
+              5648375,
+              5671542,
+              5546709,
+              5340708,
+              5483000,
+              5687542,
+              5387833
+            ],
+            [
+              5930417,
+              5986709,
+              5610375,
+              5857459,
+              5843667,
+              5808667,
+              5526792,
+              5637042,
+              5520833
+            ],
+            [
+              5578750,
+              5462250,
+              5561125,
+              5439417,
+              5517792,
+              5513667,
+              5448625,
+              5629750,
+              5252958
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
             1.0,
+            1.0,
+            1.0,
+            1.0,
             1.0
           ],
           "eligible": true,
           "speedups_vs_incumbent": [
-            -11.31831566548881,
-            -10.778956232287454
+            -12.017524487728648,
+            -10.732104251292293,
+            -12.19594038217883,
+            -12.03487685834502,
+            -12.257990982867447
           ],
           "paired_speedups_vs_incumbent": [
             [
-              -11.300818144486211,
-              -11.31831566548881,
-              -11.38871181422338
+              -12.609455120702357,
+              -12.263190373341562,
+              -11.587923353293414,
+              -11.880953974735352,
+              -12.017524487728648,
+              -9.683547892380052,
+              -9.507623775541864,
+              -10.061991154609196,
+              -8.779995685005394
             ],
             [
-              -11.460926734832528,
-              -11.39793578247035,
-              -10.478846081968546
+              -11.112134681970867,
+              -9.216783382789318,
+              -13.61444379732091,
+              -9.20647309262714,
+              -8.33702657488413,
+              -9.623228125315562,
+              -9.805587217727654,
+              -11.747498393375109,
+              -9.9384467784286
+            ],
+            [
+              -10.241010809137721,
+              -12.768607762465114,
+              -12.846907206385628,
+              -10.971592612137202,
+              -12.21825201072386,
+              -11.1448732234224,
+              -11.936699124419288,
+              -12.334072611841272,
+              -12.065372537132465
+            ],
+            [
+              -8.119046703765608,
+              -10.888203358327509,
+              -11.720727277674236,
+              -12.375759278035057,
+              -11.943988145076618,
+              -12.520318882746581,
+              -11.7861006362059,
+              -11.607306681576741,
+              -11.38896605890603
+            ],
+            [
+              -11.614471452798192,
+              -12.614509182269545,
+              -12.825046612802984,
+              -12.408576492541913,
+              -11.956365130613444,
+              -12.086214262319205,
+              -12.101593026750827,
+              -11.56991348032375,
+              -11.8670128597673
             ]
           ],
           "paired_median_speedups": [
-            -11.31831566548881,
-            -11.39793578247035
+            -11.587923353293414,
+            -9.805587217727654,
+            -12.065372537132465,
+            -11.720727277674236,
+            -12.086214262319205
           ],
           "paired_win_fractions": [
             0.0,
+            0.0,
+            0.0,
+            0.0,
             0.0
           ],
-          "cross_run_speedup_spread": 0.07962011698153937
+          "cross_run_speedup_spread": 2.280627044591551,
+          "speedup_lower_confidence_bound": -12.35515607496568,
+          "pooled_paired_win_fraction": 0.0,
+          "paired_trial_count": 45,
+          "speedup_confidence_interval": [
+            -12.35515607496568,
+            -10.551173784293109
+          ],
+          "stability_verdict": "not_a_stable_win",
+          "promotable": false
         }
       },
       "selected_evidence": {
@@ -2192,40 +4816,151 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
-            123874,
-            152249
+            151499,
+            238458,
+            131250,
+            131249,
+            128416
           ],
-          "run_drift_fraction": 0.22906340313544407,
+          "run_drift_fraction": 0.8569181410416148,
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             [
-              128749,
-              121791,
-              123874
+              131708,
+              118124,
+              118083,
+              151499,
+              150875,
+              320999,
+              314083,
+              357625,
+              364250
             ],
             [
-              152249,
-              140999,
-              166375
+              141291,
+              118124,
+              119625,
+              354583,
+              364250,
+              363249,
+              362791,
+              234874,
+              238458
+            ],
+            [
+              118000,
+              117708,
+              140874,
+              147999,
+              143958,
+              131250,
+              134916,
+              127375,
+              126916
+            ],
+            [
+              353666,
+              176958,
+              160708,
+              123458,
+              149791,
+              118916,
+              119499,
+              131249,
+              124750
+            ],
+            [
+              130916,
+              128833,
+              129041,
+              124000,
+              120166,
+              123500,
+              129125,
+              128416,
+              119999
             ]
           ],
           "paired_measurement": true,
           "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
             1.0,
             1.0
           ],
@@ -2270,21 +5005,84 @@
               "register_count": null,
               "scratch_bytes": null,
               "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
+            },
+            {
+              "threadgroup": [
+                64,
+                1,
+                1
+              ],
+              "thread_execution_width": 32,
+              "max_total_threads_per_threadgroup": 1024,
+              "static_threadgroup_memory_bytes": 0,
+              "threadgroup_memory_bytes": 0,
+              "simdgroups_per_threadgroup": 2,
+              "threadgroup_capacity_fraction": 0.0625,
+              "occupancy": null,
+              "register_count": null,
+              "scratch_bytes": null,
+              "spill_count": null
             }
           ],
           "timing_sources": [
+            null,
+            null,
+            null,
             null,
             null
           ],
           "counter_sampling_supported": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "counter_timestamp_deltas": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "times_ns": [
+            null,
+            null,
+            null,
             null,
             null
           ],
@@ -2292,10 +5090,16 @@
           "absolute_time_stable": false,
           "paired_trial_times_ns": [
             null,
+            null,
+            null,
+            null,
             null
           ],
           "paired_measurement": false,
           "timing_coverage": [
+            0.0,
+            0.0,
+            0.0,
             0.0,
             0.0
           ],

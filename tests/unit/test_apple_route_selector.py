@@ -132,12 +132,17 @@ def _report(*rows: dict[str, object]) -> dict[str, object]:
     return {"schema_version": ROUTE_REPORT_SCHEMA_VERSION, "runs": list(rows)}
 
 
-def test_stable_aggregation_promotes_only_a_two_run_per_domain_winner():
+def test_stable_aggregation_promotes_only_a_repeated_per_domain_winner():
+    # Three reports, not two: a promotion now needs enough independent runs to
+    # measure its own dispersion (`min_promotion_runs`). The subject under test
+    # is still that each timing domain is decided on its own evidence.
     reports = [
         _report(_stable_row("mps", 1000, 800),
                 _stable_row("simdgroup_matrix", 850, 700)),
         _report(_stable_row("mps", 1050, 820),
                 _stable_row("simdgroup_matrix", 880, 710)),
+        _report(_stable_row("mps", 1020, 810),
+                _stable_row("simdgroup_matrix", 865, 705)),
     ]
     ledger = aggregate_stable_route_reports(reports)
     decisions = {row["timing_domain"]: row for row in ledger["decisions"]}
@@ -201,11 +206,22 @@ def test_stable_aggregation_retains_incumbent_for_mixed_or_unstable_wins():
                 _stable_row("simdgroup_matrix", 900, 700)),
         _report(_stable_row("mps", 1010, 810),
                 _stable_row("simdgroup_matrix", 1100, 705)),
+        _report(_stable_row("mps", 1005, 805),
+                _stable_row("simdgroup_matrix", 905, 702)),
     ]
     ledger = aggregate_stable_route_reports(reports)
     decisions = {row["timing_domain"]: row for row in ledger["decisions"]}
     assert decisions["end_to_end"]["selected_route"] == "mps"
-    assert decisions["end_to_end"]["status"] == "retain_incumbent"
+    # A candidate that is 10% faster in one run and 9% slower in the next is
+    # not merely "not promoted" -- it is unmeasured, and the ledger now says
+    # so rather than recording the same bare `retain_incumbent` it would use
+    # for a route that is simply slower.
+    assert decisions["end_to_end"]["status"] == \
+        "retain_incumbent_unstable_candidate"
+    assert decisions["end_to_end"]["route_evidence"]["simdgroup_matrix"][
+        "stability_verdict"] == "unstable_evidence"
+    assert decisions["end_to_end"]["route_evidence"]["simdgroup_matrix"][
+        "promotable"] is False
     assert decisions["device"]["selected_route"] == "simdgroup_matrix"
 
 
@@ -229,6 +245,8 @@ def test_paired_comparison_survives_absolute_clock_drift():
                 _stable_row("simdgroup_matrix", 850, 680)),
         _report(_stable_row("mps", 1400, 1120),
                 _stable_row("simdgroup_matrix", 1190, 952)),
+        _report(_stable_row("mps", 1200, 960),
+                _stable_row("simdgroup_matrix", 1020, 816)),
     ]
     ledger = aggregate_stable_route_reports(reports)
     assert all(row["selected_route"] == "simdgroup_matrix"

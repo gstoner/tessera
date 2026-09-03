@@ -6850,6 +6850,33 @@ fails closed; both callers pass a pointer getter), and the `gumbel` / `rowop`
 encode-session methods (their shared C helper contains both an encode and a run
 branch, and the `_enc` entry always takes the encode one).
 
+**Closed 2026-09-03 — the allowlist is now empty, and the three were
+reclassified rather than routed.** Both reasons above describe a *limit of the
+classifier*, not a property of the code, so each became a rule:
+
+* **A wait can belong to the call rather than to the helper.**
+  `encode_or_run_rowop_dev` and its gumbel sibling take a command buffer and
+  branch on it — `if (cb) encodeToCommandBuffer … else runWithMTLCommandQueue`
+  — so the synchronous entry point (passing `nil`) waits and the `_enc` entry
+  (passing the session's buffer) does not. Classifying the helper either way
+  is wrong for half its callers, so the classifier propagates the argument,
+  and the fixture pins the split on the one pair that shares a helper. The
+  guard must be a **command-buffer** parameter: an earlier form accepted any
+  parameter and wrongly exempted three int4 matmul lanes, whose `tiled` flag
+  also guards an `if`/`else` with a wait in one arm. That was caught by
+  diffing every symbol's classification before and after the rule, which is
+  the check that forced the narrower version.
+* **A one-symbol wrapper is resolved from its callers.**
+  `_apple_gpu_raw_handle` takes its symbol as a parameter, so its own body
+  says `<dynamic>` and fails closed; both callers pass a literal, so what it
+  can reach is known exactly, and neither symbol takes a command buffer. A
+  caller passing anything unreadable keeps it `<dynamic>`, hence closed.
+
+Both rules are mutation-checked: widening the guard past command buffers, and
+accepting a non-literal caller, each fail the suite. The `KNOWN_UNROUTED`
+mechanism stays, so a future exception must still be named, and a line there
+that stops being an offender still fails the gate.
+
 **One runtime-side gap this could not close, because the `.mm` is untouched**
 (editing it invalidates `AppleRouteContext.runtime_fingerprint` and forces a
 ledger re-seal — the same sequencing as the second instance): **the MPSGraph

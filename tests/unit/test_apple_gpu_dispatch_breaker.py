@@ -861,14 +861,115 @@ _CALL = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
 # Sites still calling a symbol directly, found by the same enumeration and
 # recorded as the third instance in docs/audit/backend/apple/todo.md. Each
 # entry must currently be an offender; routing one means deleting its line.
-KNOWN_UNROUTED = {
-    # Sites the enumeration still finds, each with the reason it is not routed.
-    # Every entry must currently BE an offender: routing one means deleting its
-    # line here, and a stale line fails this gate.
-    "_apple_gpu_raw_handle": "returns a device/queue pointer; its symbol is a parameter, so it reads as dynamic, and neither caller's symbol takes a command buffer",
-    "gumbel": "encode-only `_enc` entry -- always called with a session command buffer, so it encodes rather than runs; the wait is the session's ts_enc_commit_wait (see the Apple todo)",
-    "rowop": "encode-only `_enc` entry -- same encode/run helper, same session-owned wait",
+KNOWN_UNROUTED: dict[str, str] = {
+    # Empty, and that is the claim: every function that dispatches an Apple GPU
+    # symbol which can block on the device routes it through the breaker. The
+    # three entries this once held were not routed but reclassified, each by a
+    # rule rather than by assertion -- two encode-only `_enc` entries whose
+    # shared helper waits only on its nil arm, and a one-symbol wrapper whose
+    # callers pass literals. The mechanism stays so a future exception must
+    # still be named, and the gate below fails a line that stops being an
+    # offender.
 }
+
+
+def _mm_signatures(text):
+    """{function: [parameter names]} for every line-anchored definition.
+
+    `_MM_DEF` anchors at a line start, so this walks lines the way
+    :func:`_mm_bodies` does rather than scanning the whole text.
+    """
+    signatures = {}
+    lines = text.split("\n")
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line) + 1)
+    for number, line in enumerate(lines):
+        match = _MM_DEF.match(line)
+        if not match:
+            continue
+        i, depth = offsets[number] + match.end() - 1, 0
+        while i < len(text):
+            depth += (text[i] == "(") - (text[i] == ")")
+            if depth == 0:
+                break
+            i += 1
+        params = []
+        for part in text[offsets[number] + match.end():i].split(","):
+            declaration = part.strip()
+            names = re.findall(r"([A-Za-z_]\w*)\s*(?:\[\s*\])?\s*$", declaration)
+            params.append((names[0] if names else "", declaration))
+        signatures.setdefault(match.group(1), params)
+    return signatures
+
+
+def _guarded_wait_params(bodies, signatures):
+    """{function: {parameter index whose NIL value is what reaches the wait}}.
+
+    The encode-or-run helpers take a command buffer and branch on it:
+
+        if (cb) [g encodeToCommandBuffer:cb ...];
+        else    [g runWithMTLCommandQueue:ctx.queue ...];
+
+    Only the else arm waits, so whether the caller waits depends on the
+    argument it passes -- `nil` waits, a session's buffer does not. Classifying
+    such a helper as "waits" unconditionally marks every encode-only entry
+    point as a hang risk; classifying it as "does not" hides the synchronous
+    one. Neither is true of the helper: it is true of the call.
+    """
+    guarded = {}
+    for name, variants in bodies.items():
+        params = signatures.get(name) or []
+        # ONLY a command-buffer parameter selects encode-vs-run. An earlier
+        # version accepted any parameter and wrongly exempted the int4 matmul
+        # lanes, whose `tiled` flag also guards an if/else where only one arm
+        # happens to hold a wait token within the window searched.
+        buffers = {index for index, (_, declaration) in enumerate(params)
+                   if "CommandBuffer" in declaration}
+        if not buffers:
+            continue
+        names = [name_ for name_, _ in params]
+        for body in variants:
+            for match in re.finditer(r"\bif\s*\(\s*(\w+)\s*\)", body):
+                guard = match.group(1)
+                if guard not in names or names.index(guard) not in buffers:
+                    continue
+                tail = body[match.end():]
+                split = re.search(r"\belse\b", tail)
+                if not split:
+                    continue
+                then_arm, else_arm = tail[:split.start()], tail[split.end():split.end() + 400]
+                if _WAIT_TOKENS.search(else_arm) and not _WAIT_TOKENS.search(then_arm[:400]):
+                    guarded.setdefault(name, set()).add(names.index(guard))
+    return guarded
+
+
+def _call_arguments(body, callee):
+    """Every argument list `callee(...)` is called with in `body`."""
+    calls = []
+    for match in re.finditer(r"\b" + re.escape(callee) + r"\s*\(", body):
+        i, depth = match.end() - 1, 0
+        while i < len(body):
+            depth += (body[i] == "(") - (body[i] == ")")
+            if depth == 0:
+                break
+            i += 1
+        inner, args, depth = body[match.end():i], [], 0
+        current = ""
+        for ch in inner:
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            if ch == "," and depth == 0:
+                args.append(current.strip())
+                current = ""
+            else:
+                current += ch
+        if current.strip():
+            args.append(current.strip())
+        calls.append(args)
+    return calls
 
 
 def _mm_bodies(text):
@@ -903,17 +1004,42 @@ def _mm_bodies(text):
     return bodies
 
 
-def _symbol_waits(name, bodies, memo, stack=()):
-    """Does `name`'s body, or anything it calls, block on the device?"""
+def _symbol_waits(name, bodies, memo, stack=(), guarded=None):
+    """Does `name`'s body, or anything it calls, block on the device?
+
+    `guarded` carries the argument-sensitive helpers from
+    :func:`_guarded_wait_params`: a call into one of those waits only when it
+    passes `nil` for the guard parameter, so the same helper is a hang risk for
+    the synchronous entry point and not for the encode-only one.
+    """
     if name in memo:
         return memo[name]
     if name not in bodies:
         return None
     if name in stack:
         return False
-    result = any(_WAIT_TOKENS.search(body) for body in bodies[name]) or any(
-        _symbol_waits(callee, bodies, memo, stack + (name,))
-        for body in bodies[name] for callee in set(_CALL.findall(body)) if callee in bodies and callee != name)
+    guarded = guarded or {}
+    result = any(_WAIT_TOKENS.search(body) for body in bodies[name])
+    if not result:
+        for body in bodies[name]:
+            for callee in sorted(set(_CALL.findall(body))):
+                if callee not in bodies or callee == name:
+                    continue
+                if not _symbol_waits(callee, bodies, memo, stack + (name,), guarded):
+                    continue
+                indices = guarded.get(callee)
+                if indices:
+                    # Reached only on the nil arm: does THIS caller take it?
+                    passes_nil = any(
+                        args[i].strip() in ("nil", "NULL", "nullptr", "0")
+                        for args in _call_arguments(body, callee)
+                        for i in indices if i < len(args))
+                    if not passes_nil:
+                        continue
+                result = True
+                break
+            if result:
+                break
     memo[name] = result
     return result
 
@@ -996,6 +1122,18 @@ def _direct_symbol_sites():
         if names and returns_symbol and fn.name not in BREAKER_HELPERS:
             accessors[fn.name] = names
 
+    # A one-symbol wrapper takes the name as a parameter, so its own body says
+    # `<dynamic>` and fails closed. Its CALLERS often pass a literal, and when
+    # every one of them does, the set of symbols it can reach is known exactly.
+    # `_apple_gpu_raw_handle` is the case in point: two callers, both constant.
+    constant_callers = {}
+    for fn in functions:
+        for node in ast.walk(fn):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            literal = _constant(node.args[0]) if node.args else None
+            constant_callers.setdefault(node.func.id, []).append(literal)
+
     def resolve(pattern, call):
         if pattern.startswith("<param:"):
             index = int(pattern[7:-1])
@@ -1005,6 +1143,14 @@ def _direct_symbol_sites():
             arg = _constant(call.args[0]) if call.args else None
             return pattern.replace("{}", arg) if arg else "<dynamic>"
         return pattern
+
+    def from_callers(fn_name):
+        """The symbols a `<dynamic>` wrapper can actually reach, or None when
+        any caller passes something this cannot read."""
+        literals = constant_callers.get(fn_name)
+        if not literals or any(value is None for value in literals):
+            return None
+        return {value for value in literals if value.startswith(APPLE_SYMBOL_PREFIX)} or None
 
     sites = {}
     for fn in functions:
@@ -1084,6 +1230,12 @@ def _direct_symbol_sites():
         # to a `tessera_apple_cpu_*` name, which this gate does not govern.
         keep = lambda names: {s for s in names if s == "<dynamic>" or s.startswith(APPLE_SYMBOL_PREFIX)}  # noqa: E731
         dispatched, unrouted = keep(dispatched), keep(unrouted)
+        if "<dynamic>" in dispatched:
+            resolved = from_callers(fn.name)
+            if resolved:
+                dispatched = (dispatched - {"<dynamic>"}) | resolved
+                if "<dynamic>" in unrouted:
+                    unrouted = (unrouted - {"<dynamic>"}) | resolved
         if dispatched:
             sites[fn.name] = (unrouted or dispatched, not unrouted)
     return sites
@@ -1093,18 +1245,63 @@ def _direct_symbol_sites():
 def _mm_waits():
     if not _MM.is_file():
         pytest.skip(f"{_MM} not present; the .mm classifier needs the source tree")
-    bodies = _mm_bodies(_MM.read_text())
+    text = _MM.read_text()
+    bodies = _mm_bodies(text)
+    guarded = _guarded_wait_params(bodies, _mm_signatures(text))
     memo = {}
     symbols = {n for n in bodies if n.startswith(APPLE_SYMBOL_PREFIX)}
     assert len(symbols) > 300, "the .mm parser found too few C symbols; its definition regex has drifted"
+
+    def waits(name):
+        return _symbol_waits(name, bodies, memo, guarded=guarded)
+
     # Self-check the classifier on one known member of each class before
     # trusting it to exempt anything.
-    assert _symbol_waits("tessera_apple_gpu_cholesky_f32", bodies, memo) is True       # timed
-    assert _symbol_waits("tessera_apple_gpu_cf_scan_f32", bodies, memo) is True        # untimed MPSGraph run
-    assert _symbol_waits("tessera_apple_gpu_mtl4_scan_f32", bodies, memo) is True      # Metal 4 shared event
-    assert _symbol_waits("tessera_apple_gpu_metal4_probe", bodies, memo) is False      # capability probe
-    assert _symbol_waits("tessera_apple_gpu_clear_last_error", bodies, memo) is False  # error channel
-    return lambda name: _symbol_waits(name, bodies, memo)
+    assert waits("tessera_apple_gpu_cholesky_f32") is True       # timed
+    assert waits("tessera_apple_gpu_cf_scan_f32") is True        # untimed MPSGraph run
+    assert waits("tessera_apple_gpu_mtl4_scan_f32") is True      # Metal 4 shared event
+    assert waits("tessera_apple_gpu_metal4_probe") is False      # capability probe
+    assert waits("tessera_apple_gpu_clear_last_error") is False  # error channel
+    # ... and on the pair that shares ONE helper and splits on its argument.
+    assert waits("tessera_apple_gpu_rowop_dev_f32") is True      # passes nil -> runs
+    assert waits("tessera_apple_gpu_rowop_dev_f32_enc") is False  # passes s->cb -> encodes
+    # A parameter that is not a command buffer must never earn that split: the
+    # int4 matmul lanes branch on a `tiled` flag and both arms reach a wait.
+    assert waits("tessera_apple_gpu_quantized_matmul_i4_f32") is True
+    return waits
+
+
+def test_the_wait_classifier_splits_one_helper_by_its_argument():
+    """`encode_or_run_rowop_dev` waits on the nil arm and encodes on the other,
+    so "does this symbol wait" is a property of the CALL, not the helper.
+    Classifying the helper either way is wrong for half its callers: as
+    waiting, every encode-only entry point reads as a hang risk; as not
+    waiting, the synchronous one is hidden.
+    """
+    text = _MM.read_text()
+    bodies = _mm_bodies(text)
+    signatures = _mm_signatures(text)
+    guarded = _guarded_wait_params(bodies, signatures)
+    assert guarded.get("encode_or_run_rowop_dev") == {0}, (
+        "the encode-or-run helper's command-buffer guard was not recognised")
+    assert all("CommandBuffer" in signatures[name][index][1]
+               for name, indices in guarded.items() for index in indices), (
+        "only a command-buffer parameter may select encode-vs-run")
+    # Without the rule both sides collapse to the same answer; with it they split.
+    assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32", bodies, {}) is True
+    assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32_enc", bodies, {}) is True
+    assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32", bodies, {}, guarded=guarded) is True
+    assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32_enc", bodies, {}, guarded=guarded) is False
+
+
+def test_a_one_symbol_wrapper_is_resolved_from_its_callers():
+    """`_apple_gpu_raw_handle` takes its symbol as a parameter, so its own body
+    says `<dynamic>` and fails closed. Both callers pass a literal, so the set
+    of symbols it can reach is known exactly -- and neither takes a command
+    buffer, which is why it is exempt rather than allowlisted."""
+    symbols, routed = _direct_symbol_sites()["_apple_gpu_raw_handle"]
+    assert symbols == {"tessera_apple_gpu_device_handle", "tessera_apple_gpu_command_queue_handle"}
+    assert routed is False, "the wrapper does not dispatch through the breaker, and does not need to"
 
 
 def test_the_direct_gate_is_per_dispatch_not_per_function():

@@ -3287,6 +3287,24 @@ remain Apple-owned.
   a settled loss. Making the cross-run aggregate robust (a trimmed or
   median-based bound) would trade that safety for stability and is a separate
   call, not made here.
+  **Three review findings on PR #701, all fail-open, all fixed.** (1) Masking
+  `TESSERA_APPLE_ROUTE_LEDGER` did not neutralise the incumbent, because
+  `TESSERA_APPLE_MOE_FUSED=1` is read as `... == "1" or selected_route ==
+  "single_fused"` and bypasses the selector outright — an inherited one would
+  have put the `composed` row on the fused kernel and measured it against
+  itself, reproducing the exact corruption the block exists to prevent. The
+  recorder now clears a named `_ROUTE_FORCING_ENV` set and restores it.
+  (2) Each threshold in the confidence-bound rule set guarded its own check, so
+  a ledger declaring the bound but omitting `minimum_promotion_runs` or
+  `minimum_pooled_paired_win_fraction` skipped those checks while still reading
+  as complete — a truncated two-report promotion would have been admitted. They
+  are now mandatory whenever the bound is declared. (3) The aggregator admits a
+  run on `fraction > 0.5` while the re-derivation rejected only `< 0.5`, so a
+  run sitting exactly on 0.5 was refused by the producer and admitted by the
+  loader; the comparison is now carried in the rules as
+  `paired_win_fraction_each_run_is_strict`, absent-means-non-strict so the
+  pre-pooling 0.75 ledgers verify unchanged. Each has a regression test that
+  fails against the pre-fix source.
 - **2026-07-27 APPLE-RETUNE-1 ledger invalidated by a runtime-source edit:**
   `benchmarks/baselines/apple_strict_route_ledger.json` pins
   `context.runtime_fingerprint = sha256:74eb6e95…`, a whole-file hash of

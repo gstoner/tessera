@@ -40,6 +40,24 @@ from tessera.compiler.apple_route_selector import (
 )
 
 
+# Environment overrides that pick an *implementation* rather than tune one, and
+# so can put a measured route on a different kernel than its name claims. They
+# are cleared for the duration of a recording alongside the ledger itself.
+#
+# `TESSERA_APPLE_MOE_FUSED=1` is the one proven to reach this corpus: it is read
+# as `os.environ.get(...) == "1" or selected_route == "single_fused"`, so it
+# bypasses the selector entirely and an empty ledger does not neutralise it --
+# the `composed` incumbent would run the fused kernel and be measured against
+# itself, which is the corruption this whole context manager exists to prevent.
+# `TESSERA_SSM_BLOCK_PREFILL` forces block-vs-bmm for SSM work; it reaches the
+# prefill lane rather than the decode handle this corpus calls today, and is
+# listed so that stays true by construction rather than by luck.
+_ROUTE_FORCING_ENV = (
+    "TESSERA_APPLE_MOE_FUSED",
+    "TESSERA_SSM_BLOCK_PREFILL",
+)
+
+
 @contextlib.contextmanager
 def _measure_implementations_not_the_ledgers_choice() -> Any:
     """Detach the measured routes from the ledger this recorder produces.
@@ -65,17 +83,23 @@ def _measure_implementations_not_the_ledgers_choice() -> Any:
     neutral baseline a retuning corpus is supposed to compare against.
     """
     key = "TESSERA_APPLE_ROUTE_LEDGER"
-    previous = os.environ.get(key)
+    saved = {name: os.environ.get(name) for name in (key, *_ROUTE_FORCING_ENV)}
     with tempfile.TemporaryDirectory(prefix="tessera-retune-neutral-") as empty:
         os.environ[key] = str(Path(empty) / "no-such-route-ledger.json")
+        # Masking the ledger alone is not enough: these override the selector
+        # outright, so an inherited one survives the empty ledger and puts the
+        # incumbent on the candidate's implementation anyway.
+        for name in _ROUTE_FORCING_ENV:
+            os.environ.pop(name, None)
         _cached_strict_route_ledger.cache_clear()
         try:
             yield
         finally:
-            if previous is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = previous
+            for name, value in saved.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
             _cached_strict_route_ledger.cache_clear()
 
 

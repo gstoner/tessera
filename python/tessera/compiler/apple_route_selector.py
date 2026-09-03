@@ -296,12 +296,28 @@ def promotion_rule_violations(
     # inventing a threshold the sealer never applied.
     spread_is_diagnostic = rules.get(
         "cross_run_speedup_spread_is_diagnostic_only") is True
+    win_floor_is_strict = rules.get(
+        "paired_win_fraction_each_run_is_strict") is True
     # A missing threshold is not a pass. Without it there is nothing to hold
     # the promotion to, and the honest verdict is "unverifiable", not "fine".
     if min_speedup is None or min_win is None:
         violations.append("promotion_rules_incomplete")
     if min_bound is None and (max_spread is None or spread_is_diagnostic):
         violations.append("no_stability_rule_declared")
+    elif min_bound is not None:
+        # Every threshold in the confidence-bound rule set is mandatory, not
+        # merely honoured when present. Each check below is guarded on its own
+        # threshold, so a ledger that declares the bound and omits
+        # `minimum_promotion_runs` or `minimum_pooled_paired_win_fraction`
+        # would skip those checks silently while still reading as complete --
+        # and a truncated or hand-edited two-report promotion would then be
+        # admitted even though the aggregator requires at least three. A
+        # missing threshold is not a pass (Decisions #21a, #30).
+        for name, value in (("minimum_promotion_runs", min_runs),
+                            ("minimum_pooled_paired_win_fraction",
+                             min_pooled_win)):
+            if value is None:
+                violations.append(f"promotion_rules_incomplete:{name}")
 
     medians = chosen.get("paired_median_speedups")
     fractions = chosen.get("paired_win_fractions")
@@ -347,10 +363,20 @@ def promotion_rule_violations(
     if not isinstance(fractions, list) or not fractions:
         violations.append("no_paired_win_fractions")
     elif min_win is not None and any(
-            not isinstance(v, (int, float)) or v < min_win for v in fractions):
+            not isinstance(v, (int, float))
+            or (v <= min_win if win_floor_is_strict else v < min_win)
+            for v in fractions):
         # Ledgers sealed before pooling carry 0.75 here and this is the whole
         # win rule; ledgers sealed after carry 0.5 and this is the per-run
         # floor beneath the pooled rule checked next.
+        #
+        # The floor is a strict majority -- the aggregator admits a run only on
+        # `fraction > 0.5` -- and the comparison has to be carried in the rules
+        # rather than assumed, or the two sides disagree at exactly 0.5: the
+        # producer refuses such a run while a `v < min_win` re-derivation
+        # admits it, so a foreign or hand-edited ledger would pass a promotion
+        # this aggregator would never have made. Absent the flag the rule is
+        # non-strict, which is what the pre-pooling 0.75 ledgers meant.
         violations.append("paired_win_fraction_below_minimum")
 
     if min_pooled_win is not None:
@@ -1082,6 +1108,7 @@ def aggregate_stable_route_reports(
             "absolute_time_drift_is_diagnostic_only": True,
             "minimum_pooled_paired_win_fraction": min_paired_win_fraction,
             "minimum_paired_win_fraction_each_run": 0.5,
+            "paired_win_fraction_each_run_is_strict": True,
             "minimum_speedup_lower_confidence_bound": min_speedup,
             "speedup_confidence_level": SPEEDUP_CONFIDENCE_LEVEL,
             "minimum_promotion_runs": min_promotion_runs,

@@ -266,6 +266,50 @@ def test_recorder_measures_implementations_not_the_ledger_it_writes():
     assert os.environ.get(key) is None or os.environ.get(key) == sentinel
 
 
+def test_recorder_clears_overrides_that_bypass_the_selector_entirely():
+    """Masking the ledger is not enough on its own.
+
+    `TESSERA_APPLE_MOE_FUSED=1` is read as `... == "1" or selected_route ==
+    "single_fused"`, so it forces the fused kernel without consulting the
+    selector at all. An empty ledger does not neutralise it: the `composed`
+    incumbent would run the candidate's kernel and be measured against itself,
+    which is the corrupted experiment the neutral-selection block exists to
+    prevent. Anything that picks an implementation has to be cleared too, and
+    restored afterwards.
+    """
+    module = _module()
+    import os
+
+    seen: dict[str, str | None] = {}
+
+    class _Probe(Exception):
+        pass
+
+    def _probe(*_args, **_kwargs):
+        for name in module._ROUTE_FORCING_ENV:
+            seen[name] = os.environ.get(name)
+        raise _Probe
+
+    module._cases = _probe  # type: ignore[assignment]
+    assert "TESSERA_APPLE_MOE_FUSED" in module._ROUTE_FORCING_ENV
+    before = {name: os.environ.get(name) for name in module._ROUTE_FORCING_ENV}
+    for name in module._ROUTE_FORCING_ENV:
+        os.environ[name] = "1"
+    try:
+        with pytest.raises(_Probe):
+            module.run_report(reps=1, trials=3)
+    finally:
+        for name, value in before.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    assert seen, "run_report never reached the measured cases"
+    assert all(value is None for value in seen.values()), (
+        f"a route-forcing override survived into measurement: {seen}")
+
+
 def test_more_consistent_evidence_can_never_withdraw_a_promotion():
     """The property the old gate violated: evidence must not be punished.
 

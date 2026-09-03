@@ -452,3 +452,96 @@ def test_strict_loader_refuses_a_promotion_its_own_rules_reject(tmp_path):
     path.write_text(json.dumps(payload), encoding="utf-8")
     assert len(load_strict_route_ledger(
         path, context=_CONTEXT, now=now).routes) == 1
+
+
+def _promoted_row(**evidence):
+    """A minimal promotion row carrying whatever evidence a case needs."""
+    base = {
+        "paired_median_speedups": [0.2, 0.21, 0.19],
+        "paired_win_fractions": [1.0, 1.0, 1.0],
+        "pooled_paired_win_fraction": 1.0,
+        "speedup_lower_confidence_bound": 0.18,
+        "cross_run_speedup_spread": 0.02,
+        "placement_and_numerical_proof": True,
+        "repeated_measurement": True,
+        "paired_measurement": True,
+        "resource_evidence_retained": True,
+    }
+    base.update(evidence)
+    return {
+        "status": "promote_candidate", "selected_route": "cand",
+        "route_evidence": {"cand": base},
+    }
+
+
+_CURRENT_RULES = {
+    "minimum_speedup_fraction_each_run": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.5,
+    "paired_win_fraction_each_run_is_strict": True,
+    "minimum_pooled_paired_win_fraction": 0.75,
+    "minimum_speedup_lower_confidence_bound": 0.05,
+    "minimum_promotion_runs": 3,
+    "cross_run_speedup_spread_is_diagnostic_only": True,
+    "maximum_cross_run_speedup_spread": 0.05,
+}
+
+
+def test_a_truncated_confidence_bound_rule_set_is_unverifiable_not_fine():
+    """Each new threshold guards its own check, so absence must not pass.
+
+    Every check in the confidence-bound rule set is written as `if threshold is
+    not None`, which means a ledger that declares the bound and drops
+    `minimum_promotion_runs` skips the run-count check while still reading as
+    complete -- and a two-report promotion the aggregator would never make gets
+    admitted. A missing threshold is not a pass (Decisions #21a, #30).
+    """
+    from tessera.compiler.apple_route_selector import promotion_rule_violations
+
+    row = _promoted_row()
+    assert promotion_rule_violations(row, _CURRENT_RULES) == []
+    for dropped in ("minimum_promotion_runs",
+                    "minimum_pooled_paired_win_fraction"):
+        rules = {k: v for k, v in _CURRENT_RULES.items() if k != dropped}
+        assert promotion_rule_violations(row, rules) == [
+            f"promotion_rules_incomplete:{dropped}"], dropped
+
+    # And the check the dropped threshold was guarding still bites when present.
+    short = _promoted_row(paired_median_speedups=[0.2, 0.21],
+                          paired_win_fractions=[1.0, 1.0])
+    assert any(v.startswith("promotion_runs_below_minimum")
+               for v in promotion_rule_violations(short, _CURRENT_RULES))
+
+
+def test_the_per_run_win_floor_is_the_strict_majority_the_aggregator_applied():
+    """The verifier must reject exactly what the producer rejects.
+
+    Aggregation admits a run only on `fraction > 0.5`, but a re-derivation
+    comparing `v < min_win` accepts a run sitting exactly on 0.5 -- so a
+    foreign or hand-edited ledger could carry a promotion this aggregator would
+    never have made. The comparison travels in the rules rather than being
+    assumed, and absent the flag stays non-strict for the pre-pooling ledgers
+    that meant `>= 0.75`.
+    """
+    from tessera.compiler.apple_route_selector import promotion_rule_violations
+
+    tied = _promoted_row(paired_win_fractions=[1.0, 0.5, 1.0],
+                         pooled_paired_win_fraction=0.83)
+    assert promotion_rule_violations(tied, _CURRENT_RULES) == [
+        "paired_win_fraction_below_minimum"]
+    # Without the flag the same row is admitted -- which is why old ledgers,
+    # whose 0.75 floor was never strict, keep verifying unchanged.
+    legacy = {k: v for k, v in _CURRENT_RULES.items()
+              if k != "paired_win_fraction_each_run_is_strict"}
+    assert promotion_rule_violations(tied, legacy) == []
+
+
+def test_sealed_rules_declare_the_comparison_the_aggregator_used():
+    """The producer and the rules it seals must not drift apart."""
+    reports = [
+        _report(_stable_row("mps", 1000, 800),
+                _stable_row("simdgroup_matrix", 850, 700)) for _ in range(3)]
+    rules = aggregate_stable_route_reports(reports)["promotion_rules"]
+    assert rules["paired_win_fraction_each_run_is_strict"] is True
+    assert rules["minimum_paired_win_fraction_each_run"] == 0.5
+    assert rules["minimum_promotion_runs"] == 3
+    assert rules["minimum_pooled_paired_win_fraction"] == 0.75

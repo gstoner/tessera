@@ -35951,6 +35951,15 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
         logp_new = _np.asarray([-0.15, -0.18, -0.35], dtype=_np.float32)
         adv = _np.asarray([1.2, -0.7, 0.3], dtype=_np.float32)
         mask = _np.asarray([1.0, 0.0, 1.0], dtype=_np.float32)
+        # A FRACTIONAL mask, summing to 0.2. Every probe above uses a binary
+        # mask summing to 2, which cannot reach the masked-mean denominator's
+        # clamp -- so the native kernel divided by max(sumMask, 1) for years
+        # while this probe reported it healthy. The probe compares against
+        # `_ppo_policy_loss_np`, so this entry turns a native/reference
+        # disagreement into an availability failure: the lane disables itself
+        # and falls back rather than returning a silently mis-scaled training
+        # loss.
+        mask_frac = _np.asarray([0.1, 0.0, 0.1], dtype=_np.float32)
         ref = _np.asarray([-0.21, -0.11, -0.42], dtype=_np.float32)
         ent = _np.asarray([0.4, 0.3, 0.2], dtype=_np.float32)
         out = _np.empty((), dtype=_np.float32)
@@ -35959,6 +35968,7 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
         probes: list[tuple[Any, Any, Any, float, float, int, int, int, Mapping[str, Any]]] = [
             (null, null, null, 0.0, 0.0, 0, 0, 0, {}),
             (fp(mask), null, null, 0.0, 0.0, 1, 0, 0, {"mask": mask}),
+            (fp(mask_frac), null, null, 0.0, 0.0, 1, 0, 0, {"mask": mask_frac}),
             (null, fp(ref), null, 0.03, 0.0, 0, 1, 0, {"ref_logp": ref, "kl_coef": 0.03}),
             (
                 fp(mask),

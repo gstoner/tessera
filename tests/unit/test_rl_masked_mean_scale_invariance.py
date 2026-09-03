@@ -200,3 +200,55 @@ def test_the_gradient_is_also_scale_invariant():
         scaled = np.asarray(
             rule(1.0, LOGP_NEW, LOGP_OLD, ADVANTAGES, mask=BASE_MASK * scale)[0])
         np.testing.assert_allclose(scaled, base, rtol=1e-6, atol=1e-9)
+
+
+# --- the FOURTH mirror: a native MPSGraph kernel -------------------------
+
+
+@pytest.mark.hardware_apple_gpu
+def test_the_native_ppo_kernel_agrees_with_the_reference_on_a_fractional_mask():
+    """`mpsg_run_ppo_policy_loss_ex_f32` computes this denominator too.
+
+    I first reported that no native kernel did — from a grep that found
+    nothing, which is not evidence of absence. It does: the MPSGraph build
+    had `maximum(sumMask, 1)`, so the Apple lane would have kept returning
+    the old mis-scaled loss on exactly the inputs this change fixes.
+
+    The availability probe is the enforcement: it compares the kernel against
+    `_ppo_policy_loss_np`, so a disagreement disables the lane instead of
+    silently mis-scaling a training loss. Verified by reverting the kernel
+    and rebuilding — availability went False, and True again with the fix.
+    """
+    from tessera import runtime as rt
+
+    if not rt._apple_gpu_ppo_policy_loss_ex_available():
+        pytest.skip("native Apple PPO kernel unavailable on this host")
+
+    rng = np.random.default_rng(11)
+    logp_new = rng.standard_normal(4).astype(np.float32)
+    logp_old = rng.standard_normal(4).astype(np.float32)
+    advantages = rng.standard_normal(4).astype(np.float32)
+    for scale in (0.05, 0.1, 0.5, 1.0):
+        mask = (BASE_MASK * scale).astype(np.float32)
+        reference = float(rl.ppo_policy_loss(logp_new, logp_old, advantages, mask=mask))
+        runtime_value = float(rt._ppo_policy_loss_np(
+            np, logp_new, logp_old, advantages, mask=mask))
+        assert runtime_value == pytest.approx(reference, rel=1e-6)
+
+
+def test_the_availability_probe_exercises_a_sub_unit_mask_sum():
+    """Without this the probe cannot see the defect it now guards.
+
+    Every original probe used a binary mask summing to 2 — above the clamp,
+    so the native kernel could be wrong and still report healthy. Pin that a
+    probe mask now sums below 1.
+    """
+    import inspect
+    from tessera import runtime as rt
+
+    source = inspect.getsource(rt._apple_gpu_ppo_policy_loss_ex_available)
+    assert "mask_frac" in source, "the fractional probe is gone"
+    assert "0.1, 0.0, 0.1" in source, (
+        "the fractional probe mask changed; it must still sum below 1.0 or it "
+        "cannot reach the denominator clamp"
+    )

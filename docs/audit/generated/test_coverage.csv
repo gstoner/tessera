@@ -58,7 +58,7 @@ centralize_grad,1,0,0,1,1,fp32,structural_only,category default for 'grad_transf
 chained_schedule,1,0,0,1,1,fp32,structural_only,category default for 'schedule'
 check_cauchy_riemann,0,0,0,0,1,,covered_by_family,exercised by complex_jit / CR conformance tests
 checkpoint,0,0,0,0,1,,structural_only,category default for 'transform'
-cholesky,28,31,0,59,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,59 direct test references
+cholesky,30,31,0,61,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,61 direct test references
 cholesky_solve,11,1,0,12,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,12 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 cispo_policy_loss,9,2,0,11,0,,directly_tested,11 direct test references
@@ -140,7 +140,7 @@ dct,51,2,2,53,0,bf16 f16 f32 fp16 fp32 fp64 int32 int64 int8,directly_tested,53 
 ddpm_noise_pred_loss,5,0,0,5,0,,directly_tested,5 direct test references
 deepseek_sparse_attention,22,5,0,27,0,,directly_tested,27 direct test references
 denoising_score_matching_loss,13,0,1,13,0,,directly_tested,13 direct test references
-depth_attn,7,10,1,17,0,f32 fp32,directly_tested,17 direct test references
+depth_attn,7,10,1,17,0,bf16 f32 fp32,directly_tested,17 direct test references
 depthwise_conv1d,18,0,1,18,0,fp16,directly_tested,18 direct test references
 dequant_grouped_gemm,1,4,0,5,0,int8,directly_tested,5 direct test references
 dequant_matmul,4,4,0,8,0,fp32 int8,directly_tested,8 direct test references
@@ -196,7 +196,7 @@ flip,7,0,0,7,0,,directly_tested,7 direct test references
 floor,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 floor_div,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 focal_loss,11,0,1,11,0,,directly_tested,11 direct test references
-fori_loop,25,0,3,25,0,fp16,directly_tested,25 direct test references
+fori_loop,26,0,3,26,0,fp16,directly_tested,26 direct test references
 fused_epilogue,7,8,3,15,0,f16 nvfp4,directly_tested,15 direct test references
 game_boltzmann_value,12,0,1,12,0,,directly_tested,12 direct test references
 game_coalition_excess,4,0,0,4,0,,directly_tested,4 direct test references
@@ -288,7 +288,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,507,312,25,819,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,819 direct test references
+matmul,514,312,26,826,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,826 direct test references
 matrix_power,1,0,0,1,1,fp32,structural_only,unclassified — defaults to structural_only
 max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
@@ -375,7 +375,7 @@ rearrange,13,0,1,13,0,fp16 fp32,directly_tested,13 direct test references
 reciprocal,5,0,0,5,0,bf16 f32 fp16 fp32,directly_tested,5 direct test references
 reduce,146,17,13,163,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,163 direct test references
 reduce_scatter,4,0,0,4,0,fp32,directly_tested,4 direct test references
-relu,132,39,11,171,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,171 direct test references
+relu,139,39,11,178,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,178 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,14,20,1,34,0,fp32,directly_tested,34 direct test references
@@ -433,7 +433,7 @@ sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
 sigmoid,17,9,1,26,0,bf16 f16 f32 fp32,directly_tested,26 direct test references
 sigmoid_safe,6,0,0,6,0,bf16,directly_tested,6 direct test references
 sign,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
-silu,91,8,6,99,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,99 direct test references
+silu,92,8,6,100,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,100 direct test references
 silu_mul,18,13,1,31,0,bf16 fp32,directly_tested,31 direct test references
 simple_rnn_cell,10,0,0,10,0,bf16 f16 f32 fp16,directly_tested,10 direct test references
 sin,20,1,2,21,0,bf16 f16 f32,directly_tested,21 direct test references

@@ -1493,8 +1493,6 @@ def test_each_bounded_wait_uses_its_own_event():
         assert reserves == -1 or creates < reserves, (
             f"{helper} reserves a shared-event value before trying a private "
             f"event; the shared counter must be the fallback, not the default")
-
-
 # ── The encode-session commit: accounted, never skipped ──────────────────────
 # `ts_enc_commit_wait` is the one dispatch an open breaker must still perform.
 # Everything the session encoded runs only when its buffer is committed, so
@@ -1605,3 +1603,119 @@ def test_every_session_commit_is_accounted():
             if not accounted:
                 offenders.append(f"{module.__name__}:{node.lineno}")
     assert offenders == [], "unaccounted session commit(s): " + ", ".join(offenders)
+# ── No unbounded device wait may return to Python ────────────────────────────
+# The third and last follow-up from APPLE-DISPATCH-WEDGE-1. A caller-side
+# breaker can only help where a wait RETURNS: it cuts the repeated cost of
+# asking a device that stopped answering. `runWithMTLCommandQueue:` submits and
+# waits with no timeout, so a wedged device never comes back at all -- one
+# permanent hang, nothing to cut. Every such site now encodes into an owned
+# command buffer and waits through `commit_mpsgraph_and_wait_with_timeout`,
+# which bounds the wait and reports kind 1 on expiry.
+
+
+def _mm_text():
+    """The .mm text, or a skip: these tests also run from an installed package
+    with no source tree, where the classifier fixture already skips."""
+    if not _MM.is_file():
+        pytest.skip(f"{_MM} not present; this gate reads the runtime source")
+    return _MM.read_text()
+
+
+def test_no_unbounded_mpsgraph_wait_remains():
+    """`runWithMTLCommandQueue:` must not appear as a call anywhere.
+
+    Comments may still name it -- several explain why a route moved off it --
+    so this counts calls, not mentions.
+    """
+    offenders = []
+    for number, line in enumerate(_mm_text().split("\n"), start=1):
+        stripped = line.strip()
+        if "runWithMTLCommandQueue" not in stripped or stripped.startswith(("//", "*", "/*")):
+            continue
+        offenders.append(f"line {number}: {stripped[:80]}")
+    assert offenders == [], (
+        "an unbounded MPSGraph wait is back; a device that stops answering "
+        "never returns from it, and no caller-side breaker can help:\n  "
+        + "\n  ".join(offenders))
+
+
+def test_the_bounded_wait_reports_a_timeout_kind():
+    """The bounded helper is only useful if expiry reaches the error channel:
+    that is what makes a stall count toward the streak rather than read as a
+    validation decline."""
+    body = _mm_bodies(_mm_text())["commit_mpsgraph_and_wait_with_timeout"][0]
+    assert "waitUntilSignaledValue" in body and "timeoutMS" in body
+    assert "ts_set_last_gpu_error(1" in body, (
+        "the bounded wait no longer reports a timeout kind on expiry")
+
+
+def test_every_converted_site_passes_a_finite_timeout():
+    """Every call of the bounded helper must carry a real timeout. A zero or
+    absent one would restore the unbounded behaviour under a bounded name."""
+    text = _mm_text()
+    calls = re.findall(r"commit_mpsgraph_and_wait_with_timeout\(([^;]*?)\)\s*[),]", text, re.S)
+    assert len(calls) >= 35, f"expected the converted sites to call it; found {len(calls)}"
+    for args in calls:
+        timeouts = [int(v) for v in re.findall(r"\b(\d{3,})\b", args)]
+        assert timeouts and all(t > 0 for t in timeouts), args
+
+
+# ── The commit reports its own expiry ────────────────────────────────────────
+# `ts_enc_commit_wait` used to print to stderr and touch nothing, so a stall
+# could only be INFERRED from how long the call took -- a heuristic that cannot
+# tell a 30 s hang from a 30 s workload. It now sets timeout kind 1, like every
+# other bounded wait in the runtime. The duration rule stays as a fallback for
+# a prebuilt dylib older than that change, since the package and the runtime
+# are versioned separately.
+
+
+def test_a_reported_commit_timeout_counts_without_taking_any_time(monkeypatch):
+    """The property that separates reading from inferring: a commit that
+    returns immediately but REPORTS kind 1 must still count. Under the old
+    duration-only rule this was invisible."""
+    monkeypatch.setattr(rt, "_apple_gpu_arm_gpu_error", lambda: None)
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: TIMEOUT)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "did not signal")
+    notes = []
+    monkeypatch.setattr(rt, "_note_dispatch_fallback", lambda op, reason, exc=None: notes.append((op, reason)))
+    clock = _Clock()
+    monkeypatch.setattr(rt.time, "monotonic", lambda: clock.now)   # no time passes at all
+
+    for index in range(LIMIT):
+        rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", lambda: None)
+        assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == index + 1
+    assert rt.apple_gpu_dispatch_breaker_state()["open"] is True
+    assert notes and "did not signal" in notes[0][1]
+
+
+def test_a_reported_timeout_is_counted_once_not_twice(monkeypatch, _silent_channel):
+    """A slow commit that ALSO reports must advance the streak by one. The
+    duration rule may only supply what the runtime failed to report."""
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: TIMEOUT)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "did not signal")
+    tick = _Clock().install(monkeypatch, advance_per_call=30.0)
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: TIMEOUT)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "did not signal")
+    rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", tick)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 1
+
+
+def test_an_older_dylib_that_reports_nothing_is_still_covered(monkeypatch, _silent_channel):
+    """The package and the runtime ship separately, so a prebuilt library from
+    before the reporting change still only prints to stderr. Duration keeps
+    covering that case."""
+    tick = _Clock().install(monkeypatch, advance_per_call=30.0)
+    rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", tick)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 1
+    assert _silent_channel and "without setting the GPU error channel" in _silent_channel[0][1]
+
+
+def test_the_runtime_reports_the_commit_timeout_on_the_error_channel():
+    """Drift gate: the C side must keep setting the timeout kind on expiry.
+    Losing it would silently demote the accounting back to a duration guess,
+    and nothing else in the suite would notice."""
+    body = _mm_bodies(_mm_text())["ts_enc_commit_wait"][0]
+    assert "waitUntilSignaledValue" in body and "timeoutMS" in body
+    assert "ts_set_last_gpu_error(1" in body, (
+        "the encode-session commit no longer reports its expiry; the breaker "
+        "would be back to inferring a stall from wall time")

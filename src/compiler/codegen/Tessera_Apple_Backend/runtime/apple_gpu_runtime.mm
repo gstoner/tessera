@@ -22694,6 +22694,17 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
               "not signal within 30000 ms (signaledValue=%llu wanted=%llu)\n",
               (unsigned long long)ev.signaledValue,
               (unsigned long long)signal_val);
+      // Report it, not just print it. This is `void`, so stderr was the only
+      // trace an expiry left, and the Python side had to INFER a stall from
+      // how long the call took -- a heuristic that cannot tell a 30 s hang
+      // from a 30 s workload. Setting the timeout kind here is what every
+      // other bounded wait in this file already does, and it is what
+      // `_apple_gpu_commit_accounted` reads to open the breaker for the next
+      // lane. The session's outputs are NOT valid after this: the work was
+      // committed but never signalled completion.
+      ts_set_last_gpu_error(1, "enc_commit_wait",
+                            "encode-session commit did not signal (hung/timed "
+                            "out); the session's outputs are invalid");
     }
     completed = done;
   } else {

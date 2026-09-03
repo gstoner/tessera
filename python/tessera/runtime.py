@@ -34601,19 +34601,20 @@ def _apple_gpu_commit_accounted(
     the trade the breaker exists to make. So this always dispatches; it only
     *observes*.
 
-    ``ts_enc_commit_wait`` is `void` and, on expiry, prints to stderr without
-    touching the error channel, so there is nothing to read afterwards. The
-    duration is the only signal it leaves, and it separates the two classes by
-    orders of magnitude: a healthy commit returns in milliseconds, the timeout
-    is 30 s. A commit that takes at least ``silent_failure_timeout_s`` is
-    therefore counted as a timeout and named in the fallback log (Decision
-    #21), so the *next* numpy or resident lane finds the breaker open and stops
-    paying for a device that has stopped answering.
+    ``ts_enc_commit_wait`` now **reports** its expiry: it sets timeout kind 1
+    on the error channel, like every other bounded wait in the runtime, so a
+    stalled commit is read rather than guessed. That is what makes the *next*
+    numpy or resident lane find the breaker open instead of paying for a
+    device that has stopped answering.
 
-    The runtime-side fix -- one ``ts_set_last_gpu_error(1, …)`` beside that
-    wait -- would make this exact rather than inferred, and is filed in
-    ``docs/audit/backend/apple/todo.md``; it needs a route-ledger re-seal,
-    which this does not.
+    ``silent_failure_timeout_s`` stays as a **fallback for an older dylib**.
+    The Python package and the runtime are versioned separately -- a prebuilt
+    library from before that change still prints to stderr and touches nothing
+    -- so a commit that reports no error and took at least the threshold is
+    still counted. The two classes are milliseconds against 30 s, so the
+    inference is safe where it is still needed, and harmless where the runtime
+    now reports honestly: a reported timeout is counted once, not twice.
+    Either way it lands in the fallback log under ``op_name`` (Decision #21).
     """
     breaker_enabled = not os.environ.get("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER")
     _apple_gpu_arm_gpu_error()

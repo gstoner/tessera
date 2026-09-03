@@ -4058,6 +4058,15 @@ def ir_args_from_signature(fn: Callable) -> List[IRArg]:
                 effect = ann.mode
             if hasattr(ann, "__dims__"):
                 dim_names = tuple(str(dim) for dim in getattr(ann, "__dims__"))
+            else:
+                # Dtype shorthand (`tessera.bf16["M", "K"]`) carries its dims on
+                # `.shape`, not `__dims__`; without this the names were dropped
+                # and SymbolicDimEqualityPass had nothing to check. Same
+                # convention as `Tensor[16, 32]` / call-time specialization:
+                # every dim, static ones as numeric strings.
+                shape = getattr(ann, "shape", None)
+                if isinstance(shape, tuple) and shape and not any(d is Ellipsis for d in shape):
+                    dim_names = tuple(str(dim) for dim in shape)
 
         args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect,
                           dim_names=dim_names, layout=layout))
@@ -4299,7 +4308,15 @@ def _shape_from_annotation(shape: Any) -> Tuple[Any, ...]:
         shape = (shape,)
     if any(item is Ellipsis for item in shape):
         return ("*",)
-    return tuple("?" if item is None else item for item in shape)
+    # A symbolic name ("M") is a dim_names fact, not a type fact: rendering it
+    # literally gives `tensor<MxKxbf16>`, which the MLIR parser rejects. It
+    # becomes `?` here and rides as `tessera.dim_names`; ints stay literal so
+    # the static form (`tensor<16x32xbf16>`) is unchanged.
+    return tuple(
+        "?" if item is None or (isinstance(item, str) and item != "?" and not item.isdigit())
+        else item
+        for item in shape
+    )
 
 
 def specialize_module_from_values(

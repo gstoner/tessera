@@ -7005,11 +7005,43 @@ recordings.
 the ledger or the packet passes (41). The e2e_fleet dashboards were regenerated
 with the packet.
 
+**Two P1 review findings, both latent in the timed helpers before this work.**
+Converting 35 call sites onto them is what made the blast radius wide enough to
+matter, so they are fixed here rather than filed:
+
+* **The shared event could satisfy the wrong waiter.** Both helpers reserved an
+  increasing value on the context-wide event under a lock they released
+  *before* encoding and committing, so two concurrent dispatches can submit out
+  of reservation order. If the value-2 command buffer signals first, the
+  value-1 waiter is already satisfied and reads its results while its own
+  command buffer is still running — stale or half-written output, with no error
+  anywhere. Each wait now creates its own event and waits for value 1: one
+  waiter, one signal. The shared counter survives only as the fallback for a
+  failed creation. Fixed in **both** helpers, so the 113 pre-existing callers
+  of the MSL one benefit too, not just the converted MPSGraph paths.
+* **A timed-out dispatch recycled its buffers.** The helper's own comment says
+  the command buffer may still be in flight, and the caller's guards then
+  returned pooled buffers to the shared pool on the way out — so the next
+  dispatch could be handed storage the stalled command still reads or writes.
+  Every timed wait now bumps a timeout epoch on expiry, and a guard whose
+  acquire predates the bump drops its buffer instead of pooling it. Dropping is
+  safe and is the point: Metal retains a command buffer's resources until it
+  completes, so the memory outlives the stalled command and merely stops being
+  handed out. Buffers acquired after the bump pool normally, so one timeout
+  does not disable the pool.
+
+Re-sealed again for the second fingerprint (`sha256:b12d2e92…` →
+`sha256:5b95836e…`). The ledger was unchanged by these fixes: the same 18
+decisions with the same routes across eight fresh recordings, so only the
+fingerprint moved.
+
 **What is still open here:** `ts_enc_commit_wait` reports its own 30 s expiry
 only to stderr, so the session-commit accounting infers a stall from duration
 rather than reading it. One `ts_set_last_gpu_error(1, …)` beside that wait
 would make it exact — the same class of fix as this entry, and it needs the
-same re-seal.
+same re-seal. The shared-event init failure path in that same function also
+falls back to an unbounded `waitUntilCompleted`; there is no bounded wait
+without an event, so that one needs a different answer.
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 

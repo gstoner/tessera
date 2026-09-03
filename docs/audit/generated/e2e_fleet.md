@@ -6,8 +6,8 @@
 
 | Target | Architecture | Backend | Family | State | Tested commit | Packet |
 |---|---|---|---|---|---|---|
-| `apple_gpu` | `apple7` | `apple` | `matmul` | `release_ready` | `e7d61227443b` | `docs/audit/evidence/e2e_spine/apple_gpu/apple7` |
-| `apple_gpu` | `apple7` | `apple` | `softmax` | `release_ready` | `e7d61227443b` | `docs/audit/evidence/e2e_spine/apple_gpu/apple7` |
+| `apple_gpu` | `apple7` | `apple` | `matmul` | `release_ready` | `7079e95a1eeb` | `docs/audit/evidence/e2e_spine/apple_gpu/apple7` |
+| `apple_gpu` | `apple7` | `apple` | `softmax` | `release_ready` | `7079e95a1eeb` | `docs/audit/evidence/e2e_spine/apple_gpu/apple7` |
 | `apple_gpu` | `apple7` | `apple` | `linalg` | `packet_pending` | - | - |
 | `apple_gpu` | `apple7` | `apple` | `ppo` | `packet_pending` | - | - |
 | `apple_gpu` | `apple7` | `apple` | `ebm` | `packet_pending` | - | - |

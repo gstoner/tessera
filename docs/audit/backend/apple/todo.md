@@ -3253,15 +3253,20 @@ remain Apple-owned.
   exist for the duration of measurement, so every dispatcher falls back to the
   incumbent it declares and the corpus compares implementations. After the fix
   the incumbent measures ~2050–2230 µs whether or not the ledger promotes.
-  **Route change:** the re-recorded ledger promotes `single_fused` for
-  `retune_moe_swiglu 16x32x64x32_e4` — against the *real* composed lane it is
-  ~52% faster and wins 96–100% of 45 paired trials. The promotion is
-  exact-shape; `32x64x128x64_e4` still retains `composed`, where the fused
-  kernel really is slower. **A load hypothesis was tested and refuted:** an
-  earlier reading that this row was host-load sensitive was itself an artifact
-  of the loop. With the loop fixed, eight busy cores slow both routes together
-  and the verdict is unchanged (+50.6% loaded vs +52% quiet) — the paired
-  interleaved design handles contention exactly as intended. NVIDIA and ROCm
+  **No production route changes.** All sixteen committed routes are what they
+  were; the sealed ledger simply now reaches them reproducibly. One row is
+  worth knowing about: with the loop fixed, `retune_moe_swiglu`
+  16x32x64x32_e4 measures `single_fused` ~52% faster than the *real* composed
+  lane on an otherwise-idle host and promotes it — but the committed ledger
+  was sealed while a second session was running Apple GPU tests on this Mac,
+  where the same recorder consistently refuses it
+  (`retain_incumbent_unstable_candidate`, three consecutive recordings
+  agreeing). Concurrent **GPU** work is what moves this row: eight busy CPU
+  cores do not (+50.6% loaded vs +52% quiet — the paired interleaved design
+  cancels CPU contention exactly as intended). So the row is a live promotion
+  candidate that should be sealed deliberately on a quiet box, not folded into
+  this change; refusing under contention is the safe direction and preserves
+  the shipped `composed` route. NVIDIA and ROCm
   are unaffected: this is the Apple route ledger's own aggregation, and no
   parity is claimed for them. Two sibling lanes (`flash_attn_mha`, `softmax`)
   consult the same ledger from their dispatchers; their corpora are not part of

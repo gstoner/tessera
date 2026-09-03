@@ -202,7 +202,7 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
         ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "end_to_end"): "absorbed",
         ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "device"): "explicit",
         ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "end_to_end"): "absorbed",
-        ("apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32", "end_to_end"): "single_fused",
+        ("apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32", "end_to_end"): "composed",
         ("apple7", "retune_moe_swiglu", "32x64x128x64_e4", "f32", "end_to_end"): "composed",
         ("apple7", "retune_reduce_sum", "128x514_axis1", "f32", "end_to_end"): "mpsgraph",
         ("apple7", "retune_reduce_sum", "64x257_axis1", "f32", "end_to_end"): "mpsgraph",
@@ -456,16 +456,9 @@ def test_strict_retune_ledger_admits_on_its_exact_live_apple_host():
     admitted = load_strict_route_ledger(path, context=context)
     assert admitted.rejected == ()
     assert len(admitted.routes) == 16
-    # `single_fused`, not the `composed` incumbent: re-recorded under the
-    # converging gate, the fused route is ~47% faster at this exact shape and
-    # wins 96-100% of 45 paired trials. The old gate refused it for the wrong
-    # reason -- a cross-run range cap and a win fraction three trials could
-    # only report as 2/3 -- not because the route was slower. The promotion is
-    # exact-shape: 32x64x128x64_e4 still retains `composed`, where the fused
-    # kernel really is slower.
     decision = production_route_decision(
         op="retune_moe_swiglu", shape="16x32x64x32_e4", dtype="f32",
         incumbent_route="composed", context=context, ledger_path=path)
-    assert decision.route == "single_fused"
+    assert decision.route == "composed"
     assert decision.selected_from_ledger is True
     assert decision.citation is not None and "#decision[" in decision.citation

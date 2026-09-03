@@ -166,6 +166,26 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
     promotion was to re-record until the draw was kind. A lower confidence
     bound converges instead, and eight fresh five-run recordings produced all
     sixteen of these routes identically, so the whole map is pinned here.
+
+    **Re-measured 2026-09-03, after every MPSGraph wait became bounded.**
+    Sixteen routes became eighteen, and three changed, all from one cause: a
+    route that called `runWithMTLCommandQueue:` let MPSGraph own and commit its
+    own command buffer, so there was no object on which to observe a device
+    interval. Those routes now encode into an owned buffer, which is what the
+    APPLE-DEVICE-EVENT-1 note in the runtime already recorded for `bmm`.
+
+    * `retune_reduce_sum` gains its two **device**-domain decisions. They were
+      ineligible for "incumbent paired evidence is incomplete" -- the incumbent
+      had no device interval to pair.
+    * `retune_mla_decode` device flips `explicit` -> `absorbed`, joining the
+      end-to-end domain, which already read `absorbed` on the same evidence.
+    * `retune_moe_swiglu 16x32x64x32_e4` end-to-end flips `composed` ->
+      `single_fused`.
+
+    That last row is the one this queue records as load-sensitive, so it was
+    held to the same standard as the original pin: **eight independent
+    five-run recordings on an idle M1 Max, all eighteen decisions unanimous**,
+    with no row disagreeing across recordings.
     """
     from tessera.compiler.apple_route_selector import (
         AppleRouteContext, load_strict_route_ledger)
@@ -198,13 +218,15 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
         ("apple7", "retune_grouped_gemm", "32x64x64_e4", "f32", "end_to_end"): "grouped_fused",
         ("apple7", "retune_grouped_gemm", "64x128x128_e4", "f32", "device"): "grouped_fused",
         ("apple7", "retune_grouped_gemm", "64x128x128_e4", "f32", "end_to_end"): "grouped_fused",
-        ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "device"): "explicit",
+        ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "device"): "absorbed",
         ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "end_to_end"): "absorbed",
-        ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "device"): "explicit",
+        ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "device"): "absorbed",
         ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "end_to_end"): "absorbed",
-        ("apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32", "end_to_end"): "composed",
+        ("apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32", "end_to_end"): "single_fused",
         ("apple7", "retune_moe_swiglu", "32x64x128x64_e4", "f32", "end_to_end"): "composed",
+        ("apple7", "retune_reduce_sum", "128x514_axis1", "f32", "device"): "mpsgraph",
         ("apple7", "retune_reduce_sum", "128x514_axis1", "f32", "end_to_end"): "mpsgraph",
+        ("apple7", "retune_reduce_sum", "64x257_axis1", "f32", "device"): "mpsgraph",
         ("apple7", "retune_reduce_sum", "64x257_axis1", "f32", "end_to_end"): "mpsgraph",
         ("apple7", "retune_replay_decode", "1x32x16_t8", "f32", "device"): "fused_block",
         ("apple7", "retune_replay_decode", "1x32x16_t8", "f32", "end_to_end"): "fused_block",
@@ -499,10 +521,15 @@ def test_strict_retune_ledger_admits_on_its_exact_live_apple_host():
     context = live_apple_route_context()
     admitted = load_strict_route_ledger(path, context=context)
     assert admitted.rejected == ()
-    assert len(admitted.routes) == 16
+    # Eighteen since the bounded-wait change: the two `retune_reduce_sum`
+    # device rows stopped being ineligible once their incumbent owned a
+    # command buffer and could report a device interval to pair against.
+    assert len(admitted.routes) == 18
     decision = production_route_decision(
         op="retune_moe_swiglu", shape="16x32x64x32_e4", dtype="f32",
         incumbent_route="composed", context=context, ledger_path=path)
-    assert decision.route == "composed"
+    # The ledger promotes away from the incumbent here, and that is the point
+    # of consulting it: `single_fused` won all eight recordings.
+    assert decision.route == "single_fused"
     assert decision.selected_from_ledger is True
     assert decision.citation is not None and "#decision[" in decision.citation

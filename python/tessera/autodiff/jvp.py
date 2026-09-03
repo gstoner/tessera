@@ -101,6 +101,40 @@ class _JVPTrace:
     #: tape gets from `TapeEntry.output`.
     tangents: dict[int, tuple[Any, np.ndarray]] = field(default_factory=dict)
 
+    #: Tangent arrays RETURNED by a nested `jvp` call made inside this trace.
+    #: `_ACTIVE_JVP` is a single contextvar, so an inner `jvp` shadows the
+    #: outer one completely: every `ops.*` call inside goes to the inner
+    #: trace, and the outer trace never sees the output. Without this, the
+    #: outer call reported a tangent of ZERO -- so `jvp(jvp(f))` returned 0.0
+    #: for a function with a perfectly good second derivative.
+    #:
+    #: This is the OUTPUT side, and getting there took two corrections
+    #: (review on #702). Flagging on entry -- "a nested trace ran" -- turns
+    #: every honest zero in a function that nests into a refusal. Flagging on
+    #: the inner trace's bound INPUTS is narrower but still wrong: passing the
+    #: same array to a nested `jvp` whose result is discarded intersects too,
+    #: so a function that nests on its own input and then returns a constant
+    #: was refused a legitimate zero. Neither is output-path-specific.
+    #:
+    #: What actually identifies the shadowing case is that the outer output
+    #: IS a tangent some nested call produced -- in `jvp(jvp(f))` the outer
+    #: function returns the inner call's tangent verbatim. A discarded nested
+    #: result is never returned, so it never appears here.
+    #:
+    #: The arrays are held alongside their ids for the same reason
+    #: `tangents` holds its primals: a collected array frees its address,
+    #: numpy can hand it to an unrelated one, and that one would inherit the
+    #: flag.
+    shadowed_ids: set[int] = field(default_factory=set)
+    shadow_keepalive: list = field(default_factory=list)
+
+    def publish_nested(self, tangent: Any) -> None:
+        """Record a tangent returned by a nested `jvp` inside this trace."""
+        if tangent is None:
+            return
+        self.shadowed_ids.add(id(tangent))
+        self.shadow_keepalive.append(tangent)
+
     def tangent_for(self, value: Any) -> np.ndarray | None:
         entry = self.tangents.get(id(value))
         return None if entry is None else entry[1]
@@ -1826,6 +1860,7 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
         if tangent_array.shape != primal.shape:
             raise ValueError("primal and tangent shapes must match")
         trace.bind(primal, tangent_array)
+    outer = _ACTIVE_JVP.get()
     token = _ACTIVE_JVP.set(trace)
     try:
         primal_out = fn(*converted) if isinstance(primals, tuple) else fn(converted[0])
@@ -1837,10 +1872,40 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
         )
         if any(value is None for value in tuple_tangents):
             raise TesseraAutodiffError("function output has no active tangent path")
+        if outer is not None:
+            for value in tuple_tangents:
+                outer.publish_nested(value)
         return primal_out, tuple_tangents
     scalar_tangent = trace.tangent_for(_forward_value(primal_out))
     if scalar_tangent is None:
+        # A genuinely tangent-free output is zero -- `fn` ignored its input,
+        # and that is a real answer. But an output whose path a NESTED
+        # forward trace swallowed is not zero, it is unknown, and returning
+        # zero there made `jvp(jvp(f))` silently report 0.0 for a function
+        # with a good second derivative. The tuple branch above already
+        # refused this case; only the scalar branch failed open.
+        # Output-path-specific: refuse only when the value being returned IS
+        # a tangent that a nested `jvp` produced. That is the shadowing case
+        # -- `jvp(jvp(f))` returns the inner call's tangent verbatim -- and
+        # nothing else is.
+        if id(_forward_value(primal_out)) in trace.shadowed_ids:
+            raise TesseraAutodiffError(
+                "jvp: the output's tangent path was consumed by a nested "
+                "forward-mode trace, so this call cannot see it. Returning "
+                "zero here would be a silently wrong derivative -- the "
+                "forward-mode counterpart of the reverse-over-reverse case "
+                "AD-WEIL-1/MSW-1 refuses.\n"
+                "Forward-over-forward is not composable this way: "
+                "`_ACTIVE_JVP` is a single trace, so the inner call captures "
+                "every tessera.ops.* call and the outer one sees none.\n"
+                "For higher-order derivatives use the jet surface, which "
+                "evaluates all orders in ONE pass: "
+                "`tessera.autodiff.jet_trace` with `laplacian_exact` / "
+                "`TruncatedJet`, or `hvp` for a Hessian-vector product."
+            )
         scalar_tangent = np.zeros_like(np.asarray(primal_out), dtype=np.float64)
+    if outer is not None:
+        outer.publish_nested(scalar_tangent)
     return np.asarray(primal_out), scalar_tangent
 
 

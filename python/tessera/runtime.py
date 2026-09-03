@@ -34536,6 +34536,28 @@ def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -
     return host_fallback()
 
 
+def _apple_gpu_device_call_checked(op_name: str, call: Any) -> bool:
+    """Run a device-resident (``DeviceTensor``) C-ABI dispatch through the
+    breaker in :func:`_apple_gpu_run_checked`, returning whether it succeeded.
+
+    The resident paths -- ``gather_blocks_dev``, ``paged_latent_attention_dev``,
+    ``dense_latent_attention_dev``, ``rowop_dev`` and the MTL4 MLP session --
+    call their C symbol directly and hand ``None`` back to a caller that then
+    computes on host. That never touched the last-error channel, so a device
+    that stopped answering was asked again by every one of them, one full
+    30 s wait each, after the breaker had already opened for the numpy-in /
+    numpy-out paths (APPLE-DISPATCH-WEDGE-1). It also meant a reported timeout
+    became a silent ``None`` with no diagnostic (Decision #21).
+
+    ``call`` performs the dispatch and returns the raw ``rc``. A ``0`` with no
+    error kind set is a C-side validation decline (bad shape, ``!ctx.ok``), not
+    evidence about the device: it comes back ``False`` and resets the streak,
+    exactly like an ordinary per-op failure on the numpy paths. When the
+    breaker is open this returns ``False`` without dispatching.
+    """
+    return bool(_apple_gpu_run_checked(op_name, lambda: int(call()) == 1, lambda: False))
+
+
 def _apple_gpu_known_chain_from_fusion_groups(metadata: Mapping[str, Any], n_ops: int) -> str | None:
     """P1 (2026-06-10) — read compiler fusion intent instead of re-matching.
 
@@ -43440,16 +43462,18 @@ def apple_gpu_matmul2d_dev(A: Any, B: Any, C: Any, *, bf16: bool = False) -> boo
     sym.restype = ctypes.c_int32
     M, K = int(A.shape[0]), int(A.shape[1])
     N = int(B.shape[1])
-    rc = sym(
-        A.handle,
-        B.handle,
-        C.handle,
-        ctypes.c_int32(M),
-        ctypes.c_int32(N),
-        ctypes.c_int32(K),
-        ctypes.c_int32(1 if bf16 else 0),
+    return _apple_gpu_device_call_checked(
+        "apple_gpu.mtl4_matmul2d_dev",
+        lambda: sym(
+            A.handle,
+            B.handle,
+            C.handle,
+            ctypes.c_int32(M),
+            ctypes.c_int32(N),
+            ctypes.c_int32(K),
+            ctypes.c_int32(1 if bf16 else 0),
+        ),
     )
-    return rc == 1
 
 
 def apple_gpu_metal4_tensor_roundtrip(arr: Any, np: Any) -> Any:
@@ -43846,8 +43870,11 @@ class AppleGPUMLPSession:
         if self._handle is not None:
             run = _apple_gpu_mtl4_mlp_session_run_dev_sym()
             if run is not None:
-                rc = run(self._handle, X.handle, Y.handle, ctypes.c_int32(M))
-                if rc == 1:
+                ok = _apple_gpu_device_call_checked(
+                    "apple_gpu.mtl4_mlp_session.run_dev",
+                    lambda: run(self._handle, X.handle, Y.handle, ctypes.c_int32(M)),
+                )
+                if ok:
                     return Y
         # host fallback — compute into Y's shared storage (stays "resident")
         Xh = X.numpy().astype(np.float32)
@@ -45789,8 +45816,11 @@ class DeviceTensor:
         mode = _MODE.get((src_dt, dst_dt))
         sym = getattr(self._rt, "ts_dev_cast", None)
         if out is not None and mode is not None and sym is not None and not self._freed:
-            rc = sym(self._handle, out._handle, ctypes.c_int64(n), ctypes.c_int32(mode))
-            if rc == 1:
+            ok = _apple_gpu_device_call_checked(
+                "apple_gpu.dev_cast",
+                lambda: sym(self._handle, out._handle, ctypes.c_int64(n), ctypes.c_int32(mode)),
+            )
+            if ok:
                 return out
         # host fallback — cast through numpy on the shared storage
         if out is None:
@@ -45872,16 +45902,19 @@ def _apple_gpu_rowop_device(
     out = DeviceTensor.empty((rows, cols), _np.float32)
     if out is None:
         return None
-    rc = sym(
-        X.handle,
-        gamma.handle if gamma is not None else None,
-        out.handle,
-        ctypes.c_int32(int(kind)),
-        ctypes.c_int32(rows),
-        ctypes.c_int32(cols),
-        ctypes.c_float(float(eps)),
+    ok = _apple_gpu_device_call_checked(
+        "apple_gpu.rowop_dev",
+        lambda: sym(
+            X.handle,
+            gamma.handle if gamma is not None else None,
+            out.handle,
+            ctypes.c_int32(int(kind)),
+            ctypes.c_int32(rows),
+            ctypes.c_int32(cols),
+            ctypes.c_float(float(eps)),
+        ),
     )
-    if rc != 1:
+    if not ok:
         out.free()
         return None
     return out
@@ -45918,16 +45951,19 @@ def _apple_gpu_gather_blocks_device(
     out = DeviceTensor.empty((n, block_size, dim), _np.float32)
     if out is None:
         return None
-    rc = sym(
-        pool.handle,
-        block_table.handle,
-        out.handle,
-        ctypes.c_int32(num_blocks),
-        ctypes.c_int32(n),
-        ctypes.c_int32(block_size),
-        ctypes.c_int32(dim),
+    ok = _apple_gpu_device_call_checked(
+        "apple_gpu.gather_blocks_dev",
+        lambda: sym(
+            pool.handle,
+            block_table.handle,
+            out.handle,
+            ctypes.c_int32(num_blocks),
+            ctypes.c_int32(n),
+            ctypes.c_int32(block_size),
+            ctypes.c_int32(dim),
+        ),
     )
-    if rc != 1:
+    if not ok:
         out.free()
         return None
     return out
@@ -45988,24 +46024,27 @@ def _apple_gpu_paged_latent_attention_device(
     out = DeviceTensor.empty((q_len, latent_dim), _np.float32)
     if out is None:
         return None
-    rc = sym(
-        query.handle,
-        latent_pool.handle,
-        rope_pool.handle,
-        block_table.handle,
-        out.handle,
-        ctypes.c_int32(num_blocks),
-        ctypes.c_int32(n_blocks),
-        ctypes.c_int32(block_size),
-        ctypes.c_int32(logical_length),
-        ctypes.c_int32(q_len),
-        ctypes.c_int32(latent_dim),
-        ctypes.c_int32(rope_dim),
-        ctypes.c_int32(causal_offset),
-        ctypes.c_int32(window),
-        ctypes.c_float(scale),
+    ok = _apple_gpu_device_call_checked(
+        "apple_gpu.paged_latent_attention_dev",
+        lambda: sym(
+            query.handle,
+            latent_pool.handle,
+            rope_pool.handle,
+            block_table.handle,
+            out.handle,
+            ctypes.c_int32(num_blocks),
+            ctypes.c_int32(n_blocks),
+            ctypes.c_int32(block_size),
+            ctypes.c_int32(logical_length),
+            ctypes.c_int32(q_len),
+            ctypes.c_int32(latent_dim),
+            ctypes.c_int32(rope_dim),
+            ctypes.c_int32(causal_offset),
+            ctypes.c_int32(window),
+            ctypes.c_float(scale),
+        ),
     )
-    if rc != 1:
+    if not ok:
         out.free()
         return None
     return out
@@ -46052,20 +46091,23 @@ def _apple_gpu_dense_latent_attention_device(
     out = DeviceTensor.empty((q_len, latent_dim), _np.float32)
     if out is None:
         return None
-    rc = sym(
-        query.handle,
-        latent.handle,
-        rope.handle,
-        out.handle,
-        ctypes.c_int32(logical_length),
-        ctypes.c_int32(q_len),
-        ctypes.c_int32(latent_dim),
-        ctypes.c_int32(rope_dim),
-        ctypes.c_int32(causal_offset),
-        ctypes.c_int32(window),
-        ctypes.c_float(scale),
+    ok = _apple_gpu_device_call_checked(
+        "apple_gpu.dense_latent_attention_dev",
+        lambda: sym(
+            query.handle,
+            latent.handle,
+            rope.handle,
+            out.handle,
+            ctypes.c_int32(logical_length),
+            ctypes.c_int32(q_len),
+            ctypes.c_int32(latent_dim),
+            ctypes.c_int32(rope_dim),
+            ctypes.c_int32(causal_offset),
+            ctypes.c_int32(window),
+            ctypes.c_float(scale),
+        ),
     )
-    if rc != 1:
+    if not ok:
         out.free()
         return None
     return out
@@ -46094,17 +46136,20 @@ def _apple_gpu_bmm_device(A: "DeviceTensor", B: "DeviceTensor", b_broadcast: boo
     out = DeviceTensor.empty((batch, M, N), _np.float32)
     if out is None:
         return None
-    rc = sym(
-        A.handle,
-        B.handle,
-        out.handle,
-        ctypes.c_int32(batch),
-        ctypes.c_int32(M),
-        ctypes.c_int32(N),
-        ctypes.c_int32(K),
-        ctypes.c_int32(1 if bcast else 0),
+    ok = _apple_gpu_device_call_checked(
+        "apple_gpu.bmm_dev",
+        lambda: sym(
+            A.handle,
+            B.handle,
+            out.handle,
+            ctypes.c_int32(batch),
+            ctypes.c_int32(M),
+            ctypes.c_int32(N),
+            ctypes.c_int32(K),
+            ctypes.c_int32(1 if bcast else 0),
+        ),
     )
-    if rc != 1:
+    if not ok:
         out.free()
         return None
     return out

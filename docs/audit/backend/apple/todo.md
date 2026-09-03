@@ -6662,6 +6662,70 @@ Host-free coverage: `tests/unit/test_apple_gpu_dispatch_breaker.py` (10 tests),
 mutation-verified — breaker never opens, every kind counts as a timeout, and
 success fails to reset the streak are each caught by a different test.
 
+### Second instance: the device-resident paths never went through the breaker *(fixed 2026-09-03, M1 Max)*
+
+**Trigger.** A `pytest tests/unit -q -m "not slow"` sweep on the Mac wedged
+with `tessera_apple_gpu_gather_blocks_dev_f32` at the top of the stack. The
+mitigation above covered only the numpy-in / numpy-out lanes that call
+`_apple_gpu_run_checked`. Every `DeviceTensor` path — `gather_blocks_dev`,
+`paged_latent_attention_dev`, `dense_latent_attention_dev`, `rowop_dev`,
+`bmm_dev`, `mtl4_matmul2d_dev`, `ts_dev_cast`, the MTL4 MLP session's
+`run_dev` — called its C symbol directly and returned `None` on any `rc != 1`.
+Three consequences: an **open** breaker did not stop them asking the device
+(one full timeout each); their timeouts did not count toward the streak; and a
+reported timeout became a silent `None` with no diagnostic (Decision #21).
+
+**Fix.** `runtime._apple_gpu_device_call_checked(op_name, call) -> bool` wraps
+the raw `rc` call in `_apple_gpu_run_checked`, so the eight resident paths now
+share the same streak, the same open-breaker short-circuit, and the same
+named fallback log entry. An `rc == 0` with no error kind set is a C-side
+validation decline and resets the streak, as on the numpy lanes.
+`tests/unit/test_apple_gpu_dispatch_breaker.py` drives each path host-free
+(open breaker never dispatches and frees the output; timeouts count; a
+validation decline does not; success closes the streak; the fallback is named)
+and adds an AST drift gate: any function that *calls* a name bound from a
+`*_dev_sym()` / `*_dev_f32()` accessor or a `getattr` on a `..._dev` /
+`ts_dev_cast` symbol must route it through the helper. The `.mm` is untouched,
+so the route ledger fingerprint is unchanged and no re-seal was needed.
+
+**Reproduction attempts — it did not reproduce, and that is recorded rather
+than explained away.** All unsandboxed on the M1 Max, with the dylib newer
+than the source (`libTesseraAppleRuntime.dylib` built 10:23, `.mm` last
+modified 22:24 the previous day), with a hard external `kill -9` deadline
+(macOS has no `timeout`; SIGALRM does not interrupt the IOKit trap):
+
+| arm | result |
+|---|---|
+| `test_apple_gpu_resident_block_paged.py` alone, idle, x3 | 12/12, 0.39 s each |
+| same file x3 while the whole Apple lane ran concurrently on the device | 12/12, 0.44-0.58 s |
+| whole Apple GPU lane in one process (`tests/unit/test_apple_gpu*.py`), x2 before the fix | 1610 passed / 1 skipped, 77-79 s |
+| same lane after the fix (+ resident/mtl4 files) | 1649 passed / 1 skipped, 78 s |
+
+So the wedge that was observed depends on a condition these arms did not
+recreate. The dylib's age *at the time of the wedge* is not known, and
+`APPLE-MLPKG-HANG-1` above is the same shape with a stale dylib as the cause —
+treat that as the leading hypothesis, not a finding. A "the tool sandbox
+cannot reach Metal" hypothesis was also raised and is **unproven**: the
+intended sandboxed control turned out not to be sandboxed at all (a `$HOME`
+write succeeded), so there is no control either way. Do not cite either as
+the root cause.
+
+**Class size, stated honestly.** With this change the breaker covers 9 numpy
+lanes + 8 resident paths. An enumeration of `rc = <symbol>(...)` dispatches in
+`runtime.py` finds **34 further Apple call sites** that call a C symbol
+directly and are not routed: linalg (`chol`/`solve`/`tri` 2-D, batched
+cholesky / tri-solve, `svd`), `random`, GQA x2, batched attention x2,
+`cf_scan` / `cf_serial_draft` / `cf_while_generate`, Metal 4 `caps` /
+`tensor_roundtrip` / `mtl4_scan` / `matmul_sg` / `matmul2d_{f16,bf16,epilogue}`
+/ `mtl4_conv2d`, `msl_spec_accept`, the MLP session's host-input `run`, and
+the seven `*_value_available` probes + seven `_dispatch_gpu_*` lanes
+(PPO / EBM / Clifford). Every one reaches `commit_and_wait_with_timeout`, which
+has **113 callers — 38 at 30 s and 72 at 60 s** (the "60 s at one of seven
+call sites" above counted only the MPSGraph helper), so each can still re-ask
+a device that stopped answering. Follow-up: route them through the same
+helper; the AST gate covers the `_dev` class by construction and will not
+catch these.
+
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
 **Owning item:** the matrix-core lanes decline ragged shapes ·

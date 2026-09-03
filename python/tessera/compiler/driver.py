@@ -57,7 +57,7 @@ def _warn_schedule_key_not_honored(target_kind: str, options) -> None:
         )
 from typing import Any, Mapping
 
-from .graph_ir import GraphIRModule
+from .graph_ir import GraphIRModule, unresolved_element_type_diagnostics
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
 from .matmul_pipeline import (
     CPUPlan,
@@ -755,8 +755,17 @@ def compile_graph_module(
         # Feed the *canonical* (parseable custom-assembly) Graph IR straight to
         # the value pipeline — no text rewrite. `graph_text` above is the paren
         # form kept for hashing / display; the canonical render is parser-ready.
-        value_ir, value_mode_error = _lower_apple_value_target_ir(
-            module.to_mlir(verify=False, canonical=True), target_kind
+        # Decision #21a -- an unresolved element type fails closed HERE, with a
+        # named reason, before the parser sees it. Previously the recorded
+        # reason was the parser's symptom ("expected 'x' in dimension list"),
+        # which names neither the argument nor the missing semantic key.
+        unresolved = unresolved_element_type_diagnostics(module)
+        value_ir, value_mode_error = (
+            (None, "; ".join(f"{d.code}: {d.message}" for d in unresolved))
+            if unresolved
+            else _lower_apple_value_target_ir(
+                module.to_mlir(verify=False, canonical=True), target_kind
+            )
         )
         if value_ir:
             target_artifact = LoweringArtifact(
@@ -2149,19 +2158,6 @@ def _lower_apple_value_target_ir(graph_text: str, target_kind: str) -> tuple[str
     if not proc.stdout.strip():
         return None, f"{pipeline} produced empty output"
     return proc.stdout, None
-
-
-def lower_apple_value_target_ir(graph_text: str, target_kind: str) -> str | None:
-    """Apple Value Target IR sprint 3 — front-door value mode.
-
-    Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full`` pipeline
-    on the Graph IR and return the emitted value Target IR (the
-    tessera_apple.{cpu.call,gpu.kernel_call} ops). Returns None when tessera-opt
-    is unavailable or the lowering fails — the caller then keeps the artifact
-    target IR (default behavior never drifts). Use
-    :func:`_lower_apple_value_target_ir` when the failure reason is needed."""
-    ir, _reason = _lower_apple_value_target_ir(graph_text, target_kind)
-    return ir
 
 
 def _maybe_dump_debug_artifacts(bundle: CompileArtifactBundle) -> None:

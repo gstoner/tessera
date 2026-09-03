@@ -1335,6 +1335,74 @@ parses and verifies every emitter and golden, but registers everything, so it
 cannot falsify a *leakage* claim — the same argument as Decision #19's standing
 lesson that a host with the ISA cannot falsify a host-portability claim.
 
+### FRONTEND-IR-MEDIUM-1 — the IR as the single medium of record
+
+Bound 2026-09-03 from
+[`FRONT_END_LOWERING_ASSESSMENT.md`](FRONT_END_LOWERING_ASSESSMENT.md), which
+owns the finding and the KGEN-comparison rationale. Global ordering and
+promotion authority remain here.
+
+The finding that justifies an ID rather than a reference: **Tessera's system of
+record is the Python object graph, and the MLIR text is a lossy projection of
+it.** Measured on the checked-in `tessera-opt` (host-independent): symbolic
+shapes do not survive to the parser (`Tensor['M','K']` → malformed
+`tensor<?x?x?>` → parse error), `loc` is absent from the emitted text entirely,
+`numeric_policy` is opt-in rather than universal, and `provenance`/route/arbiter
+decisions live in Python descriptor objects (46 modules) rather than as IR
+attributes. `tessera-opt` optimizes the projection; the Python spine reasons
+over the record; the two do not share a memory. This subsumes the Apple
+"two compilers" and Python-packager seams as symptoms. It also reads
+E2E-REAL-6's "one compiler authority" one level stronger — from *one frontend*
+to **one medium**: every fact a pass reads is an attribute on the IR the C++
+passes see (Decision #29's consumer rule, run in reverse).
+
+Three sub-tracks, sequenced smallest-blast-radius first:
+
+1. **Down-payment (independently landable now).** (i) **Landed 2026-09-03 — scope
+   corrected on implementation:** the front door already recorded the
+   value-lane failure (`apple_value_target_ir_error`, S4); what was missing was
+   a *named* reason. `graph_ir.unresolved_element_type_diagnostics` now emits
+   `GRAPH_IR_UNRESOLVED_ELEMENT_TYPE` (Decision #21a) per unresolved
+   argument / result / op type and the driver's value lane consults it before
+   rendering, so the recorded reason names the argument and the missing
+   semantic key instead of the parser's symptom; renders are byte-unchanged and
+   `index` / `i1` / `!tessera.*` handles are never flagged. (ii) **Landed
+   2026-09-03:** the tracer records the user's call-site span on every op
+   (`trace._user_source_span`, first frame outside the package) and the
+   canonical render emits a repo-relative `loc("file":line:col)` — relative so
+   the content-addressed canonical text stays host-independent — verified
+   through `tessera-opt -mlir-print-debuginfo`. The AST `_OpExtractor` still
+   emits no `loc`, so its deletion no longer regresses Decision #13.
+   (iii) The symbolic→concrete elaboration boundary, plus the region-privilege
+   (Decision #2) and `ConstraintSolver` (Decision #4) drops, are declared through
+   the **existing** W1.3 metadata-obligation pass
+   (`--tessera-verify-metadata-obligation`), not a new verifier (Decision
+   #29/#31), using `not_yet_carried:<item>` to keep the debt attributable.
+
+2. **Pre-elaboration parametric optimization (perf + rigor).** Elaboration is
+   entirely pre-MLIR today, so `tessera-opt` only sees concrete instances and
+   there is no tier that optimizes the parametric recipe once before it is
+   stamped per shape bucket. Build one on the existing `PresburgerSystem`
+   substrate carried through `structured_cfg.py`. Arbiter payoff (Decision #28):
+   buckets compared as instances of one optimized recipe, not N independently
+   lowered programs, so a bucket-to-bucket regression is a real difference. Also
+   retires the Decision #29 producerless consumer — `SymbolicDimEqualityPass`
+   consumes `tessera.dim_names` that the frontend cannot currently emit
+   parseably.
+
+3. **Raising / idiom recognition (algorithmic).** No pass lifts a hand-written
+   loop nest back to `tessera.matmul` / `tessera.flash_attn`, so user-written
+   math cannot reach the arbiter's Tier-3 hand-tuned candidates. Add a raising
+   path so arbitrary user code has an on-ramp into the high-performance tier —
+   the inverse of `TesseraToLinalgPass`, composing with sub-track 2 (a raised
+   parametric idiom is optimized once and elaborated per bucket).
+
+Acceptance is staged: sub-track 1 lands under existing frontend/driver fixtures
+plus a fail-closed dtype fixture and a `loc`-round-trip check; sub-tracks 2 and
+3 are rank/prune-only first and keep the current path as an oracle per the PR
+rules above. No device evidence is implied — every probe in the assessment is
+host-independent.
+
 ### W5 — Decisions become measured *(9 weeks · depends on W1, W3)*
 
 Root cause: L5, "a constant where a measured decision belongs." Every item routes

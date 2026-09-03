@@ -111,6 +111,16 @@ entire compiler.
 
 ### G2 — Type inference is a five-case if-chain over 315 ops, defaulting to "the first operand's type"
 
+> **Corrected 2026-09-03.** This finding is closed; the section below is kept as
+> the record of why it was raised. `graph_ir._infer_result_type` is now a
+> **72-rule registry** keyed by `op_catalog.shape_rule_for(op_name)` that
+> **fails loud** — an unimplemented rule raises `KeyError` rather than returning
+> `operand_types[0]` — and is drift-gated by
+> `tests/unit/test_shape_rule_registry.py`. The `operand_types[0]` lines that
+> remain are *named* rules (`same_as_first`), not a default. G1's citation of
+> `graph_ir.py:1730` failing open is superseded by the same change. Measured in
+> [`FRONT_END_LOWERING_ASSESSMENT.md`](FRONT_END_LOWERING_ASSESSMENT.md) §0.
+
 [`graph_ir.py:1702`](../../../python/tessera/compiler/graph_ir.py#L1702)
 `_infer_result_type` handles `tessera.matmul`, `tessera.batched_gemm`, two EBM
 ops, and `tessera.transpose`; its fallback returns `operand_types[0]`.
@@ -142,7 +152,7 @@ the consumer that needs it doesn't read it.
 
 | System | Design | Failure policy | Reached from |
 |---|---|---|---|
-| `graph_ir._infer_result_type` | hand-written if-chain | **fails open** (`operand_types[0]`) | all targets except Apple GPU |
+| `graph_ir._infer_result_type` | ~~hand-written if-chain~~ 72-rule registry | ~~**fails open** (`operand_types[0]`)~~ **fails loud** (corrected 2026-09-03, see G2 banner) | all targets except Apple GPU |
 | `trace._SHAPE_RULES` + `register_shape_rule` | **rule registry, extensible** | **fails closed** (`TesseraTraceError`) | Apple GPU only |
 | `shape.py` `matmul_shape` / `broadcast_shape` / `dims_compatible` | symbolic-ish, name equality | mixed | the public `Shape`/`Dim` API |
 | C++ ODS verifiers | per-op `verify()` | fails closed | `tessera-opt` |

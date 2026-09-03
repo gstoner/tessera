@@ -3209,6 +3209,19 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python", status="implemented",
     ),
     DiagnosticCode(
+        code="GRAPH_IR_UNRESOLVED_ELEMENT_TYPE",
+        pass_origin="graph_ir.unresolved_element_type_diagnostics",
+        severity="error",
+        summary=("A tensor in parser-bound Graph IR has no element type (renders "
+                 "as tensor<...x?>, which MLIR rejects); dtype is a semantic key "
+                 "and never defaults (Decision #21a)."),
+        fix_hint=("Specialize the module from concrete call values before feeding "
+                  "it to tessera-opt; a dtype-less annotation is valid only in the "
+                  "symbolic decoration-time module, which is not parser-bound."),
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="FRONTEND-IR-MEDIUM-1",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
         code="GRAPH_IR_DUP_CONSTANT", pass_origin="GraphIRModule.verify",
         severity="error",
         summary="Two module-level constants share a name.",

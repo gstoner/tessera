@@ -361,6 +361,113 @@ class TestGraphIRBuilder:
         assert str(args["B"].ir_type) == "tensor<16x32xbf16>"
         assert str(args["C"].ir_type) == "tensor<16x8xf32>"
 
+    def test_tensor_annotation_binds_a_trailing_dtype_string(self):
+        """Regression: ``Tensor['M','K','bf16']`` once read ``'bf16'`` as a THIRD
+        dimension name and left the element type unresolved -- rank 3,
+        ``tensor<?x?x?x?>``. A trailing dtype is a semantic key (Decision #21a)
+        and binds as such; the dims stay rank 2."""
+        # Bound to a local first: in annotation position ruff reads the quoted
+        # subscript items as PEP 484 forward references (the repo idiom, see
+        # test_jit_zero_function_candidate).
+        MKb = tessera.Tensor["M", "K", "bf16"]
+
+        def typed(A: MKb):
+            return tessera.ops.relu(A)
+
+        (arg,) = GraphIRBuilder().lower(typed).args
+        assert arg.dim_names == ("M", "K")
+        assert str(arg.ir_type) == "tensor<?x?xbf16>"
+        assert MKb.dtype == "bf16"
+
+    def test_tensor_annotation_binds_a_trailing_dtype_shorthand(self):
+        MKf = tessera.Tensor["M", "K", tessera.f32]
+
+        def typed(A: MKf):
+            return tessera.ops.relu(A)
+
+        (arg,) = GraphIRBuilder().lower(typed).args
+        assert arg.dim_names == ("M", "K")
+        assert str(arg.ir_type) == "tensor<?x?xf32>"
+
+    def test_tensor_annotation_dtype_alias_canonicalizes_at_the_boundary(self):
+        ann = tessera.Tensor["N", "float32"]  # Decision #15a: aliases normalize here
+        assert ann.__dims__ == ("N",) and ann.dtype == "fp32"
+        plain = tessera.Tensor["N"]           # a dim, not a dtype
+        assert plain.__dims__ == ("N",) and not hasattr(plain, "dtype")
+
+    def test_tensor_annotation_refuses_a_misplaced_or_illegal_dtype(self):
+        from tessera.dtype import TesseraDtypeError
+
+        with pytest.raises(TesseraDtypeError, match="position 0"):
+            tessera.Tensor["bf16", "K"]       # never silently a dimension name
+        with pytest.raises(TesseraDtypeError):
+            tessera.Tensor["M", "K", "tf32"]  # a math mode, not a storage dtype
+
+    def test_jit_repro_rank_and_element_type_are_right(self):
+        MK = tessera.Tensor["M", "K", "bf16"]
+        KN = tessera.Tensor["K", "N", "bf16"]
+
+        @tessera.jit
+        def f(a: MK, b: KN):
+            return tessera.ops.matmul(a, b)
+
+        ir = f.graph_ir.to_mlir()
+        assert "tensor<?x?xbf16>" in ir
+        assert 'tessera.dim_names = ["M", "K"]' in ir
+        assert '"bf16"]' not in ir              # the dtype no longer leaks into dim_names
+
+    def test_tensor_annotation_refuses_planned_gated_dtypes(self):
+        """Decision #15a: a planned/gated dtype is admissible only where
+        ``metadata.dtype_status = "planned_gated"`` can be carried, which an
+        annotation cannot do -- and most of the set has no element-type mapping
+        (``uint8`` would render ``tensor<?xuint8>``, which MLIR rejects). Refused
+        by name, never demoted to a dimension (PR #706 review, P1)."""
+        from tessera.dtype import TesseraDtypeError
+
+        for gated in ("uint8", "mxfp8", "complex64"):
+            with pytest.raises(TesseraDtypeError, match="planned/gated"):
+                tessera.Tensor["M", "K", gated]
+
+    def test_dtype_shorthand_symbolic_dims_ride_as_dim_names_not_in_the_type(self):
+        """Mirror of the Tensor[..., dtype] fix: ``tessera.bf16["M", "K"]`` once
+        produced ``dim_names=()`` and rendered the names LITERALLY as
+        ``tensor<MxKxbf16>``, which the MLIR parser rejects."""
+        MK = tessera.bf16["M", "K"]
+
+        def typed(A: MK):
+            return tessera.ops.relu(A)
+
+        (arg,) = GraphIRBuilder().lower(typed).args
+        assert arg.dim_names == ("M", "K")
+        assert str(arg.ir_type) == "tensor<?x?xbf16>"
+
+    def test_dtype_shorthand_static_dims_render_unchanged_and_are_named(self):
+        S = tessera.bf16[16, 32]
+        MB = tessera.f32["B", 64]
+
+        def typed(A: S, X: MB):
+            return tessera.ops.relu(A)
+
+        args = {a.name: a for a in GraphIRBuilder().lower(typed).args}
+        assert str(args["A"].ir_type) == "tensor<16x32xbf16>"   # byte-unchanged
+        assert args["A"].dim_names == ("16", "32")              # same convention as Tensor[16, 32]
+        assert str(args["X"].ir_type) == "tensor<?x64xf32>"
+        assert args["X"].dim_names == ("B", "64")
+
+    def test_dtype_shorthand_and_tensor_with_dtype_are_interchangeable(self):
+        A1 = tessera.bf16["M", "K"]
+        A2 = tessera.Tensor["M", "K", "bf16"]
+
+        def f1(A: A1):
+            return tessera.ops.relu(A)
+
+        def f2(A: A2):
+            return tessera.ops.relu(A)
+
+        (a1,) = GraphIRBuilder().lower(f1).args
+        (a2,) = GraphIRBuilder().lower(f2).args
+        assert (a1.dim_names, str(a1.ir_type)) == (a2.dim_names, str(a2.ir_type))
+
     def test_unsupported_python_construct_has_source_span_diagnostic(self):
         """Updated for D.1 (2026-05-31). Pre-D.1 a dynamic ``if`` with a
         non-emittable Compare test produced a blanket

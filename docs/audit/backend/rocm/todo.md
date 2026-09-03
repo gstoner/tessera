@@ -1,11 +1,49 @@
 ---
-last_updated: 2026-08-29
+last_updated: 2026-09-03
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## Cross-backend sync `FRONTEND-DTYPE-BOUNDARY-2026-09-03`
+
+A **shared Graph IR diagnostic boundary and dtype annotation contract** landed
+in [PR #706](https://github.com/gstoner/tessera/pull/706), so all four backends
+are assessed here per the integrated plan's PR rule 4.
+
+Three shared changes, none backend-specific:
+
+1. **`GRAPH_IR_UNRESOLVED_ELEMENT_TYPE`** (`graph_ir.unresolved_element_type_diagnostics`)
+   — a tensor with no element type renders `tensor<...x?>`, which MLIR rejects.
+   The Apple value lane now consults this preflight *before* rendering, so the
+   recorded reason names the argument and the missing semantic key (Decision
+   #21a) instead of the parser's symptom. Renders are byte-unchanged.
+2. **Tracer `loc`** — every traced op carries the user's call site, emitted as
+   repo-relative `loc("file":line:col)` in the canonical (parser-bound) render
+   only. Decision #13; the paren/golden render is byte-identical.
+3. **Dtype annotations** — `Tensor["M","K","bf16"]` binds a trailing dtype
+   instead of reading it as a third dim name; `tessera.bf16["M","K"]` keeps its
+   `dim_names` and renders symbolic dims as `?`. `tf32` and the planned/gated
+   set (`uint*`, `complex*`, `mxfp*`) are refused **by name** rather than
+   demoted to a dimension (#15a/#21a).
+
+Verification for all three was on the **Mac**, host-independent lanes only. No
+device claim is made or transferred by this entry; the outcomes below are
+contract assessments, not exact-device results (Decision #26).
+
+**ROCm outcome: not applicable as written; one latent consumer to note.**
+The gfx1151 route builds Tile IR and serializes hsaco through `tessera-opt`;
+it does not re-render decoration-time Graph IR, so the preflight does not gate
+it and no numerics change. The dtype-annotation fix does reach ROCm indirectly
+and favorably: shorthand-annotated args (`tessera.bf16["M","K"]`) now carry
+`tessera.dim_names`, which is exactly what `SymbolicDimEqualityPass` consumes —
+previously those names were dropped, so that pass had nothing to check on the
+shorthand path. That is a strengthening, not a behavior change, and it is
+**host-free**; the exact-device gfx1151 lanes were not run for this PR and no
+ROCm claim is made. **Follow-up (small):** when a ROCm route becomes
+parser-bound on Graph IR, call the preflight instead of relying on the parser.
 
 ## Cross-backend sync `DEVICE-CLOCK-DISCIPLINE-2026-08-31`
 

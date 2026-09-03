@@ -1148,3 +1148,60 @@ def test_every_direct_apple_symbol_dispatch_is_breaker_routed(_mm_waits):
     assert stale == [], f"KNOWN_UNROUTED lists functions that are routed or gone; delete them: {stale}"
     new = {fn: syms for fn, syms in offenders.items() if fn not in KNOWN_UNROUTED}
     assert new == {}, "direct dispatch(es) bypass the breaker: " + ", ".join(f"{fn} -> {syms}" for fn, syms in sorted(new.items()))
+
+
+# ── No unbounded device wait may return to Python ────────────────────────────
+# The third and last follow-up from APPLE-DISPATCH-WEDGE-1. A caller-side
+# breaker can only help where a wait RETURNS: it cuts the repeated cost of
+# asking a device that stopped answering. `runWithMTLCommandQueue:` submits and
+# waits with no timeout, so a wedged device never comes back at all -- one
+# permanent hang, nothing to cut. Every such site now encodes into an owned
+# command buffer and waits through `commit_mpsgraph_and_wait_with_timeout`,
+# which bounds the wait and reports kind 1 on expiry.
+
+
+def _runtime_source():
+    """The .mm text, or a skip: these tests also run from an installed package
+    with no source tree, where the classifier fixture already skips."""
+    if not _MM.is_file():
+        pytest.skip(f"{_MM} not present; this gate reads the runtime source")
+    return _MM.read_text()
+
+
+def test_no_unbounded_mpsgraph_wait_remains():
+    """`runWithMTLCommandQueue:` must not appear as a call anywhere.
+
+    Comments may still name it -- several explain why a route moved off it --
+    so this counts calls, not mentions.
+    """
+    offenders = []
+    for number, line in enumerate(_runtime_source().split("\n"), start=1):
+        stripped = line.strip()
+        if "runWithMTLCommandQueue" not in stripped or stripped.startswith(("//", "*", "/*")):
+            continue
+        offenders.append(f"line {number}: {stripped[:80]}")
+    assert offenders == [], (
+        "an unbounded MPSGraph wait is back; a device that stops answering "
+        "never returns from it, and no caller-side breaker can help:\n  "
+        + "\n  ".join(offenders))
+
+
+def test_the_bounded_wait_reports_a_timeout_kind():
+    """The bounded helper is only useful if expiry reaches the error channel:
+    that is what makes a stall count toward the streak rather than read as a
+    validation decline."""
+    body = _mm_bodies(_runtime_source())["commit_mpsgraph_and_wait_with_timeout"][0]
+    assert "waitUntilSignaledValue" in body and "timeoutMS" in body
+    assert "ts_set_last_gpu_error(1" in body, (
+        "the bounded wait no longer reports a timeout kind on expiry")
+
+
+def test_every_converted_site_passes_a_finite_timeout():
+    """Every call of the bounded helper must carry a real timeout. A zero or
+    absent one would restore the unbounded behaviour under a bounded name."""
+    text = _runtime_source()
+    calls = re.findall(r"commit_mpsgraph_and_wait_with_timeout\(([^;]*?)\)\s*[),]", text, re.S)
+    assert len(calls) >= 35, f"expected the converted sites to call it; found {len(calls)}"
+    for args in calls:
+        timeouts = [int(v) for v in re.findall(r"\b(\d{3,})\b", args)]
+        assert timeouts and all(t > 0 for t in timeouts), args

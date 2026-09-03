@@ -108,7 +108,14 @@ def test_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
     # ...and the MPSGraph helper it calls must be MPSGraph-backed (no host loop).
     body = _fn_body(source, "static bool mpsg_run_ppo_policy_loss_f32")
     assert "MPSGraph" in body
-    assert "runWithMTLCommandQueue" in body
+    # The graph must be submitted to the device, and the wait must be BOUNDED.
+    # This used to assert `runWithMTLCommandQueue`, which submits and waits
+    # forever; that spelling was replaced everywhere by an encode into an owned
+    # command buffer plus `commit_mpsgraph_and_wait_with_timeout`, so asserting
+    # the old name would now pin the very hang this file's lane was fixed for.
+    assert "encodeToCommandBuffer" in body
+    assert "commit_mpsgraph_and_wait_with_timeout" in body
+    assert "runWithMTLCommandQueue" not in body
     assert "meanOfTensor" in body
     assert "std::exp" not in body
     assert "for (" not in body
@@ -119,7 +126,9 @@ def test_extended_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
     assert "extern \"C\" int32_t tessera_apple_gpu_ppo_policy_loss_ex_f32" in source
     body = _fn_body(source, "static bool mpsg_run_ppo_policy_loss_ex_f32")
     assert "MPSGraph" in body
-    assert "runWithMTLCommandQueue" in body
+    assert "encodeToCommandBuffer" in body
+    assert "commit_mpsgraph_and_wait_with_timeout" in body
+    assert "runWithMTLCommandQueue" not in body
     assert "reductionSumWithTensor" in body
     assert "meanOfTensor" in body
     assert "std::exp" not in body

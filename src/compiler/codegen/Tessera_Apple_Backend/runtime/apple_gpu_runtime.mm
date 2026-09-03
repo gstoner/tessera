@@ -7492,10 +7492,19 @@ static bool mpsg_run_attn_bias_f32(MetalDeviceContext &ctx, const float* Q,
     MPSGraphTensorData* kd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufK shape:kShape dataType:MPSDataTypeFloat32];
     MPSGraphTensorData* vd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufV shape:kShape dataType:MPSDataTypeFloat32];
     MPSGraphTensorData* bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:MPSDataTypeFloat32];
-    NSDictionary* res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pq : qd, pk : kd, pv : vd, pb : bd}
+    id<MTLCommandBuffer> ts_cb_attn_bias_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_attn_bias_f32) return false;
+    MPSCommandBuffer *ts_owned_attn_bias_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_attn_bias_f32];
+    if (!ts_owned_attn_bias_f32) return false;
+    NSDictionary* res = [g encodeToCommandBuffer:ts_owned_attn_bias_f32
+        feeds:@{pq : qd, pk : kd, pv : vd, pb : bd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_attn_bias_f32, ts_cb_attn_bias_f32, 30000, "attn_bias_f32"))
+      return false;
     MPSGraphTensorData* od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:O strideBytes:nil];
@@ -12720,10 +12729,19 @@ static bool mpsg_run_mla_decode(MetalDeviceContext &ctx, const void *X,
     MPSGraphTensorData *wukd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufWuk shape:wukShape dataType:ioType];
     MPSGraphTensorData *wuvd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufWuv shape:wuvShape dataType:ioType];
     MPSGraphTensorData *qd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufQ shape:qShape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{px : xd, pwdkv : wdkvd, pwuk : wukd, pwuv : wuvd, pq : qd}
+    id<MTLCommandBuffer> ts_cb_mla_decode = [ctx.queue commandBuffer];
+    if (!ts_cb_mla_decode) return false;
+    MPSCommandBuffer *ts_owned_mla_decode =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_mla_decode];
+    if (!ts_owned_mla_decode) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_mla_decode
+        feeds:@{px : xd, pwdkv : wdkvd, pwuk : wukd, pwuv : wuvd, pq : qd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_mla_decode, ts_cb_mla_decode, 30000, "mla_decode"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:O strideBytes:nil];
@@ -17690,10 +17708,19 @@ static bool mpsg_run_gather(MetalDeviceContext &ctx, const void *table,
     MPSGraphTensorData *idd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufI shape:iShape
                                              dataType:MPSDataTypeInt32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{phT : td, phI : idd}
+    id<MTLCommandBuffer> ts_cb_gather = [ctx.queue commandBuffer];
+    if (!ts_cb_gather) return false;
+    MPSCommandBuffer *ts_owned_gather =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_gather];
+    if (!ts_owned_gather) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_gather
+        feeds:@{phT : td, phI : idd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_gather, ts_cb_gather, 30000, "gather"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -17743,10 +17770,19 @@ static bool mpsg_run_concat(MetalDeviceContext &ctx, const void *a, const void *
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
     MPSGraphTensorData *bd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{phA : ad, phB : bd}
+    id<MTLCommandBuffer> ts_cb_concat = [ctx.queue commandBuffer];
+    if (!ts_cb_concat) return false;
+    MPSCommandBuffer *ts_owned_concat =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_concat];
+    if (!ts_owned_concat) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_concat
+        feeds:@{phA : ad, phB : bd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_concat, ts_cb_concat, 30000, "concat"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -17807,10 +17843,19 @@ static bool mpsg_run_slice(MetalDeviceContext &ctx, const void *x, void *out,
     if (!y) return false;
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
+    id<MTLCommandBuffer> ts_cb_slice = [ctx.queue commandBuffer];
+    if (!ts_cb_slice) return false;
+    MPSCommandBuffer *ts_owned_slice =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_slice];
+    if (!ts_owned_slice) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_slice
+        feeds:@{ph : xd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_slice, ts_cb_slice, 30000, "slice"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -18471,10 +18516,19 @@ extern "C" int32_t tessera_apple_gpu_run_graph_loop_f32(
                                                                 shape:shp
                                                              dataType:dt];
       }
-      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                              feeds:feeds
+      id<MTLCommandBuffer> ts_cb_run_graph_loop_f32 = [ctx.queue commandBuffer];
+      if (!ts_cb_run_graph_loop_f32) return false;
+      MPSCommandBuffer *ts_owned_run_graph_loop_f32 =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_run_graph_loop_f32];
+      if (!ts_owned_run_graph_loop_f32) return false;
+      NSDictionary *res = [g encodeToCommandBuffer:ts_owned_run_graph_loop_f32
+          feeds:feeds
                                       targetTensors:@[ outT ]
-                                   targetOperations:nil];
+                                   targetOperations:nil
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_run_graph_loop_f32, ts_cb_run_graph_loop_f32, 30000, "run_graph_loop_f32"))
+        return false;
       MPSGraphTensorData *od = res[outT];
       if (!od) return -3;
       [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -18555,10 +18609,19 @@ extern "C" int32_t tessera_apple_gpu_run_graph_cond_f32(
                                                                 shape:shp
                                                              dataType:dt];
       }
-      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                              feeds:feeds
+      id<MTLCommandBuffer> ts_cb_run_graph_cond_f32 = [ctx.queue commandBuffer];
+      if (!ts_cb_run_graph_cond_f32) return false;
+      MPSCommandBuffer *ts_owned_run_graph_cond_f32 =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_run_graph_cond_f32];
+      if (!ts_owned_run_graph_cond_f32) return false;
+      NSDictionary *res = [g encodeToCommandBuffer:ts_owned_run_graph_cond_f32
+          feeds:feeds
                                       targetTensors:@[ outT ]
-                                   targetOperations:nil];
+                                   targetOperations:nil
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_run_graph_cond_f32, ts_cb_run_graph_cond_f32, 30000, "run_graph_cond_f32"))
+        return false;
       MPSGraphTensorData *od = res[outT];
       if (!od) return -3;
       [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -18662,10 +18725,19 @@ extern "C" int32_t tessera_apple_gpu_run_graph_while_f32(
                                                                 shape:shp
                                                              dataType:dt];
       }
-      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                              feeds:feeds
+      id<MTLCommandBuffer> ts_cb_run_graph_while_f32 = [ctx.queue commandBuffer];
+      if (!ts_cb_run_graph_while_f32) return false;
+      MPSCommandBuffer *ts_owned_run_graph_while_f32 =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_run_graph_while_f32];
+      if (!ts_owned_run_graph_while_f32) return false;
+      NSDictionary *res = [g encodeToCommandBuffer:ts_owned_run_graph_while_f32
+          feeds:feeds
                                       targetTensors:@[ outT ]
-                                   targetOperations:nil];
+                                   targetOperations:nil
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_run_graph_while_f32, ts_cb_run_graph_while_f32, 30000, "run_graph_while_f32"))
+        return false;
       MPSGraphTensorData *od = res[outT];
       if (!od) return -3;
       [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -18727,10 +18799,19 @@ static int32_t run_mpsgraph_cf(
                                                                 shape:shp
                                                              dataType:dt];
       }
-      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                              feeds:feeds
+      id<MTLCommandBuffer> ts_cb_run_mpsgraph_cf = [ctx.queue commandBuffer];
+      if (!ts_cb_run_mpsgraph_cf) return false;
+      MPSCommandBuffer *ts_owned_run_mpsgraph_cf =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_run_mpsgraph_cf];
+      if (!ts_owned_run_mpsgraph_cf) return false;
+      NSDictionary *res = [g encodeToCommandBuffer:ts_owned_run_mpsgraph_cf
+          feeds:feeds
                                       targetTensors:@[ outT ]
-                                   targetOperations:nil];
+                                   targetOperations:nil
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_run_mpsgraph_cf, ts_cb_run_mpsgraph_cf, 30000, "run_mpsgraph_cf"))
+        return false;
       MPSGraphTensorData *od = res[outT];
       if (!od) return -3;
       [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -19076,10 +19157,19 @@ extern "C" int32_t tessera_apple_gpu_run_graph_scan_f32(
                                                               shape:ysShape
                                                            dataType:dt];
       }
-      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                              feeds:feeds
+      id<MTLCommandBuffer> ts_cb_run_graph_scan_f32 = [ctx.queue commandBuffer];
+      if (!ts_cb_run_graph_scan_f32) return false;
+      MPSCommandBuffer *ts_owned_run_graph_scan_f32 =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_run_graph_scan_f32];
+      if (!ts_owned_run_graph_scan_f32) return false;
+      NSDictionary *res = [g encodeToCommandBuffer:ts_owned_run_graph_scan_f32
+          feeds:feeds
                                       targetTensors:@[ results[0], results[1] ]
-                                   targetOperations:nil];
+                                   targetOperations:nil
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_run_graph_scan_f32, ts_cb_run_graph_scan_f32, 30000, "run_graph_scan_f32"))
+        return false;
       MPSGraphTensorData *cd = res[results[0]];
       MPSGraphTensorData *yd = res[results[1]];
       if (!cd || !yd) return -3;
@@ -19590,10 +19680,19 @@ bool dispatch_fft_msl(MetalDeviceContext &ctx, int mode, const float *in,
     }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:inShape dataType:inType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
+    id<MTLCommandBuffer> ts_cb_dispatch_fft_msl = [ctx.queue commandBuffer];
+    if (!ts_cb_dispatch_fft_msl) return false;
+    MPSCommandBuffer *ts_owned_dispatch_fft_msl =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_dispatch_fft_msl];
+    if (!ts_owned_dispatch_fft_msl) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_dispatch_fft_msl
+        feeds:@{ph : xd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_dispatch_fft_msl, ts_cb_dispatch_fft_msl, 30000, "dispatch_fft_msl"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     (void)outBytes;
@@ -19704,10 +19803,19 @@ extern "C" int32_t tessera_apple_gpu_cf_scan_f32(const float *Wh, const float *W
     MPSGraphTensorData *dWx = [[MPSGraphTensorData alloc] initWithMTLBuffer:bWx shape:@[ @(m), @(d) ] dataType:F];
     MPSGraphTensorData *dXs = [[MPSGraphTensorData alloc] initWithMTLBuffer:bXs shape:@[ @(T), @(m) ] dataType:F];
     MPSGraphTensorData *dIn = [[MPSGraphTensorData alloc] initWithMTLBuffer:bIn shape:@[ @1, @(d) ] dataType:F];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pWh : dWh, pWx : dWx, pXs : dXs, pInit : dIn}
+    id<MTLCommandBuffer> ts_cb_cf_scan_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_cf_scan_f32) return false;
+    MPSCommandBuffer *ts_owned_cf_scan_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_cf_scan_f32];
+    if (!ts_owned_cf_scan_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_cf_scan_f32
+        feeds:@{pWh : dWh, pWx : dWx, pXs : dXs, pInit : dIn}
                                     targetTensors:@[ ysT ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_cf_scan_f32, ts_cb_cf_scan_f32, 30000, "cf_scan_f32"))
+      return false;
     MPSGraphTensorData *od = res[ysT];
     if (!od) return 0;
     [[od mpsndarray] readBytes:ys strideBytes:nil];
@@ -19868,7 +19976,17 @@ extern "C" int32_t tessera_apple_gpu_cf_serial_draft_f32(
       pH0 : TD(bH0, @[ @1, @(d) ], F),
       pTok0 : TD(bT0, @[ @1 ], I),
     };
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue feeds:feeds targetTensors:@[ tokT, hidT ] targetOperations:nil];
+    id<MTLCommandBuffer> ts_cb_cf_serial_draft_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_cf_serial_draft_f32) return false;
+    MPSCommandBuffer *ts_owned_cf_serial_draft_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_cf_serial_draft_f32];
+    if (!ts_owned_cf_serial_draft_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_cf_serial_draft_f32
+        feeds:feeds targetTensors:@[ tokT, hidT ] targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_cf_serial_draft_f32, ts_cb_cf_serial_draft_f32, 30000, "cf_serial_draft_f32"))
+      return false;
     MPSGraphTensorData *tod = res[tokT];
     MPSGraphTensorData *hod = res[hidT];
     if (!tod || !hod) return 0;
@@ -22051,11 +22169,20 @@ static bool mpsg_run_ppo_policy_loss_f32(MetalDeviceContext &ctx,
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufAdv
                                                shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pNew : newD, pOld : oldD,
+    id<MTLCommandBuffer> ts_cb_ppo_policy_loss_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_ppo_policy_loss_f32) return false;
+    MPSCommandBuffer *ts_owned_ppo_policy_loss_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_ppo_policy_loss_f32];
+    if (!ts_owned_ppo_policy_loss_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_ppo_policy_loss_f32
+        feeds:@{pNew : newD, pOld : oldD,
                                                     pAdv : advD}
                                     targetTensors:@[ lossMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_ppo_policy_loss_f32, ts_cb_ppo_policy_loss_f32, 30000, "ppo_policy_loss_f32"))
+      return false;
     MPSGraphTensorData *od = res[lossMean];
     if (!od)
       return false;
@@ -22253,10 +22380,19 @@ static bool mpsg_run_ppo_policy_loss_ex_f32(
                                                  shape:shape
                                               dataType:MPSDataTypeFloat32];
     }
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:feeds
+    id<MTLCommandBuffer> ts_cb_ppo_policy_loss_ex_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_ppo_policy_loss_ex_f32) return false;
+    MPSCommandBuffer *ts_owned_ppo_policy_loss_ex_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_ppo_policy_loss_ex_f32];
+    if (!ts_owned_ppo_policy_loss_ex_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_ppo_policy_loss_ex_f32
+        feeds:feeds
                                     targetTensors:@[ lossMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_ppo_policy_loss_ex_f32, ts_cb_ppo_policy_loss_ex_f32, 30000, "ppo_policy_loss_ex_f32"))
+      return false;
     MPSGraphTensorData *od = res[lossMean];
     if (!od)
       return false;
@@ -22324,10 +22460,19 @@ static bool mpsg_run_bmm_dev(MetalDeviceContext &ctx, id<MTLBuffer> bufA,
     MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
     MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
     MPSGraphTensorData *od = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:oShape dataType:ioType];
-    [g runWithMTLCommandQueue:ctx.queue
-                        feeds:@{pa : ad, pb : bd}
+    id<MTLCommandBuffer> ts_cb_bmm_dev = [ctx.queue commandBuffer];
+    if (!ts_cb_bmm_dev) return false;
+    MPSCommandBuffer *ts_owned_bmm_dev =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_bmm_dev];
+    if (!ts_owned_bmm_dev) return false;
+    [g encodeToCommandBuffer:ts_owned_bmm_dev
+        feeds:@{pa : ad, pb : bd}
              targetOperations:nil
-            resultsDictionary:@{y : od}];
+            resultsDictionary:@{y : od}
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_bmm_dev, ts_cb_bmm_dev, 30000, "bmm_dev"))
+      return false;
     return true;
   }
 }
@@ -24818,10 +24963,19 @@ static bool mpsg_run_z_loss_f32(MetalDeviceContext &ctx, const float *logits,
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX
                                                shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{px : xd}
+    id<MTLCommandBuffer> ts_cb_z_loss_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_z_loss_f32) return false;
+    MPSCommandBuffer *ts_owned_z_loss_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_z_loss_f32];
+    if (!ts_owned_z_loss_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_z_loss_f32
+        feeds:@{px : xd}
                                     targetTensors:@[ yMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_z_loss_f32, ts_cb_z_loss_f32, 30000, "z_loss_f32"))
+      return false;
     MPSGraphTensorData *od = res[yMean];
     if (!od)
       return false;
@@ -24912,10 +25066,19 @@ static bool mpsg_run_asymmetric_bce_f32(MetalDeviceContext &ctx, const float *z,
     MPSGraphTensorData *td =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufT shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pz : zd, pt : td}
+    id<MTLCommandBuffer> ts_cb_asymmetric_bce_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_asymmetric_bce_f32) return false;
+    MPSCommandBuffer *ts_owned_asymmetric_bce_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_asymmetric_bce_f32];
+    if (!ts_owned_asymmetric_bce_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_asymmetric_bce_f32
+        feeds:@{pz : zd, pt : td}
                                     targetTensors:@[ yMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_asymmetric_bce_f32, ts_cb_asymmetric_bce_f32, 30000, "asymmetric_bce_f32"))
+      return false;
     MPSGraphTensorData *od = res[yMean];
     if (!od)
       return false;
@@ -24999,10 +25162,19 @@ static bool mpsg_run_load_balance_loss_f32(MetalDeviceContext &ctx,
     MPSGraphTensorData *pd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufP shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pp : pd}
+    id<MTLCommandBuffer> ts_cb_load_balance_loss_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_load_balance_loss_f32) return false;
+    MPSCommandBuffer *ts_owned_load_balance_loss_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_load_balance_loss_f32];
+    if (!ts_owned_load_balance_loss_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_load_balance_loss_f32
+        feeds:@{pp : pd}
                                     targetTensors:@[ aux ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_load_balance_loss_f32, ts_cb_load_balance_loss_f32, 30000, "load_balance_loss_f32"))
+      return false;
     MPSGraphTensorData *od = res[aux];
     if (!od)
       return false;
@@ -25081,10 +25253,19 @@ static bool mpsg_run_ebm_energy_diff_mean_f32(MetalDeviceContext &ctx,
     MPSGraphTensorData *nd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufN shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pp : pd, pn : nd}
+    id<MTLCommandBuffer> ts_cb_ebm_energy_diff_mean_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_ebm_energy_diff_mean_f32) return false;
+    MPSCommandBuffer *ts_owned_ebm_energy_diff_mean_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_ebm_energy_diff_mean_f32];
+    if (!ts_owned_ebm_energy_diff_mean_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_ebm_energy_diff_mean_f32
+        feeds:@{pp : pd, pn : nd}
                                     targetTensors:@[ yMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_ebm_energy_diff_mean_f32, ts_cb_ebm_energy_diff_mean_f32, 30000, "ebm_energy_diff_mean_f32"))
+      return false;
     MPSGraphTensorData *od = res[yMean];
     if (!od)
       return false;
@@ -25150,10 +25331,19 @@ static bool mpsg_run_ebm_half_mse_f32(MetalDeviceContext &ctx, const float *a,
     MPSGraphTensorData *bd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pa : ad, pb : bd}
+    id<MTLCommandBuffer> ts_cb_ebm_half_mse_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_ebm_half_mse_f32) return false;
+    MPSCommandBuffer *ts_owned_ebm_half_mse_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_ebm_half_mse_f32];
+    if (!ts_owned_ebm_half_mse_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_ebm_half_mse_f32
+        feeds:@{pa : ad, pb : bd}
                                     targetTensors:@[ yHalf ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_ebm_half_mse_f32, ts_cb_ebm_half_mse_f32, 30000, "ebm_half_mse_f32"))
+      return false;
     MPSGraphTensorData *od = res[yHalf];
     if (!od)
       return false;
@@ -25228,10 +25418,19 @@ static bool mpsg_run_ebm_ism_f32(MetalDeviceContext &ctx, const float *score,
     MPSGraphTensorData *dd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufD shape:dShape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ps : sd, pd : dd}
+    id<MTLCommandBuffer> ts_cb_ebm_ism_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_ebm_ism_f32) return false;
+    MPSCommandBuffer *ts_owned_ebm_ism_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_ebm_ism_f32];
+    if (!ts_owned_ebm_ism_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_ebm_ism_f32
+        feeds:@{ps : sd, pd : dd}
                                     targetTensors:@[ yMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_ebm_ism_f32, ts_cb_ebm_ism_f32, 30000, "ebm_ism_f32"))
+      return false;
     MPSGraphTensorData *od = res[yMean];
     if (!od)
       return false;
@@ -25323,10 +25522,19 @@ static bool mpsg_run_ebm_dsm_f32(MetalDeviceContext &ctx, const float *score,
     MPSGraphTensorData *nd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufN shape:sShape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ps : sd, pc : cd, pn : nd}
+    id<MTLCommandBuffer> ts_cb_ebm_dsm_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_ebm_dsm_f32) return false;
+    MPSCommandBuffer *ts_owned_ebm_dsm_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_ebm_dsm_f32];
+    if (!ts_owned_ebm_dsm_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_ebm_dsm_f32
+        feeds:@{ps : sd, pc : cd, pn : nd}
                                     targetTensors:@[ yMean ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_ebm_dsm_f32, ts_cb_ebm_dsm_f32, 30000, "ebm_dsm_f32"))
+      return false;
     MPSGraphTensorData *od = res[yMean];
     if (!od)
       return false;
@@ -25407,10 +25615,19 @@ static bool mpsg_run_masked_categorical_f32(MetalDeviceContext &ctx,
     MPSGraphTensorData *md =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufM shape:shape
                                             dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pl : ld, pm : md}
+    id<MTLCommandBuffer> ts_cb_masked_categorical_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_masked_categorical_f32) return false;
+    MPSCommandBuffer *ts_owned_masked_categorical_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_masked_categorical_f32];
+    if (!ts_owned_masked_categorical_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_masked_categorical_f32
+        feeds:@{pl : ld, pm : md}
                                     targetTensors:@[ idxFlat ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_masked_categorical_f32, ts_cb_masked_categorical_f32, 30000, "masked_categorical_f32"))
+      return false;
     MPSGraphTensorData *od = res[idxFlat];
     if (!od)
       return false;
@@ -25579,10 +25796,19 @@ static bool mpsg_run_reduce(MetalDeviceContext &ctx, int op, const float *x,
     }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
+    id<MTLCommandBuffer> ts_cb_reduce = [ctx.queue commandBuffer];
+    if (!ts_cb_reduce) return false;
+    MPSCommandBuffer *ts_owned_reduce =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_reduce];
+    if (!ts_owned_reduce) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_reduce
+        feeds:@{ph : xd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_reduce, ts_cb_reduce, 30000, "reduce"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -25618,10 +25844,19 @@ static bool mpsg_run_argreduce(MetalDeviceContext &ctx, int op, const float *x,
     }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
+    id<MTLCommandBuffer> ts_cb_argreduce = [ctx.queue commandBuffer];
+    if (!ts_cb_argreduce) return false;
+    MPSCommandBuffer *ts_owned_argreduce =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_argreduce];
+    if (!ts_owned_argreduce) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_argreduce
+        feeds:@{ph : xd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_argreduce, ts_cb_argreduce, 30000, "argreduce"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -25668,10 +25903,19 @@ static bool mpsg_run_topk(MetalDeviceContext &ctx, const float *x,
     }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
+    id<MTLCommandBuffer> ts_cb_topk = [ctx.queue commandBuffer];
+    if (!ts_cb_topk) return false;
+    MPSCommandBuffer *ts_owned_topk =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_topk];
+    if (!ts_owned_topk) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_topk
+        feeds:@{ph : xd}
                                     targetTensors:@[ vals, idx ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_topk, ts_cb_topk, 30000, "topk"))
+      return false;
     MPSGraphTensorData *vd = res[vals];
     MPSGraphTensorData *ixd = res[idx];
     if (!vd || !ixd) return false;
@@ -25802,10 +26046,19 @@ static bool mpsg_run_scan(MetalDeviceContext &ctx, int op, const float *x,
     }
     MPSGraphTensorData *xd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{ph : xd}
+    id<MTLCommandBuffer> ts_cb_scan = [ctx.queue commandBuffer];
+    if (!ts_cb_scan) return false;
+    MPSCommandBuffer *ts_owned_scan =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_scan];
+    if (!ts_owned_scan) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_scan
+        feeds:@{ph : xd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_scan, ts_cb_scan, 30000, "scan"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -25882,10 +26135,19 @@ static bool mpsg_run_gumbel_argmax(MetalDeviceContext &ctx, const float *logits,
     MPSGraph *g = mpsg_gumbel_graph(rows, cols, invT, &pl, &pg, &y);
     MPSGraphTensorData *ld = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufL shape:xs dataType:MPSDataTypeFloat32];
     MPSGraphTensorData *gd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufG shape:xs dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pl : ld, pg : gd}
+    id<MTLCommandBuffer> ts_cb_gumbel_argmax = [ctx.queue commandBuffer];
+    if (!ts_cb_gumbel_argmax) return false;
+    MPSCommandBuffer *ts_owned_gumbel_argmax =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_gumbel_argmax];
+    if (!ts_owned_gumbel_argmax) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_gumbel_argmax
+        feeds:@{pl : ld, pg : gd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_gumbel_argmax, ts_cb_gumbel_argmax, 30000, "gumbel_argmax"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:out strideBytes:nil];
@@ -25918,7 +26180,19 @@ static bool encode_or_run_rowop_dev(MPSCommandBuffer *cb, MetalDeviceContext &ct
   if (cb)
     [g encodeToCommandBuffer:cb feeds:feeds targetOperations:nil resultsDictionary:@{y : od} executionDescriptor:nil];
   else
-    [g runWithMTLCommandQueue:ctx.queue feeds:feeds targetOperations:nil resultsDictionary:@{y : od}];
+    {
+      id<MTLCommandBuffer> ts_cb_encode_or_run_rowop_dev = [ctx.queue commandBuffer];
+      if (!ts_cb_encode_or_run_rowop_dev) return false;
+      MPSCommandBuffer *ts_owned_encode_or_run_rowop_dev =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_encode_or_run_rowop_dev];
+      if (!ts_owned_encode_or_run_rowop_dev) return false;
+      [g encodeToCommandBuffer:ts_owned_encode_or_run_rowop_dev
+          feeds:feeds targetOperations:nil resultsDictionary:@{y : od}
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_encode_or_run_rowop_dev, ts_cb_encode_or_run_rowop_dev, 30000, "encode_or_run_rowop_dev"))
+        return false;
+    }
   return true;
 }
 
@@ -25939,7 +26213,19 @@ static bool encode_or_run_gumbel_dev(MPSCommandBuffer *cb, MetalDeviceContext &c
   if (cb)
     [g encodeToCommandBuffer:cb feeds:@{pl : ld, pg : gd} targetOperations:nil resultsDictionary:@{y : od} executionDescriptor:nil];
   else
-    [g runWithMTLCommandQueue:ctx.queue feeds:@{pl : ld, pg : gd} targetOperations:nil resultsDictionary:@{y : od}];
+    {
+      id<MTLCommandBuffer> ts_cb_encode_or_run_gumbel_dev = [ctx.queue commandBuffer];
+      if (!ts_cb_encode_or_run_gumbel_dev) return false;
+      MPSCommandBuffer *ts_owned_encode_or_run_gumbel_dev =
+          [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_encode_or_run_gumbel_dev];
+      if (!ts_owned_encode_or_run_gumbel_dev) return false;
+      [g encodeToCommandBuffer:ts_owned_encode_or_run_gumbel_dev
+          feeds:@{pl : ld, pg : gd} targetOperations:nil resultsDictionary:@{y : od}
+          executionDescriptor:nil];
+      if (!commit_mpsgraph_and_wait_with_timeout(
+              ctx, ts_owned_encode_or_run_gumbel_dev, ts_cb_encode_or_run_gumbel_dev, 30000, "encode_or_run_gumbel_dev"))
+        return false;
+    }
   return true;
 }
 
@@ -26714,10 +27000,19 @@ static bool mpsg_run_rmsnorm_matmul_f32(MetalDeviceContext &ctx, const float *X,
     MPSGraphTensorData *wd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufW
                                                                     shape:wShape
                                                                  dataType:dt];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{px : xd, pg : gd, pw : wd}
+    id<MTLCommandBuffer> ts_cb_rmsnorm_matmul_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_rmsnorm_matmul_f32) return false;
+    MPSCommandBuffer *ts_owned_rmsnorm_matmul_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_rmsnorm_matmul_f32];
+    if (!ts_owned_rmsnorm_matmul_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_rmsnorm_matmul_f32
+        feeds:@{px : xd, pg : gd, pw : wd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_rmsnorm_matmul_f32, ts_cb_rmsnorm_matmul_f32, 30000, "rmsnorm_matmul_f32"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:O strideBytes:nil];
@@ -27274,10 +27569,19 @@ static bool mpsg_run_conv2d(MetalDeviceContext &ctx, const void *X,
       MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
       feeds[pb] = bd;
     }
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:feeds
+    id<MTLCommandBuffer> ts_cb_conv2d = [ctx.queue commandBuffer];
+    if (!ts_cb_conv2d) return false;
+    MPSCommandBuffer *ts_owned_conv2d =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_conv2d];
+    if (!ts_owned_conv2d) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_conv2d
+        feeds:feeds
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_conv2d, ts_cb_conv2d, 30000, "conv2d"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:O strideBytes:nil];
@@ -27603,10 +27907,19 @@ static bool mpsg_conv3d_batched_matmul_f32(MetalDeviceContext &ctx,
     }
     MPSGraphTensorData *ad = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:MPSDataTypeFloat32];
     MPSGraphTensorData *bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:MPSDataTypeFloat32];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pa : ad, pb : bd}
+    id<MTLCommandBuffer> ts_cb_conv3d_batched_matmul_f32 = [ctx.queue commandBuffer];
+    if (!ts_cb_conv3d_batched_matmul_f32) return false;
+    MPSCommandBuffer *ts_owned_conv3d_batched_matmul_f32 =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_conv3d_batched_matmul_f32];
+    if (!ts_owned_conv3d_batched_matmul_f32) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_conv3d_batched_matmul_f32
+        feeds:@{pa : ad, pb : bd}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_conv3d_batched_matmul_f32, ts_cb_conv3d_batched_matmul_f32, 30000, "conv3d_batched_matmul_f32"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:O strideBytes:nil];
@@ -28035,10 +28348,19 @@ static bool mpsg_run_mla_absorb(MetalDeviceContext &ctx, const void *qn,
     MPSGraphTensorData *dkr = [[MPSGraphTensorData alloc] initWithMTLBuffer:bkr shape:krS dataType:ioType];
     MPSGraphTensorData *dwukt = [[MPSGraphTensorData alloc] initWithMTLBuffer:bwukt shape:wuktS dataType:ioType];
     MPSGraphTensorData *dwuv = [[MPSGraphTensorData alloc] initWithMTLBuffer:bwuv shape:wuvS dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pqn : dqn, pqr : dqr, pckv : dckv, pkr : dkr, pwukt : dwukt, pwuv : dwuv}
+    id<MTLCommandBuffer> ts_cb_mla_absorb = [ctx.queue commandBuffer];
+    if (!ts_cb_mla_absorb) return false;
+    MPSCommandBuffer *ts_owned_mla_absorb =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:ts_cb_mla_absorb];
+    if (!ts_owned_mla_absorb) return false;
+    NSDictionary *res = [g encodeToCommandBuffer:ts_owned_mla_absorb
+        feeds:@{pqn : dqn, pqr : dqr, pckv : dckv, pkr : dkr, pwukt : dwukt, pwuv : dwuv}
                                     targetTensors:@[ y ]
-                                 targetOperations:nil];
+                                 targetOperations:nil
+        executionDescriptor:nil];
+    if (!commit_mpsgraph_and_wait_with_timeout(
+            ctx, ts_owned_mla_absorb, ts_cb_mla_absorb, 30000, "mla_absorb"))
+      return false;
     MPSGraphTensorData *od = res[y];
     if (!od) return false;
     [[od mpsndarray] readBytes:O strideBytes:nil];

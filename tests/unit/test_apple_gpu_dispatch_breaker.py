@@ -1205,3 +1205,27 @@ def test_every_converted_site_passes_a_finite_timeout():
     for args in calls:
         timeouts = [int(v) for v in re.findall(r"\b(\d{3,})\b", args)]
         assert timeouts and all(t > 0 for t in timeouts), args
+
+
+def test_each_bounded_wait_uses_its_own_event():
+    """Review of #710: the context-wide event reserves an increasing value
+    under a lock that is released before the command buffer is committed, so
+    two concurrent dispatches can submit out of reservation order. If the
+    value-2 buffer signals first, the value-1 waiter is already satisfied and
+    reads its results while its own command buffer is still running.
+
+    Both bounded waits now create a private event and wait for value 1, so no
+    other dispatch can satisfy this wait. The shared event survives only as the
+    fallback for a failed creation, which keeps a timeout rather than losing
+    one.
+    """
+    text = _runtime_source()
+    for helper in ("commit_and_wait_with_timeout", "commit_mpsgraph_and_wait_with_timeout"):
+        start = text.index(f"static bool {helper}(")
+        end = text.index("\nstatic ", start + 10)
+        segment = text[start:end]
+        creates, reserves = segment.index("newSharedEvent"), segment.find("++ctx.legacy_event_val")
+        assert "newSharedEvent" in segment, f"{helper} no longer makes its own event"
+        assert reserves == -1 or creates < reserves, (
+            f"{helper} reserves a shared-event value before trying a private "
+            f"event; the shared counter must be the fallback, not the default")

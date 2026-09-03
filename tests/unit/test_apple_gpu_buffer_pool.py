@@ -169,10 +169,42 @@ def test_metal_buffer_guard_is_release_safe(runtime_src: str) -> None:
     body = m.group(1)
     assert "~MetalBufferGuard()" in body
     assert "metal_buffer_release" in body
-    assert "if (buf)" in body, (
+    # A nil buffer must never reach `metal_buffer_release`. Either spelling of
+    # that check is fine -- the early-return form arrived when the destructor
+    # also had to decide whether the buffer may be POOLED, which is a second
+    # question from whether it exists.
+    assert ("if (buf)" in body or "if (!buf) return;" in body), (
         "Guard must guard against nil-buf in its destructor — "
         "metal_buffer_release(ctx, nil, ...) is a programmer error"
     )
+
+
+def test_a_timed_out_dispatch_quarantines_its_pooled_buffers(runtime_src: str) -> None:
+    """A dispatch that timed out may still be running, so the buffers it
+    referenced must not go back into the pool: the next dispatch would hand the
+    same storage to a new command while the stalled one still reads or writes
+    it. The guard compares a timeout epoch taken at acquire against the epoch
+    at destruction, and drops the buffer when they differ.
+
+    Dropping is safe, and is the point. Metal retains a command buffer's
+    resources until it completes, so the memory outlives the stalled command;
+    it simply stops being handed out. Buffers acquired after the bump carry the
+    new epoch and pool normally, so one timeout does not disable the pool.
+    """
+    m = re.search(r"struct\s+MetalBufferGuard\s*\{(.*?)\n\};", runtime_src, re.DOTALL)
+    assert m is not None
+    body = m.group(1)
+    assert "epoch" in body, "the guard no longer records a timeout epoch"
+    assert "g_dispatch_timeout_epoch" in body
+
+    # Every bounded wait must bump the epoch on expiry, or a stalled dispatch
+    # would keep recycling its buffers.
+    for helper in ("commit_and_wait_with_timeout", "commit_mpsgraph_and_wait_with_timeout"):
+        start = runtime_src.index(f"static bool {helper}(")
+        end = runtime_src.index("\nstatic ", start + 10)
+        segment = runtime_src[start:end]
+        assert "ts_quarantine_pooled_buffers_after_timeout()" in segment, (
+            f"{helper} returns on timeout without quarantining pooled buffers")
 
 
 def test_native_ebm_ops_promoted_in_primitive_coverage() -> None:

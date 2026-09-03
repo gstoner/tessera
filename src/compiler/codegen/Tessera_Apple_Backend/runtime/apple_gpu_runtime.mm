@@ -321,6 +321,21 @@ static id<MTLBuffer> metal_buffer_acquire_with_bytes(
   return buf;
 }
 
+// A dispatch that timed out may still be running on the GPU, so any pooled
+// buffer it referenced must NOT go back into the pool: the next dispatch would
+// hand the same storage to a new command while the stalled one is still
+// reading or writing it.  Every timed wait bumps this epoch on expiry, and a
+// guard whose acquire predates the bump drops its buffer instead of pooling
+// it.  Dropping is safe and is the point: Metal retains a command buffer's
+// resources until it completes, so the memory outlives the stalled command --
+// it simply stops being handed out.  Buffers acquired after the bump carry the
+// new epoch and pool normally, so one timeout does not disable the pool.
+static std::atomic<uint64_t> g_dispatch_timeout_epoch{0};
+
+static inline void ts_quarantine_pooled_buffers_after_timeout() {
+  g_dispatch_timeout_epoch.fetch_add(1, std::memory_order_relaxed);
+}
+
 // RAII guard: acquires a buffer in its constructor and returns it to
 // the pool via :func:`metal_buffer_release` in its destructor — so
 // every exit path from a dispatcher (success, early `return false`,
@@ -330,10 +345,18 @@ struct MetalBufferGuard {
   MetalDeviceContext *ctx;
   id<MTLBuffer> buf;
   size_t bytes;
+  uint64_t epoch;
   MetalBufferGuard(MetalDeviceContext &c, id<MTLBuffer> b, size_t n)
-      : ctx(&c), buf(b), bytes(n) {}
+      : ctx(&c), buf(b), bytes(n),
+        epoch(g_dispatch_timeout_epoch.load(std::memory_order_relaxed)) {}
   ~MetalBufferGuard() {
-    if (buf) metal_buffer_release(*ctx, buf, bytes);
+    if (!buf) return;
+    if (g_dispatch_timeout_epoch.load(std::memory_order_relaxed) != epoch) {
+      // A dispatch timed out while this buffer was live. Let it go rather
+      // than recycle storage a stalled command may still touch.
+      return;
+    }
+    metal_buffer_release(*ctx, buf, bytes);
   }
   MetalBufferGuard(const MetalBufferGuard&) = delete;
   MetalBufferGuard& operator=(const MetalBufferGuard&) = delete;
@@ -1089,9 +1112,14 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   // in the first dispatch's wall time, making one sample per process enormous.
   std::optional<DispatchWallWitness> ts_wall;
   // Lazy-init the shared event under the dedicated lock.
-  id<MTLSharedEvent> ev;
-  uint64_t signal_val;
-  {
+  // Per-dispatch, for the reason spelled out in the MPSGraph helper below:
+  // the shared event's reservation lock is released before the command buffer
+  // is committed, so a later dispatch can signal a higher value first and
+  // satisfy this wait while this command buffer is still running. One event,
+  // one waiter, one signal.
+  id<MTLSharedEvent> ev = [ctx.device newSharedEvent];
+  uint64_t signal_val = 1;
+  if (!ev) {
     std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
     if (!ctx.legacy_event) {
       ctx.legacy_event = [ctx.device newSharedEvent];
@@ -1132,6 +1160,8 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
                      : "<nil>");
     ts_set_last_gpu_error(1, op_name, "GPU dispatch did not signal (hung/"
                                       "timed out); outputs are invalid");
+    // Still in flight: stop recycling the pooled buffers it references.
+    ts_quarantine_pooled_buffers_after_timeout();
     return false;
   }
   // ``encodeSignalEvent`` is encoded AFTER all preceding work in the cb,
@@ -1217,9 +1247,18 @@ static bool commit_mpsgraph_and_wait_with_timeout(
   if (!root) return false;
   const bool owns_whole_dispatch = root == original_cb;
 
-  id<MTLSharedEvent> ev = nil;
-  uint64_t signal_val = 0;
-  {
+  // A per-dispatch event, NOT the context-wide one. The shared event reserves
+  // an increasing value under a lock that is released before the command
+  // buffer is encoded and committed, so two concurrent dispatches can submit
+  // out of reservation order: if the value-2 buffer signals first, the value-1
+  // waiter is already satisfied and reads its results while its own command
+  // buffer is still running. A private event has one waiter and one signal, so
+  // no other dispatch can satisfy this wait. Falls back to the shared event
+  // only if creation fails, which keeps the old behaviour rather than losing
+  // the timeout entirely.
+  uint64_t signal_val = 1;
+  id<MTLSharedEvent> ev = [ctx.device newSharedEvent];
+  if (!ev) {
     std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
     if (!ctx.legacy_event) ctx.legacy_event = [ctx.device newSharedEvent];
     ev = (id<MTLSharedEvent>)ctx.legacy_event;
@@ -1235,6 +1274,9 @@ static bool commit_mpsgraph_and_wait_with_timeout(
     if (![ev waitUntilSignaledValue:signal_val timeoutMS:timeout_ms]) {
       ts_set_last_gpu_error(1, op_name,
                             "MPSGraph dispatch did not signal (hung/timed out); outputs are invalid");
+      // The command buffer may still be in flight; stop recycling the pooled
+      // buffers it references.
+      ts_quarantine_pooled_buffers_after_timeout();
       return false;
     }
   } else {

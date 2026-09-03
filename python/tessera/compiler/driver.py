@@ -2160,19 +2160,6 @@ def _lower_apple_value_target_ir(graph_text: str, target_kind: str) -> tuple[str
     return proc.stdout, None
 
 
-def lower_apple_value_target_ir(graph_text: str, target_kind: str) -> str | None:
-    """Apple Value Target IR sprint 3 — front-door value mode.
-
-    Run the value-preserving ``tessera-lower-to-apple_{cpu,gpu}-full`` pipeline
-    on the Graph IR and return the emitted value Target IR (the
-    tessera_apple.{cpu.call,gpu.kernel_call} ops). Returns None when tessera-opt
-    is unavailable or the lowering fails — the caller then keeps the artifact
-    target IR (default behavior never drifts). Use
-    :func:`_lower_apple_value_target_ir` when the failure reason is needed."""
-    ir, _reason = _lower_apple_value_target_ir(graph_text, target_kind)
-    return ir
-
-
 def _maybe_dump_debug_artifacts(bundle: CompileArtifactBundle) -> None:
     debug_ir = os.environ.get("TESSERA_DEBUG_IR") == "1"
     dump_state = os.environ.get("TESSERA_DUMP_STATE") == "1"

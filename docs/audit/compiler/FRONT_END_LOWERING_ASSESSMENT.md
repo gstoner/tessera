@@ -221,7 +221,9 @@ from being read as one-offs.
    diagnostic. The renders are byte-untouched: `?` stays the legitimate "not
    yet specialized" placeholder of the symbolic module, which is never
    parser-bound. (The reason-*discarding* public wrapper
-   `lower_apple_value_target_ir` has no callers; left for a follow-up.)
+   `lower_apple_value_target_ir` had no callers and was **deleted 2026-09-03**
+   — Decision #29: a reason-dropping entry point with no consumer is a
+   latent path back to silent failure, not a public API.)
 
 2. **Emit `loc` from the tracer** — and do it **before** `_OpExtractor` is
    deleted. `trace.py` has **zero** `source_span` sites; the AST `_OpExtractor`

@@ -325,7 +325,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,48,11,1,59,0,,directly_tested,59 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
-mul,187,41,16,228,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,228 direct test references
+mul,189,41,16,230,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,230 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,17,0,0,17,0,fp32 fp64,directly_tested,17 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -472,7 +472,7 @@ stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,72,8,4,80,0,bf16 f16 f32 fp16 fp32 fp64 int32 int64 int8,directly_tested,80 direct test references
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
 sub,35,7,4,42,0,bf16 f16 f32 fp16 fp32,directly_tested,42 direct test references
-sum,64,0,7,64,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,64 direct test references
+sum,65,0,7,65,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,65 direct test references
 svd,24,5,1,29,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,29 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

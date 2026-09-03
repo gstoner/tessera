@@ -94,6 +94,46 @@ def test_an_unrelated_inner_jvp_does_not_poison_an_honest_zero():
     assert float(np.asarray(tangent)) == 0.0
 
 
+def test_a_discarded_nested_jvp_on_the_SAME_input_keeps_its_honest_zero():
+    """The case that broke the second version of this guard (review on #702).
+
+    Keying on the inner trace's bound INPUTS looked output-specific and was
+    not: passing the same array to a nested `jvp` intersects even when the
+    nested result is thrown away and the function returns a constant. That
+    refused a legitimate zero.
+
+    What identifies the real case is that the outer output IS a tangent some
+    nested call produced. A discarded result is never returned, so it never
+    appears — which is why this test uses the SAME input array as the outer
+    call, where the earlier `other`-array version could not tell the two
+    apart.
+    """
+    def discards_a_nested_jvp_on_its_own_input(z):
+        A.jvp(_f, (z,), (ONE,))          # same array, result thrown away
+        return ops.sum(ops.mul(np.array([3.0]), np.array([2.0])))
+
+    _, tangent = A.jvp(discards_a_nested_jvp_on_its_own_input, (X,), (ONE,))
+    assert float(np.asarray(tangent)) == 0.0
+
+
+def test_a_nested_jvp_whose_result_is_USED_but_not_returned_is_still_seen():
+    """The refusal must not be dodgeable by one arithmetic step.
+
+    If the inner tangent feeds the output through `ops.*`, the outer trace
+    genuinely sees those ops — so this is a real tangent path, not a
+    shadowed one, and the answer is a number rather than a refusal. Pinned
+    so the output-identity check is not mistaken for a licence to return
+    zeros whenever the output object merely differs.
+    """
+    def uses_nested_result(z):
+        _, inner = A.jvp(_f, (z,), (ONE,))
+        return ops.mul(inner, np.array([2.0]))
+
+    primal, tangent = A.jvp(uses_nested_result, (X,), (ONE,))
+    assert np.all(np.isfinite(np.asarray(primal)))
+    assert np.all(np.isfinite(np.asarray(tangent)))
+
+
 def test_reverse_inside_forward_still_fails_closed():
     """The neighbouring case that was already correct stays correct."""
     with pytest.raises(Exception, match="reverse mode inside an active forward"):

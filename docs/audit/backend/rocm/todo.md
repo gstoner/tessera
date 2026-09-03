@@ -6467,3 +6467,35 @@ buffers, since that is the one part that is not mechanical.
 **Not an NVIDIA problem.** The sm_120 measurement (LAUNCH-OVERHEAD-BOUND-1)
 puts that backend's per-launch cost in host-side emission, not transfers, and
 it is load-insensitive where ROCm degrades 42%. This is a ROCm-lane finding.
+
+## Cross-backend sync `DISPATCH-BREAKER-RESIDENT-2026-09-03`
+
+**Owning item:** `APPLE-DISPATCH-WEDGE-1` (Apple plan) · **synchronization
+key:** `DISPATCH-BREAKER-RESIDENT-2026-09-03`
+
+**Shared contract changed.** `runtime._apple_gpu_run_checked` gained an
+optional `silent_failure_timeout_s`, and a new
+`runtime._apple_gpu_device_call_checked` routes the eight device-resident
+(`DeviceTensor`) Apple dispatch paths through the dispatch circuit breaker.
+Shared test infrastructure changed with it: `test_apple_gpu_dispatch_breaker.py`
+gained a per-dispatch AST drift gate. Nothing outside the `_apple_gpu_*`
+namespace is touched, and no IR, ABI, dtype, diagnostic code or benchmark
+schema changes.
+
+**The premise that makes this Apple-shaped.** The breaker exists because Metal's
+`waitUntilSignaledValue:timeoutMS:` **returns** when its deadline expires. The
+caller then falls back to host, the next dispatch asks the device again, and
+each one pays the full 30 s — an observed 70-minute sweep against a 4-minute
+healthy run. The repeated cost, not the hang, is what a breaker cuts.
+
+**ROCm — not applicable for the breaker; follow-up required for the bounded
+wait.** Same structural reason as NVIDIA and the same measurement:
+`hip_backend.cpp:184` is `TSR_HIP_CHECK(hipStreamSynchronize(...))` — blocking,
+no timeout argument, error-code reporting. A gfx1151 kernel that stops
+answering blocks the calling thread once rather than returning to be retried,
+so there is no repeated 30 s cost for a breaker to cut and no streak to count.
+Follow-up under this key: ROCm has no bounded device wait at all, so the
+unresponsive-device path ends in an unattributed hang. That is the same defect
+class as the 38 Apple `runWithMTLCommandQueue:` sites named in the Apple entry,
+and worth solving once for both. No gfx1151 evidence is claimed or owed — no
+ROCm code changed.

@@ -6107,3 +6107,36 @@ executes `tessera.ga.*`, which is the signed Python path. If a native NVIDIA
 codiff is ever added it must apply the sign at its ABI boundary the way the
 Apple symbol now does — the exported name promises δ, and the mistake this
 entry records is precisely a symbol named `codiff` returning `⋆d⋆`.
+
+## Cross-backend sync `DISPATCH-BREAKER-RESIDENT-2026-09-03`
+
+**Owning item:** `APPLE-DISPATCH-WEDGE-1` (Apple plan) · **synchronization
+key:** `DISPATCH-BREAKER-RESIDENT-2026-09-03`
+
+**Shared contract changed.** `runtime._apple_gpu_run_checked` gained an
+optional `silent_failure_timeout_s`, and a new
+`runtime._apple_gpu_device_call_checked` routes the eight device-resident
+(`DeviceTensor`) Apple dispatch paths through the dispatch circuit breaker.
+Shared test infrastructure changed with it: `test_apple_gpu_dispatch_breaker.py`
+gained a per-dispatch AST drift gate. Nothing outside the `_apple_gpu_*`
+namespace is touched, and no IR, ABI, dtype, diagnostic code or benchmark
+schema changes.
+
+**The premise that makes this Apple-shaped.** The breaker exists because Metal's
+`waitUntilSignaledValue:timeoutMS:` **returns** when its deadline expires. The
+caller then falls back to host, the next dispatch asks the device again, and
+each one pays the full 30 s — an observed 70-minute sweep against a 4-minute
+healthy run. The repeated cost, not the hang, is what a breaker cuts.
+
+**NVIDIA — not applicable for the breaker; follow-up required for the bounded
+wait.** CUDA has no timeout-bearing wait to return early from:
+`cuda_backend.cpp:193` is `TSR_CUDA_CHECK(cudaStreamSynchronize(...))`, which
+blocks until the device answers or the driver's own watchdog resets the
+context, and reports through an error code rather than a deadline. So the
+"returns, falls back, is asked again" cycle this breaker cuts cannot occur, and
+porting it would guard nothing. The *inverse* gap is real and is the follow-up:
+an unresponsive sm_120 device produces one unbounded block with no Tessera-side
+diagnostic, which is strictly less recoverable than what Apple had. Assess a
+bounded wait for the PTX bridge under this key before adopting any of this
+code. No exact-device evidence is claimed on Super-Bear; none is owed, because
+no NVIDIA code changed.

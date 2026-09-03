@@ -26503,7 +26503,13 @@ def _execute_metric_loss_composite(
         mask = np.asarray(_as_numpy(values[names[2]]), np.float32)
         per = per * mask
         if reduction == "mean":
-            denom = max(float(np.sum(mask)), 1.0)
+            _total = float(np.sum(mask))
+            # Only the ZERO case is clamped (review on #697). `max(sum, 1.0)`
+            # also rescaled every sub-unit mask sum, so a float mask like
+            # [0.1, 0.1] normalised by 1.0 instead of 0.2. At sum == 0 the
+            # masked terms are already zero, so dividing by 1.0 yields the
+            # same 0.0 as before -- this changes only the fractional case.
+            denom = _total if _total > 0.0 else 1.0
             return np.float32(np.sum(per) / denom)
     return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
 

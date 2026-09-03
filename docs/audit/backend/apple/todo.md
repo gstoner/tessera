@@ -7090,13 +7090,24 @@ Re-sealed again for the second fingerprint (`sha256:b12d2e92…` →
 decisions with the same routes across eight fresh recordings, so only the
 fingerprint moved.
 
-**What is still open here:** `ts_enc_commit_wait` reports its own 30 s expiry
-only to stderr, so the session-commit accounting infers a stall from duration
-rather than reading it. One `ts_set_last_gpu_error(1, …)` beside that wait
-would make it exact — the same class of fix as this entry, and it needs the
-same re-seal. The shared-event init failure path in that same function also
-falls back to an unbounded `waitUntilCompleted`; there is no bounded wait
-without an event, so that one needs a different answer.
+**The stderr-only expiry is closed too (2026-09-03).** `ts_enc_commit_wait`
+now sets timeout kind 1 on the error channel, like every other bounded wait
+here, so a stalled session commit is **read** rather than guessed. The duration
+rule in `_apple_gpu_commit_accounted` stays as a fallback for an older dylib —
+the package and the runtime ship separately, so a prebuilt library from before
+this change still only prints — and a reported timeout is counted once, not
+twice, because the inference only fires when the runtime reported nothing.
+
+The test that distinguishes reading from inferring is the one worth keeping: a
+commit that returns with **no time elapsed** but reports kind 1 must still
+count. Under the duration-only rule that was invisible. Removing the C-side
+report is mutation-checked and caught.
+
+**Still open in that same function:** when shared-event creation fails it falls
+back to an unbounded `waitUntilCompleted`. There is no bounded wait without an
+event, so that path needs a different answer than a timeout — and it now also
+carries the per-dispatch-event change above, which makes creation failure the
+only way to reach it.
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 

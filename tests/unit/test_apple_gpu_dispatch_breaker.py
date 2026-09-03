@@ -930,18 +930,62 @@ def _guarded_wait_params(bodies, signatures):
             continue
         names = [name_ for name_, _ in params]
         for body in variants:
+            waits = [m.span() for m in _WAIT_TOKENS.finditer(body)]
+            if not waits:
+                continue
             for match in re.finditer(r"\bif\s*\(\s*(\w+)\s*\)", body):
                 guard = match.group(1)
                 if guard not in names or names.index(guard) not in buffers:
                     continue
-                tail = body[match.end():]
-                split = re.search(r"\belse\b", tail)
+                then_arm = _statement_span(body, match.end())
+                if then_arm is None:
+                    continue
+                split = re.compile(r"\s*\belse\b").match(body, then_arm[1])
                 if not split:
                     continue
-                then_arm, else_arm = tail[:split.start()], tail[split.end():split.end() + 400]
-                if _WAIT_TOKENS.search(else_arm) and not _WAIT_TOKENS.search(then_arm[:400]):
+                else_arm = _statement_span(body, split.end())
+                if else_arm is None:
+                    continue
+                # EVERY wait in the function must live inside the else arm.
+                # Bounding the arms exactly, and requiring containment of all
+                # of them rather than absence from a fixed window, is what
+                # keeps a later unconditional wait -- added before or after
+                # this branch -- from being silently exempted along with it.
+                if all(else_arm[0] <= start and end <= else_arm[1] for start, end in waits):
                     guarded.setdefault(name, set()).add(names.index(guard))
     return guarded
+
+
+def _statement_span(text, start):
+    """(begin, end) of the statement or brace block starting at `start`.
+
+    Used to bound an if/else arm exactly. Returns None when the text runs out,
+    so an unparseable arm declines the exemption rather than guessing at it.
+    """
+    i = start
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    if i >= len(text):
+        return None
+    if text[i] == "{":
+        depth, j = 0, i
+        while j < len(text):
+            depth += (text[j] == "{") - (text[j] == "}")
+            if depth == 0:
+                return (i, j + 1)
+            j += 1
+        return None
+    depth, j = 0, i
+    while j < len(text):
+        ch = text[j]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == ";" and depth == 0:
+            return (i, j + 1)
+        j += 1
+    return None
 
 
 def _call_arguments(body, callee):
@@ -1243,9 +1287,7 @@ def _direct_symbol_sites():
 
 @pytest.fixture(scope="module")
 def _mm_waits():
-    if not _MM.is_file():
-        pytest.skip(f"{_MM} not present; the .mm classifier needs the source tree")
-    text = _MM.read_text()
+    text = _mm_text()
     bodies = _mm_bodies(text)
     guarded = _guarded_wait_params(bodies, _mm_signatures(text))
     memo = {}
@@ -1271,6 +1313,16 @@ def _mm_waits():
     return waits
 
 
+def _mm_text():
+    """The .mm source, or a skip -- these tests run from an installed package
+    with no source tree as well as from the repo, and the fixture already
+    skips there. A standalone test that read it unconditionally would fail
+    with FileNotFoundError instead."""
+    if not _MM.is_file():
+        pytest.skip(f"{_MM} not present; the .mm classifier needs the source tree")
+    return _MM.read_text()
+
+
 def test_the_wait_classifier_splits_one_helper_by_its_argument():
     """`encode_or_run_rowop_dev` waits on the nil arm and encodes on the other,
     so "does this symbol wait" is a property of the CALL, not the helper.
@@ -1278,7 +1330,7 @@ def test_the_wait_classifier_splits_one_helper_by_its_argument():
     waiting, every encode-only entry point reads as a hang risk; as not
     waiting, the synchronous one is hidden.
     """
-    text = _MM.read_text()
+    text = _mm_text()
     bodies = _mm_bodies(text)
     signatures = _mm_signatures(text)
     guarded = _guarded_wait_params(bodies, signatures)
@@ -1292,6 +1344,29 @@ def test_the_wait_classifier_splits_one_helper_by_its_argument():
     assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32_enc", bodies, {}) is True
     assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32", bodies, {}, guarded=guarded) is True
     assert _symbol_waits("tessera_apple_gpu_rowop_dev_f32_enc", bodies, {}, guarded=guarded) is False
+
+
+def test_an_unconditional_wait_withdraws_the_guard_exemption():
+    """The exemption says "this helper waits only on the nil arm". If a wait
+    is ever added outside that arm -- before the branch, after it, or in a
+    second branch -- the statement stops being true, and the `_enc` entry that
+    relies on it would read as non-blocking while it now blocks. So every wait
+    in the function must lie inside the else arm, not merely be absent from a
+    window around the `if`.
+    """
+    text = _mm_text()
+    bodies = _mm_bodies(text)
+    signatures = _mm_signatures(text)
+    helper = "encode_or_run_rowop_dev"
+    assert helper in _guarded_wait_params(bodies, signatures), "fixture helper is no longer exempt"
+
+    body = bodies[helper][0]
+    unconditional = "  [g runWithMTLCommandQueue:ctx.queue feeds:nil targetOperations:nil resultsDictionary:nil];\n"
+    for label, mutated in (
+            ("before the branch", body.replace("  if (rows <= 0", unconditional + "  if (rows <= 0", 1)),
+            ("after the branch", body[:body.rindex("return true;")] + unconditional + body[body.rindex("return true;"):])):
+        assert _guarded_wait_params({helper: [mutated]}, signatures) == {}, (
+            f"a wait {label} was swallowed by the guard exemption")
 
 
 def test_a_one_symbol_wrapper_is_resolved_from_its_callers():

@@ -6865,7 +6865,14 @@ classifier*, not a property of the code, so each became a rule:
   parameter and wrongly exempted three int4 matmul lanes, whose `tiled` flag
   also guards an `if`/`else` with a wait in one arm. That was caught by
   diffing every symbol's classification before and after the rule, which is
-  the check that forced the narrower version.
+  the check that forced the narrower version. **Review of #708 tightened it
+  twice more:** the arms are now bounded exactly (brace block or statement)
+  instead of by a fixed character window, and **every** wait in the function
+  must lie inside the else arm rather than merely be absent from that window —
+  otherwise a wait added before or after the branch would be exempted along
+  with it, and the `_enc` entry would read as non-blocking while it now
+  blocks. Bounding the arms exactly also found a third helper the windowed
+  version had truncated past, `mpsg_run_gather_blocks`.
 * **A one-symbol wrapper is resolved from its callers.**
   `_apple_gpu_raw_handle` takes its symbol as a parameter, so its own body
   says `<dynamic>` and fails closed; both callers pass a literal, so what it

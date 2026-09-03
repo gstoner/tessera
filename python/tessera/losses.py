@@ -118,8 +118,15 @@ def cross_entropy_loss(
     removed) or a soft target distribution the same shape as `logits`.
     `ignore_index` drops positions from both the sum and the `mean`
     denominator, so masked tokens do not dilute the average.
-    `label_smoothing` in [0, 1) mixes the one-hot target with the uniform
-    distribution.
+    `label_smoothing` in [0, 1) uses the EXCLUDED-CLASS form: weight
+    `1 - s` on the target and `s / (C - 1)` on each of the other classes.
+    That is not the same as mixing the one-hot target with a uniform
+    distribution over all `C` classes, which would leave `1 - s + s/C` on
+    the target -- the two differ in the fourth decimal at `s = 0.1`, and the
+    tests pin which one this is. Smoothing applies to INTEGER targets only;
+    with a probability target it raises, because smoothing is the caller's
+    to apply to `targets` and the registered VJP differentiates the
+    unsmoothed objective on that branch.
 
     Takes logits, never probabilities: it applies `log_softmax` itself.
     Passing probabilities computes a finite, wrong number rather than
@@ -534,14 +541,32 @@ def seq2seq_loss(logits, targets, mask=None, reduction: str = "mean"):
     With a mask and `reduction="mean"` the denominator is the SUM OF THE
     MASK, not the element count -- a per-token mean over real tokens, which
     is what makes the value comparable across batches with different
-    padding. Without a mask it is plain `cross_entropy_loss`. The mask
-    multiplies the loss, so float weights are allowed, not only 0/1.
+    padding. Without a mask it is plain `cross_entropy_loss`.
+
+    The mask multiplies the loss, so float weights are allowed, not only
+    0/1, and the result is a true weighted mean: scaling every weight by a
+    constant leaves it unchanged. A mask summing to exactly zero -- a fully
+    padded row -- returns 0.0 rather than dividing by zero.
     """
     loss = cross_entropy_loss(logits, targets, reduction="none")
     if mask is not None:
         loss = loss * _asarray(mask)
         if reduction == "mean":
-            return np.sum(loss) / max(float(np.sum(_asarray(mask))), 1.0)
+            total = float(np.sum(_asarray(mask)))
+            # Divide by the mask sum whenever there IS one. The previous
+            # `max(total, 1.0)` clamped every sum below 1, so `[0.1, 0.1]`
+            # divided by 1.0 instead of 0.2 and returned one fifth of the
+            # weighted mean (review on #697). A weighted mean must be
+            # invariant to the scale of its weights; that one was not, so
+            # rescaling otherwise-equivalent weights moved the training loss.
+            #
+            # The clamp's only defensible job was avoiding 0/0 on a fully
+            # padded row, and that case is handled explicitly below with the
+            # same 0.0 it produced before -- so the ONLY behaviour that
+            # changes here is the fractional-mask case, which was wrong.
+            if total == 0.0:
+                return np.sum(loss)  # every term is masked to zero
+            return np.sum(loss) / total
     return _reduce(loss, reduction)
 
 

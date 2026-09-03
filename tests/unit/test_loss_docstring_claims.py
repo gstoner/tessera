@@ -100,6 +100,43 @@ def test_binary_cross_entropy_stays_exact_where_log_sigmoid_underflows():
     assert np.all(np.isfinite(out)) and np.allclose(out, 0.0, atol=1e-300)
 
 
+def test_label_smoothing_is_the_excluded_class_form_not_a_uniform_mix():
+    """Which smoothing distribution, pinned by the difference between them.
+
+    The docstring first said "mixes the one-hot target with the uniform
+    distribution" (review on #697). It does not: it puts `1 - s` on the
+    target and `s/(C-1)` on each OTHER class, leaving nothing extra on the
+    target. The uniform mix would leave `1 - s + s/C` there. Both are
+    finite and close -- 2.5476 vs 2.5510 at s=0.1 -- which is exactly why
+    an unchecked docstring could carry the wrong one indefinitely.
+    """
+    rng = np.random.default_rng(2)
+    logits = rng.standard_normal((1, 5))
+    targets = np.array([2])
+    s, C = 0.1, 5
+    got = float(L.cross_entropy_loss(logits, targets, label_smoothing=s,
+                                     reduction="sum"))
+
+    shift = logits.max(axis=-1, keepdims=True)
+    log_probs = (logits - shift
+                 - np.log(np.sum(np.exp(logits - shift), axis=-1, keepdims=True)))
+    lp = log_probs[0]
+    off = lp.sum() - lp[2]
+    excluded = float(-((1 - s) * lp[2] + (s / (C - 1)) * off))
+    uniform = float(-((1 - s + s / C) * lp[2] + (s / C) * off))
+
+    assert got == pytest.approx(excluded, abs=1e-12)
+    assert got != pytest.approx(uniform, abs=1e-6), (
+        "the two forms must be distinguishable, or this test proves nothing")
+
+
+def test_label_smoothing_is_refused_for_probability_targets():
+    """Integer targets only — the docstring's other corrected claim."""
+    with pytest.raises(ValueError, match="not supported for probability targets"):
+        L.cross_entropy_loss(np.zeros((1, 3)), np.full((1, 3), 1 / 3),
+                             label_smoothing=0.1)
+
+
 def test_cross_entropy_ignore_index_leaves_the_mean_undiluted():
     logits = np.zeros((3, 4))
     targets = np.array([1, -100, 2])
@@ -136,6 +173,35 @@ def test_seq2seq_mean_divides_by_the_mask_sum_not_the_element_count():
     # ... and not the element-count mean, which is the tempting reading
     assert float(L.seq2seq_loss(logits, targets, mask)) != \
         pytest.approx(float(np.sum(per_token * mask) / mask.size), abs=1e-6)
+
+
+def test_seq2seq_weighted_mean_is_invariant_to_the_scale_of_the_weights():
+    """A weighted mean cannot depend on how the weights are scaled.
+
+    It did: `max(sum(mask), 1.0)` divided every sub-unit mask sum by 1.0, so
+    `[0.1, 0.1]` returned one fifth of the weighted mean (review on #697).
+    The original mask test used 0/1 weights summing to 2 and never saw it —
+    which is the whole lesson: the docstring said "float weights are
+    allowed" and nothing exercised a float weight.
+    """
+    rng = np.random.default_rng(4)
+    logits = rng.standard_normal((5, 4))
+    targets = np.array([0, 1, 2, 3, 0])
+    base = np.array([1.0, 1.0, 0.0, 0.0, 0.0])
+    reference = float(L.seq2seq_loss(logits, targets, base))
+    for scale in (0.1, 0.5, 2.0, 100.0):
+        scaled = float(L.seq2seq_loss(logits, targets, base * scale))
+        assert scaled == pytest.approx(reference, rel=1e-12), (
+            f"scaling the mask by {scale} moved the loss")
+
+
+def test_seq2seq_fully_padded_row_is_zero_not_a_division_by_zero():
+    """The clamp's one defensible job, kept explicitly."""
+    rng = np.random.default_rng(5)
+    logits = rng.standard_normal((3, 4))
+    targets = np.array([0, 1, 2])
+    out = float(L.seq2seq_loss(logits, targets, np.zeros(3)))
+    assert out == 0.0 and np.isfinite(out)
 
 
 # --- target conventions that differ between two neighbouring losses -------
@@ -220,3 +286,57 @@ def test_every_public_loss_is_documented():
         "caller cannot guess (argument order, logits vs probabilities, which "
         "target value means 'similar')."
     )
+
+
+def test_seq2seq_gradient_matches_the_fixed_forward_on_a_fractional_mask():
+    """Forward and VJP must move together, or the gradient is silently wrong.
+
+    The masked-mean denominator is duplicated in the forward, the VJP, the
+    JVP and the runtime executor. Fixing one and not the others would trade
+    a wrong loss for a wrong gradient, which is harder to notice. Finite
+    differences against the fixed forward is what makes that concrete.
+    """
+    from tessera.autodiff import vjp as _vjp
+
+    rng = np.random.default_rng(7)
+    logits = rng.standard_normal((4, 3))
+    targets = np.array([0, 2, 1, 0])
+    mask = np.array([0.1, 0.1, 0.0, 0.2])      # sums to 0.4, below the old clamp
+
+    rule = _vjp._VJPS["seq2seq_loss"]
+    grad = np.asarray(rule(1.0, logits, targets, mask, reduction="mean")[0],
+                      dtype=np.float64)
+
+    h = 1e-6
+    numeric = np.zeros_like(logits)
+    for i in range(logits.shape[0]):
+        for j in range(logits.shape[1]):
+            up, dn = logits.copy(), logits.copy()
+            up[i, j] += h
+            dn[i, j] -= h
+            numeric[i, j] = (float(L.seq2seq_loss(up, targets, mask))
+                             - float(L.seq2seq_loss(dn, targets, mask))) / (2 * h)
+    np.testing.assert_allclose(grad, numeric, rtol=1e-5, atol=1e-8)
+
+
+def test_seq2seq_jvp_matches_the_fixed_forward_on_a_fractional_mask():
+    # `tessera.autodiff.jvp` is the exported FUNCTION, not the module, so
+    # the registry has to be reached through importlib.
+    import importlib
+    _jvp = importlib.import_module("tessera.autodiff.jvp")
+
+    rng = np.random.default_rng(8)
+    logits = rng.standard_normal((4, 3))
+    targets = np.array([0, 2, 1, 0])
+    mask = np.array([0.1, 0.1, 0.0, 0.2])
+    tangent = rng.standard_normal(logits.shape)
+
+    primal, tan = _jvp._JVPS["seq2seq_loss"](
+        (logits, targets, mask), (tangent, None, None), reduction="mean")
+    assert float(primal) == pytest.approx(
+        float(L.seq2seq_loss(logits, targets, mask)), abs=1e-12)
+
+    h = 1e-6
+    numeric = (float(L.seq2seq_loss(logits + h * tangent, targets, mask))
+               - float(L.seq2seq_loss(logits - h * tangent, targets, mask))) / (2 * h)
+    assert float(tan) == pytest.approx(numeric, rel=1e-5, abs=1e-8)

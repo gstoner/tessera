@@ -1611,7 +1611,13 @@ def jvp_seq2seq_loss(primals, tangents, *, reduction="mean", **_):
         loss = loss * m
         tangent = tangent * m
         if reduction == "mean":
-            denom = max(float(np.sum(m)), 1.0)
+            _total = float(np.sum(m))
+            # Only the ZERO case is clamped (review on #697). `max(sum, 1.0)`
+            # also rescaled every sub-unit mask sum, so a float mask like
+            # [0.1, 0.1] normalised by 1.0 instead of 0.2. At sum == 0 the
+            # masked terms are already zero, so dividing by 1.0 yields the
+            # same 0.0 as before -- this changes only the fractional case.
+            denom = _total if _total > 0.0 else 1.0
             return np.sum(loss) / denom, np.sum(tangent) / denom
         if reduction == "sum":
             return np.sum(loss), np.sum(tangent)

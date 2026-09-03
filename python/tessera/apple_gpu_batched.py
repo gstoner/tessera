@@ -473,7 +473,16 @@ def batched_session() -> Iterator[int]:
     try:
         yield int(handle)
     finally:
-        _ts_enc_commit_wait(ctypes.c_void_p(int(handle)))
+        # Accounted, never skipped: everything encoded in this block runs only
+        # when the buffer is committed, so an open breaker must not short-
+        # circuit here -- it would leave the outputs uncomputed while the
+        # caller reads its DeviceTensors as results. The commit's own timeouts
+        # still count, so the NEXT lane finds the breaker open.
+        from .runtime import _apple_gpu_commit_accounted
+
+        _apple_gpu_commit_accounted(
+            "apple_gpu.batched_session.commit",
+            lambda: _ts_enc_commit_wait(ctypes.c_void_p(int(handle))))
 
 
 def bmm_enc(session: int, A: DeviceTensor, B: DeviceTensor,

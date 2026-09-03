@@ -34560,17 +34560,81 @@ def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any,
         err = (f"dispatch failed after {elapsed:.1f}s without setting the GPU "
                f"error channel; treated as a timeout")
     if err is None:
-        _apple_gpu_consecutive_dispatch_timeouts = 0
+        _apple_gpu_record_dispatch_outcome(None, 0, count=breaker_enabled)
         return result
-    if breaker_enabled and kind == _APPLE_GPU_ERROR_KIND_TIMEOUT:
-        _apple_gpu_consecutive_dispatch_timeouts += 1
-    elif breaker_enabled:
-        # A per-op failure is not evidence about the device. Reset, so an
-        # interleaved unsupported-shape decline cannot mask a real streak --
-        # and cannot manufacture one either.
-        _apple_gpu_consecutive_dispatch_timeouts = 0
+    _apple_gpu_record_dispatch_outcome(err, kind, count=breaker_enabled)
     _note_dispatch_fallback(op_name, f"GPU kernel reported failure ({err}); recomputed on host")
     return host_fallback()
+
+
+def _apple_gpu_record_dispatch_outcome(err: Any, kind: int, *, count: bool = True) -> None:
+    """Move the timeout streak for one completed dispatch.
+
+    The rule is stated once here because two callers need it and they must not
+    drift: :func:`_apple_gpu_run_checked`, which may skip a dispatch once the
+    streak opens the breaker, and :func:`_apple_gpu_commit_accounted`, which
+    never may. Success and an ordinary per-op failure both clear the streak --
+    a failure says nothing about whether the device answers, so an interleaved
+    unsupported-shape decline can neither mask a real streak nor manufacture
+    one. Only a timeout counts.
+    """
+    global _apple_gpu_consecutive_dispatch_timeouts
+    if not count:
+        return
+    if err is not None and kind == _APPLE_GPU_ERROR_KIND_TIMEOUT:
+        _apple_gpu_consecutive_dispatch_timeouts += 1
+    else:
+        _apple_gpu_consecutive_dispatch_timeouts = 0
+
+
+def _apple_gpu_commit_accounted(
+        op_name: str, call: Any, *,
+        silent_failure_timeout_s: float | None = _APPLE_GPU_SILENT_FAILURE_TIMEOUT_S) -> Any:
+    """Run a dispatch that must **never** be skipped, but whose timeouts should
+    still open the breaker for everyone else.
+
+    The encode-session commit is the case this exists for. Everything the
+    session encoded runs only when its command buffer is committed, so
+    short-circuiting on an open breaker would leave those outputs uncomputed
+    while the caller reads its ``DeviceTensor`` results as if they were real --
+    trading a bounded stall for silent wrong answers, which is the opposite of
+    the trade the breaker exists to make. So this always dispatches; it only
+    *observes*.
+
+    ``ts_enc_commit_wait`` is `void` and, on expiry, prints to stderr without
+    touching the error channel, so there is nothing to read afterwards. The
+    duration is the only signal it leaves, and it separates the two classes by
+    orders of magnitude: a healthy commit returns in milliseconds, the timeout
+    is 30 s. A commit that takes at least ``silent_failure_timeout_s`` is
+    therefore counted as a timeout and named in the fallback log (Decision
+    #21), so the *next* numpy or resident lane finds the breaker open and stops
+    paying for a device that has stopped answering.
+
+    The runtime-side fix -- one ``ts_set_last_gpu_error(1, …)`` beside that
+    wait -- would make this exact rather than inferred, and is filed in
+    ``docs/audit/backend/apple/todo.md``; it needs a route-ledger re-seal,
+    which this does not.
+    """
+    breaker_enabled = not os.environ.get("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER")
+    _apple_gpu_arm_gpu_error()
+    started = time.monotonic()
+    try:
+        return call()
+    finally:
+        elapsed = time.monotonic() - started
+        kind = _apple_gpu_peek_gpu_error_kind() if breaker_enabled else 0
+        err = _apple_gpu_consume_gpu_error()
+        if (silent_failure_timeout_s is not None and err is None
+                and elapsed >= silent_failure_timeout_s):
+            kind = _APPLE_GPU_ERROR_KIND_TIMEOUT
+            err = (f"commit took {elapsed:.1f}s without setting the GPU error "
+                   f"channel; treated as a timeout")
+        _apple_gpu_record_dispatch_outcome(err, kind, count=breaker_enabled)
+        if err is not None:
+            _note_dispatch_fallback(
+                op_name,
+                f"GPU commit reported failure ({err}); the work was committed "
+                f"anyway, so its outputs are whatever the device produced")
 
 
 def _apple_gpu_symbol_call_checked(op_name: str, call: Any, *, ok_rc: int = 1,
@@ -38180,11 +38244,15 @@ def apple_gpu_resident_ssm_replay_state_handle(
                 # The session has not been committed. Commit any successfully
                 # encoded prefix synchronously so destruction cannot wait on an
                 # unsubmitted command buffer.
-                api.ts_enc_commit_wait(session)
+                _apple_gpu_commit_accounted(
+                    "apple_gpu.ssm_replay.commit_partial",
+                    lambda: api.ts_enc_commit_wait(session))
                 output.free()
                 raise RuntimeError("Apple ReplaySSM command-buffer encoding failed")
             if api.ts_enc_commit_async(session) != 1:
-                api.ts_enc_commit_wait(session)
+                _apple_gpu_commit_accounted(
+                    "apple_gpu.ssm_replay.commit_after_failed_submit",
+                    lambda: api.ts_enc_commit_wait(session))
                 output.free()
                 raise RuntimeError("Apple ReplaySSM command-buffer submission failed")
             future = _Future(self, slot, session, output, tokens)
@@ -38315,7 +38383,9 @@ def apple_gpu_resident_ssm_replay_state_handle(
                 return self
 
             if session and not submitted:
-                api.ts_enc_commit_wait(session)
+                _apple_gpu_commit_accounted(
+                    "apple_gpu.ssm_replay.flush",
+                    lambda: api.ts_enc_commit_wait(session))
             # Preserve semantics if the native encoder becomes unavailable at
             # runtime, but label the reference fold explicitly.
             SSMStateHandle.flush(self)
@@ -46810,7 +46880,9 @@ class AppleGPUEncodeSession:
         (commit waits), so ops in the next buffer can read them safely — the
         same cross-buffer ordering R1 (per-op) relies on."""
         if self._handle is not None and not self._committed:
-            self._rt.ts_enc_commit_wait(self._handle)
+            _apple_gpu_commit_accounted(
+                "apple_gpu.encode_session.flush",
+                lambda: self._rt.ts_enc_commit_wait(self._handle))
             self._commits += 1
             self._handle = None
             self._op_count = 0
@@ -46988,7 +47060,9 @@ class AppleGPUEncodeSession:
         the handle when the last op already triggered an auto-flush (nothing new
         encoded since), so it never commits an empty buffer."""
         if self._handle is not None and not self._committed:
-            self._rt.ts_enc_commit_wait(self._handle)
+            _apple_gpu_commit_accounted(
+                "apple_gpu.encode_session.commit",
+                lambda: self._rt.ts_enc_commit_wait(self._handle))
             self._commits += 1
             self._handle = None
         self._committed = True

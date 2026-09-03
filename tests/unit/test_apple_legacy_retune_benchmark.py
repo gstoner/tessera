@@ -149,14 +149,37 @@ def test_moe_dispatch_consumes_the_strict_exact_row(monkeypatch):
 
 
 def test_committed_retune_corpus_and_strict_ledger_are_consistent():
+    """Every committed route is pinned, because they now reproduce.
+
+    This assertion used to name two of the sixteen routes, and one of those
+    was loosened rather than fixed when it started flipping. Re-running the
+    recorder twelve times on this Mac from one unchanged binary -- same
+    `runtime_fingerprint`, so nothing but measurement noise differed -- flipped
+    two decisions: `retune_mla_decode` promoted `absorbed` in 7 of 12
+    recordings at 1x4x1x128... and 10 of 12 at 1x4x1x64....
+
+    The cause was a stability gate that could not converge. `absorbed` was
+    32-55% faster in all 24 runs and won 144 of 144 paired trials; the only
+    gate that ever fired was a cap on `max - min` of the per-run speedups, and
+    a range never shrinks as runs are added. So the harness punished evidence
+    -- 69% promotion at two runs, 7% at eight -- and the only way to land a
+    promotion was to re-record until the draw was kind. A lower confidence
+    bound converges instead, and eight fresh five-run recordings produced all
+    sixteen of these routes identically, so the whole map is pinned here.
+    """
     from tessera.compiler.apple_route_selector import (
         AppleRouteContext, load_strict_route_ledger)
 
     root = Path(__file__).resolve().parents[2]
-    corpus = json.loads((root / "benchmarks/baselines/apple7_legacy_retune_two_run.json")
+    corpus = json.loads((root / "benchmarks/baselines/apple7_legacy_retune_multi_run.json")
                         .read_text(encoding="utf-8"))
     assert corpus["schema"] == "tessera.apple.legacy-retune.v1"
-    assert len(corpus["reports"]) == 2
+    # Two reports can no longer promote anything: at n=2 the 95% bound carries
+    # a t multiplier of 6.31. The corpus must carry the runs its own ledger
+    # needs, and each must be an independent measurement, not a copy.
+    assert len(corpus["reports"]) >= 3
+    assert len({json.dumps(report, sort_keys=True)
+                for report in corpus["reports"]}) == len(corpus["reports"])
     assert {row["family"] for report in corpus["reports"]
             for row in report["runs"]} == {
         "grouped_gemm", "moe", "reduction", "kv_movement", "mla_decode",
@@ -164,59 +187,236 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
     }
     ledger_path = root / "benchmarks/baselines/apple_strict_route_ledger.json"
     payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert payload["source_report_count"] == len(corpus["reports"])
     context = AppleRouteContext(**payload["context"])
     measured = datetime.fromisoformat(payload["measured_at"].replace("Z", "+00:00"))
     admitted = load_strict_route_ledger(
         ledger_path, context=context, now=measured + timedelta(days=1))
     assert admitted.rejected == ()
-    assert len(admitted.routes) == 16
-    # This row is NOT pinned to a route any more, and the reason is measured
-    # (2026-09-02, this Mac). Re-sealing the ledger three times from the SAME
-    # binary flipped three of the sixteen decisions run to run:
-    #
-    #   retune_mla_decode 1x4x1x128x32x16x32x64  promote / retain / promote
-    #   retune_mla_decode 1x4x1x64x16x8x16x32    retain / promote / retain
-    #   retune_moe_swiglu 16x32x64x32_e4         retain / retain / promote
-    #
-    # Nothing in that fleet of runs changed except measurement noise, so a
-    # hard-coded route here fails on roughly a coin flip whenever anything
-    # forces a re-seal -- and every `apple_gpu_runtime.mm` edit forces one,
-    # because the runtime fingerprint is part of the ledger context. Worse,
-    # the obvious response to such a failure is to re-record until it passes,
-    # which is selecting on noise.
-    #
-    # This is the same class the note below already documents for
-    # `absorbed`/`explicit`: rows whose cross-run spread sits near the
-    # ledger's own 5% stability cap. What is asserted instead is the part
-    # that IS reproducible -- the row exists, is admitted, and carries one of
-    # the two routes the harness can select. The instability itself is a real
-    # defect in the promotion rules and is tracked separately; it should not
-    # be silently absorbed by weakening this file further.
-    moe_route = admitted.routes[(
-        "apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32",
-        "end_to_end",
-    )]
-    assert moe_route in ("composed", "single_fused"), moe_route
-    # Re-measured 2026-09-01 on this Mac (macOS 26.6.2) and CHANGED, for a
-    # reason worth keeping: `absorbed` was never the slower route. In the July
-    # run it was 54-57% faster and won 100% of paired trials in both runs --
-    # and was held at `explicit` because its cross-run speedup spread, 5.97%,
-    # missed the ledger's own 5% stability cap by ~1 point. The re-run measures
-    # 37-39% faster, again 100% paired wins, with a 2.3% spread. So the flip is
-    # not "the kernel got faster"; it is "the measurement got consistent enough
-    # for the gate to conclude". The gate was working both times.
-    #
-    # Absolute times moved the other way and that is diagnostic, not a route
-    # claim (`absolute_time_drift_is_diagnostic_only`): `absorbed` went 518us
-    # -> 836us at 128-token and 482us -> 557us at 64, while `explicit` held
-    # (1.15x / 0.96x). The larger shape's regression is outside this harness's
-    # own run drift; the smaller one is not. Cause is confounded (OS 26.5.2 ->
-    # 26.6.2, runtime .mm edits, new compiler fingerprint) and is NOT
-    # attributed here.
-    assert admitted.routes[(
-        "apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32",
-        "end_to_end",
-    )] == "absorbed"
+    assert admitted.routes == {
+        ("apple7", "retune_grouped_gemm", "32x64x64_e4", "f32", "device"): "grouped_fused",
+        ("apple7", "retune_grouped_gemm", "32x64x64_e4", "f32", "end_to_end"): "grouped_fused",
+        ("apple7", "retune_grouped_gemm", "64x128x128_e4", "f32", "device"): "grouped_fused",
+        ("apple7", "retune_grouped_gemm", "64x128x128_e4", "f32", "end_to_end"): "grouped_fused",
+        ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "device"): "explicit",
+        ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "end_to_end"): "absorbed",
+        ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "device"): "explicit",
+        ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "end_to_end"): "absorbed",
+        ("apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32", "end_to_end"): "composed",
+        ("apple7", "retune_moe_swiglu", "32x64x128x64_e4", "f32", "end_to_end"): "composed",
+        ("apple7", "retune_reduce_sum", "128x514_axis1", "f32", "end_to_end"): "mpsgraph",
+        ("apple7", "retune_reduce_sum", "64x257_axis1", "f32", "end_to_end"): "mpsgraph",
+        ("apple7", "retune_replay_decode", "1x32x16_t8", "f32", "device"): "fused_block",
+        ("apple7", "retune_replay_decode", "1x32x16_t8", "f32", "end_to_end"): "fused_block",
+        ("apple7", "retune_replay_decode", "1x64x32_t16", "f32", "device"): "fused_block",
+        ("apple7", "retune_replay_decode", "1x64x32_t16", "f32", "end_to_end"): "fused_block",
+    }
+
+
+def test_recorder_measures_implementations_not_the_ledger_it_writes():
+    """The corpus must not consult the ledger it produces.
+
+    `retune_moe_swiglu`'s incumbent calls
+    ``rt._apple_gpu_dispatch_moe_swiglu_block``, and that dispatcher asks
+    ``production_route_for`` which route to take -- reading the committed
+    ledger this recorder writes. "composed" therefore stopped meaning the
+    composed lane as soon as the ledger promoted `single_fused`: measured on
+    this M1 Max the incumbent ran 1995us with no ledger and 1080us once the
+    ledger promoted, while the candidate held at ~995us, swinging the recorded
+    speedup +50.3% -> +7.7% with neither kernel changing.
+
+    That oscillates forever -- retaining makes the incumbent look slow, which
+    promotes, which makes the incumbent *be* the candidate, which retains --
+    and a promoted row silently compares the candidate against itself. No
+    amount of statistical care in the aggregator can fix a corpus that
+    measures its own last answer, so the recorder pins the selector to a path
+    that cannot exist while it measures.
+    """
+    module = _module()
+    key = "TESSERA_APPLE_ROUTE_LEDGER"
+    import os
+
+    seen: list[str | None] = []
+
+    class _Probe(Exception):
+        pass
+
+    def _probe(*_args, **_kwargs):
+        seen.append(os.environ.get(key))
+        raise _Probe
+
+    module._cases = _probe  # type: ignore[assignment]
+    sentinel = "/definitely/not/a/real/ledger/path.json"
+    os.environ[key] = sentinel
+    try:
+        with pytest.raises(_Probe):
+            module.run_report(reps=1, trials=3)
+    finally:
+        os.environ.pop(key, None)
+
+    assert seen, "run_report never reached the measured cases"
+    inner = seen[0]
+    assert inner is not None and inner != sentinel, (
+        "the recorder measured with the ambient route ledger visible, so its "
+        "incumbent routes can dispatch whatever the last corpus concluded")
+    assert not Path(inner).exists(), (
+        "the recorder pointed the selector at a ledger that exists, so "
+        "`production_route_for` can still override a declared incumbent")
+    # ...and the caller's environment is put back exactly as it was.
+    assert os.environ.get(key) is None or os.environ.get(key) == sentinel
+
+
+def test_recorder_clears_overrides_that_bypass_the_selector_entirely():
+    """Masking the ledger is not enough on its own.
+
+    `TESSERA_APPLE_MOE_FUSED=1` is read as `... == "1" or selected_route ==
+    "single_fused"`, so it forces the fused kernel without consulting the
+    selector at all. An empty ledger does not neutralise it: the `composed`
+    incumbent would run the candidate's kernel and be measured against itself,
+    which is the corrupted experiment the neutral-selection block exists to
+    prevent. Anything that picks an implementation has to be cleared too, and
+    restored afterwards.
+    """
+    module = _module()
+    import os
+
+    seen: dict[str, str | None] = {}
+
+    class _Probe(Exception):
+        pass
+
+    def _probe(*_args, **_kwargs):
+        for name in module._ROUTE_FORCING_ENV:
+            seen[name] = os.environ.get(name)
+        raise _Probe
+
+    module._cases = _probe  # type: ignore[assignment]
+    assert "TESSERA_APPLE_MOE_FUSED" in module._ROUTE_FORCING_ENV
+    before = {name: os.environ.get(name) for name in module._ROUTE_FORCING_ENV}
+    for name in module._ROUTE_FORCING_ENV:
+        os.environ[name] = "1"
+    try:
+        with pytest.raises(_Probe):
+            module.run_report(reps=1, trials=3)
+    finally:
+        for name, value in before.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    assert seen, "run_report never reached the measured cases"
+    assert all(value is None for value in seen.values()), (
+        f"a route-forcing override survived into measurement: {seen}")
+
+
+def test_more_consistent_evidence_can_never_withdraw_a_promotion():
+    """The property the old gate violated: evidence must not be punished.
+
+    `maximum_cross_run_speedup_spread` capped `max - min` of the per-run
+    speedups, and `minimum_paired_win_fraction_each_run` was applied as
+    `all(runs)` over a fraction that three trials quantise to {0, 1/3, 2/3, 1}.
+    Both get *harder* as runs are added -- a range never shrinks, and an
+    all-runs conjunction is a product of per-run probabilities -- so adding
+    runs could turn a promotion into a refusal with no measurement getting
+    worse. That is what made re-recording until it passed the only way to land
+    a promotion, and re-recording on noise is what the gate existed to stop.
+
+    Both replacements are consistent estimators, so this holds: append further
+    runs that are no worse than the ones already there, and a promotion stays
+    a promotion. Guarding the property rather than a row keeps it true for
+    rows this corpus does not contain.
+    """
+    from tessera.compiler.apple_route_selector import (
+        aggregate_stable_route_reports)
+
+    def row(route: str, per_trial_ns: list[int]) -> dict:
+        return {
+            "op": "matmul", "shape": "64x64x64", "dtype": "f32",
+            "device": "apple7", "route": route, "reps": 8,
+            "native_dispatched": True, "numerically_validated": True,
+            "telemetry": {
+                "end_to_end_median_ns": sorted(per_trial_ns)[len(per_trial_ns) // 2],
+                "device_time_median_ns": None,
+                "paired_trial_end_to_end_medians_ns": per_trial_ns,
+                "paired_trial_device_medians_ns": None,
+                "device_time_coverage": 0.0,
+                "resources": {"api": "test"},
+            },
+        }
+
+    # A candidate that is a consistent ~20% faster, measured with the run-to-run
+    # jitter that used to decide the outcome.
+    incumbent = [[1000, 1010, 990, 1005, 995],
+                 [1002, 1008, 994, 1001, 999],
+                 [998, 1012, 991, 1007, 996]]
+    candidate = [[800, 830, 770, 815, 785],
+                 [795, 835, 775, 810, 790],
+                 [805, 825, 780, 820, 780]]
+    reports = [
+        {"schema_version": 1,
+         "runs": [row("mps", inc), row("simdgroup_matrix", cand)]}
+        for inc, cand in zip(incumbent, candidate)
+    ]
+
+    def promoted(count: int) -> bool:
+        ledger = aggregate_stable_route_reports(reports[:count])
+        decision = next(d for d in ledger["decisions"]
+                        if d["timing_domain"] == "end_to_end")
+        return decision["status"] == "promote_candidate"
+
+    assert promoted(3), "three consistent runs must be able to promote"
+    # Each appended run repeats evidence already present, so nothing measured
+    # got worse. Under the old range cap the fourth and fifth runs could only
+    # widen `max - min`; here the promotion must survive.
+    for extra in (4, 5, 6, 7, 8, 9):
+        reports.append(reports[extra % 3])
+        assert promoted(extra), (
+            f"adding a {extra}th run no worse than the others withdrew the "
+            "promotion -- the stability gate is punishing evidence again")
+
+
+def test_two_runs_cannot_promote_however_favourable_they_look():
+    """`--runs 2` was the default and could promote; now it cannot.
+
+    Two runs give one degree of freedom, so the 95% bound carries a t
+    multiplier of 6.31 and a two-run promotion is a claim the sample cannot
+    support. `min_promotion_runs` says so structurally rather than leaving it
+    to whether the two happened to agree.
+    """
+    from tessera.compiler.apple_route_selector import (
+        aggregate_stable_route_reports)
+
+    def row(route: str, trials: list[int]) -> dict:
+        return {
+            "op": "matmul", "shape": "64x64x64", "dtype": "f32",
+            "device": "apple7", "route": route, "reps": 8,
+            "native_dispatched": True, "numerically_validated": True,
+            "telemetry": {
+                "end_to_end_median_ns": trials[len(trials) // 2],
+                "device_time_median_ns": None,
+                "paired_trial_end_to_end_medians_ns": trials,
+                "paired_trial_device_medians_ns": None,
+                "device_time_coverage": 0.0,
+                "resources": {"api": "test"},
+            },
+        }
+
+    # Identical, noiseless, overwhelming: the most favourable two runs possible.
+    reports = [{"schema_version": 1,
+                "runs": [row("mps", [1000] * 5),
+                         row("simdgroup_matrix", [500] * 5)]} for _ in range(2)]
+    ledger = aggregate_stable_route_reports(reports)
+    decision = next(d for d in ledger["decisions"]
+                    if d["timing_domain"] == "end_to_end")
+    assert decision["status"] != "promote_candidate"
+    assert decision["selected_route"] == "mps"
+    # A third identical run is enough evidence, and then it promotes.
+    ledger = aggregate_stable_route_reports(reports + [reports[0]])
+    decision = next(d for d in ledger["decisions"]
+                    if d["timing_domain"] == "end_to_end")
+    assert decision["status"] == "promote_candidate"
+    assert decision["selected_route"] == "simdgroup_matrix"
 
 
 def test_every_committed_promotion_obeys_its_own_ledgers_rules():

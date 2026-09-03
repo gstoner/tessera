@@ -61,7 +61,7 @@ checkpoint,0,0,0,0,1,,structural_only,category default for 'transform'
 cholesky,28,31,0,59,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,59 direct test references
 cholesky_solve,11,1,0,12,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,12 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-cispo_policy_loss,8,2,0,10,0,,directly_tested,10 direct test references
+cispo_policy_loss,9,2,0,11,0,,directly_tested,11 direct test references
 clamp,13,0,1,13,0,,directly_tested,13 direct test references
 clifford_codiff,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_conjugate,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'

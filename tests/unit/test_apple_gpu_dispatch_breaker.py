@@ -1420,3 +1420,115 @@ def test_every_direct_apple_symbol_dispatch_is_breaker_routed(_mm_waits):
     assert stale == [], f"KNOWN_UNROUTED lists functions that are routed or gone; delete them: {stale}"
     new = {fn: syms for fn, syms in offenders.items() if fn not in KNOWN_UNROUTED}
     assert new == {}, "direct dispatch(es) bypass the breaker: " + ", ".join(f"{fn} -> {syms}" for fn, syms in sorted(new.items()))
+
+
+# ── The encode-session commit: accounted, never skipped ──────────────────────
+# `ts_enc_commit_wait` is the one dispatch an open breaker must still perform.
+# Everything the session encoded runs only when its buffer is committed, so
+# short-circuiting would leave those outputs uncomputed while the caller reads
+# its DeviceTensors as results -- trading a bounded stall for silent wrong
+# answers, which is the opposite of the trade the breaker makes everywhere
+# else. It is observed instead: its timeouts open the breaker for other lanes.
+
+
+def test_an_open_breaker_still_commits_the_session(monkeypatch, _silent_channel):
+    """The property this helper exists for. Ten calls with the breaker wide
+    open must be ten commits, not zero."""
+    tick = _Clock().install(monkeypatch, advance_per_call=0.0)
+    for _ in range(LIMIT):
+        rt._apple_gpu_record_dispatch_outcome("hung", TIMEOUT)
+    assert rt.apple_gpu_dispatch_breaker_state()["open"] is True
+
+    commits = []
+    for _ in range(10):
+        rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit",
+                                       lambda: commits.append(tick()))
+    assert len(commits) == 10, "an open breaker skipped a commit; its outputs would be uncomputed"
+
+
+def test_a_stalled_commit_opens_the_breaker_for_everyone_else(monkeypatch, _silent_channel):
+    """`ts_enc_commit_wait` is void and prints to stderr without touching the
+    error channel, so duration is the only signal. A 30 s commit must still
+    count, or the next lane pays its own full timeout."""
+    tick = _Clock().install(monkeypatch, advance_per_call=30.0)
+    for index in range(LIMIT):
+        rt._apple_gpu_commit_accounted("apple_gpu.batched_session.commit", tick)
+        assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == index + 1
+    assert rt.apple_gpu_dispatch_breaker_state()["open"] is True
+    assert _silent_channel and _silent_channel[0][0] == "apple_gpu.batched_session.commit"
+    assert "30.0s" in _silent_channel[0][1]
+
+
+def test_a_healthy_commit_keeps_the_streak_closed(monkeypatch, _silent_channel):
+    """A commit returns in milliseconds when the device is answering; that must
+    not drift toward the threshold, or an ordinary session opens the breaker."""
+    tick = _Clock().install(monkeypatch, advance_per_call=0.002)
+    for _ in range(LIMIT * 3):
+        rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", tick)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 0
+    assert _silent_channel == [], "a healthy commit produced a diagnostic"
+
+
+def test_a_stalled_commit_still_returns_and_still_propagates(monkeypatch, _silent_channel):
+    """Accounting may not change what the caller sees: the value comes back,
+    and an exception from the commit is not swallowed by the bookkeeping."""
+    _Clock().install(monkeypatch, advance_per_call=30.0)
+    assert rt._apple_gpu_commit_accounted("op", lambda: "committed") == "committed"
+
+    boom = RuntimeError("commit failed")
+
+    def _raise():
+        raise boom
+
+    with pytest.raises(RuntimeError) as caught:
+        rt._apple_gpu_commit_accounted("op", _raise)
+    assert caught.value is boom
+
+
+def test_the_commit_and_the_breaker_share_one_streak_rule(monkeypatch):
+    """Two callers move the same counter, so the rule is stated once. A
+    reported per-op failure clears the streak on both paths; only a timeout
+    counts on either."""
+    for err, kind, expected in ((None, 0, 0), ("boom", 2, 0), ("hung", TIMEOUT, 1)):
+        rt.reset_apple_gpu_dispatch_breaker()
+        rt._apple_gpu_record_dispatch_outcome(err, kind)
+        assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == expected, (err, kind)
+    rt.reset_apple_gpu_dispatch_breaker()
+    rt._apple_gpu_record_dispatch_outcome("hung", TIMEOUT, count=False)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 0
+
+
+def test_the_escape_hatch_also_silences_commit_accounting(monkeypatch, _silent_channel):
+    monkeypatch.setenv("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER", "1")
+    tick = _Clock().install(monkeypatch, advance_per_call=30.0)
+    for _ in range(LIMIT * 2):
+        rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", tick)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 0
+
+
+def test_every_session_commit_is_accounted():
+    """Drift gate: `ts_enc_commit_wait` may only be called through the
+    accounting helper. A bare call is a session whose stall is invisible --
+    which is how this lane came to be uncovered in the first place."""
+    import tessera.apple_gpu_batched as batched
+
+    offenders = []
+    for module in (rt, batched):
+        tree = ast.parse(inspect.getsource(module))
+        parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+        for node in ast.walk(tree):
+            called = (isinstance(node, ast.Call) and (
+                (isinstance(node.func, ast.Attribute) and node.func.attr == "ts_enc_commit_wait")
+                or (isinstance(node.func, ast.Name) and node.func.id == "_ts_enc_commit_wait")))
+            if not called:
+                continue
+            cur, accounted = parents.get(node), False
+            while cur is not None and not isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if (isinstance(cur, ast.Call) and isinstance(cur.func, ast.Name)
+                        and cur.func.id == "_apple_gpu_commit_accounted"):
+                    accounted = True
+                    break
+                cur = parents.get(cur)
+            if not accounted:
+                offenders.append(f"{module.__name__}:{node.lineno}")
+    assert offenders == [], "unaccounted session commit(s): " + ", ".join(offenders)

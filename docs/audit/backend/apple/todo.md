@@ -6905,13 +6905,34 @@ took ≥ 5 s as a timeout instead. Every Metal 4 lane routed here — `mtl4_scan
 session's host-input `run` — passes that opt-in; the lanes whose C side reports
 honestly deliberately do not, so an ordinary decline stays a decline.
 
-**One Python-side gap left deliberately open.**
+**One Python-side gap left deliberately open — closed 2026-09-03.**
 `apple_gpu_batched.batched_session` commits through `ts_enc_commit_wait`, a
-30 s timed wait, in a `finally`. It is not routed because an open breaker must
-not *skip* it: everything encoded into that session would go uncomputed and the
-caller would read unwritten `DeviceTensor` output as if it were a result. That
-needs an accounting-only variant (count the timeout, never short-circuit),
-which is a separate change.
+30 s timed wait, in a `finally`. It could not be *routed*, because an open
+breaker must not skip it: everything encoded into that session would go
+uncomputed and the caller would read unwritten `DeviceTensor` output as if it
+were a result — a bounded stall traded for silent wrong answers, the opposite
+of the trade the breaker makes everywhere else.
+
+`_apple_gpu_commit_accounted` is the accounting-only variant: it **always**
+dispatches and only observes. All six commit sites go through it — the
+batched-session context manager, the encode session's `commit` and its
+auto-`_flush`, and the three SSM-replay commits. `ts_enc_commit_wait` is `void`
+and, on expiry, prints to stderr without touching the error channel, so
+duration is the only signal it leaves; the two classes are milliseconds versus
+30 s, so the same `silent_failure_timeout_s` threshold separates them. A
+stalled commit therefore counts toward the streak and lands in the fallback
+log, and the *next* numpy or resident lane finds the breaker open.
+
+The streak rule itself now lives in one place (`_apple_gpu_record_dispatch_outcome`)
+because two callers move that counter and must not drift: the breaker, which
+may skip a dispatch, and this, which may not. A drift gate fails any bare
+`ts_enc_commit_wait` call, and three mutations are each caught — making the
+commit short-circuit on an open breaker, dropping the duration classification,
+and bypassing the helper at a call site.
+
+The exact fix is still runtime-side: one `ts_set_last_gpu_error(1, …)` beside
+that 30 s wait would make this reported rather than inferred. It is filed with
+the `runWithMTLCommandQueue` work below, since both need the same re-seal.
 
 **Behaviour that deliberately changed.** A reported dispatch failure on a
 routed lane now returns the host value instead of the kernel's untouched output

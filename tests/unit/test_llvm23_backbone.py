@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+
+from tests._support.repo_scan import iter_repo_files
 from pathlib import Path
 
 
@@ -35,7 +37,13 @@ def test_build_environment_names_only_llvm_mlir_23() -> None:
 
 def test_every_standalone_cmake_package_gate_requires_major_23() -> None:
     violations: list[str] = []
-    for path in REPO_ROOT.rglob("CMakeLists.txt"):
+    # `iter_repo_files` prunes nested git worktrees, which `rglob` walks into:
+    # a worktree parked at an OLDER commit carries its own CMakeLists files,
+    # and one of those legitimately predating the LLVM 23 pin would fail this
+    # test for a reason that has nothing to do with the working tree.
+    for path in iter_repo_files(REPO_ROOT):
+        if path.name != "CMakeLists.txt":
+            continue
         parts = path.relative_to(REPO_ROOT).parts
         if "archive" in parts or any(part.startswith("build") for part in parts):
             continue

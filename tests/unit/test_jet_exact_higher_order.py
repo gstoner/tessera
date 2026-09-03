@@ -325,3 +325,150 @@ def test_the_trace_is_taken_once_per_point_not_once_per_direction():
     with count_primitive_executions() as box:
         laplacian_exact(jf, np.array([4.0, 5.0, 6.0]))
     assert box[0] == 2, "a NEW point must re-trace — a stale record is wrong"
+
+
+# --- fused op OPTIONS, not just op names (review on #698) ----------------
+#
+# Failing closed on an unknown op NAME was never enough. `ops.matmul` also
+# takes `bias`, `residual`, `activation` and `epilogue`; the first version of
+# the replay evaluated `a[0] @ a[1]` and discarded the rest, so a program with
+# a `gelu` activation replayed as a LINEAR function and reported a Laplacian
+# of 0.0. A rule now declares the options it interprets and the replay refuses
+# any other, which closes the class rather than these two instances.
+
+
+BIAS = np.ones(4)
+RESIDUAL = np.full(4, 0.5)
+
+
+def _fd_laplacian(fn, x, h=1e-4):
+    total = 0.0
+    for i in range(x.size):
+        e = np.zeros_like(x)
+        e[i] = 1.0
+        total += (float(np.asarray(fn(x + h * e))) - 2 * float(np.asarray(fn(x)))
+                  + float(np.asarray(fn(x - h * e)))) / h ** 2
+    return total
+
+
+@pytest.mark.parametrize("build", [
+    lambda M: (lambda v: ops.sum(ops.exp(ops.matmul(M, v)))),
+    lambda M: (lambda v: ops.sum(ops.exp(ops.matmul(M, v, BIAS)))),
+    # residual WITHOUT bias: the tape records the omitted bias as a None
+    # literal, so this is the case that catches an off-by-one in the operand
+    # positions — it would otherwise add the residual as if it were the bias.
+    lambda M: (lambda v: ops.sum(ops.exp(ops.matmul(M, v, None, RESIDUAL)))),
+    lambda M: (lambda v: ops.sum(ops.exp(ops.matmul(M, v, BIAS, RESIDUAL)))),
+])
+def test_fused_bias_and_residual_are_honoured(build):
+    """These lift into W exactly — they are additions — so they are supported."""
+    fn = build(np.random.default_rng(0).standard_normal((4, 3)))
+    x = np.array([0.3, -1.1, 0.7])
+    assert laplacian_exact(jet_trace(fn), x) == pytest.approx(
+        _fd_laplacian(fn, x), rel=1e-4)
+
+
+def test_a_fused_activation_is_refused_not_dropped():
+    """The reported defect: dropping it made a nonlinear program linear.
+
+    `sum(matmul(M, x, activation="gelu"))` returned a Laplacian of 0.0 where
+    the finite-difference truth is 2.24 — finite, plausible, and wrong. No
+    activation the op accepts (relu/gelu/silu) is a registered holonomic
+    recurrence, so the honest answer is to refuse.
+    """
+    M = np.random.default_rng(0).standard_normal((4, 3))
+    fn = lambda v: ops.sum(ops.matmul(M, v, activation="gelu"))
+    x = np.array([0.3, -1.1, 0.7])
+
+    assert abs(_fd_laplacian(fn, x)) > 1.0, "fixture must be nonlinear, or this proves nothing"
+    with pytest.raises(Exception, match="activation"):
+        laplacian_exact(jet_trace(fn), x)
+
+
+def test_a_fused_epilogue_is_refused():
+    M = np.random.default_rng(0).standard_normal((4, 3))
+    x = np.array([0.3, -1.1, 0.7])
+    with pytest.raises(Exception, match="epilogue"):
+        laplacian_exact(
+            jet_trace(lambda v: ops.sum(ops.matmul(M, v, epilogue={"bias": BIAS}))), x)
+
+
+@pytest.mark.parametrize("build,analytic_factor", [
+    (lambda v: ops.sum(ops.mul(ops.mul(v, v), scalar=3.0)), 2.0 * 3.0),
+    (lambda v: ops.sum(ops.add(ops.mul(v, v), scalar=1.0)), 2.0),
+])
+def test_scalar_keyword_forms_are_supported(build, analytic_factor):
+    """`ops.mul(x, scalar=3.0)` is canonical and used to raise IndexError.
+
+    The tape records ONE input and keeps the value in kwargs, so reading
+    `a[1]` failed for a call that executes fine outside the transform.
+    """
+    x = np.array([0.3, -1.1, 0.7])
+    assert laplacian_exact(jet_trace(build), x) == pytest.approx(
+        analytic_factor * x.size, rel=1e-12)
+
+
+def test_an_option_no_rule_interprets_is_refused_generically():
+    """The class, not the instance: `sum` reads axis/keepdims and nothing else.
+
+    Without a generic check, every future op option becomes another silent
+    drop waiting to be found in review.
+    """
+    from tessera.autodiff.jet import _JET_REPLAY
+
+    assert _JET_REPLAY["sum"].reads == frozenset({"axis", "keepdims"})
+    assert _JET_REPLAY["exp"].reads == frozenset()
+    assert "activation" in _JET_REPLAY["matmul"].reads
+
+
+@pytest.mark.parametrize("spelling", [
+    "bias_none_kw", "bias_none_residual_kw", "bias_kw", "residual_kw", "positional",
+])
+def test_every_spelling_of_the_fused_operands_replays_correctly(spelling):
+    """Keyword-spelled operands, including an explicit `None` (review on #700).
+
+    `promote_operand_kwargs` is not consistent about which keyword operands
+    become positional inputs: `matmul(A, B, residual=r)` promotes to four
+    inputs with a None bias filler, while
+    `matmul(A, B, bias=None, residual=r)` leaves BOTH in kwargs and records
+    only two. So the strict unknown-kwarg check refused `bias=None` -- a
+    valid no-op that replayed fine before -- and a kwarg-spelled residual
+    never reached the operand path at all.
+    """
+    M = np.random.default_rng(0).standard_normal((4, 3))
+    bias, residual = np.ones(4), np.full(4, 0.5)
+    builders = {
+        "bias_none_kw": lambda v: ops.matmul(M, v, bias=None),
+        "bias_none_residual_kw": lambda v: ops.matmul(M, v, bias=None, residual=residual),
+        "bias_kw": lambda v: ops.matmul(M, v, bias=bias),
+        "residual_kw": lambda v: ops.matmul(M, v, residual=residual),
+        "positional": lambda v: ops.matmul(M, v, bias, residual),
+    }
+    fn = lambda v: ops.sum(ops.exp(builders[spelling](v)))
+    x = np.array([0.3, -1.1, 0.7])
+    assert laplacian_exact(jet_trace(fn), x) == pytest.approx(
+        _fd_laplacian(fn, x), rel=1e-4)
+
+
+def test_a_kwarg_operand_that_is_traced_keeps_its_derivative():
+    """A residual computed FROM the input must not become a constant.
+
+    The kwarg path resolves through the replay environment first. Reading it
+    as a constant would drop its dependence on x -- a smaller, quieter
+    version of the activation bug: the value stays finite and the derivative
+    goes wrong.
+    """
+    M = np.random.default_rng(0).standard_normal((3, 3))
+    x = np.array([0.3, -1.1, 0.7])
+
+    def fn(v):
+        traced_residual = ops.mul(v, v)          # depends on the input
+        return ops.sum(ops.exp(ops.matmul(M, v, residual=traced_residual)))
+
+    got = laplacian_exact(jet_trace(fn), x)
+    assert got == pytest.approx(_fd_laplacian(fn, x), rel=1e-4)
+    # and it must differ from the constant-residual reading, or the test is
+    # blind to exactly the mistake it exists to catch
+    frozen = np.asarray(ops.mul(x, x))
+    const_fn = lambda v: ops.sum(ops.exp(ops.matmul(M, v, residual=frozen)))
+    assert got != pytest.approx(laplacian_exact(jet_trace(const_fn), x), rel=1e-3)

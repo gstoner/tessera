@@ -311,11 +311,16 @@ def test_resident_timeout_is_a_named_fallback_not_a_silent_none(monkeypatch, _re
 
 
 def test_every_resident_dev_symbol_dispatch_is_breaker_routed():
-    """Drift gate: a function that dispatches on a device-resident symbol --
-    bound from a ``*_dev_sym()`` / ``*_dev_f32()`` accessor or a ``getattr`` on
-    a ``..._dev`` / ``ts_dev_cast`` name -- must call the symbol through
-    ``_apple_gpu_device_call_checked``. A new resident kernel that copies the
-    old ``rc = sym(...)`` shape re-opens APPLE-DISPATCH-WEDGE-1 for that path.
+    """Drift gate, per DISPATCH rather than per function.
+
+    An earlier form of this test asked only whether a function that dispatches
+    on a resident symbol *also mentions* the helper somewhere. Review caught
+    that a function with two dispatches, one wrapped and one not, satisfies it
+    -- and so does adding a bare ``sym(...)`` beside an existing wrapped call,
+    which is exactly how this regresses. So each call to a name bound from a
+    ``*_dev_sym()`` / ``*_dev_f32()`` accessor, or from a ``getattr`` on a
+    ``..._dev`` / ``ts_dev_cast`` symbol, is checked for a
+    ``_apple_gpu_device_call_checked`` call among its own ANCESTORS.
     """
     import ast
     import inspect
@@ -323,15 +328,33 @@ def test_every_resident_dev_symbol_dispatch_is_breaker_routed():
 
     src = inspect.getsource(rt)
     tree = ast.parse(src)
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+
     accessor = re.compile(r"_apple_gpu_\w+_dev_(?:sym|f32)$")
     symbol = re.compile(r"(?:_dev|_dev_f32|ts_dev_cast)$")
+
+    def _routed(node):
+        """Is this call lexically inside a _apple_gpu_device_call_checked call?"""
+        cur = parents.get(node)
+        while cur is not None:
+            if (isinstance(cur, ast.Call) and isinstance(cur.func, ast.Name)
+                    and cur.func.id == "_apple_gpu_device_call_checked"):
+                return True
+            if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+                return False
+            cur = parents.get(cur)
+        return False
+
     offenders = []
     for fn in ast.walk(tree):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if fn.name == "_apple_gpu_device_call_checked":
             continue
-        # Names bound to a resident symbol in this function ...
+        # Names bound to a resident symbol anywhere in this function ...
         bound = set()
         for node in ast.walk(fn):
             if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
@@ -340,25 +363,179 @@ def test_every_resident_dev_symbol_dispatch_is_breaker_routed():
             hit = False
             if isinstance(callee, ast.Name) and accessor.search(callee.id):
                 hit = True
-            elif isinstance(callee, ast.Name) and callee.id == "getattr" and len(node.value.args) >= 2:
+            elif (isinstance(callee, ast.Name) and callee.id == "getattr"
+                  and len(node.value.args) >= 2):
                 name = node.value.args[1]
-                hit = isinstance(name, ast.Constant) and isinstance(name.value, str) and bool(symbol.search(name.value))
+                hit = (isinstance(name, ast.Constant) and isinstance(name.value, str)
+                       and bool(symbol.search(name.value)))
             if hit:
-                bound.update(t.id for t in node.targets if isinstance(t, ast.Name))
+                bound.update(x.id for x in node.targets if isinstance(x, ast.Name))
         if not bound:
             continue
-        # ... that are then CALLED (an accessor that only binds argtypes is not a dispatch) ...
-        dispatches = any(
-            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in bound
-            for node in ast.walk(fn))
-        routed = any(
-            isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-            and node.func.id == "_apple_gpu_device_call_checked"
-            for node in ast.walk(fn))
-        # ... must be called through the breaker.
-        if dispatches and not routed:
-            offenders.append(f"{fn.name} (line {fn.lineno})")
-    assert offenders == [], "resident dispatch(es) bypass the breaker: " + ", ".join(offenders)
+        # ... and EVERY call of one of them must be routed. An accessor that
+        # only binds argtypes never calls the symbol and so has nothing to fail.
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id in bound and not _routed(node)):
+                offenders.append(f"{fn.name}: {node.func.id}(...) at line {node.lineno}")
+    assert offenders == [], (
+        "resident dispatch(es) bypass the breaker:\n  " + "\n  ".join(offenders))
+
+
+def test_the_drift_gate_rejects_a_second_unwrapped_dispatch(monkeypatch):
+    """The gate must fail the case that motivated rewriting it: a function
+    where ONE dispatch is wrapped and a second is not. Asserted against a
+    synthetic module rather than by breaking the real one."""
+    import ast
+    import re
+    import textwrap
+
+    source = textwrap.dedent("""
+        def _both_shapes():
+            sym = _apple_gpu_thing_dev_sym()
+            ok = _apple_gpu_device_call_checked("a", lambda: sym(1))
+            rc = sym(2)                     # <- the one that must be caught
+            return ok and rc == 1
+    """)
+    tree = ast.parse(source)
+    parents = {c: p for p in ast.walk(tree) for c in ast.iter_child_nodes(p)}
+    accessor = re.compile(r"_apple_gpu_\w+_dev_(?:sym|f32)$")
+
+    def routed(node):
+        cur = parents.get(node)
+        while cur is not None:
+            if (isinstance(cur, ast.Call) and isinstance(cur.func, ast.Name)
+                    and cur.func.id == "_apple_gpu_device_call_checked"):
+                return True
+            if isinstance(cur, (ast.FunctionDef, ast.Module)):
+                return False
+            cur = parents.get(cur)
+        return False
+
+    bound = {x.id for n in ast.walk(tree) if isinstance(n, ast.Assign)
+             and isinstance(n.value, ast.Call) and isinstance(n.value.func, ast.Name)
+             and accessor.search(n.value.func.id)
+             for x in n.targets if isinstance(x, ast.Name)}
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Name) and n.func.id in bound]
+    assert len(calls) == 2, "fixture should hold two dispatches"
+    assert [routed(c) for c in calls].count(False) == 1, (
+        "a function-wide flag would call this clean; the per-dispatch check "
+        "must see exactly one unrouted call")
+
+
+# ── The MTL4 lanes: a bounded wait that reports nothing ─────────────────────
+# `mtl4_encode_and_wait` waits 10 s and returns false WITHOUT touching the
+# error channel, so by return value alone an MTL4 stall is identical to a shape
+# decline: the streak reset and no diagnostic was emitted. Classified by
+# duration instead, which is the only signal the C side leaves.
+
+SILENT = rt._APPLE_GPU_SILENT_FAILURE_TIMEOUT_S
+
+
+class _Clock:
+    """A monotonic clock the test advances by hand, so no test sleeps."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def install(self, monkeypatch, advance_per_call):
+        monkeypatch.setattr(rt.time, "monotonic", lambda: self.now)
+
+        def _tick():
+            self.now += advance_per_call
+            return 0                       # rc 0 -- the C side reports failure
+
+        return _tick
+
+
+@pytest.fixture
+def _silent_channel(monkeypatch):
+    """The C error channel says NOTHING, as the MTL4 path leaves it."""
+    monkeypatch.setattr(rt, "_apple_gpu_arm_gpu_error", lambda: None)
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: 0)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: None)
+    notes = []
+    monkeypatch.setattr(rt, "_note_dispatch_fallback",
+                        lambda op, reason, exc=None: notes.append((op, reason)))
+    return notes
+
+
+def test_a_silent_stall_counts_as_a_timeout(monkeypatch, _silent_channel):
+    """The MTL4 defect: 10 s, false, nothing reported. It must still open."""
+    tick = _Clock().install(monkeypatch, advance_per_call=10.0)
+    for index in range(LIMIT):
+        assert rt._apple_gpu_device_call_checked("apple_gpu.mtl4_matmul2d_dev", tick) is False
+        assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == index + 1
+    assert rt.apple_gpu_dispatch_breaker_state()["open"] is True
+
+
+def test_a_silent_stall_is_a_named_fallback(monkeypatch, _silent_channel):
+    """Decision #21: it may not be a silent False."""
+    tick = _Clock().install(monkeypatch, advance_per_call=10.0)
+    rt._apple_gpu_device_call_checked("apple_gpu.mtl4_matmul2d_dev", tick)
+    assert _silent_channel, "a silent stall produced no diagnostic at all"
+    op, reason = _silent_channel[0]
+    assert op == "apple_gpu.mtl4_matmul2d_dev"
+    assert "10.0s" in reason and "error channel" in reason
+
+
+def test_a_fast_decline_is_still_not_a_timeout(monkeypatch, _silent_channel):
+    """The other half: a shape decline returns in microseconds and must keep
+    resetting the streak, or an unsupported-shape workload opens the breaker."""
+    tick = _Clock().install(monkeypatch, advance_per_call=0.000_01)
+    for _ in range(LIMIT + 2):
+        assert rt._apple_gpu_device_call_checked("apple_gpu.mtl4_matmul2d_dev", tick) is False
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 0
+    assert rt.apple_gpu_dispatch_breaker_state()["open"] is False
+    assert _silent_channel == [], "a validation decline must stay silent"
+
+
+def test_the_threshold_separates_the_two_classes_by_a_wide_margin():
+    """The constant is only defensible while it sits far from both classes:
+    four orders of magnitude above a validation decline, and at most half the
+    shortest real wait (`mtl4_encode_and_wait`'s 10 s)."""
+    assert 0.001 < SILENT <= 5.0
+    assert SILENT >= 1000 * 0.000_01
+    assert SILENT <= 10.0 / 2
+
+
+def test_the_numpy_lanes_are_not_duration_classified(monkeypatch, _silent_channel):
+    """`silent_failure_timeout_s` defaults to None, so a slow numpy-lane
+    dispatch that reports nothing is still a success, exactly as before."""
+    clock = _Clock()
+    monkeypatch.setattr(rt.time, "monotonic", lambda: clock.now)
+
+    def _slow():
+        clock.now += 60.0
+        return "gpu"
+
+    assert rt._apple_gpu_run_checked("tessera.add", _slow, lambda: "host") == "gpu"
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 0
+
+
+def test_an_array_returning_lane_is_never_truth_tested(monkeypatch, _silent_channel):
+    """Regression guard for the classifier's own operand order.
+
+    The numpy lanes return ndarrays, and `not <multi-element array>` raises
+    ValueError. The silent-failure test may therefore only be reached after
+    the opt-in check has passed -- which only the bool-returning resident
+    adapter triggers. Written because the first draft had the two conjuncts
+    the other way round, which would have raised on every numpy dispatch that
+    reported no error, i.e. on every successful one.
+    """
+    import numpy as np
+
+    clock = _Clock()
+    monkeypatch.setattr(rt.time, "monotonic", lambda: clock.now)
+
+    def _slow_array():
+        clock.now += 60.0                 # comfortably past the threshold
+        return np.zeros(4)                # falsy elementwise, ambiguous as a bool
+
+    out = rt._apple_gpu_run_checked("tessera.add", _slow_array, lambda: "host")
+    np.testing.assert_array_equal(out, np.zeros(4))
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 0
 
 
 # ── Direct C-symbol sites (APPLE-DISPATCH-WEDGE-1, third coverage pass) ──────
@@ -745,6 +922,22 @@ def _constant(node):
     return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
 
 
+def _bound_symbol(value, params, *, loads_runtime=True):
+    """The Apple symbol an assignment's right-hand side names.
+
+    Two forms reach the same place: `getattr(runtime, "tessera_apple_gpu_x")`
+    and the plain attribute `runtime.tessera_apple_gpu_x`. Missing the second
+    is not academic -- it hid `_apple_gpu_rope_f32` and its siblings from an
+    earlier version of this gate, and with them the f32 half of every lane that
+    binds its symbol that way.
+    """
+    if isinstance(value, ast.Attribute) and value.attr.startswith(APPLE_SYMBOL_PREFIX):
+        return value.attr
+    if not isinstance(value, ast.Call):
+        return None
+    return _getattr_symbol(value, params, loads_runtime=loads_runtime)
+
+
 def _getattr_symbol(call, params, *, loads_runtime=True):
     """The Apple symbol a `getattr(x, name)` names: a constant, an f-string
     pattern, or `<param:i>` for a parameter of the enclosing function.
@@ -779,6 +972,7 @@ def _direct_symbol_sites():
     dispatching (fail closed)."""
     tree = ast.parse(inspect.getsource(rt))
     functions = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
 
     def loads_runtime(fn):
         return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
@@ -789,8 +983,8 @@ def _direct_symbol_sites():
         params, runtime_here = [a.arg for a in fn.args.args], loads_runtime(fn)
         names, bound_here = [], set()
         for node in ast.walk(fn):
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-                symbol = _getattr_symbol(node.value, params, loads_runtime=runtime_here)
+            if isinstance(node, ast.Assign):
+                symbol = _bound_symbol(node.value, params, loads_runtime=runtime_here)
                 if symbol:
                     names.append(symbol)
                     bound_here.update(t.id for t in node.targets if isinstance(t, ast.Name))
@@ -816,38 +1010,82 @@ def _direct_symbol_sites():
     for fn in functions:
         if fn.name in accessors or fn.name in BREAKER_HELPERS:
             continue
+        if isinstance(parents.get(fn), (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue  # a nested wrapper is judged as part of its parent
         params, runtime_here = [a.arg for a in fn.args.args], loads_runtime(fn)
         bound = {}
         for node in ast.walk(fn):
             if not isinstance(node, ast.Assign):
                 continue
-            calls = [node.value] if isinstance(node.value, ast.Call) else (
-                [v for v in node.value.values if isinstance(v, ast.Call)] if isinstance(node.value, ast.BoolOp) else [])
+            values = ([v for v in node.value.values] if isinstance(node.value, ast.BoolOp)
+                      else [node.value])
             symbols = []
-            for call in calls:
-                direct = _getattr_symbol(call, params, loads_runtime=runtime_here)
+            for value in values:
+                direct = _bound_symbol(value, params, loads_runtime=runtime_here)
                 if direct:
                     symbols.append("<dynamic>" if direct.startswith("<param") else direct)
-                elif isinstance(call.func, ast.Name) and call.func.id in accessors:
-                    symbols.extend(resolve(p, call) for p in accessors[call.func.id])
+                elif (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                      and value.func.id in accessors):
+                    symbols.extend(resolve(p, value) for p in accessors[value.func.id])
             if symbols:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         bound.setdefault(target.id, set()).update(symbols)
-        dispatched = set()
+        # Routing is judged PER DISPATCH, not per function, for the reason the
+        # resident gate above records: a function with one wrapped call and one
+        # bare one satisfies a function-wide flag. A dispatch counts as routed
+        # when a breaker-helper call is among its own ancestors (the `lambda:
+        # sym(...)` form), or when it sits in a nested function whose name is
+        # handed to a breaker helper in this scope (the `def _run(): ...` form
+        # the multi-statement lanes need).
+        wrapped = {a.id for node in ast.walk(fn)
+                   if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                   and node.func.id in BREAKER_HELPERS
+                   for a in node.args if isinstance(a, ast.Name)}
+        # `call = lambda: symbol(...)` handed to a helper is the same shape as a
+        # nested def, so a Lambda carries the name it was bound to.
+        lambda_names = {node.value: target.id
+                        for node in ast.walk(fn) if isinstance(node, ast.Assign)
+                        and isinstance(node.value, ast.Lambda)
+                        for target in node.targets if isinstance(target, ast.Name)}
+
+        def _routed(node):
+            cur = parents.get(node)
+            while cur is not None:
+                if (isinstance(cur, ast.Call) and isinstance(cur.func, ast.Name)
+                        and cur.func.id in BREAKER_HELPERS):
+                    return True
+                if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if cur is fn:
+                        return False
+                    if cur.name in wrapped:
+                        return True
+                elif isinstance(cur, ast.Lambda) and lambda_names.get(cur) in wrapped:
+                    return True
+                elif isinstance(cur, ast.Module):
+                    return False
+                cur = parents.get(cur)
+            return False
+
+        dispatched, unrouted = set(), set()
         for node in ast.walk(fn):
+            symbols = set()
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in bound:
-                dispatched |= bound[node.func.id]
+                symbols = bound[node.func.id]
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr.startswith(APPLE_SYMBOL_PREFIX):
-                dispatched.add(node.func.attr)
+                symbols = {node.func.attr}
+            if not symbols:
+                continue
+            dispatched |= symbols
+            if not _routed(node):
+                unrouted |= symbols
         # The Apple CPU (Accelerate) lane is a different backend with no
         # command buffer and no breaker; an accessor shared with it can resolve
         # to a `tessera_apple_cpu_*` name, which this gate does not govern.
-        dispatched = {s for s in dispatched if s == "<dynamic>" or s.startswith(APPLE_SYMBOL_PREFIX)}
+        keep = lambda names: {s for s in names if s == "<dynamic>" or s.startswith(APPLE_SYMBOL_PREFIX)}  # noqa: E731
+        dispatched, unrouted = keep(dispatched), keep(unrouted)
         if dispatched:
-            routed = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in BREAKER_HELPERS
-                         for n in ast.walk(fn))
-            sites[fn.name] = (dispatched, routed)
+            sites[fn.name] = (unrouted or dispatched, not unrouted)
     return sites
 
 
@@ -867,6 +1105,25 @@ def _mm_waits():
     assert _symbol_waits("tessera_apple_gpu_metal4_probe", bodies, memo) is False      # capability probe
     assert _symbol_waits("tessera_apple_gpu_clear_last_error", bodies, memo) is False  # error channel
     return lambda name: _symbol_waits(name, bodies, memo)
+
+
+def test_the_direct_gate_is_per_dispatch_not_per_function():
+    """The direct gate inherits the resident gate's per-dispatch rule, and has
+    two wrapper shapes to recognise that a plain ancestor walk does not: a
+    nested `def` and an assigned `lambda`, both handed to a helper by name.
+
+    Asserted on the real module rather than a synthetic one, because the point
+    is that those two shapes — which every multi-statement lane here uses —
+    are not mistaken for unrouted, while a bare second dispatch beside them
+    still is. `_apple_gpu_dispatch_rope` has three wrapped dispatches and no
+    bare one; the three known offenders have bare ones and nothing else.
+    """
+    sites = _direct_symbol_sites()
+    assert sites["_apple_gpu_dispatch_rope"][1] is True, (
+        "a `def _run(): sym(...)` passed to the helper by name reads as unrouted")
+    assert sites["_execute_apple_compiled_norm_backward"][1] is True, (
+        "a `call = lambda: symbol(...)` passed to the helper by name reads as unrouted")
+    assert sites["_apple_gpu_raw_handle"][1] is False
 
 
 def test_every_direct_apple_symbol_dispatch_is_breaker_routed(_mm_waits):

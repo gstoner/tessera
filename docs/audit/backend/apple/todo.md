@@ -6710,6 +6710,40 @@ intended sandboxed control turned out not to be sandboxed at all (a `$HOME`
 write succeeded), so there is no control either way. Do not cite either as
 the root cause.
 
+**Review found the fix was uniform where the runtime is not (2026-09-03).**
+The first version routed all eight resident paths and implied they were now
+equally covered. Tracing each entry point to its wait helper says otherwise,
+and the three classes need different work:
+
+| resident path | wait helper | bounded? | reports timeout? |
+|---|---|---|---|
+| `gather_blocks_dev` | `commit_mpsgraph_and_wait_with_timeout` | 30 s | yes, kind 1 |
+| `paged_latent_attention_dev` | `commit_and_wait_with_timeout` | 30/60 s | yes, kind 1 |
+| `dense_latent_attention_dev` | `commit_and_wait_with_timeout` | 30/60 s | yes, kind 1 |
+| `ts_dev_cast` | `commit_and_wait_with_timeout` | 30/60 s | yes, kind 1 |
+| `mtl4_matmul2d_dev` | `mtl4_encode_and_wait` | 10 s | **no** |
+| MTL4 MLP session `run_dev` | `mtl4_encode_and_wait` | 10 s | **no** |
+| `rowop_dev` | `[MPSGraph runWithMTLCommandQueue:]` | **no** | no |
+| `bmm_dev` | `[MPSGraph runWithMTLCommandQueue:]` | **no** | no |
+
+* **The MTL4 pair returns `false` after 10 s with the error channel
+  untouched** (`mtl4_encode_and_wait`, `apple_gpu_runtime.mm:4348`; there is no
+  `ts_set_last_gpu_error` anywhere in the MTL4 region). By return value alone
+  that is indistinguishable from a shape decline, so the streak reset and no
+  diagnostic was emitted — the exact wedge, inside the fix for it. Handled with
+  `silent_failure_timeout_s`: a failure that reported nothing and took ≥ 5 s is
+  counted as a timeout. Duration is the only signal the C side leaves, and the
+  two classes differ by four orders of magnitude (a decline is microseconds).
+  The proper fix is one line in the `.mm` and is deferred only because that
+  file's hash is the route-ledger fingerprint.
+* **`rowop_dev` and `bmm_dev` cannot be protected from Python at all.** They
+  call MPSGraph's own `runWithMTLCommandQueue:`, which is **unbounded** — a
+  device that stops answering never returns, so there is no repeated cost to
+  cut and no fallback to take. One permanent hang is worse than N bounded
+  timeouts, and it is invisible to `pytest --timeout` for the same reason
+  `APPLE-MLPKG-HANG-1` was. **38 call sites in the runtime use that form.**
+  Runtime-side fix, filed here, not attempted in this change.
+
 **Class size, stated honestly.** With this change the breaker covers 9 numpy
 lanes + 8 resident paths. An enumeration of `rc = <symbol>(...)` dispatches in
 `runtime.py` finds **34 further Apple call sites** that call a C symbol
@@ -6726,9 +6760,24 @@ a device that stopped answering. Follow-up: route them through the same
 helper; the AST gate covers the `_dev` class by construction and will not
 catch these.
 
+**The drift gate is per-dispatch, after review.** Its first form asked whether
+a function containing a resident dispatch *also mentioned* the helper, which a
+function with one wrapped and one bare dispatch satisfies — the exact way this
+regresses. It now checks each call to a bound resident symbol for a
+`_apple_gpu_device_call_checked` among its own AST ancestors, and a companion
+test pins that the per-dispatch check catches the mixed case a function-wide
+flag calls clean.
+
+**Cross-backend assessment** is recorded in all four queues under
+`DISPATCH-BREAKER-RESIDENT-2026-09-03`: NVIDIA and ROCm *not applicable* for
+the breaker (both use blocking `*StreamSynchronize` with no timeout, so a wait
+never returns to be retried) with a *follow-up* for having no bounded device
+wait at all; x86 *not applicable* structurally (synchronous host calls, no
+device).
+
 **Corrected 2026-09-03 — that enumeration was a regex, and the count is wrong
 in both directions.** See the third instance below: parsing `runtime.py` and
-classifying each symbol against the `.mm` finds 84 dispatching functions, not
+classifying each symbol against the `.mm` finds 85 dispatching functions, not
 34 further ones, and several sites the regex named never reach a command
 buffer. Read the count there, not here.
 
@@ -6737,7 +6786,7 @@ buffer. Read the count there, not here.
 **The second instance closed with a count taken from a regex, and the count was
 wrong in both directions.** It reported "34 further Apple call sites"; a
 re-enumeration that parses `runtime.py` with `ast` and classifies each symbol
-against `apple_gpu_runtime.mm` finds **84 functions** that dispatch a
+against `apple_gpu_runtime.mm` finds **85 functions** that dispatch a
 `tessera_apple_gpu_*` symbol directly, of which the regex list named about a
 third — and some of what it did name never reaches a command buffer at all.
 Both errors came from the same place: a regex can see `rc = sym(...)`, but it
@@ -6752,7 +6801,7 @@ choke points, MPSGraph's synchronous `runWithMTLCommandQueue`, and the Metal 4
 shared-event wait. A symbol reaching none of those cannot hang, whatever the
 Python looks like.
 
-**Result: 61 of the 84 are now routed** (up from 17). Of the 23 that are not,
+**Result: 62 of the 85 are now routed** (up from 17). Of the 23 that are not,
 **20 are exempt by that classification, not by assertion** — the Metal 4 and
 SIMD capability probes, the last-error channel itself, the memory statistics
 and cache calls, the archive enable/flush, and the encode-only `_enc` entries
@@ -6763,21 +6812,26 @@ fails closed; both callers pass a pointer getter), and the `gumbel` / `rowop`
 encode-session methods (their shared C helper contains both an encode and a run
 branch, and the `_enc` entry always takes the encode one).
 
-**Two runtime-side gaps this could not close, because the `.mm` is untouched**
+**One runtime-side gap this could not close, because the `.mm` is untouched**
 (editing it invalidates `AppleRouteContext.runtime_fingerprint` and forces a
-ledger re-seal — the same sequencing as the second instance):
+ledger re-seal — the same sequencing as the second instance): **the MPSGraph
+`runWithMTLCommandQueue` lanes wait with no timeout at all.** `cf_scan`,
+`cf_serial_draft`, the reduce / argreduce / scan and conv families,
+`gumbel_argmax`, `mla_decode`, `ppo_policy_loss` and the rest of that family
+block until the graph completes, so a wedged device never returns to them —
+there is no repeated cost for a caller-side breaker to cut, only one permanent
+hang. Routing them still buys the open-breaker short-circuit and the named
+fallback. The runtime-side fix is filed with the second instance's own finding
+about the same 38 call sites.
 
-* **The MPSGraph `runWithMTLCommandQueue` lanes wait with no timeout and never
-  report kind 1.** `cf_scan`, `cf_serial_draft`, the reduce / argreduce / scan
-  and conv families, `gumbel_argmax`, `mla_decode`, `ppo_policy_loss` and the
-  rest of that family block until the graph completes. Routing them buys the
-  open-breaker short-circuit and the named fallback, but *their own* timeouts
-  cannot count toward the streak until the runtime reports them.
-* **`mtl4_encode_and_wait` returns `false` on expiry without setting kind 1.**
-  The Metal 4 lanes (`mtl4_scan`, `matmul_sg`, `matmul2d_*`, `mtl4_conv2d`, the
-  MLP session) therefore look like a validation decline rather than a timeout.
-  Same consequence, same fix location: one `ts_set_last_gpu_error(1, …)` beside
-  the `waitUntilSignaledValue` at `mtl4_encode_and_wait`.
+**The Metal 4 half of that gap is closed by the second instance's duration
+heuristic, not left open.** `mtl4_encode_and_wait` bounds its wait at 10 s and
+sets no error kind, so an MTL4 stall is indistinguishable from a shape decline
+by return value; `silent_failure_timeout_s` classifies a silent failure that
+took ≥ 5 s as a timeout instead. Every Metal 4 lane routed here — `mtl4_scan`,
+`matmul_sg`, `matmul2d_{f16,bf16,epilogue}`, `mtl4_conv2d` and the MLP
+session's host-input `run` — passes that opt-in; the lanes whose C side reports
+honestly deliberately do not, so an ordinary decline stays a decline.
 
 **One Python-side gap left deliberately open.**
 `apple_gpu_batched.batched_session` commits through `ts_enc_commit_wait`, a
@@ -6801,6 +6855,17 @@ streak has opened the breaker makes every other lane dispatch again, and a
 probe keyed on the raw open bit alone would have stayed unavailable until an
 explicit reset. The MPS single-matrix linalg lanes report success as `rc == 0`, which
 the helper carries as an explicit `ok_rc` rather than normalizing.
+
+**The gate is per-dispatch, and finding that out cost a bug.** It inherits the
+second instance's per-dispatch rule, which needs two wrapper shapes a plain
+ancestor walk does not recognise: a nested `def _run(): sym(...)` and an
+assigned `call = lambda: symbol(...)`, both handed to a helper by name. A
+mutation check — add a bare second dispatch beside a wrapped one — then failed
+to fail, because accessors that bind by plain attribute
+(`runtime.tessera_apple_gpu_rope_f32`) rather than `getattr` were invisible to
+the enumeration entirely. Teaching it that form both caught the mutation and
+surfaced one genuinely unrouted lane the first pass had missed,
+`_apple_gpu_dispatch_swiglu`, now routed.
 
 **Coverage.** `tests/unit/test_apple_gpu_dispatch_breaker.py` drives one
 representative per family host-free (linalg both rc conventions, random, GQA,

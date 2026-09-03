@@ -34430,6 +34430,16 @@ _APPLE_GPU_ERROR_KIND_TIMEOUT = 1
 #: is a device that stopped answering.
 _APPLE_GPU_DISPATCH_TIMEOUT_LIMIT = 3
 
+#: A failed dispatch that reported NOTHING on the error channel and took at
+#: least this long is counted as a timeout anyway. Not a heuristic for its own
+#: sake: `mtl4_encode_and_wait` waits 10 s and returns `false` **without**
+#: calling `ts_set_last_gpu_error`, so an MTL4 stall is indistinguishable from
+#: a shape decline by return value alone -- and a shape decline returns in
+#: microseconds. Five seconds sits four orders of magnitude above any
+#: validation path and half the shortest real wait (10 s), so neither class can
+#: reach the other's side. Delete once the runtime sets the channel itself.
+_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S = 5.0
+
 _apple_gpu_consecutive_dispatch_timeouts = 0
 
 
@@ -34477,7 +34487,8 @@ def reset_apple_gpu_dispatch_breaker() -> None:
     _apple_gpu_consecutive_dispatch_timeouts = 0
 
 
-def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -> Any:
+def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any,
+                           *, silent_failure_timeout_s: float | None = None) -> Any:
     """Run a GPU kernel through the last-error channel: arm (clear) before,
     consume (read+clear) after. On a reported internal failure, funnel
     (strict mode raises) and return ``host_fallback()`` instead of the kernel's
@@ -34506,6 +34517,17 @@ def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -
     which is correct, just slower. Not tripping costs unbounded wall time and
     produces no evidence of why. Set ``TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER``
     to keep the old behaviour.
+
+    ``silent_failure_timeout_s`` covers the lanes whose C side times out
+    **without reporting it**. ``mtl4_encode_and_wait`` waits 10 s and returns
+    ``false`` with the error channel untouched, so by return value alone an
+    MTL4 stall reads exactly like a shape decline: the streak resets and no
+    diagnostic is emitted, which is the wedge this entry is about. When set, a
+    falsy result that reported nothing and took at least that long is
+    classified as a timeout. Duration is the only signal the C side leaves, and
+    it is a sound one here because the two classes differ by four orders of
+    magnitude. ``None`` (the default) keeps the numpy lanes exactly as they
+    were -- every one of them reports properly.
     """
     global _apple_gpu_consecutive_dispatch_timeouts
     breaker_enabled = not os.environ.get("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER")
@@ -34521,9 +34543,22 @@ def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -
             f"device is known good.")
         return host_fallback()
     _apple_gpu_arm_gpu_error()
+    started = time.monotonic()
     result = kernel_call()
+    elapsed = time.monotonic() - started
     kind = _apple_gpu_peek_gpu_error_kind() if breaker_enabled else 0
     err = _apple_gpu_consume_gpu_error()
+    # Order matters: the opt-in check comes FIRST. The numpy lanes return
+    # ndarrays, and `not <array>` raises "truth value is ambiguous" -- so a
+    # truthiness test may only be reached once we know the caller opted in,
+    # which only the bool-returning resident adapter does.
+    if (silent_failure_timeout_s is not None and err is None and not result
+            and elapsed >= silent_failure_timeout_s):
+        # The C side stalled and did not say so. Infer it from the wall time
+        # rather than let it reset the streak (see the docstring).
+        kind = _APPLE_GPU_ERROR_KIND_TIMEOUT
+        err = (f"dispatch failed after {elapsed:.1f}s without setting the GPU "
+               f"error channel; treated as a timeout")
     if err is None:
         _apple_gpu_consecutive_dispatch_timeouts = 0
         return result
@@ -34538,7 +34573,8 @@ def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -
     return host_fallback()
 
 
-def _apple_gpu_symbol_call_checked(op_name: str, call: Any, *, ok_rc: int = 1) -> bool:
+def _apple_gpu_symbol_call_checked(op_name: str, call: Any, *, ok_rc: int = 1,
+                                   silent_failure_timeout_s: float | None = None) -> bool:
     """Run a status-returning Apple GPU C-ABI dispatch through the breaker in
     :func:`_apple_gpu_run_checked`, returning whether it succeeded.
 
@@ -34552,18 +34588,25 @@ def _apple_gpu_symbol_call_checked(op_name: str, call: Any, *, ok_rc: int = 1) -
     ``op_name`` (raising under strict dispatch, Decision #21); an open breaker
     returns ``False`` without dispatching.
 
+    ``silent_failure_timeout_s`` forwards the duration heuristic: a Metal 4
+    lane bounds its wait but sets no error kind, so by return value alone its
+    stall is indistinguishable from a shape decline. Pass
+    ``_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S`` for those; leave it ``None`` where
+    the C side reports honestly, so an ordinary decline stays a decline.
+
     APPLE-DISPATCH-WEDGE-1, third coverage pass: the direct ``rc = sym(...)``
     sites -- linalg, random, GQA, batched attention, MPSGraph control flow, the
     Metal 4 lanes, ``msl_spec_accept``, the MLP session's host-input ``run``,
-    and the value-lane executors and their ``*_available`` probes. Two
-    runtime-side gaps this cannot close from Python are recorded in
+    and the value-lane executors and their ``*_available`` probes. One
+    runtime-side gap this cannot close from Python is recorded in
     ``docs/audit/backend/apple/todo.md``: the MPSGraph ``runWithMTLCommandQueue``
-    sites wait with no timeout and never report kind 1, and the Metal 4
-    ``mtl4_encode_and_wait`` expiry returns ``false`` without setting kind 1 --
-    both still get the open-breaker short-circuit here, but their own timeouts
-    cannot count toward the streak until the ``.mm`` reports them.
+    sites wait with **no** timeout, so a wedged device never returns to them at
+    all -- there is no repeated cost for a caller-side breaker to cut, only one
+    permanent hang.
     """
-    return bool(_apple_gpu_run_checked(op_name, lambda: int(call()) == ok_rc, lambda: False))
+    return bool(_apple_gpu_run_checked(
+        op_name, lambda: int(call()) == ok_rc, lambda: False,
+        silent_failure_timeout_s=silent_failure_timeout_s))
 
 
 def _apple_gpu_probe_blocked_by_open_breaker() -> bool:
@@ -34615,8 +34658,25 @@ def _apple_gpu_device_call_checked(op_name: str, call: Any) -> bool:
     evidence about the device: it comes back ``False`` and resets the streak,
     exactly like an ordinary per-op failure on the numpy paths. When the
     breaker is open this returns ``False`` without dispatching.
+
+    **What this can and cannot protect, by wait style.** The eight resident
+    entry points do not share one:
+
+    * ``gather_blocks_dev``, ``paged_``/``dense_latent_attention_dev`` and
+      ``ts_dev_cast`` reach ``commit_{,mpsgraph_}and_wait_with_timeout``, which
+      bounds the wait and sets kind 1. Fully covered.
+    * ``mtl4_matmul2d_dev`` and the MTL4 MLP session's ``run_dev`` reach
+      ``mtl4_encode_and_wait``, which bounds the wait at 10 s but sets
+      **nothing**. Covered only through ``silent_failure_timeout_s``.
+    * ``rowop_dev`` and ``bmm_dev`` call MPSGraph's own
+      ``runWithMTLCommandQueue:``, which is **unbounded**. A device that stops
+      answering never returns from those, so no caller-side breaker can help --
+      there is no repeated cost to cut, there is one permanent hang. That is a
+      runtime-side defect (38 call sites use that form) and is filed as such;
+      it is NOT fixed here.
     """
-    return _apple_gpu_symbol_call_checked(op_name, call)
+    return _apple_gpu_symbol_call_checked(
+        op_name, call, silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S)
 
 
 def _apple_gpu_known_chain_from_fusion_groups(metadata: Mapping[str, Any], n_ops: int) -> str | None:
@@ -39694,6 +39754,8 @@ def apple_gpu_conv2d(
                 ctypes.c_int32(act_code),
                 *[ctypes.c_int32(v) for v in (N, H, Wd, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW)],
             ),
+
+            silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
         )
         if ok:
             return Y.reshape(N, OH, OW, Cout), True
@@ -43876,6 +43938,8 @@ def apple_gpu_mtl4_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any):
                 ctypes.c_int32(d),
                 ctypes.c_int32(m),
             ),
+
+            silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
         )
     if not ok:
         carry = init.astype(np.float64)
@@ -43923,6 +43987,8 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
                     ctypes.c_int32(N),
                     ctypes.c_int32(K),
                 ),
+
+                silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
             )
     if not ok:
         C = (A.astype(np.float64) @ B.astype(np.float64)).astype(np.float32)
@@ -43972,6 +44038,8 @@ def apple_gpu_mtl4_matmul2d_f16(A: Any, B: Any, np: Any):
                     ctypes.c_int32(N),
                     ctypes.c_int32(K),
                 ),
+
+                silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
             )
     if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
@@ -44028,6 +44096,8 @@ def apple_gpu_mtl4_matmul2d_bf16(A: Any, B: Any, np: Any):
                     ctypes.c_int32(N),
                     ctypes.c_int32(K),
                 ),
+
+                silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
             )
     if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
@@ -44089,6 +44159,8 @@ def apple_gpu_mtl4_matmul2d_epilogue(
                     ctypes.c_int32(N),
                     ctypes.c_int32(K),
                 ),
+
+                silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
             )
     if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
@@ -44184,6 +44256,8 @@ class AppleGPUMLPSession:
                 ok = _apple_gpu_symbol_call_checked(
                     "apple_gpu.mtl4_mlp_session.run",
                     lambda: run(self._handle, X.view(np.uint16).ctypes.data_as(u16), Y.ctypes.data_as(fp), ctypes.c_int32(M)),
+
+                    silent_failure_timeout_s=_APPLE_GPU_SILENT_FAILURE_TIMEOUT_S,
                 )
                 if ok:
                     return Y
@@ -45583,18 +45657,27 @@ def _apple_gpu_dispatch_swiglu(x: Any, wg: Any, wu: Any, wd: Any, np: Any) -> An
     Kout = wd.shape[1]
     out = np.zeros((M, Kout), dtype=np.float32)
     fused = _apple_gpu_swiglu_f32()
-    fused(
-        x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        wg.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        wu.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        wd.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(M),
-        ctypes.c_int32(K),
-        ctypes.c_int32(H),
-        ctypes.c_int32(Kout),
-    )
-    return out
+
+    def _run() -> Any:
+        fused(
+            x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            wg.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            wu.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            wd.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int32(M),
+            ctypes.c_int32(K),
+            ctypes.c_int32(H),
+            ctypes.c_int32(Kout),
+        )
+        return out
+
+    def _host() -> Any:
+        gate = np.matmul(x, wg)
+        up = np.matmul(x, wu)
+        return np.matmul((gate / (1.0 + np.exp(-gate))) * up, wd)
+
+    return _apple_gpu_run_checked("apple_gpu.swiglu_f32", _run, _host)
 
 
 def _apple_gpu_swiglu_f32() -> Any:

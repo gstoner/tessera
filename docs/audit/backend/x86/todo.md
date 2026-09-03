@@ -3851,3 +3851,31 @@ AVX-512 Clifford lanes call `_clifford_ops.clifford_codiff`, which delegates to
 the signed `ga.calculus.codiff`; no x86 symbol implements the codifferential
 directly, so nothing carries the old convention. Covered by the same
 Princess-Luna sweep (that host runs both the ROCm and AVX-512 lanes).
+
+## Cross-backend sync `DISPATCH-BREAKER-RESIDENT-2026-09-03`
+
+**Owning item:** `APPLE-DISPATCH-WEDGE-1` (Apple plan) · **synchronization
+key:** `DISPATCH-BREAKER-RESIDENT-2026-09-03`
+
+**Shared contract changed.** `runtime._apple_gpu_run_checked` gained an
+optional `silent_failure_timeout_s`, and a new
+`runtime._apple_gpu_device_call_checked` routes the eight device-resident
+(`DeviceTensor`) Apple dispatch paths through the dispatch circuit breaker.
+Shared test infrastructure changed with it: `test_apple_gpu_dispatch_breaker.py`
+gained a per-dispatch AST drift gate. Nothing outside the `_apple_gpu_*`
+namespace is touched, and no IR, ABI, dtype, diagnostic code or benchmark
+schema changes.
+
+**The premise that makes this Apple-shaped.** The breaker exists because Metal's
+`waitUntilSignaledValue:timeoutMS:` **returns** when its deadline expires. The
+caller then falls back to host, the next dispatch asks the device again, and
+each one pays the full 30 s — an observed 70-minute sweep against a 4-minute
+healthy run. The repeated cost, not the hang, is what a breaker cuts.
+
+**x86 — not applicable, and structurally so.** There is no device and no
+asynchronous dispatch: the AVX-512 lane is a synchronous host function call
+that either returns a result or raises. There is no wait to bound, no deadline
+to expire, and no streak to accumulate, so neither the breaker nor the
+duration-based silent-timeout classifier has anything to apply to. This entry
+exists to record that the assessment was made rather than skipped; no x86
+change is expected under this key now or later.

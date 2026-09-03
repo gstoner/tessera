@@ -399,6 +399,53 @@ Still out of scope for the F4 first cut:
   model-derived budget. The deterministic greedy live-set selector is landed;
   explicit `tessera.recompute` markers remain authoritative.
 
+## Higher-order derivatives — the jet surface (MSW-2)
+
+Truncated jets evaluate a program in `W = ℝ[ε]/(ε^{k+1})`, so orders 0..k
+come out of **one** forward pass rather than `k` nested tapes. The
+machinery predates MSW-2; what MSW-2 added is reachability — the surface is
+exported from `tessera.autodiff`, and a caller no longer hand-translates
+their program into the `jet_*` vocabulary.
+
+```python
+from tessera import autodiff as A
+import tessera
+
+ops = tessera.ops
+f  = lambda x: ops.sum(ops.exp(ops.matmul(M, x)))     # ordinary ops.* code
+jf = A.jet_trace(f)                                   # lift it into W
+lap = A.laplacian_exact(jf, x)                        # Δf, no sampling, no key
+```
+
+| entry point | what it gives |
+|---|---|
+| `jet_trace(fn)` | lifts an `ops.*` program into a `jet_fn(W, coeffs)` |
+| `laplacian_exact(jet_fn, x)` | `tr ∇²f` in `d` deterministic evaluations |
+| `laplacian_estimate` / `hessian_trace_estimate` | the same quantity, sampled, from a mandatory Philox key |
+| `TruncatedJet`, `jet_lift`, `jet_*` | the vocabulary, for hand-written jet programs |
+
+**Choose exact vs sampled by dimension, not preference.** `laplacian_exact`
+costs exactly `d` jet evaluations for a `d`-element field and carries no
+variance; the estimator's error falls as `1/√samples` *independently of
+`d`*. Exact wins below a few hundred elements and is unusable far above
+that. The two are checked against each other, not only against closed
+forms.
+
+**Two failure modes are refused rather than approximated.** An op with no
+jet rule raises instead of being treated as a constant — an op dropped to
+order 0 yields a derivative that is wrong without looking wrong. And a
+program that never calls `ops.*` raises rather than returning zeros, since
+raw numpy is invisible to the tape.
+
+`jet_trace` reuses the tape (there is one interception mechanism, #31) and
+re-traces per point, so it inherits the tape's straight-line restriction
+rather than inventing a new one. The record is cached on the primal point,
+which is what makes `laplacian_exact`'s `d` evaluations share one trace.
+
+Production authority is unchanged: the hand-written `_JVPS`/`_VJPS` remain
+the production derivative path, and the structured jets stay reference +
+oracle (see `jet.py` and `tests/unit/test_jet_struct.py`).
+
 ## Cross-references
 
 - Programming Guide Ch.7 (Autodiff) — describes the *full* Phase 5 epic.

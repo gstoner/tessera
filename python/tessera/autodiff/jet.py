@@ -418,6 +418,197 @@ def laplacian_estimate(
     )
 
 
+def _jet_div(W: TruncatedJet, a: Jet, b: Jet) -> Jet:
+    """`a / b` in W, as `a * reciprocal(b)`.
+
+    `reciprocal` is a registered holonomic recurrence, so division needs no
+    rule of its own -- which also means it inherits that recurrence's
+    behaviour at `b = 0` rather than inventing a second convention.
+    """
+    return jet_mul(W, a, jet_map(W, "reciprocal", b))
+
+
+#: `ops.<name>` -> how that op evaluates in W. Absence is meaningful: an op
+#: with no entry here FAILS CLOSED in `jet_trace` rather than being treated as
+#: a constant, because silently dropping an op to order 0 returns a derivative
+#: that is wrong without being obviously wrong.
+_JET_REPLAY: "dict[str, Callable]" = {
+    "add": lambda W, a, kw: jet_add(W, a[0], a[1]),
+    "sub": lambda W, a, kw: jet_sub(W, a[0], a[1]),
+    "mul": lambda W, a, kw: jet_mul(W, a[0], a[1]),
+    "div": lambda W, a, kw: _jet_div(W, a[0], a[1]),
+    "neg": lambda W, a, kw: jet_scale(W, a[0], -1.0),
+    "matmul": lambda W, a, kw: jet_matmul(W, a[0], a[1]),
+    "gemm": lambda W, a, kw: jet_matmul(W, a[0], a[1]),
+    "sum": lambda W, a, kw: jet_sum(W, a[0], axis=kw.get("axis"),
+                                    keepdims=bool(kw.get("keepdims", False))),
+    "mean": lambda W, a, kw: jet_mean(W, a[0], axis=kw.get("axis"),
+                                      keepdims=bool(kw.get("keepdims", False))),
+    "softmax": lambda W, a, kw: jet_softmax(W, a[0], axis=int(kw.get("axis", -1))),
+    "logsumexp": lambda W, a, kw: jet_logsumexp(
+        W, a[0], axis=kw.get("axis"), keepdims=bool(kw.get("keepdims", False))),
+}
+# The 21 registered pointwise recurrences ride in unchanged: `jet_map` already
+# applies them coefficient-wise, so each is a rule only in the sense that its
+# NAME must be listed -- which is what keeps an unregistered scalar failing
+# closed instead of silently resolving.
+_JET_REPLAY.update({
+    _name: (lambda _n: lambda W, a, kw: jet_map(W, _n, a[0]))(_name)
+    for _name in SCALAR_RECURRENCES
+})
+
+
+def jet_trace(fn: "Callable[[np.ndarray], np.ndarray]") -> "Callable[[TruncatedJet, Jet], Jet]":
+    """Lift a plain `tessera.ops.*` program into jet arithmetic (MSW-2).
+
+    Returns a `jet_fn(W, coeffs)` of the shape `laplacian_exact` and
+    `hessian_trace_estimate` consume, so a caller writes ordinary
+    `ops.*` code instead of hand-translating it into this module's `jet_*`
+    vocabulary -- which was the practical barrier to using either.
+
+    **It reuses the tape rather than adding a second tracer** (#31). `fn` is
+    run once under `tape()`, which already records every `ops.*` call in
+    order with its operands and kwargs; this replays that linear record with
+    each buffer bound to a jet. There is one interception mechanism in the
+    codebase and this is not a new one.
+
+    **It re-traces on every call, deliberately.** The tape captures the
+    control flow taken at ONE point, so a record reused at another point
+    would silently evaluate the wrong branch. Re-tracing costs one numpy
+    forward per evaluation and removes the entire class; the straight-line
+    restriction that remains is the tape's own, inherited rather than
+    invented.
+
+    Values `fn` closes over are constants in W (order 0 only), which is
+    correct -- they do not vary with the seed direction -- and so are Python
+    scalar literals.
+    """
+    from .errors import TesseraAutodiffError
+    from .tape import tape
+
+    # One-entry trace cache, keyed on the PRIMAL POINT. The record depends on
+    # `coeffs[0]` alone -- control flow, captured constants and literal
+    # operands are all fixed once the point is -- and NOT on the seed
+    # direction, so `laplacian_exact`'s d evaluations at one point can share a
+    # single trace. Measured on a d=128 field: tracing was 40% of
+    # `laplacian_exact`, all of it redundant.
+    #
+    # One entry, not an unbounded dict: d consecutive calls at the same point
+    # is exactly the access pattern, and a growing cache of traces (each
+    # holding every intermediate array) is a memory leak wearing an
+    # optimisation's clothes. A different point re-traces, which is what
+    # `test_jet_trace_retraces_so_a_second_point_is_not_stale` pins.
+    #
+    # The cache holds the probe array itself, not just its id: `env` is keyed
+    # on `id(probe)`, and a collected probe could see its id reused by another
+    # object, silently binding the wrong buffer to the input jet.
+    cache: dict = {"key": None, "probe": None, "entries": None, "out_id": None}
+
+    def _trace_at(point: np.ndarray):
+        key = (point.shape, point.dtype.str, point.tobytes())
+        if cache["key"] == key:
+            return cache["probe"], cache["entries"], cache["out_id"]
+        probe = np.array(point, copy=True)
+        with tape() as recorded:
+            out = fn(probe)
+        if not recorded.entries:
+            raise TesseraAutodiffError(
+                "jet_trace recorded no tessera.ops.* calls. The function must "
+                "build its result through ops.*; raw numpy is invisible to the "
+                "tape, so the jet would be a constant and every derivative "
+                "would come back zero."
+            )
+        cache.update(key=key, probe=probe, entries=tuple(recorded.entries),
+                     out_id=id(out))
+        return probe, cache["entries"], cache["out_id"]
+
+    def jet_fn(W: TruncatedJet, coeffs: Jet) -> Jet:
+        probe, entries, out_id = _trace_at(np.asarray(coeffs[0], dtype=np.float64))
+        env: dict[int, Jet] = {id(probe): coeffs}
+
+        def resolve(desc) -> Jet:
+            if desc.array_id in env:
+                return env[desc.array_id]
+            # A literal or a captured constant: order 0 only.
+            return jet_const(W, np.asarray(desc.array, dtype=np.float64))
+
+        for entry in entries:
+            rule = _JET_REPLAY.get(entry.op)
+            if rule is None:
+                raise TesseraAutodiffError(
+                    f"jet_trace has no jet rule for tessera.ops.{entry.op}. "
+                    f"Refusing rather than treating it as a constant: an op "
+                    f"dropped to order 0 yields a derivative that is wrong "
+                    f"without looking wrong. Known ops: "
+                    f"{', '.join(sorted(_JET_REPLAY))}."
+                )
+            env[entry.output_id] = rule(W, [resolve(i) for i in entry.inputs],
+                                        entry.kwargs)
+
+        if out_id not in env:
+            raise TesseraAutodiffError(
+                "jet_trace could not tie the returned value back to a recorded "
+                "op: the function returned something the tape did not produce "
+                "(a raw numpy result, or a value built outside ops.*)."
+            )
+        return env[out_id]
+
+    return jet_fn
+
+
+def laplacian_exact(
+    jet_fn: "Callable[[TruncatedJet, Jet], Jet]",
+    x: np.ndarray,
+) -> float:
+    """Exact ``tr ∇²f(x)`` from `d` deterministic jet evaluations (MSW-2).
+
+    The estimator above randomizes the order-2 seed and averages; this walks
+    the coordinate directions instead. Seeding ``v = e_i`` makes the order-2
+    Taylor coefficient of ``t ↦ f(x + t e_i)`` exactly ``½ ∂²f/∂x_i²``, so
+
+        Σ_i 2·a₂(e_i) = Σ_i ∂²f/∂x_i²  =  tr ∇²f  =  Δf
+
+    with no variance and no key. It is the same quantity
+    `laplacian_estimate` approximates, which is why they are checked against
+    each other rather than only against closed forms.
+
+    **Cost is the reason both exist.** This is exactly ``d`` jet evaluations
+    for a ``d``-element input -- cheaper than the estimator only when ``d``
+    is smaller than the sample count, and unusable when ``d`` is large. The
+    estimator's error falls as ``1/sqrt(samples)`` independently of ``d``.
+    Choose by dimension, not by preference: exact below a few hundred
+    elements, sampled above.
+
+    No key, deliberately. A signature that accepted one would suggest the
+    result varies with it, and an exact method that quietly ignored a key
+    would be the more confusing of the two failures.
+    """
+    from .errors import TesseraAutodiffError
+
+    x = np.asarray(x, dtype=np.float64)
+    if x.size == 0:
+        raise TesseraAutodiffError(
+            "laplacian_exact needs at least one input element; the Laplacian "
+            "of a zero-element field is not 0, it is undefined"
+        )
+    W = TruncatedJet(2)
+    total = 0.0
+    flat_basis = np.zeros(x.size, dtype=np.float64)
+    for i in range(x.size):
+        flat_basis[i] = 1.0
+        v = flat_basis.reshape(x.shape)
+        coeffs = jet_fn(W, jet_lift(W, x, v))
+        a2 = np.asarray(coeffs[2], dtype=np.float64)
+        if a2.size != 1:
+            raise TesseraAutodiffError(
+                f"laplacian_exact needs a scalar-output jet program; got "
+                f"output shape {a2.shape}"
+            )
+        total += 2.0 * float(a2.reshape(()))
+        flat_basis[i] = 0.0
+    return total
+
+
 # ── AD-RETIRE-2: the structured family's production rules derive here ────────
 #
 # Second retirement wave (after the ODE family in `derivative_contract`).

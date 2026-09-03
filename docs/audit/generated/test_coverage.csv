@@ -288,7 +288,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,521,312,25,833,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,833 direct test references
+matmul,525,312,25,837,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,837 direct test references
 matrix_power,1,0,0,1,1,fp32,structural_only,unclassified — defaults to structural_only
 max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
@@ -472,7 +472,7 @@ stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,72,8,4,80,0,bf16 f16 f32 fp16 fp32 fp64 int32 int64 int8,directly_tested,80 direct test references
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
 sub,37,7,4,44,0,bf16 f16 f32 fp16 fp32,directly_tested,44 direct test references
-sum,86,0,7,86,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,86 direct test references
+sum,89,0,7,89,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,89 direct test references
 svd,24,5,1,29,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,29 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

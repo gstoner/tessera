@@ -246,18 +246,30 @@ def vjp_gemm(dout, A, B, bias=None, residual=None, *,
     a_was_1d, b_was_1d = a_arr.ndim == 1, b_arr.ndim == 1
     a_mat = a_arr[None, :] if a_was_1d else a_arr
     b_mat = b_arr[:, None] if b_was_1d else b_arr
-    # `local_dout` lost the promoted axes with the result, so restore them in
-    # the same order numpy removed them: the leading one first.
+    # `local_dout` lost the promoted axes with the result, so restore them --
+    # each in the MATRIX position it occupied, not at the front of the array.
+    # numpy prepends the 1 to the operand's own dimensions, which puts it at
+    # axis -2 of the promoted operand; any batch axes broadcast in FRONT of it.
+    # So for `(K,) @ (batch, K, N)` the forward is `(batch, 1, N)` collapsed to
+    # `(batch, N)`, and the axis to restore is -2, not 0. Restoring it at 0
+    # gave `(1, batch, N)`, which makes `batch` the contraction dimension and
+    # raises for every batch size but 1 -- the shape that accidentally passes.
+    #
+    # Restore B's axis FIRST. Both promotions collapse `v @ v` to a 0-d
+    # cotangent, and a 0-d array has no axis for the `:` in `[..., None, :]`
+    # -- appending B's column axis makes the room A's row axis then needs.
     d_mat = np.asarray(local_dout)
-    if a_was_1d:
-        d_mat = d_mat[None, ...]
     if b_was_1d:
         d_mat = d_mat[..., None]
+    if a_was_1d:
+        d_mat = d_mat[..., None, :]
 
     dA = np.matmul(d_mat, np.swapaxes(b_mat, -1, -2))
     dB = np.matmul(np.swapaxes(a_mat, -1, -2), d_mat)
+    # Drop the same axis that was added, in the same position. `_sum_to_shape`
+    # then folds any broadcast batch axes back onto the 1-D operand's shape.
     if a_was_1d:
-        dA = dA[0]
+        dA = dA[..., 0, :]
     if b_was_1d:
         dB = dB[..., 0]
     dA = _sum_to_shape(dA, a_arr.shape)

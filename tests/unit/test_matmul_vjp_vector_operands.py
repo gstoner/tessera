@@ -155,3 +155,96 @@ def test_the_jet_laplacian_now_composes_with_parameter_gradients():
     grad = np.asarray(A.grad(lambda M: laplacian_ops(x, M))(W0))
     np.testing.assert_allclose(grad, _fd_grad(lambda M: laplacian_ops(x, M), W0),
                                rtol=1e-4, atol=1e-7)
+
+
+# ── The rank cross-product, generated rather than hand-picked ────────────────
+#
+# The hand-picked CASES above missed `(K,) @ (batch, K, N)`, and review caught
+# it: numpy prepends A's promoted axis to A's OWN dimensions, which puts it at
+# axis -2 once batch axes broadcast in front. Restoring it at axis 0 instead
+# built `(1, batch, N)`, making `batch` the contraction dimension -- so the
+# case raised for every batch size except 1, the one size that accidentally
+# works. A picked list is exactly the wrong shape of test for a rank bug, so
+# the ranks are enumerated here and the completeness is itself asserted.
+
+K, M_, N_ = 3, 2, 4
+
+#: label -> (A shape, B shape). `None` means the operand is 1-D.
+RANK_SHAPES = {
+    "1d @ 1d":            ((K,),           (K,)),
+    "1d @ 2d":            ((K,),           (K, N_)),
+    "2d @ 1d":            ((M_, K),        (K,)),
+    "2d @ 2d":            ((M_, K),        (K, N_)),
+    "1d @ batched":       ((K,),           (5, K, N_)),
+    "batched @ 1d":       ((5, M_, K),     (K,)),
+    "1d @ batch-of-1":    ((K,),           (1, K, N_)),
+    "1d @ two batch dims": ((K,),          (3, 2, K, N_)),
+    "two batch dims @ 1d": ((3, 2, M_, K), (K,)),
+    "batched @ batched":  ((5, M_, K),     (5, K, N_)),
+    "batched @ 2d":       ((5, M_, K),     (K, N_)),
+    "2d @ batched":       ((M_, K),        (5, K, N_)),
+}
+
+
+def _fd_full(fn, z, h=1e-6):
+    """Finite difference of a scalar-valued `fn` over every element of `z`."""
+    g = np.zeros_like(z)
+    it = np.nditer(z, flags=["multi_index"])
+    while not it.finished:
+        i = it.multi_index
+        up, dn = z.copy(), z.copy()
+        up[i] += h
+        dn[i] -= h
+        g[i] = (float(np.asarray(fn(up))) - float(np.asarray(fn(dn)))) / (2 * h)
+        it.iternext()
+    return g
+
+
+@pytest.mark.parametrize("label", list(RANK_SHAPES), ids=list(RANK_SHAPES))
+@pytest.mark.parametrize("wrt", ["A", "B"])
+def test_every_rank_combination_has_a_correct_gradient(label, wrt):
+    a_shape, b_shape = RANK_SHAPES[label]
+    rng = np.random.default_rng(abs(hash((label, wrt))) % (2**32))
+    a, b = rng.standard_normal(a_shape), rng.standard_normal(b_shape)
+    primal, fn = ((a, lambda M: ops.sum(ops.matmul(M, b))) if wrt == "A"
+                  else (b, lambda M: ops.sum(ops.matmul(a, M))))
+
+    grad = np.asarray(A.grad(fn)(primal))
+    assert grad.shape == primal.shape, f"{label} d{wrt}: shape {grad.shape}"
+    np.testing.assert_allclose(grad, _fd_full(fn, primal), rtol=1e-4, atol=1e-6)
+
+    tangent = rng.standard_normal(primal.shape)
+    _, jvp_out = A.jvp(fn, (primal,), (tangent,))
+    h = 1e-6
+    fd = (float(np.asarray(fn(primal + h * tangent)))
+          - float(np.asarray(fn(primal - h * tangent)))) / (2 * h)
+    assert float(np.asarray(jvp_out)) == pytest.approx(fd, rel=1e-5, abs=1e-7)
+
+
+def test_the_rank_cross_product_is_actually_complete():
+    """A generated matrix is only worth more than a picked list while it stays
+    complete. Every (rank of A, rank of B) pair up to two batch dims, in both
+    directions, must appear -- 1-D against a BATCHED operand especially, since
+    that is the combination the picked list omitted."""
+    seen = {(len(a), len(b)) for a, b in RANK_SHAPES.values()}
+    for ra in (1, 2, 3):
+        for rb in (1, 2, 3):
+            if ra == 1 and rb == 1:
+                continue
+            assert (ra, rb) in seen, f"rank pair ({ra}, {rb}) is not covered"
+    assert (1, 1) in seen and (4, 1) in seen and (1, 4) in seen
+
+
+def test_the_batched_vector_case_needs_a_batch_bigger_than_one():
+    """Pins the discriminator, because batch=1 passes under the wrong axis too.
+
+    With A `(K,)` and B `(batch, K, N)` the forward is `(batch, N)`; inserting
+    A's restored row axis at the FRONT gives `(1, batch, N)`, which is only a
+    valid contraction when `batch == 1`. A regression that reinstates the old
+    indexing therefore still passes a batch-of-1 fixture."""
+    rng = np.random.default_rng(11)
+    a, b = rng.standard_normal(K), rng.standard_normal((5, K, N_))
+    assert np.asarray(ops.matmul(a, b)).shape == (5, N_)
+    fn = lambda v: ops.sum(ops.matmul(v, b))
+    np.testing.assert_allclose(np.asarray(A.grad(fn)(a)), _fd_full(fn, a),
+                               rtol=1e-4, atol=1e-6)

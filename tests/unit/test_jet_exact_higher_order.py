@@ -419,3 +419,56 @@ def test_an_option_no_rule_interprets_is_refused_generically():
     assert _JET_REPLAY["sum"].reads == frozenset({"axis", "keepdims"})
     assert _JET_REPLAY["exp"].reads == frozenset()
     assert "activation" in _JET_REPLAY["matmul"].reads
+
+
+@pytest.mark.parametrize("spelling", [
+    "bias_none_kw", "bias_none_residual_kw", "bias_kw", "residual_kw", "positional",
+])
+def test_every_spelling_of_the_fused_operands_replays_correctly(spelling):
+    """Keyword-spelled operands, including an explicit `None` (review on #700).
+
+    `promote_operand_kwargs` is not consistent about which keyword operands
+    become positional inputs: `matmul(A, B, residual=r)` promotes to four
+    inputs with a None bias filler, while
+    `matmul(A, B, bias=None, residual=r)` leaves BOTH in kwargs and records
+    only two. So the strict unknown-kwarg check refused `bias=None` -- a
+    valid no-op that replayed fine before -- and a kwarg-spelled residual
+    never reached the operand path at all.
+    """
+    M = np.random.default_rng(0).standard_normal((4, 3))
+    bias, residual = np.ones(4), np.full(4, 0.5)
+    builders = {
+        "bias_none_kw": lambda v: ops.matmul(M, v, bias=None),
+        "bias_none_residual_kw": lambda v: ops.matmul(M, v, bias=None, residual=residual),
+        "bias_kw": lambda v: ops.matmul(M, v, bias=bias),
+        "residual_kw": lambda v: ops.matmul(M, v, residual=residual),
+        "positional": lambda v: ops.matmul(M, v, bias, residual),
+    }
+    fn = lambda v: ops.sum(ops.exp(builders[spelling](v)))
+    x = np.array([0.3, -1.1, 0.7])
+    assert laplacian_exact(jet_trace(fn), x) == pytest.approx(
+        _fd_laplacian(fn, x), rel=1e-4)
+
+
+def test_a_kwarg_operand_that_is_traced_keeps_its_derivative():
+    """A residual computed FROM the input must not become a constant.
+
+    The kwarg path resolves through the replay environment first. Reading it
+    as a constant would drop its dependence on x -- a smaller, quieter
+    version of the activation bug: the value stays finite and the derivative
+    goes wrong.
+    """
+    M = np.random.default_rng(0).standard_normal((3, 3))
+    x = np.array([0.3, -1.1, 0.7])
+
+    def fn(v):
+        traced_residual = ops.mul(v, v)          # depends on the input
+        return ops.sum(ops.exp(ops.matmul(M, v, residual=traced_residual)))
+
+    got = laplacian_exact(jet_trace(fn), x)
+    assert got == pytest.approx(_fd_laplacian(fn, x), rel=1e-4)
+    # and it must differ from the constant-residual reading, or the test is
+    # blind to exactly the mistake it exists to catch
+    frozen = np.asarray(ops.mul(x, x))
+    const_fn = lambda v: ops.sum(ops.exp(ops.matmul(M, v, residual=frozen)))
+    assert got != pytest.approx(laplacian_exact(jet_trace(const_fn), x), rel=1e-3)

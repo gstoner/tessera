@@ -444,8 +444,13 @@ class _JetRule(NamedTuple):
     that names one is responsible for honouring its VALUE.
     """
 
-    apply: "Callable[[TruncatedJet, list, dict], Jet]"
+    apply: "Callable[..., Jet]"
     reads: frozenset
+    #: True when `apply` also takes a `lift` callable that turns a raw value
+    #: from `kwargs` into a jet -- resolving it through the replay's
+    #: environment first, so a kwarg-spelled operand that is itself a traced
+    #: intermediate keeps its derivative instead of becoming a constant.
+    wants_lift: bool = False
 
 
 def _scalar_operand(W: TruncatedJet, args: list, kwargs: dict) -> "Jet | None":
@@ -477,7 +482,7 @@ def _binary(name: str, op):
     return _JetRule(rule, frozenset({"scalar"}))
 
 
-def _jet_matmul_fused(W: TruncatedJet, a: list, kw: dict) -> Jet:
+def _jet_matmul_fused(W: TruncatedJet, a: list, kw: dict, lift) -> Jet:
     """`A @ B`, plus the fused epilogue operands, in the op's own order.
 
     `gemm` computes `A@B -> +bias -> activation -> +residual -> epilogue`.
@@ -509,11 +514,27 @@ def _jet_matmul_fused(W: TruncatedJet, a: list, kw: dict) -> Jet:
             "`epilogue=`; its contents are opaque to the replay. Express the "
             "epilogue as explicit ops so each step can be lifted into W."
         )
+    # `bias`/`residual` arrive EITHER as positional inputs or as kwargs, and
+    # the promotion is not consistent: `matmul(A, B, residual=r)` promotes to
+    # four inputs with a None bias filler, while
+    # `matmul(A, B, bias=None, residual=r)` leaves BOTH in kwargs and records
+    # only two inputs (review on #700). So both spellings are read here, and
+    # a kwarg operand goes through `lift`, which resolves it against the
+    # replay environment first -- a residual that is itself a traced value
+    # must keep its derivative, not silently become a constant.
+    def operand(position: int, name: str):
+        if len(a) > position and a[position] is not None:
+            return a[position]
+        value = kw.get(name)
+        return None if value is None else lift(value)
+
     out = jet_matmul(W, a[0], a[1])
-    if len(a) > 2 and a[2] is not None:          # bias, before the activation
-        out = jet_add(W, out, a[2])
-    if len(a) > 3 and a[3] is not None:          # residual, after it
-        out = jet_add(W, out, a[3])
+    bias = operand(2, "bias")
+    if bias is not None:                          # before the activation
+        out = jet_add(W, out, bias)
+    residual = operand(3, "residual")
+    if residual is not None:                      # after it
+        out = jet_add(W, out, residual)
     return out
 
 
@@ -528,8 +549,15 @@ _JET_REPLAY: "dict[str, _JetRule]" = {
     "mul": _binary("mul", jet_mul),
     "div": _JetRule(lambda W, a, kw: _jet_div(W, a[0], a[1]), frozenset()),
     "neg": _JetRule(lambda W, a, kw: jet_scale(W, a[0], -1.0), frozenset()),
-    "matmul": _JetRule(_jet_matmul_fused, frozenset({"activation", "epilogue"})),
-    "gemm": _JetRule(_jet_matmul_fused, frozenset({"activation", "epilogue"})),
+    # `bias`/`residual` are named here because an explicit `bias=None` is a
+    # valid no-op spelling that must not be refused, and a kwarg-spelled
+    # residual must actually be applied.
+    "matmul": _JetRule(_jet_matmul_fused,
+                       frozenset({"activation", "epilogue", "bias", "residual"}),
+                       wants_lift=True),
+    "gemm": _JetRule(_jet_matmul_fused,
+                     frozenset({"activation", "epilogue", "bias", "residual"}),
+                     wants_lift=True),
     "sum": _JetRule(
         lambda W, a, kw: jet_sum(W, a[0], axis=kw.get("axis"),
                                  keepdims=bool(kw.get("keepdims", False))),
@@ -625,6 +653,13 @@ def jet_trace(fn: "Callable[[np.ndarray], np.ndarray]") -> "Callable[[TruncatedJ
         probe, entries, out_id = _trace_at(np.asarray(coeffs[0], dtype=np.float64))
         env: dict[int, Jet] = {id(probe): coeffs}
 
+        def lift(value):
+            """A raw kwarg value as a jet: traced if the replay knows it."""
+            known = env.get(id(value))
+            if known is not None:
+                return known
+            return jet_const(W, np.asarray(value, dtype=np.float64))
+
         def resolve(desc):
             if desc.array_id in env:
                 return env[desc.array_id]
@@ -655,8 +690,11 @@ def jet_trace(fn: "Callable[[np.ndarray], np.ndarray]") -> "Callable[[TruncatedJ
                     f"from the replay changes the function being "
                     f"differentiated, not just its speed."
                 )
-            env[entry.output_id] = rule.apply(
-                W, [resolve(i) for i in entry.inputs], entry.kwargs)
+            operands = [resolve(i) for i in entry.inputs]
+            if rule.wants_lift:
+                env[entry.output_id] = rule.apply(W, operands, entry.kwargs, lift)
+            else:
+                env[entry.output_id] = rule.apply(W, operands, entry.kwargs)
 
         if out_id not in env:
             raise TesseraAutodiffError(

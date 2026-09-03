@@ -1317,3 +1317,64 @@ def test_every_converted_site_passes_a_finite_timeout():
     for args in calls:
         timeouts = [int(v) for v in re.findall(r"\b(\d{3,})\b", args)]
         assert timeouts and all(t > 0 for t in timeouts), args
+
+
+# ── The commit reports its own expiry ────────────────────────────────────────
+# `ts_enc_commit_wait` used to print to stderr and touch nothing, so a stall
+# could only be INFERRED from how long the call took -- a heuristic that cannot
+# tell a 30 s hang from a 30 s workload. It now sets timeout kind 1, like every
+# other bounded wait in the runtime. The duration rule stays as a fallback for
+# a prebuilt dylib older than that change, since the package and the runtime
+# are versioned separately.
+
+
+def test_a_reported_commit_timeout_counts_without_taking_any_time(monkeypatch):
+    """The property that separates reading from inferring: a commit that
+    returns immediately but REPORTS kind 1 must still count. Under the old
+    duration-only rule this was invisible."""
+    monkeypatch.setattr(rt, "_apple_gpu_arm_gpu_error", lambda: None)
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: TIMEOUT)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "did not signal")
+    notes = []
+    monkeypatch.setattr(rt, "_note_dispatch_fallback", lambda op, reason, exc=None: notes.append((op, reason)))
+    clock = _Clock()
+    monkeypatch.setattr(rt.time, "monotonic", lambda: clock.now)   # no time passes at all
+
+    for index in range(LIMIT):
+        rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", lambda: None)
+        assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == index + 1
+    assert rt.apple_gpu_dispatch_breaker_state()["open"] is True
+    assert notes and "did not signal" in notes[0][1]
+
+
+def test_a_reported_timeout_is_counted_once_not_twice(monkeypatch, _silent_channel):
+    """A slow commit that ALSO reports must advance the streak by one. The
+    duration rule may only supply what the runtime failed to report."""
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: TIMEOUT)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "did not signal")
+    tick = _Clock().install(monkeypatch, advance_per_call=30.0)
+    monkeypatch.setattr(rt, "_apple_gpu_peek_gpu_error_kind", lambda: TIMEOUT)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "did not signal")
+    rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", tick)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 1
+
+
+def test_an_older_dylib_that_reports_nothing_is_still_covered(monkeypatch, _silent_channel):
+    """The package and the runtime ship separately, so a prebuilt library from
+    before the reporting change still only prints to stderr. Duration keeps
+    covering that case."""
+    tick = _Clock().install(monkeypatch, advance_per_call=30.0)
+    rt._apple_gpu_commit_accounted("apple_gpu.encode_session.commit", tick)
+    assert rt.apple_gpu_dispatch_breaker_state()["consecutive_timeouts"] == 1
+    assert _silent_channel and "without setting the GPU error channel" in _silent_channel[0][1]
+
+
+def test_the_runtime_reports_the_commit_timeout_on_the_error_channel():
+    """Drift gate: the C side must keep setting the timeout kind on expiry.
+    Losing it would silently demote the accounting back to a duration guess,
+    and nothing else in the suite would notice."""
+    body = _mm_bodies(_runtime_source())["ts_enc_commit_wait"][0]
+    assert "waitUntilSignaledValue" in body and "timeoutMS" in body
+    assert "ts_set_last_gpu_error(1" in body, (
+        "the encode-session commit no longer reports its expiry; the breaker "
+        "would be back to inferring a stall from wall time")

@@ -6,9 +6,9 @@ Reference date for staleness: **2026-09-03**.
 
 ## Headline
 
-- **151** docs catalogued across the canonical doc tree.
-- **150** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **51** updated within the last 30 days.
+- **152** docs catalogued across the canonical doc tree.
+- **151** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **52** updated within the last 30 days.
 - **23** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -175,6 +175,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-08-08 | 26 | ✓ |
 | `compiler/FORGE_ASSESSMENT.md` | - | 2026-08-15 | 19 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 32 | ✓ |
+| `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 0 | ✓ |
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-08-22 | 12 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-08-15 | 19 | ✓ |
 | `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-24 | 10 | ✓ |

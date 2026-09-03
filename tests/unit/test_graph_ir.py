@@ -361,6 +361,61 @@ class TestGraphIRBuilder:
         assert str(args["B"].ir_type) == "tensor<16x32xbf16>"
         assert str(args["C"].ir_type) == "tensor<16x8xf32>"
 
+    def test_tensor_annotation_binds_a_trailing_dtype_string(self):
+        """Regression: ``Tensor['M','K','bf16']`` once read ``'bf16'`` as a THIRD
+        dimension name and left the element type unresolved -- rank 3,
+        ``tensor<?x?x?x?>``. A trailing dtype is a semantic key (Decision #21a)
+        and binds as such; the dims stay rank 2."""
+        # Bound to a local first: in annotation position ruff reads the quoted
+        # subscript items as PEP 484 forward references (the repo idiom, see
+        # test_jit_zero_function_candidate).
+        MKb = tessera.Tensor["M", "K", "bf16"]
+
+        def typed(A: MKb):
+            return tessera.ops.relu(A)
+
+        (arg,) = GraphIRBuilder().lower(typed).args
+        assert arg.dim_names == ("M", "K")
+        assert str(arg.ir_type) == "tensor<?x?xbf16>"
+        assert MKb.dtype == "bf16"
+
+    def test_tensor_annotation_binds_a_trailing_dtype_shorthand(self):
+        MKf = tessera.Tensor["M", "K", tessera.f32]
+
+        def typed(A: MKf):
+            return tessera.ops.relu(A)
+
+        (arg,) = GraphIRBuilder().lower(typed).args
+        assert arg.dim_names == ("M", "K")
+        assert str(arg.ir_type) == "tensor<?x?xf32>"
+
+    def test_tensor_annotation_dtype_alias_canonicalizes_at_the_boundary(self):
+        ann = tessera.Tensor["N", "float32"]  # Decision #15a: aliases normalize here
+        assert ann.__dims__ == ("N",) and ann.dtype == "fp32"
+        plain = tessera.Tensor["N"]           # a dim, not a dtype
+        assert plain.__dims__ == ("N",) and not hasattr(plain, "dtype")
+
+    def test_tensor_annotation_refuses_a_misplaced_or_illegal_dtype(self):
+        from tessera.dtype import TesseraDtypeError
+
+        with pytest.raises(TesseraDtypeError, match="position 0"):
+            tessera.Tensor["bf16", "K"]       # never silently a dimension name
+        with pytest.raises(TesseraDtypeError):
+            tessera.Tensor["M", "K", "tf32"]  # a math mode, not a storage dtype
+
+    def test_jit_repro_rank_and_element_type_are_right(self):
+        MK = tessera.Tensor["M", "K", "bf16"]
+        KN = tessera.Tensor["K", "N", "bf16"]
+
+        @tessera.jit
+        def f(a: MK, b: KN):
+            return tessera.ops.matmul(a, b)
+
+        ir = f.graph_ir.to_mlir()
+        assert "tensor<?x?xbf16>" in ir
+        assert 'tessera.dim_names = ["M", "K"]' in ir
+        assert '"bf16"]' not in ir              # the dtype no longer leaks into dim_names
+
     def test_unsupported_python_construct_has_source_span_diagnostic(self):
         """Updated for D.1 (2026-05-31). Pre-D.1 a dynamic ``if`` with a
         non-emittable Compare test produced a blanket

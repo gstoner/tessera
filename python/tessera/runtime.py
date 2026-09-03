@@ -34570,8 +34570,17 @@ def _apple_gpu_probe_blocked_by_open_breaker() -> bool:
     """A cached ``*_value_available`` probe must not run -- and must not cache
     its answer -- while the breaker is open: the device may answer again after
     :func:`reset_apple_gpu_dispatch_breaker`, and a ``False`` cached now would
-    outlive that reset and disable the lane for the rest of the process."""
-    return bool(apple_gpu_dispatch_breaker_state()["open"])
+    outlive that reset and disable the lane for the rest of the process.
+
+    ``TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER`` is read here as well as in
+    :func:`_apple_gpu_run_checked`, and for the same reason: that opt-out is
+    read per call, so setting it after a streak has opened the breaker makes
+    every other lane dispatch again. A probe that consulted only the raw open
+    bit would stay unavailable until an explicit reset, which is not the old
+    behaviour the escape hatch promises.
+    """
+    state = apple_gpu_dispatch_breaker_state()
+    return bool(state["open"]) and not bool(state["disabled"])
 
 
 def _apple_gpu_strict_value_fallback(op_name: str) -> Any:

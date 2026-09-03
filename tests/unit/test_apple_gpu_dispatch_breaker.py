@@ -510,7 +510,17 @@ DIRECT_SITES = [
 @pytest.fixture(autouse=True)
 def _probe_caches_reset(monkeypatch):
     """The `*_value_available` probes cache per process; a test must never
-    inherit another's answer."""
+    inherit another's answer.
+
+    They are also gated on `_apple_value_compile_pipeline_available`, which
+    runs a real canonical compile: it is False on a host without the Apple
+    value pipeline (so the probe would never reach the symbol under test, and
+    these tests would pass vacuously on Linux while failing on the Mac) and
+    costs ~30 s on a host where it is True. Stubbing it keeps this file
+    host-free and puts the breaker, not the compile seam, under test.
+    """
+    monkeypatch.setattr(rt, "_apple_value_compile_pipeline_available", lambda: True)
+    monkeypatch.setattr(rt, "_APPLE_VALUE_COMPILE_PIPELINE_OK", True)
     for name in dir(rt):
         if name.startswith("_APPLE_GPU_") and name.endswith("_AVAILABLE"):
             monkeypatch.setattr(rt, name, None)
@@ -611,6 +621,26 @@ def test_open_breaker_does_not_cache_a_value_probe_as_unavailable(monkeypatch):
     assert rt._apple_gpu_ebm_energy_quadratic_value_available() is False
     assert sym.calls == 1
     assert rt._APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE is False
+
+
+def test_the_escape_hatch_also_reopens_the_value_probes(monkeypatch):
+    """`TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER` is read per call, so setting it
+    after a streak has opened the breaker makes every lane dispatch again. A
+    probe that consulted only the raw open bit would stay unavailable until an
+    explicit reset -- which is not the old behaviour the opt-out promises."""
+    sym = _Sym(rc=1)
+    _install(monkeypatch, _apple_gpu_ebm_energy_quadratic_value_f32=lambda: sym)
+    channel = _Channel(TIMEOUT).install(monkeypatch)
+    for _ in range(LIMIT):
+        rt._apple_gpu_run_checked("warmup", lambda: None, lambda: None)
+    assert rt._apple_gpu_ebm_energy_quadratic_value_available() is False
+    assert sym.calls == 0, "the breaker is open, so the probe must not dispatch"
+
+    monkeypatch.setenv("TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER", "1")
+    channel.detail = None
+    rt._APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = None
+    rt._apple_gpu_ebm_energy_quadratic_value_available()
+    assert sym.calls == 1, "the opt-out did not reach the probe gate"
 
 
 def test_a_value_probe_timeout_raises_under_strict_dispatch(monkeypatch):

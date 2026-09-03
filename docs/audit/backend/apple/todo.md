@@ -6795,7 +6795,11 @@ routed lane now returns the host value instead of the kernel's untouched output
 they now re-raise it; they also refuse to run — and, more importantly, refuse to
 **cache** — while the breaker is open, since a `False` cached then would outlive
 `reset_apple_gpu_dispatch_breaker()` and disable the lane for the rest of the
-process. The MPS single-matrix linalg lanes report success as `rc == 0`, which
+process. That probe gate reads `TESSERA_APPLE_GPU_NO_DISPATCH_BREAKER` as well
+(review of #707): the opt-out is consulted per call, so setting it after a
+streak has opened the breaker makes every other lane dispatch again, and a
+probe keyed on the raw open bit alone would have stayed unavailable until an
+explicit reset. The MPS single-matrix linalg lanes report success as `rc == 0`, which
 the helper carries as an explicit `ok_rc` rather than normalizing.
 
 **Coverage.** `tests/unit/test_apple_gpu_dispatch_breaker.py` drives one
@@ -6807,6 +6811,13 @@ timeouts count toward the streak, a validation decline does not, and success
 closes it. The drift gate is the enumeration above, so a new dispatching lane
 that copies the old shape fails it by construction, and a `KNOWN_UNROUTED` line
 that stops being an offender fails it too.
+
+The value-probe cases stub `_apple_value_compile_pipeline_available`. That gate
+runs a real canonical compile: it is **False on a host without the Apple value
+pipeline**, so the probe short-circuits before reaching the symbol under test —
+which is why the first push passed on this Mac and failed five cases on the
+Linux CI runner, the reverse of the usual host asymmetry. Stubbing it also
+drops the file from 34 s to 3 s, since that compile ran once per process.
 
 **Evidence, M1 Max, unsandboxed, dylib built 10:23 the same day.**
 

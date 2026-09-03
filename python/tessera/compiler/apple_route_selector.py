@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import hashlib
 import json
+import math
 import os
 import platform
 from pathlib import Path
@@ -185,6 +186,63 @@ def _parse_utc(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
+# One-sided Student-t 95% multipliers, indexed by degrees of freedom (n - 1).
+# Table rather than SciPy: this module is imported on the runtime path and
+# Decision #23 keeps the shipped package free of heavyweight dependencies.
+_STUDENT_T_ONE_SIDED_95 = {
+    1: 6.314, 2: 2.920, 3: 2.353, 4: 2.132, 5: 2.015, 6: 1.943, 7: 1.895,
+    8: 1.860, 9: 1.833, 10: 1.812, 11: 1.796, 12: 1.782, 13: 1.771,
+    14: 1.761, 15: 1.753, 16: 1.746, 17: 1.740, 18: 1.734, 19: 1.729,
+    20: 1.725, 21: 1.721, 22: 1.717, 23: 1.714, 24: 1.711, 25: 1.708,
+    26: 1.706, 27: 1.703, 28: 1.701, 29: 1.699, 30: 1.697,
+}
+_STUDENT_T_ONE_SIDED_95_LARGE_SAMPLE = 1.645
+
+SPEEDUP_CONFIDENCE_LEVEL = 0.95
+
+
+def speedup_confidence_interval(
+    per_run_speedups: Sequence[float],
+) -> tuple[float, float] | None:
+    """95% interval for the mean per-run median speedup, or ``None`` under two runs.
+
+    The bounds answer the two questions a route decision actually asks: is the
+    win big enough to be worth taking (lower bound), and can a qualifying win
+    be ruled out at all (upper bound)? A row where the interval straddles the
+    threshold is inconclusive -- see ``speedup_lower_confidence_bound``.
+    """
+    values = [float(value) for value in per_run_speedups]
+    if len(values) < 2:
+        return None
+    multiplier = _STUDENT_T_ONE_SIDED_95.get(
+        len(values) - 1, _STUDENT_T_ONE_SIDED_95_LARGE_SAMPLE)
+    margin = multiplier * statistics.stdev(values) / math.sqrt(len(values))
+    mean = statistics.mean(values)
+    return (mean - margin, mean + margin)
+
+
+def speedup_lower_confidence_bound(per_run_speedups: Sequence[float]) -> float | None:
+    """One-sided 95% lower bound on the mean of per-run median speedups.
+
+    **This replaces a range, and the difference is the whole point.** The gate
+    it supersedes capped ``max - min`` of the per-run speedups at a fixed
+    0.05. A range is monotonically non-decreasing in the number of runs, so
+    that gate got *harder* the more evidence you collected: measured on this
+    M1 Max, a route that is 40% faster and wins 144 of 144 paired trials
+    promoted 69% of the time at two runs and 7% at eight. Adding runs -- the
+    obvious response to an irreproducible decision -- made a true winner less
+    promotable, and re-recording until it passed was selection on noise.
+
+    A lower confidence bound converges instead: more runs shrink the interval
+    toward the true mean, so evidence can only help a route that is genuinely
+    faster, and can never rescue one whose speedup is indistinguishable from
+    noise. Returns ``None`` when fewer than two runs make dispersion
+    unmeasurable -- unprovable is not the permissive answer (Decision #30).
+    """
+    interval = speedup_confidence_interval(per_run_speedups)
+    return None if interval is None else interval[0]
+
+
 def promotion_rule_violations(
     row: Mapping[str, Any], rules: Mapping[str, Any],
     *, source_report_count: int | None = None,
@@ -226,11 +284,40 @@ def promotion_rule_violations(
 
     min_speedup = _threshold("minimum_speedup_fraction_each_run")
     min_win = _threshold("minimum_paired_win_fraction_each_run")
+    min_pooled_win = _threshold("minimum_pooled_paired_win_fraction")
     max_spread = _threshold("maximum_cross_run_speedup_spread")
+    min_bound = _threshold("minimum_speedup_lower_confidence_bound")
+    min_runs = _threshold("minimum_promotion_runs")
+    # A ledger is held to the stability rule IT was sealed under. Ledgers
+    # sealed before the confidence bound carry only the cross-run range cap;
+    # ledgers sealed after it mark that range diagnostic and carry a bound.
+    # Checking whichever one the ledger declares is what lets this verifier
+    # audit both without either grandfathering old rows or retroactively
+    # inventing a threshold the sealer never applied.
+    spread_is_diagnostic = rules.get(
+        "cross_run_speedup_spread_is_diagnostic_only") is True
+    win_floor_is_strict = rules.get(
+        "paired_win_fraction_each_run_is_strict") is True
     # A missing threshold is not a pass. Without it there is nothing to hold
     # the promotion to, and the honest verdict is "unverifiable", not "fine".
-    if min_speedup is None or min_win is None or max_spread is None:
+    if min_speedup is None or min_win is None:
         violations.append("promotion_rules_incomplete")
+    if min_bound is None and (max_spread is None or spread_is_diagnostic):
+        violations.append("no_stability_rule_declared")
+    elif min_bound is not None:
+        # Every threshold in the confidence-bound rule set is mandatory, not
+        # merely honoured when present. Each check below is guarded on its own
+        # threshold, so a ledger that declares the bound and omits
+        # `minimum_promotion_runs` or `minimum_pooled_paired_win_fraction`
+        # would skip those checks silently while still reading as complete --
+        # and a truncated or hand-edited two-report promotion would then be
+        # admitted even though the aggregator requires at least three. A
+        # missing threshold is not a pass (Decisions #21a, #30).
+        for name, value in (("minimum_promotion_runs", min_runs),
+                            ("minimum_pooled_paired_win_fraction",
+                             min_pooled_win)):
+            if value is None:
+                violations.append(f"promotion_rules_incomplete:{name}")
 
     medians = chosen.get("paired_median_speedups")
     fractions = chosen.get("paired_win_fractions")
@@ -276,14 +363,47 @@ def promotion_rule_violations(
     if not isinstance(fractions, list) or not fractions:
         violations.append("no_paired_win_fractions")
     elif min_win is not None and any(
-            not isinstance(v, (int, float)) or v < min_win for v in fractions):
+            not isinstance(v, (int, float))
+            or (v <= min_win if win_floor_is_strict else v < min_win)
+            for v in fractions):
+        # Ledgers sealed before pooling carry 0.75 here and this is the whole
+        # win rule; ledgers sealed after carry 0.5 and this is the per-run
+        # floor beneath the pooled rule checked next.
+        #
+        # The floor is a strict majority -- the aggregator admits a run only on
+        # `fraction > 0.5` -- and the comparison has to be carried in the rules
+        # rather than assumed, or the two sides disagree at exactly 0.5: the
+        # producer refuses such a run while a `v < min_win` re-derivation
+        # admits it, so a foreign or hand-edited ledger would pass a promotion
+        # this aggregator would never have made. Absent the flag the rule is
+        # non-strict, which is what the pre-pooling 0.75 ledgers meant.
         violations.append("paired_win_fraction_below_minimum")
 
-    spread = chosen.get("cross_run_speedup_spread")
-    if not isinstance(spread, (int, float)):
-        violations.append("no_cross_run_speedup_spread")
-    elif max_spread is not None and spread > max_spread:
-        violations.append(f"speedup_spread_above_maximum:{spread!r}")
+    if min_pooled_win is not None:
+        pooled = chosen.get("pooled_paired_win_fraction")
+        if not isinstance(pooled, (int, float)):
+            violations.append("no_pooled_paired_win_fraction")
+        elif pooled < min_pooled_win:
+            violations.append(f"pooled_paired_win_fraction_below_minimum:{pooled!r}")
+
+    if min_bound is not None:
+        # Current rule: the win must survive its own measurement error.
+        bound = chosen.get("speedup_lower_confidence_bound")
+        if not isinstance(bound, (int, float)):
+            violations.append("no_speedup_lower_confidence_bound")
+        elif bound < min_bound:
+            violations.append(f"speedup_lower_bound_below_minimum:{bound!r}")
+        if (min_runs is not None and isinstance(medians, list)
+                and len(medians) < int(min_runs)):
+            violations.append(
+                f"promotion_runs_below_minimum:{len(medians)}<{int(min_runs)}")
+    elif max_spread is not None and not spread_is_diagnostic:
+        # Superseded rule, still enforced for ledgers sealed under it.
+        spread = chosen.get("cross_run_speedup_spread")
+        if not isinstance(spread, (int, float)):
+            violations.append("no_cross_run_speedup_spread")
+        elif spread > max_spread:
+            violations.append(f"speedup_spread_above_maximum:{spread!r}")
 
     # The `requires_*` booleans name evidence that must be PRESENT, not a
     # threshold to clear. Each maps to the field the aggregator set.
@@ -374,7 +494,13 @@ def load_strict_route_ledger(
         if key[0] != ctx.device:
             rejected.append(f"{prefix}:wrong_device")
             continue
-        if row.get("status") not in {"promote_candidate", "retain_incumbent"}:
+        # `retain_incumbent_unstable_candidate` is admitted on exactly the
+        # same terms as `retain_incumbent`: the incumbent serves either way.
+        # It is a separate status so the ledger records WHY the candidate was
+        # refused -- unreproducible rather than slower -- which a bare
+        # `retain_incumbent` could not express.
+        if row.get("status") not in {"promote_candidate", "retain_incumbent",
+                                     "retain_incumbent_unstable_candidate"}:
             rejected.append(f"{prefix}:ineligible_status")
             continue
         evidence = row.get("selected_evidence")
@@ -731,16 +857,34 @@ def aggregate_stable_route_reports(
     max_run_drift: float = 0.15,
     min_paired_win_fraction: float = 0.75,
     max_speedup_spread: float = 0.05,
+    min_promotion_runs: int = 3,
 ) -> dict[str, Any]:
     """Build an evidence ledger from two or more independent warm reports.
 
     A candidate is promoted only when it and the incumbent have exact matching
-    rows in every report, retain placement/numerical/resource evidence, are
+    rows in every report, retain placement/numerical/resource evidence, and are
     collected in paired interleaved trials. The candidate must win at least
-    ``min_paired_win_fraction`` of trials, clear ``min_speedup`` in every
-    independent run, and keep its cross-run median speedup within
-    ``max_speedup_spread``. Absolute clock drift is retained diagnostically but
-    cannot invalidate an otherwise stable paired comparison.
+    ``min_paired_win_fraction`` of trials and clear ``min_speedup`` in every
+    independent run -- and then its *lower 95% confidence bound* across runs
+    must also clear ``min_speedup``, over at least ``min_promotion_runs`` runs.
+
+    **The confidence bound replaced a cross-run range cap, because the range
+    made promotions irreproducible.** ``max_speedup_spread`` capped
+    ``max - min`` of the per-run speedups at 0.05. Re-running this recorder
+    twelve times on one M1 Max from one unchanged binary flipped two of the
+    sixteen decisions, and the range was the only gate that ever fired: the
+    ``retune_mla_decode`` candidate was 32-55% faster in all 24 runs and won
+    144 of 144 paired trials, yet promoted in only 7 of 12 recordings. Because
+    a range never shrinks as samples are added, collecting more evidence made
+    that true winner *less* promotable (69% at two runs, 7% at eight), so the
+    only way to land a promotion was to re-record until the draw was
+    favourable -- selecting on noise, which is what this gate existed to stop.
+
+    The bound converges on the true mean instead, so more runs can only help a
+    route that is really faster and can never rescue one whose speedup is
+    noise. ``max_speedup_spread`` is still computed and retained, but it is now
+    diagnostic: like absolute clock drift, it describes the measurement without
+    deciding the route.
     """
     if len(reports) < 2:
         raise ValueError("stable route selection requires at least two reports")
@@ -752,6 +896,8 @@ def aggregate_stable_route_reports(
         raise ValueError("min_paired_win_fraction must be in [0.5, 1]")
     if max_speedup_spread < 0.0:
         raise ValueError("max_speedup_spread must be non-negative")
+    if min_promotion_runs < 2:
+        raise ValueError("min_promotion_runs must be at least two")
     for report in reports:
         if report.get("schema_version") != ROUTE_REPORT_SCHEMA_VERSION:
             raise ValueError("all reports must use the current route schema")
@@ -841,22 +987,105 @@ def aggregate_stable_route_reports(
                         for values in paired_speedups]
                     spread = ((max(median_speedups) - min(median_speedups))
                               if median_speedups else None)
+                    lower_bound = speedup_lower_confidence_bound(median_speedups)
                     route_evidence["paired_speedups_vs_incumbent"] = paired_speedups
                     route_evidence["paired_median_speedups"] = median_speedups
                     route_evidence["paired_win_fractions"] = win_fractions
+                    # Retained for audit, no longer decisive: a range grows
+                    # with the sample, so gating on it punished evidence.
                     route_evidence["cross_run_speedup_spread"] = spread
-                    if (median_speedups
-                            and all(speedup >= min_speedup
-                                    for speedup in median_speedups)
-                            and all(fraction >= min_paired_win_fraction
-                                    for fraction in win_fractions)
-                            and spread is not None
-                            and spread <= max_speedup_spread):
+                    route_evidence["speedup_lower_confidence_bound"] = lower_bound
+                    # Every run individually shows a win of the required size.
+                    # This is the point estimate; it is necessary, not
+                    # sufficient, because it says nothing about reproducibility.
+                    # Pooled across every paired trial in every run, with a
+                    # per-run floor that no run may actually lose on balance.
+                    #
+                    # This replaced `all(fraction >= min_paired_win_fraction)`,
+                    # which had the same non-convergence as the range cap it
+                    # sits beside. With three trials a run's win fraction can
+                    # only be 0, 1/3, 2/3 or 1, so a 0.75 threshold means "win
+                    # all three", and requiring that of every run means winning
+                    # 3n consecutive trials: for a route that truly wins 95% of
+                    # trials, P(promote) falls from 0.74 at two runs to 0.29 at
+                    # eight. Measured here, `retune_moe_swiglu` 16x32x64x32_e4
+                    # promoted in 2 of 6 recordings on a single lost trial out
+                    # of fifteen. A pooled proportion is a consistent estimator
+                    # and settles as runs are added; the floor keeps one strong
+                    # run from carrying a run the candidate lost.
+                    trial_wins = sum(sum(value > 0.0 for value in values)
+                                     for values in paired_speedups)
+                    trial_count = sum(len(values) for values in paired_speedups)
+                    pooled_win_fraction = (trial_wins / trial_count
+                                           if trial_count else None)
+                    route_evidence["pooled_paired_win_fraction"] = pooled_win_fraction
+                    route_evidence["paired_trial_count"] = trial_count
+                    wins_on_point_estimates = bool(
+                        median_speedups
+                        and all(speedup >= min_speedup
+                                for speedup in median_speedups)
+                        and pooled_win_fraction is not None
+                        and pooled_win_fraction >= min_paired_win_fraction
+                        and all(fraction > 0.5 for fraction in win_fractions))
+                    # ...and the win survives its own measurement error, over
+                    # enough independent runs to have measured that error.
+                    reproducible = bool(
+                        wins_on_point_estimates
+                        and len(median_speedups) >= min_promotion_runs
+                        and lower_bound is not None
+                        and lower_bound >= min_speedup)
+                    # Three distinct states, and collapsing the last two is
+                    # how a re-record launders one into a promotion. A route
+                    # that averages a win of the required size but cannot hold
+                    # it across runs is *unmeasured*, not settled; a route that
+                    # is simply slower is settled.
+                    #
+                    # The state is reached whenever runs disagree about a win
+                    # the point estimates like -- a candidate whose per-run
+                    # speedups scatter across the threshold, or one run landing
+                    # somewhere the others did not. Host contention is *not*
+                    # such a case and must not be confused for one: the trials
+                    # are paired and interleaved, so eight busy cores slow both
+                    # routes together and leave the verdict intact (measured on
+                    # this M1 Max, `retune_moe_swiglu` 16x32x64x32_e4 records
+                    # +50.6% loaded against +52% quiet). What this state is for
+                    # is evidence that genuinely does not agree with itself.
+                    interval = speedup_confidence_interval(median_speedups)
+                    route_evidence["speedup_confidence_interval"] = (
+                        list(interval) if interval else None)
+                    route_evidence["stability_verdict"] = (
+                        "stable_win" if reproducible
+                        # The interval still admits a qualifying win but cannot
+                        # confirm one: inconclusive, so explicitly unpromotable.
+                        else "unstable_evidence"
+                        if interval is not None and interval[1] >= min_speedup
+                        # The interval excludes a qualifying win: settled.
+                        else "not_a_stable_win")
+                    route_evidence["promotable"] = reproducible
+                    if reproducible:
                         winners.append((min(median_speedups), route))
                 if winners:
                     _, selected = max(winners)
                     status = "promote_candidate"
                     reason = "candidate met paired stable-win gates in every run"
+                else:
+                    # A candidate that wins every run on point estimates but
+                    # cannot clear its own confidence bound is NOT the same
+                    # state as a candidate that is simply slower, and recording
+                    # both as a bare `retain_incumbent` hid the difference. Say
+                    # which one this is, so a re-record cannot quietly convert
+                    # "we could not tell" into "promoted on a good draw".
+                    unstable = sorted(
+                        route for route, route_evidence in evidence.items()
+                        if route_evidence.get("stability_verdict")
+                        == "unstable_evidence")
+                    if unstable:
+                        status = "retain_incumbent_unstable_candidate"
+                        reason = (
+                            "candidate(s) " + ", ".join(unstable) +
+                            " won every run but missed the 95% lower bound on "
+                            "cross-run speedup; not promotable without "
+                            "measurement that reproduces")
             decisions.append({
                 "op": op,
                 "shape": shape,
@@ -877,7 +1106,13 @@ def aggregate_stable_route_reports(
             "minimum_speedup_fraction_each_run": min_speedup,
             "maximum_cross_run_drift_fraction": max_run_drift,
             "absolute_time_drift_is_diagnostic_only": True,
-            "minimum_paired_win_fraction_each_run": min_paired_win_fraction,
+            "minimum_pooled_paired_win_fraction": min_paired_win_fraction,
+            "minimum_paired_win_fraction_each_run": 0.5,
+            "paired_win_fraction_each_run_is_strict": True,
+            "minimum_speedup_lower_confidence_bound": min_speedup,
+            "speedup_confidence_level": SPEEDUP_CONFIDENCE_LEVEL,
+            "minimum_promotion_runs": min_promotion_runs,
+            "cross_run_speedup_spread_is_diagnostic_only": True,
             "maximum_cross_run_speedup_spread": max_speedup_spread,
             "requires_native_dispatch": True,
             "requires_numerical_validation": True,
@@ -979,4 +1214,7 @@ __all__ = [
     "live_apple_device_tag",
     "select_route",
     "seal_strict_route_ledger",
+    "speedup_confidence_interval",
+    "speedup_lower_confidence_bound",
+    "SPEEDUP_CONFIDENCE_LEVEL",
 ]

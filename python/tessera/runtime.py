@@ -13113,17 +13113,19 @@ def _execute_apple_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) 
     if kind == "rmsnorm":
         symbol.argtypes = [pointer] * 5 + trailing
         symbol.restype = ctypes.c_int32
-        status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
-                        ptr(dx), ptr(dg) if want_gamma else null,
-                        rows, cols, ctypes.c_float(eps))
+        call = lambda: symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),  # noqa: E731
+                              ptr(dx), ptr(dg) if want_gamma else null,
+                              rows, cols, ctypes.c_float(eps))
     else:
         symbol.argtypes = [pointer] * 6 + trailing
         symbol.restype = ctypes.c_int32
-        status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
-                        ptr(dx), ptr(dg) if want_gamma else null,
-                        ptr(db) if beta is not None else null,
-                        rows, cols, ctypes.c_float(eps))
-    if int(status) != 1:
+        call = lambda: symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),  # noqa: E731
+                              ptr(dx), ptr(dg) if want_gamma else null,
+                              ptr(db) if beta is not None else null,
+                              rows, cols, ctypes.c_float(eps))
+    # Routed through the breaker so a wedged device stops being asked; the
+    # placement ABI still refuses to substitute a host result for a native one.
+    if not _apple_gpu_symbol_call_checked(f"apple_gpu.{family}_bwd_{storage}", call):
         raise RuntimeError(
             "Apple normalization backward ABI reported a non-native dispatch"
         )
@@ -34536,6 +34538,56 @@ def _apple_gpu_run_checked(op_name: str, kernel_call: Any, host_fallback: Any) -
     return host_fallback()
 
 
+def _apple_gpu_symbol_call_checked(op_name: str, call: Any, *, ok_rc: int = 1) -> bool:
+    """Run a status-returning Apple GPU C-ABI dispatch through the breaker in
+    :func:`_apple_gpu_run_checked`, returning whether it succeeded.
+
+    ``call`` performs the dispatch and returns the raw ``rc``; ``ok_rc`` is the
+    value that symbol uses for success -- ``1`` on the MSL / MPSGraph / Metal 4
+    lanes, ``0`` on the MPS single-matrix linalg lanes. Any other ``rc`` with
+    no error kind set is a C-side validation decline (bad shape, ``!ctx.ok``, a
+    symbol that chose not to run): it comes back ``False`` and resets the
+    streak, exactly as the site behaved before it was routed. A reported
+    timeout counts toward the streak and lands in the fallback log under
+    ``op_name`` (raising under strict dispatch, Decision #21); an open breaker
+    returns ``False`` without dispatching.
+
+    APPLE-DISPATCH-WEDGE-1, third coverage pass: the direct ``rc = sym(...)``
+    sites -- linalg, random, GQA, batched attention, MPSGraph control flow, the
+    Metal 4 lanes, ``msl_spec_accept``, the MLP session's host-input ``run``,
+    and the value-lane executors and their ``*_available`` probes. Two
+    runtime-side gaps this cannot close from Python are recorded in
+    ``docs/audit/backend/apple/todo.md``: the MPSGraph ``runWithMTLCommandQueue``
+    sites wait with no timeout and never report kind 1, and the Metal 4
+    ``mtl4_encode_and_wait`` expiry returns ``false`` without setting kind 1 --
+    both still get the open-breaker short-circuit here, but their own timeouts
+    cannot count toward the streak until the ``.mm`` reports them.
+    """
+    return bool(_apple_gpu_run_checked(op_name, lambda: int(call()) == ok_rc, lambda: False))
+
+
+def _apple_gpu_probe_blocked_by_open_breaker() -> bool:
+    """A cached ``*_value_available`` probe must not run -- and must not cache
+    its answer -- while the breaker is open: the device may answer again after
+    :func:`reset_apple_gpu_dispatch_breaker`, and a ``False`` cached now would
+    outlive that reset and disable the lane for the rest of the process."""
+    return bool(apple_gpu_dispatch_breaker_state()["open"])
+
+
+def _apple_gpu_strict_value_fallback(op_name: str) -> Any:
+    """``host_fallback`` for a strict Apple GPU value-lane executor: there is
+    no host path, so a reported dispatch failure -- or an open breaker -- is an
+    error, never a substituted result."""
+
+    def _raise() -> Any:
+        raise ValueError(
+            f"apple_gpu {op_name} value executor did not run: the GPU dispatch "
+            f"reported failure or the dispatch breaker is open"
+        )
+
+    return _raise
+
+
 def _apple_gpu_device_call_checked(op_name: str, call: Any) -> bool:
     """Run a device-resident (``DeviceTensor``) C-ABI dispatch through the
     breaker in :func:`_apple_gpu_run_checked`, returning whether it succeeded.
@@ -34555,7 +34607,7 @@ def _apple_gpu_device_call_checked(op_name: str, call: Any) -> bool:
     exactly like an ordinary per-op failure on the numpy paths. When the
     breaker is open this returns ``False`` without dispatching.
     """
-    return bool(_apple_gpu_run_checked(op_name, lambda: int(call()) == 1, lambda: False))
+    return _apple_gpu_symbol_call_checked(op_name, call)
 
 
 def _apple_gpu_known_chain_from_fusion_groups(metadata: Mapping[str, Any], n_ops: int) -> str | None:
@@ -35939,6 +35991,8 @@ def _apple_gpu_ppo_policy_loss_available() -> bool:
     if sym is None:
         _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE = False
         return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
+        return False
     try:
         import numpy as _np
 
@@ -35947,11 +36001,16 @@ def _apple_gpu_ppo_policy_loss_available() -> bool:
         adv = _np.asarray([1.0], dtype=_np.float32)
         out = _np.empty((), dtype=_np.float32)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = int(sym(fp(a), fp(b), fp(adv), fp(out), ctypes.c_int32(1), ctypes.c_float(0.2)))
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ppo_policy_loss.probe",
+            lambda: sym(fp(a), fp(b), fp(adv), fp(out), ctypes.c_int32(1), ctypes.c_float(0.2)),
+        )
         expected = -min(float(_np.exp(0.1)), 1.2)
         _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE = (
-            rc == 1 and bool(_np.isfinite(out)) and abs(float(out) - expected) < 1.0e-5
+            ok and bool(_np.isfinite(out)) and abs(float(out) - expected) < 1.0e-5
         )
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE = False
     return _APPLE_GPU_PPO_POLICY_LOSS_AVAILABLE
@@ -35965,6 +36024,8 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
     sym = _apple_gpu_ppo_policy_loss_ex_f32()
     if sym is None:
         _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE = False
+        return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
         return False
     try:
         import numpy as _np
@@ -36006,8 +36067,9 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
         ]
         ok = True
         for mask_p, ref_p, ent_p, kl, ent_coef, has_mask, has_ref, has_ent, kw in probes:
-            rc = int(
-                sym(
+            ran = _apple_gpu_symbol_call_checked(
+                "apple_gpu.ppo_policy_loss_ex.probe",
+                lambda: sym(
                     fp(logp_new),
                     fp(logp_old),
                     fp(adv),
@@ -36022,11 +36084,13 @@ def _apple_gpu_ppo_policy_loss_ex_available() -> bool:
                     ctypes.c_int32(has_mask),
                     ctypes.c_int32(has_ref),
                     ctypes.c_int32(has_ent),
-                )
+                ),
             )
             expected = _ppo_policy_loss_np(_np, logp_new, logp_old, adv, clip_epsilon=0.2, **kw)
-            ok = ok and rc == 1 and bool(_np.isfinite(out)) and (abs(float(out) - expected) < 2.0e-5)
+            ok = ok and ran and bool(_np.isfinite(out)) and (abs(float(out) - expected) < 2.0e-5)
         _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE = ok
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE = False
     return _APPLE_GPU_PPO_POLICY_LOSS_EX_AVAILABLE
@@ -36122,6 +36186,8 @@ def _apple_gpu_ebm_energy_quadratic_value_available() -> bool:
     if sym is None:
         _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = False
         return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
+        return False
     try:
         import numpy as _np
 
@@ -36129,11 +36195,16 @@ def _apple_gpu_ebm_energy_quadratic_value_available() -> bool:
         y = _np.asarray([[0.0, 1.0, 1.0], [0.25, -0.25, -0.25]], dtype=_np.float32)
         out = _np.empty((2,), dtype=_np.float32)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = int(sym(fp(x), fp(y), fp(out), ctypes.c_int32(2), ctypes.c_int32(3)))
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ebm_energy_quadratic_value.probe",
+            lambda: sym(fp(x), fp(y), fp(out), ctypes.c_int32(2), ctypes.c_int32(3)),
+        )
         expected = 0.5 * _np.sum((x - y) * (x - y), axis=1)
         _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = (
-            rc == 1 and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
+            ok and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
         )
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE = False
     return _APPLE_GPU_EBM_ENERGY_QUADRATIC_AVAILABLE
@@ -36149,6 +36220,8 @@ def _apple_gpu_ebm_langevin_step_value_available() -> bool:
     if sym is None:
         _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE = False
         return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
+        return False
     try:
         import numpy as _np
 
@@ -36159,8 +36232,9 @@ def _apple_gpu_ebm_langevin_step_value_available() -> bool:
         noise_scale = 0.25
         out = _np.empty_like(y)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = int(
-            sym(
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ebm_langevin_step_value.probe",
+            lambda: sym(
                 fp(y),
                 fp(grad),
                 fp(noise),
@@ -36168,12 +36242,14 @@ def _apple_gpu_ebm_langevin_step_value_available() -> bool:
                 ctypes.c_float(noise_scale),
                 fp(out),
                 ctypes.c_int32(int(y.size)),
-            )
+            ),
         )
         expected = y - eta * grad + noise_scale * noise
         _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE = (
-            rc == 1 and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
+            ok and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
         )
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE = False
     return _APPLE_GPU_EBM_LANGEVIN_STEP_AVAILABLE
@@ -36275,6 +36351,8 @@ def _apple_gpu_ebm_refinement_value_available() -> bool:
     if sym is None:
         _APPLE_GPU_EBM_REFINEMENT_AVAILABLE = False
         return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
+        return False
     try:
         import numpy as _np
 
@@ -36284,13 +36362,16 @@ def _apple_gpu_ebm_refinement_value_available() -> bool:
         steps = 4
         out = _np.empty_like(y0)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = int(
-            sym(fp(y0), fp(grad), ctypes.c_float(eta), ctypes.c_int32(steps), fp(out), ctypes.c_int32(int(y0.size)))
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ebm_refinement_value.probe",
+            lambda: sym(fp(y0), fp(grad), ctypes.c_float(eta), ctypes.c_int32(steps), fp(out), ctypes.c_int32(int(y0.size))),
         )
         expected = y0 - steps * eta * grad
         _APPLE_GPU_EBM_REFINEMENT_AVAILABLE = (
-            rc == 1 and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
+            ok and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
         )
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_EBM_REFINEMENT_AVAILABLE = False
     return _APPLE_GPU_EBM_REFINEMENT_AVAILABLE
@@ -36306,6 +36387,8 @@ def _apple_gpu_ebm_partition_exact_value_available() -> bool:
     if sym is None:
         _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE = False
         return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
+        return False
     try:
         import numpy as _np
 
@@ -36313,12 +36396,17 @@ def _apple_gpu_ebm_partition_exact_value_available() -> bool:
         temperature = 0.75
         out = _np.empty((), dtype=_np.float32)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = int(sym(fp(energies), ctypes.c_int32(int(energies.size)), ctypes.c_float(temperature), fp(out)))
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ebm_partition_exact_value.probe",
+            lambda: sym(fp(energies), ctypes.c_int32(int(energies.size)), ctypes.c_float(temperature), fp(out)),
+        )
         scaled = -energies / temperature
         expected = float(_np.exp(_np.max(scaled)) * _np.sum(_np.exp(scaled - _np.max(scaled))))
         _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE = (
-            rc == 1 and bool(_np.isfinite(out)) and abs(float(out) - expected) < 1.0e-5
+            ok and bool(_np.isfinite(out)) and abs(float(out) - expected) < 1.0e-5
         )
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE = False
     return _APPLE_GPU_EBM_PARTITION_EXACT_AVAILABLE
@@ -36334,6 +36422,8 @@ def _apple_gpu_clifford_geo_product_cl30_value_available() -> bool:
     if sym is None:
         _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE = False
         return False
+    if _apple_gpu_probe_blocked_by_open_breaker():
+        return False
     try:
         import numpy as _np
 
@@ -36347,11 +36437,16 @@ def _apple_gpu_clifford_geo_product_cl30_value_available() -> bool:
         )
         out = _np.empty_like(a)
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = int(sym(fp(a), fp(b), fp(out), ctypes.c_int32(2)))
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.clifford_geo_product_cl30_value.probe",
+            lambda: sym(fp(a), fp(b), fp(out), ctypes.c_int32(2)),
+        )
         expected = _clifford_geo_product_cl30_np(_np, a, b)
         _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE = (
-            rc == 1 and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
+            ok and bool(_np.all(_np.isfinite(out))) and bool(_np.allclose(out, expected, rtol=1.0e-5, atol=1.0e-6))
         )
+    except TesseraStrictDispatchError:
+        raise
     except Exception:
         _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE = False
     return _APPLE_GPU_CLIFFORD_GEO_PRODUCT_AVAILABLE
@@ -36471,14 +36566,17 @@ def _dispatch_gpu_batched_matmul(inputs, call, np):
         def _u16(arr):
             return arr.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
 
-        sym(_u16(a), _u16(b), _u16(out), *dims)
+        call = lambda: sym(_u16(a), _u16(b), _u16(out), *dims)
     else:
 
         def _fp(arr):
             return arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
-        sym(_fp(a), _fp(b), _fp(out), *dims)
-    return out
+        call = lambda: sym(_fp(a), _fp(b), _fp(out), *dims)
+    op_name = "apple_gpu." + symbol.removeprefix("tessera_apple_gpu_")
+    # The bmm symbols are void: a failure only reaches Python through the
+    # last-error channel, which the breaker helper arms and consumes.
+    return _apple_gpu_run_checked(op_name, lambda: (call(), out)[1], _apple_gpu_strict_value_fallback(op_name))
 
 
 def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
@@ -36582,22 +36680,28 @@ def _dispatch_gpu_native_sparse_attn(inputs, call, np):
         )
     out = np.empty_like(q, dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    sym(
-        fp(q),
-        fp(k),
-        fp(v),
-        fp(gate),
-        fp(out),
-        ctypes.c_int32(B),
-        ctypes.c_int32(H),
-        ctypes.c_int32(S),
-        ctypes.c_int32(D),
-        ctypes.c_int32(window),
-        ctypes.c_int32(block),
-        ctypes.c_int32(top_k),
-        ctypes.c_int32(1 if causal else 0),
+
+    def _dispatch() -> Any:
+        sym(
+            fp(q),
+            fp(k),
+            fp(v),
+            fp(gate),
+            fp(out),
+            ctypes.c_int32(B),
+            ctypes.c_int32(H),
+            ctypes.c_int32(S),
+            ctypes.c_int32(D),
+            ctypes.c_int32(window),
+            ctypes.c_int32(block),
+            ctypes.c_int32(top_k),
+            ctypes.c_int32(1 if causal else 0),
+        )
+        return out
+
+    return _apple_gpu_run_checked(
+        "apple_gpu.native_sparse_attn", _dispatch, _apple_gpu_strict_value_fallback("apple_gpu.native_sparse_attn")
     )
-    return out
 
 
 def _dispatch_gpu_flash_attn_gqa(inputs, call, np):
@@ -36647,13 +36751,19 @@ def _dispatch_gpu_flash_attn_gqa(inputs, call, np):
     v_flat = v.reshape(B * Hkv, Sk, D)
     out = np.empty_like(q_flat)
     fp = lambda array: array.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    sym(
-        fp(q_flat), fp(k_flat), fp(v_flat), fp(out),
-        ctypes.c_int32(B * Hq), ctypes.c_int32(Hq), ctypes.c_int32(Hkv),
-        ctypes.c_int32(Sq), ctypes.c_int32(Sk), ctypes.c_int32(D),
-        ctypes.c_float(scale), ctypes.c_int32(1 if bool(call.get("causal", False)) else 0),
-    )
-    return out.reshape(q.shape)
+
+    def _dispatch() -> Any:
+        sym(
+            fp(q_flat), fp(k_flat), fp(v_flat), fp(out),
+            ctypes.c_int32(B * Hq), ctypes.c_int32(Hq), ctypes.c_int32(Hkv),
+            ctypes.c_int32(Sq), ctypes.c_int32(Sk), ctypes.c_int32(D),
+            ctypes.c_float(scale), ctypes.c_int32(1 if bool(call.get("causal", False)) else 0),
+        )
+        return out
+
+    return _apple_gpu_run_checked(
+        "apple_gpu.flash_attn_gqa", _dispatch, _apple_gpu_strict_value_fallback("apple_gpu.flash_attn_gqa")
+    ).reshape(q.shape)
 
 
 def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
@@ -36706,8 +36816,9 @@ def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
             raise ValueError(
                 "apple_gpu runtime lacks an active, numerically proven tessera_apple_gpu_ppo_policy_loss_f32 executor"
             )
-        rc = int(
-            sym(fp(logp_new), fp(logp_old), fp(adv), fp(out), ctypes.c_int32(int(logp_new.size)), ctypes.c_float(clip))
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ppo_policy_loss",
+            lambda: sym(fp(logp_new), fp(logp_old), fp(adv), fp(out), ctypes.c_int32(int(logp_new.size)), ctypes.c_float(clip)),
         )
     else:
         sym = _apple_gpu_ppo_policy_loss_ex_f32()
@@ -36732,8 +36843,9 @@ def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
                     f"ppo_policy_loss(gpu) {label} shape {arr.shape} must match logp shape {logp_new.shape}"
                 )
         null = ctypes.POINTER(ctypes.c_float)()
-        rc = int(
-            sym(
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.ppo_policy_loss_ex",
+            lambda: sym(
                 fp(logp_new),
                 fp(logp_old),
                 fp(adv),
@@ -36748,9 +36860,9 @@ def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
                 ctypes.c_int32(1 if has_mask else 0),
                 ctypes.c_int32(1 if has_ref_kl else 0),
                 ctypes.c_int32(1 if has_entropy else 0),
-            )
+            ),
         )
-    if rc != 1:
+    if not ok:
         raise ValueError(
             "apple_gpu PPO policy-loss value executor is not active "
             "(stub/unavailable MPSGraph path returned non-success)"
@@ -36785,8 +36897,11 @@ def _dispatch_gpu_ebm_energy_quadratic(inputs, call, np):
     batch, dim = int(x.shape[0]), int(x.shape[1])
     out = np.empty((batch,), dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    rc = int(sym(fp(x), fp(y), fp(out), ctypes.c_int32(batch), ctypes.c_int32(dim)))
-    if rc != 1:
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.ebm_energy_quadratic_value",
+        lambda: sym(fp(x), fp(y), fp(out), ctypes.c_int32(batch), ctypes.c_int32(dim)),
+    )
+    if not ok:
         raise ValueError(
             "apple_gpu EBM energy value executor is not active (stub/unavailable Metal path returned non-success)"
         )
@@ -36824,8 +36939,9 @@ def _dispatch_gpu_ebm_langevin_step(inputs, call, np):
         )
     out = np.empty_like(y, dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    rc = int(
-        sym(
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.ebm_langevin_step_value",
+        lambda: sym(
             fp(y),
             fp(grad),
             fp(noise),
@@ -36833,9 +36949,9 @@ def _dispatch_gpu_ebm_langevin_step(inputs, call, np):
             ctypes.c_float(noise_scale),
             fp(out),
             ctypes.c_int32(int(y.size)),
-        )
+        ),
     )
-    if rc != 1:
+    if not ok:
         raise ValueError(
             "apple_gpu EBM Langevin value executor is not active (stub/unavailable Metal path returned non-success)"
         )
@@ -36875,8 +36991,11 @@ def _dispatch_gpu_ebm_refinement(inputs, call, np):
         )
     out = np.empty_like(y0, dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    rc = int(sym(fp(y0), fp(grad), ctypes.c_float(eta), ctypes.c_int32(steps), fp(out), ctypes.c_int32(int(y0.size))))
-    if rc != 1:
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.ebm_refinement_value",
+        lambda: sym(fp(y0), fp(grad), ctypes.c_float(eta), ctypes.c_int32(steps), fp(out), ctypes.c_int32(int(y0.size))),
+    )
+    if not ok:
         raise ValueError(
             "apple_gpu EBM refinement value executor is not active (stub/unavailable Metal path returned non-success)"
         )
@@ -36910,8 +37029,11 @@ def _dispatch_gpu_ebm_partition_exact(inputs, call, np):
         )
     out = np.empty((), dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    rc = int(sym(fp(energies), ctypes.c_int32(int(energies.size)), ctypes.c_float(temperature), fp(out)))
-    if rc != 1:
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.ebm_partition_exact_value",
+        lambda: sym(fp(energies), ctypes.c_int32(int(energies.size)), ctypes.c_float(temperature), fp(out)),
+    )
+    if not ok:
         raise ValueError(
             "apple_gpu EBM partition-exact value executor is not active "
             "(stub/unavailable Metal path returned non-success)"
@@ -36951,8 +37073,10 @@ def _dispatch_gpu_clifford_geometric_product(inputs, call, np):
         )
     out = np.empty_like(a, dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    rc = int(sym(fp(a), fp(b), fp(out), ctypes.c_int32(batch)))
-    if rc != 1:
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.clifford_geo_product_cl30_value", lambda: sym(fp(a), fp(b), fp(out), ctypes.c_int32(batch))
+    )
+    if not ok:
         raise ValueError(
             "apple_gpu Clifford geometric-product value executor is not active "
             "(stub/unavailable Metal path returned non-success)"
@@ -38966,20 +39090,25 @@ def _apple_gpu_gumbel_sample(
     sym = _apple_gpu_gumbel_argmax_f32()
     masked = np.ascontiguousarray(masked, np.float32)
     gumbel = np.ascontiguousarray(gumbel, np.float32)
+    _host_ids = lambda: np.argmax(masked * inv_temp + gumbel, axis=-1).astype(np.int64)  # noqa: E731
     if sym is not None:
         out = np.zeros(rows, np.int32)
         fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        sym(
-            fp(masked),
-            fp(gumbel),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-            ctypes.c_int32(rows),
-            ctypes.c_int32(vocab),
-            ctypes.c_float(inv_temp),
-        )
-        ids = out.astype(np.int64)
+
+        def _run() -> Any:
+            sym(
+                fp(masked),
+                fp(gumbel),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+                ctypes.c_int32(rows),
+                ctypes.c_int32(vocab),
+                ctypes.c_float(inv_temp),
+            )
+            return out.astype(np.int64)
+
+        ids = _apple_gpu_run_checked("apple_gpu.gumbel_argmax", _run, _host_ids)
     else:
-        ids = np.argmax(masked * inv_temp + gumbel, axis=-1).astype(np.int64)
+        ids = _host_ids()
     return ids.reshape(lead) if lead else ids.reshape(())
 
 
@@ -39094,7 +39223,7 @@ def _apple_gpu_dispatch_topk(op_name: str, operands: list[Any], kwargs: dict, np
         idx2 = np.zeros((rows, k), np.int32)
         fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         ip = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-        if sym(fp(x2), fp(vals2), ip(idx2), rows, cols, k) != 1:
+        if not _apple_gpu_symbol_call_checked("apple_gpu.topk", lambda: sym(fp(x2), fp(vals2), ip(idx2), rows, cols, k)):
             vals2, idx2 = _topk_ordered_reference(x2, k, np)
 
     out_shape = (*lead, k)
@@ -39186,9 +39315,12 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict, 
         if sym is None:
             return _ref()
         out = np.empty((outer, inner), np.float32)
-        sym(ctypes.c_int32(op), fp(xt.reshape(outer, inner)), fp(out), ctypes.c_int32(outer), ctypes.c_int32(inner))
-        res = np.transpose(out.reshape(xt.shape), inv)
-        return res.astype(out_dtype)
+
+        def _run_scan() -> Any:
+            sym(ctypes.c_int32(op), fp(xt.reshape(outer, inner)), fp(out), ctypes.c_int32(outer), ctypes.c_int32(inner))
+            return np.transpose(out.reshape(xt.shape), inv).astype(out_dtype)
+
+        return _apple_gpu_run_checked("apple_gpu.mpsgraph_scan", _run_scan, _ref)
 
     # reduce / arg: normalize the reduced axes.
     if axis is None:
@@ -39213,38 +39345,47 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict, 
         if sym is None:
             return _ref()
         out = np.empty(max(outer, 1), np.float32)
-        sym(ctypes.c_int32(op), fp(xt.reshape(outer, inner)), fp(out), ctypes.c_int32(outer), ctypes.c_int32(inner))
-        if op in (5, 6) and ddof != 0 and inner > ddof:
-            factor = inner / (inner - ddof)
-            out = out * (factor if op == 5 else np.sqrt(factor))
-        res = out.reshape(kept_shape) if kept_shape else out.reshape(())
-        if keepdims:
-            full = [int(s) for s in x.shape]
-            for a in axes:
-                full[a] = 1
-            res = res.reshape(full)
-        return res.astype(out_dtype)
+
+        def _run_reduce() -> Any:
+            sym(ctypes.c_int32(op), fp(xt.reshape(outer, inner)), fp(out), ctypes.c_int32(outer), ctypes.c_int32(inner))
+            values = out
+            if op in (5, 6) and ddof != 0 and inner > ddof:
+                factor = inner / (inner - ddof)
+                values = values * (factor if op == 5 else np.sqrt(factor))
+            res = values.reshape(kept_shape) if kept_shape else values.reshape(())
+            if keepdims:
+                full = [int(s) for s in x.shape]
+                for a in axes:
+                    full[a] = 1
+                res = res.reshape(full)
+            return res.astype(out_dtype)
+
+        return _apple_gpu_run_checked("apple_gpu.mpsgraph_reduce", _run_reduce, _ref)
 
     # arg
     sym = _apple_gpu_mpsgraph_argreduce_f32()
     if sym is None:
         return _ref()
     out = np.empty(max(outer, 1), np.int32)
-    sym(
-        ctypes.c_int32(op),
-        fp(np.ascontiguousarray(xt.reshape(outer, inner))),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
-        ctypes.c_int32(outer),
-        ctypes.c_int32(inner),
-    )
-    res = out.astype(np.int64)
-    res = res.reshape(kept_shape) if kept_shape else res.reshape(())
-    if keepdims and axis is not None:
-        full = [int(s) for s in x.shape]
-        for a in axes:
-            full[a] = 1
-        res = res.reshape(full)
-    return res
+
+    def _run_arg() -> Any:
+        sym(
+            ctypes.c_int32(op),
+            fp(np.ascontiguousarray(xt.reshape(outer, inner))),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(outer),
+            ctypes.c_int32(inner),
+        )
+        res = out.astype(np.int64)
+        res = res.reshape(kept_shape) if kept_shape else res.reshape(())
+        if keepdims and axis is not None:
+            full = [int(s) for s in x.shape]
+            for a in axes:
+                full[a] = 1
+            res = res.reshape(full)
+        return res
+
+    return _apple_gpu_run_checked("apple_gpu.mpsgraph_argreduce", _run_arg, _ref)
 
 
 def apple_gpu_kv_cache_read(cache: Any, start: int, end: "int | None" = None) -> "tuple[Any, Any, str]":
@@ -39534,15 +39675,18 @@ def apple_gpu_conv2d(
         u16 = ctypes.POINTER(ctypes.c_uint16)
         fp = ctypes.POINTER(ctypes.c_float)
         Y = np.empty((N * OH * OW, Cout), np.float32)
-        rc = sym(
-            Xc.view(np.uint16).ctypes.data_as(u16),
-            Wr.view(np.uint16).ctypes.data_as(u16),
-            bias_f.ctypes.data_as(fp) if bias_f is not None else None,
-            Y.ctypes.data_as(fp),
-            ctypes.c_int32(act_code),
-            *[ctypes.c_int32(v) for v in (N, H, Wd, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW)],
+        ok = _apple_gpu_symbol_call_checked(
+            f"apple_gpu.mtl4_conv2d_{dtype}",
+            lambda: sym(
+                Xc.view(np.uint16).ctypes.data_as(u16),
+                Wr.view(np.uint16).ctypes.data_as(u16),
+                bias_f.ctypes.data_as(fp) if bias_f is not None else None,
+                Y.ctypes.data_as(fp),
+                ctypes.c_int32(act_code),
+                *[ctypes.c_int32(v) for v in (N, H, Wd, Cin, Cout, kH, kW, sH, sW, pH, pW, dH, dW)],
+            ),
         )
-        if rc == 1:
+        if ok:
             return Y.reshape(N, OH, OW, Cout), True
 
     # Fallback: host im2col + the epilogue (also numpy-falls-back off Metal 4).
@@ -39579,8 +39723,12 @@ def _apple_gpu_chol_2d(A2d: Any, np: Any) -> Any:
         return None
     n = int(A2d.shape[0])
     L = np.empty((n, n), np.float32)
-    rc = sym(np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp), L.ctypes.data_as(fp), ctypes.c_int32(n))
-    return L if rc == 0 else None
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.cholesky",
+        lambda: sym(np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp), L.ctypes.data_as(fp), ctypes.c_int32(n)),
+        ok_rc=0,
+    )
+    return L if ok else None
 
 
 def _apple_gpu_solve_2d(A2d: Any, B2d: Any, np: Any, symname: str) -> Any:
@@ -39591,14 +39739,18 @@ def _apple_gpu_solve_2d(A2d: Any, B2d: Any, np: Any, symname: str) -> Any:
         return None
     n, nrhs = int(A2d.shape[0]), int(B2d.shape[1])
     X = np.empty((n, nrhs), np.float32)
-    rc = sym(
-        np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
-        np.ascontiguousarray(B2d, np.float32).ctypes.data_as(fp),
-        X.ctypes.data_as(fp),
-        ctypes.c_int32(n),
-        ctypes.c_int32(nrhs),
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu." + symname.removeprefix("tessera_apple_gpu_"),
+        lambda: sym(
+            np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
+            np.ascontiguousarray(B2d, np.float32).ctypes.data_as(fp),
+            X.ctypes.data_as(fp),
+            ctypes.c_int32(n),
+            ctypes.c_int32(nrhs),
+        ),
+        ok_rc=0,
     )
-    return X if rc == 0 else None
+    return X if ok else None
 
 
 def _apple_gpu_tri_2d(A2d: Any, B2d: Any, np: Any, lower: bool, trans: bool, unit: bool) -> Any:
@@ -39610,17 +39762,21 @@ def _apple_gpu_tri_2d(A2d: Any, B2d: Any, np: Any, lower: bool, trans: bool, uni
         return None
     n, nrhs = int(A2d.shape[0]), int(B2d.shape[1])
     X = np.empty((n, nrhs), np.float32)
-    rc = sym(
-        np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
-        np.ascontiguousarray(B2d, np.float32).ctypes.data_as(fp),
-        X.ctypes.data_as(fp),
-        i32(n),
-        i32(nrhs),
-        i32(1 if lower else 0),
-        i32(1 if trans else 0),
-        i32(1 if unit else 0),
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.tri_solve",
+        lambda: sym(
+            np.ascontiguousarray(A2d, np.float32).ctypes.data_as(fp),
+            np.ascontiguousarray(B2d, np.float32).ctypes.data_as(fp),
+            X.ctypes.data_as(fp),
+            i32(n),
+            i32(nrhs),
+            i32(1 if lower else 0),
+            i32(1 if trans else 0),
+            i32(1 if unit else 0),
+        ),
+        ok_rc=0,
     )
-    return X if rc == 0 else None
+    return X if ok else None
 
 
 def _apple_gpu_batched_linalg(A2: Any, B2: Any, core: Any, out_tail_cols: int, np: Any) -> Any:
@@ -39683,8 +39839,11 @@ def _apple_gpu_cholesky_batched_msl(A2: Any, np: Any) -> Any:
     flat = np.ascontiguousarray(A2.reshape(B, n, n))
     L = np.empty((B, n, n), np.float32)
     st = np.zeros(B, np.int32)
-    rc = sym(flat.ctypes.data_as(fp), L.ctypes.data_as(fp), st.ctypes.data_as(ip), ctypes.c_int32(B), ctypes.c_int32(n))
-    if rc != 1 or bool(st.any()):  # not-PD anywhere -> numpy fallback raises
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.cholesky_batched",
+        lambda: sym(flat.ctypes.data_as(fp), L.ctypes.data_as(fp), st.ctypes.data_as(ip), ctypes.c_int32(B), ctypes.c_int32(n)),
+    )
+    if not ok or bool(st.any()):  # not-PD anywhere -> numpy fallback raises
         return None
     return L.reshape(A2.shape)
 
@@ -39709,18 +39868,21 @@ def _apple_gpu_tri_solve_batched_msl(A2: Any, B2: Any, np: Any, *, lower: bool, 
     Af = np.ascontiguousarray(A2.reshape(B, n, n))
     Bf = np.ascontiguousarray(B2.reshape(B, n, nrhs))
     X = np.empty((B, n, nrhs), np.float32)
-    rc = sym(
-        Af.ctypes.data_as(fp),
-        Bf.ctypes.data_as(fp),
-        X.ctypes.data_as(fp),
-        i32(B),
-        i32(n),
-        i32(nrhs),
-        i32(1 if lower else 0),
-        i32(1 if trans else 0),
-        i32(1 if unit else 0),
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.tri_solve_batched",
+        lambda: sym(
+            Af.ctypes.data_as(fp),
+            Bf.ctypes.data_as(fp),
+            X.ctypes.data_as(fp),
+            i32(B),
+            i32(n),
+            i32(nrhs),
+            i32(1 if lower else 0),
+            i32(1 if trans else 0),
+            i32(1 if unit else 0),
+        ),
     )
-    return X.reshape(lead + (n, nrhs)) if rc == 1 else None
+    return X.reshape(lead + (n, nrhs)) if ok else None
 
 
 def apple_gpu_cholesky(A: Any, np: Any) -> Any:
@@ -39918,16 +40080,19 @@ def apple_gpu_svd(A: Any, np: Any, *, full_matrices: bool = False) -> Any:
             Uf = np.empty((Bn, r, c), np.float32)
             Sf = np.empty((Bn, c), np.float32)
             Vf = np.empty((Bn, c, c), np.float32)  # right vectors as columns
-            rc = sym(
-                flat.ctypes.data_as(fp),
-                Uf.ctypes.data_as(fp),
-                Sf.ctypes.data_as(fp),
-                Vf.ctypes.data_as(fp),
-                ctypes.c_int32(Bn),
-                ctypes.c_int32(r),
-                ctypes.c_int32(c),
+            ok = _apple_gpu_symbol_call_checked(
+                "apple_gpu." + symname.removeprefix("tessera_apple_gpu_"),
+                lambda: sym(
+                    flat.ctypes.data_as(fp),
+                    Uf.ctypes.data_as(fp),
+                    Sf.ctypes.data_as(fp),
+                    Vf.ctypes.data_as(fp),
+                    ctypes.c_int32(Bn),
+                    ctypes.c_int32(r),
+                    ctypes.c_int32(c),
+                ),
             )
-            if rc == 1:
+            if ok:
                 order = np.argsort(-Sf, axis=-1)  # per-matrix descending
                 Ss = np.take_along_axis(Sf, order, axis=-1)
                 Us = np.take_along_axis(Uf, order[:, None, :], axis=-1)
@@ -39984,14 +40149,17 @@ def _apple_gpu_random(shape: Any, np: Any, *, seed: int, normal: bool, a: float,
     out = np.empty(n, np.float32)
     sym = _apple_gpu_random_sym(symname)
     if sym is not None and n > 0:
-        rc = sym(
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int64(n),
-            ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
-            ctypes.c_float(a),
-            ctypes.c_float(b),
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu." + symname.removeprefix("tessera_apple_gpu_"),
+            lambda: sym(
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int64(n),
+                ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+                ctypes.c_float(a),
+                ctypes.c_float(b),
+            ),
         )
-        if rc == 1:
+        if ok:
             return out.reshape(shape), True
     # numpy fallback — NOT the same stream as the GPU (nor as tessera.rng); this
     # path only guarantees the requested distribution + shape.
@@ -40168,8 +40336,12 @@ def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> An
         wh = np.ascontiguousarray(W).view(np.uint16)
         bh = np.ascontiguousarray(bias).view(np.uint16) if bias is not None else None
         out = np.zeros((N, outH, outW, Cout), dtype=np.uint16)
-        sym(up(xh), up(wh), up(bh) if bh is not None else None, up(out), *iattrs)
-        return out.view(np.float16)
+
+        def _run() -> Any:
+            sym(up(xh), up(wh), up(bh) if bh is not None else None, up(out), *iattrs)
+            return out.view(np.float16)
+
+        return _apple_gpu_run_checked("apple_gpu.conv2d_f16", _run, lambda: None)
 
     is_bf16 = bf16 is not None and out_dtype == bf16
     is_f32 = out_dtype == np.float32
@@ -40183,8 +40355,12 @@ def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> An
     wf = np.ascontiguousarray(W.astype(np.float32))
     bf = np.ascontiguousarray(bias.astype(np.float32)) if bias is not None else None
     out = np.zeros((N, outH, outW, Cout), dtype=np.float32)
-    sym(fp(xf), fp(wf), fp(bf) if bf is not None else None, fp(out), *iattrs)
-    return out.astype(out_dtype)
+
+    def _run2() -> Any:
+        sym(fp(xf), fp(wf), fp(bf) if bf is not None else None, fp(out), *iattrs)
+        return out.astype(out_dtype)
+
+    return _apple_gpu_run_checked("apple_gpu.conv2d_f32", _run2, lambda: None)
 
 
 def _apple_gpu_conv3d_f32() -> Any:
@@ -40262,8 +40438,12 @@ def _apple_gpu_dispatch_conv3d(operands: list[Any], kwargs: dict, np: Any) -> An
         wh = np.ascontiguousarray(W).view(np.uint16)
         bh = np.ascontiguousarray(bias).view(np.uint16) if bias is not None else None
         out = np.zeros((N, oD, oH, oW, Cout), dtype=np.uint16)
-        sym(up(xh), up(wh), up(bh) if bh is not None else None, up(out), *iattrs)
-        return out.view(np.float16)
+
+        def _run() -> Any:
+            sym(up(xh), up(wh), up(bh) if bh is not None else None, up(out), *iattrs)
+            return out.view(np.float16)
+
+        return _apple_gpu_run_checked("apple_gpu.conv3d_f16", _run, lambda: None)
 
     is_bf16 = bf16 is not None and out_dtype == bf16
     is_f32 = out_dtype == np.float32
@@ -40277,8 +40457,12 @@ def _apple_gpu_dispatch_conv3d(operands: list[Any], kwargs: dict, np: Any) -> An
     wf = np.ascontiguousarray(W.astype(np.float32))
     bf = np.ascontiguousarray(bias.astype(np.float32)) if bias is not None else None
     out = np.zeros((N, oD, oH, oW, Cout), dtype=np.float32)
-    sym(fp(xf), fp(wf), fp(bf) if bf is not None else None, fp(out), *iattrs)
-    return out.astype(out_dtype)
+
+    def _run2() -> Any:
+        sym(fp(xf), fp(wf), fp(bf) if bf is not None else None, fp(out), *iattrs)
+        return out.astype(out_dtype)
+
+    return _apple_gpu_run_checked("apple_gpu.conv3d_f32", _run2, lambda: None)
 
 
 def _apple_gpu_mla_decode_sym(suffix: str) -> Any:
@@ -40368,20 +40552,24 @@ def _apple_gpu_mla_decode_rope(
             up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
             ten = [np.ascontiguousarray(a).view(np.uint16) for a in (Qn, Qr, Kn, Kr, V)]
             O = np.zeros((B, H, Sq, dv), np.uint16)
-            sym(
-                up(ten[0]),
-                up(ten[1]),
-                up(ten[2]),
-                up(ten[3]),
-                up(ten[4]),
-                fpf(cosQ),
-                fpf(sinQ),
-                fpf(cosK),
-                fpf(sinK),
-                up(O),
-                *iargs,
-            )
-            return O.view(out_dtype)
+
+            def _run() -> Any:
+                sym(
+                    up(ten[0]),
+                    up(ten[1]),
+                    up(ten[2]),
+                    up(ten[3]),
+                    up(ten[4]),
+                    fpf(cosQ),
+                    fpf(sinQ),
+                    fpf(cosK),
+                    fpf(sinK),
+                    up(O),
+                    *iargs,
+                )
+                return O.view(out_dtype)
+
+            return _apple_gpu_run_checked("apple_gpu.mla_decode_rope_half", _run, lambda: None)
 
     Qn = np.ascontiguousarray(Qn, np.float32)
     Qr = np.ascontiguousarray(Qr, np.float32)
@@ -40392,8 +40580,12 @@ def _apple_gpu_mla_decode_rope(
     if sym is None:
         return None
     O = np.zeros((B, H, Sq, dv), np.float32)
-    sym(fpf(Qn), fpf(Qr), fpf(Kn), fpf(Kr), fpf(V), fpf(cosQ), fpf(sinQ), fpf(cosK), fpf(sinK), fpf(O), *iargs)
-    return O.astype(out_dtype) if out_dtype != np.float32 else O
+
+    def _run2() -> Any:
+        sym(fpf(Qn), fpf(Qr), fpf(Kn), fpf(Kr), fpf(V), fpf(cosQ), fpf(sinQ), fpf(cosK), fpf(sinK), fpf(O), *iargs)
+        return O.astype(out_dtype) if out_dtype != np.float32 else O
+
+    return _apple_gpu_run_checked("apple_gpu.mla_decode_rope_f32", _run2, lambda: None)
 
 
 def _apple_gpu_mla_absorb_decode_f32() -> Any:
@@ -40474,29 +40666,33 @@ def _apple_gpu_mla_absorb_decode(
             dv = int(np.asarray(Wuv).shape[-1])
             up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
             O = np.zeros((B, H, Sq, dv), np.uint16)
-            sym(
-                up(qn),
-                up(qr),
-                up(ckv),
-                up(kr),
-                up(wukt),
-                up(wuv),
-                fpf(cosQ),
-                fpf(sinQ),
-                fpf(cosK),
-                fpf(sinK),
-                up(O),
-                ctypes.c_int32(B),
-                ctypes.c_int32(H),
-                ctypes.c_int32(Sq),
-                ctypes.c_int32(Skv),
-                ctypes.c_int32(dn),
-                ctypes.c_int32(dr),
-                ctypes.c_int32(dv),
-                ctypes.c_int32(Dl),
-                ctypes.c_int32(style),
-            )
-            return O.view(out_dtype)
+
+            def _run() -> Any:
+                sym(
+                    up(qn),
+                    up(qr),
+                    up(ckv),
+                    up(kr),
+                    up(wukt),
+                    up(wuv),
+                    fpf(cosQ),
+                    fpf(sinQ),
+                    fpf(cosK),
+                    fpf(sinK),
+                    up(O),
+                    ctypes.c_int32(B),
+                    ctypes.c_int32(H),
+                    ctypes.c_int32(Sq),
+                    ctypes.c_int32(Skv),
+                    ctypes.c_int32(dn),
+                    ctypes.c_int32(dr),
+                    ctypes.c_int32(dv),
+                    ctypes.c_int32(Dl),
+                    ctypes.c_int32(style),
+                )
+                return O.view(out_dtype)
+
+            return _apple_gpu_run_checked("apple_gpu.mla_absorb_decode_half", _run, lambda: None)
         # fall through to f32 if the half symbol is unavailable
 
     arrs = [np.ascontiguousarray(a, np.float32) for a in (q_nope, q_rope, c_kv, k_rope, Wuk_t, Wuv)]
@@ -40509,29 +40705,33 @@ def _apple_gpu_mla_absorb_decode(
     if sym is None:
         return None
     O = np.zeros((B, H, Sq, dv), np.float32)
-    sym(
-        fpf(qn),
-        fpf(qr),
-        fpf(ckv),
-        fpf(kr),
-        fpf(wukt),
-        fpf(wuv),
-        fpf(cosQ),
-        fpf(sinQ),
-        fpf(cosK),
-        fpf(sinK),
-        fpf(O),
-        ctypes.c_int32(B),
-        ctypes.c_int32(H),
-        ctypes.c_int32(Sq),
-        ctypes.c_int32(Skv),
-        ctypes.c_int32(dn),
-        ctypes.c_int32(dr),
-        ctypes.c_int32(dv),
-        ctypes.c_int32(Dl),
-        ctypes.c_int32(style),
-    )
-    return O.astype(out_dtype) if out_dtype != np.float32 else O
+
+    def _run2() -> Any:
+        sym(
+            fpf(qn),
+            fpf(qr),
+            fpf(ckv),
+            fpf(kr),
+            fpf(wukt),
+            fpf(wuv),
+            fpf(cosQ),
+            fpf(sinQ),
+            fpf(cosK),
+            fpf(sinK),
+            fpf(O),
+            ctypes.c_int32(B),
+            ctypes.c_int32(H),
+            ctypes.c_int32(Sq),
+            ctypes.c_int32(Skv),
+            ctypes.c_int32(dn),
+            ctypes.c_int32(dr),
+            ctypes.c_int32(dv),
+            ctypes.c_int32(Dl),
+            ctypes.c_int32(style),
+        )
+        return O.astype(out_dtype) if out_dtype != np.float32 else O
+
+    return _apple_gpu_run_checked("apple_gpu.mla_absorb_decode_f32", _run2, lambda: None)
 
 
 def _apple_gpu_flash_attn_gqa_f32() -> Any:
@@ -40678,24 +40878,27 @@ def _apple_gpu_dispatch_gqa(
             outh = np.zeros((Bq, Sq, D), dtype=np.uint16)
             up = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
             bh = None if bias_flat is None else bias_flat.view(np.uint16)
-            rc = sym(
-                up(qh),
-                up(kh),
-                up(vh),
-                up(bh) if bh is not None else None,
-                up(outh),
-                ctypes.c_int32(Bq),
-                ctypes.c_int32(num_q_heads),
-                ctypes.c_int32(num_kv_heads),
-                ctypes.c_int32(Sq),
-                ctypes.c_int32(Sk),
-                ctypes.c_int32(D),
-                ctypes.c_float(sc),
-                ctypes.c_int32(1 if causal else 0),
-                ctypes.c_int32(window_size),
-                ctypes.c_float(logit_softcap),
+            ok = _apple_gpu_symbol_call_checked(
+                "apple_gpu.flash_attn_variant_f16",
+                lambda: sym(
+                    up(qh),
+                    up(kh),
+                    up(vh),
+                    up(bh) if bh is not None else None,
+                    up(outh),
+                    ctypes.c_int32(Bq),
+                    ctypes.c_int32(num_q_heads),
+                    ctypes.c_int32(num_kv_heads),
+                    ctypes.c_int32(Sq),
+                    ctypes.c_int32(Sk),
+                    ctypes.c_int32(D),
+                    ctypes.c_float(sc),
+                    ctypes.c_int32(1 if causal else 0),
+                    ctypes.c_int32(window_size),
+                    ctypes.c_float(logit_softcap),
+                ),
             )
-            if int(rc) == 1:
+            if ok:
                 return outh.reshape(Q.shape).view(out_dtype)
         return None
 
@@ -40756,24 +40959,27 @@ def _apple_gpu_dispatch_gqa(
     out = np.zeros((Bq, Sq, D), dtype=np.float32)
     fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     bf = None if bias_flat is None else np.ascontiguousarray(bias_flat.astype(np.float32))
-    rc = sym(
-        fp(qf),
-        fp(kf),
-        fp(vf),
-        fp(bf) if bf is not None else None,
-        fp(out),
-        ctypes.c_int32(Bq),
-        ctypes.c_int32(num_q_heads),
-        ctypes.c_int32(num_kv_heads),
-        ctypes.c_int32(Sq),
-        ctypes.c_int32(Sk),
-        ctypes.c_int32(D),
-        ctypes.c_float(sc),
-        ctypes.c_int32(1 if causal else 0),
-        ctypes.c_int32(window_size),
-        ctypes.c_float(logit_softcap),
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.flash_attn_variant_f32",
+        lambda: sym(
+            fp(qf),
+            fp(kf),
+            fp(vf),
+            fp(bf) if bf is not None else None,
+            fp(out),
+            ctypes.c_int32(Bq),
+            ctypes.c_int32(num_q_heads),
+            ctypes.c_int32(num_kv_heads),
+            ctypes.c_int32(Sq),
+            ctypes.c_int32(Sk),
+            ctypes.c_int32(D),
+            ctypes.c_float(sc),
+            ctypes.c_int32(1 if causal else 0),
+            ctypes.c_int32(window_size),
+            ctypes.c_float(logit_softcap),
+        ),
     )
-    if int(rc) != 1:
+    if not ok:
         return None
     return out.reshape(Q.shape).astype(out_dtype)
 
@@ -40839,11 +41045,11 @@ def _apple_gpu_dispatch_batched_attention(Q: Any, K: Any, V: Any, np: Any, scale
     )
     if half:
         up = lambda arr: arr.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
-        rc = sym(up(a), up(bmat), up(c), up(out), *dims)
+        call = lambda: sym(up(a), up(bmat), up(c), up(out), *dims)
     else:
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = sym(fp(a), fp(bmat), fp(c), fp(out), *dims)
-    if int(rc) != 1:
+        call = lambda: sym(fp(a), fp(bmat), fp(c), fp(out), *dims)
+    if not _apple_gpu_symbol_call_checked("apple_gpu.bsmm_f16" if half else "apple_gpu.bsmm_f32", call):
         return None
     return out.reshape(Q.shape).astype(out_dtype)
 
@@ -41413,24 +41619,30 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any], kwargs: d
                     O = np.zeros((B, Hq, S_q, Dv), dtype=np.float16)
                     up = ctypes.POINTER(ctypes.c_uint16)
                     ip = ctypes.POINTER(ctypes.c_int32)
-                    native16(
-                        Qc.view(np.uint16).ctypes.data_as(up),
-                        Kc.view(np.uint16).ctypes.data_as(up),
-                        Vc.view(np.uint16).ctypes.data_as(up),
-                        ids.ctypes.data_as(ip),
-                        O.view(np.uint16).ctypes.data_as(up),
-                        ctypes.c_int32(B),
-                        ctypes.c_int32(Hq),
-                        ctypes.c_int32(Hkv),
-                        ctypes.c_int32(S_q),
-                        ctypes.c_int32(S_k),
-                        ctypes.c_int32(D),
-                        ctypes.c_int32(block_size),
-                        ctypes.c_int32(tk),
-                        ctypes.c_float(attn_scale),
-                        ctypes.c_int32(1 if causal else 0),
-                    )
-                    return O
+
+                    def _run_f16() -> Any:
+                        native16(
+                            Qc.view(np.uint16).ctypes.data_as(up),
+                            Kc.view(np.uint16).ctypes.data_as(up),
+                            Vc.view(np.uint16).ctypes.data_as(up),
+                            ids.ctypes.data_as(ip),
+                            O.view(np.uint16).ctypes.data_as(up),
+                            ctypes.c_int32(B),
+                            ctypes.c_int32(Hq),
+                            ctypes.c_int32(Hkv),
+                            ctypes.c_int32(S_q),
+                            ctypes.c_int32(S_k),
+                            ctypes.c_int32(D),
+                            ctypes.c_int32(block_size),
+                            ctypes.c_int32(tk),
+                            ctypes.c_float(attn_scale),
+                            ctypes.c_int32(1 if causal else 0),
+                        )
+                        return O
+
+                    result = _apple_gpu_run_checked("apple_gpu.msa_block_sparse_f16", _run_f16, lambda: None)
+                    if result is not None:
+                        return result
             # Prefer the tiled (simdgroup-cooperative) kernel; it falls back to
             # the scalar kernel internally when simd reduction is unavailable.
             native = _apple_gpu_msa_block_sparse_tiled_f32() or _apple_gpu_msa_block_sparse_f32()
@@ -41443,24 +41655,30 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any], kwargs: d
                 O = np.zeros((B, Hq, S_q, Dv), dtype=np.float32)
                 fp = ctypes.POINTER(ctypes.c_float)
                 ip = ctypes.POINTER(ctypes.c_int32)
-                native(
-                    Qc.ctypes.data_as(fp),
-                    Kc.ctypes.data_as(fp),
-                    Vc.ctypes.data_as(fp),
-                    ids.ctypes.data_as(ip),
-                    O.ctypes.data_as(fp),
-                    ctypes.c_int32(B),
-                    ctypes.c_int32(Hq),
-                    ctypes.c_int32(Hkv),
-                    ctypes.c_int32(S_q),
-                    ctypes.c_int32(S_k),
-                    ctypes.c_int32(D),
-                    ctypes.c_int32(block_size),
-                    ctypes.c_int32(tk),
-                    ctypes.c_float(attn_scale),
-                    ctypes.c_int32(1 if causal else 0),
-                )
-                return O.astype(np.result_type(Q, K, V))
+
+                def _run_f32() -> Any:
+                    native(
+                        Qc.ctypes.data_as(fp),
+                        Kc.ctypes.data_as(fp),
+                        Vc.ctypes.data_as(fp),
+                        ids.ctypes.data_as(ip),
+                        O.ctypes.data_as(fp),
+                        ctypes.c_int32(B),
+                        ctypes.c_int32(Hq),
+                        ctypes.c_int32(Hkv),
+                        ctypes.c_int32(S_q),
+                        ctypes.c_int32(S_k),
+                        ctypes.c_int32(D),
+                        ctypes.c_int32(block_size),
+                        ctypes.c_int32(tk),
+                        ctypes.c_float(attn_scale),
+                        ctypes.c_int32(1 if causal else 0),
+                    )
+                    return O.astype(np.result_type(Q, K, V))
+
+                result = _apple_gpu_run_checked("apple_gpu.msa_block_sparse_f32", _run_f32, lambda: None)
+                if result is not None:
+                    return result
 
         # Host: per-(b, group, query) deduped, causally-valid token index lists.
         row_idx: dict = {}
@@ -41690,19 +41908,25 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any], kwargs: d
                 Vf = np.ascontiguousarray(V_flat.reshape(batch, t_max, Dv))
                 Mf = np.ascontiguousarray(bias.reshape(batch, t_max))
                 Of = np.zeros((batch, Dv), np.float32)
-                fused(
-                    Qf.ctypes.data_as(fp_t),
-                    Kf.ctypes.data_as(fp_t),
-                    Vf.ctypes.data_as(fp_t),
-                    Mf.ctypes.data_as(fp_t),
-                    Of.ctypes.data_as(fp_t),
-                    ctypes.c_int32(batch),
-                    ctypes.c_int32(t_max),
-                    ctypes.c_int32(D),
-                    ctypes.c_int32(Dv),
-                    ctypes.c_float(scale),
-                )
-                return Of.reshape(B, H, S, Dv).astype(np.result_type(Q, K, V))
+
+                def _run_fused() -> Any:
+                    fused(
+                        Qf.ctypes.data_as(fp_t),
+                        Kf.ctypes.data_as(fp_t),
+                        Vf.ctypes.data_as(fp_t),
+                        Mf.ctypes.data_as(fp_t),
+                        Of.ctypes.data_as(fp_t),
+                        ctypes.c_int32(batch),
+                        ctypes.c_int32(t_max),
+                        ctypes.c_int32(D),
+                        ctypes.c_int32(Dv),
+                        ctypes.c_float(scale),
+                    )
+                    return Of.reshape(B, H, S, Dv).astype(np.result_type(Q, K, V))
+
+                fused_out = _apple_gpu_run_checked("apple_gpu.lookahead_sparse_attn", _run_fused, lambda: None)
+                if fused_out is not None:
+                    return fused_out
 
         Qb = np.ascontiguousarray((Q.astype(np.float32) * np.float32(scale)).reshape(batch, 1, D))
         KsT = np.ascontiguousarray(np.swapaxes(K_flat, -1, -2).reshape(batch, D, t_max))
@@ -41899,14 +42123,18 @@ def _apple_gpu_dispatch_rope(op_name: str, operands: list[Any], np: Any) -> Any:
             theta = np.ascontiguousarray(theta, dtype=np.float32)
         out = np.zeros(x.shape, dtype=np.float32)
         rope = _apple_gpu_rope_f32()
-        rope(
-            x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            theta.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int32(x.shape[0]),
-            ctypes.c_int32(x.shape[1]),
-        )
-        return out
+
+        def _run() -> Any:
+            rope(
+                x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                theta.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int32(x.shape[0]),
+                ctypes.c_int32(x.shape[1]),
+            )
+            return out
+
+        return _apple_gpu_run_checked("apple_gpu.rope_f32", _run, lambda: _runtime_rope(np, x, theta))
 
     if x.dtype == np.float16:
         if not x.flags.c_contiguous:
@@ -41915,17 +42143,22 @@ def _apple_gpu_dispatch_rope(op_name: str, operands: list[Any], np: Any) -> Any:
             theta = np.ascontiguousarray(theta, dtype=np.float16)
         out = np.zeros(x.shape, dtype=np.float16)
         rope_f16 = _apple_gpu_rope_f16()
+        _host = lambda: _runtime_rope(np, x.astype(np.float32), theta.astype(np.float32)).astype(np.float16)  # noqa: E731
         if rope_f16 is not None:
-            rope_f16(
-                x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                theta.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(x.shape[0]),
-                ctypes.c_int32(x.shape[1]),
-            )
-            return out
+
+            def _run2() -> Any:
+                rope_f16(
+                    x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    theta.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(x.shape[0]),
+                    ctypes.c_int32(x.shape[1]),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.rope_f16", _run2, _host)
         # Older runtime build without f16 — fall back via fp32.
-        return _runtime_rope(np, x.astype(np.float32), theta.astype(np.float32)).astype(np.float16)
+        return _host()
 
     bf16_dtype = _bfloat16_dtype()
     if bf16_dtype is not None and x.dtype == bf16_dtype:
@@ -41935,16 +42168,21 @@ def _apple_gpu_dispatch_rope(op_name: str, operands: list[Any], np: Any) -> Any:
             theta = np.ascontiguousarray(theta, dtype=bf16_dtype)
         out = np.zeros(x.shape, dtype=bf16_dtype)
         rope_bf16 = _apple_gpu_rope_bf16()
+        _host = lambda: _runtime_rope(np, x.astype(np.float32), theta.astype(np.float32)).astype(bf16_dtype)  # noqa: E731
         if rope_bf16 is not None:
-            rope_bf16(
-                x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                theta.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(x.shape[0]),
-                ctypes.c_int32(x.shape[1]),
-            )
-            return out
-        return _runtime_rope(np, x.astype(np.float32), theta.astype(np.float32)).astype(bf16_dtype)
+
+            def _run3() -> Any:
+                rope_bf16(
+                    x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    theta.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(x.shape[0]),
+                    ctypes.c_int32(x.shape[1]),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.rope_bf16", _run3, _host)
+        return _host()
 
     return _runtime_rope(np, x, theta)
 
@@ -42073,14 +42311,35 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any], kwargs: Ma
             v = np.ascontiguousarray(v, dtype=np.float32)
         out = np.zeros((B, Sq, D), dtype=np.float32)
         fp = ctypes.POINTER(ctypes.c_float)
+        _host = lambda: _runtime_flash_attn(np, q, k, v, kwargs)  # noqa: E731
         if bias is not None:
             bias = np.ascontiguousarray(bias, dtype=np.float32)
             flash_attn_bias = _apple_gpu_flash_attn_bias_f32()
-            flash_attn_bias(
+
+            def _run_bias() -> Any:
+                flash_attn_bias(
+                    q.ctypes.data_as(fp),
+                    k.ctypes.data_as(fp),
+                    v.ctypes.data_as(fp),
+                    bias.ctypes.data_as(fp),
+                    out.ctypes.data_as(fp),
+                    ctypes.c_int32(B),
+                    ctypes.c_int32(Sq),
+                    ctypes.c_int32(Sk),
+                    ctypes.c_int32(D),
+                    ctypes.c_float(scale),
+                    ctypes.c_int32(causal),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.flash_attn_bias_f32", _run_bias, _host)
+        flash_attn = _apple_gpu_flash_attn_f32()
+
+        def _run() -> Any:
+            flash_attn(
                 q.ctypes.data_as(fp),
                 k.ctypes.data_as(fp),
                 v.ctypes.data_as(fp),
-                bias.ctypes.data_as(fp),
                 out.ctypes.data_as(fp),
                 ctypes.c_int32(B),
                 ctypes.c_int32(Sq),
@@ -42090,20 +42349,8 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any], kwargs: Ma
                 ctypes.c_int32(causal),
             )
             return out
-        flash_attn = _apple_gpu_flash_attn_f32()
-        flash_attn(
-            q.ctypes.data_as(fp),
-            k.ctypes.data_as(fp),
-            v.ctypes.data_as(fp),
-            out.ctypes.data_as(fp),
-            ctypes.c_int32(B),
-            ctypes.c_int32(Sq),
-            ctypes.c_int32(Sk),
-            ctypes.c_int32(D),
-            ctypes.c_float(scale),
-            ctypes.c_int32(causal),
-        )
-        return out
+
+        return _apple_gpu_run_checked("apple_gpu.flash_attn_f32", _run, _host)
 
     if q.dtype == np.float16:
         if not q.flags.c_contiguous:
@@ -42114,15 +42361,40 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any], kwargs: Ma
             v = np.ascontiguousarray(v, dtype=np.float16)
         out = np.zeros((B, Sq, D), dtype=np.float16)
         up = ctypes.POINTER(ctypes.c_uint16)
+        _host = lambda: _runtime_flash_attn(  # noqa: E731
+            np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
+        ).astype(np.float16)
         if bias is not None:
             bias16 = np.ascontiguousarray(bias, dtype=np.float16)
             flash_attn_bias_f16 = _apple_gpu_flash_attn_bias_f16()
             if flash_attn_bias_f16 is not None:
-                flash_attn_bias_f16(
+
+                def _run_bias() -> Any:
+                    flash_attn_bias_f16(
+                        q.view(np.uint16).ctypes.data_as(up),
+                        k.view(np.uint16).ctypes.data_as(up),
+                        v.view(np.uint16).ctypes.data_as(up),
+                        bias16.view(np.uint16).ctypes.data_as(up),
+                        out.view(np.uint16).ctypes.data_as(up),
+                        ctypes.c_int32(B),
+                        ctypes.c_int32(Sq),
+                        ctypes.c_int32(Sk),
+                        ctypes.c_int32(D),
+                        ctypes.c_float(scale),
+                        ctypes.c_int32(causal),
+                    )
+                    return out
+
+                return _apple_gpu_run_checked("apple_gpu.flash_attn_bias_f16", _run_bias, _host)
+            return _host()
+        flash_attn_f16 = _apple_gpu_flash_attn_f16()
+        if flash_attn_f16 is not None:
+
+            def _run2() -> Any:
+                flash_attn_f16(
                     q.view(np.uint16).ctypes.data_as(up),
                     k.view(np.uint16).ctypes.data_as(up),
                     v.view(np.uint16).ctypes.data_as(up),
-                    bias16.view(np.uint16).ctypes.data_as(up),
                     out.view(np.uint16).ctypes.data_as(up),
                     ctypes.c_int32(B),
                     ctypes.c_int32(Sq),
@@ -42132,27 +42404,9 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any], kwargs: Ma
                     ctypes.c_int32(causal),
                 )
                 return out
-            return _runtime_flash_attn(
-                np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
-            ).astype(np.float16)
-        flash_attn_f16 = _apple_gpu_flash_attn_f16()
-        if flash_attn_f16 is not None:
-            flash_attn_f16(
-                q.view(np.uint16).ctypes.data_as(up),
-                k.view(np.uint16).ctypes.data_as(up),
-                v.view(np.uint16).ctypes.data_as(up),
-                out.view(np.uint16).ctypes.data_as(up),
-                ctypes.c_int32(B),
-                ctypes.c_int32(Sq),
-                ctypes.c_int32(Sk),
-                ctypes.c_int32(D),
-                ctypes.c_float(scale),
-                ctypes.c_int32(causal),
-            )
-            return out
-        return _runtime_flash_attn(np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs).astype(
-            np.float16
-        )
+
+            return _apple_gpu_run_checked("apple_gpu.flash_attn_f16", _run2, _host)
+        return _host()
 
     bf16_dtype = _bfloat16_dtype()
     if bf16_dtype is not None and q.dtype == bf16_dtype:
@@ -42164,15 +42418,40 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any], kwargs: Ma
             v = np.ascontiguousarray(v, dtype=bf16_dtype)
         out = np.zeros((B, Sq, D), dtype=bf16_dtype)
         up = ctypes.POINTER(ctypes.c_uint16)
+        _host = lambda: _runtime_flash_attn(  # noqa: E731
+            np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
+        ).astype(bf16_dtype)
         if bias is not None:
             bias_bf = np.ascontiguousarray(bias, dtype=bf16_dtype)
             flash_attn_bias_bf16 = _apple_gpu_flash_attn_bias_bf16()
             if flash_attn_bias_bf16 is not None:
-                flash_attn_bias_bf16(
+
+                def _run_bias() -> Any:
+                    flash_attn_bias_bf16(
+                        q.view(np.uint16).ctypes.data_as(up),
+                        k.view(np.uint16).ctypes.data_as(up),
+                        v.view(np.uint16).ctypes.data_as(up),
+                        bias_bf.view(np.uint16).ctypes.data_as(up),
+                        out.view(np.uint16).ctypes.data_as(up),
+                        ctypes.c_int32(B),
+                        ctypes.c_int32(Sq),
+                        ctypes.c_int32(Sk),
+                        ctypes.c_int32(D),
+                        ctypes.c_float(scale),
+                        ctypes.c_int32(causal),
+                    )
+                    return out
+
+                return _apple_gpu_run_checked("apple_gpu.flash_attn_bias_bf16", _run_bias, _host)
+            return _host()
+        flash_attn_bf16 = _apple_gpu_flash_attn_bf16()
+        if flash_attn_bf16 is not None:
+
+            def _run3() -> Any:
+                flash_attn_bf16(
                     q.view(np.uint16).ctypes.data_as(up),
                     k.view(np.uint16).ctypes.data_as(up),
                     v.view(np.uint16).ctypes.data_as(up),
-                    bias_bf.view(np.uint16).ctypes.data_as(up),
                     out.view(np.uint16).ctypes.data_as(up),
                     ctypes.c_int32(B),
                     ctypes.c_int32(Sq),
@@ -42182,27 +42461,9 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any], kwargs: Ma
                     ctypes.c_int32(causal),
                 )
                 return out
-            return _runtime_flash_attn(
-                np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
-            ).astype(bf16_dtype)
-        flash_attn_bf16 = _apple_gpu_flash_attn_bf16()
-        if flash_attn_bf16 is not None:
-            flash_attn_bf16(
-                q.view(np.uint16).ctypes.data_as(up),
-                k.view(np.uint16).ctypes.data_as(up),
-                v.view(np.uint16).ctypes.data_as(up),
-                out.view(np.uint16).ctypes.data_as(up),
-                ctypes.c_int32(B),
-                ctypes.c_int32(Sq),
-                ctypes.c_int32(Sk),
-                ctypes.c_int32(D),
-                ctypes.c_float(scale),
-                ctypes.c_int32(causal),
-            )
-            return out
-        return _runtime_flash_attn(np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs).astype(
-            bf16_dtype
-        )
+
+            return _apple_gpu_run_checked("apple_gpu.flash_attn_bf16", _run3, _host)
+        return _host()
 
     return _runtime_flash_attn(np, q, k, v, kwargs)
 
@@ -42312,19 +42573,22 @@ def _apple_gpu_msa_gpu_resident_select(Q, K, *, block_size, top_k, causal, force
     block_ids = np.zeros((B, Hkv, Sq, top_k), np.int32)
     fp = ctypes.POINTER(ctypes.c_float)
     ip = ctypes.POINTER(ctypes.c_int32)
-    sel_sym(
-        scores.ctypes.data_as(fp),
-        block_ids.ctypes.data_as(ip),
-        ctypes.c_int32(B),
-        ctypes.c_int32(Hkv),
-        ctypes.c_int32(Sq),
-        ctypes.c_int32(num_blocks),
-        ctypes.c_int32(block_size),
-        ctypes.c_int32(top_k),
-        ctypes.c_int32(1 if causal else 0),
-        ctypes.c_int32(1 if force_local else 0),
-    )
-    return block_ids
+    def _run() -> Any:
+        sel_sym(
+            scores.ctypes.data_as(fp),
+            block_ids.ctypes.data_as(ip),
+            ctypes.c_int32(B),
+            ctypes.c_int32(Hkv),
+            ctypes.c_int32(Sq),
+            ctypes.c_int32(num_blocks),
+            ctypes.c_int32(block_size),
+            ctypes.c_int32(top_k),
+            ctypes.c_int32(1 if causal else 0),
+            ctypes.c_int32(1 if force_local else 0),
+        )
+        return block_ids
+
+    return _apple_gpu_run_checked("apple_gpu.msa_select_blocks", _run, lambda: None)
 
 
 # Huge-batch threshold (Index-Branch FLOPs ≈ B·Hkv·Sq·D·num_blocks): below this,
@@ -42557,13 +42821,21 @@ def _apple_gpu_dispatch_softmax_msl(op_name: str, operands: list[Any], kwargs: M
         M, K = x.shape
         out = np.zeros((M, K), dtype=np.float32)
         softmax = _apple_gpu_softmax_f32()
-        softmax(
-            x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int32(M),
-            ctypes.c_int32(K),
-        )
-        return out
+
+        def _run() -> Any:
+            softmax(
+                x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int32(M),
+                ctypes.c_int32(K),
+            )
+            return out
+
+        def _host() -> Any:
+            e = np.exp(x - np.max(x, axis=-1, keepdims=True))
+            return e / np.sum(e, axis=-1, keepdims=True)
+
+        return _apple_gpu_run_checked("apple_gpu.softmax_f32", _run, _host)
 
     if x.dtype == np.float16:
         if not x.flags.c_contiguous:
@@ -42571,16 +42843,24 @@ def _apple_gpu_dispatch_softmax_msl(op_name: str, operands: list[Any], kwargs: M
         M, K = x.shape
         out = np.zeros((M, K), dtype=np.float16)
         softmax_f16 = _apple_gpu_softmax_f16()
+
+        def _host() -> Any:
+            e = np.exp(x.astype(np.float32) - np.max(x.astype(np.float32), axis=-1, keepdims=True))
+            return (e / np.sum(e, axis=-1, keepdims=True)).astype(np.float16)
+
         if softmax_f16 is not None:
-            softmax_f16(
-                x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M),
-                ctypes.c_int32(K),
-            )
-            return out
-        e = np.exp(x.astype(np.float32) - np.max(x.astype(np.float32), axis=-1, keepdims=True))
-        return (e / np.sum(e, axis=-1, keepdims=True)).astype(np.float16)
+
+            def _run2() -> Any:
+                softmax_f16(
+                    x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(K),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.softmax_f16", _run2, _host)
+        return _host()
 
     bf16_dtype = _bfloat16_dtype()
     if bf16_dtype is not None and x.dtype == bf16_dtype:
@@ -42589,16 +42869,24 @@ def _apple_gpu_dispatch_softmax_msl(op_name: str, operands: list[Any], kwargs: M
         M, K = x.shape
         out = np.zeros((M, K), dtype=bf16_dtype)
         softmax_bf16 = _apple_gpu_softmax_bf16()
+
+        def _host() -> Any:
+            e = np.exp(x.astype(np.float32) - np.max(x.astype(np.float32), axis=-1, keepdims=True))
+            return (e / np.sum(e, axis=-1, keepdims=True)).astype(bf16_dtype)
+
         if softmax_bf16 is not None:
-            softmax_bf16(
-                x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M),
-                ctypes.c_int32(K),
-            )
-            return out
-        e = np.exp(x.astype(np.float32) - np.max(x.astype(np.float32), axis=-1, keepdims=True))
-        return (e / np.sum(e, axis=-1, keepdims=True)).astype(bf16_dtype)
+
+            def _run3() -> Any:
+                softmax_bf16(
+                    x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(K),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.softmax_bf16", _run3, _host)
+        return _host()
 
     e = np.exp(x - np.max(x, axis=axis, keepdims=True))
     return e / np.sum(e, axis=axis, keepdims=True)
@@ -42679,12 +42967,18 @@ def _apple_gpu_dispatch_gelu(op_name: str, operands: list[Any], np: Any) -> Any:
         M, K = x.shape
         out = np.zeros((M, K), dtype=np.float32)
         gelu = _apple_gpu_gelu_f32()
-        gelu(
-            x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int32(M * K),
-        )
-        return out
+
+        def _run() -> Any:
+            gelu(
+                x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int32(M * K),
+            )
+            return out
+
+        return _apple_gpu_run_checked(
+            "apple_gpu.gelu_f32", _run,
+            lambda: 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3))))
 
     if x.dtype == np.float16:
         if not x.flags.c_contiguous:
@@ -42692,15 +42986,23 @@ def _apple_gpu_dispatch_gelu(op_name: str, operands: list[Any], np: Any) -> Any:
         M, K = x.shape
         out = np.zeros((M, K), dtype=np.float16)
         gelu_f16 = _apple_gpu_gelu_f16()
+
+        def _host() -> Any:
+            x32 = x.astype(np.float32)
+            return (0.5 * x32 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x32 + 0.044715 * x32**3)))).astype(np.float16)
+
         if gelu_f16 is not None:
-            gelu_f16(
-                x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M * K),
-            )
-            return out
-        x32 = x.astype(np.float32)
-        return (0.5 * x32 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x32 + 0.044715 * x32**3)))).astype(np.float16)
+
+            def _run2() -> Any:
+                gelu_f16(
+                    x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(M * K),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.gelu_f16", _run2, _host)
+        return _host()
 
     bf16_dtype = _bfloat16_dtype()
     if bf16_dtype is not None and x.dtype == bf16_dtype:
@@ -42709,15 +43011,23 @@ def _apple_gpu_dispatch_gelu(op_name: str, operands: list[Any], np: Any) -> Any:
         M, K = x.shape
         out = np.zeros((M, K), dtype=bf16_dtype)
         gelu_bf16 = _apple_gpu_gelu_bf16()
+
+        def _host() -> Any:
+            x32 = x.astype(np.float32)
+            return (0.5 * x32 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x32 + 0.044715 * x32**3)))).astype(bf16_dtype)
+
         if gelu_bf16 is not None:
-            gelu_bf16(
-                x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M * K),
-            )
-            return out
-        x32 = x.astype(np.float32)
-        return (0.5 * x32 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x32 + 0.044715 * x32**3)))).astype(bf16_dtype)
+
+            def _run3() -> Any:
+                gelu_bf16(
+                    x.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(M * K),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.gelu_bf16", _run3, _host)
+        return _host()
 
     return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
 
@@ -43221,19 +43531,22 @@ def apple_gpu_cf_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any) -> Any:
     ys = np.empty((T, d), np.float32)
     sym = _apple_gpu_cf_scan_f32()
     fp = ctypes.POINTER(ctypes.c_float)
-    rc = 0
+    ok = False
     if sym is not None:
-        rc = sym(
-            Wh.ctypes.data_as(fp),
-            Wx.ctypes.data_as(fp),
-            xseq.ctypes.data_as(fp),
-            init.ctypes.data_as(fp),
-            ys.ctypes.data_as(fp),
-            ctypes.c_int32(T),
-            ctypes.c_int32(d),
-            ctypes.c_int32(m),
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.cf_scan",
+            lambda: sym(
+                Wh.ctypes.data_as(fp),
+                Wx.ctypes.data_as(fp),
+                xseq.ctypes.data_as(fp),
+                init.ctypes.data_as(fp),
+                ys.ctypes.data_as(fp),
+                ctypes.c_int32(T),
+                ctypes.c_int32(d),
+                ctypes.c_int32(m),
+            ),
         )
-    if rc != 1:
+    if not ok:
         carry = init.astype(np.float64)
         for t in range(T):
             carry = np.tanh(carry @ Wh.astype(np.float64) + xseq[t].astype(np.float64) @ Wx.astype(np.float64))
@@ -43291,19 +43604,22 @@ def apple_gpu_cf_serial_draft(
     hiddens = np.empty((int(T), int(d)), np.float32)
     fp = ctypes.POINTER(ctypes.c_float)
     ip = ctypes.POINTER(ctypes.c_int32)
-    rc = sym(
-        *[a.ctypes.data_as(fp) for a in arrs],
-        ctypes.c_int32(int(root_token)),
-        tokens.ctypes.data_as(ip),
-        hiddens.ctypes.data_as(fp),
-        ctypes.c_int32(int(T)),
-        ctypes.c_int32(int(L)),
-        ctypes.c_int32(int(d)),
-        ctypes.c_int32(int(ffn)),
-        ctypes.c_int32(int(V)),
-        ctypes.c_float(float(eps)),
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.cf_serial_draft",
+        lambda: sym(
+            *[a.ctypes.data_as(fp) for a in arrs],
+            ctypes.c_int32(int(root_token)),
+            tokens.ctypes.data_as(ip),
+            hiddens.ctypes.data_as(fp),
+            ctypes.c_int32(int(T)),
+            ctypes.c_int32(int(L)),
+            ctypes.c_int32(int(d)),
+            ctypes.c_int32(int(ffn)),
+            ctypes.c_int32(int(V)),
+            ctypes.c_float(float(eps)),
+        ),
     )
-    if rc != 1:
+    if not ok:
         return None
     return tokens.astype(np.int64), hiddens
 
@@ -43334,19 +43650,22 @@ def apple_gpu_cf_while_generate(W, lm, h_init, start_token, eos_token, max_steps
         n = np.zeros(1, np.int32)
         fp = ctypes.POINTER(ctypes.c_float)
         ip = ctypes.POINTER(ctypes.c_int32)
-        rc = sym(
-            W.ctypes.data_as(fp),
-            lm.ctypes.data_as(fp),
-            h_init.ctypes.data_as(fp),
-            ctypes.c_int32(int(start_token)),
-            ctypes.c_int32(int(eos_token)),
-            ctypes.c_int32(int(max_steps)),
-            toks.ctypes.data_as(ip),
-            n.ctypes.data_as(ip),
-            ctypes.c_int32(int(d)),
-            ctypes.c_int32(int(V)),
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.cf_while_generate",
+            lambda: sym(
+                W.ctypes.data_as(fp),
+                lm.ctypes.data_as(fp),
+                h_init.ctypes.data_as(fp),
+                ctypes.c_int32(int(start_token)),
+                ctypes.c_int32(int(eos_token)),
+                ctypes.c_int32(int(max_steps)),
+                toks.ctypes.data_as(ip),
+                n.ctypes.data_as(ip),
+                ctypes.c_int32(int(d)),
+                ctypes.c_int32(int(V)),
+            ),
         )
-        if rc == 1:
+        if ok:
             k = int(n[0])
             return [int(t) for t in toks[:k]], k
     # numpy fallback — same predicate (loop while step<max and last!=eos).
@@ -43534,24 +43853,27 @@ def apple_gpu_mtl4_scan(Wh: Any, Wx: Any, xseq: Any, init: Any, np: Any):
     ys = np.empty((T, d), np.float32)
     sym = _apple_gpu_mtl4_scan_f32()
     fp = ctypes.POINTER(ctypes.c_float)
-    rc = 0
+    ok = False
     if sym is not None:
-        rc = sym(
-            Wh.ctypes.data_as(fp),
-            Wx.ctypes.data_as(fp),
-            xseq.ctypes.data_as(fp),
-            init.ctypes.data_as(fp),
-            ys.ctypes.data_as(fp),
-            ctypes.c_int32(T),
-            ctypes.c_int32(d),
-            ctypes.c_int32(m),
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.mtl4_scan",
+            lambda: sym(
+                Wh.ctypes.data_as(fp),
+                Wx.ctypes.data_as(fp),
+                xseq.ctypes.data_as(fp),
+                init.ctypes.data_as(fp),
+                ys.ctypes.data_as(fp),
+                ctypes.c_int32(T),
+                ctypes.c_int32(d),
+                ctypes.c_int32(m),
+            ),
         )
-    if rc != 1:
+    if not ok:
         carry = init.astype(np.float64)
         for t in range(T):
             carry = np.tanh(carry @ Wh.astype(np.float64) + xseq[t].astype(np.float64) @ Wx.astype(np.float64))
             ys[t] = carry.astype(np.float32)
-    return ys, rc == 1
+    return ys, ok
 
 
 def _apple_gpu_mtl4_matmul_sg_f32() -> Any:
@@ -43577,22 +43899,25 @@ def apple_gpu_mtl4_matmul_sg(A: Any, B: Any, np: Any):
     M, K = A.shape
     K2, N = B.shape
     C = np.empty((M, N), np.float32)
-    rc = 0
+    ok = False
     if K2 == K and M % 8 == 0 and N % 8 == 0 and K % 8 == 0:
         sym = _apple_gpu_mtl4_matmul_sg_f32()
         if sym is not None:
             fp = ctypes.POINTER(ctypes.c_float)
-            rc = sym(
-                A.ctypes.data_as(fp),
-                B.ctypes.data_as(fp),
-                C.ctypes.data_as(fp),
-                ctypes.c_int32(M),
-                ctypes.c_int32(N),
-                ctypes.c_int32(K),
+            ok = _apple_gpu_symbol_call_checked(
+                "apple_gpu.mtl4_matmul_sg",
+                lambda: sym(
+                    A.ctypes.data_as(fp),
+                    B.ctypes.data_as(fp),
+                    C.ctypes.data_as(fp),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(K),
+                ),
             )
-    if rc != 1:
+    if not ok:
         C = (A.astype(np.float64) @ B.astype(np.float64)).astype(np.float32)
-    return C, rc == 1
+    return C, ok
 
 
 def _apple_gpu_mtl4_matmul2d_f16_sym() -> Any:
@@ -43622,23 +43947,26 @@ def apple_gpu_mtl4_matmul2d_f16(A: Any, B: Any, np: Any):
     M, K = A.shape
     K2, N = B.shape
     C = np.empty((M, N), np.float32)
-    rc = 0
+    ok = False
     if K2 == K:
         sym = _apple_gpu_mtl4_matmul2d_f16_sym()
         if sym is not None:
             u16 = ctypes.POINTER(ctypes.c_uint16)
             fp = ctypes.POINTER(ctypes.c_float)
-            rc = sym(
-                A.view(np.uint16).ctypes.data_as(u16),
-                B.view(np.uint16).ctypes.data_as(u16),
-                C.ctypes.data_as(fp),
-                ctypes.c_int32(M),
-                ctypes.c_int32(N),
-                ctypes.c_int32(K),
+            ok = _apple_gpu_symbol_call_checked(
+                "apple_gpu.mtl4_matmul2d_f16",
+                lambda: sym(
+                    A.view(np.uint16).ctypes.data_as(u16),
+                    B.view(np.uint16).ctypes.data_as(u16),
+                    C.ctypes.data_as(fp),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(K),
+                ),
             )
-    if rc != 1:
+    if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
-    return C, rc == 1
+    return C, ok
 
 
 def _apple_gpu_mtl4_matmul2d_sym(name: str, *, fused: bool) -> Any:
@@ -43675,23 +44003,26 @@ def apple_gpu_mtl4_matmul2d_bf16(A: Any, B: Any, np: Any):
     M, K = A.shape
     K2, N = B.shape
     C = np.empty((M, N), np.float32)
-    rc = 0
+    ok = False
     if K2 == K:
         sym = _apple_gpu_mtl4_matmul2d_sym("tessera_apple_gpu_mtl4_matmul2d_bf16", fused=False)
         if sym is not None:
             u16 = ctypes.POINTER(ctypes.c_uint16)
             fp = ctypes.POINTER(ctypes.c_float)
-            rc = sym(
-                A.view(np.uint16).ctypes.data_as(u16),
-                B.view(np.uint16).ctypes.data_as(u16),
-                C.ctypes.data_as(fp),
-                ctypes.c_int32(M),
-                ctypes.c_int32(N),
-                ctypes.c_int32(K),
+            ok = _apple_gpu_symbol_call_checked(
+                "apple_gpu.mtl4_matmul2d_bf16",
+                lambda: sym(
+                    A.view(np.uint16).ctypes.data_as(u16),
+                    B.view(np.uint16).ctypes.data_as(u16),
+                    C.ctypes.data_as(fp),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(K),
+                ),
             )
-    if rc != 1:
+    if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
-    return C, rc == 1
+    return C, ok
 
 
 _MTL4_EPILOGUE_ACT = {"none": 0, "relu": 1, "gelu": 2, "silu": 3}
@@ -43730,29 +44061,32 @@ def apple_gpu_mtl4_matmul2d_epilogue(
         if bias_arr.shape[0] != N:
             raise ValueError(f"bias length must be N={N}; got {bias_arr.shape[0]}")
     C = np.empty((M, N), np.float32)
-    rc = 0
+    ok = False
     if K2 == K:
         sym = _apple_gpu_mtl4_matmul2d_sym(entry, fused=True)
         if sym is not None:
             u16 = ctypes.POINTER(ctypes.c_uint16)
             fp = ctypes.POINTER(ctypes.c_float)
             bias_ptr = bias_arr.ctypes.data_as(fp) if bias_arr is not None else None
-            rc = sym(
-                A.view(np.uint16).ctypes.data_as(u16),
-                B.view(np.uint16).ctypes.data_as(u16),
-                C.ctypes.data_as(fp),
-                bias_ptr,
-                ctypes.c_int32(act_code),
-                ctypes.c_int32(M),
-                ctypes.c_int32(N),
-                ctypes.c_int32(K),
+            ok = _apple_gpu_symbol_call_checked(
+                "apple_gpu." + entry.removeprefix("tessera_apple_gpu_"),
+                lambda: sym(
+                    A.view(np.uint16).ctypes.data_as(u16),
+                    B.view(np.uint16).ctypes.data_as(u16),
+                    C.ctypes.data_as(fp),
+                    bias_ptr,
+                    ctypes.c_int32(act_code),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(K),
+                ),
             )
-    if rc != 1:
+    if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
         if bias_arr is not None:
             C = C + bias_arr[None, :]
         C = _mtl4_epilogue_act_numpy(C, act_code, np)
-    return C, rc == 1
+    return C, ok
 
 
 def _mtl4_epilogue_act_numpy(x: Any, act_code: int, np: Any) -> Any:
@@ -43838,8 +44172,11 @@ class AppleGPUMLPSession:
                 Y = np.empty((M, self._N), np.float32)
                 u16 = ctypes.POINTER(ctypes.c_uint16)
                 fp = ctypes.POINTER(ctypes.c_float)
-                rc = run(self._handle, X.view(np.uint16).ctypes.data_as(u16), Y.ctypes.data_as(fp), ctypes.c_int32(M))
-                if rc == 1:
+                ok = _apple_gpu_symbol_call_checked(
+                    "apple_gpu.mtl4_mlp_session.run",
+                    lambda: run(self._handle, X.view(np.uint16).ctypes.data_as(u16), Y.ctypes.data_as(fp), ctypes.c_int32(M)),
+                )
+                if ok:
                     return Y
         # numpy fallback
         Y = (X.astype(np.float32) @ self._W.astype(np.float32)).astype(np.float32)
@@ -44137,19 +44474,22 @@ def apple_gpu_msl_spec_accept(draft_paths: Any, target_greedy: Any, np: Any):
     out = np.empty(3 + depth, np.int32)
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_msl_spec_accept", None)
-    rc = 0
+    ok = False
     if sym is not None:
         ip = ctypes.POINTER(ctypes.c_int32)
         sym.argtypes = [ip, ip, ip, ctypes.c_int32, ctypes.c_int32]
         sym.restype = ctypes.c_int32
-        rc = sym(
-            draft.ctypes.data_as(ip),
-            target.ctypes.data_as(ip),
-            out.ctypes.data_as(ip),
-            ctypes.c_int32(P),
-            ctypes.c_int32(depth),
+        ok = _apple_gpu_symbol_call_checked(
+            "apple_gpu.msl_spec_accept",
+            lambda: sym(
+                draft.ctypes.data_as(ip),
+                target.ctypes.data_as(ip),
+                out.ctypes.data_as(ip),
+                ctypes.c_int32(P),
+                ctypes.c_int32(depth),
+            ),
         )
-    if rc != 1:
+    if not ok:
         best_path, best_len, best_bonus = 0, -1, 0
         for p in range(P):
             length = 0
@@ -44821,8 +45161,13 @@ def _apple_gpu_dispatch_silu_mul(operands: list[Any], np: Any) -> Any:
     second = np.ascontiguousarray(a.astype(np.float32)).reshape(-1)
     out = np.empty(n, dtype=np.float32)
     fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    sym(ctypes.c_int32(6), fp(first), fp(second), fp(out), ctypes.c_int64(n))
-    return out.reshape(shape).astype(out_dtype)
+
+    def _run() -> Any:
+        sym(ctypes.c_int32(6), fp(first), fp(second), fp(out), ctypes.c_int64(n))
+        return out.reshape(shape).astype(out_dtype)
+
+    return _apple_gpu_run_checked(
+        "apple_gpu.silu_mul", _run, lambda: _ref().astype(out_dtype).reshape(shape))
 
 
 def _apple_gpu_dispatch_mpsgraph_softmax(x: Any, np: Any) -> Any:
@@ -44847,8 +45192,17 @@ def _apple_gpu_dispatch_mpsgraph_softmax(x: Any, np: Any) -> Any:
     x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(rows, cols)
     out = np.empty((rows, cols), dtype=np.float32)
     fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    sym(fp(x32), fp(out), ctypes.c_int32(rows), ctypes.c_int32(cols))
-    return out.reshape(shape).astype(out_dtype)
+
+    def _run() -> Any:
+        sym(fp(x32), fp(out), ctypes.c_int32(rows), ctypes.c_int32(cols))
+        return out.reshape(shape).astype(out_dtype)
+
+    def _host() -> Any:
+        f = x.astype(np.float32)
+        e = np.exp(f - f.max(axis=-1, keepdims=True))
+        return (e / e.sum(axis=-1, keepdims=True)).astype(out_dtype)
+
+    return _apple_gpu_run_checked("apple_gpu.mpsgraph_softmax", _run, _host)
 
 
 def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
@@ -44962,39 +45316,53 @@ def _apple_gpu_dispatch_gelu_gpu(x: Any, np: Any) -> Any:
             return _ref().reshape(shape)
         xf = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
         out = np.empty(n, dtype=np.float32)
-        sym(
-            ctypes.c_int32(5),
-            xf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int64(n),
-        )
-        return out.reshape(shape)
+
+        def _run() -> Any:
+            sym(
+                ctypes.c_int32(5),
+                xf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int64(n),
+            )
+            return out.reshape(shape)
+
+        return _apple_gpu_run_checked("apple_gpu.gelu_mpsgraph_f32", _run, lambda: _ref().reshape(shape))
     if x.dtype == np.float16:
         sym = _apple_gpu_mpsgraph_unary_f16()
         if sym is None:
             return _ref().astype(np.float16).reshape(shape)
         xf = np.ascontiguousarray(x, dtype=np.float16).reshape(-1)
         out = np.empty(n, dtype=np.float16)
-        sym(
-            ctypes.c_int32(5),
-            xf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-            out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-            ctypes.c_int64(n),
-        )
-        return out.reshape(shape)
+
+        def _run2() -> Any:
+            sym(
+                ctypes.c_int32(5),
+                xf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                ctypes.c_int64(n),
+            )
+            return out.reshape(shape)
+
+        return _apple_gpu_run_checked(
+            "apple_gpu.gelu_mpsgraph_f16", _run2, lambda: _ref().astype(np.float16).reshape(shape))
     if bf16_dtype is not None and x.dtype == bf16_dtype:
         sym = _apple_gpu_mpsgraph_unary_f32()
         if sym is None:
             return _ref().astype(bf16_dtype).reshape(shape)
         x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(-1)
         out = np.empty(n, dtype=np.float32)
-        sym(
-            ctypes.c_int32(5),
-            x32.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int64(n),
-        )
-        return out.reshape(shape).astype(bf16_dtype)
+
+        def _run3() -> Any:
+            sym(
+                ctypes.c_int32(5),
+                x32.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int64(n),
+            )
+            return out.reshape(shape).astype(bf16_dtype)
+
+        return _apple_gpu_run_checked(
+            "apple_gpu.gelu_mpsgraph_bf16", _run3, lambda: _ref().astype(bf16_dtype).reshape(shape))
     return _ref().astype(x.dtype).reshape(shape)
 
 
@@ -45285,17 +45653,26 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
         import time as _time
         from tessera.compiler import jit_bridge as _bridge
 
+        def _run() -> Any:
+            fused(
+                a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                c.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int32(M),
+                ctypes.c_int32(K),
+                ctypes.c_int32(N),
+                ctypes.c_int32(P),
+            )
+            return out
+
+        def _host() -> Any:
+            scores = a @ b
+            e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+            return (e / np.sum(e, axis=-1, keepdims=True)) @ c
+
         _t0 = _time.perf_counter_ns()
-        fused(
-            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            c.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int32(M),
-            ctypes.c_int32(K),
-            ctypes.c_int32(N),
-            ctypes.c_int32(P),
-        )
+        result = _apple_gpu_run_checked("apple_gpu.matmul_softmax_matmul_f32", _run, _host)
         _latency_ms = (_time.perf_counter_ns() - _t0) / 1e6
         _bridge.record_driver_route(
             op_name="matmul_softmax_matmul",
@@ -45305,7 +45682,7 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
             latency_ms=_latency_ms,
             args_summary=_bridge.shaped_summary(a, b, c),
         )
-        return out
+        return result
 
     if a.dtype == np.float16:
         if not a.flags.c_contiguous:
@@ -45316,22 +45693,29 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
             c = np.ascontiguousarray(c, dtype=np.float16)
         out = np.zeros((M, P), dtype=np.float16)
         fused_f16 = _apple_gpu_matmul_softmax_matmul_f16()
+
+        def _host() -> Any:
+            scores = a.astype(np.float32) @ b.astype(np.float32)
+            e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+            return ((e / np.sum(e, axis=-1, keepdims=True)) @ c.astype(np.float32)).astype(np.float16)
+
         if fused_f16 is not None:
-            fused_f16(
-                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                c.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M),
-                ctypes.c_int32(K),
-                ctypes.c_int32(N),
-                ctypes.c_int32(P),
-            )
-            return out
-        scores = a.astype(np.float32) @ b.astype(np.float32)
-        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
-        probs = e / np.sum(e, axis=-1, keepdims=True)
-        return (probs @ c.astype(np.float32)).astype(np.float16)
+
+            def _run2() -> Any:
+                fused_f16(
+                    a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    c.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(K),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(P),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.matmul_softmax_matmul_f16", _run2, _host)
+        return _host()
 
     bf16_dtype = _bfloat16_dtype()
     if bf16_dtype is not None and a.dtype == bf16_dtype:
@@ -45343,22 +45727,29 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
             c = np.ascontiguousarray(c, dtype=bf16_dtype)
         out = np.zeros((M, P), dtype=bf16_dtype)
         fused_bf16 = _apple_gpu_matmul_softmax_matmul_bf16()
+
+        def _host() -> Any:
+            scores = a.astype(np.float32) @ b.astype(np.float32)
+            e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+            return ((e / np.sum(e, axis=-1, keepdims=True)) @ c.astype(np.float32)).astype(bf16_dtype)
+
         if fused_bf16 is not None:
-            fused_bf16(
-                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                c.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M),
-                ctypes.c_int32(K),
-                ctypes.c_int32(N),
-                ctypes.c_int32(P),
-            )
-            return out
-        scores = a.astype(np.float32) @ b.astype(np.float32)
-        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
-        probs = e / np.sum(e, axis=-1, keepdims=True)
-        return (probs @ c.astype(np.float32)).astype(bf16_dtype)
+
+            def _run3() -> Any:
+                fused_bf16(
+                    a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    c.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                    ctypes.c_int32(M),
+                    ctypes.c_int32(K),
+                    ctypes.c_int32(N),
+                    ctypes.c_int32(P),
+                )
+                return out
+
+            return _apple_gpu_run_checked("apple_gpu.matmul_softmax_matmul_bf16", _run3, _host)
+        return _host()
 
     scores = a @ b
     e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
@@ -45597,18 +45988,22 @@ def apple_gpu_quantized_matmul_i4(
         raise ValueError(f"X has K={Kx} but K={K} was declared")
     N = int(Pc.shape[0])
     O = _np.empty((M, N), _np.float32)
-    fn(
-        Xc.ctypes.data_as(ctypes.c_void_p),
-        Pc.ctypes.data_as(ctypes.c_void_p),
-        Sc.ctypes.data_as(ctypes.c_void_p),
-        Bc.ctypes.data_as(ctypes.c_void_p),
-        O.ctypes.data_as(ctypes.c_void_p),
-        M,
-        int(K),
-        N,
-        int(group_size),
-    )
-    return O
+
+    def _run() -> Any:
+        fn(
+            Xc.ctypes.data_as(ctypes.c_void_p),
+            Pc.ctypes.data_as(ctypes.c_void_p),
+            Sc.ctypes.data_as(ctypes.c_void_p),
+            Bc.ctypes.data_as(ctypes.c_void_p),
+            O.ctypes.data_as(ctypes.c_void_p),
+            M,
+            int(K),
+            N,
+            int(group_size),
+        )
+        return O
+
+    return _apple_gpu_run_checked(f"apple_gpu.quantized_matmul_i4_{variant}", _run, lambda: None)
 
 
 _FP4_MATMUL_CONFIGURED = False
@@ -45642,17 +46037,21 @@ def apple_gpu_quantized_matmul_fp4(X: Any, packed: Any, scales: Any, K: int, gro
         raise ValueError(f"X has K={Kx} but K={K} was declared")
     N = int(Pc.shape[0])
     O = _np.empty((M, N), _np.float32)
-    fn(
-        Xc.ctypes.data_as(ctypes.c_void_p),
-        Pc.ctypes.data_as(ctypes.c_void_p),
-        Sc.ctypes.data_as(ctypes.c_void_p),
-        O.ctypes.data_as(ctypes.c_void_p),
-        M,
-        int(K),
-        N,
-        int(group_size),
-    )
-    return O
+
+    def _run() -> Any:
+        fn(
+            Xc.ctypes.data_as(ctypes.c_void_p),
+            Pc.ctypes.data_as(ctypes.c_void_p),
+            Sc.ctypes.data_as(ctypes.c_void_p),
+            O.ctypes.data_as(ctypes.c_void_p),
+            M,
+            int(K),
+            N,
+            int(group_size),
+        )
+        return O
+
+    return _apple_gpu_run_checked("apple_gpu.quantized_matmul_fp4", _run, lambda: None)
 
 
 class DeviceTensor:

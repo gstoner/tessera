@@ -6726,6 +6726,103 @@ a device that stopped answering. Follow-up: route them through the same
 helper; the AST gate covers the `_dev` class by construction and will not
 catch these.
 
+**Corrected 2026-09-03 — that enumeration was a regex, and the count is wrong
+in both directions.** See the third instance below: parsing `runtime.py` and
+classifying each symbol against the `.mm` finds 84 dispatching functions, not
+34 further ones, and several sites the regex named never reach a command
+buffer. Read the count there, not here.
+
+### Third instance: the direct `rc = sym(...)` sites *(fixed 2026-09-03, M1 Max)*
+
+**The second instance closed with a count taken from a regex, and the count was
+wrong in both directions.** It reported "34 further Apple call sites"; a
+re-enumeration that parses `runtime.py` with `ast` and classifies each symbol
+against `apple_gpu_runtime.mm` finds **84 functions** that dispatch a
+`tessera_apple_gpu_*` symbol directly, of which the regex list named about a
+third — and some of what it did name never reaches a command buffer at all.
+Both errors came from the same place: a regex can see `rc = sym(...)`, but it
+cannot see which `sym` that is or whether the C function behind it waits.
+
+**What the enumeration does instead.** An accessor is any function that
+`getattr`s an Apple symbol *and returns it*; a name bound from an accessor call
+(with constant arguments resolved through it) and then called is a dispatch.
+Each resolved symbol is then looked up in the `.mm`, and its body plus
+everything it transitively calls is searched for a device wait — the two timed
+choke points, MPSGraph's synchronous `runWithMTLCommandQueue`, and the Metal 4
+shared-event wait. A symbol reaching none of those cannot hang, whatever the
+Python looks like.
+
+**Result: 61 of the 84 are now routed** (up from 17). Of the 23 that are not,
+**20 are exempt by that classification, not by assertion** — the Metal 4 and
+SIMD capability probes, the last-error channel itself, the memory statistics
+and cache calls, the archive enable/flush, and the encode-only `_enc` entries
+whose command buffer belongs to the caller's session. Three remain, each named
+with its reason in the gate's own `KNOWN_UNROUTED` table:
+`_apple_gpu_raw_handle` (its symbol is a parameter, so it reads as dynamic and
+fails closed; both callers pass a pointer getter), and the `gumbel` / `rowop`
+encode-session methods (their shared C helper contains both an encode and a run
+branch, and the `_enc` entry always takes the encode one).
+
+**Two runtime-side gaps this could not close, because the `.mm` is untouched**
+(editing it invalidates `AppleRouteContext.runtime_fingerprint` and forces a
+ledger re-seal — the same sequencing as the second instance):
+
+* **The MPSGraph `runWithMTLCommandQueue` lanes wait with no timeout and never
+  report kind 1.** `cf_scan`, `cf_serial_draft`, the reduce / argreduce / scan
+  and conv families, `gumbel_argmax`, `mla_decode`, `ppo_policy_loss` and the
+  rest of that family block until the graph completes. Routing them buys the
+  open-breaker short-circuit and the named fallback, but *their own* timeouts
+  cannot count toward the streak until the runtime reports them.
+* **`mtl4_encode_and_wait` returns `false` on expiry without setting kind 1.**
+  The Metal 4 lanes (`mtl4_scan`, `matmul_sg`, `matmul2d_*`, `mtl4_conv2d`, the
+  MLP session) therefore look like a validation decline rather than a timeout.
+  Same consequence, same fix location: one `ts_set_last_gpu_error(1, …)` beside
+  the `waitUntilSignaledValue` at `mtl4_encode_and_wait`.
+
+**One Python-side gap left deliberately open.**
+`apple_gpu_batched.batched_session` commits through `ts_enc_commit_wait`, a
+30 s timed wait, in a `finally`. It is not routed because an open breaker must
+not *skip* it: everything encoded into that session would go uncomputed and the
+caller would read unwritten `DeviceTensor` output as if it were a result. That
+needs an accounting-only variant (count the timeout, never short-circuit),
+which is a separate change.
+
+**Behaviour that deliberately changed.** A reported dispatch failure on a
+routed lane now returns the host value instead of the kernel's untouched output
+(Decision #21), counts toward the streak, and raises under
+`TESSERA_STRICT_DISPATCH`. The `*_value_available` probes wrap their dispatch in
+`except Exception`, which would have swallowed that strict-dispatch error, so
+they now re-raise it; they also refuse to run — and, more importantly, refuse to
+**cache** — while the breaker is open, since a `False` cached then would outlive
+`reset_apple_gpu_dispatch_breaker()` and disable the lane for the rest of the
+process. The MPS single-matrix linalg lanes report success as `rc == 0`, which
+the helper carries as an explicit `ok_rc` rather than normalizing.
+
+**Coverage.** `tests/unit/test_apple_gpu_dispatch_breaker.py` drives one
+representative per family host-free (linalg both rc conventions, random, GQA,
+batched attention, MPSGraph control flow, Metal 4 matmul/conv/MLP session,
+`msl_spec_accept`, a value probe, a value-lane executor, and a void-symbol
+executor) through four properties each: an open breaker never dispatches,
+timeouts count toward the streak, a validation decline does not, and success
+closes it. The drift gate is the enumeration above, so a new dispatching lane
+that copies the old shape fails it by construction, and a `KNOWN_UNROUTED` line
+that stops being an offender fails it too.
+
+**Evidence, M1 Max, unsandboxed, dylib built 10:23 the same day.**
+
+| run | result |
+|---|---|
+| `tests/unit/test_apple_gpu*.py` before | 1 failed, 1627 passed, 1 skipped (76 s) |
+| `tests/unit/test_apple_gpu*.py` after | 1 failed, 1687 passed, 2 skipped (112 s) |
+| `tests/unit/test_apple*.py` after | **2625 passed**, 2 skipped (186 s) |
+| `tests/unit/test_apple*.py` on the stashed tree | 1 failed, 2564 passed (183 s) |
+
+Both failures are flaky and both landed on **unmodified** code: a `cumscan`
+case that passes in isolation, and `test_warmup_then_production_call_is_faster_than_cold`,
+a timing ratio. `mypy python/tessera/runtime.py` is clean, and
+`scripts/check_generated_docs.sh --write` rewrote no dashboard — this change
+adds no ops.
+
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
 **Owning item:** the matrix-core lanes decline ragged shapes ·

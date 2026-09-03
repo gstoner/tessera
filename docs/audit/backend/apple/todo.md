@@ -6884,10 +6884,11 @@ accepting a non-literal caller, each fail the suite. The `KNOWN_UNROUTED`
 mechanism stays, so a future exception must still be named, and a line there
 that stops being an offender still fails the gate.
 
-**One runtime-side gap this could not close, because the `.mm` is untouched**
-(editing it invalidates `AppleRouteContext.runtime_fingerprint` and forces a
-ledger re-seal — the same sequencing as the second instance): **the MPSGraph
-`runWithMTLCommandQueue` lanes wait with no timeout at all.** `cf_scan`,
+**One runtime-side gap this could not close, because the `.mm` is untouched
+— closed 2026-09-03, see the entry below.** (Editing it invalidates
+`AppleRouteContext.runtime_fingerprint` and forces a ledger re-seal — the same
+sequencing as the second instance.) **The MPSGraph
+`runWithMTLCommandQueue` lanes waited with no timeout at all.** `cf_scan`,
 `cf_serial_draft`, the reduce / argreduce / scan and conv families,
 `gumbel_argmax`, `mla_decode`, `ppo_policy_loss` and the rest of that family
 block until the graph completes, so a wedged device never returns to them —
@@ -6991,6 +6992,111 @@ case that passes in isolation, and `test_warmup_then_production_call_is_faster_t
 a timing ratio. `mypy python/tessera/runtime.py` is clean, and
 `scripts/check_generated_docs.sh --write` rewrote no dashboard — this change
 adds no ops.
+
+### Fourth instance: the unbounded MPSGraph wait *(fixed 2026-09-03, M1 Max)*
+
+**The one a caller-side breaker could never reach.** The breaker cuts the
+*repeated* cost of asking a device that stopped answering. `runWithMTLCommandQueue:`
+submits and waits with no timeout, so a wedged device never returns from it —
+one permanent hang, and nothing to cut. 35 call sites used that form.
+
+Each now encodes into an explicitly owned `MPSCommandBuffer` and waits through
+`commit_mpsgraph_and_wait_with_timeout`, the helper this file already used
+elsewhere: bounded at 30 s, and on expiry it sets error kind 1, which is
+exactly what the Python breaker counts. The conversion follows the
+APPLE-DEVICE-EVENT-1 precedent already in the runtime, which moved the `bmm`
+route off the same call for a related reason.
+
+**Two shapes, and one that would have been a silent bug.** The
+`resultsDictionary` form maps directly; the returning `targetTensors` form
+becomes its encode analog, whose results are valid once the wait completes —
+which is what the wait now guarantees. But the two `encode_or_run_*` helpers
+hold their call in a **braceless `else`**, where a multi-statement replacement
+binds only its first statement and leaves the wait running unconditionally.
+Those two are braced, and the transform detects that case rather than assuming
+it.
+
+**Three gates.** No `runWithMTLCommandQueue` call may return (comments still
+name it, so the gate counts calls, not mentions); the bounded helper must still
+report kind 1 on expiry; and every call site must pass a finite timeout, since
+a zero would restore the old behaviour under a bounded name.
+
+The PPO source assertions required the old spelling to prove those lanes were
+MPSGraph-backed rather than host loops. They now require the encode plus the
+bounded wait, and the *absence* of the unbounded spelling — asserting the old
+name would have pinned the very hang this fixes.
+
+**The re-seal, measured rather than re-stamped.** The `.mm` changed, so
+`runtime_fingerprint` changed (`sha256:5c4941d8…` → `sha256:b12d2e92…`). Both
+sealed artifacts were re-recorded on this M1 Max after committing the runtime
+(the packet recorder refuses a dirty fingerprinted source):
+
+* **Fleet packet** — re-recorded and re-sealed. Medians moved rather than being
+  restamped: matmul end-to-end 1.134 ms → 1.071 ms, softmax 0.437 ms → 0.381 ms.
+* **Route ledger** — re-recorded with `--profile extended`, **not** the default.
+  The default `core` profile produced 9 decisions against the committed 16, and
+  reported `rejected == ()` while doing it. That is the same near-miss this
+  queue already records; diffing decision **key sets** against the committed
+  ledger is what caught it, and it is the check to keep running.
+
+**The ledger legitimately moved, and the reason is the change itself.** Sixteen
+routes became eighteen and three flipped, all from one cause: a route that let
+MPSGraph own its command buffer offered no object on which to observe a device
+interval.
+
+| row | before | after |
+|---|---|---|
+| `retune_reduce_sum` (both shapes), device | ineligible — "incumbent paired evidence is incomplete" | eligible, `mpsgraph` retained |
+| `retune_mla_decode` (both shapes), device | `explicit` | `absorbed` (joining end-to-end, which already read `absorbed`) |
+| `retune_moe_swiglu 16x32x64x32_e4`, end-to-end | `composed` | `single_fused` |
+
+The last row is the one recorded here as load-sensitive, so it was held to the
+standard the original pin set: **eight independent five-run recordings on an
+idle box, all eighteen decisions unanimous**, no row disagreeing across
+recordings.
+
+**Evidence, M1 Max, unsandboxed, against a dylib built from this source.**
+`tests/unit/test_apple*.py` — **2638 passed**, 2 skipped. Every test that reads
+the ledger or the packet passes (41). The e2e_fleet dashboards were regenerated
+with the packet.
+
+**Two P1 review findings, both latent in the timed helpers before this work.**
+Converting 35 call sites onto them is what made the blast radius wide enough to
+matter, so they are fixed here rather than filed:
+
+* **The shared event could satisfy the wrong waiter.** Both helpers reserved an
+  increasing value on the context-wide event under a lock they released
+  *before* encoding and committing, so two concurrent dispatches can submit out
+  of reservation order. If the value-2 command buffer signals first, the
+  value-1 waiter is already satisfied and reads its results while its own
+  command buffer is still running — stale or half-written output, with no error
+  anywhere. Each wait now creates its own event and waits for value 1: one
+  waiter, one signal. The shared counter survives only as the fallback for a
+  failed creation. Fixed in **both** helpers, so the 113 pre-existing callers
+  of the MSL one benefit too, not just the converted MPSGraph paths.
+* **A timed-out dispatch recycled its buffers.** The helper's own comment says
+  the command buffer may still be in flight, and the caller's guards then
+  returned pooled buffers to the shared pool on the way out — so the next
+  dispatch could be handed storage the stalled command still reads or writes.
+  Every timed wait now bumps a timeout epoch on expiry, and a guard whose
+  acquire predates the bump drops its buffer instead of pooling it. Dropping is
+  safe and is the point: Metal retains a command buffer's resources until it
+  completes, so the memory outlives the stalled command and merely stops being
+  handed out. Buffers acquired after the bump pool normally, so one timeout
+  does not disable the pool.
+
+Re-sealed again for the second fingerprint (`sha256:b12d2e92…` →
+`sha256:5b95836e…`). The ledger was unchanged by these fixes: the same 18
+decisions with the same routes across eight fresh recordings, so only the
+fingerprint moved.
+
+**What is still open here:** `ts_enc_commit_wait` reports its own 30 s expiry
+only to stderr, so the session-commit accounting infers a stall from duration
+rather than reading it. One `ts_set_last_gpu_error(1, …)` beside that wait
+would make it exact — the same class of fix as this entry, and it needs the
+same re-seal. The shared-event init failure path in that same function also
+falls back to an unbounded `waitUntilCompleted`; there is no bounded wait
+without an event, so that one needs a different answer.
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 

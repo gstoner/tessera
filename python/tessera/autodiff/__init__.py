@@ -71,7 +71,36 @@ register_datum_derived_rules()
 # AD-RETIRE-2: the structured family (softmax / logsumexp / rmsnorm-core)
 # switches to jet-derived first-order rules — see jet.py's retirement
 # section for the envelope audit and the symmetric-transpose derivations.
-from .jet import register_jet_derived_structured_rules
+# MSW-2: the jet surface is part of the public autodiff API, not an internal
+# of the rule-derivation hook. Exact higher-order derivatives were reachable
+# only by importing `tessera.autodiff.jet` directly and hand-writing a jet
+# program in its `jet_*` vocabulary; `jet_trace` removes the second half of
+# that and this export removes the first.
+from .jet import (
+    Jet,
+    hessian_trace_estimate,
+    jet_add,
+    jet_const,
+    jet_flash_attn,
+    jet_layer_norm,
+    jet_lift,
+    jet_logsumexp,
+    jet_map,
+    jet_matmul,
+    jet_mean,
+    jet_mul,
+    jet_reduce_max,
+    jet_rmsnorm,
+    jet_scale,
+    jet_softmax,
+    jet_sub,
+    jet_sum,
+    jet_trace,
+    laplacian_estimate,
+    laplacian_exact,
+    register_jet_derived_structured_rules,
+)
+from .algebra import TruncatedJet
 register_jet_derived_structured_rules()
 
 # Wrap every op in `_VJPS` so it's tape-aware.
@@ -125,6 +154,29 @@ def reverse(fn: Callable) -> Callable:
 
 
 __all__ = [
+    # MSW-2 — exact higher-order derivatives
+    "TruncatedJet",
+    "Jet",
+    "jet_trace",
+    "laplacian_exact",
+    "laplacian_estimate",
+    "hessian_trace_estimate",
+    "jet_lift",
+    "jet_const",
+    "jet_add",
+    "jet_sub",
+    "jet_mul",
+    "jet_scale",
+    "jet_map",
+    "jet_matmul",
+    "jet_sum",
+    "jet_mean",
+    "jet_softmax",
+    "jet_logsumexp",
+    "jet_rmsnorm",
+    "jet_layer_norm",
+    "jet_flash_attn",
+    "jet_reduce_max",
     "tape",
     "reverse",
     "custom_rule",

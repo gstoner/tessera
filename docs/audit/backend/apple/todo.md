@@ -6710,6 +6710,40 @@ intended sandboxed control turned out not to be sandboxed at all (a `$HOME`
 write succeeded), so there is no control either way. Do not cite either as
 the root cause.
 
+**Review found the fix was uniform where the runtime is not (2026-09-03).**
+The first version routed all eight resident paths and implied they were now
+equally covered. Tracing each entry point to its wait helper says otherwise,
+and the three classes need different work:
+
+| resident path | wait helper | bounded? | reports timeout? |
+|---|---|---|---|
+| `gather_blocks_dev` | `commit_mpsgraph_and_wait_with_timeout` | 30 s | yes, kind 1 |
+| `paged_latent_attention_dev` | `commit_and_wait_with_timeout` | 30/60 s | yes, kind 1 |
+| `dense_latent_attention_dev` | `commit_and_wait_with_timeout` | 30/60 s | yes, kind 1 |
+| `ts_dev_cast` | `commit_and_wait_with_timeout` | 30/60 s | yes, kind 1 |
+| `mtl4_matmul2d_dev` | `mtl4_encode_and_wait` | 10 s | **no** |
+| MTL4 MLP session `run_dev` | `mtl4_encode_and_wait` | 10 s | **no** |
+| `rowop_dev` | `[MPSGraph runWithMTLCommandQueue:]` | **no** | no |
+| `bmm_dev` | `[MPSGraph runWithMTLCommandQueue:]` | **no** | no |
+
+* **The MTL4 pair returns `false` after 10 s with the error channel
+  untouched** (`mtl4_encode_and_wait`, `apple_gpu_runtime.mm:4348`; there is no
+  `ts_set_last_gpu_error` anywhere in the MTL4 region). By return value alone
+  that is indistinguishable from a shape decline, so the streak reset and no
+  diagnostic was emitted — the exact wedge, inside the fix for it. Handled with
+  `silent_failure_timeout_s`: a failure that reported nothing and took ≥ 5 s is
+  counted as a timeout. Duration is the only signal the C side leaves, and the
+  two classes differ by four orders of magnitude (a decline is microseconds).
+  The proper fix is one line in the `.mm` and is deferred only because that
+  file's hash is the route-ledger fingerprint.
+* **`rowop_dev` and `bmm_dev` cannot be protected from Python at all.** They
+  call MPSGraph's own `runWithMTLCommandQueue:`, which is **unbounded** — a
+  device that stops answering never returns, so there is no repeated cost to
+  cut and no fallback to take. One permanent hang is worse than N bounded
+  timeouts, and it is invisible to `pytest --timeout` for the same reason
+  `APPLE-MLPKG-HANG-1` was. **38 call sites in the runtime use that form.**
+  Runtime-side fix, filed here, not attempted in this change.
+
 **Class size, stated honestly.** With this change the breaker covers 9 numpy
 lanes + 8 resident paths. An enumeration of `rc = <symbol>(...)` dispatches in
 `runtime.py` finds **34 further Apple call sites** that call a C symbol
@@ -6725,6 +6759,21 @@ call sites" above counted only the MPSGraph helper), so each can still re-ask
 a device that stopped answering. Follow-up: route them through the same
 helper; the AST gate covers the `_dev` class by construction and will not
 catch these.
+
+**The drift gate is per-dispatch, after review.** Its first form asked whether
+a function containing a resident dispatch *also mentioned* the helper, which a
+function with one wrapped and one bare dispatch satisfies — the exact way this
+regresses. It now checks each call to a bound resident symbol for a
+`_apple_gpu_device_call_checked` among its own AST ancestors, and a companion
+test pins that the per-dispatch check catches the mixed case a function-wide
+flag calls clean.
+
+**Cross-backend assessment** is recorded in all four queues under
+`DISPATCH-BREAKER-RESIDENT-2026-09-03`: NVIDIA and ROCm *not applicable* for
+the breaker (both use blocking `*StreamSynchronize` with no timeout, so a wait
+never returns to be retried) with a *follow-up* for having no bounded device
+wait at all; x86 *not applicable* structurally (synchronous host calls, no
+device).
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 

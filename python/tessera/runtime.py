@@ -35898,8 +35898,13 @@ def _ppo_policy_loss_np(
         loss = loss - entropy_coef * entropy
     if mask is not None:
         masked = loss * mask
-        denom = max(float(np.sum(mask)), 1.0)
-        return float(np.sum(masked) / denom)
+        # Mirrors `rl._reduce` exactly -- this is a SECOND forward for the
+        # same loss, so the denominators must move together or the runtime
+        # and the Python reference disagree on a fractional mask.
+        total = float(np.sum(mask))
+        if total == 0.0:
+            return float(np.sum(masked))
+        return float(np.sum(masked) / total)
     return float(np.mean(loss))
 
 

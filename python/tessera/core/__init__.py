@@ -8,20 +8,30 @@ def _as_dtype_token(item):
     ``_DtypeAnnotation`` class or instance -- duck-typed on ``_dtype``/``dtype``
     because ``tessera.core`` is imported before those classes exist) and a
     dtype string (``"bf16"``; aliases such as ``"float32"`` normalize at this
-    boundary per Decision #15a). ``tf32`` is refused by ``canonicalize_dtype``
-    -- it is a math mode, not a storage dtype.
+    boundary per Decision #15a).
+
+    Recognized-but-not-first-class spellings are REFUSED by name rather than
+    silently demoted to a dimension: ``tf32`` (a math mode, not a storage
+    dtype) and the planned/gated set (``uint*``, ``complex*``, ``mxfp*``).
+    ``allow_planned_gated`` stays False -- an annotation IS a first-class
+    storage declaration, and #15a admits a planned/gated dtype only where
+    ``metadata.dtype_status = "planned_gated"`` can be carried, which an
+    annotation cannot do. Concretely, most of that set has no element-type
+    mapping either (``uint8`` would render ``tensor<?xuint8>``, which MLIR
+    rejects), so admitting them here would reintroduce exactly the invalid
+    element types ``GRAPH_IR_UNRESOLVED_ELEMENT_TYPE`` exists to stop.
     """
     from ..dtype import _TF32_NOT_A_DTYPE, canonicalize_dtype, is_known_dtype
 
     if isinstance(item, str):
-        # ``tf32`` is dtype-shaped but deliberately not "known": it must be
-        # REFUSED by name (canonicalize_dtype raises its dedicated error), never
-        # demoted to a dimension called "tf32".
+        # `is_known_dtype` covers canonical + alias + planned/gated; `tf32` is
+        # deliberately outside it. Both non-first-class families reach
+        # `canonicalize_dtype`, which raises its own named error for each.
         if is_known_dtype(item) or item in _TF32_NOT_A_DTYPE:
-            return canonicalize_dtype(item, allow_planned_gated=True)
+            return canonicalize_dtype(item)
         return None
     dtype = getattr(item, "dtype", None) or getattr(item, "_dtype", None)
-    return canonicalize_dtype(dtype, allow_planned_gated=True) if isinstance(dtype, str) else None
+    return canonicalize_dtype(dtype) if isinstance(dtype, str) else None
 
 
 class Tensor:

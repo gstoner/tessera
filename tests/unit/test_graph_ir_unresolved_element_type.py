@@ -76,6 +76,41 @@ def test_op_result_is_flagged_and_carries_the_op_span():
     assert "user.py:7:3" in d.format()
 
 
+def test_multi_result_aggregate_flags_an_unresolved_component():
+    """A multi-result op renders one parenthesized aggregate. Checking only the
+    whole string missed an unresolved component -- the preflight passed and the
+    generic parser failure came back instead (PR #706 review, P2)."""
+    agg = f"({TENSOR_OPAQUE}, tensor<4xf32>)"
+    op = IROp(result="a,b", op_name="tessera.qr", operands=[], operand_types=[],
+              result_type=agg)
+    (d,) = unresolved_element_type_diagnostics(_module(GraphIRFunction(name="f", body=[op])))
+    assert d.code == CODE and "tessera.qr" in d.message and "%a,b" in d.message
+
+
+def test_multi_result_uses_the_structured_contract_when_declared():
+    op = IROp(result="a,b", op_name="tessera.qr", operands=[], operand_types=[],
+              result_type="(tensor<4xf32>, tensor<4xf32>)",   # rendered form disagrees
+              inferred_types=(TENSOR_OPAQUE, tensor_ir_type(("4",), "fp32")))
+    (d,) = unresolved_element_type_diagnostics(_module(GraphIRFunction(name="f", body=[op])))
+    assert d.code == CODE and "tensor<*x?>" in d.message
+
+
+def test_multi_result_fully_resolved_is_not_flagged():
+    op = IROp(result="a,b", op_name="tessera.qr", operands=[], operand_types=[],
+              result_type="(tensor<4xf32>, tensor<2xcomplex<f32>>)")
+    assert unresolved_element_type_diagnostics(_module(GraphIRFunction(name="f", body=[op]))) == ()
+
+
+def test_component_split_respects_commas_inside_angle_brackets():
+    from tessera.compiler.graph_ir import _type_components
+
+    assert _type_components("tensor<4xf32>") == ["tensor<4xf32>"]
+    assert _type_components("(tensor<*x?>, tensor<4xf32>)") == ["tensor<*x?>", "tensor<4xf32>"]
+    # A parameterized element type is one component, not two.
+    assert _type_components("(tensor<2xcomplex<f32>>, tensor<*x?>)") == [
+        "tensor<2xcomplex<f32>>", "tensor<*x?>"]
+
+
 def test_declared_result_type_is_flagged():
     fn = GraphIRFunction(name="f", result_types=[TENSOR_OPAQUE])
     (d,) = unresolved_element_type_diagnostics(_module(fn))

@@ -363,7 +363,7 @@ ppo_policy_loss,26,11,1,37,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,
 prod,4,0,0,4,0,bf16,directly_tested,4 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
 qkv_projection,9,0,0,9,0,fp32,directly_tested,9 direct test references
-qr,17,3,0,20,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,20 direct test references
+qr,21,3,0,24,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,24 direct test references
 quantize_fp4,16,0,3,16,0,bf16 f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,16 direct test references
 quantize_fp6,14,0,2,14,0,bf16 f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,14 direct test references
 quantize_fp8,33,3,4,36,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,36 direct test references

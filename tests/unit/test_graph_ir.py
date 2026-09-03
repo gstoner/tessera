@@ -416,6 +416,18 @@ class TestGraphIRBuilder:
         assert 'tessera.dim_names = ["M", "K"]' in ir
         assert '"bf16"]' not in ir              # the dtype no longer leaks into dim_names
 
+    def test_tensor_annotation_refuses_planned_gated_dtypes(self):
+        """Decision #15a: a planned/gated dtype is admissible only where
+        ``metadata.dtype_status = "planned_gated"`` can be carried, which an
+        annotation cannot do -- and most of the set has no element-type mapping
+        (``uint8`` would render ``tensor<?xuint8>``, which MLIR rejects). Refused
+        by name, never demoted to a dimension (PR #706 review, P1)."""
+        from tessera.dtype import TesseraDtypeError
+
+        for gated in ("uint8", "mxfp8", "complex64"):
+            with pytest.raises(TesseraDtypeError, match="planned/gated"):
+                tessera.Tensor["M", "K", gated]
+
     def test_dtype_shorthand_symbolic_dims_ride_as_dim_names_not_in_the_type(self):
         """Mirror of the Tensor[..., dtype] fix: ``tessera.bf16["M", "K"]`` once
         produced ``dim_names=()`` and rendered the names LITERALLY as

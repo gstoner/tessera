@@ -722,11 +722,40 @@ def _loc_path(filename: str) -> str:
 _UNRESOLVED_ELEMENT_RE = re.compile(r"x\?>$")
 
 
+def _type_components(text: str) -> List[str]:
+    """Split a multi-result type -- ``"(tensor<*x?>, tensor<4xf32>)"`` -- into its
+    component types; a single type yields itself.
+
+    A multi-result op renders its results as one parenthesized aggregate, so a
+    predicate that only matched a bare ``tensor<...>`` saw neither the leading
+    ``tensor<`` nor a trailing ``x?>`` and passed the whole thing. Commas
+    inside ``<>`` (``complex<f32>``, and any future parameterized type) are not
+    separators, so depth is tracked rather than splitting on every comma.
+    """
+    if not (text.startswith("(") and text.endswith(")")):
+        return [text]
+    inner, parts, depth, start = text[1:-1], [], 0, 0
+    for i, ch in enumerate(inner):
+        if ch == "<":
+            depth += 1
+        elif ch == ">":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(inner[start:i].strip())
+            start = i + 1
+    parts.append(inner[start:].strip())
+    return [p for p in parts if p]
+
+
 def _is_unresolved_tensor_type(t: Any) -> bool:
+    """True if ``t`` -- or ANY component of a multi-result type -- is a tensor
+    with no element type."""
     if t is None:
         return False
-    text = str(t)
-    return text.startswith("tensor<") and bool(_UNRESOLVED_ELEMENT_RE.search(text))
+    return any(
+        component.startswith("tensor<") and bool(_UNRESOLVED_ELEMENT_RE.search(component))
+        for component in _type_components(str(t))
+    )
 
 
 def unresolved_element_type_diagnostics(
@@ -766,10 +795,19 @@ def unresolved_element_type_diagnostics(
             if _is_unresolved_tensor_type(rt):
                 _flag(f"@{fn.name} result #{i}", rt, None)
         for op in fn.body:
-            if _is_unresolved_tensor_type(op.result_type):
-                names = ",".join(op.result_names) or "<void>"
-                _flag(f"@{fn.name} {op.op_name} -> %{names}", op.result_type,
-                      op.source_span)
+            names = ",".join(op.result_names) or "<void>"
+            # `inferred_types` is the structured multi-result contract when the
+            # producer declared one; `result_type` is the rendered form every op
+            # has. Checking both means neither an undeclared contract nor an
+            # aggregate string hides an unresolved component.
+            for ty in op.inferred_types or ():
+                if _is_unresolved_tensor_type(ty):
+                    _flag(f"@{fn.name} {op.op_name} -> %{names}", ty, op.source_span)
+                    break
+            else:
+                if _is_unresolved_tensor_type(op.result_type):
+                    _flag(f"@{fn.name} {op.op_name} -> %{names}", op.result_type,
+                          op.source_span)
     return tuple(found)
 
 

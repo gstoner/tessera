@@ -6499,3 +6499,36 @@ unresponsive-device path ends in an unattributed hang. That is the same defect
 class as the 38 Apple `runWithMTLCommandQueue:` sites named in the Apple entry,
 and worth solving once for both. No gfx1151 evidence is claimed or owed — no
 ROCm code changed.
+
+**Extended 2026-09-03 for the runtime-side follow-ups (#710, #711).** The
+earlier note above covers the Python dispatch helpers. Three further contract
+changes landed in the Apple runtime itself, and each is assessed here:
+
+1. **A bounded wait now publishes timeout kind 1.** `ts_enc_commit_wait` used
+   to print an expiry to stderr and touch nothing, so the Python accounting had
+   to infer a stall from wall time. It now reports on the shared error channel,
+   as the other bounded waits already did.
+2. **Each bounded wait owns its event.** Both Apple wait helpers reserved
+   increasing values on one context-wide `MTLSharedEvent` under a lock released
+   before commit, so a later dispatch could signal first and satisfy an earlier
+   waiter while its own command buffer was still running.
+3. **A timed-out dispatch quarantines its pooled buffers.** A guard whose
+   acquire predates a timeout drops its buffer instead of returning it to the
+   shared pool, since the stalled command may still read or write it.
+
+**ROCm — not applicable, for the same three reasons as NVIDIA, on its own
+sources; the existing bounded-wait follow-up is unchanged.**
+
+1. *Nothing to publish.* `hip_backend.cpp:184` is `hipStreamSynchronize` and
+   `hip_backend.cpp:233` is `hipEventSynchronize` — blocking, no timeout
+   argument. A gfx1151 kernel that stops answering blocks once rather than
+   returning a deadline that could be reported, so there is no expiry to
+   publish. Still the open follow-up above, not a new gap.
+2. *No shared-event hazard.* `hip_backend.cpp:191` creates a fresh
+   `hipEvent_t` per event object, so no concurrent dispatch can satisfy
+   another's wait.
+3. *No pool to quarantine.* Same as NVIDIA: the pool is in the Apple runtime
+   only.
+
+**Validation performed:** none on device for this key; no ROCm code changed.
+**Missing exact-device evidence:** none required — no ROCm behaviour is claimed.

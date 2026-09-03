@@ -3913,3 +3913,28 @@ to expire, and no streak to accumulate, so neither the breaker nor the
 duration-based silent-timeout classifier has anything to apply to. This entry
 exists to record that the assessment was made rather than skipped; no x86
 change is expected under this key now or later.
+
+**Extended 2026-09-03 for the runtime-side follow-ups (#710, #711).** The
+earlier note above covers the Python dispatch helpers. Three further contract
+changes landed in the Apple runtime itself, and each is assessed here:
+
+1. **A bounded wait now publishes timeout kind 1.** `ts_enc_commit_wait` used
+   to print an expiry to stderr and touch nothing, so the Python accounting had
+   to infer a stall from wall time. It now reports on the shared error channel,
+   as the other bounded waits already did.
+2. **Each bounded wait owns its event.** Both Apple wait helpers reserved
+   increasing values on one context-wide `MTLSharedEvent` under a lock released
+   before commit, so a later dispatch could signal first and satisfy an earlier
+   waiter while its own command buffer was still running.
+3. **A timed-out dispatch quarantines its pooled buffers.** A guard whose
+   acquire predates a timeout drops its buffer instead of returning it to the
+   shared pool, since the stalled command may still read or write it.
+
+**x86 — not applicable, structurally.** The CPU backend runs synchronous host
+calls: there is no device to stop answering, so no wait to bound, no expiry to
+publish, no event to share and no device buffer pool to quarantine. All three
+changes are about what happens when a device stalls, which is not a state this
+backend can enter.
+
+**Validation performed:** none required; no x86 code changed. **Missing
+exact-device evidence:** none.

@@ -170,10 +170,33 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
         ledger_path, context=context, now=measured + timedelta(days=1))
     assert admitted.rejected == ()
     assert len(admitted.routes) == 16
-    assert admitted.routes[(
+    # This row is NOT pinned to a route any more, and the reason is measured
+    # (2026-09-02, this Mac). Re-sealing the ledger three times from the SAME
+    # binary flipped three of the sixteen decisions run to run:
+    #
+    #   retune_mla_decode 1x4x1x128x32x16x32x64  promote / retain / promote
+    #   retune_mla_decode 1x4x1x64x16x8x16x32    retain / promote / retain
+    #   retune_moe_swiglu 16x32x64x32_e4         retain / retain / promote
+    #
+    # Nothing in that fleet of runs changed except measurement noise, so a
+    # hard-coded route here fails on roughly a coin flip whenever anything
+    # forces a re-seal -- and every `apple_gpu_runtime.mm` edit forces one,
+    # because the runtime fingerprint is part of the ledger context. Worse,
+    # the obvious response to such a failure is to re-record until it passes,
+    # which is selecting on noise.
+    #
+    # This is the same class the note below already documents for
+    # `absorbed`/`explicit`: rows whose cross-run spread sits near the
+    # ledger's own 5% stability cap. What is asserted instead is the part
+    # that IS reproducible -- the row exists, is admitted, and carries one of
+    # the two routes the harness can select. The instability itself is a real
+    # defect in the promotion rules and is tracked separately; it should not
+    # be silently absorbed by weakening this file further.
+    moe_route = admitted.routes[(
         "apple7", "retune_moe_swiglu", "16x32x64x32_e4", "f32",
         "end_to_end",
-    )] == "composed"
+    )]
+    assert moe_route in ("composed", "single_fused"), moe_route
     # Re-measured 2026-09-01 on this Mac (macOS 26.6.2) and CHANGED, for a
     # reason worth keeping: `absorbed` was never the slower route. In the July
     # run it was 54-57% faster and won 100% of paired trials in both runs --

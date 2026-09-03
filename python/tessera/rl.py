@@ -28,7 +28,25 @@ def _reduce(x: np.ndarray, reduction: str, mask: np.ndarray | None = None):
     if reduction == "mean":
         if mask is None:
             return np.mean(x)
-        return np.sum(x) / max(float(np.sum(mask)), 1.0)
+        # Clamp ONLY the zero case. `max(sum, 1.0)` also rescaled every
+        # sub-unit mask sum, so a float mask like [0.1, 0.1] normalised by
+        # 1.0 instead of 0.2 and returned one fifth of the weighted mean.
+        # Clamping the denominator UP makes the loss SMALLER by exactly the
+        # ratio of the true sum to the clamp: measured on `ppo_policy_loss`
+        # at mask scale 0.1, a mask summing to 0.3 returned 0.30x the
+        # correct value. A
+        # weighted mean must be invariant to the scale of its weights, and
+        # nothing here restricts the mask to 0/1: the spec says only
+        # "optional mask", the argument is typed `Any`, and it is cast to
+        # float64 and multiplied without validation.
+        #
+        # At sum == 0 every term is already masked to zero, so dividing by
+        # 1.0 yielded 0.0 -- the zero branch keeps that exactly, which is
+        # why only the fractional case changes behaviour.
+        total = float(np.sum(mask))
+        if total == 0.0:
+            return np.sum(x)          # every term is masked to zero
+        return np.sum(x) / total
     raise ValueError("reduction must be 'none', 'mean', or 'sum'")
 
 
@@ -58,7 +76,14 @@ def normalize_group_advantages(rewards, *, group_axis: int = 1, eps: float = 1e-
         var = np.mean((r - mean) ** 2, axis=group_axis, keepdims=True)
         return (r - mean) / np.sqrt(var + float(eps))
     m = np.asarray(_asarray(mask), dtype=np.float64)
-    denom = np.maximum(np.sum(m, axis=group_axis, keepdims=True), 1.0)
+    # Per-group, and the same rule as `_reduce`: clamp only the empty group.
+    # `np.maximum(..., 1.0)` rescaled any group whose mask summed below 1, so
+    # the group mean and variance -- and therefore every normalised advantage
+    # in that group -- moved with the arbitrary scale of the weights.
+    # A fully masked group contributes r*m = 0, so mean and var are 0 and the
+    # result is 0 either way; dividing by 1.0 there preserves that exactly.
+    group_total = np.sum(m, axis=group_axis, keepdims=True)
+    denom = np.where(group_total > 0.0, group_total, 1.0)
     mean = np.sum(r * m, axis=group_axis, keepdims=True) / denom
     var = np.sum(((r - mean) ** 2) * m, axis=group_axis, keepdims=True) / denom
     return ((r - mean) / np.sqrt(var + float(eps))) * m

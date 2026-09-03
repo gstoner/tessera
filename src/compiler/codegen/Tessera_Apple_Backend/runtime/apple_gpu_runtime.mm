@@ -22189,10 +22189,28 @@ static bool mpsg_run_ppo_policy_loss_ex_f32(
             [g reductionSumWithTensor:masked axes:axis0 name:nil];
         MPSGraphTensor *sumMask =
             [g reductionSumWithTensor:pMask axes:axis0 name:nil];
+        // Clamp ONLY the zero case, matching `rl._reduce` and
+        // `runtime._ppo_policy_loss_np`. `maximum(sumMask, 1)` also rescaled
+        // every mask sum below 1, so a fractional mask divided by 1.0 instead
+        // of its true total and the loss came out smaller by exactly that
+        // ratio. This is the FOURTH implementation of the same denominator;
+        // leaving it behind would have left the Apple lane silently
+        // disagreeing with the Python reference on precisely the inputs the
+        // fix is about.
         MPSGraphTensor *one =
             [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+        MPSGraphTensor *zeroS =
+            [g constantWithScalar:0.0 dataType:MPSDataTypeFloat32];
+        MPSGraphTensor *maskIsPositive =
+            [g greaterThanWithPrimaryTensor:sumMask secondaryTensor:zeroS name:nil];
+        // At sum == 0 every term is already masked to zero, so dividing by
+        // 1.0 returns the same 0.0 it did before -- only the fractional case
+        // changes.
         MPSGraphTensor *denom =
-            [g maximumWithPrimaryTensor:sumMask secondaryTensor:one name:nil];
+            [g selectWithPredicateTensor:maskIsPositive
+                     truePredicateTensor:sumMask
+                    falsePredicateTensor:one
+                                    name:nil];
         lossMean =
             [g divisionWithPrimaryTensor:sumLoss secondaryTensor:denom name:nil];
       } else {

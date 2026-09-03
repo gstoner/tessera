@@ -6850,6 +6850,40 @@ fails closed; both callers pass a pointer getter), and the `gumbel` / `rowop`
 encode-session methods (their shared C helper contains both an encode and a run
 branch, and the `_enc` entry always takes the encode one).
 
+**Closed 2026-09-03 — the allowlist is now empty, and the three were
+reclassified rather than routed.** Both reasons above describe a *limit of the
+classifier*, not a property of the code, so each became a rule:
+
+* **A wait can belong to the call rather than to the helper.**
+  `encode_or_run_rowop_dev` and its gumbel sibling take a command buffer and
+  branch on it — `if (cb) encodeToCommandBuffer … else runWithMTLCommandQueue`
+  — so the synchronous entry point (passing `nil`) waits and the `_enc` entry
+  (passing the session's buffer) does not. Classifying the helper either way
+  is wrong for half its callers, so the classifier propagates the argument,
+  and the fixture pins the split on the one pair that shares a helper. The
+  guard must be a **command-buffer** parameter: an earlier form accepted any
+  parameter and wrongly exempted three int4 matmul lanes, whose `tiled` flag
+  also guards an `if`/`else` with a wait in one arm. That was caught by
+  diffing every symbol's classification before and after the rule, which is
+  the check that forced the narrower version. **Review of #708 tightened it
+  twice more:** the arms are now bounded exactly (brace block or statement)
+  instead of by a fixed character window, and **every** wait in the function
+  must lie inside the else arm rather than merely be absent from that window —
+  otherwise a wait added before or after the branch would be exempted along
+  with it, and the `_enc` entry would read as non-blocking while it now
+  blocks. Bounding the arms exactly also found a third helper the windowed
+  version had truncated past, `mpsg_run_gather_blocks`.
+* **A one-symbol wrapper is resolved from its callers.**
+  `_apple_gpu_raw_handle` takes its symbol as a parameter, so its own body
+  says `<dynamic>` and fails closed; both callers pass a literal, so what it
+  can reach is known exactly, and neither symbol takes a command buffer. A
+  caller passing anything unreadable keeps it `<dynamic>`, hence closed.
+
+Both rules are mutation-checked: widening the guard past command buffers, and
+accepting a non-literal caller, each fail the suite. The `KNOWN_UNROUTED`
+mechanism stays, so a future exception must still be named, and a line there
+that stops being an offender still fails the gate.
+
 **One runtime-side gap this could not close, because the `.mm` is untouched
 — closed 2026-09-03, see the entry below.** (Editing it invalidates
 `AppleRouteContext.runtime_fingerprint` and forces a ledger re-seal — the same
@@ -7026,11 +7060,43 @@ recordings.
 the ledger or the packet passes (41). The e2e_fleet dashboards were regenerated
 with the packet.
 
+**Two P1 review findings, both latent in the timed helpers before this work.**
+Converting 35 call sites onto them is what made the blast radius wide enough to
+matter, so they are fixed here rather than filed:
+
+* **The shared event could satisfy the wrong waiter.** Both helpers reserved an
+  increasing value on the context-wide event under a lock they released
+  *before* encoding and committing, so two concurrent dispatches can submit out
+  of reservation order. If the value-2 command buffer signals first, the
+  value-1 waiter is already satisfied and reads its results while its own
+  command buffer is still running — stale or half-written output, with no error
+  anywhere. Each wait now creates its own event and waits for value 1: one
+  waiter, one signal. The shared counter survives only as the fallback for a
+  failed creation. Fixed in **both** helpers, so the 113 pre-existing callers
+  of the MSL one benefit too, not just the converted MPSGraph paths.
+* **A timed-out dispatch recycled its buffers.** The helper's own comment says
+  the command buffer may still be in flight, and the caller's guards then
+  returned pooled buffers to the shared pool on the way out — so the next
+  dispatch could be handed storage the stalled command still reads or writes.
+  Every timed wait now bumps a timeout epoch on expiry, and a guard whose
+  acquire predates the bump drops its buffer instead of pooling it. Dropping is
+  safe and is the point: Metal retains a command buffer's resources until it
+  completes, so the memory outlives the stalled command and merely stops being
+  handed out. Buffers acquired after the bump pool normally, so one timeout
+  does not disable the pool.
+
+Re-sealed again for the second fingerprint (`sha256:b12d2e92…` →
+`sha256:5b95836e…`). The ledger was unchanged by these fixes: the same 18
+decisions with the same routes across eight fresh recordings, so only the
+fingerprint moved.
+
 **What is still open here:** `ts_enc_commit_wait` reports its own 30 s expiry
 only to stderr, so the session-commit accounting infers a stall from duration
 rather than reading it. One `ts_set_last_gpu_error(1, …)` beside that wait
 would make it exact — the same class of fix as this entry, and it needs the
-same re-seal.
+same re-seal. The shared-event init failure path in that same function also
+falls back to an unbounded `waitUntilCompleted`; there is no bounded wait
+without an event, so that one needs a different answer.
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 

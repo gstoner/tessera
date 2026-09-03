@@ -2374,3 +2374,27 @@ def test_gpu_value_native_sparse_non_darwin_stub_is_not_executable(monkeypatch):
     assert res["ok"] is False
     assert res["runtime_status"] == "invalid_artifact"
     assert "non-Darwin stub is not executable" in res["reason"]
+
+
+def test_value_mode_unresolved_dtype_records_named_semantic_key_error():
+    """Decision #21a at the parser boundary: an argument with no element type
+    is refused BEFORE tessera-opt with a named GRAPH_IR_UNRESOLVED_ELEMENT_TYPE
+    reason -- not the parser's symptom -- and the artifact route is kept."""
+    from tessera.compiler.canonical_compile import canonical_compile
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType, tensor_ir_type,
+    )
+    sym = tensor_ir_type(("?", "?"), None)            # tensor<?x?x?>
+    t = IRType("tensor<8x8xf32>", ("8", "8"), "fp32")
+    fn = GraphIRFunction(
+        name="f", args=[IRArg("a", sym)], result_types=[t],
+        body=[IROp(result="c", op_name="tessera.cholesky", operands=["%a"],
+                   operand_types=[str(sym)], result_type="tensor<8x8xf32>")],
+        return_values=["%c"],
+    )
+    art = canonical_compile(GraphIRModule(functions=[fn]), target="apple_cpu",
+                            options={"apple_target_ir_mode": "value"}).to_runtime_artifact()
+    assert art.metadata.get("compiler_path") != "apple_value_target_ir"
+    err = art.metadata.get("apple_value_target_ir_error")
+    assert err and "GRAPH_IR_UNRESOLVED_ELEMENT_TYPE" in err and "%a" in err
+    assert "expected 'x'" not in err   # the parser's symptom is no longer the reason

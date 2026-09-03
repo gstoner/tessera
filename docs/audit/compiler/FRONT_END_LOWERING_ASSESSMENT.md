@@ -47,7 +47,8 @@ $ PYTHONPATH=python python3 -c "from tessera.compiler.graph_ir import _SHAPE_RUL
 
 The surviving `operand_types[0]` lines are now *named* rules (`same_as_first`),
 not a default. Per the amendment protocol, the review is a doc-bug against the
-code, not a live finding — flagged here, to be fixed in that review.
+code, not a live finding — corrected in that review with a dated banner on
+2026-09-03.
 
 The correction matters because it removes the tempting explanation ("the
 frontend is just weak") and forces the structural one below.
@@ -77,7 +78,7 @@ through MLIR; the *facts about the computation* ride in Python beside it.
 | Fact | KGEN | Tessera — where it actually lives | Probe |
 |---|---|---|---|
 | Symbolic shapes | IR type, parametric | Python `IRType`; **does not survive to `tessera-opt`** | `Tensor['M','K']` → `tensor<?x?x?>` (rank inflated, dtype gone) → parse error `expected 'x' in dimension list`; a named-dim render `tensor<MxNxf32>` → `expected non-function type` |
-| Source location | `loc` on every op | **Nowhere in the MLIR text** | `'loc(' in f.graph_ir.to_mlir()` → `False` |
+| Source location | `loc` on every op | **Nowhere in the MLIR text** — **tracer closed 2026-09-03** (repo-relative `loc` in the canonical render, parser-verified; the AST frontend still emits none) | `'loc(' in f.graph_ir.to_mlir()` → `False` |
 | Numeric policy | — (LLVM has no field) | Carrier `to_mlir_attr` exists, but a plain `matmul` emits **none** — opt-in, not universal | `'numeric_policy' in to_mlir()` → `False` for `ops.matmul` |
 | Provenance / route | — | Python descriptor objects; `provenance` appears in **46** compiler modules, **~1** as an MLIR attr string | `grep -rln provenance python/tessera/compiler/*.py \| wc -l` → 46 |
 | Arbiter decision (Decision #28) | — | Python (`composition_cost.provenance`, `autotune_v2.timing_provenance`), never an IR attribute | source read |
@@ -203,13 +204,24 @@ from being read as one-offs.
    `tensor<{dims}x{dtype}>` and substitutes `?` for an unknown dtype, so a rank-2
    `Tensor['M','K']` becomes a malformed `tensor<?x?x?>`. A missing dtype is a
    **semantic key** (Decision #21a) and must fail closed, not degrade into an
-   unparseable type. Today it degrades, and the consequence is a hollow-green
-   demotion: `_lower_apple_value_target_ir`
-   ([`driver.py`](../../../python/tessera/compiler/driver.py#L2145)) returns
-   `None` on the parse failure and, in its own words, "the caller then keeps the
-   artifact target IR (default behavior never drifts)" — a **rendering bug that
-   silently falls back to the bootstrap packager.** Make the render fail closed;
-   make the driver's parse-failure path loud.
+   unparseable type. **Corrected 2026-09-03 on
+   implementation — the front door is *not* silent.** `compile_graph_module`
+   calls the reason-returning `_lower_apple_value_target_ir` and records the
+   failure as `apple_value_target_ir_error` on the bundle (the S4 "observable,
+   never silent" contract,
+   [`driver.py`](../../../python/tessera/compiler/driver.py#L758)). The real
+   defect was the *quality* of that reason: it was the parser's symptom
+   (`expected 'x' in dimension list`), naming neither the argument nor the
+   missing semantic key. **Landed 2026-09-03:**
+   `graph_ir.unresolved_element_type_diagnostics` emits a named
+   `GRAPH_IR_UNRESOLVED_ELEMENT_TYPE` per offending argument / result / op (the
+   string form is the test, so `index`, `i1`, and `!tessera.*` handles — valid
+   MLIR with `dtype=None` — are never flagged), and the driver's value lane
+   consults it *before* rendering, so the recorded reason is the #21a
+   diagnostic. The renders are byte-untouched: `?` stays the legitimate "not
+   yet specialized" placeholder of the symbolic module, which is never
+   parser-bound. (The reason-*discarding* public wrapper
+   `lower_apple_value_target_ir` has no callers; left for a follow-up.)
 
 2. **Emit `loc` from the tracer** — and do it **before** `_OpExtractor` is
    deleted. `trace.py` has **zero** `source_span` sites; the AST `_OpExtractor`
@@ -219,6 +231,18 @@ from being read as one-offs.
    lossy-projection debt: the rule to adopt is *any fact a Python pass reads must
    be an attribute on the IR the C++ passes see*, and `loc` is the most visible
    violator.
+
+   **Landed 2026-09-03.** `trace._user_source_span` records the first stack
+   frame *outside* the tessera package on every recorded op (`record_op` and
+   the four control-flow recorders), so the wrapper-chain depth never matters
+   and a call made from inside a tessera layer reports the caller's line, not
+   the library's. The canonical render appends `loc("file":line:col)`; the
+   paren (golden-text) render is byte-unchanged. The path is **repo-relative
+   for in-repo files** — the canonical text is content-addressed downstream
+   (`stable_hash` of what is fed to `tessera-opt`), so an absolute path would
+   have made the same program hash differently on every checkout — and
+   absolute otherwise. Verified end-to-end: `tessera-opt -mlir-print-debuginfo`
+   preserves the location (`tests/unit/test_trace_loc.py`).
 
 3. **Declare the symbolic→concrete elaboration boundary under Decision #32.**
    It is the single largest information-loss event in the stack (the entire

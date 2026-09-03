@@ -20,16 +20,64 @@ import contextlib
 import inspect
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
 
 import numpy as np
 
 from . import _trace_hook
-from .graph_ir import IROp, apply_presence_flags
+from .graph_ir import IROp, SourceSpan, apply_presence_flags
 from .op_catalog import graph_name_for
 
 if TYPE_CHECKING:
     from .graph_ir import GraphIRModule
+
+# python/tessera -- frames inside the package are library frames, not user code.
+_TESSERA_PKG_ROOT = Path(__file__).resolve().parent.parent
+_TESSERA_PKG_PREFIX = str(_TESSERA_PKG_ROOT) + "/"
+
+
+def _inside_tessera(filename: str) -> bool:
+    if filename.startswith(_TESSERA_PKG_PREFIX):
+        return True
+    try:
+        Path(filename).resolve().relative_to(_TESSERA_PKG_ROOT)
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _user_source_span() -> SourceSpan | None:
+    """The first stack frame OUTSIDE the tessera package -- the user's op call
+    site -- as a :class:`SourceSpan` for the canonical render's ``loc(...)``.
+
+    Decision #13: a Graph IR op must be traceable to the Python line that
+    produced it. Walking outward from the tracer means the depth of the wrapper
+    chain (``autodiff.tape`` chokepoint -> ``record_op``) never matters, and a
+    frame inside tessera (stdlib / ``nn`` layers included) is skipped so the
+    reported line is the caller's, not the library's. Never raises: a miss
+    yields ``None``, which the render leaves as MLIR's honest ``loc(unknown)``.
+    """
+    try:
+        for info in inspect.stack(context=0):
+            filename = info.filename
+            if filename.startswith("<") or _inside_tessera(filename):
+                continue
+            col = 1
+            end_line = end_col = None
+            positions = getattr(info, "positions", None)   # 3.11+
+            if positions is not None and positions.col_offset is not None:
+                col = positions.col_offset + 1
+                end_line = positions.end_lineno
+                if positions.end_col_offset is not None:
+                    end_col = positions.end_col_offset + 1
+            return SourceSpan(line=info.lineno, col=col, end_line=end_line,
+                              end_col=end_col, source_name=filename)
+    except Exception:  # noqa: BLE001 -- loc capture must never break tracing
+        return None
+    return None
+
+
 
 # ── abstract value ────────────────────────────────────────────────────────── #
 
@@ -302,6 +350,7 @@ class TraceBuilder:
             kwargs=ir_kwargs,
             inferred_type=result_ir_types[0],
             inferred_types=result_ir_types,
+            source_span=_user_source_span(),
         ))
         traced_outputs = tuple(
             Tracer(shape, dtype, ssa, value)
@@ -351,6 +400,7 @@ class TraceBuilder:
                 f"(carry {init_carry.dtype}, body returned {nxt.dtype})")
         res = self._fresh()
         self.body.append(IROp(
+            source_span=_user_source_span(),
             result=res, op_name="tessera.control_for",
             operands=[f"%{init_carry.ssa}"],
             operand_types=[_ty(init_carry.shape, init_carry.dtype)],
@@ -392,6 +442,7 @@ class TraceBuilder:
         results = tuple(self._fresh() for _ in then_values)
         result_types = tuple(_ty(value.shape, value.dtype) for value in then_values)
         self.body.append(IROp(
+            source_span=_user_source_span(),
             result=",".join(results), op_name="tessera.control_if",
             operands=[f"%{pred.ssa}"],
             operand_types=[_ty(pred.shape, pred.dtype)],
@@ -439,6 +490,7 @@ class TraceBuilder:
                 f"(carry {init.dtype}, body returned {nxt.dtype})")
         res = self._fresh()
         self.body.append(IROp(
+            source_span=_user_source_span(),
             result=res, op_name="tessera.control_while",
             operands=[f"%{init.ssa}"],
             operand_types=[_ty(init.shape, init.dtype)],
@@ -483,6 +535,7 @@ class TraceBuilder:
         res_c, res_y = self._fresh(), self._fresh()
         ys_shape = (trip, *y.shape)
         self.body.append(IROp(
+            source_span=_user_source_span(),
             result=res_c, op_name="tessera.control_scan",
             operands=[f"%{init.ssa}", f"%{xs.ssa}"],
             operand_types=[_ty(init.shape, init.dtype), _ty(xs.shape, xs.dtype)],

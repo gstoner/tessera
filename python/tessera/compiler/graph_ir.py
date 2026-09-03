@@ -26,6 +26,7 @@ import copy
 import inspect
 import json
 import re
+from pathlib import Path
 import textwrap
 import typing
 from dataclasses import dataclass, field
@@ -680,6 +681,98 @@ def _source_location(span: Optional[SourceSpan]) -> Optional[SourceLocation]:
     return SourceLocation(file=span.source_name or "<tessera-ir>", line=span.line, column=span.col)
 
 
+
+def _loc_suffix(span: Optional["SourceSpan"]) -> str:
+    """Trailing `` loc("file":line:col)`` for the parser-bound (canonical) render.
+
+    Decision #13: a Graph IR op must be traceable to the Python line that
+    produced it, and MLIR's carrier for that is ``loc``. Emitted only when the
+    span names a real file; otherwise nothing is appended and MLIR treats the
+    op as ``loc(unknown)`` -- the honest default, never a fabricated location.
+    Canonical render only: the paren (golden-text) form stays byte-stable.
+    """
+    if span is None or not span.source_name:
+        return ""
+    return f" loc({json.dumps(_loc_path(span.source_name))}:{span.line}:{span.col})"
+
+
+# Repo root = python/tessera/compiler/graph_ir.py -> parents[3].
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _loc_path(filename: str) -> str:
+    """The path a ``loc`` names: repo-relative for in-repo files, absolute
+    otherwise. The canonical render is content-addressed downstream
+    (``stable_hash`` of the text fed to ``tessera-opt``), so an absolute path
+    would make the same program hash differently on every checkout location.
+    A repo-relative path is still a real, resolvable location (Decision #13)
+    and is host-independent; a file outside the repo keeps its absolute path
+    because nothing shorter would still be true."""
+    try:
+        return Path(filename).resolve().relative_to(_REPO_ROOT).as_posix()
+    except (ValueError, OSError):
+        return filename
+
+
+# A tensor type whose ELEMENT slot is `?` -- `tensor<*x?>` / `tensor<?x?x?>`.
+# Every unresolved-dtype render from `tensor_ir_type` ends this way, and MLIR
+# rejects all of them ("expected 'x' in dimension list"). Scalars (`index`,
+# `i1`) and `!tessera.*` handles carry `dtype=None` legitimately and are NOT
+# tensors, so the string form -- what the parser actually sees -- is the test.
+_UNRESOLVED_ELEMENT_RE = re.compile(r"x\?>$")
+
+
+def _is_unresolved_tensor_type(t: Any) -> bool:
+    if t is None:
+        return False
+    text = str(t)
+    return text.startswith("tensor<") and bool(_UNRESOLVED_ELEMENT_RE.search(text))
+
+
+def unresolved_element_type_diagnostics(
+    module: "GraphIRModule",
+) -> Tuple["GraphIRDiagnostic", ...]:
+    """Decision #21a -- dtype is a semantic key and never defaults.
+
+    One ``GRAPH_IR_UNRESOLVED_ELEMENT_TYPE`` diagnostic per function argument,
+    declared result, or op result whose tensor type has no element type. Such a
+    type renders as ``tensor<...x?>``, which MLIR rejects, so a parser-bound
+    consumer (the driver's value lane) calls this BEFORE rendering canonical
+    text: the failure is then a named semantic-key error at the boundary that
+    owns it, not the parser's symptom one level down. The renders themselves
+    are untouched -- ``?`` remains the legitimate "not yet specialized"
+    placeholder in the symbolic decoration-time module, which is never meant
+    for the parser.
+    """
+    found: List["GraphIRDiagnostic"] = []
+
+    def _flag(what: str, ty: Any, span: Optional["SourceSpan"]) -> None:
+        found.append(GraphIRDiagnostic(
+            severity="error",
+            message=(
+                f"{what}: {ty} has no element type; dtype is a semantic key "
+                "(Decision #21a) and never defaults. Specialize the module from "
+                "concrete call values before compiling it."
+            ),
+            span=span,
+            code="GRAPH_IR_UNRESOLVED_ELEMENT_TYPE",
+        ))
+
+    for fn in module.functions:
+        for arg in fn.args:
+            if _is_unresolved_tensor_type(arg.ir_type):
+                _flag(f"@{fn.name} argument %{arg.name}", arg.ir_type, None)
+        for i, rt in enumerate(fn.result_types):
+            if _is_unresolved_tensor_type(rt):
+                _flag(f"@{fn.name} result #{i}", rt, None)
+        for op in fn.body:
+            if _is_unresolved_tensor_type(op.result_type):
+                names = ",".join(op.result_names) or "<void>"
+                _flag(f"@{fn.name} {op.op_name} -> %{names}", op.result_type,
+                      op.source_span)
+    return tuple(found)
+
+
 def _ir_level_for_diagnostic(code: str) -> str:
     if code.startswith("SCHEDULE_IR"):
         return "schedule-ir"
@@ -903,7 +996,8 @@ class IROp:
             # default (non-canonical) form below keeps the paren rendering used by
             # human-inspection / golden-text consumers unchanged.
             operand_part = f" {ops_str}" if ops_str else ""
-            return f"{indent}{lhs}{self.op_name}{operand_part}{attr_str}{type_str}"
+            return (f"{indent}{lhs}{self.op_name}{operand_part}{attr_str}{type_str}"
+                    f"{_loc_suffix(self.source_span)}")
         return f"{indent}{lhs}{self.op_name}({ops_str}){attr_str}{type_str}"
 
 

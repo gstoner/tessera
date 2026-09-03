@@ -1358,13 +1358,21 @@ passes see (Decision #29's consumer rule, run in reverse).
 
 Three sub-tracks, sequenced smallest-blast-radius first:
 
-1. **Down-payment (independently landable now).** (i) `graph_ir.tensor_ir_type`
-   fails closed on an unresolved element type (Decision #21a) instead of
-   rendering an unparseable `tensor<?x?x?>`, and `driver._lower_apple_value_
-   target_ir` surfaces a parse failure loudly rather than silently demoting to
-   the bootstrap packager (a hollow-green fallback today). (ii) The tracer emits
-   `loc` **before** `_OpExtractor` is deleted (the AST frontend has 13
-   `source_span` sites, the tracer zero — deleting it regresses Decision #13).
+1. **Down-payment (independently landable now).** (i) **Landed 2026-09-03 — scope
+   corrected on implementation:** the front door already recorded the
+   value-lane failure (`apple_value_target_ir_error`, S4); what was missing was
+   a *named* reason. `graph_ir.unresolved_element_type_diagnostics` now emits
+   `GRAPH_IR_UNRESOLVED_ELEMENT_TYPE` (Decision #21a) per unresolved
+   argument / result / op type and the driver's value lane consults it before
+   rendering, so the recorded reason names the argument and the missing
+   semantic key instead of the parser's symptom; renders are byte-unchanged and
+   `index` / `i1` / `!tessera.*` handles are never flagged. (ii) **Landed
+   2026-09-03:** the tracer records the user's call-site span on every op
+   (`trace._user_source_span`, first frame outside the package) and the
+   canonical render emits a repo-relative `loc("file":line:col)` — relative so
+   the content-addressed canonical text stays host-independent — verified
+   through `tessera-opt -mlir-print-debuginfo`. The AST `_OpExtractor` still
+   emits no `loc`, so its deletion no longer regresses Decision #13.
    (iii) The symbolic→concrete elaboration boundary, plus the region-privilege
    (Decision #2) and `ConstraintSolver` (Decision #4) drops, are declared through
    the **existing** W1.3 metadata-obligation pass

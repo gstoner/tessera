@@ -57,7 +57,7 @@ def _warn_schedule_key_not_honored(target_kind: str, options) -> None:
         )
 from typing import Any, Mapping
 
-from .graph_ir import GraphIRModule
+from .graph_ir import GraphIRModule, unresolved_element_type_diagnostics
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
 from .matmul_pipeline import (
     CPUPlan,
@@ -755,8 +755,17 @@ def compile_graph_module(
         # Feed the *canonical* (parseable custom-assembly) Graph IR straight to
         # the value pipeline — no text rewrite. `graph_text` above is the paren
         # form kept for hashing / display; the canonical render is parser-ready.
-        value_ir, value_mode_error = _lower_apple_value_target_ir(
-            module.to_mlir(verify=False, canonical=True), target_kind
+        # Decision #21a -- an unresolved element type fails closed HERE, with a
+        # named reason, before the parser sees it. Previously the recorded
+        # reason was the parser's symptom ("expected 'x' in dimension list"),
+        # which names neither the argument nor the missing semantic key.
+        unresolved = unresolved_element_type_diagnostics(module)
+        value_ir, value_mode_error = (
+            (None, "; ".join(f"{d.code}: {d.message}" for d in unresolved))
+            if unresolved
+            else _lower_apple_value_target_ir(
+                module.to_mlir(verify=False, canonical=True), target_kind
+            )
         )
         if value_ir:
             target_artifact = LoweringArtifact(

@@ -101,6 +101,24 @@ class _JVPTrace:
     #: tape gets from `TapeEntry.output`.
     tangents: dict[int, tuple[Any, np.ndarray]] = field(default_factory=dict)
 
+    #: Values whose tangent path was consumed by a NESTED forward trace.
+    #: `_ACTIVE_JVP` is a single contextvar, so an inner `jvp` shadows the
+    #: outer one completely: every `ops.*` call inside goes to the inner
+    #: trace, and the outer trace never sees the output. Without this, the
+    #: outer call reported a tangent of ZERO -- so `jvp(jvp(f))` returned 0.0
+    #: for a function with a perfectly good second derivative.
+    #:
+    #: Recorded on EXIT from what the inner trace actually consumed, and
+    #: checked PER VALUE -- the same refinement MSW-1 landed for the reverse
+    #: tape. Flagging on entry would be too coarse: a function that opens an
+    #: inner trace for something unrelated AND genuinely ignores an input
+    #: would have that input's legitimate zero turned into a refusal.
+    shadowed_ids: set[int] = field(default_factory=set)
+
+    def consumed_ids(self) -> set[int]:
+        """Every value this trace bound or produced a tangent for."""
+        return set(self.tangents)
+
     def tangent_for(self, value: Any) -> np.ndarray | None:
         entry = self.tangents.get(id(value))
         return None if entry is None else entry[1]
@@ -1826,11 +1844,16 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
         if tangent_array.shape != primal.shape:
             raise ValueError("primal and tangent shapes must match")
         trace.bind(primal, tangent_array)
+    outer = _ACTIVE_JVP.get()
     token = _ACTIVE_JVP.set(trace)
     try:
         primal_out = fn(*converted) if isinstance(primals, tuple) else fn(converted[0])
     finally:
         _ACTIVE_JVP.reset(token)
+        if outer is not None:
+            # Decided on EXIT from what this trace actually consumed, not on
+            # entry from the mere fact that a trace opened.
+            outer.shadowed_ids |= trace.consumed_ids()
     if isinstance(primal_out, tuple):
         tuple_tangents = tuple(
             trace.tangent_for(_forward_value(value)) for value in primal_out
@@ -1840,6 +1863,35 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
         return primal_out, tuple_tangents
     scalar_tangent = trace.tangent_for(_forward_value(primal_out))
     if scalar_tangent is None:
+        # A genuinely tangent-free output is zero -- `fn` ignored its input,
+        # and that is a real answer. But an output whose path a NESTED
+        # forward trace swallowed is not zero, it is unknown, and returning
+        # zero there made `jvp(jvp(f))` silently report 0.0 for a function
+        # with a good second derivative. The tuple branch above already
+        # refused this case; only the scalar branch failed open.
+        # PER VALUE, not blanket. The question is not "did a nested trace
+        # run" but "did it swallow something THIS trace was tracking" -- the
+        # inner call binds the same input object, so the intersection with
+        # our own bound primals is exactly the shadowing case. A function
+        # that opens an inner trace for something unrelated AND genuinely
+        # ignores its input keeps its honest zero, which is the refinement
+        # MSW-1 had to make for the reverse tape after the coarse version
+        # turned real zeros into refusals.
+        if trace.shadowed_ids & set(trace.tangents):
+            raise TesseraAutodiffError(
+                "jvp: the output's tangent path was consumed by a nested "
+                "forward-mode trace, so this call cannot see it. Returning "
+                "zero here would be a silently wrong derivative -- the "
+                "forward-mode counterpart of the reverse-over-reverse case "
+                "AD-WEIL-1/MSW-1 refuses.\n"
+                "Forward-over-forward is not composable this way: "
+                "`_ACTIVE_JVP` is a single trace, so the inner call captures "
+                "every tessera.ops.* call and the outer one sees none.\n"
+                "For higher-order derivatives use the jet surface, which "
+                "evaluates all orders in ONE pass: "
+                "`tessera.autodiff.jet_trace` with `laplacian_exact` / "
+                "`TruncatedJet`, or `hvp` for a Hessian-vector product."
+            )
         scalar_tangent = np.zeros_like(np.asarray(primal_out), dtype=np.float64)
     return np.asarray(primal_out), scalar_tangent
 

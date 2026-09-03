@@ -61,7 +61,7 @@ checkpoint,0,0,0,0,1,,structural_only,category default for 'transform'
 cholesky,28,31,0,59,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,59 direct test references
 cholesky_solve,11,1,0,12,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,12 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-cispo_policy_loss,8,2,0,10,0,,directly_tested,10 direct test references
+cispo_policy_loss,9,2,0,11,0,,directly_tested,11 direct test references
 clamp,13,0,1,13,0,,directly_tested,13 direct test references
 clifford_codiff,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_conjugate,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
@@ -325,7 +325,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,48,11,1,59,0,,directly_tested,59 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
-mul,185,41,15,226,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,226 direct test references
+mul,187,41,16,228,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,228 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,17,0,0,17,0,fp32 fp64,directly_tested,17 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -472,12 +472,12 @@ stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,72,8,4,80,0,bf16 f16 f32 fp16 fp32 fp64 int32 int64 int8,directly_tested,80 direct test references
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
 sub,35,7,4,42,0,bf16 f16 f32 fp16 fp32,directly_tested,42 direct test references
-sum,61,0,6,61,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,61 direct test references
+sum,64,0,7,64,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,64 direct test references
 svd,24,5,1,29,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,29 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-tanh,21,26,3,47,0,bf16 f16 f32,directly_tested,47 direct test references
+tanh,22,26,4,48,0,bf16 f16 f32,directly_tested,48 direct test references
 target_verify,3,5,1,8,0,,directly_tested,8 direct test references
 tile,4,0,0,4,0,,directly_tested,4 direct test references
 tile_view,6,0,0,6,0,fp16,directly_tested,6 direct test references

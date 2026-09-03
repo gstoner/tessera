@@ -55,7 +55,7 @@ Law-4 proof is green, and is deliberately NOT exercised in this slice.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, NamedTuple, Optional
 
 import numpy as np
 
@@ -428,32 +428,131 @@ def _jet_div(W: TruncatedJet, a: Jet, b: Jet) -> Jet:
     return jet_mul(W, a, jet_map(W, "reciprocal", b))
 
 
+class _JetRule(NamedTuple):
+    """One op's evaluation in W, plus the option names it actually reads.
+
+    `reads` is the load-bearing half. Failing closed on an unknown op NAME
+    was never enough: `ops.matmul` also takes `bias`, `residual`,
+    `activation` and `epilogue`, and the first version of this table
+    evaluated `a[0] @ a[1]` and discarded the rest -- so
+    `sum(matmul(M, x, activation="gelu"))` replayed as a LINEAR function and
+    reported a Laplacian of 0.0 where the truth is 2.24 (review on #698).
+    That is exactly the "wrong without looking wrong" failure the op-name
+    check exists to prevent, one level down.
+
+    So the replay rejects any kwarg a rule does not name here, and a rule
+    that names one is responsible for honouring its VALUE.
+    """
+
+    apply: "Callable[[TruncatedJet, list, dict], Jet]"
+    reads: frozenset
+
+
+def _scalar_operand(W: TruncatedJet, args: list, kwargs: dict) -> "Jet | None":
+    """The second operand of `add`/`mul`, whether positional or `scalar=`.
+
+    `ops.mul(x, scalar=3.0)` is a canonical public form: the tape records
+    ONE input and keeps the value in kwargs, so reading `a[1]` raised
+    IndexError for a call that executes fine outside the transform.
+    """
+    if len(args) > 1:
+        return args[1]
+    if kwargs.get("scalar") is not None:
+        return jet_const(W, np.asarray(kwargs["scalar"], dtype=np.float64))
+    return None
+
+
+def _binary(name: str, op):
+    def rule(W, a, kw):
+        from .errors import TesseraAutodiffError
+
+        other = _scalar_operand(W, a, kw)
+        if other is None:
+            raise TesseraAutodiffError(
+                f"jet_trace: tessera.ops.{name} needs a second operand or "
+                f"`scalar=`; got neither."
+            )
+        return op(W, a[0], other)
+
+    return _JetRule(rule, frozenset({"scalar"}))
+
+
+def _jet_matmul_fused(W: TruncatedJet, a: list, kw: dict) -> Jet:
+    """`A @ B`, plus the fused epilogue operands, in the op's own order.
+
+    `gemm` computes `A@B -> +bias -> activation -> +residual -> epilogue`.
+    Bias and residual are additions and lift into W exactly, so they are
+    honoured. `activation` and `epilogue` are NOT: no activation the op
+    accepts (relu / gelu / silu) is a registered holonomic recurrence, and
+    an epilogue is opaque, so neither can be evaluated in W. They are
+    refused rather than dropped -- dropping them is what made a nonlinear
+    program replay as a linear one.
+
+    Operand positions are stable because the tape records an omitted
+    `bias` as a `None` literal, so four inputs always mean
+    `(A, B, bias-or-None, residual)`.
+    """
+    from .errors import TesseraAutodiffError
+
+    activation = kw.get("activation", "none")
+    if activation not in (None, "none"):
+        raise TesseraAutodiffError(
+            f"jet_trace: tessera.ops.matmul has no jet rule for "
+            f"activation={activation!r}. Refusing rather than replaying the "
+            f"unactivated matmul: that silently turns a nonlinear program "
+            f"into a linear one and reports a zero second derivative. Apply "
+            f"the activation as a separate op if it has a jet rule."
+        )
+    if kw.get("epilogue") is not None:
+        raise TesseraAutodiffError(
+            "jet_trace: tessera.ops.matmul has no jet rule for a fused "
+            "`epilogue=`; its contents are opaque to the replay. Express the "
+            "epilogue as explicit ops so each step can be lifted into W."
+        )
+    out = jet_matmul(W, a[0], a[1])
+    if len(a) > 2 and a[2] is not None:          # bias, before the activation
+        out = jet_add(W, out, a[2])
+    if len(a) > 3 and a[3] is not None:          # residual, after it
+        out = jet_add(W, out, a[3])
+    return out
+
+
 #: `ops.<name>` -> how that op evaluates in W. Absence is meaningful: an op
 #: with no entry here FAILS CLOSED in `jet_trace` rather than being treated as
 #: a constant, because silently dropping an op to order 0 returns a derivative
-#: that is wrong without being obviously wrong.
-_JET_REPLAY: "dict[str, Callable]" = {
-    "add": lambda W, a, kw: jet_add(W, a[0], a[1]),
-    "sub": lambda W, a, kw: jet_sub(W, a[0], a[1]),
-    "mul": lambda W, a, kw: jet_mul(W, a[0], a[1]),
-    "div": lambda W, a, kw: _jet_div(W, a[0], a[1]),
-    "neg": lambda W, a, kw: jet_scale(W, a[0], -1.0),
-    "matmul": lambda W, a, kw: jet_matmul(W, a[0], a[1]),
-    "gemm": lambda W, a, kw: jet_matmul(W, a[0], a[1]),
-    "sum": lambda W, a, kw: jet_sum(W, a[0], axis=kw.get("axis"),
-                                    keepdims=bool(kw.get("keepdims", False))),
-    "mean": lambda W, a, kw: jet_mean(W, a[0], axis=kw.get("axis"),
-                                      keepdims=bool(kw.get("keepdims", False))),
-    "softmax": lambda W, a, kw: jet_softmax(W, a[0], axis=int(kw.get("axis", -1))),
-    "logsumexp": lambda W, a, kw: jet_logsumexp(
-        W, a[0], axis=kw.get("axis"), keepdims=bool(kw.get("keepdims", False))),
+#: that is wrong without being obviously wrong. The same is true one level
+#: down, for an option a rule does not name in `reads`.
+_JET_REPLAY: "dict[str, _JetRule]" = {
+    "add": _binary("add", jet_add),
+    "sub": _JetRule(lambda W, a, kw: jet_sub(W, a[0], a[1]), frozenset()),
+    "mul": _binary("mul", jet_mul),
+    "div": _JetRule(lambda W, a, kw: _jet_div(W, a[0], a[1]), frozenset()),
+    "neg": _JetRule(lambda W, a, kw: jet_scale(W, a[0], -1.0), frozenset()),
+    "matmul": _JetRule(_jet_matmul_fused, frozenset({"activation", "epilogue"})),
+    "gemm": _JetRule(_jet_matmul_fused, frozenset({"activation", "epilogue"})),
+    "sum": _JetRule(
+        lambda W, a, kw: jet_sum(W, a[0], axis=kw.get("axis"),
+                                 keepdims=bool(kw.get("keepdims", False))),
+        frozenset({"axis", "keepdims"})),
+    "mean": _JetRule(
+        lambda W, a, kw: jet_mean(W, a[0], axis=kw.get("axis"),
+                                  keepdims=bool(kw.get("keepdims", False))),
+        frozenset({"axis", "keepdims"})),
+    "softmax": _JetRule(
+        lambda W, a, kw: jet_softmax(W, a[0], axis=int(kw.get("axis", -1))),
+        frozenset({"axis"})),
+    "logsumexp": _JetRule(
+        lambda W, a, kw: jet_logsumexp(W, a[0], axis=kw.get("axis"),
+                                       keepdims=bool(kw.get("keepdims", False))),
+        frozenset({"axis", "keepdims"})),
 }
 # The 21 registered pointwise recurrences ride in unchanged: `jet_map` already
 # applies them coefficient-wise, so each is a rule only in the sense that its
 # NAME must be listed -- which is what keeps an unregistered scalar failing
-# closed instead of silently resolving.
+# closed instead of silently resolving. None of them takes an option.
 _JET_REPLAY.update({
-    _name: (lambda _n: lambda W, a, kw: jet_map(W, _n, a[0]))(_name)
+    _name: _JetRule((lambda _n: lambda W, a, kw: jet_map(W, _n, a[0]))(_name),
+                    frozenset())
     for _name in SCALAR_RECURRENCES
 })
 
@@ -526,9 +625,14 @@ def jet_trace(fn: "Callable[[np.ndarray], np.ndarray]") -> "Callable[[TruncatedJ
         probe, entries, out_id = _trace_at(np.asarray(coeffs[0], dtype=np.float64))
         env: dict[int, Jet] = {id(probe): coeffs}
 
-        def resolve(desc) -> Jet:
+        def resolve(desc):
             if desc.array_id in env:
                 return env[desc.array_id]
+            if desc.array is None:
+                # An omitted optional operand (`matmul(A, B, None, r)`). Kept
+                # as None rather than dropped so later operands stay at their
+                # own positions.
+                return None
             # A literal or a captured constant: order 0 only.
             return jet_const(W, np.asarray(desc.array, dtype=np.float64))
 
@@ -542,8 +646,17 @@ def jet_trace(fn: "Callable[[np.ndarray], np.ndarray]") -> "Callable[[TruncatedJ
                     f"without looking wrong. Known ops: "
                     f"{', '.join(sorted(_JET_REPLAY))}."
                 )
-            env[entry.output_id] = rule(W, [resolve(i) for i in entry.inputs],
-                                        entry.kwargs)
+            unread = sorted(set(entry.kwargs) - rule.reads)
+            if unread:
+                raise TesseraAutodiffError(
+                    f"jet_trace: tessera.ops.{entry.op} was called with "
+                    f"{unread}, which its jet rule does not interpret. "
+                    f"Refusing rather than ignoring them -- an option dropped "
+                    f"from the replay changes the function being "
+                    f"differentiated, not just its speed."
+                )
+            env[entry.output_id] = rule.apply(
+                W, [resolve(i) for i in entry.inputs], entry.kwargs)
 
         if out_id not in env:
             raise TesseraAutodiffError(

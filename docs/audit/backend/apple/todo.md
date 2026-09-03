@@ -6850,6 +6850,40 @@ fails closed; both callers pass a pointer getter), and the `gumbel` / `rowop`
 encode-session methods (their shared C helper contains both an encode and a run
 branch, and the `_enc` entry always takes the encode one).
 
+**Closed 2026-09-03 — the allowlist is now empty, and the three were
+reclassified rather than routed.** Both reasons above describe a *limit of the
+classifier*, not a property of the code, so each became a rule:
+
+* **A wait can belong to the call rather than to the helper.**
+  `encode_or_run_rowop_dev` and its gumbel sibling take a command buffer and
+  branch on it — `if (cb) encodeToCommandBuffer … else runWithMTLCommandQueue`
+  — so the synchronous entry point (passing `nil`) waits and the `_enc` entry
+  (passing the session's buffer) does not. Classifying the helper either way
+  is wrong for half its callers, so the classifier propagates the argument,
+  and the fixture pins the split on the one pair that shares a helper. The
+  guard must be a **command-buffer** parameter: an earlier form accepted any
+  parameter and wrongly exempted three int4 matmul lanes, whose `tiled` flag
+  also guards an `if`/`else` with a wait in one arm. That was caught by
+  diffing every symbol's classification before and after the rule, which is
+  the check that forced the narrower version. **Review of #708 tightened it
+  twice more:** the arms are now bounded exactly (brace block or statement)
+  instead of by a fixed character window, and **every** wait in the function
+  must lie inside the else arm rather than merely be absent from that window —
+  otherwise a wait added before or after the branch would be exempted along
+  with it, and the `_enc` entry would read as non-blocking while it now
+  blocks. Bounding the arms exactly also found a third helper the windowed
+  version had truncated past, `mpsg_run_gather_blocks`.
+* **A one-symbol wrapper is resolved from its callers.**
+  `_apple_gpu_raw_handle` takes its symbol as a parameter, so its own body
+  says `<dynamic>` and fails closed; both callers pass a literal, so what it
+  can reach is known exactly, and neither symbol takes a command buffer. A
+  caller passing anything unreadable keeps it `<dynamic>`, hence closed.
+
+Both rules are mutation-checked: widening the guard past command buffers, and
+accepting a non-literal caller, each fail the suite. The `KNOWN_UNROUTED`
+mechanism stays, so a future exception must still be named, and a line there
+that stops being an offender still fails the gate.
+
 **One runtime-side gap this could not close, because the `.mm` is untouched
 — closed 2026-09-03, see the entry below.** (Editing it invalidates
 `AppleRouteContext.runtime_fingerprint` and forces a ledger re-seal — the same
@@ -6872,13 +6906,34 @@ took ≥ 5 s as a timeout instead. Every Metal 4 lane routed here — `mtl4_scan
 session's host-input `run` — passes that opt-in; the lanes whose C side reports
 honestly deliberately do not, so an ordinary decline stays a decline.
 
-**One Python-side gap left deliberately open.**
+**One Python-side gap left deliberately open — closed 2026-09-03.**
 `apple_gpu_batched.batched_session` commits through `ts_enc_commit_wait`, a
-30 s timed wait, in a `finally`. It is not routed because an open breaker must
-not *skip* it: everything encoded into that session would go uncomputed and the
-caller would read unwritten `DeviceTensor` output as if it were a result. That
-needs an accounting-only variant (count the timeout, never short-circuit),
-which is a separate change.
+30 s timed wait, in a `finally`. It could not be *routed*, because an open
+breaker must not skip it: everything encoded into that session would go
+uncomputed and the caller would read unwritten `DeviceTensor` output as if it
+were a result — a bounded stall traded for silent wrong answers, the opposite
+of the trade the breaker makes everywhere else.
+
+`_apple_gpu_commit_accounted` is the accounting-only variant: it **always**
+dispatches and only observes. All six commit sites go through it — the
+batched-session context manager, the encode session's `commit` and its
+auto-`_flush`, and the three SSM-replay commits. `ts_enc_commit_wait` is `void`
+and, on expiry, prints to stderr without touching the error channel, so
+duration is the only signal it leaves; the two classes are milliseconds versus
+30 s, so the same `silent_failure_timeout_s` threshold separates them. A
+stalled commit therefore counts toward the streak and lands in the fallback
+log, and the *next* numpy or resident lane finds the breaker open.
+
+The streak rule itself now lives in one place (`_apple_gpu_record_dispatch_outcome`)
+because two callers move that counter and must not drift: the breaker, which
+may skip a dispatch, and this, which may not. A drift gate fails any bare
+`ts_enc_commit_wait` call, and three mutations are each caught — making the
+commit short-circuit on an open breaker, dropping the duration classification,
+and bypassing the helper at a call site.
+
+The exact fix is still runtime-side: one `ts_set_last_gpu_error(1, …)` beside
+that 30 s wait would make this reported rather than inferred. It is filed with
+the `runWithMTLCommandQueue` work below, since both need the same re-seal.
 
 **Behaviour that deliberately changed.** A reported dispatch failure on a
 routed lane now returns the host value instead of the kernel's untouched output

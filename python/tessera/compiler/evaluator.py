@@ -778,10 +778,10 @@ def program_pair_equivalence(
     max_abs_err: float | None = None
     ref_scale = 1.0
     if na and nb and out_a is not None and out_b is not None:
-        a = np.asarray(out_a, dtype=np.float64)
+        a = np.asarray(out_a, dtype=np.complex128 if np.iscomplexobj(out_a) else np.float64)
         if output_map is not None:
-            a = np.asarray(output_map(a), dtype=np.float64)
-        b = np.asarray(out_b, dtype=np.float64)
+            a = np.asarray(output_map(a))
+        b = np.asarray(out_b, dtype=np.complex128 if np.iscomplexobj(out_b) else np.float64)
         if a.shape == b.shape and np.all(np.isfinite(a)) and np.all(np.isfinite(b)):
             max_abs_err = float(np.max(np.abs(a - b), initial=0))
             ref_scale = float(np.max(np.abs(b), initial=0)) or 1.0

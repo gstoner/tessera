@@ -39,3 +39,11 @@ def test_ann_reference_laws_are_separate():
     results = ann_identity_checks()
     assert len(results) == 2
     assert all(result.status == 'pass' and result.registry == 'ann_calculus' for result in results)
+
+
+def test_pair_does_not_discard_imaginary_residual(monkeypatch):
+    programs = {'first': np.array([1 + 2j]), 'second': np.array([1 + 3j])}
+    monkeypatch.setattr(evaluator, 'run_native', lambda target, fn, args: (programs[fn], True))
+    verdict = evaluator.program_pair_equivalence('x86', 'first', 'second', (), ())
+    assert verdict.relation == 'divergent'
+    assert verdict.max_abs_err == 1

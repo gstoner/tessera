@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-03
+last_updated: 2026-09-04
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -3951,3 +3951,36 @@ command buffer, so there is no wait to bound and no completion status to poll.
 
 **Validation performed:** none required; no x86 code changed. **Missing
 exact-device evidence:** none.
+
+
+## Cross-backend sync `FRONTIER-MSW-2026-09-04`
+
+Owners: `FRONTEND-IR-MEDIUM-1`, `APPLE-DISPATCH-WEDGE-1`,
+`APPLE-MOE-ROUTE-1`, and `MSW-5` through `MSW-9`.
+
+Shared changes: pending metadata snapshots are verified before a new record and
+the preceding boundary's drop declarations are retired; einsum execution and
+AD/trace recording consume one alpha-normal equation; sampled reference fields
+carry orthogonal coordinate contracts with registered diagnostic
+`FIELD_COORDINATE_CONTRACT`. Coordinate laws extend the existing field-calculus
+registry. MSW-6/MSW-8 are host-free examples; MSW-9 is a design spike, with the
+native program-pair evaluator/fusion gate still open. No new ODS operation,
+backend candidate, physical schedule or native metric ABI is introduced.
+
+**x86 outcome:** Shared-contract parity validated by host-free tests only. The coordinate and contraction additions are Python reference/front-end algebra; no native x86 lowering or schedule is added. No AVX-512 result is claimed from these tests.
+
+Validation records live in `MATH_SOURCE_WORKSTREAM.md` and the focused review
+fixtures. The metadata pass was rebuilt on WSL; the positive/negative lifecycle
+fixtures pass. Reference proof does not transfer exact-device status.
+
+## Cross-backend sync `FRONTEND-RECIPE-2026-09-04`
+
+Owner: `FRONTEND-IR-MEDIUM-1`, staged rank/prune acceptance. Shared contracts:
+AST location fidelity and location-sensitive capture caching; argument-local
+symbolic dimension consumption; opt-in native parametric CSE with one recipe
+digest across constraint-checked buckets; strict source-loop matmul candidate
+raising. Existing passes and operations are reused; execution selection is
+unchanged. The validation spine now binds checkout fingerprints, and coverage
+conflicts are regenerated after authored inputs are resolved.
+
+x86 outcome: host-free compiler contract validation only; native recipe selection and performance evidence remain follow-up required.

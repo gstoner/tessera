@@ -1421,6 +1421,38 @@ Three sub-tracks, sequenced smallest-blast-radius first:
    the inverse of `TesseraToLinalgPass`, composing with sub-track 2 (a raised
    parametric idiom is optimized once and elaborated per bucket).
 
+**2026-09-04 implementation update — first rank/prune stage only.**
+`parametric_recipe.prepare_recipe` now runs the existing native symbolic
+verifier, canonicalizer and CSE on a typed, dynamic-shape Graph IR recipe before
+bucket analysis. It retains the input MLIR oracle and content-addresses the
+optimized program, Presburger system and compiler binary. Complete positive
+integer witnesses may be pruned by the typed constraints; all survivors remain
+promotion-ineligible. `JitFn.rank_parametric_buckets` is the explicit opt-in
+consumer. A duplicate-matmul fixture proves native CSE occurs before buckets.
+The SymbolicDimEquality consumer now reads the frontend's argument-local
+`tessera.dim_names` as well as the legacy function array; positive and negative
+parser-backed fixtures cover the connection.
+
+`loop_idioms.recognize_matmul_loop` provides the first raising analysis:
+two matching f32/f64 rank-2 arguments, fresh NumPy zero output, and an exact
+complete i/j/k multiply-accumulate nest. The source loop is retained as the
+oracle; the candidate contains the existing `tessera.matmul` operation and
+feeds `prepare_recipe`. Unsupported source is refused. This is an explicit
+compatibility analysis, not a second execution authority. Reassociation and
+native numerical validation remain promotion requirements.
+
+**Still open:** instantiate the optimized native program per bucket, wire its
+identity and measured candidates into the arbiter, recognize tracer/MLIR loop
+regions beyond this narrow source form, and add a separately proved attention
+recognizer. No Tier-3 selection or backend execution support is claimed.
+
+The retained AST frontend now emits file/line/column locations (virtual source
+identity for explicit source that differs from the file); cache keys include
+source location. `validation_tree.py` binds external expected file hashes and
+rejects changes during a gate. The validation spine uses it, and generated
+coverage has a resolve-authored-inputs-then-regenerate workflow documented in
+[`VALIDATION_SPINE.md`](../../spec/VALIDATION_SPINE.md).
+
 Acceptance is staged: sub-track 1 lands under existing frontend/driver fixtures
 plus a fail-closed dtype fixture and a `loc`-round-trip check; sub-tracks 2 and
 3 are rank/prune-only first and keep the current path as an oracle per the PR

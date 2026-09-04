@@ -40,7 +40,7 @@ those is the coarse-grid relative error, not a tolerance.
 
 | Law | Status | Ops |
 |---|---|---:|
-| vector_identity | pass | 5 |
+| vector_identity | pass | 15 |
 
 ## Checked tensor ops
 

@@ -105,6 +105,13 @@ class DiagnosticCode:
 
 REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
+        code="FIELD_COORDINATE_CONTRACT", pass_origin="tessera.ga.coordinates",
+        severity="error", summary="A sampled field has a missing or inconsistent coordinate contract.",
+        fix_hint="Declare a uniform orthogonal chart with nonsingular scale factors matching the field grid.",
+        spec="docs/audit/compiler/PDE_STENCIL_CAPABILITY_PLAN.md", sprint="MSW-5",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
         code="AUTODIFF_CONTROL_SCAN_UNSUPPORTED",
         pass_origin="AutodiffPairedPass",
         severity="error",

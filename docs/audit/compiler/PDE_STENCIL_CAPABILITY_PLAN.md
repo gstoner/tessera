@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-09-04
 audit_role: plan
 plan_state: open
 ---
@@ -632,3 +632,31 @@ group, and no `gradient`/`divergence`/`curl`/`diff`/`tridiagonal`/`eig`.
 `_HALO_AWARE_OPS` exists as a registry hook with exactly one user. Graph
 algorithms in the compiler: one brute-force toposort enumeration, greedy top-k
 MoE routing, closed-form pipeline schedules, and no algorithmic collectives.
+
+
+## MSW-5 owner record — orthogonal sampled fields (2026-09-04)
+
+The reference field calculus now carries an explicit `OrthogonalCoordinates`
+chart. This consumes the existing uniform-grid central difference through the
+exterior derivative: multiply each orthonormal blade coefficient by the product
+of its coordinate scale factors, differentiate in coordinate directions, then
+divide by the output blade's product. The Hodge operator stays pointwise in the
+orthonormal frame; its composition with d supplies the metric-weighted
+codifferential. Volume pairing uses sqrt(g)=product(h_i).
+
+This is the MSW-5 reference slice, not a second PDE symbol/stability model.
+Supported: Cartesian, cylindrical and spherical charts on increasing uniform
+coordinate grids, Euclidean nondegenerate metric, local orthonormal components,
+second-order central interior and one-sided endpoints. Origins, poles,
+nonuniform grids, periodic seams, general connections and native metric lowering
+remain unsupported. Existing manifold integration refuses curvilinear fields
+until it has chart-aware quadrature; callers may explicitly use volume density
+for a stated sampled pairing. Required-but-missing coordinates and invalid chart
+contracts fail with registered `FIELD_COORDINATE_CONTRACT`; legacy constructor
+calls retain Cartesian behavior with an inspectable reason.
+
+Tests compare the same physical scalar/vector fields to Cartesian analytic
+oracles, check weighted adjointness and d²/δ², and require second-order analytic
+gradient and product-rule convergence. The ten non-Cartesian law rows join the
+existing MSW-4 registry. Native Cartesian kernels are ineligible for curvilinear
+fields. No target or device execution claim follows from this reference proof.

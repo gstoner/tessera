@@ -117,17 +117,9 @@ struct MetalDeviceContext {
   bool                ok;
   int32_t             simd_caps = 0;  // TsSimdCaps bitmask (0 until device init)
 
-  // Apple-sample Pattern 4 (2026-05-31) — Shared-event timeout for the
-  // legacy MPS / MPSGraph queue. The MTL4 lane already has ``mtl4_event``
-  // below; this is its sibling on the legacy ``queue`` so the
-  // ``commit_and_wait_with_timeout`` helper can sign a per-dispatch value
-  // and bail out with a precise diagnostic instead of hanging forever.
-  // Lazy-init on first use; ``legacy_event_val`` is monotonic across
-  // dispatches (the shared event's signaled value only grows). Mirrors
-  // Apple's sample at ``MLMatrixMultiplier.m:87, 241-255``.
-  id        legacy_event;       // id<MTLSharedEvent>
-  uint64_t  legacy_event_val = 0;
-  std::mutex legacy_event_mu;
+  // Session instrumentation is separate from completion synchronization.
+  // Every dispatch owns a private event; no context-wide completion event.
+  std::atomic<uint64_t> session_commit_count{0};
 
   // Phase 8.4 — MSL kernel cache. Keyed by (msl_source + entry_point) so
   // multiple kernels in the same source unit (uncommon but legal) cache
@@ -1157,29 +1149,24 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
   id<MTLSharedEvent> ev = [ctx.device newSharedEvent];
   uint64_t signal_val = 1;
   if (!ev) {
-    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
-    if (!ctx.legacy_event) {
-      ctx.legacy_event = [ctx.device newSharedEvent];
-      if (!ctx.legacy_event) {
-        // Event creation failed. Still bounded: the caller must not lose its
-        // deadline just because the device was too unhealthy to give us an
-        // event, which is precisely when a hang is likeliest.
-        auto slot = ts_attach_gpu_timestamps(cb);
-        ts_wall.emplace();
-        [cb commit];
-        if (!ts_wait_for_completion_with_timeout(cb, timeout_ms)) {
-          ts_set_last_gpu_error(1, op_name,
-                                "GPU dispatch did not complete (hung/timed "
-                                "out, no event available); outputs are invalid");
-          ts_quarantine_pooled_buffers_after_timeout();
-          return false;
-        }
-        ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, slot);
-        return cb.status == MTLCommandBufferStatusCompleted;
-      }
+    // Do not reuse a context-wide event: a later submission can satisfy an
+    // earlier reservation before its buffer completes. Poll this buffer only.
+    auto slot = ts_attach_gpu_timestamps(cb);
+    ts_wall.emplace();
+    [cb commit];
+    if (!ts_wait_for_completion_with_timeout(cb, timeout_ms)) {
+      ts_set_last_gpu_error(1, op_name,
+                            "GPU dispatch did not complete (hung/timed out, "
+                            "no event available); outputs are invalid");
+      ts_quarantine_pooled_buffers_after_timeout();
+      return false;
     }
-    ev = (id<MTLSharedEvent>)ctx.legacy_event;
-    signal_val = ++ctx.legacy_event_val;
+    if (cb.error != nil) {
+      ts_set_last_gpu_error(2, op_name, [[cb.error localizedDescription] UTF8String]);
+      return false;
+    }
+    ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, slot);
+    return cb.status == MTLCommandBufferStatusCompleted;
   }
   // Encode the signal into the command buffer; the event ticks AFTER the
   // GPU finishes everything queued before it on this cb.
@@ -1296,17 +1283,10 @@ static bool commit_mpsgraph_and_wait_with_timeout(
   // out of reservation order: if the value-2 buffer signals first, the value-1
   // waiter is already satisfied and reads its results while its own command
   // buffer is still running. A private event has one waiter and one signal, so
-  // no other dispatch can satisfy this wait. Falls back to the shared event
-  // only if creation fails, which keeps the old behaviour rather than losing
-  // the timeout entirely.
+  // no other dispatch can satisfy this wait. If creation fails, poll this
+  // command buffer with a deadline; never reuse a context-wide event.
   uint64_t signal_val = 1;
   id<MTLSharedEvent> ev = [ctx.device newSharedEvent];
-  if (!ev) {
-    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
-    if (!ctx.legacy_event) ctx.legacy_event = [ctx.device newSharedEvent];
-    ev = (id<MTLSharedEvent>)ctx.legacy_event;
-    if (ev) signal_val = ++ctx.legacy_event_val;
-  }
   if (ev) [root encodeSignalEvent:ev value:signal_val];
   // Covers the `owns_whole_dispatch` branch below, which publishes a
   // command-buffer interval when no timing bracket is active.
@@ -1322,8 +1302,7 @@ static bool commit_mpsgraph_and_wait_with_timeout(
       ts_quarantine_pooled_buffers_after_timeout();
       return false;
     }
-  } else if (!ts_wait_for_completion_with_timeout(root,
-                                                  kEventlessCompletionWaitMs)) {
+  } else if (!ts_wait_for_completion_with_timeout(root, timeout_ms)) {
     ts_set_last_gpu_error(1, op_name,
                           "MPSGraph dispatch did not complete (hung/timed out, "
                           "no event available); outputs are invalid");
@@ -22787,22 +22766,15 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   // (AppleGPUEncodeSession) and any heavy single-commit reliable.
   MetalDeviceContext &ctx = deviceContext();
   id<MTLCommandBuffer> root = s->cb.rootCommandBuffer;
-  id<MTLSharedEvent> ev = nil;
-  uint64_t signal_val = 0;
-  if (ctx.ok) {
-    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
-    if (!ctx.legacy_event) {
-      ctx.legacy_event = [ctx.device newSharedEvent];
-    }
-    ev = (id<MTLSharedEvent>)ctx.legacy_event;
-    if (ev) signal_val = ++ctx.legacy_event_val;
-  }
+  id<MTLSharedEvent> ev = ctx.ok ? [ctx.device newSharedEvent] : nil;
+  uint64_t signal_val = 1;
   if (ev) {
     [root encodeSignalEvent:ev value:signal_val];
   }
   auto ts_slot = ts_attach_gpu_timestamps(root);
   DispatchWallWitness ts_wall_session;
   [s->cb commit];
+  ctx.session_commit_count.fetch_add(1, std::memory_order_relaxed);
   bool completed = false;
   if (ev) {
     bool done = [ev waitUntilSignaledValue:signal_val
@@ -22825,6 +22797,7 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
                             "encode-session commit did not signal (hung/timed "
                             "out); the session's outputs are invalid");
     }
+    if (!done) ts_quarantine_pooled_buffers_after_timeout();
     completed = done;
   } else {
     // Shared-event init failed. Bounded anyway, and reported the same way as
@@ -22874,11 +22847,9 @@ extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
   if (!root) return 0;
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok) {
-    std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
-    if (!ctx.legacy_event) ctx.legacy_event = [ctx.device newSharedEvent];
-    s->asyncEvent = (id<MTLSharedEvent>)ctx.legacy_event;
+    s->asyncEvent = [ctx.device newSharedEvent];
     if (s->asyncEvent) {
-      s->asyncSignal = ++ctx.legacy_event_val;
+      s->asyncSignal = 1;
       [root encodeSignalEvent:s->asyncEvent value:s->asyncSignal];
     }
     if (g_dispatch_telemetry_enabled.load(std::memory_order_relaxed)) {
@@ -22889,6 +22860,7 @@ extern "C" int32_t ts_enc_commit_async(TsEncodeSession *s) {
     }
   }
   [s->cb commit];
+  ctx.session_commit_count.fetch_add(1, std::memory_order_relaxed);
   // MPSCommandBuffer may rotate its underlying Metal buffer while encoding.
   // Retain the live root used for this commit so the later wait/status/timing
   // operations never consult the stale handle captured by ts_enc_begin.
@@ -22904,6 +22876,11 @@ extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
   if (s->asyncEvent && s->asyncSignal) {
     completed = [s->asyncEvent waitUntilSignaledValue:s->asyncSignal
                                             timeoutMS:30000];
+    if (!completed) {
+      ts_set_last_gpu_error(1, "enc_wait_destroy",
+                            "encode-session teardown did not signal (hung/timed out)");
+      ts_quarantine_pooled_buffers_after_timeout();
+    }
   } else {
     // No event on this session: the buffer was already submitted elsewhere, so
     // there is nothing to attach a handler to. Poll to a deadline instead of
@@ -23360,11 +23337,7 @@ extern "C" int32_t tessera_apple_gpu_rope_dev_f32_enc(
 extern "C" int64_t tessera_apple_gpu_session_commit_count(void) {
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok) return -1;
-  std::lock_guard<std::mutex> lock(ctx.legacy_event_mu);
-  // ``legacy_event_val`` increments once per ``ts_enc_commit_wait`` (or other
-  // Pattern-4-wrapped dispatch). We don't need the absolute value, just a
-  // monotonic counter callers can diff across a session.
-  return (int64_t)ctx.legacy_event_val;
+  return (int64_t)ctx.session_commit_count.load(std::memory_order_relaxed);
 }
 
 //===----------------------------------------------------------------------===//

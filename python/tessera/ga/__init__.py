@@ -72,6 +72,8 @@ from tessera.ga.types import (
     VectorField,
 )
 
+from tessera.ga.coordinates import OrthogonalCoordinates
+
 __version__ = "0.0.0-ga5"
 
 __all__ = [
@@ -113,6 +115,7 @@ __all__ = [
     "wedge",
     # Differential calculus + manifolds (GA5)
     "MultivectorField",
+    "OrthogonalCoordinates",
     "codiff",
     "ext_deriv",
     "hodge_star",

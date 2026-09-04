@@ -30,11 +30,23 @@ case "${1:-}" in
   "")
     exec "${PY}" -m tessera.compiler.generated_docs --check
     ;;
+  --refresh-coverage)
+    # Regenerate from the resolved source tree; never merge generated rows.
+    # Refuse if any authored input is still conflicted.
+    while IFS= read -r conflict; do
+      case "$conflict" in
+        docs/audit/generated/test_coverage.md|docs/audit/generated/test_coverage.csv|docs/audit/generated/docs_freshness.md) ;;
+        *) echo "Resolve authored conflict before regeneration: $conflict" >&2; exit 1 ;;
+      esac
+    done < <(git diff --name-only --diff-filter=U)
+    "${PY}" -m tessera.compiler.generated_docs --write test_coverage docs_freshness || exit 1
+    exec "${PY}" -m tessera.compiler.generated_docs --check test_coverage docs_freshness
+    ;;
   --write)
     exec "${PY}" -m tessera.compiler.generated_docs --write
     ;;
   *)
-    echo "usage: $0 [--write]" >&2
+    echo "usage: $0 [--write|--refresh-coverage]" >&2
     exit 2
     ;;
 esac

@@ -1030,6 +1030,23 @@ class JitFn:
         self._autodiff_specializations[signature] = specialized
         return specialized
 
+    def rank_parametric_buckets(self, buckets, *, tessera_opt: str):
+        """Opt-in native pre-elaboration analysis; never selects execution.
+
+        Reuses one optimized symbolic recipe across the supplied shape buckets.
+        Keep the decoration-time oracle even after concrete tracing replaces
+        ``graph_ir``. Unresolved element types fail before invoking MLIR.
+        """
+        from .parametric_recipe import prepare_recipe
+        from .presburger import presburger_system_from_constraints
+
+        from .constraints import Divisible, Equal, Range
+        if any(not isinstance(c, (Divisible, Equal, Range)) for c in self.constraints._constraints):
+            raise ValueError("parametric rank tier requires integer-affine constraints")
+        module = self._legacy_graph_ir or self.graph_ir
+        system = presburger_system_from_constraints(self.constraints._constraints)
+        return prepare_recipe(module, tessera_opt=tessera_opt, system=system).rank_buckets(buckets)
+
     def specialized_autodiff_ir(self, *args: Any, **kwargs: Any) -> str:
         """Concrete Graph IR used for this autodiff call signature."""
         if self.differentiation_request is None:
@@ -2669,8 +2686,12 @@ def _jit_emit_graph_ir(
         # G4 memoization (2026-05-19) — process-local cache keyed on
         # source_text + effect_tag + target_attr.
         from . import graph_ir_cache as _gic
+        # Identical source at different call sites must not reuse stale locs.
+        from .graph_ir import _loc_path
+        source_location = f"{_loc_path(fn.__code__.co_filename)}:{fn.__code__.co_firstlineno}"
         module = _gic.lookup(
-            source_text, effect_tag=effect_tag, target_attr=target_attr)
+            source_text, effect_tag=effect_tag, target_attr=target_attr,
+            source_location=source_location)
         if module is None:
             builder = GraphIRBuilder()
             builder.lower(
@@ -2684,6 +2705,7 @@ def _jit_emit_graph_ir(
             _gic.store(
                 source_text, module,
                 effect_tag=effect_tag, target_attr=target_attr,
+                source_location=source_location,
             )
         diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
         if source_text is None:

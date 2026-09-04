@@ -37483,7 +37483,7 @@ def _apple_gpu_dispatch_spectral(op_name: Any, operands: Any, kwargs: Any, np: A
     raise ValueError(f"apple_gpu spectral lane: unsupported op {op_name!r}")
 
 
-def _apple_moe_select_route(x: Any, w_gate: Any, w_down: Any, g: Any,
+def _apple_moe_select_route(x: Any, w_gate: Any, w_up: Any, w_down: Any, g: Any,
                             kw: Any, np: Any) -> "tuple[str, str]":
     """Which MoE SwiGLU implementation runs, and the reason — one place.
 
@@ -37520,7 +37520,7 @@ def _apple_moe_select_route(x: Any, w_gate: Any, w_down: Any, g: Any,
 
     grouped = int(np.asarray(g).sum()) == int(np.asarray(x).shape[0])
     bf16 = _bfloat16_dtype()
-    uniform_low = (x.dtype == w_gate.dtype == w_down.dtype
+    uniform_low = (x.dtype == w_gate.dtype == w_up.dtype == w_down.dtype
                    and (x.dtype == np.float16
                         or (bf16 is not None and x.dtype == bf16)))
 
@@ -37538,6 +37538,14 @@ def _apple_moe_select_route(x: Any, w_gate: Any, w_down: Any, g: Any,
             return "single_fused", "TESSERA_APPLE_MOE_FUSED=1"
         return "composed", "TESSERA_APPLE_MOE_FUSED=1 but the shape is out of the fused kernel's range"
 
+    # A mixed-storage signature has no single-dtype ledger row.
+    if not (x.dtype == w_gate.dtype == w_up.dtype == w_down.dtype):
+        return "composed", "mixed operand dtypes have no exact route evidence"
+    ledger_dtype = ("f16" if x.dtype == np.float16 else
+                    "bf16" if bf16 is not None and x.dtype == bf16 else
+                    "f32" if x.dtype == np.float32 else None)
+    if ledger_dtype is None:
+        return "composed", "operand dtype has no route evidence"
     # The arbiter, for the routes it actually has evidence about.
     try:
         from .compiler.apple_route_selector import production_route_for
@@ -37546,7 +37554,7 @@ def _apple_moe_select_route(x: Any, w_gate: Any, w_down: Any, g: Any,
         chosen = production_route_for(
             op="retune_moe_swiglu",
             shape=f"{int(xs[0])}x{int(xs[1])}x{int(wgs[2])}x{int(wds[2])}_e{int(wgs[0])}",
-            dtype="f32",
+            dtype=ledger_dtype,
             incumbent_route="composed",
         )
     except Exception as exc:  # noqa: BLE001 — an unreadable ledger is not fatal
@@ -37630,7 +37638,7 @@ def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) ->
     # streaming lane), but neither is selected implicitly any more. Selection is
     # explicit, recorded, and a failure inside a chosen route is a diagnostic
     # rather than a silent downgrade (Decision #21).
-    route, reason = _apple_moe_select_route(x, w_gate, w_down, g, kw, np)
+    route, reason = _apple_moe_select_route(x, w_gate, w_up, w_down, g, kw, np)
     if route != "composed":
         _note_dispatch_fallback(
             "apple_gpu.moe_swiglu_block",

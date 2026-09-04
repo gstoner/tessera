@@ -19,6 +19,12 @@ if [ -z "${PYTHON:-}" ]; then
   fi
 fi
 
+# Re-exec once under a checkout guard. CI binds GITHUB_SHA; local callers can
+# supply TESSERA_EXPECTED_TREE captured before a checkout/remote transfer.
+if [ "${TESSERA_VALIDATION_TREE_ACTIVE:-}" != "1" ]; then
+  exec "$PYTHON" "$ROOT/scripts/validation_tree.py" -- bash "$ROOT/scripts/validate.sh" "$@"
+fi
+
 TMP_ROOT="${TMPDIR:-/tmp}"
 RUNTIME_BUILD="$TMP_ROOT/tessera_runtime_validate"
 TPROF_BUILD="$TMP_ROOT/tessera_tprof_validate"

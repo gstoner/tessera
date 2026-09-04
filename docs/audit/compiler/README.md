@@ -230,3 +230,8 @@ none is an active setup or execution guide.
   index. A plan may own acceptance criteria, never a competing global queue.
 - Regenerate derived dashboards with their owning generator; never hand-edit
   generated status.
+
+
+MSW-9's bounded ANN-calculus prototype and integration decisions are recorded in
+[`ANN_CALCULUS_DESIGN_SPIKE.md`](ANN_CALCULUS_DESIGN_SPIKE.md). The spike separates
+reference laws from the still-open native program-pair and fusion consumers.

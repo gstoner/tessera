@@ -1666,3 +1666,26 @@ global order or a shared contract:
 Absence from this plan is not a clean bill of health or authorization to start
 an unbound queue. Add an owning integrated ID when delegated work becomes a
 cross-compiler priority.
+
+### Engineering follow-through — 2026-09-04
+
+Published snapshot: [PR #721](https://github.com/gstoner/tessera/pull/721).
+The following work remains independently gated; publishing the snapshot does
+not close native/compiler evidence gaps.
+
+| Owner | Current action and acceptance |
+|---|---|
+| APPLE-DISPATCH-WEDGE-1 / telemetry | Scoped telemetry capture restores prior process state, including nested/error paths; two device-clock tests adopted it. An opt-in pytest order tracer records transitions after teardown without resetting them. The original process latch and downstream MoE failures still require the triggering order and exact Metal reproduction. |
+| MSW-9 | Program-pair native evaluator adapter and separate reference composition/identity law family implemented. Graph IR fragment inventory and the actual fusion consumer remain open. |
+| FRONTEND-IR-MEDIUM-1 | PR #721 contains native pre-bucket CSE and narrow source-loop recognition in rank/prune mode. Native instantiation, arbiter consumption, tracer/MLIR raising and attention remain open. |
+| APPLE-DISPATCH-WEDGE-1 | Metal 4 direct wait now stamps timeout kind/message. Local runtime compilation and WSL source contracts are separate from the outstanding exact-device re-seal. Lowp MoE remains opt-in without a measured ledger row; cooperative rewrite remains open. |
+| DISPATCH-BREAKER cross-backend | CUDA and HIP waits remain unbounded. A replacement must poison the owning context on timeout and retain every outstanding buffer/module/event; adding a polling deadline followed by current synchronous cleanup would still hang or free live storage. First slices should target one owning bridge each, with injected not-ready/error cases before GPU proof. |
+| IKF-1 | Bind `INTRA_KERNEL_FEEDBACK_PLAN.md` here. P0 extends the existing D2 gfx1151 timing probe; P2 waits for green clocks and consumes Schedule-Object region identity. P1 host schema/math is independent; no IR instrumentation is authorized by a scalar clock sample alone. |
+| Toolchain evidence | Assertion-enabled LLVM remains an explicit fleet proof gap. Do not interpret release-build negative tests as assertion-enabled contract falsification. The sandbox/Metal mechanism remains unproven; no claim of its root cause is made. |
+| Apple cross-run decision | Preserve mean ± t·sd and incumbent-biased refusal. A robust alternative must be evaluated on recorded clean/outlier cohorts with unchanged promotion semantics before adoption. |
+| Generated coverage | Preserve Decision #26 committed primary evidence. Continue regeneration from merged authored input via the owning generator. Moving evidence to CI-only artifacts requires a replacement immutable evidence contract, not merely deleting the files. |
+
+All numerical/backend promotion remains architecture-owned. The immediate
+reproduction priority is telemetry attribution; a scoped cleanup proves a
+state leak is fixed but does not establish the root cause of the reported
+order-dependent failure.

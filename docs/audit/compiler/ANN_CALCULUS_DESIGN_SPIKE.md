@@ -76,3 +76,20 @@ and mutation suite. A/B are host-free contracts; C needs each affected backend's
 existing exact-device lane before native promotion. Estimate by these slices,
 not a blanket claim that the algebra prototype closes MSW-9. No new lowering
 registry, backend candidate, or production execution path is introduced here.
+
+## 2026-09-04 engineering integration
+
+Slice B now has a production evaluator entry point:
+`evaluator.program_pair_equivalence` runs distinct programs through the
+existing `run_native` boundary. The original same-program metamorphic API
+delegates to it. Either reference/fallback side remains inconclusive; finite
+nonnegative tolerances are required. Composition bias mutation and all four
+native/reference combinations are covered by synthetic-provenance tests,
+which prove adapter behavior rather than hardware execution.
+
+`ann_calculus` is now a separate reference law family in `run_law_sweep`,
+covering affine composition and ReLU identity extension across three width
+sets. Generated law evidence labels these as reference algebra. Slice A
+(Graph IR fragment and immutable/shared parameter inventory) and slice C
+(fusion-boundary consumer and exact-device mutation evidence) remain open.
+The spike itself has not become a product execution path.

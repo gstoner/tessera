@@ -32,6 +32,7 @@ location first, then the repo source tree (so this works in both
 from __future__ import annotations
 
 import ctypes
+from contextlib import contextmanager
 import os
 import shutil
 import subprocess
@@ -53,6 +54,7 @@ __all__ = [
     "read_profiling_capabilities",
     "read_dispatch_telemetry",
     "set_dispatch_telemetry_enabled",
+    "dispatch_telemetry_capture",
     "accept_apple_device_ns",
     "clear_dispatch_telemetry",
     "APPLE_ABI",
@@ -689,6 +691,35 @@ def set_dispatch_telemetry_enabled(enabled: bool) -> bool:
         return False
     setter(ctypes.c_int32(1 if enabled else 0))
     return bool(probe()) == bool(enabled)
+
+
+# Serialize managed captures and preserve nesting. Direct legacy setters remain
+# available, but benchmark callers should use this scope to restore on failure.
+_capture_lock = threading.RLock()
+
+
+@contextmanager
+def dispatch_telemetry_capture():
+    """Enable timing for this scope and restore the prior process-wide state.
+
+    Bind both operations once so cleanup uses the same native image as entry.
+    This is an evidence-collection scope, not a runtime execution fallback.
+    """
+    with _capture_lock:
+        setter = bind_registered("tessera_apple_gpu_dispatch_telemetry_set_enabled")
+        probe = bind_registered("tessera_apple_gpu_dispatch_telemetry_enabled")
+        if setter is None or probe is None:
+            raise RuntimeError("dispatch telemetry capture is unavailable")
+        previous = bool(probe())
+        try:
+            setter(ctypes.c_int32(1))
+            if not bool(probe()):
+                raise RuntimeError("dispatch telemetry capture did not enable")
+            yield
+        finally:
+            setter(ctypes.c_int32(int(previous)))
+            if bool(probe()) != previous:
+                raise RuntimeError("dispatch telemetry capture state was not restored")
 
 
 def clear_dispatch_telemetry() -> None:

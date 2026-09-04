@@ -90,43 +90,43 @@ def test_the_device_clock_moves_with_the_host_wall():
     from tessera._apple_gpu_dispatch import (
         clear_dispatch_telemetry,
         read_dispatch_telemetry,
-        set_dispatch_telemetry_enabled,
+        dispatch_telemetry_capture,
     )
     from tests._support.apple import require_apple_metal
 
     require_apple_metal()
-    assert set_dispatch_telemetry_enabled(True)
+    with dispatch_telemetry_capture():
 
-    device_ns, wall_ns, sources = [], [], []
-    for sk in _KV_LENGTHS:
-        qd, kd, vd, bd, kw = _run(sk, agpu)
-        for _ in range(3):          # warm: exclude pipeline construction
+        device_ns, wall_ns, sources = [], [], []
+        for sk in _KV_LENGTHS:
+            qd, kd, vd, bd, kw = _run(sk, agpu)
+            for _ in range(3):          # warm: exclude pipeline construction
+                with agpu.batched_session() as s:
+                    agpu.flash_attn_variant_enc(s, qd, kd, vd, bd, **kw)
+            clear_dispatch_telemetry()
             with agpu.batched_session() as s:
                 agpu.flash_attn_variant_enc(s, qd, kd, vd, bd, **kw)
-        clear_dispatch_telemetry()
-        with agpu.batched_session() as s:
-            agpu.flash_attn_variant_enc(s, qd, kd, vd, bd, **kw)
-        t = read_dispatch_telemetry()
-        assert t["device_time_ns"] is not None, (
-            f"Sk={sk}: no accepted device time; either the clock was refused "
-            "by the acceptance band or telemetry did not record")
-        device_ns.append(t["device_time_ns"])
-        wall_ns.append(t["wall_time_ns"])
-        sources.append(t["timing_source"])
+            t = read_dispatch_telemetry()
+            assert t["device_time_ns"] is not None, (
+                f"Sk={sk}: no accepted device time; either the clock was refused "
+                "by the acceptance band or telemetry did not record")
+            device_ns.append(t["device_time_ns"])
+            wall_ns.append(t["wall_time_ns"])
+            sources.append(t["timing_source"])
 
-    device_growth = device_ns[-1] / device_ns[0]
-    wall_growth = wall_ns[-1] / wall_ns[0]
-    tracking = device_growth / wall_growth
-    assert _MIN_TRACKING <= tracking <= _MAX_TRACKING, (
-        f"the device clock did not move with the host wall across a "
-        f"{_KV_LENGTHS[-1] // _KV_LENGTHS[0]}x KV sweep: device "
-        f"{device_ns[0]} -> {device_ns[-1]} ns ({device_growth:.2f}x) against "
-        f"wall {wall_ns[0]} -> {wall_ns[-1]} ns ({wall_growth:.2f}x), "
-        f"tracking {tracking:.2f}. sources={sources}. This is the "
-        "kernelStartTime defect: a clock reporting a plausible number that is "
-        "not a measurement of the kernel. Note the two are allowed to diverge "
-        "in MAGNITUDE -- the wall carries submission overhead the GPU interval "
-        "excludes -- but not in DIRECTION.")
+        device_growth = device_ns[-1] / device_ns[0]
+        wall_growth = wall_ns[-1] / wall_ns[0]
+        tracking = device_growth / wall_growth
+        assert _MIN_TRACKING <= tracking <= _MAX_TRACKING, (
+            f"the device clock did not move with the host wall across a "
+            f"{_KV_LENGTHS[-1] // _KV_LENGTHS[0]}x KV sweep: device "
+            f"{device_ns[0]} -> {device_ns[-1]} ns ({device_growth:.2f}x) against "
+            f"wall {wall_ns[0]} -> {wall_ns[-1]} ns ({wall_growth:.2f}x), "
+            f"tracking {tracking:.2f}. sources={sources}. This is the "
+            "kernelStartTime defect: a clock reporting a plausible number that is "
+            "not a measurement of the kernel. Note the two are allowed to diverge "
+            "in MAGNITUDE -- the wall carries submission overhead the GPU interval "
+            "excludes -- but not in DIRECTION.")
 
 
 @pytest.mark.hardware_apple_gpu
@@ -149,24 +149,24 @@ def test_the_documented_gpu_clock_is_the_one_selected():
     from tessera._apple_gpu_dispatch import (
         clear_dispatch_telemetry,
         read_dispatch_telemetry,
-        set_dispatch_telemetry_enabled,
+        dispatch_telemetry_capture,
     )
     from tests._support.apple import require_apple_metal
 
     require_apple_metal()
-    assert set_dispatch_telemetry_enabled(True)
-    qd, kd, vd, bd, kw = _run(304, agpu)
-    for _ in range(3):
+    with dispatch_telemetry_capture():
+        qd, kd, vd, bd, kw = _run(304, agpu)
+        for _ in range(3):
+            with agpu.batched_session() as s:
+                agpu.flash_attn_variant_enc(s, qd, kd, vd, bd, **kw)
+        clear_dispatch_telemetry()
         with agpu.batched_session() as s:
             agpu.flash_attn_variant_enc(s, qd, kd, vd, bd, **kw)
-    clear_dispatch_telemetry()
-    with agpu.batched_session() as s:
-        agpu.flash_attn_variant_enc(s, qd, kd, vd, bd, **kw)
-    source = read_dispatch_telemetry()["timing_source"]
-    assert source != "metal_kernel_interval", (
-        "fell back to the undocumented kernelStartTime pair, which was "
-        "measured flat across a 64x workload. If GPUStartTime is genuinely "
-        "unavailable here, that is a finding to record -- not a fallback to "
-        "take silently.")
-    assert source in {"metal_command_buffer_interval", "metal4_timestamp_heap",
-                      "metal4_mpsgraph_envelope"}, source
+        source = read_dispatch_telemetry()["timing_source"]
+        assert source != "metal_kernel_interval", (
+            "fell back to the undocumented kernelStartTime pair, which was "
+            "measured flat across a 64x workload. If GPUStartTime is genuinely "
+            "unavailable here, that is a finding to record -- not a fallback to "
+            "take silently.")
+        assert source in {"metal_command_buffer_interval", "metal4_timestamp_heap",
+                          "metal4_mpsgraph_envelope"}, source

@@ -767,6 +767,8 @@ def run_law_sweep() -> list[LawResult]:
     results.extend(vector_identity_checks())
     from .coordinate_laws import coordinate_identity_checks
     results.extend(coordinate_identity_checks())
+    from .ann_laws import ann_identity_checks
+    results.extend(ann_identity_checks())
 
     return results
 

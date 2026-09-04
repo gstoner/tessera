@@ -3984,3 +3984,15 @@ unchanged. The validation spine now binds checkout fingerprints, and coverage
 conflicts are regenerated after authored inputs are resolved.
 
 x86 outcome: host-free compiler contract validation only; native recipe selection and performance evidence remain follow-up required.
+
+## Engineering sync `EVAL-TELEMETRY-IKF-2026-09-04`
+
+Owners: MSW-9, APPLE-DISPATCH-WEDGE-1 and IKF-1. Program-pair evaluator
+comparison keeps both native provenance gates; ANN composition and ReLU
+identity checks are separately registered reference laws. IKF-1 is now bound
+in the integrated plan: P0 timing first, P2 after validated clocks and
+Schedule-Object region identity, P1 host schema/math independently.
+
+x86: not applicable to Apple capture state and GPU wait mechanics. Native
+ANN fusion remains follow-up required. IKF indexed-slot instrumentation stays
+deferred to a measured CPU need under the existing TPROF-X86 owner.

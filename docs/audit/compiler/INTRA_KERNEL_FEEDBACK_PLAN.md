@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-27
+last_updated: 2026-09-04
 audit_role: plan
 plan_state: open
 ---
@@ -10,9 +10,9 @@ Scoped plan for an intra-kernel measurement foundation whose primary consumer
 is the **compiler's own cost models and arbiter**, not a human with a timeline
 viewer. Ordering authority stays with
 [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) — **this plan is
-not yet bound to an integrated-plan queue entry**; binding it (and where it
-sits relative to the D2 measured-autotune and Schedule-Object tracks) is an
-owner decision recorded in §13. The compiler map and authority chain are in
+bound to integrated-plan item IKF-1**. P0 clock validation follows the
+existing D2 timing contract; P2 consumes the Schedule-Object region contract
+and remains gated on green P0 evidence. The compiler map and authority chain are in
 [`README.md`](README.md). This document owns the design and acceptance detail
 only.
 
@@ -364,10 +364,10 @@ first consumer that pays for attribute carrying).
 
 ## 13. Open items for the owner
 
-1. **Integrated-plan queue entry** — where IKF-1 sits relative to D2/D3 and
-   the Schedule-Object track (`SCHEDULE_OBJECT_DESIGN.md` is the natural
-   carrier for C1's region identity once SO lands; IKF-P2 should consume it
-   if sequenced after, or define the minimal subset if before).
+1. **Integrated-plan queue entry — bound 2026-09-04:** IKF-1 starts with
+   the existing D2 timing contract's P0 probes. P2 consumes Schedule-Object
+   region identity and must wait for P0 clock validation; it does not create
+   a parallel region taxonomy. P1 host mathematics may proceed independently.
 2. **Disposition of the existing `*.profiler_probe` ops** — IKF-P2 either
    subsumes them (they become the lowered form of the new contract) or they
    are deleted per Decision #29; keeping them unconsumed is the one
@@ -375,3 +375,20 @@ first consumer that pays for attribute carrying).
 3. Whether `@jit(profile=...)` is the final user spelling (it must compose
    with `deterministic=True`: instrumentation is effect-free but
    perturbation-relevant).
+
+## P0 baseline evidence — 2026-09-04
+
+The existing native probe was rebuilt with ROCm for exact gfx1151 and run on
+Princess-Luna WSL. The [normalized timing artifact](../artifacts/ikf/gfx1151-wsl-clock-baseline-20260904.json)
+binds the probe binary digest and source state. For 32 repetitions the device
+clock reports 2.655480 ms, HIP events 2.665968 ms, and host wall 2.709466 ms;
+queried wall-clock rate is 100 MHz. All three validity gates pass. The artifact
+explicitly remains promotion-ineligible and records that ROCprofiler activity
+was not collected.
+
+This is a baseline, not P0 closure: cross-CU ping-pong, monotonicity stress and
+read-cost distribution still need dedicated probes. Consequently no P2 IR
+instrumentation or fitted-cost-model promotion follows from this packet.
+Princess-Luna LLVM 23 reports assertions OFF; it cannot supply assertions-on
+MLIR contract evidence. Super-Bear has an RTX 5070 visible in WSL, but no
+`llvm-config` on the non-interactive PATH used for this inspection.

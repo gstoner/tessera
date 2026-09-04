@@ -14,6 +14,8 @@ algebra,W4,quotient,pass,6
 algebra,hutchinson,unbiasedness,pass,2
 algebra,hvp,hessian_second_difference,pass,2
 algebra,hvp,hessian_symmetry,pass,2
+ann_calculus,affine_composition,realization,pass,3
+ann_calculus,relu_identity_extension,realization,pass,3
 field_calculus,codiff_is_adjoint_to_ext_deriv,vector_identity,pass,3
 field_calculus,codiff_squared_is_zero,vector_identity,pass,2
 field_calculus,cylindrical.analytic_gradient,vector_identity,pass,2

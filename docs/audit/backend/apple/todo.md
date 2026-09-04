@@ -7103,6 +7103,18 @@ commit that returns with **no time elapsed** but reports kind 1 must still
 count. Under the duration-only rule that was invisible. Removing the C-side
 report is mutation-checked and caught.
 
+**Cross-backend sync.** The three runtime-side contract changes on this key —
+publishing timeout kind 1 from `ts_enc_commit_wait`, a per-dispatch event in
+both bounded waits, and quarantining pooled buffers after a timeout — are
+assessed in all four queues under `DISPATCH-BREAKER-RESIDENT-2026-09-03`. All
+three are **not applicable** to NVIDIA, ROCm and x86, each for a reason checked
+against those sources rather than inherited from the earlier note: neither CUDA
+nor HIP has a timeout-bearing wait to report an expiry from, both create one
+event per event object so no concurrent dispatch can satisfy another's wait,
+and the recycling buffer pool exists only in `apple_gpu_runtime.mm`. The
+standing follow-up for those two backends — that they have no bounded device
+wait at all — is unchanged by this work.
+
 **Still open in that same function:** when shared-event creation fails it falls
 back to an unbounded `waitUntilCompleted`. There is no bounded wait without an
 event, so that path needs a different answer than a timeout — and it now also

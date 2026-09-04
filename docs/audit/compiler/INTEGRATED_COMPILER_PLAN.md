@@ -1373,11 +1373,35 @@ Three sub-tracks, sequenced smallest-blast-radius first:
    the content-addressed canonical text stays host-independent — verified
    through `tessera-opt -mlir-print-debuginfo`. The AST `_OpExtractor` still
    emits no `loc`, so its deletion no longer regresses Decision #13.
-   (iii) The symbolic→concrete elaboration boundary, plus the region-privilege
-   (Decision #2) and `ConstraintSolver` (Decision #4) drops, are declared through
-   the **existing** W1.3 metadata-obligation pass
-   (`--tessera-verify-metadata-obligation`), not a new verifier (Decision
-   #29/#31), using `not_yet_carried:<item>` to keep the debt attributable.
+   (iii) **Landed 2026-09-03.** The symbolic→concrete elaboration boundary,
+   the region-privilege (Decision #2) and the `ConstraintSolver` (Decision #4)
+   drops are declared through the **existing** W1.3 metadata-obligation pass
+   (`--tessera-verify-metadata-obligation`), not a new verifier (Decisions
+   #29/#31), using `not_yet_carried:FRONTEND-IR-MEDIUM-1`. The C++ verifier is
+   **unchanged**.
+
+   *One correction to how this was specified, recorded because it is the whole
+   trick.* The instruction "declare them through the existing pass" is not
+   directly executable: that pass takes its `before` from
+   `--tessera-record-metadata`, which walks MLIR, and these three facts never
+   enter MLIR at all — so the pass can never record them, and a bare
+   declaration is refused as `METADATA_OBLIGATION_STALE_DECLARATION` (measured
+   first, on all three names). What makes it work is that the verifier decodes
+   the snapshot **unfiltered**: it is not restricted to the four attributes
+   `isTrackedName` collects. So the **frontend writes the snapshot itself** —
+   the frontier is the one boundary whose `before` lives in Python —
+   and the verifier then behaves exactly as it does for `numeric_policy` at the
+   Tile boundary. `graph_ir.declare_frontier_debt` stamps both halves from
+   `JitFn`'s decoration-time `IRArg`s and solver; `tests/unit/
+   test_frontier_metadata_obligation.py` (11) covers it, plus a positive and a
+   negative lit fixture. Verified end to end on real `@tessera.jit` output: the
+   emitted module passes `--tessera-verify-metadata-obligation`, and deleting
+   any one declaration fails it with `METADATA_OBLIGATION_SILENT_DROP`.
+
+   Deliberately narrow: nothing is stamped when the frontend held none of these
+   facts, and a fact the IR still carries is never declared — both would be the
+   unconsumed declaration of Decision #29, and the second silently licenses a
+   real future drop.
 
 2. **Pre-elaboration parametric optimization (perf + rigor).** Elaboration is
    entirely pre-MLIR today, so `tessera-opt` only sees concrete instances and

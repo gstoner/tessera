@@ -1088,6 +1088,18 @@ class JitFn:
                 intent = self.differentiation_request.module_intent_attrs()
                 module.module_attrs.update(intent)
                 module.functions[0].fn_attrs.update(intent)
+            # FRONTEND-IR-MEDIUM-1 (iii): the tracer rebuilds its arguments from
+            # shape and dtype alone, so the region privileges (Decision #2), the
+            # ConstraintSolver's facts (Decision #4) and the symbolic dimension
+            # names all stop here. Record what was known and declare the debt,
+            # so the loss is attributable and machine-checked rather than
+            # invisible (Decision #32).
+            from .graph_ir import declare_frontier_debt
+            declare_frontier_debt(
+                module,
+                args=self._constraint_ir_args,
+                constraints=self.constraints,
+            )
         except Exception as exc:
             raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
         self._traced_frontend_specializations[signature] = module

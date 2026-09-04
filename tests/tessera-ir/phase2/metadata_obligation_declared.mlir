@@ -117,3 +117,38 @@ module attributes {
     return %0 : tensor<8xf32>
   }
 }
+
+// -----
+
+// The PYTHON->MLIR FRONTIER (FRONTEND-IR-MEDIUM-1 item iii).
+//
+// Region privileges (Decision #2), the ConstraintSolver's facts (Decision #4)
+// and symbolic dimension names never enter MLIR at all, so
+// `--tessera-record-metadata` can never record them: it only sees what is
+// already in the IR. The frontier is the one boundary whose "before" lives in
+// Python, so the frontend writes this snapshot itself
+// (`graph_ir.declare_frontier_debt`) and the verifier is untouched -- it
+// decodes the snapshot unfiltered, finds each fact absent after the boundary,
+// and demands an attributed reason exactly as it does for `numeric_policy`.
+//
+// This is the shape `@tessera.jit` now emits; the paired Python test is
+// tests/unit/test_frontier_metadata_obligation.py.
+// CHECK-LABEL: func.func @frontier
+module attributes {
+  tessera.metadata_snapshot = {
+    frontier = {constraints = ["Divisible('K', 8)", 1],
+                dim_names = ["[M, K]", 1],
+                region_privilege = ["read", 2]}}
+} {
+  func.func @frontier(%a: tensor<8x16xf32>) -> tensor<8x16xf32>
+      attributes {
+        tessera.lowering.dropped = {
+          constraints = "not_yet_carried:FRONTEND-IR-MEDIUM-1",
+          dim_names = "not_yet_carried:FRONTEND-IR-MEDIUM-1",
+          region_privilege = "not_yet_carried:FRONTEND-IR-MEDIUM-1"
+        }
+      } {
+    // CHECK: return
+    return %a : tensor<8x16xf32>
+  }
+}

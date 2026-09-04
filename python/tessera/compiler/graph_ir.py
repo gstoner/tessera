@@ -1079,6 +1079,131 @@ def _format_dictionary_attr(value: Dict[str, Any]) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Frontier metadata obligation (FRONTEND-IR-MEDIUM-1, down-payment item iii)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Plan item that owns the debt these declarations record.
+FRONTIER_PLAN_ITEM = "FRONTEND-IR-MEDIUM-1"
+
+#: Facts the Python frontend holds that the tracer's Graph IR does not carry.
+#: Each entry maps the snapshot name to how the fact is read off an ``IRArg``.
+#: `region_privilege` is Decision #2's `Region["read"|"write"|"reduce_*"]`;
+#: `dim_names` is the symbolic side of the elaboration boundary, lost when
+#: `Tensor['M','K']` is specialized to a concrete `tensor<8x16xf32>`.
+_FRONTIER_ARG_FACTS = {
+    "region_privilege": lambda arg: (arg.effect,) if arg.effect else (),
+    "dim_names": lambda arg: (
+        ("[" + ", ".join(arg.dim_names) + "]",) if arg.dim_names else ()
+    ),
+}
+
+
+def frontier_facts(args: "Sequence[IRArg]",
+                   constraints: Any = None,
+                   ) -> Dict[str, Dict[str, int]]:
+    """The multiset of frontend-only facts carried by ``args``/``constraints``.
+
+    ``constraints`` is a ``ConstraintSolver`` (what ``@jit`` holds), any
+    sequence of constraints, or ``None``. It is typed ``Any`` because it is
+    genuinely a union the function duck-types over, and narrowing the
+    annotation to ``Sequence`` would be a lie mypy accepts at the definition
+    and rejects at the one real call site.
+
+    Returns ``{fact name: {printed value: count}}`` — the same shape
+    ``--tessera-record-metadata`` produces, because the verifier decodes both
+    through one path. Empty groups are omitted: a snapshot entry for a fact the
+    frontend never had would be a stale declaration, which the verifier refuses
+    (and is right to — it licenses a future drop nobody reviewed).
+    """
+    facts: Dict[str, Dict[str, int]] = {}
+    for name, read in _FRONTIER_ARG_FACTS.items():
+        counts: Dict[str, int] = {}
+        for arg in args:
+            for value in read(arg):
+                counts[value] = counts.get(value, 0) + 1
+        if counts:
+            facts[name] = counts
+    # `constraints` arrives as a ConstraintSolver from `@jit`, but callers that
+    # already hold a plain sequence should not have to wrap one. Read the
+    # solver's list when it is a solver, and refuse to guess otherwise: a
+    # frontend fact recorded from an object nobody can enumerate would be a
+    # fabricated snapshot, which is worse than no declaration at all.
+    registered = getattr(constraints, "_constraints", constraints)
+    if isinstance(registered, (list, tuple)):
+        counts = {}
+        for constraint in registered:
+            counts[str(constraint)] = counts.get(str(constraint), 0) + 1
+        if counts:
+            facts["constraints"] = counts
+    return facts
+
+
+def declare_frontier_debt(module: "GraphIRModule",
+                          *,
+                          args: "Sequence[IRArg]",
+                          constraints: Any = None,
+                          plan_item: str = FRONTIER_PLAN_ITEM) -> bool:
+    """Record, in the IR, every frontend fact the tracer did not carry.
+
+    **Why this exists (Decision #32, FRONTEND-IR-MEDIUM-1 item iii).** Region
+    privileges, the ConstraintSolver's facts, and symbolic dimension names all
+    live on the decoration-time ``IRArg``s and none of them survive into the
+    tracer's Graph IR — its arguments are rebuilt from shape and dtype alone.
+    That loss was real, total, and completely undocumented: nothing in the tree
+    declared a drop under this plan item, so the debt had no owner and no gate.
+
+    **Why the existing W1.3 verifier and not a new one** (Decisions #29/#31).
+    ``--tessera-verify-metadata-obligation`` compares a recorded ``before``
+    against the IR's ``after``. Its ``before`` normally comes from
+    ``--tessera-record-metadata``, which can only see what is already in MLIR —
+    and these three facts never enter MLIR at all, so that pass can never
+    record them. The frontier is the one boundary whose ``before`` lives in
+    Python, so the frontend writes the snapshot itself. Nothing in the verifier
+    changes: it decodes the snapshot unfiltered, finds each fact absent after
+    the boundary, and demands an attributed reason exactly as it does for
+    ``numeric_policy`` at the Tile boundary.
+
+    A first attempt declared the drops WITHOUT recording them, which the
+    verifier rejected as ``METADATA_OBLIGATION_STALE_DECLARATION``. That
+    rejection is the design working: a declaration is only meaningful next to
+    the record of what was lost.
+
+    Returns whether anything was declared. Stamps nothing when the frontend
+    held none of these facts, so a plain positional function stays byte-identical.
+    """
+    facts = frontier_facts(args, constraints)
+    if not facts or not module.functions:
+        return False
+    function = module.functions[0]
+    # Never declare a fact the emitted IR still carries -- that is the stale
+    # declaration the verifier refuses, and it would license a real future drop.
+    emitted = function.to_mlir(canonical=True)
+    facts = {
+        name: values for name, values in facts.items()
+        if f"tessera.{name}" not in emitted
+    }
+    if not facts:
+        return False
+    # Built as text rather than through `_format_attr_value`, which renders a
+    # nested dict as a JSON *string* attribute. The verifier decodes a real
+    # nested DictionaryAttr, so the encoding has to be
+    # {scope: {fact: ["<value>", <count>, ...]}} -- flat pairs, because a
+    # printed attribute value is not a legal MLIR dictionary key.
+    groups = ", ".join(
+        "{name} = [{pairs}]".format(
+            name=name,
+            pairs=", ".join(
+                f"{json.dumps(value)}, {count}"
+                for value, count in sorted(values.items())))
+        for name, values in sorted(facts.items()))
+    module.module_attrs["tessera.metadata_snapshot"] = (
+        "{" + f"{function.name} = " + "{" + groups + "}" + "}")
+    function.fn_attrs["tessera.lowering.dropped"] = _format_dictionary_attr(
+        {name: f"not_yet_carried:{plan_item}" for name in sorted(facts)})
+    return True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Graph IR module
 # ─────────────────────────────────────────────────────────────────────────────
 

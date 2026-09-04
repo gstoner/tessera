@@ -131,3 +131,19 @@ module attributes {
     return %a : tensor<8xf32>
   }
 }
+
+// -----
+
+// A frontier fact recorded and NOT declared. This is the state the frontend was
+// in before FRONTEND-IR-MEDIUM-1 item (iii): the privilege was known, it did
+// not survive, and nothing said so. The verifier must refuse it, or the
+// frontier declaration is decoration rather than a gate.
+// CHECK: METADATA_OBLIGATION_SILENT_DROP
+module attributes {
+  tessera.metadata_snapshot = {
+    frontier_undeclared = {region_privilege = ["read", 2]}}
+} {
+  func.func @frontier_undeclared(%a: tensor<8xf32>) -> tensor<8xf32> {
+    return %a : tensor<8xf32>
+  }
+}

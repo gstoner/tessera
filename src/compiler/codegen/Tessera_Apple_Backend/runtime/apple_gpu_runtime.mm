@@ -4156,16 +4156,32 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_argument_table_ready(void *handle) {
 
 extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
                                                     uint64_t timeout_ms) {
-  if (!handle) return 0;
+  // Every failure below reports on the last-error channel. It previously
+  // returned 0 from ten places and set the channel from none, so a failed
+  // packaged dispatch surfaced to the caller as
+  // `dispatch returned False; last_error_kind=0` -- true, useless, and
+  // indistinguishable between "no ML encoder on this SDK" and "the device
+  // stopped answering". Kind 2 is an ordinary per-op failure; kind 1 is
+  // reserved for the timeout, and is what feeds the Python dispatch breaker.
+  if (!handle) {
+    ts_set_last_gpu_error(2, "mlpkg_dispatch", "null pipeline handle");
+    return 0;
+  }
   MetalDeviceContext &ctx = deviceContext();
-  if (!ctx.ok) return 0;
+  if (!ctx.ok) {
+    ts_set_last_gpu_error(2, "mlpkg_dispatch", "Metal device context unavailable");
+    return 0;
+  }
   if (@available(macOS 26.0, iOS 26.0, *)) {
     @autoreleasepool {
       TesseraMlpkgPipeline *box = (__bridge TesseraMlpkgPipeline *)handle;
-      if (!box.pipelineState) return 0;
+      if (!box.pipelineState) {
+        ts_set_last_gpu_error(2, "mlpkg_dispatch", "pipeline state not compiled");
+        return 0;
+      }
       if (!box.argumentTable) {
-        fprintf(stderr, "[tessera_apple_gpu_mlpkg] dispatch: argument "
-                "table not prepared — call prepare_tensors() first\n");
+        ts_set_last_gpu_error(2, "mlpkg_dispatch",
+                              "argument table not prepared; call prepare_tensors() first");
         return 0;
       }
       id<MTLDevice> dev = ctx.device;
@@ -4191,6 +4207,8 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
         if (!box.intermediatesHeap) {
           fprintf(stderr, "[tessera_apple_gpu_mlpkg] heap create failed "
                   "for size=%lu\n", (unsigned long)heapSize);
+          ts_set_last_gpu_error(2, "mlpkg_dispatch",
+                                "intermediates heap allocation failed");
           return 0;
         }
       }
@@ -4199,9 +4217,16 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
       // ``mtl4_dispatch_mu`` and so create fresh objects per call).
       id<MTL4CommandAllocator> allocator = [dev newCommandAllocator];
       id<MTL4CommandBuffer> cb = [dev newCommandBuffer];
-      if (!allocator || !cb) return 0;
+      if (!allocator || !cb) {
+        ts_set_last_gpu_error(2, "mlpkg_dispatch",
+                              "command allocator or command buffer creation failed");
+        return 0;
+      }
       id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
-      if (!queue) return 0;
+      if (!queue) {
+        ts_set_last_gpu_error(2, "mlpkg_dispatch", "no MTL4 command queue");
+        return 0;
+      }
       // Encode + commit.
       [cb beginCommandBufferWithAllocator:allocator];
       // ``machineLearningCommandEncoder`` lives on a sub-protocol of
@@ -4215,6 +4240,8 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
       if (!encoder) {
         fprintf(stderr, "[tessera_apple_gpu_mlpkg] dispatch: ML encoder "
                 "unavailable (host SDK may not expose it)\n");
+        ts_set_last_gpu_error(2, "mlpkg_dispatch",
+                              "machineLearningCommandEncoder unavailable on this SDK");
         return 0;
       }
       // ``setArgumentTable:`` + ``setPipelineState:`` are MTL4 standard
@@ -4233,7 +4260,6 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
       // the SDK header accepts it (the `MTL4CommandBuffer*` form
       // doesn't conform to the type's strict requirements).
       const id<MTL4CommandBuffer> cbs[1] = {cb};
-      [queue commit:cbs count:1];
       // PK audit P2 (2026-05-31) — packaged ML has its OWN shared event +
       // monotonic counter, guarded by its OWN mutex. The canonical MTL4
       // dispatcher (``mtl4_matmul2d_dispatch`` and friends) takes
@@ -4248,19 +4274,55 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
       // isolation keeps the queue shared (the queue itself serializes
       // submission, so we don't lose ordering) while giving each lane its
       // own scoreboard.
-      id<MTLSharedEvent> ev;
-      uint64_t signal_val;
-      {
-        std::lock_guard<std::mutex> lock(ctx.mlpkg_event_mu);
-        ev = (id<MTLSharedEvent>)ctx.mlpkg_event;
-        if (!ev) {
-          ev = [dev newSharedEvent];
-          ctx.mlpkg_event = ev;
-        }
-        if (!ev) return 0;
-        signal_val = ++ctx.mlpkg_event_val;
+      // A per-dispatch event, NOT the context-wide one -- the same correction
+      // `commit_and_wait_with_timeout` and its MPSGraph sibling already took.
+      // The shared `mlpkg_event` reserves an increasing value under
+      // `mlpkg_event_mu` and then RELEASES it before the command buffer is
+      // committed and signalled, so two concurrent packaged dispatches can
+      // submit out of reservation order. When the value-2 buffer signals
+      // first the event is already past 1, and the value-1 waiter returns
+      // while its own command buffer is still running; when the ordering
+      // inverts the other way a waiter is never satisfied and times out.
+      // Both were observed: `test_apple_mlpkg_concurrency` failed as
+      // "thread 1 dispatch 1 returned False (last_error_kind=0)", and 20
+      // more packaged dispatches failed the same way in the same sweep while
+      // every one of them passed in isolation.
+      //
+      // Lane isolation (the earlier P2 fix) separated this event from the
+      // canonical MTL4 lane's, which fixed cross-lane collisions. It could not
+      // fix collisions BETWEEN packaged dispatches, because they share this
+      // one counter. A private event has exactly one waiter and one signal,
+      // so no other dispatch can satisfy or starve this wait.
+      uint64_t signal_val = 1;
+      id<MTLSharedEvent> ev = [dev newSharedEvent];
+      if (!ev) {
+        ts_set_last_gpu_error(2, "mlpkg_dispatch",
+                              "shared event creation failed; cannot bound the wait");
+        return 0;
       }
-      [queue signalEvent:ev value:signal_val];
+      {
+        // COMMIT AND SIGNAL AS ONE. `mtl4_shared_queue` is shared by every
+        // packaged dispatch, and this lane deliberately does not take
+        // `mtl4_dispatch_mu` (fresh allocator + command buffer per call). That
+        // is right for the per-pipeline state, but `commit:` and
+        // `signalEvent:value:` are two separate queue operations: unlocked,
+        // thread B interleaves between A's commit and A's signal, and A's
+        // signal no longer denotes A's buffer.
+        //
+        // The shared event HID this. Any thread's signal satisfied any thread's
+        // wait, so a waiter could return on another dispatch's completion --
+        // reading its outputs while its own buffer was still running -- and the
+        // suite saw only an occasional
+        // `dispatch returned False (last_error_kind=0)`. Switching to a private
+        // event exposed it at once as a wait that never completes, which is the
+        // truthful symptom: the signal really was not arriving for this buffer.
+        //
+        // The wait stays OUTSIDE the lock, so dispatches still overlap on the
+        // GPU; only the two-call submission is serialized.
+        std::lock_guard<std::mutex> lock(ctx.mlpkg_event_mu);
+        [queue commit:cbs count:1];
+        [queue signalEvent:ev value:signal_val];
+      }
       bool done = [ev waitUntilSignaledValue:signal_val
                                     timeoutMS:timeout_ms];
       if (!done) {
@@ -4269,11 +4331,20 @@ extern "C" int32_t tessera_apple_gpu_mlpkg_dispatch(void *handle,
                 (unsigned long long)timeout_ms,
                 (unsigned long long)ev.signaledValue,
                 (unsigned long long)signal_val);
+        // Kind 1 is the reserved "device never signalled" -- the one kind that
+        // feeds the Python dispatch breaker, so a wedged device stops being
+        // asked instead of paying this timeout once per packaged dispatch.
+        ts_set_last_gpu_error(1, "mlpkg_dispatch",
+                              "packaged ML dispatch did not signal (hung/timed out); "
+                              "outputs are invalid");
+        ts_quarantine_pooled_buffers_after_timeout();
         return 0;
       }
       return 1;
     }
   }
+  ts_set_last_gpu_error(2, "mlpkg_dispatch",
+                        "packaged ML requires macOS 26.0 / iOS 26.0 or newer");
   return 0;
 }
 

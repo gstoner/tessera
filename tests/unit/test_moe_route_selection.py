@@ -32,6 +32,12 @@ import pytest
 
 from tessera import runtime as R
 
+#: The nine selection tests are pure logic and run everywhere -- that is the
+#: point of moving selection out of the dispatcher. Only the one test that
+#: actually DISPATCHES needs the device, and it carries the same marker its
+#: siblings in test_moe_swiglu_block.py use.
+gpu = pytest.mark.hardware_apple_gpu
+
 G = np.array([2, 2])
 
 
@@ -106,6 +112,7 @@ def test_every_reason_is_non_empty():
             assert reason and reason.strip()
 
 
+@gpu
 def test_choosing_a_slower_route_is_recorded_not_silent(monkeypatch):
     """Decision #21: taking a route measured slower than the default must land
     in the dispatch fallback log under the op's name, so a machine running the

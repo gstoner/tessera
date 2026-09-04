@@ -770,18 +770,17 @@ def test_solver_ift_compiled_package_matches_numerical_oracle(target: str) -> No
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
 def test_solver_ift_tile_artifacts_reach_architecture_owned_lowering() -> None:
-    # Covers x86 AND the SM120 route, so it needs a driver registering the
-    # NVIDIA Target IR dialect. `assert tool is not None` checked only that a
-    # binary exists, which on a lean driver produced "requires the registered
-    # NVIDIA Target IR dialect" -- a build-selection fact reported as a defect.
-    from tests._support.compiler_tool import missing_dialects, tessera_opt_path
-    probe = tessera_opt_path()
-    if probe is None or missing_dialects(probe, "tessera_nvidia"):
-        pytest.skip(
-            "tessera-opt does not register the tessera_nvidia Target IR dialect"
-        )
-    tool = find_tessera_opt()
-    assert tool is not None
+    # Gate on the dialects this body actually lowers to. It used to require
+    # `tessera_nvidia`, which is neither necessary nor sufficient: the two
+    # lowerings below are x86 and ROCm, and no NVIDIA pass runs here. That gate
+    # skipped on drivers that could run the test, and admitted drivers that
+    # could not -- on The-Super-Bear, a build with the NVIDIA backend on and
+    # ROCm off passed the check, then died on `--lower-tile-to-rocm` with
+    # "Unknown command line argument". A build-selection fact reported as a
+    # defect, which is the very thing the old comment here set out to fix.
+    from tests._support.compiler_tool import require_tessera_opt_dialects
+
+    tool = require_tessera_opt_dialects("tessera_x86", "tessera_rocm")
     x86 = lower_scheduled_solver_ift(target="x86", shape=(17,))
     x86_ir = run_tessera_opt(
         tool,

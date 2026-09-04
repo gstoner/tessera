@@ -6532,3 +6532,19 @@ sources; the existing bounded-wait follow-up is unchanged.**
 
 **Validation performed:** none on device for this key; no ROCm code changed.
 **Missing exact-device evidence:** none required — no ROCm behaviour is claimed.
+
+**Extended again 2026-09-03 — the event-less fallbacks are bounded.** Four
+Apple waits fell back to an untimed `waitUntilCompleted` when `newSharedEvent`
+failed. That is the case where the device is already in trouble, so the one
+path taken *because* it was unhealthy was the only one that could hang
+forever. They now poll `status` against a deadline and, on expiry, report
+timeout kind 1 and quarantine their pooled buffers.
+
+**ROCm — not applicable, same reading on its own sources.**
+`hip_backend.cpp:184` and `:233` are `hipStreamSynchronize` /
+`hipEventSynchronize`, both untimed, so there is no bounded path with an
+unbounded fallback to repair. The gap here remains the one the standing
+follow-up names: no bounded device wait exists at all.
+
+**Validation performed:** none on device; no ROCm code changed. **Missing
+exact-device evidence:** none required — no ROCm behaviour is claimed.

@@ -7115,11 +7115,32 @@ and the recycling buffer pool exists only in `apple_gpu_runtime.mm`. The
 standing follow-up for those two backends — that they have no bounded device
 wait at all — is unchanged by this work.
 
-**Still open in that same function:** when shared-event creation fails it falls
-back to an unbounded `waitUntilCompleted`. There is no bounded wait without an
-event, so that path needs a different answer than a timeout — and it now also
-carries the per-dispatch-event change above, which makes creation failure the
-only way to reach it.
+**That last gap is closed too (2026-09-03).** Four fallbacks used the untimed
+`waitUntilCompleted` — in `commit_and_wait_with_timeout`,
+`commit_mpsgraph_and_wait_with_timeout`, `ts_enc_commit_wait` and
+`ts_enc_wait_destroy` — each described in the source as "no timeout
+protection, but at least correct". It is not correct: `newSharedEvent` fails on
+a device that is **already in trouble**, so the one path taken *because* the
+device was unhealthy was the only one that could hang forever.
+
+Metal offers no timed `waitUntilCompleted`, so `ts_wait_for_completion_with_timeout`
+polls `status` against a deadline. Polling rather than a completion handler is
+deliberate and worth recording: a handler must be attached **before** commit,
+and two of these sites reach their fallback after committing while a third is
+handed an already-submitted buffer. Polling is uniform across all four, needs
+no ordering, and keeps nothing alive past the wait; the 1 ms tick is a bounded
+number of wakeups on a path that is rare by construction. On expiry each
+reports kind 1 and quarantines its pooled buffers, so the breaker counts them
+like any other timeout.
+
+**One `waitUntilCompleted` remains, and is meant to:** the completed-buffer
+telemetry read, gated on `prefer_command_buffer` and reached only after the
+event has signalled. The buffer is finished by then, so it returns at once —
+bounding it would put a deadline on a no-op. The existing wait-pattern
+migration gate documented all five sites and **caught the removal**; it now
+documents the one, asserts zero session fallbacks, and checks the survivor is
+still the telemetry read rather than a fallback that crept back under the same
+spelling.
 
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 

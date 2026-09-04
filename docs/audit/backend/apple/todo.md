@@ -7142,6 +7142,82 @@ documents the one, asserts zero session fallbacks, and checks the survivor is
 still the telemetry read rather than a fallback that crept back under the same
 spelling.
 
+## APPLE-MLPKG-RACE-1: the packaged ML dispatch raced its own signal *(fixed 2026-09-04, M1 Max)*
+
+**How it was found is the useful part.** It was not reported as a bug. It
+surfaced while attributing a pre-existing flake during unrelated work: the same
+command failed **2, then 21, then 62, then 28** tests across four runs, and
+every failure carried one signature — `dispatch returned False;
+last_error_kind=0`. A varying failure count with a constant signature is a race,
+not twenty-one bugs.
+
+**Two defects, and the first hid behind the second.**
+
+*The race.* `mtl4_shared_queue` is shared by every packaged dispatch, and this
+lane deliberately does not take `mtl4_dispatch_mu` (fresh allocator + command
+buffer per call). But `commit:` and `signalEvent:value:` are **two separate
+queue operations**. Unlocked, thread B interleaves between A's commit and A's
+signal, and A's signal no longer denotes A's buffer.
+
+*Why nobody saw it.* The context-wide `mlpkg_event` made any thread's signal
+satisfy any thread's wait. A waiter returned on **another dispatch's**
+completion and read its outputs while its own command buffer was still
+running — a silent wrong answer whose only visible trace was an occasional
+False. Switching to a private event turned that into a wait that never
+completes, which is the *truthful* symptom and the evidence the signal was
+genuinely not arriving. Both halves are needed: a per-dispatch event, and
+commit+signal under one lock. The wait stays outside the lock, so dispatches
+still overlap on the GPU.
+
+This is the correction `7079e95a` already applied to `commit_and_wait_with_timeout`
+and its MPSGraph sibling, with the reasoning recorded there. **The packaged lane
+was simply missed** — worth remembering when a fix is applied "to the waits":
+enumerate them.
+
+*The silence.* The function returned 0 from **ten** places and set the
+last-error channel from **none**. Every failure reached the caller as
+`last_error_kind=0` — true, useless, and indistinguishable between "no ML
+encoder on this SDK" and "the device stopped answering". Each path now names
+itself: kind 2 for an ordinary per-op failure, kind 1 for the timeout — the
+kind that feeds the Python dispatch breaker, so a wedged device now stops being
+asked instead of paying this timeout once per packaged dispatch. The timeout
+path also quarantines pooled buffers, as the sibling waits do.
+
+**Evidence** (M1 Max, unsandboxed, fresh process per trial, hang counted as a
+failure via an external deadline). The test is the one written for this race —
+`test_apple_mlpkg_concurrency`, 4 threads x 8 dispatches:
+
+| runtime | trials | pass | fail |
+|---|---:|---:|---:|
+| unmodified | 20 | 18 | 2 |
+| fixed | 60 | 60 | 0 |
+
+At the baseline's 10% rate, 60 clean trials has probability ~0.0018. The eight
+files that failed in the original sweep run **101 passed / 0 skipped**, and the
+reproducer's failure count stopped varying between runs.
+
+**Two process traps hit while verifying this, both worth avoiding.**
+
+1. **A `build` symlink into another checkout's build tree silently compiles
+   THAT checkout's source.** CMake stores absolute paths, so
+   `ninja -C build TesseraAppleRuntimeShared` from a worktree rebuilt the main
+   tree's `.mm` and produced a dylib without the fix. The tell is the compiler
+   warning paths naming a directory you are not editing. Configure a build in
+   the worktree instead.
+2. **A minimal build turns the tests you are trying to verify into skips.** The
+   first "all green" family run had 21 skips reading *"integration requires the
+   Apple GPU runtime and libtessera_jit ABI"* — and those skips were exactly
+   five of the failures under investigation. Build `libtessera_jit` and
+   `tessera-opt`, then re-run: `-rs` and a skip count are the check that a green
+   result evaluated anything ([[hollow_green_signal_pattern]]).
+
+**Cross-backend:** not applicable to NVIDIA, ROCm or x86 under
+`DISPATCH-BREAKER-RESIDENT-2026-09-03`'s reasoning — this is a Metal 4 queue
+API pairing with no sibling. The *general* lesson does transfer and is worth
+stating: any backend that submits work and signals completion as two separate
+calls on a shared queue has this bug shape, and a shared completion counter
+will hide it as an occasional wrong answer rather than a failure.
+
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
 **Owning item:** the matrix-core lanes decline ragged shapes ·

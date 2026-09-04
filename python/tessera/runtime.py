@@ -37483,6 +37483,82 @@ def _apple_gpu_dispatch_spectral(op_name: Any, operands: Any, kwargs: Any, np: A
     raise ValueError(f"apple_gpu spectral lane: unsupported op {op_name!r}")
 
 
+def _apple_moe_select_route(x: Any, w_gate: Any, w_down: Any, g: Any,
+                            kw: Any, np: Any) -> "tuple[str, str]":
+    """Which MoE SwiGLU implementation runs, and the reason — one place.
+
+    Returns ``(route, reason)``: ``composed``, ``single_fused``, or ``lowp``.
+
+    **The arbiter decides between the two arbitrated routes** (Decision #28).
+    `production_route_for` reads the strict route ledger, which is measured on
+    this device, and on the committed ledger it answers ``composed`` — the
+    right answer. Keeping that call is the point: the ledger row would
+    otherwise be a declaration with no consumer (Decision #29), and deleting
+    an arbiter because one of its candidates is slow removes the mechanism
+    instead of fixing the measurement.
+
+    **`lowp` was never arbitrated at all**, and that is the defect this
+    restructure fixes. It sat in a block AHEAD of the arbiter and preempted it
+    unconditionally for any uniform f16/bf16 operand, so the ledger never got
+    to decide for the common low-precision inference shape. Measured on this
+    M1 Max (best of 5 after warm-up, ms): 15.04 vs 1.26 at
+    (64,128,256,128,4), 35.66 vs 1.84 at (256,256,256,256,8), and 1571.06 vs
+    26.31 at (1024,512,512,512,8) — 12x to 60x slower than the route it
+    displaced, and less accurate too (2.6e-4 relative error against an fp32
+    reference where composed is 6.3e-8, because composed accumulates in fp32).
+
+    So `lowp` is opt-in until it has a ledger row of its own. It stays
+    reachable because its one-command-buffer shape may yet win on a resident
+    streaming lane — but it has to be *measured* into the arbiter, not wired
+    ahead of it.
+
+    `quant` outranks everything: per-GEMM quantization semantics are the one
+    thing the single-kernel paths cannot express.
+    """
+    if kw.get("quant") is not None:
+        return "composed", "quantized blocks need per-GEMM semantics"
+
+    grouped = int(np.asarray(g).sum()) == int(np.asarray(x).shape[0])
+    bf16 = _bfloat16_dtype()
+    uniform_low = (x.dtype == w_gate.dtype == w_down.dtype
+                   and (x.dtype == np.float16
+                        or (bf16 is not None and x.dtype == bf16)))
+
+    if os.environ.get("TESSERA_APPLE_MOE_LOWP") == "1":
+        if grouped and uniform_low:
+            return "lowp", "TESSERA_APPLE_MOE_LOWP=1 (not arbitrated; measured slower)"
+        return "composed", "TESSERA_APPLE_MOE_LOWP=1 but the operands are not uniform f16/bf16"
+
+    fused_ok = grouped and (
+        int(np.asarray(w_gate).shape[2]) <= _apple_fused_score_cap()
+        and int(np.asarray(w_down).shape[2]) <= _apple_fused_score_cap())
+
+    if os.environ.get("TESSERA_APPLE_MOE_FUSED") == "1":
+        if fused_ok:
+            return "single_fused", "TESSERA_APPLE_MOE_FUSED=1"
+        return "composed", "TESSERA_APPLE_MOE_FUSED=1 but the shape is out of the fused kernel's range"
+
+    # The arbiter, for the routes it actually has evidence about.
+    try:
+        from .compiler.apple_route_selector import production_route_for
+
+        xs, wgs, wds = (np.asarray(v).shape for v in (x, w_gate, w_down))
+        chosen = production_route_for(
+            op="retune_moe_swiglu",
+            shape=f"{int(xs[0])}x{int(xs[1])}x{int(wgs[2])}x{int(wds[2])}_e{int(wgs[0])}",
+            dtype="f32",
+            incumbent_route="composed",
+        )
+    except Exception as exc:  # noqa: BLE001 — an unreadable ledger is not fatal
+        return "composed", f"route ledger unavailable ({type(exc).__name__}); default"
+
+    if chosen == "single_fused" and fused_ok:
+        return "single_fused", "strict route ledger"
+    if chosen == "single_fused":
+        return "composed", "ledger says single_fused but the shape is out of its range"
+    return "composed", "strict route ledger"
+
+
 def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) -> Any:
     """Local SwiGLU-fused MoE expert FFN on Apple GPU.
 
@@ -37527,52 +37603,47 @@ def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) ->
     # T×N and rides MPS, and gets relatively faster as T grows. So the composed
     # path is the default; the fused kernel stays reachable behind
     # TESSERA_APPLE_MOE_FUSED=1 for a future threadgroup-cooperative rewrite.
-    selected_route = "composed"
-    if kw.get("quant") is None:
-        try:
-            from .compiler.apple_route_selector import production_route_for
-
-            xa_shape = np.asarray(x).shape
-            wg_shape = np.asarray(w_gate).shape
-            wd_shape = np.asarray(w_down).shape
-            selected_route = production_route_for(
-                op="retune_moe_swiglu",
-                shape=(
-                    f"{int(xa_shape[0])}x{int(xa_shape[1])}x{int(wg_shape[2])}x{int(wd_shape[2])}_e{int(wg_shape[0])}"
-                ),
-                dtype="f32",
-                incumbent_route="composed",
-            )
-        except Exception:
-            selected_route = "composed"
-    if kw.get("quant") is None and (
-        os.environ.get("TESSERA_APPLE_MOE_FUSED") == "1" or selected_route == "single_fused"
-    ):
-        xa = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
-        wg = np.ascontiguousarray(np.asarray(w_gate, dtype=np.float32))
-        wu = np.ascontiguousarray(np.asarray(w_up, dtype=np.float32))
-        wd = np.ascontiguousarray(np.asarray(w_down, dtype=np.float32))
-        T = int(xa.shape[0])
-        H, Kout = int(wg.shape[2]), int(wd.shape[2])
-        if int(g.sum()) == T and H <= _apple_fused_score_cap() and Kout <= _apple_fused_score_cap():
-            expert_ids = np.repeat(np.arange(wg.shape[0], dtype=np.int32), g)
-            try:
-                return np.ascontiguousarray(agb.gpu_moe_swiglu_block(xa, wg, wu, wd, expert_ids))
-            except Exception:  # noqa: BLE001 — fall to composed
-                pass
-
-    bf16 = _bfloat16_dtype()
-    if (
-        kw.get("quant") is None
-        and x.dtype == w_gate.dtype == w_up.dtype == w_down.dtype
-        and (x.dtype == np.float16 or (bf16 is not None and x.dtype == bf16))
-    ):
-        if int(g.sum()) == int(x.shape[0]):
-            expert_ids = np.repeat(np.arange(w_gate.shape[0], dtype=np.int32), g)
-            try:
-                return np.ascontiguousarray(agb.gpu_moe_swiglu_block_lowp(x, w_gate, w_up, w_down, expert_ids))
-            except Exception:  # noqa: BLE001 — retain the generic composed fallback
-                pass
+    # ── One selection point, and it says WHY ────────────────────────────────
+    #
+    # This used to be three fall-through blocks, each ending in
+    # `except Exception: pass`, so the implementation that actually ran was not
+    # predictable from the inputs and a failure between them was invisible.
+    # Worse, the ordering silently PREFERRED the two slow paths: measured on
+    # this M1 Max (best of 5, after warm-up), against the composed lane —
+    #
+    #     (T,K,H,N,E)              dtype   single_fused   lowp   composed
+    #     (64,128,256,128,4)       f32           13.23      --       1.27
+    #     (64,128,256,128,4)       f16              --   15.04       1.26
+    #     (256,256,256,256,8)      f32           32.00      --       1.89
+    #     (256,256,256,256,8)      f16              --   35.66       1.84
+    #     (1024,512,512,512,8)     f16              --  1571.06     26.31
+    #
+    # composed wins EVERY case and the gap widens with size (10x -> 17x -> 60x).
+    # `lowp` is also the less accurate of the two: 2.6e-4 relative error against
+    # an fp32 reference where composed is 6.3e-8, because composed accumulates
+    # in fp32. So the f16/bf16 default was both ~12-60x slower and ~4000x less
+    # accurate than the path it was chosen over.
+    #
+    # Both alternatives stay REACHABLE for the rewrites they are waiting on
+    # (the fused kernel is one-thread-per-token and needs a threadgroup
+    # cooperative version; lowp is one command buffer and may win on a resident
+    # streaming lane), but neither is selected implicitly any more. Selection is
+    # explicit, recorded, and a failure inside a chosen route is a diagnostic
+    # rather than a silent downgrade (Decision #21).
+    route, reason = _apple_moe_select_route(x, w_gate, w_down, g, kw, np)
+    if route != "composed":
+        _note_dispatch_fallback(
+            "apple_gpu.moe_swiglu_block",
+            f"route {route!r} selected over the measured-faster 'composed' lane ({reason})")
+    if route == "single_fused":
+        xa, wg, wu, wd = (np.ascontiguousarray(np.asarray(v, dtype=np.float32))
+                          for v in (x, w_gate, w_up, w_down))
+        expert_ids = np.repeat(np.arange(wg.shape[0], dtype=np.int32), g)
+        return np.ascontiguousarray(agb.gpu_moe_swiglu_block(xa, wg, wu, wd, expert_ids))
+    if route == "lowp":
+        expert_ids = np.repeat(np.arange(w_gate.shape[0], dtype=np.int32), g)
+        return np.ascontiguousarray(
+            agb.gpu_moe_swiglu_block_lowp(x, w_gate, w_up, w_down, expert_ids))
 
     # Composed path — proven grouped-GEMM + silu_mul lanes (and the quant path).
     def gg(a: Any, b: Any) -> Any:

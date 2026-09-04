@@ -7218,6 +7218,66 @@ stating: any backend that submits work and signals completion as two separate
 calls on a shared queue has this bug shape, and a shared completion counter
 will hide it as an occasional wrong answer rather than a failure.
 
+## APPLE-MOE-ROUTE-1: the low-precision MoE path jumped the arbiter *(fixed 2026-09-04, M1 Max)*
+
+**The MoE SwiGLU composite had three implementations and no single place that
+chose between them.** `single_fused`, `lowp` and `composed` were three
+fall-through blocks, each ending in `except Exception: pass`, so which one ran
+was not predictable from the inputs and a failure between them was invisible.
+
+**The defect is narrower and worse than "untidy".** `lowp` sat **ahead of the
+arbiter** and preempted it unconditionally for any uniform f16/bf16 operand, so
+`production_route_for` never got to decide for the common low-precision
+inference shape. Measured here (best of 5 after warm-up, ms):
+
+| (T,K,H,N,E) | dtype | single_fused | lowp | composed |
+|---|---|---:|---:|---:|
+| 64,128,256,128,4 | f32 | 13.23 | — | **1.27** |
+| 64,128,256,128,4 | f16 | — | 15.04 | **1.26** |
+| 256,256,256,256,8 | f32 | 32.00 | — | **1.89** |
+| 256,256,256,256,8 | f16 | — | 35.66 | **1.84** |
+| 1024,512,512,512,8 | f16 | — | 1571.06 | **26.31** |
+
+`composed` wins every case and the gap widens with size (10x → 17x → 60x). It
+is also the more accurate: **6.3e-8** relative error against an fp32 reference
+where `lowp` is **2.6e-4**, because `composed` accumulates in fp32. So the
+low-precision default was ~12-60x slower *and* ~4000x less accurate than the
+route it displaced — and `lowp` **has no ledger row at all**: it was preferred
+by default while never having been measured into the arbiter.
+
+**The fix restores the arbiter rather than removing it.** The first attempt
+deleted the `production_route_for` call, which the suite caught
+(`test_moe_dispatch_consumes_the_strict_exact_row`) and was right to: that
+would have made the ledger row a declaration nothing reads (Decision #29) and
+"fixed" a slow route by deleting the mechanism whose job is to choose between
+routes (Decision #28). Checking the ledger directly settled it — on the
+committed ledger it answers `composed`, correctly. It was never the problem.
+
+`_apple_moe_select_route` is now the one selection point, returning
+`(route, reason)`. The arbiter decides between the routes it has evidence
+about; `lowp` is opt-in (`TESSERA_APPLE_MOE_LOWP=1`) until it earns a ledger
+row; `quant` outranks everything, because per-GEMM quantization is the one
+thing the single-kernel paths cannot express. Choosing a route measured slower
+than the default lands in the dispatch fallback log under the op's name
+(Decision #21), so a machine running a slow lane can be found rather than
+guessed at. `tests/unit/test_moe_route_selection.py` (10) pins the matrix,
+including an unreadable ledger and a ledger choice the shape cannot honour.
+
+**Do we need all three? On this evidence, no — but keep them reachable.**
+Neither alternative earns a default. Both are waiting on rewrites that could
+change that: the fused kernel is one-thread-per-token and needs a
+threadgroup-cooperative version, and `lowp`'s single command buffer may win on
+a resident streaming lane where the composed path's three dispatches dominate.
+The rule this entry sets is that such a path must be **measured into the
+arbiter**, not wired ahead of it.
+
+**Cross-backend:** not applicable to NVIDIA, ROCm or x86 — this is Apple
+dispatch-selection code with no sibling, and it changes no dtype, Graph IR
+spelling, ABI or numeric contract. The *general* lesson transfers and is worth
+stating: an implementation that selects itself ahead of the arbiter is outside
+the measured-arbiter model of Decision #28 no matter how fast it is, and this
+one was neither fast nor accurate.
+
 ## Cross-backend sync `MATRIX-LANE-RAGGED-SHAPES-2026-09-01`
 
 **Owning item:** the matrix-core lanes decline ragged shapes ·

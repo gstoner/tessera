@@ -57,10 +57,63 @@ def _file_alias_ns(tree: ast.Module) -> dict:
             if name in ns:
                 continue
             try:
-                ns[name] = eval(expr, dict(ns))  # noqa: S307 — trusted repo source
+                ns[name] = _safe_eval(expr, ns)
             except Exception:
                 pass
     return ns
+
+
+# ── The guard may parse repo source, but must never RUN it ───────────────────
+# These evaluate expressions lifted out of the tree. One of them is
+# `ctypes.CDLL('libamdhip64.so', mode=ctypes.RTLD_LOCAL)`, and evaluating it
+# dlopens the HIP runtime as a side effect of a STATIC ABI check -- leaving it
+# loaded, outside its normal initialization path, in the same process. On
+# Princess-Luna that made a later live ROCm launch fail with rc 3 (a HIP
+# allocation error) in the full sweep while passing in isolation, which read as
+# a flaky ROCm test for as long as nobody ran the two files together.
+#
+# So evaluation is restricted to what this guard actually needs: ctypes TYPE
+# expressions. `ctypes.c_float`, `ctypes.POINTER(...)`, a list or tuple of
+# those, and names already resolved in this file's alias namespace. A call to
+# anything else -- `CDLL`, `cdll.LoadLibrary`, an arbitrary function -- is
+# refused before it runs, and the alias is simply left unresolved, exactly as
+# it already was for every expression that failed to evaluate.
+_CTYPES_TYPE_CALLS = frozenset({"POINTER", "CFUNCTYPE", "ARRAY"})
+
+
+def _is_pure_ctypes_type_expr(node: ast.AST, ns: dict) -> bool:
+    """Whether `node` builds a ctypes type with no side effects."""
+    if isinstance(node, ast.Attribute):
+        # ctypes.c_float / ctypes.RTLD_LOCAL — attribute reads are inert.
+        return isinstance(node.value, ast.Name) and node.value.id in ns
+    if isinstance(node, ast.Name):
+        return node.id in ns
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return all(_is_pure_ctypes_type_expr(e, ns) for e in node.elts)
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Add)):
+        # `ctypes.c_char * 8` is the ctypes array spelling, and real argtypes
+        # are built with tuple arithmetic:
+        #   (ctypes.c_void_p,) * 5 + (ctypes.c_int32,) * 14
+        return (_is_pure_ctypes_type_expr(node.left, ns)
+                and _is_pure_ctypes_type_expr(node.right, ns))
+    if isinstance(node, ast.Call):
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr in _CTYPES_TYPE_CALLS):
+            return False
+        if not (isinstance(func.value, ast.Name) and func.value.id in ns):
+            return False
+        return all(_is_pure_ctypes_type_expr(a, ns) for a in node.args)
+    return False
+
+
+def _safe_eval(expr: str, ns: dict):
+    """`eval` restricted to pure ctypes type expressions; raises otherwise."""
+    node = ast.parse(expr, mode="eval").body
+    if not _is_pure_ctypes_type_expr(node, ns):
+        raise ValueError(f"refusing to execute non-type expression: {expr}")
+    return eval(compile(ast.Expression(node), "<abi-guard>", "eval"), dict(ns))  # noqa: S307
 
 
 def _canon(argtypes_expr: str, restype_expr: str | None, ns: dict | None = None):
@@ -69,11 +122,11 @@ def _canon(argtypes_expr: str, restype_expr: str | None, ns: dict | None = None)
     for void). ``ns`` supplies the file's aliases; defaults to ``ctypes`` only
     (used for the registry, whose entries are always explicit ctypes types)."""
     ns = ns or {"ctypes": ctypes}
-    argtypes = eval(argtypes_expr, dict(ns))  # noqa: S307 — trusted repo source
+    argtypes = _safe_eval(argtypes_expr, ns)
     at = tuple(getattr(t, "__name__", repr(t)) for t in argtypes)
     if restype_expr in (None, "None"):
         return (at, None)
-    rt = eval(restype_expr, dict(ns))  # noqa: S307
+    rt = _safe_eval(restype_expr, ns)
     return (at, None if rt is None else getattr(rt, "__name__", repr(rt)))
 
 

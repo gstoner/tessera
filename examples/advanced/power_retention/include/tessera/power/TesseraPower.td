@@ -24,6 +24,10 @@ def Power_RetentionOp : Op<Power_Dialect, "retention",
                         OptionalAttr<I64Attr>:$switch_over,
                         UnitAttr:$causal);
   let results = (outs AnyTensor:$o, AnyTensor:$state, AnyTensor:$sum_of_keys);
+  // Both optional groups need their own anchor: MLIR resolves each `(...)?`
+  // independently, so the type group cannot borrow the operand group's `^`.
+  // Without it tablegen fails with "optional group has no anchor element" --
+  // reachable only under -DTESSERA_ENABLE_CUDA=ON, which is why it survived.
   let assemblyFormat = [{ $q `,` $k `,` $v (`,` $log_g^)? attr-dict `:`
-    type($q) `,` type($k) `,` type($v) (`,` type($log_g))? `->` type($o) `,` type($state) `,` type($sum_of_keys)}];
+    type($q) `,` type($k) `,` type($v) (`,` type($log_g)^)? `->` type($o) `,` type($state) `,` type($sum_of_keys)}];
 }

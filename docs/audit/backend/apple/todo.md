@@ -6917,10 +6917,20 @@ of the trade the breaker makes everywhere else.
 `_apple_gpu_commit_accounted` is the accounting-only variant: it **always**
 dispatches and only observes. All six commit sites go through it — the
 batched-session context manager, the encode session's `commit` and its
-auto-`_flush`, and the three SSM-replay commits. `ts_enc_commit_wait` is `void`
-and, on expiry, prints to stderr without touching the error channel, so
-duration is the only signal it leaves; the two classes are milliseconds versus
-30 s, so the same `silent_failure_timeout_s` threshold separates them. A
+auto-`_flush`, and the three SSM-replay commits.
+
+**Superseded in part, same day: `ts_enc_commit_wait` now reports.** This
+paragraph originally read that the symbol "is `void` and, on expiry, prints to
+stderr without touching the error channel, so duration is the only signal it
+leaves." That was true when the accounting variant was written and PR #711
+(`fix/apple-commit-wait-reports-timeout`) made it false: both expiry branches
+now call `ts_set_last_gpu_error(1, "enc_commit_wait", …)` like every other
+bounded wait in the runtime, so a stalled commit is **read** rather than
+inferred. `silent_failure_timeout_s` stays on that path as a fallback for an
+older dylib — the Python package and the runtime are versioned separately, so a
+prebuilt library from before that change still only prints — and a reported
+timeout is counted once, not twice. The two classes remain milliseconds versus
+30 s where the inference is still needed. A
 stalled commit therefore counts toward the streak and lands in the fallback
 log, and the *next* numpy or resident lane finds the breaker open.
 

@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <thread>
 #include <memory>
 #include <chrono>
 #include <cmath>
@@ -334,6 +335,42 @@ static std::atomic<uint64_t> g_dispatch_timeout_epoch{0};
 
 static inline void ts_quarantine_pooled_buffers_after_timeout() {
   g_dispatch_timeout_epoch.fetch_add(1, std::memory_order_relaxed);
+}
+
+//: How long an event-less wait will watch a command buffer before giving up.
+//: The same 30 s the event paths use, so a device that stops answering costs
+//: the same bounded amount whichever wait it is being asked through.
+static const uint64_t kEventlessCompletionWaitMs = 30000;
+
+// A bounded wait for a command buffer with NO event to wait on.
+//
+// `newSharedEvent` can fail -- on a device that is already in trouble, which
+// is exactly when a wait must stay bounded -- and Metal offers no timed
+// `waitUntilCompleted`. Every such fallback in this file therefore used the
+// untimed one, which is the defect this closes: a wedged GPU turned a bounded
+// failure into a permanent hang on the one path taken because the device was
+// already unhealthy.
+//
+// This polls `status` against a deadline rather than installing a completion
+// handler, because the handler must be attached BEFORE `commit` and two of the
+// call sites reach their fallback after committing (and one is handed an
+// already-submitted buffer). Polling is uniform across all of them, needs no
+// ordering, and keeps no state alive past the wait. The 1 ms tick costs a
+// bounded number of wakeups on a path that is rare by construction, and the
+// lateness it can add to a SUCCESSFUL completion is irrelevant here: these
+// paths are already degraded, and the timed paths do not use this.
+static bool ts_wait_for_completion_with_timeout(id<MTLCommandBuffer> cb,
+                                                uint64_t timeout_ms) {
+  if (!cb) return false;
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  for (;;) {
+    const MTLCommandBufferStatus status = cb.status;
+    if (status == MTLCommandBufferStatusCompleted) return true;
+    if (status == MTLCommandBufferStatusError) return false;
+    if (std::chrono::steady_clock::now() >= deadline) return false;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
 }
 
 // RAII guard: acquires a buffer in its constructor and returns it to
@@ -1124,13 +1161,19 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
     if (!ctx.legacy_event) {
       ctx.legacy_event = [ctx.device newSharedEvent];
       if (!ctx.legacy_event) {
-        // Event creation failed — fall back to the pre-Pattern-4
-        // ``waitUntilCompleted`` path so the caller doesn't crash.
-        // No timeout protection, but at least correct.
+        // Event creation failed. Still bounded: the caller must not lose its
+        // deadline just because the device was too unhealthy to give us an
+        // event, which is precisely when a hang is likeliest.
         auto slot = ts_attach_gpu_timestamps(cb);
         ts_wall.emplace();
         [cb commit];
-        [cb waitUntilCompleted];
+        if (!ts_wait_for_completion_with_timeout(cb, timeout_ms)) {
+          ts_set_last_gpu_error(1, op_name,
+                                "GPU dispatch did not complete (hung/timed "
+                                "out, no event available); outputs are invalid");
+          ts_quarantine_pooled_buffers_after_timeout();
+          return false;
+        }
         ts_record_dispatch_gpu_elapsed(cb, prefer_command_buffer, slot);
         return cb.status == MTLCommandBufferStatusCompleted;
       }
@@ -1279,8 +1322,13 @@ static bool commit_mpsgraph_and_wait_with_timeout(
       ts_quarantine_pooled_buffers_after_timeout();
       return false;
     }
-  } else {
-    [root waitUntilCompleted];
+  } else if (!ts_wait_for_completion_with_timeout(root,
+                                                  kEventlessCompletionWaitMs)) {
+    ts_set_last_gpu_error(1, op_name,
+                          "MPSGraph dispatch did not complete (hung/timed out, "
+                          "no event available); outputs are invalid");
+    ts_quarantine_pooled_buffers_after_timeout();
+    return false;
   }
   if (root.error != nil) {
     ts_set_last_gpu_error(2, op_name,
@@ -22708,11 +22756,22 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
     }
     completed = done;
   } else {
-    // Shared-event init failed — fall back to the legacy synchronous
-    // wait so the caller doesn't crash. No timeout protection in this
-    // path (matches the helper's own fallback).
-    [root waitUntilCompleted];
-    completed = true;
+    // Shared-event init failed. Bounded anyway, and reported the same way as
+    // the event path: a session whose commit never completes must not become
+    // an unbounded hang just because no event could be created.
+    completed = ts_wait_for_completion_with_timeout(root,
+                                                    kEventlessCompletionWaitMs);
+    if (!completed) {
+      fprintf(stderr,
+              "[tessera_apple_gpu] ts_enc_commit_wait: command buffer did not "
+              "complete within %llu ms (no event available)\n",
+              (unsigned long long)kEventlessCompletionWaitMs);
+      ts_set_last_gpu_error(1, "enc_commit_wait",
+                            "encode-session commit did not complete (hung/"
+                            "timed out, no event available); the session's "
+                            "outputs are invalid");
+      ts_quarantine_pooled_buffers_after_timeout();
+    }
   }
   // APPLE-ATTN-FWD-1: publish the complete interval for an owned resident
   // session. The shared-event signal is encoded after all session work, so the
@@ -22775,7 +22834,17 @@ extern "C" int32_t ts_enc_wait_destroy(TsEncodeSession *s) {
     completed = [s->asyncEvent waitUntilSignaledValue:s->asyncSignal
                                             timeoutMS:30000];
   } else {
-    [root waitUntilCompleted];
+    // No event on this session: the buffer was already submitted elsewhere, so
+    // there is nothing to attach a handler to. Poll to a deadline instead of
+    // blocking forever.
+    completed = ts_wait_for_completion_with_timeout(root,
+                                                    kEventlessCompletionWaitMs);
+    if (!completed) {
+      ts_set_last_gpu_error(1, "enc_wait_destroy",
+                            "encode-session teardown did not complete (hung/"
+                            "timed out, no event available)");
+      ts_quarantine_pooled_buffers_after_timeout();
+    }
   }
   // The shared-event signal is ordered after every encoded kernel. Metal may
   // publish it a few microseconds before the host-visible status advances from

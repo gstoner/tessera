@@ -6178,3 +6178,22 @@ the existing bounded-wait follow-up is unchanged.**
 **Validation performed:** none on device for this key; these are structural
 readings of the CUDA backend, and no NVIDIA code changed. **Missing exact-device
 evidence:** none required — no NVIDIA behaviour is claimed.
+
+**Extended again 2026-09-03 — the event-less fallbacks are bounded.** Four
+Apple waits fell back to an untimed `waitUntilCompleted` when `newSharedEvent`
+failed. That is the case where the device is already in trouble, so the one
+path taken *because* it was unhealthy was the only one that could hang
+forever. They now poll `status` against a deadline and, on expiry, report
+timeout kind 1 and quarantine their pooled buffers.
+
+**NVIDIA — not applicable, and for a reason worth stating precisely.** This
+change bounds a *fallback* taken when a bounded primitive is unavailable. CUDA
+has no bounded primitive to fall back FROM: `cuda_backend.cpp:193` and `:247`
+are `cudaStreamSynchronize` / `cudaEventSynchronize`, both untimed. So CUDA is
+not in the state this fixes — it is in the state the standing follow-up
+already owns, which is that its only wait is the untimed one. Porting the poll
+loop would be that follow-up's work, not this one's, and would need its own
+device evidence.
+
+**Validation performed:** none on device; no NVIDIA code changed. **Missing
+exact-device evidence:** none required — no NVIDIA behaviour is claimed.

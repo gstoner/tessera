@@ -3938,3 +3938,16 @@ backend can enter.
 
 **Validation performed:** none required; no x86 code changed. **Missing
 exact-device evidence:** none.
+
+**Extended again 2026-09-03 — the event-less fallbacks are bounded.** Four
+Apple waits fell back to an untimed `waitUntilCompleted` when `newSharedEvent`
+failed. That is the case where the device is already in trouble, so the one
+path taken *because* it was unhealthy was the only one that could hang
+forever. They now poll `status` against a deadline and, on expiry, report
+timeout kind 1 and quarantine their pooled buffers.
+
+**x86 — not applicable, structurally.** Synchronous host calls, no device, no
+command buffer, so there is no wait to bound and no completion status to poll.
+
+**Validation performed:** none required; no x86 code changed. **Missing
+exact-device evidence:** none.

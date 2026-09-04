@@ -188,38 +188,34 @@ def test_tri_solve_still_correct_after_migration():
 # ---- Source-level drift gate (the migrated sites stay migrated) --------
 
 def test_only_documented_waituntilcompleted_sites_remain():
-    """Only the documented ``waitUntilCompleted`` invocations should remain.
+    """Only ONE ``waitUntilCompleted`` invocation should remain.
 
-    * The fallback path INSIDE ``commit_and_wait_with_timeout`` itself
-      (around the helper's lazy event init). Recursing into the
-      wrapper there would deadlock; the legacy path is the correct
-      fallback.
-    * The completed-command-buffer telemetry mode in the same helper. It is
-      enabled only for an ABI that owns the full command buffer and requires
-      completed timestamp properties before telemetry is recorded.
-    * The equivalent fallback inside
-      ``commit_mpsgraph_and_wait_with_timeout``. The MPSGraph wrapper must
-      commit its live root itself because ``commitAndContinue`` may rotate
-      the originally supplied command buffer.
-    * The fallback INSIDE ``ts_enc_commit_wait`` for the case where
-      shared-event init failed (the encode-session path also keeps a
-      legacy synchronous wait as a no-crash fallback, mirroring the
-      helper's own). This waits on ``[root waitUntilCompleted]`` — the
-      *live* ``s->cb.rootCommandBuffer`` — NOT the ``s->mtlcb`` captured
-      at ts_enc_begin: MPSGraph's encode may call ``commitAndContinue``
-      and rotate the underlying buffer, so the captured handle can be
-      stale. (See ``ts_enc_commit_wait`` + MPSCommandBuffer.h.)
-    * The equivalent no-shared-event fallback inside
-      ``ts_enc_wait_destroy``. ``ts_enc_commit_async`` replaces the captured
-      handle with the live root used for its commit before ownership crosses
-      the asynchronous boundary.
+    This gate used to document five: a fallback inside
+    ``commit_and_wait_with_timeout``, the completed-buffer telemetry mode in
+    the same helper, and the equivalent no-shared-event fallbacks in
+    ``commit_mpsgraph_and_wait_with_timeout``, ``ts_enc_commit_wait`` and
+    ``ts_enc_wait_destroy``. Four of those are gone, because the reason they
+    were tolerated stopped being true.
+
+    They existed for the case where ``newSharedEvent`` fails, and each was
+    described as "no timeout protection, but at least correct". It is not
+    correct: event creation fails on a device already in trouble, which is
+    exactly when a wait must stay bounded, so the one path taken *because* the
+    device was unhealthy was the only one that could hang forever. Metal offers
+    no timed ``waitUntilCompleted``, so those four now poll ``status`` against
+    a deadline through ``ts_wait_for_completion_with_timeout`` and, on expiry,
+    report timeout kind 1 and quarantine their pooled buffers -- the same
+    contract the event paths already honour.
+
+    The one that remains is the completed-buffer telemetry read, gated on
+    ``prefer_command_buffer`` and reached only after the shared event has
+    already signalled. The buffer is finished by then, so the call returns at
+    once; it is there to publish ``GPUStartTime``/``GPUEndTime``, which are
+    documented as readable once the buffer completes. Bounding a wait that
+    cannot block would add a deadline to a no-op.
 
     The timestamp-visibility wait that briefly lived in ``ts_gpu_interval`` is
-    GONE, replaced by ``addCompletedHandler`` (the pattern the SDK prescribes:
-    ``GPUStartTime`` is documented as readable "in command buffer completion
-    handler"). That removed the dilemma rather than containing it -- a handler
-    plus a BOUNDED semaphore wait cannot hang, so the ``completed`` flag that
-    had to be threaded through six call sites is gone with it.
+    GONE, replaced by ``addCompletedHandler`` plus a bounded semaphore wait.
 
     Any OTHER site is a regression. This test fires loud."""
     src = _RUNTIME_SRC.read_text()
@@ -229,25 +225,26 @@ def test_only_documented_waituntilcompleted_sites_remain():
     # `[cb waitUntilCompleted]` to explain why it no longer does that was being
     # tallied as a third site, so the assertion passed on a wrong basis.
     code = "\n".join(re.sub(r"//.*$", "", line) for line in src.splitlines())
-    cb_calls = [m for m in re.finditer(
-        r"\[cb waitUntilCompleted\]", code)]
-    session_calls = [m for m in re.finditer(
-        r"\[root waitUntilCompleted\]", code)]
-    # One generic-command-buffer fallback plus the explicit completed-buffer
-    # telemetry mode used only when an ABI owns the entire command buffer.
-    assert len(cb_calls) == 2, (
-        f"expected exactly 2 [cb waitUntilCompleted] calls (the wrapper's "
-        f"fallback and complete-command-buffer telemetry mode), found "
+    cb_calls = [m for m in re.finditer(r"\[cb waitUntilCompleted\]", code)]
+    session_calls = [m for m in re.finditer(r"\[root waitUntilCompleted\]", code)]
+    assert len(cb_calls) == 1, (
+        f"expected exactly 1 [cb waitUntilCompleted] call (the completed-buffer "
+        f"telemetry mode, reached only after the event signalled), found "
         f"{len(cb_calls)}")
-    assert len(session_calls) == 3, (
-        f"expected exactly 3 [root waitUntilCompleted] calls (the owned "
-        f"MPSGraph, synchronous-session, and async-session fallbacks on live root command "
-        f"buffers), found {len(session_calls)}")
+    assert len(session_calls) == 0, (
+        f"expected no [root waitUntilCompleted] calls -- every event-less "
+        f"session fallback is bounded now -- found {len(session_calls)}")
+    # The surviving one must still be the telemetry read, not a fallback that
+    # crept back under the same spelling.
+    for match in cb_calls:
+        line_start = code.rfind("\n", 0, match.start()) + 1
+        assert "prefer_command_buffer" in code[line_start:match.end()], (
+            "the remaining [cb waitUntilCompleted] is no longer the "
+            "post-event telemetry read")
     # The pre-fix stale-handle wait must be gone (commitAndContinue safety).
     assert "[s->mtlcb waitUntilCompleted]" not in src, (
         "stale [s->mtlcb waitUntilCompleted] reintroduced — must wait on "
         "the live rootCommandBuffer, not the handle captured at begin")
-
 
 def test_runtime_source_includes_pattern_4_helper():
     """Sanity check: the wrapper the migration depends on is still

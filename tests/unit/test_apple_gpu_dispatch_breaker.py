@@ -1719,3 +1719,56 @@ def test_the_runtime_reports_the_commit_timeout_on_the_error_channel():
     assert "ts_set_last_gpu_error(1" in body, (
         "the encode-session commit no longer reports its expiry; the breaker "
         "would be back to inferring a stall from wall time")
+
+
+# ── No wait may be unbounded, event or not ───────────────────────────────────
+# `newSharedEvent` can fail -- on a device already in trouble, which is exactly
+# when a wait must stay bounded -- and Metal has no timed `waitUntilCompleted`.
+# Every event-less fallback used the untimed one, so the single path taken
+# BECAUSE the device was unhealthy was the one that could hang forever.
+
+
+def test_no_untimed_completion_wait_remains_on_a_fallback_path():
+    """`[cb waitUntilCompleted]` may appear only where an event has already
+    proven the buffer complete. Anywhere else it is an unbounded wait on a
+    device that may never answer."""
+    text = _mm_text()
+    offenders = []
+    for number, line in enumerate(text.split("\n"), start=1):
+        stripped = line.strip()
+        if "waitUntilCompleted]" not in stripped or stripped.startswith(("//", "*", "/*")):
+            continue
+        # The one legitimate use: gated on `prefer_command_buffer`, reached
+        # only after the shared event signalled, so it returns at once and
+        # exists to publish the command buffer's timestamp properties.
+        if "prefer_command_buffer" in stripped:
+            continue
+        offenders.append(f"line {number}: {stripped[:80]}")
+    assert offenders == [], (
+        "unbounded completion wait(s) on a fallback path:\n  " + "\n  ".join(offenders))
+
+
+def test_every_eventless_fallback_waits_with_a_deadline_and_reports():
+    """Each event-less path must use the bounded helper, and must report the
+    timeout the same way the event paths do -- kind 1 plus a buffer
+    quarantine, since the command buffer may still be in flight."""
+    text = _mm_text()
+    assert "ts_wait_for_completion_with_timeout" in text
+    bodies = _mm_bodies(text)
+    for name in ("commit_and_wait_with_timeout", "commit_mpsgraph_and_wait_with_timeout",
+                 "ts_enc_commit_wait", "ts_enc_wait_destroy"):
+        body = bodies[name][0]
+        assert "ts_wait_for_completion_with_timeout" in body, (
+            f"{name} still has an event-less path with no deadline")
+        assert "ts_set_last_gpu_error(1" in body, f"{name} does not report its expiry"
+        assert "ts_quarantine_pooled_buffers_after_timeout()" in body, (
+            f"{name} does not quarantine pooled buffers on expiry")
+
+
+def test_the_bounded_helper_actually_bounds():
+    """It must compare against a deadline and yield between polls -- a loop on
+    `status` alone would spin, and one without a deadline would not bound."""
+    body = _mm_bodies(_mm_text())["ts_wait_for_completion_with_timeout"][0]
+    assert "steady_clock::now()" in body and "deadline" in body
+    assert "sleep_for" in body, "the poll loop never yields"
+    assert "MTLCommandBufferStatusCompleted" in body and "MTLCommandBufferStatusError" in body

@@ -613,3 +613,50 @@ def test_x86_attention_descriptor_matches_oracle(extended) -> None:
     assert result["ok"] is True, result.get("reason")
     assert result["execution_kind"] == "native_cpu"
     np.testing.assert_allclose(output, expected, rtol=3e-5, atol=3e-5)
+
+
+def test_no_avx512_test_gates_on_the_isa_family_instead_of_the_feature() -> None:
+    """`x86_64` is the ISA family; AVX-512 is a feature some x86_64 hosts lack.
+
+    A test that packages an `x86_64_avx512` image and gates only on
+    `platform.machine()` runs on any x86_64 box and then dies inside the
+    runtime's fail-closed admission check -- which is the runtime doing its
+    job, but reads as a code defect. That is what happened on The-Super-Bear, a
+    Zen 2 Threadripper with AVX2 and no AVX-512.
+
+    Absent hardware must skip. `tools_available()` and
+    `tools_available_for_architecture()` already fold in
+    `host_supports_architecture`, so gating on either is sufficient; so is the
+    `hardware_avx512` marker. Gating on the family alone is not, and this fails
+    if it comes back.
+    """
+    import ast
+    from pathlib import Path
+
+    family_check = "platform.machine"
+    capability = (
+        "hardware_avx512", "tools_available", "tools_available_for_architecture",
+        "host_supports_architecture", "avx512_is_plausibly_present",
+    )
+    offenders: list[str] = []
+    for path in sorted(Path(__file__).parent.glob("test_*.py")):
+        source = path.read_text(encoding="utf-8")
+        if family_check not in source:
+            continue
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+                continue
+            body = ast.get_source_segment(source, node) or ""
+            decorators = " ".join(ast.unparse(d) for d in node.decorator_list)
+            packages_avx512 = "package_x86(" in body or "x86_64_avx512" in body
+            if not packages_avx512 or family_check not in body:
+                continue
+            if any(name in body or name in decorators for name in capability):
+                continue
+            offenders.append(f"{path.name}::{node.name}")
+    assert offenders == [], (
+        "test(s) gate an AVX-512 image on the x86_64 family rather than the "
+        "feature, so they fail instead of skipping on an x86 host without "
+        "AVX-512: " + ", ".join(offenders)
+    )

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 import math
-import platform
 
 import numpy as np
 import pytest
@@ -387,12 +386,18 @@ def test_attention_backward_rejects_stale_multi_output_identity() -> None:
     ("hq", "hkv", "sq", "sk"),
     [(2, 2, 16, 16), (4, 2, 17, 19), (4, 1, 15, 21)],
 )
+@pytest.mark.hardware_avx512
 @_needs_opt
 def test_zen5_scheduled_attention_backward_exact_mha_gqa_mqa(
     hq: int, hkv: int, sq: int, sk: int
 ) -> None:
-    if platform.machine().lower() not in {"x86_64", "amd64"}:
-        pytest.skip("Zen 5/AVX-512 validation requires an x86_64 host")
+    # `x86_64` is the ISA FAMILY, not the feature. This gate used to accept any
+    # x86_64 host, so on The-Super-Bear -- a Zen 2 Threadripper with AVX2 and
+    # no AVX-512 -- it ran, packaged an `x86_64_avx512` image, and died inside
+    # the runtime's (correct) fail-closed admission check with "not executable
+    # on this host". Absent hardware must skip, not fail: the raise is the
+    # runtime doing its job, and reading it as a test failure is the same
+    # mistake as gating on `hardware_amx` to mean "x86 hardware".
     artifact = lower_scheduled_attention_backward(_x86_module(hq, hkv, sq, sk), target="x86")
     package = package_x86(artifact, pipeline_name="tessera-lower-to-x86")
     rng = np.random.default_rng(20260805 + hkv + sq)

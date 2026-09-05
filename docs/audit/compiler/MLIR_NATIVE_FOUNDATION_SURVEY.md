@@ -194,3 +194,12 @@ Source checks superseding the archived August census:
 | `GenerateWMMAGemmKernel.cpp` constructs parameterized A/B/accumulator fragment types; its typed view/pack/zero/MMA chain is a real producer. | The inventory's “zero typed C++ producers” premise is obsolete. Preserve the existing typed ROCm path and its regression gates. |
 | `src/transforms/lib/TileIRLoweringPass.cpp` still has two `OperationState(..., "tile.mma")` tensor-valued construction sites. | W1.1 / IR-NATIVE-FOUNDATION-1 F2: migrate both to the logical/typed boundary and prove NVIDIA lowering before removing the value lane. Constructor-site presence was checked; this is not a new device execution result. |
 | The typing design's completion ledger retains NVIDIA producer/Target proof and the separately checked tensor lane as its residuals. | Keep `W1_1_TYPING_DESIGN.md` live. The old inventory is historical; no plan closure or native capability promotion follows. |
+
+
+### F1 follow-through — 2026-09-04
+
+The Graph re-entry described in the original census has been removed from
+NVIDIA scheduled matmul. `package_scheduled_matmul` now accepts only the scheduled
+artifact, checks its descriptor contract against Schedule/Tile IR, and compiles
+once. Driver ancestry follows the scheduled boundaries. The census above records
+the pre-migration finding; remaining Graph-owned package roots stay in F2.

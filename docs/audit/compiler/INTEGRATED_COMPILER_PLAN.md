@@ -1824,3 +1824,17 @@ No new implementation queue is created. Surviving actions remain:
 Older architecture reviews and overlapping scoped plans remain live during
 reconciliation. Foundation F1 (NVIDIA scheduled matmul Graph re-entry) remains
 the first code migration; archiving neither replaces nor completes it.
+
+
+### Foundation F1 implementation — 2026-09-04
+
+`nvidia_native.package_scheduled_matmul(artifact)` now constructs the descriptor
+from the scheduled launch contract and compiles only its Tile IR. The Graph
+argument, dynamic Graph clone and discarded base-image build are removed.
+Schedule fields and Tile entry ABI must agree with descriptor metadata before
+compilation. The driver records the real adjacent scheduled ancestry.
+
+This is the first bounded migration, not closure of E2E-REAL-3 or all native
+packaging: F2 still owns the remaining Graph package roots and typed producers.
+Validation and exact-device scope are recorded in the NVIDIA queue under
+`IR-NATIVE-FOUNDATION-1`. Physical kernel optimization is outside this cut.

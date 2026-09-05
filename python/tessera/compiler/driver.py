@@ -802,7 +802,6 @@ def compile_graph_module(
             # this keeps NVIDIA's physical lowering while removing the second
             # Graph-local schedule classification.
             nvidia_package = nvidia_native.package_scheduled_matmul(
-                module,
                 scheduled_matmul_artifact,
                 pipeline_name=producer,
             )
@@ -813,13 +812,19 @@ def compile_graph_module(
                 options=options,
             )
         package_dtype = nvidia_package.descriptor.buffers[0].dtype
-        tile, target_artifact, backend_artifact = _package_artifacts(
-            graph,
-            target_kind,
-            nvidia_package.tile_ir,
-            nvidia_package.target_ir,
-            nvidia_package.backend_ir,
-        )
+        if scheduled_matmul_artifact is not None:
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_matmul_artifact.schedule_ir, nvidia_package.tile_ir,
+                target_kind, nvidia_package.target_ir, nvidia_package.backend_ir,
+            )
+        else:
+            tile, target_artifact, backend_artifact = _package_artifacts(
+                graph,
+                target_kind,
+                nvidia_package.tile_ir,
+                nvidia_package.target_ir,
+                nvidia_package.backend_ir,
+            )
         native_image = nvidia_package.image
         launch_descriptor = nvidia_package.descriptor
         executable = True

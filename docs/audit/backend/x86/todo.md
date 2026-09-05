@@ -4042,3 +4042,15 @@ applicable, and no new device evidence is claimed.
 
 No backend execution contract changes in this archive handoff; existing
 shared-pass and native-foundation follow-ups retain their current status.
+
+## Foundation F1 — `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+NVIDIA scheduled matmul packaging now consumes its scheduled artifact without a
+`GraphIRModule` argument or a base-package compilation. Descriptor fields are
+checked against the durable Schedule record and Tile entry signature; the driver
+records adjacent Graph → Schedule → Tile → Target → PTX ancestry. Runtime ABI,
+physical kernels and numerical policy are unchanged.
+
+Sibling outcome: not applicable to execution parity. x86 scheduled packagers and LLVM/library execution paths are unchanged.
+The driver change is confined to the NVIDIA branch; no device evidence transfers
+to this backend. Its F2 migration obligations remain open.

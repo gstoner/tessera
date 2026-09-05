@@ -6640,3 +6640,15 @@ applicable, and no new device evidence is claimed.
 
 The previously recorded batch FFT and rank-4 dropout evidence remains bounded
 to its recorded gfx1151 route; it does not close other shared-pass obligations.
+
+## Foundation F1 — `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+NVIDIA scheduled matmul packaging now consumes its scheduled artifact without a
+`GraphIRModule` argument or a base-package compilation. Descriptor fields are
+checked against the durable Schedule record and Tile entry signature; the driver
+records adjacent Graph → Schedule → Tile → Target → PTX ancestry. Runtime ABI,
+physical kernels and numerical policy are unchanged.
+
+Sibling outcome: not applicable to execution parity. ROCm scheduled packagers and ROCDL/HSACO generation are unchanged.
+The driver change is confined to the NVIDIA branch; no device evidence transfers
+to this backend. Its F2 migration obligations remain open.

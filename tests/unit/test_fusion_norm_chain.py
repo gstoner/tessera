@@ -4,7 +4,7 @@
 — fused into ONE synthesized MSL kernel instead of a separate elementwise add +
 a separate norm dispatch. The reduction blocks (rmsnorm/layer_norm) are reused
 verbatim from REDUCTION_OPS; only the row materialization differs from the
-matmul-epilogue synthesizer. See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md
+matmul-epilogue synthesizer. See docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md
 (M2).
 """
 

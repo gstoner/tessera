@@ -7,7 +7,7 @@ native `bfloat`-typed MSL (fp32 accumulators inside) and reuses the f16 synth
 symbol's raw-uint16 ABI — no host f32 round-trip. This is the first milestone of
 the Apple-GPU dispatcher→compiler plan, grounded directly in the hardware doc.
 
-See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md and the
+See docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md and the
 apple7-m1max-gpu-feature-set memory.
 """
 

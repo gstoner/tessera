@@ -35,8 +35,8 @@ Today's coverage includes the core Graph/Tile dialects, attention,
 portable collective Target IR, NVIDIA/ROCm Target IR, and the registered
 ``tessera_solver`` dialect.  The V8 ``tessera.queue`` dialect was deleted
 2026-08-10 (Decisions #29/#31: zero producers/consumers, dotted-name type
-syntax unparseable in standalone lit IR); the queue vocabulary survives
-only in the Python tile IR spine (``tile_ir.py``, ``memory_verifier.py``).
+syntax unparseable in standalone lit IR). Historical queue spellings are
+rejected; production ownership uses typed Tile pipeline, role and token values.
 """
 
 from __future__ import annotations

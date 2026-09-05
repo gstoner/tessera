@@ -68,7 +68,7 @@ def test_attention_native_boundary(dtype, bias, monkeypatch):
     calls = []
     monkeypatch.setattr(nvidia_native, "_compile_tile_ir", lambda text, entry: (
         calls.append(text) or text, "// PTX", {}, "compiler", "toolchain", (), "cold"))
-    monkeypatch.setattr(nvidia_native, "emit_attention_tile_ir", lambda **kw: pytest.fail("Graph emitter called"))
+    assert not hasattr(nvidia_native, "emit_attention_tile_ir")
     package = nvidia_native.package_scheduled_attention(replace(artifact, graph_ir="discarded"), pipeline_name="tessera-nvidia-pipeline-sm120")
     assert calls == [artifact.tile_ir]
     assert package.descriptor.buffers[-1].dtype == "fp32"

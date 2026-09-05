@@ -131,6 +131,15 @@ def lower_scheduled_matmul(
         fn0 = targeted.functions[0]
         if not fn0.name.startswith(_SM120_SCHEDULED_MATMUL_PREFIX):
             fn0.name = f"{_SM120_SCHEDULED_MATMUL_PREFIX}{fn0.name}"
+    if contract[12] == "int4":
+        # Historical callers carry the unregistered !tessera.int4 spelling.
+        # Normalize the frontend tensor description to canonical builtin i4.
+        from .graph_ir import tensor_ir_type
+        fn = targeted.functions[0]
+        fn.body[0].op_name = "tessera.matmul"
+        for arg in fn.args:
+            arg.ir_type = tensor_ir_type(tuple(arg.ir_type.shape), arg.ir_type.dtype)
+        fn.body[0].operand_types = [str(arg.ir_type) for arg in fn.args]
     graph_ir = targeted.to_mlir(target=target, canonical=True)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
@@ -209,7 +218,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if len(function.body) != 1 or len(function.result_types) != 1:
         raise ValueError("scheduled matmul requires one Graph operation and result")
     op = function.body[0]
-    if op.op_name != "tessera.matmul" or not 2 <= len(op.operands) <= 4:
+    int4_gemm = (op.op_name == "tessera.gemm" and target == "nvidia_sm120"
+                 and len(function.args) == 2 and all(a.ir_type.dtype == "int4" for a in function.args))
+    if (op.op_name != "tessera.matmul" and not int4_gemm) or not 2 <= len(op.operands) <= 4:
         raise ValueError("scheduled matmul requires one tessera.matmul")
     if op.kwargs.get("transposeA", False) or op.kwargs.get("transposeB", False):
         raise ValueError("scheduled matmul does not support transpose")
@@ -337,6 +348,18 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             32,
             64,
         )
+    elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == ("int4", "int4", "int32"):
+        if not op.result or function.return_values != ["%" + op.result] or len(function.args) != 2:
+            raise ValueError("INT4 native entry must return its matmul result with two inputs")
+        if any(a.layout is not None or a.ir_type.layout is not None for a in function.args) or function.result_types[0].layout is not None:
+            raise ValueError("INT4 native packing does not accept layout overrides")
+        if any(any(part in key for part in ("layout", "pack", "stride")) for key in op.kwargs):
+            raise ValueError("INT4 native packing does not accept physical overrides")
+        if bias_name or residual_name or activation != "none" or dynamic_m or dynamic_n or dynamic_k:
+            raise ValueError("INT4 scheduled matmul requires static plain signed storage")
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "nvidia_sm120", "sm_120", "int4", "int32", 16, 8)
+        function_name = "tessera_tile_matmul_int4"
     elif (
         target == "nvidia_sm120"
         and a_dtype == b_dtype

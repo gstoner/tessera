@@ -1,5 +1,6 @@
 """Pre-native attention packaging retained only for differential device tests."""
 import hashlib
+import math
 from tessera.compiler.graph_ir import GraphIRModule
 from tessera.compiler.native_artifact import (
     BufferBinding, LaunchDescriptor, LaunchGeometry, NativeEntryPoint, NativeImageArtifact,
@@ -8,7 +9,7 @@ from tessera.compiler.native_artifact import (
 from tessera.compiler.nvidia_native import (
     NVIDIANativePackage, SM120_ATTN_F16_ABI, SM120_ATTN_BF16_ABI, SM120_ATTN_F32_ABI,
     SM120_ATTN_BIAS_F16_ABI, SM120_ATTN_BIAS_BF16_ABI, SM120_ATTN_BIAS_F32_ABI,
-    _attention_contract, emit_attention_tile_ir, _compile_tile_ir,
+    _attention_contract, _compile_tile_ir,
 )
 
 def baseline_attention(
@@ -126,3 +127,114 @@ def baseline_attention(
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def emit_attention_tile_ir(
+    *,
+    entry: str,
+    storage: str,
+    scale: float,
+    causal: bool,
+    bias: bool = False,
+    window_left: int = -1,
+    window_right: int = -1,
+    softcap: float = 0.0,
+    dropout_p: float = 0.0,
+    dropout_seed: int = 0,
+    lse_checkpoint: str = "recompute",
+) -> str:
+    """Emit the correctness-first typed SDPA launch envelope."""
+    if storage not in {"f16", "bf16", "f32"}:
+        raise ValueError(f"unsupported SM120 attention storage {storage!r}")
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("SM120 attention scale must be finite and positive")
+    if window_left < -1 or window_right < -1:
+        raise ValueError("SM120 attention windows must be >= -1")
+    if not math.isfinite(softcap) or softcap < 0.0:
+        raise ValueError("SM120 attention softcap must be finite and nonnegative")
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("SM120 attention dropout_p must be in [0, 1)")
+    if lse_checkpoint not in {"recompute", "saved"}:
+        raise ValueError("SM120 attention lse_checkpoint must be 'recompute' or 'saved'")
+    optional_arg = "%bias: !llvm.ptr, " if bias else ""
+    optional_operand = "%bias, " if bias else ""
+    lse_arg = "%row_lse: !llvm.ptr, " if lse_checkpoint == "saved" else ""
+    lse_operand = "%row_lse, " if lse_checkpoint == "saved" else ""
+    return f'''module {{
+  llvm.func @{entry}(%q: !llvm.ptr, %key: !llvm.ptr, %v: !llvm.ptr,
+                     {optional_arg}%o: !llvm.ptr, {lse_arg}%b: i64, %hq: i64, %hkv: i64,
+                     %sq: i64, %sk: i64, %d: i64, %dv: i64)
+      attributes {{nvvm.kernel}} {{
+    tile.attention_kernel %q, %key, %v, {optional_operand}%o, {lse_operand}%b, %hq, %hkv, %sq, %sk, %d, %dv {{
+      storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
+      causal = {str(causal).lower()}, bias = {str(bias).lower()},
+      window_left = {window_left} : i64, window_right = {window_right} : i64,
+      softcap = {float(softcap)!r} : f32, dropout_p = {float(dropout_p)!r} : f32,
+      dropout_seed = {dropout_seed} : i64, lse_checkpoint = "{lse_checkpoint}"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (1 + int(bias) + int(lse_checkpoint == "saved"))}i64, i64, i64, i64, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+
+def emit_paged_kv_read_tile_ir(*, entry: str) -> str:
+    return f'''module {{
+  llvm.func @{entry}(%pages: !llvm.ptr, %table: !llvm.ptr, %o: !llvm.ptr,
+                     %p: i64, %lp: i64, %ps: i64, %h: i64, %d: i64,
+                     %start: i64, %tokens: i64) attributes {{nvvm.kernel}} {{
+    tile.paged_kv_read_kernel %pages, %table, %o, %p, %lp, %ps, %h, %d, %start, %tokens {{
+      storage = "f32", table_storage = "i32", route = "direct"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+
+def emit_attention_backward_tile_ir(
+    *, entry: str, scale: float, causal: bool, storage: str = "f32", bias: bool = False,
+    window_left: int = -1, window_right: int = -1, softcap: float = 0.0,
+    dropout_p: float = 0.0, dropout_seed: int = 0,
+    lse_checkpoint: str = "recompute",
+) -> str:
+    """Emit the deterministic f16/bf16/f32 reference VJP through Tile IR."""
+    if storage not in {"f16", "bf16", "f32"}:
+        raise ValueError(f"unsupported SM120 attention backward storage {storage!r}")
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("SM120 attention backward scale must be finite and positive")
+    if window_left < -1 or window_right < -1:
+        raise ValueError("SM120 attention backward windows must be >= -1")
+    if not math.isfinite(softcap) or softcap < 0.0:
+        raise ValueError("SM120 attention backward softcap must be finite and nonnegative")
+    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
+        raise ValueError("SM120 attention backward dropout_p must be in [0, 1)")
+    if lse_checkpoint not in {"recompute", "saved"}:
+        raise ValueError("SM120 attention backward lse_checkpoint must be 'recompute' or 'saved'")
+    optional_arg = "%bias: !llvm.ptr, " if bias else ""
+    optional_operand = "%bias, " if bias else ""
+    lse_arg = "%row_lse: !llvm.ptr, " if lse_checkpoint == "saved" else ""
+    lse_operand = "%row_lse, " if lse_checkpoint == "saved" else ""
+    return f'''module {{
+  llvm.func @{entry}(%do: !llvm.ptr, %q: !llvm.ptr, %key: !llvm.ptr,
+                     %v: !llvm.ptr, {optional_arg}{lse_arg}%dq: !llvm.ptr,
+                     %dk: !llvm.ptr, %dv: !llvm.ptr, %b: i64, %hq: i64,
+                     %hkv: i64, %sq: i64, %sk: i64, %d: i64, %dv_dim: i64)
+      attributes {{nvvm.kernel}} {{
+    tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}{lse_operand}%dq, %dk, %dv,
+        %b, %hq, %hkv, %sq, %sk, %d, %dv_dim {{
+      storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
+      causal = {str(causal).lower()}, bias = {str(bias).lower()},
+      window_left = {window_left} : i64, window_right = {window_right} : i64,
+      softcap = {float(softcap)!r} : f32,
+      dropout_p = {float(dropout_p)!r} : f32, dropout_seed = {dropout_seed} : i64,
+      route = "deterministic_direct",
+      deterministic = true, workspace_bytes = 0 : i64,
+      workspace_owner = "output_element", lse_checkpoint = "{lse_checkpoint}"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias) + int(lse_checkpoint == "saved"))}i64, i64, i64, i64, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''

@@ -1,14 +1,29 @@
 ---
-last_updated: 2026-07-31
+last_updated: 2026-09-05
 audit_role: theme
 ---
 
 # Backend Audit
 
 This document consolidates shared backend/runtime audit work. Platform-specific
-Apple, NVIDIA, and ROCm details live in sibling platform folders.
+Apple, NVIDIA, ROCm, and x86 details live in sibling platform folders.
 
-## Finished
+## Authority and current work
+
+The [integrated compiler plan](../compiler/INTEGRATED_COMPILER_PLAN.md) owns
+cross-backend sequencing toward the MLIR/LLVM native-code foundation. This audit
+owns shared findings and historical evidence; [the backend map](README.md) routes
+readers to architecture queues, scoped plans, and generated status evidence.
+Queue entries are dated assessments: later entries supersede earlier claims only
+for the explicitly named target, operation, and proof level.
+
+Current native ownership work uses synchronization key `IR-NATIVE-FOUNDATION-1`
+and owners E2E-REAL-5 / W2.4 / W2.4a. Bounded saved-LSE, signed INT4, and paged-read
+implementation is recorded in the integrated plan's five-action loop. Remaining
+work includes allocation-scoped reuse legality, control-flow lifetime analysis,
+scaled packing, stateful families, and architecture-specific device proof.
+
+## Recorded outcomes
 
 - **Runtime execution matrix:** `../generated/runtime_execution_matrix.md`
   owns what `runtime.launch()` can execute.
@@ -45,9 +60,9 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   end-to-end on AVX-512 hardware via this lane and carry honest `x86:fused`
   manifest slots — the x86 backend reaches `runtime.launch()` for the elementwise
   set, not just GEMM.**
-- **Non-executable targets are honest:** NVIDIA and ROCm are
-  recognized but return unsupported/unimplemented behavior rather than fake
-  success.
+- **Unsupported routes fail explicitly:** NVIDIA and ROCm have native execution
+  lanes. Support remains specific to a route, target, and operation; consult the
+  execution matrix and owning queue rather than inferring fleet-wide support.
 - **Toolchain pins:** CUDA, NCCL, and ROCm pins agree in generated dashboards.
 - **Hardware frontier framing:** archived Phase G/H material establishes that
   backend-kernel completion requires real device proof.
@@ -61,9 +76,9 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   the Apple runtime and the GPU output equals `A @ B`; an unregistered kernel
   name still returns `UNIMPLEMENTED` (no silent success). Locked by
   `tests/unit/test_runtime_abi_gpu_launch_bridge.py` (contract guards run
-  everywhere; the GEMM e2e runs on Darwin+Metal). NVIDIA/ROCm close their
-  launch bridge by registering a backend launcher into the same hook once
-  hardware exists.
+  everywhere; the GEMM e2e runs on Darwin+Metal). This is the dated Metal
+  bridge result; current NVIDIA/ROCm packaging and launch evidence lives in
+  their owning queues, separately from this C-ABI hook proof.
 
 - **CDNA3 attention cost-model spine (2026-06-21):** eight compiler-visible
   levers harvested from the moonmath CDNA3/MI300X attention writeup, landed as

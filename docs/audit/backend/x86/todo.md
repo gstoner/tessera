@@ -9,6 +9,21 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## Current integrated-plan handoff
+
+[The integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md) owns
+sequencing; [the backend audit map](../README.md) defines document authority.
+This queue owns architecture-specific execution and evidence. Start with the
+[2026-09-05 native checkpoint, packed/state boundaries and ownership audit](#native-checkpoint-packedstate-boundaries-and-ownership-audit--2026-09-05)
+entry below (sync `IR-NATIVE-FOUNDATION-1`, E2E-REAL-5 / W2.4 / W2.4a).
+
+That entry assesses the bounded saved-LSE, INT4 and paged-read migrations and
+ownership spike. Allocation-scoped release, control-flow lifetime, remaining
+Graph-owned constructors and architecture-specific performance proof stay open.
+Earlier synchronization notes retain their original scope and date; statements
+such as “no follow-up owed” apply to that increment, not the whole backend.
+
+
 ## Cross-backend sync `FRONTEND-DTYPE-BOUNDARY-2026-09-03`
 
 A **shared Graph IR diagnostic boundary and dtype annotation contract** landed
@@ -4149,3 +4164,25 @@ Not applicable to x86 physical lowering: this change is confined to the
 NVIDIA scheduled unary package consumer. Shared IR and runtime ABIs are unchanged.
 Existing x86 package validation and owning-host evidence remain separate;
 no sibling replay completeness or performance claim follows from this fix.
+
+
+### Native checkpoint, packed/state boundaries and ownership audit — 2026-09-05
+
+Owner: E2E-REAL-5 / W2.4 / W2.4a; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's five-action loop records native saved-LSE, signed-INT4 and
+bounded paged-read package migrations, the recovered prefetch-space check, and
+the nonblocking-poll reuse-verifier fix. Shared legality is assessed on every
+backend; allocation-scoped release and control-flow lifetime proof remain open.
+Not applicable to x86 physical package generation: SM120 pointer launchers and
+packed views are not CPU schedules. Shared native verification applies where
+used. Follow-up required for CPU-specific packed/state consumers and lifetime
+proof; retain explicit no-async behavior and separate CPU performance evidence.
+
+### Physical paged-read mnemonic isolation — PR #728 review
+
+Owner E2E-REAL-5 / F2-S1; sync `IR-NATIVE-FOUNDATION-1`.
+The bounded native tensor producer is `tessera.paged_kv_read`, distinct from the
+public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
+handle form remains unchanged and its Graph ODS declaration remains open.
+This shared-contract correction prevents the NVIDIA physical form from claiming
+Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.

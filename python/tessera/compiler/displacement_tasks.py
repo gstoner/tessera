@@ -9,7 +9,7 @@ everything else — and a lane that ever diverges fails the grade, not just a un
 test. Importing this module registers the tasks (the standard import-to-register
 pattern); nothing in the grader imports it, so it stays optional.
 
-See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M5) and
+See docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M5) and
 docs/audit/compiler/EVALUATOR_PLAN.md §9.
 """
 

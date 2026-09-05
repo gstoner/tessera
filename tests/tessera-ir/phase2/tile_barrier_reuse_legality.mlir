@@ -1,4 +1,5 @@
-// RUN: tessera-opt --tessera-tile-barrier-reuse-legality -split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: %tessera_strict_opt --tessera-tile-dataflow-legality -split-input-file -verify-diagnostics %s
+// RUN: %tessera_strict_opt --tessera-tile-barrier-reuse-legality -split-input-file -verify-diagnostics %s | FileCheck %s
 //
 // C2 (2026-06-23, TIRx review / COMPILER_AUDIT item C2): "barriers are a
 // layout-reuse correctness property." Two writes to overlapping storage-axis
@@ -27,6 +28,7 @@ func.func @tmem_alias_race() {
   // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer SSA allocation}}
   tile.buffer_write %buffer {
     tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }
@@ -45,6 +47,7 @@ func.func @tmem_alias_barriered() {
   tile.wait_async : () -> ()
   tile.buffer_write %buffer {
     tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }
@@ -61,6 +64,7 @@ func.func @double_buffer_disjoint() {
     tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : !tile.buffer
   tile.buffer_write %buffer {
     tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 128>} : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }
@@ -77,6 +81,7 @@ func.func @register_fragment_no_hazard() {
     tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : !tile.buffer
   tile.buffer_write %buffer {
     tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }
@@ -94,6 +99,7 @@ func.func @lds_alias_race() {
   // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer SSA allocation}}
   tile.buffer_write %buffer {
     tile.layout = #tile.layout<shard = [256] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }
@@ -119,6 +125,7 @@ func.func @ssa_allocation_alias_race() {
     tile.layout = #tile.layout<shard = [128] : [1] on ["m"],
                                replica = [] : [] on [], offset = 0>
   } : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }
@@ -142,6 +149,28 @@ func.func @ssa_allocation_barriered() {
     tile.layout = #tile.layout<shard = [128] : [1] on ["m"],
                                replica = [] : [] on [], offset = 0>
   } : !tile.buffer
+  tile.cta_sync
+  tile.dealloc %buffer : !tile.buffer
+  return
+}
+
+// -----
+
+// A barrier attribute describes policy; it cannot turn a non-wait into a
+// completing operation. In particular a decorated poll must not release reuse.
+func.func @barrier_attribute_is_not_completion() {
+  %buffer = tile.alloc {bytes = 1024 : i64, space = "smem",
+    layout = #tile.layout<shard = [256] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  %bar = tile.mbarrier.init {slots = 1 : i64, phase_bits = 1 : i64} : !tile.mbarrier
+  %token = tile.mbarrier.arrive_expect_tx %bar {slot = 0 : i64, bytes = 128 : i64} : !tile.mbarrier -> !tile.mbarrier_token
+  // expected-note @+1 {{previous write to the same allocation root here}}
+  tile.buffer_write %buffer {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  %ready = tile.mbarrier.try_wait %bar, %token {slot = 0 : i64, tile.barrier = #tile.barrier<kind = "mbarrier", expect = 1>} : !tile.mbarrier, !tile.mbarrier_token
+  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER}}
+  tile.buffer_write %buffer {
+    tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : !tile.buffer
+  tile.cta_sync
   tile.dealloc %buffer : !tile.buffer
   return
 }

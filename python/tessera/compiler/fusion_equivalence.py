@@ -8,7 +8,7 @@ fallback can never earn a "displaced" verdict (the Evaluator's provenance
 invariant). This module is the reusable gate; a future migration calls
 ``displacement_verdict`` and only ships the lane when it returns ``equivalent``.
 
-See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M5).
+See docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M5).
 """
 
 from __future__ import annotations

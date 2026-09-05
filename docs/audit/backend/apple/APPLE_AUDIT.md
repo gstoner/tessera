@@ -1,9 +1,23 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-09-05
 audit_role: sub_audit
 ---
 
 # Apple Backend Audit
+
+The superseded dispatcher-to-codegen milestone design now lives in
+[archive/APPLE_GPU_CODEGEN_PLAN.md](archive/APPLE_GPU_CODEGEN_PLAN.md).
+Its rationale is preserved; current native ownership and packaging work is
+tracked by `IR-NATIVE-FOUNDATION-1` in the integrated plan and Apple queue.
+
+
+Current sequencing is owned by the
+[integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Use the [architecture queue](todo.md) for current execution work and the
+[backend audit map](../README.md) for document authority. Dated findings and
+bring-up descriptions below retain their original evidence scope; they are
+not a current fleet-wide support statement.
+
 
 This document records Apple-specific audit **deltas and decisions**. It is not
 the current execution-status authority: use

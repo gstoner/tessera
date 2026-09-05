@@ -121,8 +121,9 @@ LogicalResult MatmulOp::verify() {
   if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
                           getActivation()))
     return emitOpError("requires a supported pointwise activation");
-  if (getOutput() != "f32" && getOutput() != "f16")
-    return emitOpError("requires f32 or f16 output storage");
+  if (getOutput() != "f32" && getOutput() != "f16" &&
+      !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
+    return emitOpError("requires f32/f16 output or int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")
     return emitOpError("initial matmul contract requires row/col layouts");
   if (getRasterOrder() != "row_major")
@@ -762,8 +763,9 @@ LogicalResult OptimizerShardOp::verify() {
 LogicalResult PrefetchOp::verify() {
   if (getSource().getType() != getStaged().getType())
     return emitOpError("must preserve the source type");
-  if (getInto().empty())
-    return emitOpError("requires a destination memory space");
+  if (!llvm::is_contained(ArrayRef<StringRef>{"register", "shared", "lds",
+                                            "global", "managed", "host", "tmem"}, getInto()))
+    return emitOpError("requires a recognized destination memory space");
   StringRef overlap = getOverlap();
   if (overlap != "none" && overlap != "compute" && overlap != "collective")
     return emitOpError("overlap must be none, compute, or collective");

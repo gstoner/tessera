@@ -608,6 +608,38 @@ void registerAttnDialect(::mlir::DialectRegistry &registry) {
   registry.insert<TesseraAttnDialect>();
 }
 
+// Checkpoint entry semantics are deliberately narrower than general attention.
+static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool backward) {
+  using namespace mlir;
+  SmallVector<RankedTensorType> inputs;
+  for (Type type : op->getOperandTypes()) {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32() ||
+        llvm::any_of(tensor.getShape(), [](int64_t d) { return d <= 0; }))
+      return op->emitOpError("checkpoint operands require positive static f32 shapes");
+    inputs.push_back(tensor);
+  }
+  unsigned base = backward ? 1 : 0;
+  auto q=inputs[base], k=inputs[base+1], v=inputs[base+2];
+  if (q.getRank()!=4 || k.getRank()!=4 || v.getRank()!=4)
+    return op->emitOpError("checkpoint Q/K/V must have rank four");
+  int64_t b=q.getDimSize(0), hq=q.getDimSize(1), sq=q.getDimSize(2), d=q.getDimSize(3);
+  int64_t hkv=k.getDimSize(1), sk=k.getDimSize(2), dv=v.getDimSize(3);
+  auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
+  auto output=tensor({b,hq,sq,dv}), lse=tensor({b,hq,sq});
+  if (k!=tensor({b,hkv,sk,d}) || v!=tensor({b,hkv,sk,dv}) || hq%hkv ||
+      (!backward && (op->getResult(0).getType()!=output || op->getResult(1).getType()!=lse)) ||
+      (backward && (inputs[0]!=output || inputs[4]!=lse ||
+       op->getResult(0).getType()!=q || op->getResult(1).getType()!=k || op->getResult(2).getType()!=v)))
+    return op->emitOpError("checkpoint result or LSE shapes disagree");
+  auto scale=op->getAttrOfType<FloatAttr>("scale").getValue();
+  if (!scale.isFinite() || scale.isNegative() || scale.isZero())
+    return op->emitOpError("checkpoint scale must be finite and positive");
+  return success();
+}
+mlir::LogicalResult CheckpointForwardOp::verify() { return verifyCheckpointTensorOp(*this,false); }
+mlir::LogicalResult CheckpointBackwardOp::verify() { return verifyCheckpointTensorOp(*this,true); }
+
 } // namespace attn
 } // namespace tessera
 

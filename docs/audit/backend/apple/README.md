@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-13
+last_updated: 2026-09-05
 audit_role: index
 ---
 
@@ -10,7 +10,11 @@ date. Apple support has several valid execution forms, so a statement is only
 meaningful when it names its target, unit, compiler form, runtime executor,
 placement, and proof rung.
 
-## Authority order
+The [integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md)
+owns sequencing; [todo.md](todo.md) owns Apple execution work. The
+[backend map](../README.md) explains shared audit authority.
+
+## Status and architecture sources
 
 1. [`../../generated/apple_execution_inventory.md`](../../generated/apple_execution_inventory.md)
    — execution-unit status: generic dispatch, Value Target-IR, authored package
@@ -29,7 +33,7 @@ placement, and proof rung.
 - [`APPLE_AUDIT.md`](APPLE_AUDIT.md) is the active decision and audit-delta log.
 - [`todo.md`](todo.md) is the active compiler, exact-device test, and
   performance execution plan derived from the CUDA/ROCm proof standard.
-- [`APPLE_GPU_CODEGEN_PLAN.md`](APPLE_GPU_CODEGEN_PLAN.md) is a historical
+- [`archive/APPLE_GPU_CODEGEN_PLAN.md`](archive/APPLE_GPU_CODEGEN_PLAN.md) is a historical
   codegen plan; do not use it for current status.
 - [`MPSGRAPH_RUNTIME_GLASS_JAWS.md`](MPSGRAPH_RUNTIME_GLASS_JAWS.md) is a
   MPSGraph Value Target-IR risk register.

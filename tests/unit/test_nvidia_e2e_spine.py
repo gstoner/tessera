@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests._support.nvidia_attention_baseline import emit_attention_tile_ir, emit_paged_kv_read_tile_ir, emit_attention_backward_tile_ir
 
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.capabilities import supports_op
@@ -11,8 +12,6 @@ from tessera.compiler.nvidia_native import (
     _TILE_TO_PTX_MLIR_PASSES,
     _link_cuda_device_library_if_needed,
     emit_f16_matmul_tile_ir,
-    emit_attention_backward_tile_ir,
-    emit_attention_tile_ir,
     emit_f16_softmax_tile_ir,
     emit_f32_softmax_tile_ir,
     emit_softmax_tile_ir,
@@ -23,7 +22,6 @@ from tessera.compiler.nvidia_native import (
     emit_mx_matmul_tile_ir,
     emit_packed_decode_tile_ir,
     emit_paged_attention_tile_ir,
-    emit_paged_kv_read_tile_ir,
     native_package_kind,
     package_nvfp4_matmul,
     package_packed_decode,

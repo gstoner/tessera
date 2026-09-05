@@ -2,6 +2,7 @@
 import pytest
 
 from tessera.compiler import nvidia_native as native
+from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, tensor_ir_type
 
 
@@ -50,6 +51,7 @@ def test_checkpoint_pair_rejects_mismatch_before_compilation(monkeypatch, change
         native.package_attention_checkpoint_pair(forward, backward, pipeline_name="tessera-nvidia-pipeline-sm120")
 
 
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
 def test_checkpoint_identity_matches_physical_float_policy(monkeypatch):
     forward, backward = checkpoint_modules()
     backward.functions[0].body[0].kwargs["scale"] += 1e-10

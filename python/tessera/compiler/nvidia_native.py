@@ -485,26 +485,6 @@ def emit_nvfp4_matmul_tile_ir(*, entry: str) -> str:
 """
 
 
-def emit_int4_matmul_tile_ir(*, entry: str) -> str:
-    """Emit the canonical signed-int4 packed-storage launch kernel."""
-    packed_format = _packed_format_attr("int4")
-    return f"""module {{
-  llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
-                     %m: i64, %n: i64, %k: i64) attributes {{nvvm.kernel}} {{
-    tile.matmul_kernel %a, %b, %d, %m, %n, %k {{
-      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 32, a = "int4", b = "int4", acc = "int32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
-      epilogue = #tile.epilogue<bias = false, activation = "none", output = "i32">,
-      warps = 1 : i64, staging = "global",
-      tessera.storage_packed = true,
-      tessera.storage_container = "int8",
-      tessera.storage_pack = {packed_format}
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
-    llvm.return
-  }}
-}}
-"""
-
-
 def emit_cuda_intrinsic_tile_ir(*, entry: str, kind: str) -> str:
     """Emit one typed CUDA integer/cast/packed intrinsic kernel."""
     cast = kind.startswith("cvt_f32_i32_")
@@ -930,68 +910,6 @@ def emit_norm_tile_ir(
 '''
 
 
-def emit_attention_tile_ir(
-    *,
-    entry: str,
-    storage: str,
-    scale: float,
-    causal: bool,
-    bias: bool = False,
-    window_left: int = -1,
-    window_right: int = -1,
-    softcap: float = 0.0,
-    dropout_p: float = 0.0,
-    dropout_seed: int = 0,
-    lse_checkpoint: str = "recompute",
-) -> str:
-    """Emit the correctness-first typed SDPA launch envelope."""
-    if storage not in {"f16", "bf16", "f32"}:
-        raise ValueError(f"unsupported SM120 attention storage {storage!r}")
-    if not math.isfinite(scale) or scale <= 0.0:
-        raise ValueError("SM120 attention scale must be finite and positive")
-    if window_left < -1 or window_right < -1:
-        raise ValueError("SM120 attention windows must be >= -1")
-    if not math.isfinite(softcap) or softcap < 0.0:
-        raise ValueError("SM120 attention softcap must be finite and nonnegative")
-    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
-        raise ValueError("SM120 attention dropout_p must be in [0, 1)")
-    if lse_checkpoint not in {"recompute", "saved"}:
-        raise ValueError("SM120 attention lse_checkpoint must be 'recompute' or 'saved'")
-    optional_arg = "%bias: !llvm.ptr, " if bias else ""
-    optional_operand = "%bias, " if bias else ""
-    lse_arg = "%row_lse: !llvm.ptr, " if lse_checkpoint == "saved" else ""
-    lse_operand = "%row_lse, " if lse_checkpoint == "saved" else ""
-    return f'''module {{
-  llvm.func @{entry}(%q: !llvm.ptr, %key: !llvm.ptr, %v: !llvm.ptr,
-                     {optional_arg}%o: !llvm.ptr, {lse_arg}%b: i64, %hq: i64, %hkv: i64,
-                     %sq: i64, %sk: i64, %d: i64, %dv: i64)
-      attributes {{nvvm.kernel}} {{
-    tile.attention_kernel %q, %key, %v, {optional_operand}%o, {lse_operand}%b, %hq, %hkv, %sq, %sk, %d, %dv {{
-      storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
-      causal = {str(causal).lower()}, bias = {str(bias).lower()},
-      window_left = {window_left} : i64, window_right = {window_right} : i64,
-      softcap = {float(softcap)!r} : f32, dropout_p = {float(dropout_p)!r} : f32,
-      dropout_seed = {dropout_seed} : i64, lse_checkpoint = "{lse_checkpoint}"
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (1 + int(bias) + int(lse_checkpoint == "saved"))}i64, i64, i64, i64, i64, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
-def emit_paged_kv_read_tile_ir(*, entry: str) -> str:
-    return f'''module {{
-  llvm.func @{entry}(%pages: !llvm.ptr, %table: !llvm.ptr, %o: !llvm.ptr,
-                     %p: i64, %lp: i64, %ps: i64, %h: i64, %d: i64,
-                     %start: i64, %tokens: i64) attributes {{nvvm.kernel}} {{
-    tile.paged_kv_read_kernel %pages, %table, %o, %p, %lp, %ps, %h, %d, %start, %tokens {{
-      storage = "f32", table_storage = "i32", route = "direct"
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64, i64, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
 
 def emit_paged_attention_tile_ir(*, entry: str, scale: float, causal: bool) -> str:
     """Emit the compiler-owned fused causal-offset paged-attention envelope."""
@@ -1081,7 +999,6 @@ def emit_attention_backward_tile_ir(
     *, entry: str, scale: float, causal: bool, storage: str = "f32", bias: bool = False,
     window_left: int = -1, window_right: int = -1, softcap: float = 0.0,
     dropout_p: float = 0.0, dropout_seed: int = 0,
-    lse_checkpoint: str = "recompute",
 ) -> str:
     """Emit the deterministic f16/bf16/f32 reference VJP through Tile IR."""
     if storage not in {"f16", "bf16", "f32"}:
@@ -1094,19 +1011,15 @@ def emit_attention_backward_tile_ir(
         raise ValueError("SM120 attention backward softcap must be finite and nonnegative")
     if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
         raise ValueError("SM120 attention backward dropout_p must be in [0, 1)")
-    if lse_checkpoint not in {"recompute", "saved"}:
-        raise ValueError("SM120 attention backward lse_checkpoint must be 'recompute' or 'saved'")
     optional_arg = "%bias: !llvm.ptr, " if bias else ""
     optional_operand = "%bias, " if bias else ""
-    lse_arg = "%row_lse: !llvm.ptr, " if lse_checkpoint == "saved" else ""
-    lse_operand = "%row_lse, " if lse_checkpoint == "saved" else ""
     return f'''module {{
   llvm.func @{entry}(%do: !llvm.ptr, %q: !llvm.ptr, %key: !llvm.ptr,
-                     %v: !llvm.ptr, {optional_arg}{lse_arg}%dq: !llvm.ptr,
+                     %v: !llvm.ptr, {optional_arg}%dq: !llvm.ptr,
                      %dk: !llvm.ptr, %dv: !llvm.ptr, %b: i64, %hq: i64,
                      %hkv: i64, %sq: i64, %sk: i64, %d: i64, %dv_dim: i64)
       attributes {{nvvm.kernel}} {{
-    tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}{lse_operand}%dq, %dk, %dv,
+    tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}%dq, %dk, %dv,
         %b, %hq, %hkv, %sq, %sk, %d, %dv_dim {{
       storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
@@ -1115,8 +1028,8 @@ def emit_attention_backward_tile_ir(
       dropout_p = {float(dropout_p)!r} : f32, dropout_seed = {dropout_seed} : i64,
       route = "deterministic_direct",
       deterministic = true, workspace_bytes = 0 : i64,
-      workspace_owner = "output_element", lse_checkpoint = "{lse_checkpoint}"
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias) + int(lse_checkpoint == "saved"))}i64, i64, i64, i64, i64, i64, i64
+      workspace_owner = "output_element", lse_checkpoint = "recompute"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias))}i64, i64, i64, i64, i64, i64, i64
     llvm.return
   }}
 }}
@@ -1209,6 +1122,8 @@ def _paged_kv_contract(
         return None
     fn = module.functions[0]
     op = fn.body[0]
+    if any(arg.layout is not None or arg.ir_type.layout is not None for arg in fn.args) or any(t.layout is not None for t in fn.result_types):
+        return None
     if len(op.operands) != 2 or len(fn.result_types) != 1:
         return None
     pages_name, table_name = (value.removeprefix("%") for value in op.operands)
@@ -1465,6 +1380,8 @@ def _attention_lse_contract(
     if not requests_attention(module):
         return None
     fn, op = module.functions[0], module.functions[0].body[0]
+    if any(arg.layout is not None or arg.ir_type.layout is not None for arg in fn.args) or any(t.layout is not None for t in fn.result_types):
+        return None
     if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) != 3:
         return None
     if len(fn.result_types) != 2 or len(fn.return_values) != 2 or len(op.result_names) != 2:
@@ -1515,6 +1432,8 @@ def _attention_backward_lse_contract(
     if not requests_attention_backward(module):
         return None
     fn, op = module.functions[0], module.functions[0].body[0]
+    if any(arg.layout is not None or arg.ir_type.layout is not None for arg in fn.args) or any(t.layout is not None for t in fn.result_types):
+        return None
     if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) != 5:
         return None
     if len(fn.result_types) != 3 or len(fn.return_values) != 3 or len(op.result_names) != 3:
@@ -2346,6 +2265,8 @@ def package_scheduled_matmul(
     pipeline_name: str,
 ) -> NVIDIANativePackage:
     """Compile the scheduled Tile artifact once and bind its launch contract."""
+    if artifact.storage == "int4":
+        return package_scheduled_int4_matmul(artifact, pipeline_name=pipeline_name)
     artifact.validate()
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
             or artifact.storage not in {"f16", "bf16"}
@@ -2615,8 +2536,31 @@ def package_int4_matmul(
             "SM120 INT4 packaging requires one static rank-2 signed INT4 "
             "matmul, i32 output, and no scale or fused epilogue"
         )
-    entry = "tessera_tile_matmul_int4"
-    tile_ir = emit_int4_matmul_tile_ir(entry=entry)
+    from .scheduled_matmul import lower_scheduled_matmul
+    return package_scheduled_int4_matmul(lower_scheduled_matmul(module, target="nvidia_sm120"), pipeline_name=pipeline_name)
+
+
+def package_scheduled_int4_matmul(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Consume native signed INT4 scheduling and its replayed physical packing."""
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+    artifact.validate()
+    if (artifact.target, artifact.architecture, artifact.storage, artifact.accum,
+            artifact.a_dtype, artifact.b_dtype, artifact.output_dtype) != (
+            "nvidia_sm120", "sm_120", "int4", "int32", "int4", "int4", "int32"):
+        raise ValueError("unsupported native INT4 contract")
+    if artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k or artifact.bias_name or artifact.residual_name or artifact.activation != "none":
+        raise ValueError("native INT4 requires static plain matmul")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("INT4 packaging requires native Schedule replay")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("INT4 Tile IR disagrees with native Schedule replay")
+    m, n, k = artifact.m, artifact.n, artifact.k
+    if any(type(d) is not int or d <= 0 for d in (m, n, k)) or f'shape_key = "M={m};N={n};K={k};dtype=int4"' not in artifact.schedule_ir:
+        raise ValueError("INT4 dimensions disagree with native schedule")
+    if artifact.function_name != "tessera_tile_matmul_int4":
+        raise ValueError("INT4 entry disagrees with runtime ABI")
+    entry, tile_ir = artifact.function_name, artifact.tile_ir
     (lowered, ptx, metrics, compiler_fp, toolchain_fp,
      device_libraries, compile_state) = _compile_tile_ir(tile_ir, entry)
     image = NativeImageArtifact(
@@ -2635,16 +2579,9 @@ def package_int4_matmul(
             provenance="ptxas --arch=sm_120a -v", metrics=metrics,
         ),
     )
-    fn = module.functions[0]
-    op = fn.body[0]
-    a_name, b_name = (value.removeprefix("%") for value in op.operands)
-    a_shape = _static_shape(module, a_name)
-    b_shape = _static_shape(module, b_name)
-    assert a_shape is not None and b_shape is not None
-    m, k = a_shape
-    n = b_shape[1]
+    a_name, b_name, output_name = artifact.a_name, artifact.b_name, artifact.output_name
+    m, n, k = artifact.m, artifact.n, artifact.k
     packed_k = (k + 1) // 2
-    output_name = op.result or "output"
     storage_pack = {
         "logical": "int4",
         "container": "int8",
@@ -2681,6 +2618,8 @@ def package_int4_matmul(
         ),
         provenance={
             "work_item": "NVIDIA-PACKED-STORAGE-CONSUMER",
+            "schedule_digest": artifact.schedule_digest,
+            "schedule_ir_digest": artifact.schedule_ir_digest,
             "sync_key": "NVIDIA-PACKED-MATH-2026-07-25",
             "schedule": "packed_scalar_correctness",
             "shape": [m, n, k],
@@ -3213,15 +3152,18 @@ def package_attention_lse(
     contract = _attention_lse_contract(module)
     if contract is None:
         raise ValueError("SM120 saved-LSE forward requires the canonical f32 paired ABI")
+    from .scheduled_checkpoint import lower_scheduled_checkpoint
+
     names, dims, scale, causal = contract
+    return package_scheduled_checkpoint(lower_scheduled_checkpoint(
+        names, dims, scale, causal, backward=False), pipeline_name=pipeline_name)
+
+
+def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
     q_name, k_name, v_name, output_name, lse_name = names
     b, hq, hkv, sq, sk, d, dv = dims
-    key = hashlib.sha256(f"{scale:.17g}:{causal}:saved_lse".encode()).hexdigest()[:10]
-    entry = f"tessera_tile_attention_lse_f32_{'causal' if causal else 'full'}_{key}"
-    tile_ir = emit_attention_tile_ir(
-        entry=entry, storage="f32", scale=scale, causal=causal,
-        lse_checkpoint="saved",
-    )
+    entry, tile_ir = scheduled.entry, scheduled.tile_ir
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
     image = NativeImageArtifact(
         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
@@ -3255,6 +3197,10 @@ def package_attention_lse(
         workspace=WorkspaceRequirement(bytes=0, alignment=4),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
+            "schedule_digest": scheduled.schedule_digest,
+            "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
+            "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
+
             "checkpoint_contract": _checkpoint_identity(dims, scale, causal),
             "mask_alignment": "end_aligned_v1",
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "forward_save",
@@ -3274,15 +3220,18 @@ def package_attention_backward_lse(
     contract = _attention_backward_lse_contract(module)
     if contract is None:
         raise ValueError("SM120 saved-LSE backward requires the canonical f32 paired ABI")
+    from .scheduled_checkpoint import lower_scheduled_checkpoint
+
     names, dims, scale, causal = contract
+    return package_scheduled_checkpoint(lower_scheduled_checkpoint(
+        names, dims, scale, causal, backward=True), pipeline_name=pipeline_name)
+
+
+def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
     do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name = names
     b, hq, hkv, sq, sk, d, dv = dims
-    key = hashlib.sha256(f"{scale:.17g}:{causal}:saved_lse:deterministic_direct".encode()).hexdigest()[:10]
-    entry = f"tessera_tile_attention_backward_lse_f32_deterministic_{key}"
-    tile_ir = emit_attention_backward_tile_ir(
-        entry=entry, storage="f32", scale=scale, causal=causal,
-        lse_checkpoint="saved",
-    )
+    entry, tile_ir = scheduled.entry, scheduled.tile_ir
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
     image = NativeImageArtifact(
         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
@@ -3320,6 +3269,10 @@ def package_attention_backward_lse(
         workspace=WorkspaceRequirement(bytes=0, alignment=4),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
+            "schedule_digest": scheduled.schedule_digest,
+            "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
+            "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
+
             "checkpoint_contract": _checkpoint_identity(dims, scale, causal),
             "mask_alignment": "end_aligned_v1",
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "backward_load",
@@ -3331,6 +3284,13 @@ def package_attention_backward_lse(
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_scheduled_checkpoint(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Consume a replay-verified native checkpoint without Graph reconstruction."""
+    scheduled.validate()
+    package = _package_attention_backward_lse if scheduled.backward else _package_attention_lse
+    return package(scheduled, pipeline_name=pipeline_name)
 
 
 @dataclass(frozen=True)
@@ -3373,9 +3333,18 @@ def package_paged_kv_read(
             "rank-1 int32 page table, explicit valid start/end, and f32 output"
         )
     pages_name, table_name, dims = contract
+    from .scheduled_paged_kv import lower_scheduled_paged_kv
+    output_name = module.functions[0].body[0].result or "output"
+    return package_scheduled_paged_kv(lower_scheduled_paged_kv(
+        (pages_name, table_name, output_name), dims), pipeline_name=pipeline_name)
+
+
+def package_scheduled_paged_kv(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    artifact.validate()
+    pages_name, table_name, output_name = artifact.names
+    dims = artifact.dims
     p, logical_pages, page_size, heads, dim, start, tokens = dims
-    entry = "tessera_tile_paged_kv_read_f32_direct"
-    tile_ir = emit_paged_kv_read_tile_ir(entry=entry)
+    entry, tile_ir = artifact.entry, artifact.tile_ir
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
     )
@@ -3388,7 +3357,6 @@ def package_paged_kv_read(
         compile_state=compile_state, device_libraries=device_libraries,
         resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
     )
-    output_name = module.functions[0].body[0].result or "output"
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_PAGED_KV_F32_ABI,
         buffers=(
@@ -3413,6 +3381,8 @@ def package_paged_kv_read(
         provenance={
             "work_item": "NVIDIA-E2E-2", "sync_key": "E2E-SPINE-2026-07-18",
             "route": "direct", "shape": list(dims), "storage": "f32",
+            "schedule_digest": artifact.schedule_digest,
+            "page_ownership": "read_only_borrow",
             "table_storage": "i32", "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
@@ -3744,7 +3714,6 @@ __all__ = [
     "SM120_SOFTMAX_BF16_ABI",
     "SM120_SOFTMAX_F32_ABI",
     "emit_f16_matmul_tile_ir",
-    "emit_attention_tile_ir",
     "emit_attention_backward_tile_ir",
     "emit_f16_softmax_tile_ir",
     "emit_matmul_tile_ir",
@@ -3753,9 +3722,7 @@ __all__ = [
     "emit_norm_tile_ir",
     "emit_f32_softmax_tile_ir",
     "emit_nvfp4_matmul_tile_ir",
-    "emit_int4_matmul_tile_ir",
     "emit_cuda_intrinsic_tile_ir",
-    "emit_paged_kv_read_tile_ir",
     "emit_paged_attention_tile_ir",
     "emit_replay_ssm_tile_ir",
     "emit_moe_tile_ir",
@@ -3764,6 +3731,7 @@ __all__ = [
     "package_bf16_softmax",
     "package_attention",
     "package_attention_backward",
+    "package_scheduled_checkpoint",
     "AttentionCheckpointPair",
     "package_attention_checkpoint_pair",
     "package_attention_lse",
@@ -3779,9 +3747,11 @@ __all__ = [
     "package_f32_softmax",
     "package_nvfp4_matmul",
     "package_int4_matmul",
+    "package_scheduled_int4_matmul",
     "package_cuda_intrinsic",
     "package_packed_decode",
     "package_paged_kv_read",
+    "package_scheduled_paged_kv",
     "package_paged_attention",
     "package_replay_ssm_kernels",
     "package_moe_kernels",

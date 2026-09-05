@@ -1,10 +1,18 @@
 ---
-last_updated: 2026-06-24
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: landing
 ---
 
 # RTX 5070 Ti (Blackwell sm_120) — Tessera NVIDIA Execution Plan
+
+Current sequencing is owned by the
+[integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Use the [architecture queue](todo.md) for current execution work and the
+[backend audit map](../README.md) for document authority. Dated findings and
+bring-up descriptions below retain their original evidence scope; they are
+not a current fleet-wide support statement.
+
 
 > Second real box (with the Strix Halo machine — `../rocm/STRIX_HALO_EXECUTION_PLAN.md`).
 > Authored 2026-06-17. **This is the Linux/CUDA runner with real silicon that the NVIDIA

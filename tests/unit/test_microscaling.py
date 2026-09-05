@@ -8,7 +8,7 @@ lists), so these are the *contract* + bit-accurate numpy reference. The
 metamorphic invariants (idempotence, power-of-2 scale-invariance, microscaled
 GEMM ≈ fp32 within the format grid) are backend-independent and are the proof a
 future Metal lowering must preserve. See
-docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M3) and the
+docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M3) and the
 deepgemm_compiler_extraction memo (scale layout as IR operand type).
 """
 

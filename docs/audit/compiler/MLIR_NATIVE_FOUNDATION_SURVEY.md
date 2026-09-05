@@ -20,15 +20,16 @@ registries and their generated projections retain status authority.
 The survey inventories all **42 pre-existing top-level Markdown documents**:
 22 plans (14 open, eight landing), 17 references, one snapshot, one theme and
 one index. Eleven archived documents are historical inputs, not active queues.
-This reference makes the live total 43. Counts describe this revision, not
-implementation completeness.
+This reference initially made the live total 43. The subsequent archive
+reconciliation moves two historical documents out: 41 live, 13 archived, with
+all 22 plans still live. Counts do not measure implementation completeness.
 
 Review depth: frontmatter, queue/status sections and dependencies across the
 whole live folder; source tracing at the frontend, package driver, four native
 packagers, emitter interface, CPU JIT, evaluator and parametric-recipe boundary.
 This is not a fresh reproduction of every historical finding or every backend
 packet. The source baseline is main `e2a30df1`, with the plan corrections and
-Apple experiment in pending PR #724 (`1d35284a`). No new kernel proof or paper
+Apple experiment in now-merged PR #724 (`1d35284a`). No new kernel proof or paper
 claim is established here. Source links below name durable symbols; old line
 numbers and device/toolchain assertions in historical reviews need rechecking.
 
@@ -84,14 +85,12 @@ replacing Graph with another independently authored Python object is not closure
 The folder has useful contracts but too many time horizons in its summaries.
 The following discrepancies should not become new implementation work:
 
-- The index's 33-document/16-plan table is stale. Its text also calls the
-  2026-08-29 P1/P2/P3 findings an open queue, while the snapshot's status table
-  says all have source fixes and retains specific device-proof gaps.
-- The snapshot itself disagrees internally: its frontmatter and P3 heading say
-  all device-verified, while its introductory status identifies three unverified
-  P3 rows. Its aggregate count and severity sums also differ. Keep it as a
-  historical snapshot; use individual rows and owning backend proof rather than
-  recreating a 102-item implementation backlog or silently certifying closure.
+- The index has been recounted after archiving the superseded review snapshot
+  and typing inventory: 41 live documents, 13 archived. No active plan is closed.
+- The archived snapshot now separates 103 listed severity rows from its original
+  102-confirmed aggregate and resolves stale P3/dropout statements against later
+  backend records. Allocation-failure injection and broader P2 backend proof
+  remain live; see the owning audit's archive reconciliation.
 - `SCHEDULE_OBJECT_DESIGN.md` still proposes SO-3/SO-4 work whose bounded shared
   objectives the integrated plan records as landed. `CORE_SUBSTRATE_VIEW.md`
   still calls FORGE locality/residency unowned, while the integrated layout
@@ -106,7 +105,7 @@ The following discrepancies should not become new implementation work:
   No plan is closed or archived by this survey. Closure needs the residual
   acceptance tests and the owning audit's summary.
 
-## Disposition of every existing live document
+## Disposition of the original live-document cohort
 
 “Residual” below is a scoped planning disposition, not newly executed proof.
 Where only documentary evidence was inspected, the next route inventory must
@@ -149,13 +148,13 @@ verify reachability and exact tests before scheduling a deletion.
 | `DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | reference | Rule/transform/evaluator requirements; do not reopen documented implementation fixes without reproduction. |
 | `MATRIX_CALCULUS_REVIEW.md` | reference | Degeneracy, structural and higher-order oracles; separate existing remediation from native transform needs. |
 | `W1_1_TYPING_DESIGN.md` | reference | Binding typed Tile/layout/numeric-policy semantics; preserve unknown-case refusal. |
-| `W1_1_TYPING_INVENTORY.md` | reference | Historical producer census; refresh by actual route in the first foundation slice. |
+| `archive/W1_1_TYPING_INVENTORY.md` | archived reference | Superseded census; current source census below and typing design retain the NVIDIA residual. |
 | `LSE_CHECKPOINT_CONTRACT.md` | reference | Reuse saved/recomputed state and backward ABI as a paired-program witness; per-target evidence remains independent. |
 | `SEQUENCE_MIXER_THEORY.md` | reference | Semantic transitions/state/reassociation contracts, not a second lowering implementation. |
 | `TILESIGHT_ASSESSMENT.md` | reference | Calibrate and constrain analytical pruning; measured target latency remains promotion authority. |
 | `TILERT_ASSESSMENT.md` | reference | Composition/overlap constraints feed the existing schedule; no new queue/runtime hierarchy. |
 | `AMD_KERNEL_COMPILER_SURVEY.md` | reference | Algorithm options for native ROCm generators, not a mandate to import an alternative compiler stack. |
-| `CODE_REVIEW_2026-08-29.md` | snapshot | Source fixes largely recorded closed; reconcile conflicting aggregate/device claims before using any row as current evidence. |
+| `archive/CODE_REVIEW_2026-08-29.md` | archived snapshot | Reconciled historical source/device dispositions; unresolved fault-injection and P2 obligations remain owned in live queues. |
 
 ## Desired execution boundary
 
@@ -184,3 +183,14 @@ The integrated plan specifies the ordered cuts, backend endpoints and stop
 conditions. The initial deliverable is a refreshed *route* inventory and one
 native replay slice, not a new registry, another set of Python lowerers, or a
 blanket rewrite of all working generators.
+
+## Typing inventory replacement — 2026-09-04
+
+Source checks superseding the archived August census:
+
+| Current source fact | Migration consequence / owner |
+|---|---|
+| `src/compiler/ir/TileOps.cpp::MMAOp::verify` filters data operands, rejects unknown fragment types and calls `verifyMMAFromTypes`. Its separate tensor-value lane checks rank, types, arity and accumulator compatibility. | No permissive bare-fragment branch remains to delete. W1.1 owns eventual tensor-value lane retirement after its actual callers migrate. |
+| `GenerateWMMAGemmKernel.cpp` constructs parameterized A/B/accumulator fragment types; its typed view/pack/zero/MMA chain is a real producer. | The inventory's “zero typed C++ producers” premise is obsolete. Preserve the existing typed ROCm path and its regression gates. |
+| `src/transforms/lib/TileIRLoweringPass.cpp` still has two `OperationState(..., "tile.mma")` tensor-valued construction sites. | W1.1 / IR-NATIVE-FOUNDATION-1 F2: migrate both to the logical/typed boundary and prove NVIDIA lowering before removing the value lane. Constructor-site presence was checked; this is not a new device execution result. |
+| The typing design's completion ledger retains NVIDIA producer/Target proof and the separately checked tensor lane as its residuals. | Keep `W1_1_TYPING_DESIGN.md` live. The old inventory is historical; no plan closure or native capability promotion follows. |

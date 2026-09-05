@@ -260,7 +260,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "the loss magnitude, clip the gradients, or widen the gradient "
             "dtype — raising GradScaler(init_scale=...) cannot help."
         ),
-        spec="docs/audit/compiler/CODE_REVIEW_2026-08-29.md",
+        spec="docs/audit/compiler/archive/CODE_REVIEW_2026-08-29.md",
         sprint="CODE-REVIEW-2026-08-29", language="python",
     ),
     DiagnosticCode(

@@ -1,18 +1,20 @@
 ---
 title: Full Code Review — 2026-08-29 (logic · mathematical correctness · algorithms · performance)
-last_updated: 2026-08-29
+last_updated: 2026-09-04
 scope: Python numeric core (autodiff · RNG/quantization · losses/optimizers · fusion + four backend emitters) · MLIR passes (linalg lowering · autodiff · tiling · analysis · legality · solver dialects)
-status: 102 findings confirmed by an independent refutation pass; all four severity tiers closed and device-verified
+status: archived source-review snapshot; see 2026-09-04 reconciliation for bounded device evidence
 audit_role: snapshot
 ---
 
 # Tessera full code review — logic, mathematical correctness, algorithms, performance
 
 > **Status.** All four tiers have fixes committed: P0 (9), P1 (36), P2 (42), P3 (16).
-> Three P3 rows are fixed in source but **not device-verified** — see that section.
+> The previously unverified P3 executions and rank-4 dropout lit fixture have
+> later backend evidence; allocation-failure injection remains open. See the
+> archive reconciliation below.
 > Route work through
-> [`README.md`](README.md)'s authority chain; the generated dashboards in
-> `../generated/` remain the primary status evidence (Decision #26).
+> [`README.md`](../README.md)'s authority chain; the generated dashboards in
+> `../../generated/` remain the primary status evidence (Decision #26).
 >
 > **A source-level fix is not a device claim.** Every batch was written and
 > tested on hosts that do not have all four targets, so the per-backend todos
@@ -22,9 +24,9 @@ audit_role: snapshot
 > | Severity | Closed in | Outcome |
 > |---|---|---|
 > | P0 · 9 | PR #635 | all 9 fixed |
-> | P1 · 36 | PRs #636, #637, #638, the P3 batch, and the deferred-P1 batch | all 36 fixed. The last 2 — Adafactor bias correction and the rank-4 dropout per-instance seed — were deferred 2026-08-29 with ABI reasoning that **did not survive re-examination**: neither needed a kernel ABI change. Both fixed 2026-08-30; see their rows. The dropout row's severity was also corrected downward (the executing gfx1151 lane was already iid across batch/head; the defect was in the Tile-IR contract). The rank-4 dropout fix is **not yet lit-verified on the ROCm box** |
+> | P1 · 36 | PRs #636, #637, #638, the P3 batch, and the deferred-P1 batch | all 36 fixed. The last 2 — Adafactor bias correction and the rank-4 dropout per-instance seed — were deferred 2026-08-29 with ABI reasoning that **did not survive re-examination**: neither needed a kernel ABI change. Both fixed 2026-08-30; see their rows. The dropout row's severity was also corrected downward (the executing gfx1151 lane was already iid across batch/head; the defect was in the Tile-IR contract). The rank-4 dropout fixture subsequently passed on ROCm; see archive reconciliation |
 > | P2 · 42 | PR #640 | 39 fixed; 3 needed no change — two had already been fixed by the P0 batch and the review quoted the pre-fix body, one (`AutodiffPass.cpp:199`) was closed by the P0 seed-type fix |
-> | P3 · 16 | the P3 batch | all 16 fixed in source; 13 host-measured, **3 device-unverified** (see the P3 section); 2 of the 16 were correctness defects, not improvements |
+> | P3 · 16 | the P3 batch | all 16 have recorded source dispositions; the three formerly unverified P3 executions have later backend evidence. Fault injection remains separate; 2 of the 16 were correctness defects, not improvements |
 >
 > The three P2 rows that needed no change are worth keeping visible rather than
 > deleting: they are the cost of reviewing a moving tree, and each was
@@ -36,6 +38,30 @@ audit_role: snapshot
 > most are cases where an ODS verifier already rejects the input a reviewer
 > assumed reachable.
 
+
+
+## Archive reconciliation — 2026-09-04
+
+Archived as a superseded review snapshot, not as a blanket backend certificate.
+The owning [compiler audit](../COMPILER_AUDIT.md#archive-reconciliation--2026-09-04)
+records closure and surviving obligations. Existing backend records under
+`P3-DEVICE-VERIFIED-2026-08-30` document the NVIDIA CG/GMRES split after a measured
+regression, normal-path flash-backward execution, ROCm batch FFT execution and
+the rank-4 dropout lit fixture. These are retained historical results, not new
+measurements performed while archiving.
+
+NVIDIA allocation-failure cleanup injection remains open under
+`P3-SOURCE-ONLY-2026-08-30` / `DISPATCH-BREAKER` in the NVIDIA queue. Broader
+`P2-REVIEW-SHARED-PASSES-2026-08-29` backend proof obligations remain in the four
+live queues; do not infer their closure from the P3 runs.
+
+The current file contains 9/36/42/16 severity headings: **103 listed rows**.
+The original raw-summary paragraph below says 102 confirmed and P2=41; those
+are historical totals from an earlier version, not the current row census.
+This reconciliation does not assert 103 unique new defects: the P2 status table
+already records three rows requiring no further change. Per-row disposition is
+authoritative over either historical aggregate. Superseded reproductions and
+source-only statements below are retained as provenance.
 
 Generated 2026-08-28. 17 review units, each swept across four dimensions by a dedicated agent, then every finding adversarially re-checked by a second agent that tried to refute it.
 
@@ -1206,18 +1232,18 @@ By dimension: logic 56 · math 24 · algorithm 7 · performance 15.
 **Independently verified:** AsyncPrefetch.cpp:33-40 + 77-84: producesOperandOf compares prev->getResults() against op->getOperands() only, and the hoist at line 81 fires whenever prev is non-terminator and that SSA test is false. A zero-result writer — memref.store, a linalg op on memrefs, a collective writing a buffer — always fails the test, so the prefetch moves above the write. Nothing restricts the prefetch source to value semantics: Schedule_PrefetchOp takes AnyType:$source (ScheduleMeshPipelineOps.td:556-566) and its verifier (ScheduleDialect.cpp:748-757) checks only type preservation, non-empty `into`, and the overlap enum — a memref source is legal. The pass also never consults MemoryEffectOpInterface for prev or for the prefetch, and the pass runs on a plain module walk with no bufferization ordering constraint, so the header's 'dependency-safe' claim rests on an SSA-only fact (Decision #30, told-not-derived, failing open). The existing fixture (async_prefetch_overlap.mlir) uses only tensor values and comp.matmul, so it does not pin the memref case as intentional. Proposed fix (refuse the hoist when prev has write effects on a buffer the prefetch touches) is the right shape.
 
 
-## P3 — improvement opportunities (16) — CLOSED 2026-08-30, all rows device-verified
+## P3 — improvement opportunities (16) — source fixes and later bounded device evidence
 
 > All 16 fixed, together with the 3 P1 rows that had been left open as
 > performance/scope items. The three rows that were device-unverified on
 > 2026-08-30 have since been measured on their own hardware, and **one of
 > them was a regression the reasoning had missed** — see the Krylov row in
-> `../backend/nvidia/todo.md`. Superseded text follows for the record. `nvidia_cuda.py:626` (flash-backward cleanup),
+> `../../backend/nvidia/todo.md`. Superseded text follows for the record. `nvidia_cuda.py:626` (flash-backward cleanup),
 > `nvidia_solver_krylov.py:79` (warp-per-row matvec) and the ROCm half of the
 > spectral per-frame row are verified only as generated text plus a clean
 > `clang++ -fsyntax-only` parse — no GPU has executed any of them, and this
 > repo does not count a source-level fix as a device claim. The obligations are
-> recorded in `../backend/nvidia/todo.md` and `../backend/rocm/todo.md`; until
+> recorded in `../../backend/nvidia/todo.md` and `../../backend/rocm/todo.md`; until
 > those runs happen, treat those three rows as open on their own hardware.
 >
 > The other thirteen are host-measured on this Mac, and `apple_msl.py:1327`

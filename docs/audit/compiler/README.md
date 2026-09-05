@@ -37,8 +37,7 @@ surface.
 
 ## Re-indexed live tree
 
-The 2026-09-04 survey inventories **43 live Markdown documents** (including
-its new reference) and **11 archived documents**. There are 22 plans: 14 open
+The 2026-09-04 survey inventories **41 live Markdown documents** and **13 archived documents**. There are 22 plans: 14 open
 and eight landing. No lifecycle state was promoted by this survey. Counts are
 revision-specific; frontmatter and the integrated plan determine current state.
 
@@ -47,9 +46,8 @@ revision-specific; frontmatter and the integrated plan determine current state.
 | Index | 1 | Navigation and authority hierarchy. |
 | Theme/audit | 1 | Architecture and evidence narrative. |
 | Plans | 22 | Domain contracts; only the integrated plan sequences across domains. |
-| References | 18 | Rationale, inventories and assessments; not completion evidence. |
-| Snapshot | 1 | Historical review findings; reconcile row-specific proof before reuse. |
-| Archive | 11 | Historical evidence, never an active queue. |
+| References | 17 | Rationale, inventories and assessments; not completion evidence. |
+| Archive | 13 | Historical evidence, never an active queue. |
 
 The complete file-by-file catalog is below. Its practical summary is:
 
@@ -68,11 +66,11 @@ The complete file-by-file catalog is below. Its practical summary is:
 - The four backend `todo.md` files own promotion on Apple, NVIDIA, ROCm, and
   x86. A shared contract can land host-free; exact-device evidence cannot move
   between architectures.
-- [`CODE_REVIEW_2026-08-29.md`](CODE_REVIEW_2026-08-29.md) records source
-  fixes across all severity tiers and specific remaining device-proof gaps.
-  Its aggregate counts and device-verification summaries disagree internally;
-  consult the individual finding and owning backend evidence rather than
-  treating the snapshot as a fresh open-fix queue.
+- The [archived 2026-08-29 review](archive/CODE_REVIEW_2026-08-29.md)
+  has reconciled source/device status and historical counts. Normal P3 device
+  execution and dropout lit proof are recorded; allocation-failure injection
+  and broader backend obligations remain in the live queues. See the
+  [owning audit summary](COMPILER_AUDIT.md#archive-reconciliation--2026-09-04).
 - [`MLIR_NATIVE_FOUNDATION_SURVEY.md`](MLIR_NATIVE_FOUNDATION_SURVEY.md)
   inventories every live compiler document and identifies historical Graph-owned
   packaging, source emitters and their canonical IR migration targets.
@@ -197,12 +195,15 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`IR_STACK_INTEGRATION_REVIEW.md`](IR_STACK_INTEGRATION_REVIEW.md) | IR adjacency and lowering-boundary findings. |
 | [`TARGET_IR_REVIEW.md`](TARGET_IR_REVIEW.md) | Target-dialect typing and target-lowering review. |
 | [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) | Current typed Tile design. |
-| [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md) | Source inventory behind the typing design. |
 | [`LSE_CHECKPOINT_CONTRACT.md`](LSE_CHECKPOINT_CONTRACT.md) | Shared saved/recomputed-LSE identity contract. |
 | [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) | Sequence-mixer semantic model. |
 | [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) | Analytical-model research and candidate-pruning guidance. |
 | [`TILERT_ASSESSMENT.md`](TILERT_ASSESSMENT.md) | TileRT assessment; overlap-scheduling models and W6/T3/T4 composition-layer direction. |
 | [`AMD_KERNEL_COMPILER_SURVEY.md`](AMD_KERNEL_COMPILER_SURVEY.md) | AMD compiler research survey; input to ROCm design, not ROCm evidence. |
+
+The [old typing inventory](archive/W1_1_TYPING_INVENTORY.md) is archived;
+the [current typing census](MLIR_NATIVE_FOUNDATION_SURVEY.md#typing-inventory-replacement--2026-09-04)
+and `W1_1_TYPING_DESIGN.md` retain the NVIDIA producer obligation.
 
 Documents under [`archive/`](archive/) are point-in-time evidence only. This
 includes the superseded

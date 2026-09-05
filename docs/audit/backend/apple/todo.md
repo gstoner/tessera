@@ -7644,3 +7644,16 @@ Sequencing and acceptance are owned by
 Shared change in this slice: architectural migration plan only; runtime, ABI,
 selector and physical schedules are unchanged. Historical routes have explicit
 replacement and deletion gates, not permanent compatibility exemptions.
+
+## Compiler archive handoff — 2026-09-04
+
+The [August review](../../compiler/archive/CODE_REVIEW_2026-08-29.md)
+and [historical typing census](../../compiler/archive/W1_1_TYPING_INVENTORY.md)
+are archived. Their [reconciliation](../../compiler/COMPILER_AUDIT.md#archive-reconciliation--2026-09-04)
+retains unresolved work in live owners; archival does not close this backend's
+`P2-REVIEW-SHARED-PASSES-2026-08-29` proof obligations. This is a documentation
+and diagnostic-specification link change; runtime parity testing is not
+applicable, and no new device evidence is claimed.
+
+No backend execution contract changes in this archive handoff; existing
+shared-pass and native-foundation follow-ups retain their current status.

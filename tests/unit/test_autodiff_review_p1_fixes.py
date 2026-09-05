@@ -1,5 +1,5 @@
 """Regression tests for the P1 autodiff-rule defects found by the 2026-08-29
-review (`docs/audit/compiler/CODE_REVIEW_2026-08-29.md`).
+review (`docs/audit/compiler/archive/CODE_REVIEW_2026-08-29.md`).
 
 Each rule is checked against a finite-difference reference rather than against
 its own algebra, so a re-derivation that is self-consistently wrong still

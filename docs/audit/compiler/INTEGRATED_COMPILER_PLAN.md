@@ -1803,3 +1803,24 @@ The Apple policy experiment is complete for its declared cohort: retain the
 existing default. Lowp MoE ledger admission/cooperative kernel work and an
 assertions-enabled LLVM remain separately owned follow-ups; neither is closed
 by a policy comparison or a fleet visibility probe.
+
+### Archive follow-through — 2026-09-04
+
+The superseded code-review snapshot and typing inventory are archived with
+[owning-audit summaries](COMPILER_AUDIT.md#archive-reconciliation--2026-09-04).
+No new implementation queue is created. Surviving actions remain:
+
+- **W1.1 / foundation F2:** migrate the two tensor-valued MMA constructors in
+  `TileIRLoweringPass` and obtain NVIDIA Target/device proof before deleting
+  the checked tensor-value lane. The old bare-fragment permissive branch is
+  already gone; do not recreate that closed task.
+- **DISPATCH-BREAKER / NVIDIA `P3-SOURCE-ONLY-2026-08-30`:** inject allocation
+  failure in flash-backward cleanup and prove exactly-once release of acquired
+  resources. Recorded normal-path device tests do not establish this case.
+- **`P2-REVIEW-SHARED-PASSES-2026-08-29`:** preserve the existing backend
+  queue obligations and their exact-host acceptance. Reconcile later receipts
+  per row before claiming closure; the P3 closure note is not blanket P2 proof.
+
+Older architecture reviews and overlapping scoped plans remain live during
+reconciliation. Foundation F1 (NVIDIA scheduled matmul Graph re-entry) remains
+the first code migration; archiving neither replaces nor completes it.

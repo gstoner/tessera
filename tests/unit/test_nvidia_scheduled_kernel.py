@@ -84,3 +84,70 @@ def test_nvidia_schedule_does_not_discard_extra_function_work():
     assert changed != artifact.schedule_ir
     with pytest.raises(RuntimeError, match="isolated unary function"):
         run_tessera_opt(find_tessera_opt(), changed, "--tessera-schedule-to-tile")
+
+
+@pytest.mark.parametrize("family", ["softmax", "reduce"])
+def test_direct_unary_clients_use_native_schedule(monkeypatch, family):
+    module = _module(family=family, target="nvidia_sm120")
+    calls = []
+    artifact = object()
+    result = object()
+
+    def lower(value, *, target):
+        assert value is module and target == "nvidia_sm120"
+        calls.append("lower")
+        return artifact
+
+    def package(value, *, pipeline_name):
+        assert value is artifact
+        calls.append("package")
+        return result
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("migrated direct client used Graph emission")
+
+    monkeypatch.setattr(scheduled_kernel, "lower_scheduled_kernel", lower)
+    monkeypatch.setattr(nvidia_native, "package_scheduled_kernel", package)
+    monkeypatch.setattr(nvidia_native, "_package_graph_softmax", forbidden)
+    monkeypatch.setattr(nvidia_native, "_package_graph_reduction", forbidden)
+    assert nvidia_native.package_native(module, pipeline_name="pipeline") is result
+    assert calls == ["lower", "package"]
+
+
+@pytest.mark.parametrize("family", ["softmax", "reduce"])
+def test_direct_migrated_unary_requires_native_compiler(monkeypatch, family):
+    monkeypatch.setattr(scheduled_kernel, "find_tessera_opt", lambda: None)
+    with pytest.raises(RuntimeError, match="requires production tessera-opt"):
+        nvidia_native.package_native(_module(family=family, target="nvidia_sm120"), pipeline_name="pipeline")
+
+
+def test_explicit_cooperative_reduction_keeps_owning_route(monkeypatch):
+    module = _module(family="reduce", target="nvidia_sm120")
+    sentinel = object()
+    calls = []
+
+    def package(value, *, pipeline_name, schedule):
+        calls.append(schedule)
+        return sentinel
+
+    monkeypatch.setattr(nvidia_native, "_package_graph_reduction", package)
+    assert nvidia_native.package_native(module, pipeline_name="pipeline", options={
+        "nvidia_reduction_schedule": "cooperative_128"
+    }) is sentinel
+    assert calls == ["cooperative_128"]
+
+
+@pytest.mark.parametrize("family", ["softmax", "reduce"])
+def test_narrow_direct_unary_retains_unmigrated_route(monkeypatch, family):
+    from tessera.compiler.graph_ir import tensor_ir_type
+
+    module = _module(family=family, target="nvidia_sm120")
+    fn = module.functions[0]
+    fn.args[0].ir_type = tensor_ir_type((2, 3, 5), "fp16")
+    if family == "softmax":
+        fn.result_types[0] = fn.args[0].ir_type
+    sentinel = object()
+    monkeypatch.setattr(scheduled_kernel, "find_tessera_opt", lambda: None)
+    monkeypatch.setattr(nvidia_native, "_package_graph_softmax", lambda *a, **kw: sentinel)
+    monkeypatch.setattr(nvidia_native, "_package_graph_reduction", lambda *a, **kw: sentinel)
+    assert nvidia_native.package_native(module, pipeline_name="pipeline") is sentinel

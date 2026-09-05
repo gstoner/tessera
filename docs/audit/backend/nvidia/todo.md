@@ -6348,3 +6348,26 @@ identical and matched NumPy. Princess-Luna passed 331 focused compiler, audit
 and registry tests with 24 environment skips, including the two enabled gfx1151
 semantic-kernel tests. Three native FileCheck fixtures passed. Mypy reports zero
 errors and Ruff passes. These builds are not assertions-enabled LLVM proof.
+
+## F2 direct unary clients — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The public NVIDIA unary package APIs now enter the same native Schedule/Tile
+boundary as the driver for the migrated f32 envelope. Missing `tessera-opt` is
+an explicit failure for that envelope, not a return to Python kernel emission.
+Private Graph constructors remain for unmigrated dtype/policy cases and retained
+differential baselines; they are not new production routes.
+
+Closed in this cut: direct `package_native`, `package_softmax`,
+`package_f32_softmax` and serial f32 sum/mean/max `package_reduction` callers.
+Narrow softmax/reduction, min, keepdims and cooperative schedules retain their
+previous implementations. Constructor deletion remains blocked on those cases.
+The RTX comparison now launches baseline, direct API and driver artifacts for
+all 12 shape/operation cases; outputs are identical and agree with NumPy. No
+native compiler, runtime ABI, physical schedule or numerical policy changes in
+this follow-through; the prior F2 compiler build is reused.
+
+Validation: 83 focused WSL routing, NVIDIA packaging and audit tests passed;
+mypy retained zero errors and Ruff passed. The 12 RTX comparison cases include
+singleton/tail widths and multiple blocks, with the direct API separately
+launched alongside the driver and retained baseline. Constructor retirement is
+still gated on the remaining dtype/policy envelopes, not on renaming helpers.

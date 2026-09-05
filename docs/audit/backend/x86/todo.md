@@ -4068,3 +4068,14 @@ The wrapper consumer refuses extra function work rather than erasing it.
 Sibling outcome: not applicable to native execution changes. The x86 schedule
 policy is unchanged; shared compiler fixtures cover its existing boundary.
 No new x86 exact-device evidence is claimed. Its F2 families remain open.
+
+## F2 direct unary clients — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The public NVIDIA unary package APIs now enter the same native Schedule/Tile
+boundary as the driver for the migrated f32 envelope. Missing `tessera-opt` is
+an explicit failure for that envelope, not a return to Python kernel emission.
+Private Graph constructors remain for unmigrated dtype/policy cases and retained
+differential baselines; they are not new production routes.
+
+Sibling outcome: not applicable. The x86 package APIs, native passes,
+runtime ABI and numerical policy are unchanged; no device proof transfers.

@@ -29,7 +29,10 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
     fn.body[0].operand_types = [str(fn.args[0].ir_type)]
     fn.body[0].result_type = str(fn.result_types[0])
     fn.body[0].inferred_type = fn.result_types[0]
-    legacy = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    baseline = nvidia_native._package_graph_softmax if kind == "softmax" else nvidia_native._package_graph_reduction
+    legacy = baseline(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    direct = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    assert direct.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
     bundle = compile_graph_module(module, source_origin="F2-native-unary", target="nvidia_sm120",
                                   options={"package_native": True}, enable_tool_validation=False)
     assert bundle.schedule is not None and bundle.tile is not None
@@ -45,6 +48,7 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
     results = []
     for image, descriptor, tile, target in (
         (legacy.image, legacy.descriptor, legacy.tile_ir, legacy.target_ir),
+        (direct.image, direct.descriptor, direct.tile_ir, direct.target_ir),
         (bundle.native_image, bundle.launch_descriptor, bundle.tile.text, bundle.target_ir.text),
     ):
         output = np.empty_like(expected)
@@ -53,5 +57,6 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
         assert result["ok"], result
         np.testing.assert_allclose(output, expected, rtol=2e-5, atol=2e-6)
         results.append(output)
-    np.testing.assert_array_equal(results[0], results[1])
+    for output in results[1:]:
+        np.testing.assert_array_equal(results[0], output)
     assert legacy.descriptor.abi_id == bundle.launch_descriptor.abi_id

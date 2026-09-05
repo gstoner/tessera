@@ -1855,3 +1855,14 @@ This closes the default-driver migration for that envelope, not F2: direct
 Graph clients, narrow dtypes, min/keepdims/cooperative reductions and other
 backends' remaining package families retain explicit retirement obligations.
 See all four backend queues under `IR-NATIVE-FOUNDATION-1` for evidence boundaries.
+
+
+### F2 direct unary entry points — 2026-09-05
+
+The migrated NVIDIA static f32 envelope now shares one native scheduling path
+between driver and direct package clients. Supported requests require the
+native scheduling compiler; they do not silently reconstruct Tile IR when it
+is absent. Narrow dtypes and min/keepdims/cooperative reductions remain explicit
+unmigrated envelopes, with the old implementation retained privately until their
+own comparisons pass. Direct-client migration is closed for f32 softmax and
+serial sum/mean/max; full constructor retirement remains open.

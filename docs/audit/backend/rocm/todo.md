@@ -6667,3 +6667,14 @@ Sibling outcome: parity validated for the existing f32 scheduled softmax and
 reduction tests on Princess-Luna gfx1151 with the explicit device opt-in enabled.
 The ROCm schedule/hash policy is unchanged; no NVIDIA physical schedule transfers.
 Other ROCm Graph-owned families remain follow-up work.
+
+## F2 direct unary clients — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The public NVIDIA unary package APIs now enter the same native Schedule/Tile
+boundary as the driver for the migrated f32 envelope. Missing `tessera-opt` is
+an explicit failure for that envelope, not a return to Python kernel emission.
+Private Graph constructors remain for unmigrated dtype/policy cases and retained
+differential baselines; they are not new production routes.
+
+Sibling outcome: not applicable. The rocm package APIs, native passes,
+runtime ABI and numerical policy are unchanged; no device proof transfers.

@@ -2830,6 +2830,23 @@ def package_reduction(
     pipeline_name: str,
     schedule: str = "serial",
 ) -> NVIDIANativePackage:
+    """Enter native scheduling for the migrated f32 serial envelope."""
+    from . import scheduled_kernel
+
+    if schedule == "serial" and scheduled_kernel.supports_scheduled_kernel(
+        module, target="nvidia_sm120"
+    ) and requests_reduction(module):
+        artifact = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120")
+        return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
+    return _package_graph_reduction(module, pipeline_name=pipeline_name, schedule=schedule)
+
+
+def _package_graph_reduction(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+    schedule: str = "serial",
+) -> NVIDIANativePackage:
     contract = _reduction_contract(module)
     if contract is None:
         raise ValueError(
@@ -3657,6 +3674,22 @@ def package_moe_kernels(
 
 
 def package_softmax(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+) -> NVIDIANativePackage:
+    """Enter native scheduling for f32; retain the unmigrated narrow lane."""
+    from . import scheduled_kernel
+
+    if requests_softmax(module) and scheduled_kernel.supports_scheduled_kernel(
+        module, target="nvidia_sm120"
+    ):
+        artifact = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120")
+        return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
+    return _package_graph_softmax(module, pipeline_name=pipeline_name)
+
+
+def _package_graph_softmax(
     module: GraphIRModule,
     *,
     pipeline_name: str,

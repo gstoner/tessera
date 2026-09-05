@@ -2845,13 +2845,6 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                 or _mlir_f32_bits(epsilon_attr[1]) != _mlir_f32_bits(tile_epsilon[1])
                 or _mlir_f32_bits(epsilon_attr[1]) != struct.pack("f", artifact.epsilon)):
             raise ValueError("scheduled norm epsilon disagrees with native IR")
-        from .scheduled_matmul import find_tessera_opt, run_tessera_opt
-
-        tool = find_tessera_opt()
-        if tool is None:
-            raise RuntimeError("scheduled norm validation requires production tessera-opt")
-        if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
-            raise ValueError("norm Tile IR disagrees with native Schedule replay")
     elif softmax:
         if (artifact.axis != -1 or shape != output_shape or artifact.keepdims is not False
                 or artifact.kind != "softmax" or artifact.schedule != "serial"):
@@ -2887,6 +2880,15 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     types = [] if signature is None else [a.split(":", 1)[-1].strip() for a in signature.group(1).split(",")]
     if artifact.function_name != entry or types != ["!llvm.ptr", "!llvm.ptr"] + ["i64"] * len(scalar_names):
         raise ValueError("NVIDIA scheduled unary Tile entry ABI disagrees")
+    # Serialized Tile text is untrusted even when its attributes and hash match.
+    # Replay every unary family to bind executable dataflow to the Schedule IR.
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled unary validation requires production tessera-opt")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("unary Tile IR disagrees with native Schedule replay")
     lowered, ptx, metrics, compiler, toolchain, libraries, state = _compile_tile_ir(artifact.tile_ir, entry)
     image = NativeImageArtifact(
         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,

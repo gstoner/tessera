@@ -7754,3 +7754,12 @@ consumer. This is planning only: no dialect restoration, capability promotion,
 or new hardware evidence. Existing F2 implementation ordering is unchanged.
 
 Follow-up required for Metal synchronization/residency mapping and Apple owning-host proof; shared legality changes alone do not establish Metal overlap.
+
+
+### Scheduled unary replay review fix — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Not applicable to apple physical lowering: this change is confined to the
+NVIDIA scheduled unary package consumer. Shared IR and runtime ABIs are unchanged.
+Existing apple package validation and owning-host evidence remain separate;
+no sibling replay completeness or performance claim follows from this fix.

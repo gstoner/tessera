@@ -226,3 +226,38 @@ def test_softmax_consumer_refuses_unrelated_policy_fields(fields):
     )
     with pytest.raises(ValueError, match="fixed policy"):
         nvidia_native.package_scheduled_kernel(replace(artifact, **fields), pipeline_name="pipeline")
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
+@pytest.mark.parametrize("family,schedule", [
+    ("softmax", "serial"), ("reduce", "serial"), ("reduce", "cooperative_128"),
+])
+def test_unary_package_rejects_swapped_tile_buffers_before_compilation(family, schedule, monkeypatch):
+    import re
+
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        _module(family=family, target="nvidia_sm120"), target="nvidia_sm120", schedule=schedule)
+    pattern = rf"(tile\.{family}_kernel\s+)(%[\w]+), (%[\w]+)"
+    altered, count = re.subn(pattern, lambda m: f"{m[1]}{m[3]}, {m[2]}", artifact.tile_ir)
+    assert count == 1 and altered != artifact.tile_ir
+    tampered = replace(artifact, graph_ir="discarded", tile_ir=altered)
+    # The forged IR retains the signature, policy attributes and Schedule hash.
+    tampered.validate()
+    monkeypatch.setattr(nvidia_native, "_compile_tile_ir",
+                        lambda *args: pytest.fail("compiled altered Tile dataflow"))
+    with pytest.raises(ValueError, match="native Schedule replay"):
+        nvidia_native.package_scheduled_kernel(tampered, pipeline_name="tessera-nvidia-pipeline-sm120")
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
+@pytest.mark.parametrize("family", ["softmax", "reduce"])
+def test_unary_package_requires_native_replay_compiler(family, monkeypatch):
+    from tessera.compiler import scheduled_matmul
+
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        _module(family=family, target="nvidia_sm120"), target="nvidia_sm120")
+    monkeypatch.setattr(scheduled_matmul, "find_tessera_opt", lambda: None)
+    monkeypatch.setattr(nvidia_native, "_compile_tile_ir",
+                        lambda *args: pytest.fail("compiled without Schedule verification"))
+    with pytest.raises(RuntimeError, match="validation requires production tessera-opt"):
+        nvidia_native.package_scheduled_kernel(artifact, pipeline_name="tessera-nvidia-pipeline-sm120")

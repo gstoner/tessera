@@ -107,3 +107,7 @@ amdgpu-install_*.deb
 # Second build tree for the NVIDIA dialect (ROCm and NVIDIA cannot both
 # register in one tessera-opt).
 build-nvidia/
+
+# Decision #26: CI-generated coverage evidence, reproducible locally.
+/docs/audit/generated/test_coverage.csv
+/docs/audit/generated/test_coverage.md

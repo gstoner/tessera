@@ -29,9 +29,11 @@ def _incumbent(spec: str) -> tuple[str, str]:
 def seal_reports(
     reports: list[dict[str, object]], *, incumbents: dict[str, str],
     valid_days: int = 30, selection_scope: str = STRICT_RUNTIME_ROUTE_SCOPE,
+    cross_run_estimator: str = "mean_student_t",
 ) -> dict[str, object]:
     """Aggregate and seal reports produced by one Apple benchmark family."""
-    stable = aggregate_stable_route_reports(reports, incumbent_routes=incumbents)
+    stable = aggregate_stable_route_reports(
+        reports, incumbent_routes=incumbents, cross_run_estimator=cross_run_estimator)
     return seal_strict_route_ledger(
         stable, reports, valid_days=valid_days, selection_scope=selection_scope,
     )
@@ -48,6 +50,9 @@ def main(argv: list[str] | None = None) -> int:
         choices=(STRICT_RUNTIME_ROUTE_SCOPE, STRICT_PACKAGE_SUBGRAPH_SCOPE),
         default=STRICT_RUNTIME_ROUTE_SCOPE,
     )
+    parser.add_argument("--cross-run-estimator",
+                        choices=("mean_student_t", "median_order_statistic"),
+                        default="mean_student_t")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     if len(args.reports) < 2:
@@ -57,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     reports = [json.loads(path.read_text(encoding="utf-8")) for path in args.reports]
     ledger = seal_reports(reports, incumbents=dict(args.incumbent_route),
                           valid_days=args.valid_days,
-                          selection_scope=args.selection_scope)
+                          selection_scope=args.selection_scope,
+                          cross_run_estimator=args.cross_run_estimator)
     args.output.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n",
                            encoding="utf-8")
     return 0

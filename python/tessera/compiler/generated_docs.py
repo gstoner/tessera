@@ -38,7 +38,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
@@ -481,6 +482,8 @@ class GeneratedDoc:
     render_csv: Optional[Callable[[], str]] = None
     gated: bool = True
     also_gate_md: bool = False
+    # False: render/check in isolation; CI publishes revision-bound evidence.
+    committed: bool = True
 
     @property
     def canonical_path(self) -> Path:
@@ -632,6 +635,7 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         "test_coverage", "test_coverage", _GEN / "test_coverage.md",
         _r_test_coverage_md,
         csv_path=_GEN / "test_coverage.csv", render_csv=_r_test_coverage_csv,
+        committed=False, also_gate_md=True,
     ),
     # ── Specialized ──
     GeneratedDoc(
@@ -706,13 +710,17 @@ def _select(names: Sequence[str]) -> tuple[GeneratedDoc, ...]:
 def write(doc: GeneratedDoc) -> list[Path]:
     """(Re)generate ``doc`` on disk.  Writes the CSV (if any) and the
     Markdown.  Returns the paths written."""
+    markdown = doc.render_md()
+    csv_text = doc.render_csv() if doc.render_csv else None
+    if not markdown.strip() or (csv_text is not None and not csv_text.strip()):
+        raise ValueError(f"{doc.name}: generated evidence is empty")
     written: list[Path] = []
     doc.md_path.parent.mkdir(parents=True, exist_ok=True)
     if doc.csv_path is not None and doc.render_csv is not None:
         doc.csv_path.parent.mkdir(parents=True, exist_ok=True)
-        doc.csv_path.write_text(doc.render_csv())
+        doc.csv_path.write_text(csv_text or "")
         written.append(doc.csv_path)
-    doc.md_path.write_text(doc.render_md())
+    doc.md_path.write_text(markdown)
     written.append(doc.md_path)
     return written
 
@@ -722,10 +730,19 @@ def check(doc: GeneratedDoc) -> Optional[str]:
     message.  Non-gated docs always return ``None``."""
     if not doc.gated:
         return None
+    if not doc.committed:
+        # CI owns these artifacts. A clean checkout need not contain them;
+        # exercise both renderers and verify repeatable output in isolation.
+        with tempfile.TemporaryDirectory(prefix="tessera-coverage-") as directory:
+            local = replace(doc, committed=True,
+                            md_path=Path(directory) / doc.md_path.name,
+                            csv_path=Path(directory) / doc.csv_path.name if doc.csv_path else None)
+            write(local)
+            return check(local)
     target = doc.canonical_path
     if not target.exists():
         return (
-            f"{doc.name}: {target.relative_to(_REPO_ROOT)} does not exist — "
+            f"{doc.name}: {target} does not exist — "
             f"run `python -m tessera.compiler.generated_docs --write {doc.name}`"
         )
     # Build the list of (artifact path, live text) pairs to byte-compare. The
@@ -738,7 +755,7 @@ def check(doc: GeneratedDoc) -> Optional[str]:
     for art, live in pairs:
         if not art.exists():
             return (
-                f"{doc.name}: {art.relative_to(_REPO_ROOT)} does not exist — "
+                f"{doc.name}: {art} does not exist — "
                 f"run `python -m tessera.compiler.generated_docs --write {doc.name}`"
             )
         on_disk = art.read_text()
@@ -751,7 +768,7 @@ def check(doc: GeneratedDoc) -> Optional[str]:
         )
         near = disk_lines[idx] if idx < len(disk_lines) else "<EOF>"
         return (
-            f"{doc.name}: drift in {art.relative_to(_REPO_ROOT)} at line {idx + 1} "
+            f"{doc.name}: drift in {art} at line {idx + 1} "
             f"(on-disk: {near!r}) — regenerate with "
             f"`python -m tessera.compiler.generated_docs --write {doc.name}`"
         )

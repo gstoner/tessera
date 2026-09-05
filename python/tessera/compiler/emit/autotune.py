@@ -209,6 +209,8 @@ class MeasureCache:
 
     def get(self, key: tuple[Any, ...]) -> MeasureRecord | None:
         rec = self._store.get(_normalize_key(key))
+        if rec is not None and not _uninstrumented_measurement(rec):
+            rec = None
         if rec is not None:
             self.hits += 1
         else:
@@ -216,6 +218,8 @@ class MeasureCache:
         return rec
 
     def put(self, key: tuple[Any, ...], rec: MeasureRecord) -> None:
+        if not _uninstrumented_measurement(rec):
+            raise ValueError("intra-kernel instrumented evidence cannot select a kernel")
         self._store[_normalize_key(key)] = rec
 
     def clear(self) -> None:
@@ -253,6 +257,8 @@ class MeasureCache:
         for r in payload.get("records", ()):
             key = _key_from_json(r)
             record = MeasureRecord.from_json(r)
+            if not _uninstrumented_measurement(record):
+                continue
             if not _evidence_matches(key, record, required_evidence):
                 continue
             if not overwrite and key in self._store:
@@ -472,6 +478,14 @@ def _infer_dims(op: str, inputs: tuple[Any, ...]) -> tuple[int, ...] | None:
     return None
 
 
+def _uninstrumented_measurement(rec: MeasureRecord) -> bool:
+    # Existing D2 records predate in-kernel instrumentation and retain L0
+    # semantics. L1 is the provider's kernel-boundary timer. L2/L3 timings
+    # explain execution but must never choose a production implementation.
+    level = rec.evidence.get("instr_level", 0)
+    return type(level) is int and level in (0, 1)
+
+
 def record_is_admissible(rec: MeasureRecord) -> bool:
     """Whether a persisted record may be served as a dispatch hint.
 
@@ -499,6 +513,8 @@ def record_is_admissible(rec: MeasureRecord) -> bool:
     competitor -- it marks "could not be timed" -- so a row with one latency
     and one `inf` is a sole-candidate row wearing a pair's clothes.
     """
+    if not _uninstrumented_measurement(rec):
+        return False
     if rec.is_separated() is False:
         return False
     if rec.evidence.get("selector_eligible") is False:

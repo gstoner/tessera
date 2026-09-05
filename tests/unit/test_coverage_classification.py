@@ -362,3 +362,19 @@ def test_dashboard_pins_canonical_phrases() -> None:
         assert phrase in text, (
             f"Classification dashboard missing canonical phrase {phrase!r}"
         )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def generated_coverage_dashboard(tmp_path_factory):
+    """Inspect a fresh artifact without relying on a committed snapshot."""
+    from dataclasses import replace
+    from tessera.compiler import generated_docs as gd
+    global DASHBOARD
+    previous = DASHBOARD
+    directory = tmp_path_factory.mktemp("coverage")
+    doc = replace(gd.get("test_coverage"), md_path=directory / "test_coverage.md",
+                  csv_path=directory / "test_coverage.csv")
+    gd.write(doc)
+    DASHBOARD = doc.md_path
+    yield
+    DASHBOARD = previous

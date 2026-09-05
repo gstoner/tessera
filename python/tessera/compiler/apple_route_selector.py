@@ -204,7 +204,7 @@ SPEEDUP_CONFIDENCE_LEVEL = 0.95
 def speedup_confidence_interval(
     per_run_speedups: Sequence[float],
 ) -> tuple[float, float] | None:
-    """95% interval for the mean per-run median speedup, or ``None`` under two runs.
+    """One-sided 95% bounds for mean run speedup, or ``None`` under two runs.
 
     The bounds answer the two questions a route decision actually asks: is the
     win big enough to be worth taking (lower bound), and can a qualifying win
@@ -221,6 +221,39 @@ def speedup_confidence_interval(
     return (mean - margin, mean + margin)
 
 
+def median_speedup_confidence_interval(
+    per_run_speedups: Sequence[float],
+) -> tuple[float, float] | None:
+    """Exact order-statistic bounds, each with at least 95% one-sided coverage.
+
+    Estimates the population median of independent run medians, not the mean.
+    Choose the largest k with P(Binomial(n, .5) < k) <= .05. No trimming,
+    interpolation, or Gaussian approximation; fewer than five runs cannot
+    provide finite bounds. Ties make coverage conservative.
+    """
+    values = sorted(float(value) for value in per_run_speedups)
+    if any(not math.isfinite(value) for value in values):
+        return None
+    n = len(values)
+    tail = 0
+    rank = 0
+    for k in range(1, n // 2 + 1):
+        tail += math.comb(n, k - 1)
+        if 20 * tail <= 2 ** n:
+            rank = k
+        else:
+            break
+    return (values[rank - 1], values[-rank]) if rank else None
+
+
+def _policy_interval(values: Sequence[float], estimator: str) -> tuple[float, float] | None:
+    if estimator == "mean_student_t":
+        return speedup_confidence_interval(values)
+    if estimator == "median_order_statistic":
+        return median_speedup_confidence_interval(values)
+    raise ValueError(f"unsupported cross-run estimator: {estimator}")
+
+
 def speedup_lower_confidence_bound(per_run_speedups: Sequence[float]) -> float | None:
     """One-sided 95% lower bound on the mean of per-run median speedups.
 
@@ -233,10 +266,8 @@ def speedup_lower_confidence_bound(per_run_speedups: Sequence[float]) -> float |
     obvious response to an irreproducible decision -- made a true winner less
     promotable, and re-recording until it passed was selection on noise.
 
-    A lower confidence bound converges instead: more runs shrink the interval
-    toward the true mean, so evidence can only help a route that is genuinely
-    faster, and can never rescue one whose speedup is indistinguishable from
-    noise. Returns ``None`` when fewer than two runs make dispersion
+    A lower confidence bound converges under its independent-run model;
+    individual added runs can still widen it or change the estimate. Returns ``None`` when fewer than two runs make dispersion
     unmeasurable -- unprovable is not the permissive answer (Decision #30).
     """
     interval = speedup_confidence_interval(per_run_speedups)
@@ -277,10 +308,15 @@ def promotion_rule_violations(
         return [f"missing_evidence_for:{selected}"]
 
     violations: list[str] = []
+    estimator = rules.get("cross_run_estimator", "mean_student_t")
+    if estimator not in ("mean_student_t", "median_order_statistic"):
+        violations.append("unsupported_cross_run_estimator")
 
     def _threshold(name: str) -> float | None:
         value = rules.get(name)
-        return float(value) if isinstance(value, (int, float)) else None
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None
+        return float(value) if math.isfinite(value) else None
 
     min_speedup = _threshold("minimum_speedup_fraction_each_run")
     min_win = _threshold("minimum_paired_win_fraction_each_run")
@@ -393,6 +429,14 @@ def promotion_rule_violations(
             violations.append("no_speedup_lower_confidence_bound")
         elif bound < min_bound:
             violations.append(f"speedup_lower_bound_below_minimum:{bound!r}")
+        if estimator == "median_order_statistic":
+            if not isinstance(medians, list) or any(
+                    not isinstance(v, (int, float)) or not math.isfinite(v) for v in medians):
+                violations.append("invalid_median_bound_inputs")
+            else:
+                derived = median_speedup_confidence_interval(medians)
+                if derived is None or bound != derived[0]:
+                    violations.append("median_bound_does_not_match_runs")
         if (min_runs is not None and isinstance(medians, list)
                 and len(medians) < int(min_runs)):
             violations.append(
@@ -858,6 +902,7 @@ def aggregate_stable_route_reports(
     min_paired_win_fraction: float = 0.75,
     max_speedup_spread: float = 0.05,
     min_promotion_runs: int = 3,
+    cross_run_estimator: str = "mean_student_t",
 ) -> dict[str, Any]:
     """Build an evidence ledger from two or more independent warm reports.
 
@@ -880,12 +925,15 @@ def aggregate_stable_route_reports(
     only way to land a promotion was to re-record until the draw was
     favourable -- selecting on noise, which is what this gate existed to stop.
 
-    The bound converges on the true mean instead, so more runs can only help a
-    route that is really faster and can never rescue one whose speedup is
-    noise. ``max_speedup_spread`` is still computed and retained, but it is now
+    The mean bound is sensitive to outliers. The explicit opt-in
+    ``median_order_statistic`` policy instead bounds the population median,
+    requires at least five runs for finite bounds, and retains all per-run
+    safety floors. No run is discarded. Policies are recorded in the ledger;
+    the default and previously sealed ledgers retain the mean policy. ``max_speedup_spread`` is still computed and retained, but it is now
     diagnostic: like absolute clock drift, it describes the measurement without
     deciding the route.
     """
+    _policy_interval([], cross_run_estimator)  # Validate before reading reports.
     if len(reports) < 2:
         raise ValueError("stable route selection requires at least two reports")
     if not 0.0 <= min_speedup < 1.0:
@@ -987,7 +1035,8 @@ def aggregate_stable_route_reports(
                         for values in paired_speedups]
                     spread = ((max(median_speedups) - min(median_speedups))
                               if median_speedups else None)
-                    lower_bound = speedup_lower_confidence_bound(median_speedups)
+                    policy_interval = _policy_interval(median_speedups, cross_run_estimator)
+                    lower_bound = None if policy_interval is None else policy_interval[0]
                     route_evidence["paired_speedups_vs_incumbent"] = paired_speedups
                     route_evidence["paired_median_speedups"] = median_speedups
                     route_evidence["paired_win_fractions"] = win_fractions
@@ -1050,7 +1099,7 @@ def aggregate_stable_route_reports(
                     # this M1 Max, `retune_moe_swiglu` 16x32x64x32_e4 records
                     # +50.6% loaded against +52% quiet). What this state is for
                     # is evidence that genuinely does not agree with itself.
-                    interval = speedup_confidence_interval(median_speedups)
+                    interval = _policy_interval(median_speedups, cross_run_estimator)
                     route_evidence["speedup_confidence_interval"] = (
                         list(interval) if interval else None)
                     route_evidence["stability_verdict"] = (
@@ -1111,6 +1160,7 @@ def aggregate_stable_route_reports(
             "paired_win_fraction_each_run_is_strict": True,
             "minimum_speedup_lower_confidence_bound": min_speedup,
             "speedup_confidence_level": SPEEDUP_CONFIDENCE_LEVEL,
+            "cross_run_estimator": cross_run_estimator,
             "minimum_promotion_runs": min_promotion_runs,
             "cross_run_speedup_spread_is_diagnostic_only": True,
             "maximum_cross_run_speedup_spread": max_speedup_spread,
@@ -1215,6 +1265,7 @@ __all__ = [
     "select_route",
     "seal_strict_route_ledger",
     "speedup_confidence_interval",
+    "median_speedup_confidence_interval",
     "speedup_lower_confidence_bound",
     "SPEEDUP_CONFIDENCE_LEVEL",
 ]

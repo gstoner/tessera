@@ -7846,3 +7846,11 @@ is a CUDA-specific matched wait ablation. Physical schedule parity is not
 applicable here: this backend does not consume the SM120 `cp.async`/MMA kernel.
 No runtime, selector or shared ownership contract changes in this experiment;
 existing backend-specific lifetime follow-ups remain open.
+
+**PR #729 review correction — IR-NATIVE-FOUNDATION-1:** forwarded TMA
+descriptors now contribute all derivable source allocations to lifetime checks;
+unknown descriptor origins fail closed. Arena diagnostics register both emitting
+passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
+now explicitly selects the consumed NVIDIA lowerer and restores its environment.
+Shared verifier/registry validation applies to this backend; no new device or
+physical schedule proof is claimed by this correction.

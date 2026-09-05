@@ -6842,3 +6842,11 @@ Follow-up required on gfx1151: choose an ISA-supported asynchronous producer and
 measure its own wait/compute protocol. The existing HIP ring was synchronous;
 CUDA `cp.async` timing and synchronization do not establish ROCm parity. Shared
 benchmark-control regressions run on Princess-Luna WSL; no new ROCm device result.
+
+**PR #729 review correction — IR-NATIVE-FOUNDATION-1:** forwarded TMA
+descriptors now contribute all derivable source allocations to lifetime checks;
+unknown descriptor origins fail closed. Arena diagnostics register both emitting
+passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
+now explicitly selects the consumed NVIDIA lowerer and restores its environment.
+Shared verifier/registry validation applies to this backend; no new device or
+physical schedule proof is claimed by this correction.

@@ -6514,9 +6514,9 @@ Unknown origins/regions and loop-token generation remain conservatively gated;
 see the integrated plan's matching section for the exact admission boundary.
 NVIDIA owns CUDA-event and end-to-end native-image regression comparison on Super-Bear; no schedule or selector change.
 
-Owning-host comparison recorded in `benchmarks/baselines/allocation_lifetime_nvidia.json`:
-outputs match the oracle and baseline/candidate native images are identical.
-See the integrated plan for timings and clock domains; no selector promotion.
+The comparison in `benchmarks/baselines/allocation_lifetime_nvidia.json` is
+withdrawn: the supplied core compiler hashes did not identify the NVIDIA lowerers
+actually selected. New exact-host comparison evidence is required.
 
 
 ### Dynamic completion generations and memref arena proof — 2026-09-05
@@ -6532,9 +6532,9 @@ selector or architecture schedule changes.
 
 Follow-up required: SM120 lowering and measured slot/phase protocol/resource proof for a producer using the new dynamic completion edges. Existing attention image/oracle regression is recorded separately; it is not queue throughput evidence.
 
-Final compiler regression: `benchmarks/baselines/token_memref_nvidia.json`
-records passing numerical oracles and byte-identical native images. It measures
-existing routes, not performance of the newly admitted rolling-token protocol.
+`benchmarks/baselines/token_memref_nvidia.json` is also withdrawn for the native
+compiler-selection defect. No before/after claim is retained from this packet;
+the independently recorded ring and async GEMM experiments are unaffected.
 
 
 ### Structured-path reuse, private borrowing and device ring experiment — 2026-09-05
@@ -6562,3 +6562,11 @@ scheduling interpretation. Follow-up required: generic release-token integration
 independent runs, and sanitizer validation (WDDM debugger initialization blocked).
 No selector promotion. Sibling ROCm needs its own physical producer; Apple/x86
 schedule parity is not applicable to this CUDA-only experiment.
+
+**PR #729 review correction — IR-NATIVE-FOUNDATION-1:** forwarded TMA
+descriptors now contribute all derivable source allocations to lifetime checks;
+unknown descriptor origins fail closed. Arena diagnostics register both emitting
+passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
+now explicitly selects the consumed NVIDIA lowerer and restores its environment.
+Shared verifier/registry validation applies to this backend; no new device or
+physical schedule proof is claimed by this correction.

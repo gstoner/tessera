@@ -7,6 +7,7 @@ from code generation; timings are observations, not evidence of a queue speedup.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -18,12 +19,34 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 
+@contextmanager
+def selected_nvidia_compiler(compiler):
+    """Select the consumed native lowerer, independently of the core compiler."""
+    from tessera.compiler import nvidia_native
+    key = "TESSERA_NVIDIA_OPT"
+    previous = os.environ.get(key)
+    os.environ[key] = str(compiler)
+    nvidia_native._cache.clear()
+    try:
+        selected = nvidia_native._tool("tessera-nvidia-opt")
+        if selected is None or selected.resolve() != compiler.resolve():
+            raise RuntimeError("NVIDIA compiler selection disagrees with requested binary")
+        yield selected
+    finally:
+        if previous is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = previous
+        nvidia_native._cache.clear()
+
+
 def record(args):
     compilers = {name: Path(getattr(args, name)).resolve() for name in ("before", "after")}
     for compiler in compilers.values():
         if not compiler.is_file():
             raise RuntimeError(f"missing compiler: {compiler}")
     result = {
+        "compiler_role": "tessera-nvidia-opt" if args.backend == "nvidia" else "tessera-opt",
         "schema": "tessera.allocation-lifetime-comparison.v1",
         "sync_key": "IR-NATIVE-FOUNDATION-1",
         "backend": args.backend,
@@ -35,7 +58,6 @@ def record(args):
         import numpy as np
         from benchmarks.nvidia.record_lse_checkpoint import _compile, _sample
         from tests.device.nvidia.test_lse_checkpoint_native import _forward_module, _backward_module, _reference
-        from tessera.compiler import nvidia_native
         import subprocess
         result["device"] = subprocess.check_output(
             ["nvidia-smi", "--query-gpu=name,uuid,driver_version", "--format=csv,noheader"], text=True
@@ -49,25 +71,24 @@ def record(args):
         expected, expected_lse, grads = _reference(q, k, v, do)
         packets = {}
         for variant, compiler in compilers.items():
-            os.environ["TESSERA_OPT"] = str(compiler)
-            nvidia_native._cache.clear()
-            output, lse = np.empty_like(q), np.empty((1, 2, 8), np.float32)
-            dq, dk, dv = np.empty_like(q), np.empty_like(k), np.empty_like(v)
-            scalars = dict(zip(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"), shape, strict=True))
-            forward = {"q": q, "k": k, "v": v, "o": output, "row_lse": lse, **scalars}
-            backward = {"q": q, "k": k, "v": v, "do": do, "row_lse": lse,
-                        "dq": dq, "dk": dk, "dv": dv, **scalars}
-            rows = []
-            for stage, make_module, bindings in (("forward", _forward_module, forward),
-                                                  ("backward", _backward_module, backward)):
-                module = make_module(saved=True, shape=shape)
-                bundle = _compile(module)
-                row = _sample(bundle, module, bindings, samples=args.samples, reps=args.reps, warmup=10)
-                row.update(stage=stage, image_digest=bundle.native_image.image_digest)
-                rows.append(row)
-            for actual, reference in zip((output, lse, dq, dk, dv), (expected, expected_lse, *grads), strict=True):
-                np.testing.assert_allclose(actual, reference, rtol=3e-4, atol=3e-5)
-            packets[variant] = {"rows": rows, "oracle": "forward/LSE/dQ/dK/dV allclose", "shape": shape}
+            with selected_nvidia_compiler(compiler):
+                output, lse = np.empty_like(q), np.empty((1, 2, 8), np.float32)
+                dq, dk, dv = np.empty_like(q), np.empty_like(k), np.empty_like(v)
+                scalars = dict(zip(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"), shape, strict=True))
+                forward = {"q": q, "k": k, "v": v, "o": output, "row_lse": lse, **scalars}
+                backward = {"q": q, "k": k, "v": v, "do": do, "row_lse": lse,
+                            "dq": dq, "dk": dk, "dv": dv, **scalars}
+                rows = []
+                for stage, make_module, bindings in (("forward", _forward_module, forward),
+                                                      ("backward", _backward_module, backward)):
+                    module = make_module(saved=True, shape=shape)
+                    bundle = _compile(module)
+                    row = _sample(bundle, module, bindings, samples=args.samples, reps=args.reps, warmup=10)
+                    row.update(stage=stage, image_digest=bundle.native_image.image_digest)
+                    rows.append(row)
+                for actual, reference in zip((output, lse, dq, dk, dv), (expected, expected_lse, *grads), strict=True):
+                    np.testing.assert_allclose(actual, reference, rtol=3e-4, atol=3e-5)
+                packets[variant] = {"rows": rows, "oracle": "forward/LSE/dQ/dK/dV allclose", "shape": shape}
         result["measurements"] = packets
         result["images_equal"] = all(
             a["image_digest"] == b["image_digest"]
@@ -120,8 +141,8 @@ def record(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("nvidia", "rocm"), required=True)
-    parser.add_argument("--before", required=True)
-    parser.add_argument("--after", required=True)
+    parser.add_argument("--before", required=True, help="NVIDIA: tessera-nvidia-opt; ROCm: tessera-opt")
+    parser.add_argument("--after", required=True, help="same compiler role as --before")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--reps", type=int, default=30)

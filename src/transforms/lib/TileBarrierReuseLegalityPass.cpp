@@ -295,9 +295,18 @@ struct TileBarrierReuseLegality
     bool write = markerWrite || mmaWrite;
     bool async = isa<tessera::tile::AsyncCopyOp, tessera::tile::TMACopyAsyncOp>(op);
     if (auto copy = dyn_cast<tessera::tile::TMACopyAsyncOp>(op)) {
-      auto descriptor = copy.getDescriptor().getDefiningOp<tessera::tile::TMADescriptorOp>();
-      if (descriptor && isa<tessera::tile::BufferType>(descriptor.getSource().getType()))
-        roots(descriptor.getSource(), buffers, op);
+      auto origins = tessera::tile::resolveSSAOrigins(copy.getDescriptor());
+      if (!origins.complete)
+        report(op, nullptr, "has an unresolved TMA descriptor lifetime");
+      for (Value origin : origins.roots) {
+        auto descriptor = origin.getDefiningOp<tessera::tile::TMADescriptorOp>();
+        if (!descriptor) {
+          report(op, nullptr, "has an opaque TMA descriptor lifetime");
+          continue;
+        }
+        if (isa<tessera::tile::BufferType>(descriptor.getSource().getType()))
+          roots(descriptor.getSource(), buffers, op);
+      }
     }
     bool dealloc = isa<tessera::tile::DeallocOp>(op);
     SmallVector<Value> destinations;

@@ -2144,24 +2144,20 @@ schedules; selector promotion and occupancy gains are not implied. The older
 memref reuse-group planner and backend consumption of its allocation groups
 remain a separate integration task.
 
-Exact-host results are stored in
-`benchmarks/baselines/allocation_lifetime_{nvidia,rocm}.json` with the same
-baseline/candidate compiler hashes on both hosts. All measured native images
-are byte-identical; no runtime optimization or queue-depth improvement is claimed.
+ROCm exact-host results remain in `benchmarks/baselines/allocation_lifetime_rocm.json`.
+The NVIDIA allocation-lifetime comparison is withdrawn: the harness set the core
+compiler variable while native lowering consumed a different compiler variable.
+Its recorded binary hashes did not identify the native lowerers actually used.
+The NVIDIA JSON is now an explicit withdrawal record; new measurements are required.
 
 | Host / workload | Before → after median | Domain / proof |
 |---|---|---|
-| Super-Bear RTX 5070, saved-LSE forward 1×2×1×8×8×8×8 | 0.01023 → 0.01212 ms | CUDA events; f32 output/LSE oracle passed. |
-| Super-Bear, matching saved backward | 0.08166 → 0.08176 ms | CUDA events; dQ/dK/dV oracle passed. |
 | Princess-Luna gfx1151, 512³ f16 direct GEMM | 0.02278 → 0.02217 ms | Synchronized host wall time, not HIP events; relative error 2.28e-6. |
 | Princess-Luna, same GEMM via Tile route | 0.02265 → 0.02234 ms | Same clock/oracle and identical HSACO. |
 
-CUDA resources are unchanged: forward/backward use 40/56 registers per thread,
-zero local/shared bytes, and 12/9 active blocks per SM at the measured launch.
-The packets retain all five samples and separate end-to-end CUDA timings.
-CUDA variants ran before-then-after; ordering/clock noise prevents interpreting
-small differences as compiler performance changes. These are regression
-comparisons of existing executable paths, not device proof of a new queue protocol.
+The ROCm comparison is regression evidence for existing executable paths, not
+device proof of a new queue protocol. No CUDA timing or resource comparison from
+the withdrawn packets is retained as compiler-change evidence.
 
 Validation: 161 native fixtures passed (four feature-gated exclusions), including
 real WarpSpecialization buffer markers and 22 positive/negative lifetime cases.
@@ -2208,14 +2204,13 @@ boundary and follow-up; no cross-architecture performance transfer.
 
 Validation for this increment: **167 native fixtures passed** (four feature-gated
 exclusions), **252 focused unit/registry/audit tests passed**, Ruff passed and
-mypy remained at zero errors. Owning-host packets are
-`benchmarks/baselines/token_memref_nvidia.json` and
-`benchmarks/baselines/token_memref_rocm.json`; both record final compiler SHA-256
-`a6697e6cd41fffa24e57d0461da6ddbc96d21944987b539a9e319190c5c88a87`.
-Existing CUDA saved-LSE forward/backward and gfx1151 direct/Tile GEMM outputs
-passed their oracles, with byte-identical baseline/candidate native images.
-CUDA event measurements remain separate from synchronized ROCm host timing.
-Outlier runs remain in the packets; no latency/occupancy improvement is claimed.
+mypy remained at zero errors. The ROCm owning-host packet
+`benchmarks/baselines/token_memref_rocm.json` remains valid.
+`benchmarks/baselines/token_memref_nvidia.json` is withdrawn for the same native
+compiler-selection defect as the earlier NVIDIA comparison. No CUDA before/after
+image or timing claim survives from those two records. The separate synchronous
+ring and asynchronous GEMM experiments below are unaffected.
+
 
 
 ### Structured-path coalescing, private borrowing and device ring experiment — 2026-09-05

@@ -70,3 +70,32 @@ def test_nonfinite_or_boolean_threshold_cannot_bypass_gate(invalid):
     ledger['promotion_rules']['minimum_speedup_lower_confidence_bound'] = invalid
     assert 'no_stability_rule_declared' in promotion_rule_violations(
         ledger['decisions'][0], ledger['promotion_rules'])
+
+
+@pytest.mark.parametrize('field', [
+    'paired_median_speedups', 'paired_win_fractions',
+    'pooled_paired_win_fraction', 'speedup_lower_confidence_bound',
+])
+@pytest.mark.parametrize('invalid', [True, False, float('nan'), float('inf')])
+def test_malformed_numeric_evidence_is_never_a_promotion(field, invalid):
+    import json
+    from tessera.compiler.apple_route_selector import promotion_rule_violations
+    reports = [_report(_stable_row('mps', 1000, 1000),
+                       _stable_row('simdgroup_matrix', 600, 600)) for _ in range(5)]
+    ledger = aggregate_stable_route_reports(reports, cross_run_estimator='median_order_statistic')
+    row = ledger['decisions'][0]
+    chosen = row['route_evidence'][row['selected_route']]
+    # 1.0 deliberately makes True == the derived lower bound, exercising
+    # the reviewer's bypass rather than an unrelated bound mismatch.
+    chosen.update(paired_median_speedups=[1.0] * 5, paired_win_fractions=[1.0] * 5,
+                  pooled_paired_win_fraction=1.0, speedup_lower_confidence_bound=1.0)
+    assert promotion_rule_violations(row, ledger['promotion_rules'], source_report_count=5) == []
+    chosen[field] = [invalid] * 5 if isinstance(chosen[field], list) else invalid
+    decoded = json.loads(json.dumps(row))
+    assert promotion_rule_violations(decoded, ledger['promotion_rules'], source_report_count=5)
+
+
+@pytest.mark.parametrize('invalid', [True, False, float('nan'), float('inf'), 10**400])
+def test_confidence_helpers_refuse_non_measurements(invalid):
+    assert median_speedup_confidence_interval([invalid] * 5) is None
+    assert speedup_confidence_interval([invalid] * 5) is None

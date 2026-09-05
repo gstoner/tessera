@@ -25,7 +25,7 @@ from pathlib import Path
 import re
 import statistics
 import subprocess
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, TypeGuard
 
 
 ROUTE_REPORT_SCHEMA_VERSION = 1
@@ -198,6 +198,16 @@ _STUDENT_T_ONE_SIDED_95 = {
 }
 _STUDENT_T_ONE_SIDED_95_LARGE_SAMPLE = 1.645
 
+def _is_finite_real(value: Any) -> TypeGuard[int | float]:
+    """JSON booleans are not numeric measurements or policy thresholds."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 SPEEDUP_CONFIDENCE_LEVEL = 0.95
 
 
@@ -211,6 +221,8 @@ def speedup_confidence_interval(
     be ruled out at all (upper bound)? A row where the interval straddles the
     threshold is inconclusive -- see ``speedup_lower_confidence_bound``.
     """
+    if any(not _is_finite_real(value) for value in per_run_speedups):
+        return None
     values = [float(value) for value in per_run_speedups]
     if len(values) < 2:
         return None
@@ -231,9 +243,9 @@ def median_speedup_confidence_interval(
     interpolation, or Gaussian approximation; fewer than five runs cannot
     provide finite bounds. Ties make coverage conservative.
     """
-    values = sorted(float(value) for value in per_run_speedups)
-    if any(not math.isfinite(value) for value in values):
+    if any(not _is_finite_real(value) for value in per_run_speedups):
         return None
+    values = sorted(float(value) for value in per_run_speedups)
     n = len(values)
     tail = 0
     rank = 0
@@ -314,9 +326,7 @@ def promotion_rule_violations(
 
     def _threshold(name: str) -> float | None:
         value = rules.get(name)
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
-            return None
-        return float(value) if math.isfinite(value) else None
+        return float(value) if _is_finite_real(value) else None
 
     min_speedup = _threshold("minimum_speedup_fraction_each_run")
     min_win = _threshold("minimum_paired_win_fraction_each_run")
@@ -390,16 +400,16 @@ def promotion_rule_violations(
     if not isinstance(medians, list) or not medians:
         violations.append("no_paired_median_speedups")
     elif min_speedup is not None and any(
-            not isinstance(v, (int, float)) or v < min_speedup for v in medians):
+            not _is_finite_real(v) or v < min_speedup for v in medians):
         violations.append(
-            f"speedup_below_minimum:{min(v for v in medians if isinstance(v, (int, float)))!r}"
-            if any(isinstance(v, (int, float)) for v in medians)
+            f"speedup_below_minimum:{min(v for v in medians if _is_finite_real(v))!r}"
+            if any(_is_finite_real(v) for v in medians)
             else "speedup_below_minimum")
 
     if not isinstance(fractions, list) or not fractions:
         violations.append("no_paired_win_fractions")
     elif min_win is not None and any(
-            not isinstance(v, (int, float))
+            not _is_finite_real(v)
             or (v <= min_win if win_floor_is_strict else v < min_win)
             for v in fractions):
         # Ledgers sealed before pooling carry 0.75 here and this is the whole
@@ -417,7 +427,7 @@ def promotion_rule_violations(
 
     if min_pooled_win is not None:
         pooled = chosen.get("pooled_paired_win_fraction")
-        if not isinstance(pooled, (int, float)):
+        if not _is_finite_real(pooled):
             violations.append("no_pooled_paired_win_fraction")
         elif pooled < min_pooled_win:
             violations.append(f"pooled_paired_win_fraction_below_minimum:{pooled!r}")
@@ -425,13 +435,13 @@ def promotion_rule_violations(
     if min_bound is not None:
         # Current rule: the win must survive its own measurement error.
         bound = chosen.get("speedup_lower_confidence_bound")
-        if not isinstance(bound, (int, float)):
+        if not _is_finite_real(bound):
             violations.append("no_speedup_lower_confidence_bound")
         elif bound < min_bound:
             violations.append(f"speedup_lower_bound_below_minimum:{bound!r}")
         if estimator == "median_order_statistic":
             if not isinstance(medians, list) or any(
-                    not isinstance(v, (int, float)) or not math.isfinite(v) for v in medians):
+                    not _is_finite_real(v) for v in medians):
                 violations.append("invalid_median_bound_inputs")
             else:
                 derived = median_speedup_confidence_interval(medians)
@@ -444,7 +454,7 @@ def promotion_rule_violations(
     elif max_spread is not None and not spread_is_diagnostic:
         # Superseded rule, still enforced for ledgers sealed under it.
         spread = chosen.get("cross_run_speedup_spread")
-        if not isinstance(spread, (int, float)):
+        if not _is_finite_real(spread):
             violations.append("no_cross_run_speedup_spread")
         elif spread > max_spread:
             violations.append(f"speedup_spread_above_maximum:{spread!r}")

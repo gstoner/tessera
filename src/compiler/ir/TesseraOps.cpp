@@ -5340,6 +5340,26 @@ LogicalResult CPUMsaBlockSparseOp::verify() {
   return requireStrAttrs(*this, {"source", "abi", "arch", "kernel", "status"});
 }
 
+LogicalResult KVCacheReadOp::verify() {
+  auto pages = cast<RankedTensorType>(getPages().getType());
+  auto table = cast<RankedTensorType>(getPageTable().getType());
+  auto output = cast<RankedTensorType>(getOutput().getType());
+  if (pages.getEncoding() || table.getEncoding() || output.getEncoding() ||
+      pages.getRank() != 4 || table.getRank() != 1 || output.getRank() != 3 ||
+      !pages.hasStaticShape() || !table.hasStaticShape() || !output.hasStaticShape() ||
+      !pages.getElementType().isF32() || !table.getElementType().isInteger(32) ||
+      !output.getElementType().isF32())
+    return emitOpError("requires static f32 pages[P,PS,H,D], i32 table[LP], f32 output[T,H,D]");
+  for (auto type : {pages, table, output})
+    if (llvm::any_of(type.getShape(), [](int64_t d) { return d <= 0; }))
+      return emitOpError("requires positive page and output dimensions");
+  if (getStart() < 0 || getEnd() <= getStart() ||
+      static_cast<__int128>(getEnd()) > static_cast<__int128>(table.getDimSize(0)) * pages.getDimSize(1) ||
+      output.getShape() != ArrayRef<int64_t>({getEnd()-getStart(), pages.getDimSize(2), pages.getDimSize(3)}))
+    return emitOpError("page read interval or output shape disagrees with logical capacity");
+  return success();
+}
+
 } // namespace tessera
 
 #define GET_OP_CLASSES

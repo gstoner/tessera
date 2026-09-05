@@ -17,22 +17,10 @@
 // once WarpSpecialization emits real barriers, "does this pass go green on the
 // FA-4 fixture?" becomes the correctness check.
 //
-// Op conventions (kept envelope-driven so it works on the value lane and on
-// unregistered husks alike):
-//   write op   : a `!tile.buffer` operand rooted at `tile.alloc`, plus
-//                `tile.layout = #tile.layout<...>`
-//   barrier op : a typed `#tile.barrier` of a completion kind (s_barrier /
-//                mbarrier / tma / tcgen05 — not the "waitcnt" counter marker on
-//                an async_copy), OR an explicit sync op by exact name
-//                (tile.wait_async / tile.s_barrier / tile.barrier / mbarrier
-//                *wait*). tile.async_copy is the hazard source, never a release.
-//                A barrier releases the pending-write hazard for every buffer
-//                (conservative v1 scope). See isBarrierOp for the full rule.
-//
-// Diagnostic code (stable):
-//   TILE_BARRIER_REUSE_MISSING_BARRIER
-//     A buffer is written twice over overlapping storage footprints with no
-//     intervening barrier — a producer/consumer race on the reused region.
+// The local write/write check uses !tile.buffer allocation identity plus
+// tile.layout footprints. Only registered completing waits/barriers clear a
+// pending hazard; policy attributes and nonblocking polls do not. Allocation-
+// scoped release and branch/loop-sensitive lifetime analysis remain follow-ups.
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
@@ -91,36 +79,11 @@ static bool overlaps(const std::pair<int64_t, int64_t> &a,
   return a.first < b.second && b.first < a.second;
 }
 
-// A barrier op releases the pending-write hazard. Precise detection (NOT a
-// `name.contains("barrier")` substring sniff — that was removed from the ROCm
-// path in f32479c8 because it let a non-completing poll like `mbarrier.try_wait`
-// wrongly clear a hazard; the same anti-pattern is avoided here):
-//   * `tile.async_copy` is the hazard SOURCE, never a release — exclude it first
-//     even though it carries a `#tile.barrier` attr (kind="waitcnt") to name its
-//     counter.
-//   * a typed `#tile.barrier` attr whose kind is a real completion barrier
-//     (s_barrier / mbarrier / tma / tcgen05 — anything but the "waitcnt" counter
-//     marker that rides the copy).
-//   * the explicit synchronization ops by EXACT name (registered or husk):
-//     tile.wait_async / tile.s_barrier / tile.barrier, and the mbarrier *wait*
-//     forms. An arrive / alloc / non-completing try_wait is deliberately NOT a
-//     release.
+// Completion is an operation effect, never an attribute attached to a poll,
+// arrival or unrelated operation. In particular try_wait does not complete.
 static bool isBarrierOp(Operation *op) {
-  // Typed identities first (P1a second increment): the registered wait forms
-  // release; a non-completing try_wait deliberately does not; async_copy is
-  // the hazard source even though it carries a waitcnt #tile.barrier marker.
-  if (isa<tessera::tile::AsyncCopyOp>(op))
-    return false;
-  if (auto b =
-          op->getAttrOfType<tessera::tile::TileBarrierAttr>("tile.barrier"))
-    return b.getKind() != "waitcnt";
-  if (isa<tessera::tile::WaitAsyncOp, tessera::tile::MBarrierWaitOp,
-          tessera::tile::CtaSyncOp>(op))
-    return true;
-  // Exact-name remainder with no registered op yet (ROCm s_barrier lane);
-  // graduates to a typed check when registered (Decision #29).
-  StringRef name = op->getName().getStringRef();
-  return name == "tile.s_barrier" || name == "tile.barrier";
+  return isa<tessera::tile::WaitAsyncOp, tessera::tile::MBarrierWaitOp,
+             tessera::tile::CtaSyncOp, tessera::tile::SBarrierOp>(op);
 }
 
 struct PendingWrite {

@@ -4,7 +4,7 @@ Each fused MSL codegen lane that displaces the per-op MPS/MSL dispatcher must be
 proven equivalent to its unfused reference on *hidden* inputs (fresh RNG the
 codegen never saw), and must genuinely run on Metal — a numpy fallback can never
 earn a "displaced" verdict. These tests run that gate over every shipped lane.
-See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M5).
+See docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M5).
 """
 
 from __future__ import annotations

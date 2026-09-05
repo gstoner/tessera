@@ -3,7 +3,7 @@
 An arbitrary connected DAG of same-shape elementwise ops compiles to ONE Metal
 kernel run in a single dispatch, instead of N separate MPSGraph dispatches with
 host round-trips between them — the GPU analogue of the CPU `run_graph_ops` lane.
-See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M4).
+See docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M4).
 """
 
 from __future__ import annotations

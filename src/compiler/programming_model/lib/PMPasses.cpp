@@ -31,6 +31,7 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
@@ -44,6 +45,9 @@
 using namespace mlir;
 
 namespace tessera {
+
+#include "NativeCheckpoint.h"
+#include "NativePagedKV.h"
 
 // ---------------------------------------------------------------------------
 // Dialect registration
@@ -402,6 +406,36 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.macroTileN = 64;
     if (schedule.arch.empty())
       schedule.arch = "gfx1151";
+    return schedule;
+  }
+  if (nvidia_sm120 && lhsElement.isInteger(4) && rhsElement.isInteger(4) &&
+      outElement.isInteger(32) && !schedule.dynamicM && !schedule.dynamicN &&
+      !schedule.dynamicK && !schedule.bias && !schedule.residual &&
+      schedule.activation == "none") {
+    if (lhs.getEncoding() || rhs.getEncoding() || out.getEncoding()) return failure();
+    auto int4Function = op->getParentOfType<func::FuncOp>();
+    if (!int4Function || !llvm::hasSingleElement(int4Function.getBody()) ||
+        int4Function.getNumArguments() != 2) return failure();
+    auto ret = dyn_cast<func::ReturnOp>(int4Function.getBody().front().back());
+    if (!ret || ret.getNumOperands() != 1) return failure();
+    Value returned = ret.getOperand(0);
+    if (auto scheduled = returned.getDefiningOp<schedule::MatmulOp>())
+      returned = scheduled.getSubject();
+    if (returned != op->getResult(0)) return failure();
+    for (NamedAttribute attr : op->getAttrs())
+      if (attr.getName().getValue().contains("layout") ||
+          attr.getName().getValue().contains("pack") ||
+          attr.getName().getValue().contains("stride")) return failure();
+    if (auto fn = op->getParentOfType<func::FuncOp>())
+      for (unsigned i = 0; i < fn.getNumArguments(); ++i)
+        if (fn.getArgAttr(i, "tessera.layout")) return failure();
+    schedule.storage = "int4";
+    schedule.accum = "int32";
+    schedule.output = "i32";
+    schedule.tileM = schedule.macroTileM = 16;
+    schedule.tileN = schedule.macroTileN = 8;
+    schedule.tileK = 32;
+    if (schedule.arch.empty()) schedule.arch = "sm_120";
     return schedule;
   }
   if (nvidia_sm120 &&
@@ -1757,6 +1791,8 @@ struct GraphToSchedulePass
   void runOnOperation() override {
     ModuleOp mod = getOperation();
     OpBuilder builder(mod.getContext());
+    if (failed(scheduleNativeCheckpoints(mod))) return signalPassFailure();
+    if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
 
     SmallVector<Operation *> tridiagonalSolves;
     mod.walk([&](Operation *op) {
@@ -1898,7 +1934,7 @@ struct GraphToSchedulePass
       FailureOr<MatmulSchedule> selected = getMatmulSchedule(op);
       if (failed(selected)) {
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
-                      "x86 f32->f32, ROCm f16->f32, NVIDIA f16/bf16->f32, "
+                      "x86 f32->f32, ROCm f16->f32, NVIDIA f16/bf16->f32 or signed int4->i32, "
                       "or Apple-GPU f32->f32 "
                       "matmul with no transpose");
         return signalPassFailure();
@@ -2673,6 +2709,8 @@ struct ScheduleToTilePass
   void runOnOperation() override {
     ModuleOp mod = getOperation();
     OpBuilder builder(mod.getContext());
+    if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
+    if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
 
     SmallVector<Operation *> scheduledTridiagonalSolves;
     mod.walk([&](Operation *op) {
@@ -2934,7 +2972,7 @@ struct ScheduleToTilePass
         // dependency on an optional target backend.  In a CUDA-enabled tool,
         // load the registered target dialect by namespace before constructing
         // its block-coordinate boundary operation.
-        if (!getContext().getOrLoadDialect("tessera_nvidia")) {
+        if (selected->storage != "int4" && !getContext().getOrLoadDialect("tessera_nvidia")) {
           scheduled.emitError(
               "SM120 scheduled matmul requires the registered NVIDIA Target IR dialect");
           return signalPassFailure();
@@ -2974,6 +3012,7 @@ struct ScheduleToTilePass
             (graphFunction.getName() + epilogueSuffix +
              (macroSm120Producer ? "_macro_kernel" : "_kernel"))
                 .str();
+        if (selected->storage == "int4") kernelName = "tessera_tile_matmul_int4";
         if (SymbolTable::lookupSymbolIn(mod, kernelName)) {
           scheduled.emitError("SM120 scheduled matmul kernel symbol already exists");
           return signalPassFailure();
@@ -3250,6 +3289,23 @@ struct ScheduleToTilePass
         kernelState.addOperands(entry->getArguments());
         kernelState.addAttribute("mma", mma);
         kernelState.addAttribute("epilogue", epilogue);
+        if (selected->storage == "int4") {
+          kernelState.addAttribute("tessera.storage_packed", kernelBuilder.getBoolAttr(true));
+          kernelState.addAttribute("tessera.storage_container", kernelBuilder.getStringAttr("int8"));
+          kernelState.addAttribute("tessera.storage_pack", tile::TilePackedFormatAttr::get(
+              &getContext(), "int4", "int8", 4, 2, "signed_twos_complement",
+              "twos_complement", "low_to_high"));
+          auto format = tile::TilePackedFormatAttr::get(&getContext(), "int4", "int8", 4, 2,
+              "signed_twos_complement", "twos_complement", "low_to_high");
+          auto noScale = tile::TileScaleLayoutAttr::get(&getContext(), "none", 0, -1, "none", 0, 1, 0);
+          kernelState.addAttribute("tessera.a_packed_view", tile::TilePackedPhysicalViewAttr::get(
+              &getContext(), format, 1, {(selected->k + 1) / 2, 1}, 1, 0, noScale));
+          kernelState.addAttribute("tessera.b_packed_view", tile::TilePackedPhysicalViewAttr::get(
+              &getContext(), format, 0, {selected->n, 1}, 1, 0, noScale));
+          kernelState.addAttribute("tessera.packing_axes", kernelBuilder.getDenseI64ArrayAttr({1, 0}));
+          kernelState.addAttribute("tessera.packed_shapes", kernelBuilder.getDenseI64ArrayAttr(
+              {selected->m, (selected->k + 1) / 2, (selected->k + 1) / 2, selected->n}));
+        }
         kernelState.addAttribute(
             "warps", kernelBuilder.getI64IntegerAttr(
                          macroSm120Producer ? 4 : selected->warps));

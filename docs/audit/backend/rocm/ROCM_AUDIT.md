@@ -1,9 +1,17 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-09-05
 audit_role: sub_audit
 ---
 
 # ROCm Backend Audit
+
+Current sequencing is owned by the
+[integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Use the [architecture queue](todo.md) for current execution work and the
+[backend audit map](../README.md) for document authority. Dated findings and
+bring-up descriptions below retain their original evidence scope; they are
+not a current fleet-wide support statement.
+
 
 This audit answers three questions:
 

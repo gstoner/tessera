@@ -20,7 +20,9 @@ supersedes_queues_in:
 # Integrated Compiler Plan
 
 Start at [`README.md`](README.md) for the folder authority map. This is the sole
-cross-domain compiler sequencing authority.
+cross-domain compiler sequencing authority. Backend execution queues and evidence
+are mapped in [`../backend/README.md`](../backend/README.md); the scoped E2E
+compilation plan supplies closure gates under this sequencing.
 
 One plan across the compiler reviews and scoped plans. Each document's ranked queue stays as *evidence
 and rationale*; **this document owns sequencing and de-duplication.** Where a
@@ -1916,9 +1918,9 @@ promotion, is the acceptance criterion for this migration.
 Next actions, in dependency order:
 
 1. F2-A2: align NVIDIA ragged forward/backward masks and audit backward float hashes.
-2. F2-A3: migrate the paired saved-LSE producer and backward consumer together.
-3. F2-P1: migrate packed matmul with native storage/packing and layout projections.
-4. F2-S1: native paged KV, replay-SSM and MoE state/workspace contracts.
+2. F2-A3: native paired saved-LSE migration implemented in the bounded f32 SM120 lane; integrate residual-policy selection separately.
+3. F2-P1: signed INT4 migration implemented; extend scale-layout projections for NVFP4/MX.
+4. F2-S1: bounded paged read migration implemented; replay-SSM and MoE state/workspace contracts remain.
 5. F2-C1: retire sibling direct package constructors using their existing scheduled
    consumers only where storage, policy and ABI envelopes agree.
 
@@ -2029,3 +2031,83 @@ Tile operands still implement the recorded schedule. Regressions mutate source/
 destination operands without changing those markers and require rejection before
 target compilation; missing production `tessera-opt` also fails closed. This
 corrects the earlier F2-U10 replay-coverage claim rather than opening a new queue.
+
+
+### Five-action native ownership loop — 2026-09-05
+
+Owner: E2E-REAL-5 / W2.4 / W2.4a; synchronization key `IR-NATIVE-FOUNDATION-1`.
+This increment supersedes the F2-A3/P1/S1 migration status above for the bounded
+families listed here. It does not close all packed or stateful execution.
+
+1. **F2-A3 implemented:** registered `tessera_attn.checkpoint_forward` yields
+   output and row LSE; `checkpoint_backward` consumes dO/Q/K/V/LSE and yields
+   dQ/dK/dV. Existing `lse.save/load` only transfer an already computed value, so
+   they cannot substitute for the fused multi-result producer. Native
+   `schedule.attention_checkpoint` retains shapes, binding roles, exact f32 scale,
+   causal alignment and hash. Packaging replays Schedule-to-Tile and never
+   reconstructs Graph. The old forward and saved-backward constructors are
+   retired from production. Recompute backward remains a separate migration.
+2. **W2.4 audit:** the deleted file's useful prefetch memory-space allowlist was
+   missing in registered verification; restored with seven valid spaces and
+   three invalid-input tests. Dispositions of the reviewed checks are below.
+3. **W2.4a spike:** existing pipeline depth/stage/phase, roles, allocation roots
+   and completion tokens express the bounded ownership vocabulary. A decorated
+   `mbarrier.try_wait` falsely cleared reuse hazards; a native negative fixture
+   reproduced it before the fix. Only registered completing operations now
+   release that local hazard. No queue dialect is restored. **Still open:** the
+   checker clears pending hazards broadly at waits and walks regions in order;
+   allocation-specific release, control-flow joins and consumer-completion
+   lifetimes need relational analysis. Do not call this full queue ownership.
+4. **F2-P1 signed INT4 implemented:** builtin i4 Graph tensors enter the existing
+   native matmul Schedule. C++ derives signed low-nibble-first byte packing,
+   A-axis 1/B-axis 0, physical shapes, container strides, zero offsets and absent
+   scales in typed packed views. Serialized Schedule replay rejects edited Tile
+   operands before compilation. The fixed runtime entry ABI is preserved.
+   NVFP4/MX scale layouts remain open; no performance promotion occurred.
+5. **F2-S1 bounded paged read implemented:** registered `tessera.kv_cache.read`
+   verifies static f32 pages, i32 table, logical interval and output shape.
+   Native Schedule binds read-only borrowing, runtime physical-index validation,
+   layout and names; the package consumes the replayed artifact. Runtime still
+   validates actual table contents. Stateful mutation, replay decode/flush and
+   MoE workspace/lifetime contracts remain separate open cuts.
+
+The canonical driver retains adjacent native Graph/Schedule/Tile lineage for all
+three package migrations. Descriptor identity is not proof that an external LSE
+buffer contains values from the paired forward input. Python remains the
+frontend, descriptor validation and oracle; native C++ owns these Tile programs.
+
+#### Deleted-verifier disposition inventory
+
+History inspected: `e34a59de^` ScheduleOps.cpp and Target/TesseraTargetIR.cpp.
+The old files were unbuilt; comments claiming invariants were not enforcement.
+
+| Historical checks | Disposition and current authority |
+|---|---|
+| Mesh dimensions, axis strings/count; mesh body/symbol; pipeline schedule/microbatches; stage devices | Covered by registered Schedule ODS and ScheduleDialect.cpp. Current checks additionally enforce result/yield roles. |
+| Prefetch destination and overlap | Missing destination allowlist restored in ScheduleDialect.cpp; overlap/type preservation already covered. |
+| Schedule async-copy spaces differ, nonnegative stage; await arity | Covered by Schedule ODS/verifiers. Historical prose claimed known-space validation but the implementation only checked presence/difference. Extending the space vocabulary is a separate contract decision. |
+| Artifact hash/arch; knob name/choices/logit cardinality | Covered by registered Schedule verification; not a second verifier implementation. |
+| Cache kv/pt/ring construction and page-lookup arity | Historical cache scaffold has no active native package producer. Its handle API is obsolete for these tensor package boundaries; do not resurrect it solely for arity checks. New paged-read ODS binds its actual tensor interface. |
+| Tile alloc-shared memref operand; required async-copy/wait stage and two memrefs | Obsolete historical signature. Native tile.alloc returns an SSA buffer; copy/wait use typed tokens. Optional stage nonnegativity already lives in TileOps.cpp. Requiring historical operands would reject real producers. |
+| Mbarrier count/scope, positive arrive bytes, try-wait arity | Active init/arrive/wait ODS and TileOps.cpp cover slots/phase bits/bytes/token shapes; TileDataflowLegality owns pairing and slot agreement. Historical alloc/scope spelling is not the current API. PMV11 compatibility checks must not become a competing native authority. |
+| Atomic order/scope and divergent barrier | Old generic spellings retain PMV11 compatibility checks; current target effects and relational WarpSpec legality own executable semantics. No new atomic support implied. |
+| Reduction op/order strings and unknown-op warning | Obsolete generic reduction helper. Registered reduction kernels have closed operation/storage contracts; the old advisory unknown-op warning is not a useful correctness gate. |
+| Target warp_config positive count/power-of-two warning; smem_layout attr presence | Obsolete standalone target helper spellings. Current typed schedule, layout and backend launch/resource contracts are authoritative; a power-of-two warning cannot replace architecture limits. |
+| Target TMA cp_size positive | Historical descriptor signature obsolete; current descriptor expected-byte and arrival agreement is checked by Tile types/ops and TileDataflowLegality. The old comment about global source memory was never enforced there. |
+
+Validation in this loop: RTX 5070 passed nine native package device cases
+(three checkpoint pairs, two INT4 cases and four paged intervals/invalid tables).
+Princess-Luna gfx1151 passed 39 existing WMMA compiler/runtime tests, including
+native SSA/LDS structure. These are correctness checks. There is no new
+cross-backend latency/occupancy comparison, and the ownership spike's performance
+exit criterion remains open. Apple/x86 physical migrations and owning-host proof
+remain separate. Focused registry, native fixture, lint and generated-doc results
+are recorded with the implementation rather than inferred from these device runs.
+
+Final focused validation passed **438 tests**, including registry, dtype, artifact
+replay, driver lineage and audit lifecycle checks. The separate canonical/consumer
+cohort passed 90 tests with 12 explicit host/tool skips. Both native dataflow/reuse
+fixtures passed, including strict registered parsing for the changed reuse
+fixture. Ruff and the zero-error mypy ratchet passed. The ROCm SSA/LDS compiler
+probe preserved allocation/token ownership through target lowering at one, two
+and four stages; it measures host compiler cost only, not device latency.

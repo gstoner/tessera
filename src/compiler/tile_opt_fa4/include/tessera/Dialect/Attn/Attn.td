@@ -277,3 +277,25 @@ def BackwardReduceSplitOp : Op<Tessera_Attn_Dialect, "backward_reduce_split", [P
   let assemblyFormat = "$inputs attr-dict `:` type($inputs) `->` type($d_key) `,` type($d_value)";
   let hasVerifier = 1;
 }
+
+// Isolated f32 attention checkpoint entries. These tensor contracts produce or
+// consume the LSE value; lse.save/load separately own explicit memory movement.
+def CheckpointForwardOp : Op<Tessera_Attn_Dialect, "checkpoint_forward", [Pure]> {
+  let summary = "Compute plain scaled attention and natural-log row LSE";
+  let arguments = (ins AnyRankedTensor:$query, AnyRankedTensor:$key,
+                      AnyRankedTensor:$value, F32Attr:$scale, BoolAttr:$causal);
+  let results = (outs AnyRankedTensor:$output, AnyRankedTensor:$row_lse);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def CheckpointBackwardOp : Op<Tessera_Attn_Dialect, "checkpoint_backward", [Pure]> {
+  let summary = "Compute deterministic attention gradients using saved row LSE";
+  let arguments = (ins AnyRankedTensor:$d_output, AnyRankedTensor:$query,
+                      AnyRankedTensor:$key, AnyRankedTensor:$value,
+                      AnyRankedTensor:$row_lse, F32Attr:$scale, BoolAttr:$causal);
+  let results = (outs AnyRankedTensor:$d_query, AnyRankedTensor:$d_key,
+                     AnyRankedTensor:$d_value);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}

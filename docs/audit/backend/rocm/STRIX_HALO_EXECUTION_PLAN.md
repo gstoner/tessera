@@ -1,10 +1,18 @@
 ---
-last_updated: 2026-06-23
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: landing
 ---
 
 # Strix Halo (Ryzen AI Max+ 395) — Tessera Bring-Up & RDNA 3.5 Execution Plan
+
+Current sequencing is owned by the
+[integrated compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Use the [architecture queue](todo.md) for current execution work and the
+[backend audit map](../README.md) for document authority. Dated findings and
+bring-up descriptions below retain their original evidence scope; they are
+not a current fleet-wide support statement.
+
 
 > First real **non-Apple** silicon Tessera will own. Authored 2026-06-17 against the
 > "RDNA3.5" Instruction Set Architecture Reference Guide (AMD, 23-July-2024).

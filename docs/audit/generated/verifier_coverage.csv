@@ -103,6 +103,7 @@ src/compiler/ir/TesseraOps.td,KLDivergenceLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheAppendOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheCreateOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCachePruneOp,1,1,real
+src/compiler/ir/TesseraOps.td,KVCacheReadOp,1,1,real
 src/compiler/ir/TesseraOps.td,KimiDeltaAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LUOp,1,1,real
 src/compiler/ir/TesseraOps.td,LatentKVCompressOp,1,1,real
@@ -226,6 +227,8 @@ src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,BackwardReduceSpl
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,BlockDropoutOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,BoundaryMaskOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,CausalMaskOp,1,1,real
+src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,CheckpointBackwardOp,1,1,real
+src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,CheckpointForwardOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,DropoutMaskOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,LseAccumulateOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,LseLoadOp,1,1,real

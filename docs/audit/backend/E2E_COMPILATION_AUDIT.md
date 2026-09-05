@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-27
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: landing
 owner: shared compiler and backend owners
@@ -8,11 +8,14 @@ sync_key: E2E-SPINE-2026-07-18
 
 # Backend end-to-end MLIR compilation plan
 
-This is the authoritative execution plan for joining Tessera's frontend,
+This scoped execution plan supplies closure gates for joining Tessera's frontend,
 four-layer IR stack, architecture-owned code generators, native-image
 packaging, and runtime launch paths. Generated dashboards remain status truth
-for counts and per-op execution state; this plan owns the architectural seam,
-work-item order, dependencies, and closure gates.
+for counts and per-op execution state. The
+[integrated compiler plan](../compiler/INTEGRATED_COMPILER_PLAN.md) owns work-item
+order and cross-domain dependencies; this document retains architectural seam
+requirements and detailed closure gates. Use the [backend map](README.md) and
+current architecture queues for subsequent implementation and device evidence.
 
 The plan covers Apple GPU, Apple CPU, x86, ROCm, and NVIDIA. It does not make
 physical schedules portable. Logical operations, typed ABI contracts, artifact

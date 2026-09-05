@@ -540,6 +540,8 @@ def compile_graph_module(
     scheduled_kernel_artifact = None
     scheduled_attention_artifact = None
     scheduled_depth_attention_artifact = None
+    scheduled_checkpoint_artifact = None
+    scheduled_paged_kv_artifact = None
     if bool(options.get("package_native", False)) and target_kind in {
         "x86",
         "rocm_gfx1151",
@@ -549,7 +551,25 @@ def compile_graph_module(
 
         from . import scheduled_depth_attention
 
-        if target_kind == "rocm_gfx1151" and scheduled_depth_attention.supports_scheduled_depth_attention(
+        from . import nvidia_native
+        checkpoint_contract = None
+        paged_contract = None
+        if target_kind == "nvidia_sm120":
+            checkpoint_contract = nvidia_native._attention_lse_contract(module) or nvidia_native._attention_backward_lse_contract(module)
+            paged_contract = nvidia_native._paged_kv_contract(module)
+        if checkpoint_contract is not None:
+            from .scheduled_checkpoint import lower_scheduled_checkpoint
+            names, dims, scale, causal = checkpoint_contract
+            scheduled_checkpoint_artifact = lower_scheduled_checkpoint(
+                names, dims, scale, causal, backward=len(names) == 8)
+            graph_text = scheduled_checkpoint_artifact.graph_ir
+        elif paged_contract is not None:
+            from .scheduled_paged_kv import lower_scheduled_paged_kv
+            pages, table, dims = paged_contract
+            output = module.functions[0].body[0].result or "output"
+            scheduled_paged_kv_artifact = lower_scheduled_paged_kv((pages, table, output), dims)
+            graph_text = scheduled_paged_kv_artifact.graph_ir
+        elif target_kind == "rocm_gfx1151" and scheduled_depth_attention.supports_scheduled_depth_attention(
             module, target=target_kind
         ):
             scheduled_depth_attention_artifact = (
@@ -799,7 +819,11 @@ def compile_graph_module(
         )
         package_start = time.perf_counter()
         package_kind = nvidia_native.native_package_kind(module)
-        if scheduled_matmul_artifact is not None:
+        if scheduled_checkpoint_artifact is not None:
+            nvidia_package = nvidia_native.package_scheduled_checkpoint(scheduled_checkpoint_artifact, pipeline_name=producer)
+        elif scheduled_paged_kv_artifact is not None:
+            nvidia_package = nvidia_native.package_scheduled_paged_kv(scheduled_paged_kv_artifact, pipeline_name=producer)
+        elif scheduled_matmul_artifact is not None:
             # Consume the shared Schedule -> launch-Tile artifact directly;
             # this keeps NVIDIA's physical lowering while removing the second
             # Graph-local schedule classification.
@@ -820,7 +844,15 @@ def compile_graph_module(
                 options=options,
             )
         package_dtype = nvidia_package.descriptor.buffers[0].dtype
-        if scheduled_matmul_artifact is not None:
+        if scheduled_checkpoint_artifact is not None:
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_checkpoint_artifact.schedule_ir, nvidia_package.tile_ir,
+                target_kind, nvidia_package.target_ir, nvidia_package.backend_ir)
+        elif scheduled_paged_kv_artifact is not None:
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_paged_kv_artifact.schedule_ir, nvidia_package.tile_ir,
+                target_kind, nvidia_package.target_ir, nvidia_package.backend_ir)
+        elif scheduled_matmul_artifact is not None:
             schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
                 graph, scheduled_matmul_artifact.schedule_ir, nvidia_package.tile_ir,
                 target_kind, nvidia_package.target_ir, nvidia_package.backend_ir,

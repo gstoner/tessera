@@ -3390,3 +3390,12 @@ def Tessera_CPUMsaBlockSparseOp : Op<Tessera_Dialect, "cpu.msa_block_sparse"> {
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
+
+// F2-S1: bounded tensor view of explicit physical pages and a logical page map.
+def Tessera_KVCacheReadOp : Op<Tessera_Dialect, "kv_cache.read", [MemoryEffects<[MemRead]>]> {
+  let arguments = (ins AnyRankedTensor:$pages, AnyRankedTensor:$page_table,
+                       I64Attr:$start, I64Attr:$end);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

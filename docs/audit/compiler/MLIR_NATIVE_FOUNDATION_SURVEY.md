@@ -62,7 +62,7 @@ route fixtures and an inventory derived from those existing routes.
 | Route and current entry | What still comes from Python Graph state | Existing replacement / next migration |
 |---|---|---|
 | NVIDIA `nvidia_native.package_scheduled_matmul(artifact)` | F1 removed the Graph argument and base-package compilation. The consumer validates artifact shape/ABI facts and compiles Tile once; the driver retains adjacent boundary lineage. | Keep the one-compile, no-Graph and tampering gates. Broader matmul storage and dynamic envelopes remain separately scoped. |
-| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Backward/saved-LSE attention, paged KV and packed/quantized matmul still reconstruct Tile. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired and packed producers remain open; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
+| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Recompute backward attention, fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs, signed INT4 and bounded paged reads now have native producers and replayed Schedule consumers. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
 | ROCm `rocm_native.package_native` | `package_softmax`, `package_reduction`, `package_paged_kv_read`, `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Matmul/softmax/reduction/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, static/dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
@@ -251,9 +251,8 @@ The remaining NVIDIA Graph-owned constructors are explicit next work:
 | Entry/family | Native contract still required |
 |---|---|
 | `package_attention_backward` | dQ/dK/dV result roles, mask alignment, workspace/reduction policy |
-| `package_attention_lse`, `package_attention_backward_lse` | Paired O/LSE producer-consumer identity and checkpoint lifetime |
-| `package_matmul` and NVFP4/INT4/MX variants | Remaining dtype/layout/packing envelopes outside the scheduled consumer |
-| `package_paged_kv_read`, `package_paged_attention` | Page table, logical positions, ownership and bounds |
+| `package_matmul` and NVFP4/MX variants | Remaining dtype/layout/packing envelopes outside the scheduled consumer |
+| `package_paged_attention` | Page table, logical positions, ownership and bounds |
 | `package_replay_ssm_kernels` | Paired decode/flush state and ordered effects |
 | `package_moe_kernels` | Multi-entry routing, movement, capacities and workspace |
 
@@ -261,7 +260,8 @@ ROCm, x86, Apple GPU and Apple CPU direct package paths remain as listed in the
 main census. Existing scheduled consumers do not establish direct-client
 retirement. The next cuts must migrate those callers with backend-owned evidence,
 not transplant NVIDIA's 128-thread schedule. F2-A2 also fixes backward float
-identity with exact f32 bits. F2-A3 adds checked paired packaging, but the native
-Graph two-result checkpoint producer is still missing. Packed/stateful integer,
-return-role and allocation overflow checks are implemented; their Python Tile
-constructors remain in the census until native producers replace them.
+identity with exact f32 bits. F2-A3 now has native two-result forward and three-result backward checkpoint
+producers. Signed INT4 and bounded paged reads also consume native Schedule/Tile
+artifacts, with their Python Tile constructors retired. Scaled packing, fused
+paged attention, replay-SSM and MoE remain in this census. A checkpoint descriptor
+still does not prove runtime buffer provenance or complete AD policy integration.

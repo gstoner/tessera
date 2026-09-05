@@ -8,7 +8,7 @@ Reference date for staleness: **2026-09-05**.
 
 - **152** docs catalogued across the canonical doc tree.
 - **151** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **51** updated within the last 30 days.
+- **59** updated within the last 30 days.
 - **24** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -135,16 +135,16 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 |------|--------|--------------|-----------:|--|
 | `MASTER_AUDIT.md` | - | 2026-09-04 | 1 | ✓ |
 | `README.md` | - | 2026-08-08 | 28 | ✓ |
-| `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 36 | ✓ |
-| `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 40 | ✓ |
+| `backend/BACKEND_AUDIT.md` | - | 2026-09-05 | 0 | ✓ |
+| `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-09-05 | 0 | ✓ |
+| `backend/README.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/X86_AVX512_ABI_INVENTORY.md` | - | 2026-07-22 | 45 | ✓ |
-| `backend/apple/APPLE_AUDIT.md` | - | 2026-07-28 | 39 | ✓ |
-| `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 54 | ✓ |
+| `backend/apple/APPLE_AUDIT.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 54 | ✓ |
-| `backend/apple/README.md` | - | 2026-07-13 | 54 | ✓ |
+| `backend/apple/README.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/apple/todo.md` | - | 2026-09-05 | 0 | ✓ |
-| `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 73 | ✓ |
-| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-18 | 49 | ✓ |
+| `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-09-05 | 0 | ✓ |
+| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 48 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 54 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 73 | ✓ |
@@ -152,10 +152,10 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 32 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 22 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 27 | ✓ |
-| `backend/rocm/ROCM_AUDIT.md` | - | 2026-08-14 | 22 | ✓ |
+| `backend/rocm/ROCM_AUDIT.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 31 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 39 | ✓ |
-| `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 74 | ✓ |
+| `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/rocm/todo.md` | - | 2026-09-05 | 0 | ✓ |
 | `backend/x86/todo.md` | - | 2026-09-05 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 39 | ✓ |

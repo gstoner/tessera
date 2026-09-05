@@ -22,14 +22,14 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 4 |
-| `package_*` functions total | 49 |
+| `package_*` functions total | 55 |
 | — **bootstrap** (re-enter Graph IR; prune target) | 34 |
-|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 24 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 15 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 1 |
 |   ·  of the bootstrap, both | 1 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 8 |
-| — compiled-route packagers (consume a lowered artifact) | 15 |
-| Lines in those modules | 8738 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 17 |
+| — compiled-route packagers (consume a lowered artifact) | 21 |
+| Lines in those modules | 8747 |
 | Classified families | 24 |
 | — covered by a compiled route | 6 |
 | — **gap (no compiled route)** | 18 |
@@ -39,7 +39,7 @@ the bootstrap row can go.
 
 | Target | Module | bootstrap | compiled-route | Families | Lines |
 |---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 5 | 12 | 3783 |
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 11 | 12 | 3792 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 5 | 2894 |
 | `x86` | `x86_native.py` | 7 | 5 | 7 | 1846 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 215 |
@@ -87,13 +87,13 @@ covered because a same-named family is compiled.
 
 | Target | Packager |
 |---|---|
+| `nvidia_sm120` | `package_attention_checkpoint_pair` |
 | `nvidia_sm120` | `package_bf16_matmul` |
 | `nvidia_sm120` | `package_bf16_softmax` |
 | `nvidia_sm120` | `package_f16_matmul` |
 | `nvidia_sm120` | `package_f16_softmax` |
 | `nvidia_sm120` | `package_f32_softmax` |
 | `nvidia_sm120` | `package_paged_kv_read` |
-| `nvidia_sm120` | `package_scheduled_matmul` |
 | `rocm_gfx1151` | `package_attention_backward` |
 | `rocm_gfx1151` | `package_paged_kv_read` |
 

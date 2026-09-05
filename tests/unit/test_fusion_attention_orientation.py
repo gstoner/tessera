@@ -6,7 +6,7 @@ dispatch role / on the AttentionRegion), not from value shapes — closing the
 long-standing "ambiguous when D==Nk" blocker. `transpose_b=True` means the K
 operand is natural (Nk,D) and the matmul does Q·Kᵀ; `transpose_b=False` means the
 operand is already Kᵀ and is flipped. See
-docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M2).
+docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M2).
 """
 
 from __future__ import annotations

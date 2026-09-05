@@ -1083,7 +1083,7 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
 # optional residual add) into a stack accumulator, then the row reduction
 # (rmsnorm/layer_norm, reused verbatim from REDUCTION_OPS). Eliminates the
 # host round-trip between the residual add and the norm. See
-# docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M2).
+# docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M2).
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NORM_CHAIN_ENTRY = "synth_norm_chain"
@@ -1252,7 +1252,7 @@ def run_norm_chain_region(region: NormChainRegion, X: np.ndarray,
 # dispatches with host round-trips between them. The GPU analogue of the CPU
 # `run_graph_ops` lane. First cut: same-shape (no broadcast) pointwise ops; a
 # broadcast operand or a non-pointwise op bounds the region. See
-# docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M4).
+# docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md (M4).
 # ─────────────────────────────────────────────────────────────────────────────
 
 _PW_ENTRY = "synth_pointwise"

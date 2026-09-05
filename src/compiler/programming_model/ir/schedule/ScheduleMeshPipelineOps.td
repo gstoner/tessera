@@ -618,3 +618,17 @@ def Schedule_KnobOp : Op<ScheduleDialect, "knob"> {
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($selected)";
   let hasVerifier = 1;
 }
+
+// Retains every checkpoint result so native replay can prove result ownership.
+def Schedule_AttentionCheckpointOp : Op<ScheduleDialect, "attention_checkpoint"> {
+  let summary = "Content-addressed native attention checkpoint schedule";
+  let arguments = (ins Variadic<AnyRankedTensor>:$subjects, StrAttr:$artifact_hash);
+  let results = (outs Variadic<AnyRankedTensor>:$scheduled);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Schedule_PagedKVReadOp : Op<ScheduleDialect, "paged_kv_read"> {
+  let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash, DictionaryAttr:$contract);
+  let results = (outs AnyRankedTensor:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}

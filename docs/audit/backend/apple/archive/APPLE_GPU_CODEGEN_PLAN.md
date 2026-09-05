@@ -9,9 +9,9 @@ plan_state: superseded_for_active_execution_work
 > **Historical planning record.** This document explains the rationale and
 > milestones that produced the current MSL/MTL4 codegen substrate; it is not a
 > current support or execution-status source. Read
-> [`docs/backends/apple/`](../../../backends/apple/) for architecture,
-> [`apple_execution_inventory.md`](../../generated/apple_execution_inventory.md)
-> for execution-unit status, and `APPLE_AUDIT.md` for active Apple decisions.
+> [`docs/backends/apple/`](../../../../backends/apple/) for architecture,
+> [`apple_execution_inventory.md`](../../../generated/apple_execution_inventory.md)
+> for execution-unit status, and [`APPLE_AUDIT.md`](../APPLE_AUDIT.md) for active Apple decisions.
 >
 > Current terminology: a **generic route** dispatches ordinary JIT regions;
 > a **Value Target-IR call** is a strict single ABI call; a **package subgraph**

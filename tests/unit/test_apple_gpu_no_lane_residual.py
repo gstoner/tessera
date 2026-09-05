@@ -3,7 +3,7 @@ class of program that still demotes to ``target_ir_artifact``.
 
 Background (closes the stale "design fork"): the runtime synthesized-fusion
 prepass IS the canonical live path for multi-op ``@jit(target="apple_gpu")``
-programs (decided 2026-06-16, ``docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md``).
+programs (decided 2026-06-16, ``docs/audit/backend/apple/archive/APPLE_GPU_CODEGEN_PLAN.md``).
 ``driver._apple_gpu_chain_kind`` routes a >=2-op plan to ``apple_gpu_mps`` /
 ``metal_runtime`` when it is a named fusion, a wholly-pointwise DAG, OR — since
 the 2026-06-17 general residency gate — when **every** op has an Apple GPU

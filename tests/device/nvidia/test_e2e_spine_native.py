@@ -1962,7 +1962,7 @@ def test_canonical_sm120_attention_packages_launches_and_compares(
             scores *= scale
             if causal:
                 scores = np.where(
-                    np.arange(sk)[None, :] <= np.arange(sq)[:, None], scores, -np.inf
+                    np.arange(sk)[None, :] <= (np.arange(sq)[:, None] + max(sk - sq, 0)), scores, -np.inf
                 )
             weights = np.exp(scores - scores.max(axis=-1, keepdims=True))
             weights /= weights.sum(axis=-1, keepdims=True)
@@ -2033,7 +2033,8 @@ def test_canonical_sm120_attention_advanced_forward_contract_and_dropout_replay(
                 scores = scores / np.sqrt(float(d)) + bias[batch, head, query]
                 scores = 1.7 * pade_tanh(scores / 1.7)
                 keys = np.arange(sk)
-                legal = (keys <= query) & (keys >= query - 2) & (keys <= query + 1)
+                aligned = query + max(sk - sq, 0)
+                legal = (keys <= aligned) & (keys >= aligned - 2) & (keys <= aligned + 1)
                 scores = np.where(legal, scores, -np.inf)
                 weights = np.exp(scores - np.max(scores))
                 weights /= np.sum(weights)
@@ -2102,7 +2103,8 @@ def test_canonical_sm120_attention_backward_is_deterministic_and_oracle_proven()
             raw = q[0, head, query] @ k[0, 0].T * 0.5 + bias[0, head, query]
             t = pade_tanh(raw / 1.7)
             scores = 1.7 * t
-            legal = (keys <= query) & (keys >= query - 2) & (keys <= query + 1)
+            aligned = query + 1  # Sq=3, Sk=4: end-aligned canonical mask.
+            legal = (keys <= aligned) & (keys >= aligned - 2) & (keys <= aligned + 1)
             scores = np.where(legal, scores, -np.inf)
             p = np.exp(scores - np.max(scores)); p /= np.sum(p)
             delta = do[0, head, query] @ (p @ v[0, 0])
@@ -2170,7 +2172,8 @@ def test_canonical_sm120_lowp_attention_dropout_backward_replays_mask(
         for query in range(3):
             raw = qf[0, head, query] @ kf[0, 0].T * 0.5
             t = pade_tanh(raw / 1.7); scores = 1.7 * t
-            legal = (keys <= query) & (keys >= query - 2) & (keys <= query + 1)
+            aligned = query + 1  # Sq=3, Sk=4: end-aligned canonical mask.
+            legal = (keys <= aligned) & (keys >= aligned - 2) & (keys <= aligned + 1)
             scores = np.where(legal, scores, -np.inf)
             p = np.exp(scores - np.max(scores)); p /= p.sum()
             counter = ((head * 3 + query) * 4 + keys)
@@ -2289,3 +2292,48 @@ def test_canonical_sm120_paged_kv_remap_boundaries_and_invalid_table(start, end)
     )
     assert rejected["ok"] is False
     assert "invalid physical page" in rejected["reason"]
+
+
+@pytest.mark.hardware_nvidia
+@pytest.mark.parametrize("sq,sk,causal", [(3, 4, True), (5, 3, True), (3, 4, False)])
+def test_saved_attention_checkpoint_pair_launches_and_compares(sq, sk, causal):
+    from tessera.compiler.nvidia_native import package_attention_checkpoint_pair
+    from tests.unit.test_nvidia_checkpoint_pair import checkpoint_modules
+
+    if not nvidia_cuda_host_ready():
+        pytest.skip("host WSL CUDA device/toolchain unavailable")
+    forward, backward = checkpoint_modules(sq=sq, sk=sk, causal=causal)
+    pair = package_attention_checkpoint_pair(forward, backward, pipeline_name="tessera-nvidia-pipeline-sm120")
+    rng = np.random.default_rng(7121)
+    q = rng.normal(0, 0.2, (1, 2, sq, 4)).astype(np.float32)
+    k = rng.normal(0, 0.2, (1, 1, sk, 4)).astype(np.float32)
+    v = rng.normal(0, 0.2, (1, 1, sk, 3)).astype(np.float32)
+    do = rng.normal(0, 0.2, (1, 2, sq, 3)).astype(np.float32)
+    o, row_lse = np.empty_like(do), np.empty((1, 2, sq), np.float32)
+    dq, dk, dv = np.empty_like(q), np.empty_like(k), np.empty_like(v)
+    args = {"q": q, "k": k, "v": v, "do": do, "o": o, "row_lse": row_lse,
+            "dq": dq, "dk": dk, "dv": dv,
+            "B": 1, "Hq": 2, "Hkv": 1, "Sq": sq, "Sk": sk, "D": 4, "Dv": 3}
+    for package in (pair.forward, pair.backward):
+        artifact = RuntimeArtifact(tile_ir=package.tile_ir, target_ir=package.target_ir,
+            metadata={"target": "nvidia_sm120"}, native_image=package.image,
+            launch_descriptor=package.descriptor)
+        names = {binding.name for binding in package.descriptor.buffers}
+        names.update(scalar.name for scalar in package.descriptor.scalars)
+        result = launch(artifact, {name: args[name] for name in names})
+        assert result["ok"], result.get("reason")
+    scores = np.matmul(q, k.swapaxes(-1, -2)) * 0.5
+    if causal:
+        legal = np.arange(sk)[None, :] <= np.arange(sq)[:, None] + max(sk - sq, 0)
+        scores = np.where(legal, scores, -np.inf)
+    expected_lse = np.logaddexp.reduce(scores, axis=-1)
+    p = np.exp(scores - expected_lse[..., None])
+    expected_o = p @ v
+    dp = do @ v.swapaxes(-1, -2)
+    ds = p * (dp - (p * dp).sum(axis=-1, keepdims=True))
+    expected_dq = ds @ k * 0.5
+    expected_dk = (ds.swapaxes(-1, -2) @ q * 0.5).sum(axis=1, keepdims=True)
+    expected_dv = (p.swapaxes(-1, -2) @ do).sum(axis=1, keepdims=True)
+    for actual, expected in zip((o, row_lse, dq, dk, dv),
+            (expected_o, expected_lse, expected_dq, expected_dk, expected_dv)):
+        np.testing.assert_allclose(actual, expected, rtol=3e-5, atol=3e-6)

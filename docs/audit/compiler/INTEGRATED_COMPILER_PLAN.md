@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -74,7 +74,7 @@ owner and ships independently; each backend can advance after its own gates.
 | Cut | Existing owner / concrete deliverable | Depends on | Acceptance and retirement gate |
 |---|---|---|---|
 | F0 — live route census and executable migration baseline | E2E-REAL-3/5/6 + COMPILER-DEVEX-1. Derive a family/target/shape-policy map from current driver/package/plugin entry points, joining existing execution/lineage evidence. Include Apple CPU and the mixed NVIDIA scheduled wrapper. | Existing compiled slices; no new hardware prerequisite for census. | Route fixtures distinguish canonical IR input, Graph reconstruction, source-emitted bodies, explicit library calls and reference execution as separate facts. Name constructor, replacement, missing carrier, test and owning host. Establish an assertions-enabled MLIR lane for negative contract claims; release-build results remain separately labeled. |
-| F1 — remove the first live Graph re-entry | E2E-REAL-3 / NVIDIA-E2E-1. Refactor `nvidia_native.package_scheduled_matmul(module, artifact)` to build its descriptor from the validated scheduled IR/ABI, without `package_matmul(module)` or a second compilation. Correct driver ancestry only after the real consumer changes. | F0 fixture for this route; existing scheduled matmul artifact. | Static and bounded-dynamic f16/bf16 cases retain ABI/layout/shape guards; compile invocation count is one; mutating/discarding the original Graph cannot affect the artifact; altered IR is rejected or changes identity. Exact RTX 5070 numerical proof before retiring the old dependency. |
+| F1 — remove the first live Graph re-entry | E2E-REAL-3 / NVIDIA-E2E-1. Landed in PR #725: refactored `nvidia_native.package_scheduled_matmul(artifact)` to build its descriptor from the validated scheduled IR/ABI, without `package_matmul(module)` or a second compilation. Correct driver ancestry only after the real consumer changes. | F0 fixture for this route; existing scheduled matmul artifact. | Static and bounded-dynamic f16/bf16 cases retain ABI/layout/shape guards; compile invocation count is one; mutating/discarding the original Graph cannot affect the artifact; altered IR is rejected or changes identity. Exact RTX 5070 numerical proof before retiring the old dependency. |
 | F2 — migrate historical package families | E2E-REAL-5/6, W3.7, backend E2E owners. Extend scheduled softmax/reduction to NVIDIA; close uncovered ROCm movement, x86 cohort/breadth, and Apple value/CPU call contracts one family at a time. | F0 route census; per-family IR carrier and backend lowering. | Old/new numerical and ABI comparison, unsupported-policy rejection, independent IR replay and target-owned execution. Delete each Graph constructor only after all driver, direct-client and family-plugin callers migrate. No newly added Graph reconstruction path. |
 | F3 — make optimization and specialization native IR consumers | FRONTEND-IR-MEDIUM-1, W5.1/W5.2, MSW-9. Instantiate one optimized parametric recipe for valid buckets; migrate fusion/region and candidate inputs to canonical IR; connect one ANN rewrite to native pair evaluation. | F1 working boundary; F2 for the selected family, not every backend. | Two buckets share recipe/compiler identity and complete witnesses; illegal witnesses fail before lowering; original and rewritten native programs satisfy numeric policy; candidate admission binds emitted image/resources to that IR. Broader attention raising follows this path. |
 | F4 — extend structured semantics through the same path | W4-PRODUCT-1/W4-EFFECTS-1, NUMPOL-CARRIER-1, LAYOUT-ALG-1, SO-2/3/4, AD-*/DIST-NATIVE-1. Expand control/effects/residuals, batching, memory, state and distributed products only through verified carriers. | F2/F3 on the workload's families and existing legality interfaces. | IR-only forward/backward execution, complete shape/effect/layout/policy preservation, unknown cases fail closed, actual transport for multi-rank claims. Preserve closed shared work; implement only missing producer/consumer or envelope rows. |
@@ -936,7 +936,7 @@ The seven reviews costed overlapping work independently. Corrections applied her
 not a work queue — every row's work already lives in a wave item — but two rows
 no longer describe reality:
 
-- **Remat unification.** Deleting `EBMCheckpointInnerLoop` is **done**: W0.2
+- **Remat unification.** Removing `EBMCheckpointInnerLoop` from the default pipeline is **done**: W0.2
   removed it from the default EBM pipeline (its three attributes had zero
   consumers tree-wide), kept it as an explicitly experimental standalone pass,
   and shipped the Decision #10a `CHECK-NOT` fixture proving the default pipeline
@@ -1156,7 +1156,7 @@ than a subsystem.
 | W2.1 | **Closed 2026-08-11 — shared Graph IR dataflow framework.** `GraphDataflowAnalysis` runs shape and alias product lattices plus liveness on MLIR `DataFlowSolver`, derives value-scoped memory dependence from registered effects/resources, and exposes reverse activity. Unknown producers, unranked shape, unknown effects, aliased memref arguments, nested regions, stale snapshots, and absent analysis state resolve conservatively to ⊤/unsafe. The analysis owns explicit `invalidate`/`recompute`; await sinking recomputes after every mutation. Reverse AD and await sinking are production C++ clients. `--tessera-graph-dataflow` exposes schema-v1 facts for inspection, while `python/tessera/compiler/graph_dataflow.py` provides a structural-digest-invalidated Python query mirror. Direct tests cover shape, alias lineage, dead values, activity/`stop_gradient`, unknown producers, stale mutation, ordered collectives, and the x86 no-async path. Wiring automatically inferred dependence edges into new Tile action DAGs remains a scheduling-client task, not missing analysis substrate. | Sweep §3 | closed |
 | W2.2 | **Closed 2026-08-10 — effects from registered traced IR.** The canonical op catalog now emits explicit `tessera.effect_kind` for pure and effectful Graph operations plus alias and stochastic-identity contracts. Python `EffectLattice` consumes Graph records and `_EffectVisitor` is deleted. The C++ semantic analysis consumes those contracts, falls back to MLIR memory/cast/view interfaces, treats unknown behavior as `top`, rejects an attribute that erases a registered side effect, and reaches a fixed point across internal calls. Await sinking uses the same query. Direct tests cover indirect RNG, aliases, mutation, ordered collectives, regions, unknown operations, and x86/no-async. | Frontend §U7 | closed |
 | W2.3 | **Region-aware and whole-program memory activity landed.** Reverse AD consumes W2.1 activity and `stop_gradient` semantics instead of its private walker. Active structured operations propagate to explicit operands and implicit captures. A backward whole-function memory fixed point now retains preceding writes that may feed an active read, including result-less writes and conservative cross-block dependencies; the inspection pass annotates result-less operations too. `RegionAdjointInterface` owns admitted internal block activity. | Autodiff D3 | closed |
-| W2.4 | **Production relational legality authority consolidated 2026-08-18.** Fragment/TCGen05 and semantic-kind local invariants are binding ODS/type constraints, and WarpSpec divergence derives only from registered `schedule.warp` ancestry. `TileDataflowLegalityPass` now owns the shared pipeline, WarpSpec, barrier-reuse, and derived token/dataflow implementations in explicit pre-lowering and final stages. The old CLI pass names are compatibility wrappers over those same implementations and are not production authorities. `IRContractLegality` and Graph/layout checks remain separate level authorities. Remaining cleanup is deletion of the wrappers after downstream users migrate, not another legality algorithm. | IR Stack §U2 | shared objective closed; wrapper retirement open |
+| W2.4 | **Production relational legality authority consolidated 2026-08-18.** Fragment/TCGen05 and semantic-kind local invariants are binding ODS/type constraints, and WarpSpec divergence derives only from registered `schedule.warp` ancestry. `TileDataflowLegalityPass` now owns the shared pipeline, WarpSpec, barrier-reuse, and derived token/dataflow implementations in explicit pre-lowering and final stages. The old CLI pass names are compatibility wrappers over those same implementations and are not production authorities. `IRContractLegality` and Graph/layout checks remain separate level authorities. Remaining cleanup is deletion of the wrappers after downstream users migrate, not another legality algorithm. The [deleted-verifier invariant audit](#deleted-functionality-reassessment--2026-09-05) maps historical checks into these existing authorities. | IR Stack §U2 | shared objective closed; wrapper retirement open |
 | W2.4a | **CAKE typed Tile sync/memory + SO-2 role surface.** Phase 1 §5.1–§5.4 is closed: typed waits/tokens, loop-carry provenance, registered sync vocabulary, hatch deletion, and production NVIDIA legality wiring. On 2026-08-16 the Phase 2 role carrier added loop-carry-safe `!tile.role`, role-bearing pipeline/mbarrier ownership, a ROCm role-producing and role-consuming wave/LDS path, and explicit x86 `no_async_noop`. The plan-named gfx1151 §5.5 cohort passed **8/8**. On 2026-08-18 WarpSpec stopped recognizing arbitrary `tile.warp_role`/`tile.warp_guard`/`tile.wg_id` ancestor markers, and CAKE row 8 became a typed TCGen05 fragment contract with positive and negative host-free tests. **Open:** NVIDIA barrier-at-birth emission and SM120 exact-device proof; no CUDA performance claim is implied by the host-free row-8 verifier. | CAKE §5–§6 | gfx1151 gate closed; shared row 8 closed; NVIDIA producer proof open |
 
 **Exit:** an aliased/indirect RNG call is detected by effect inference; an
@@ -1559,7 +1559,7 @@ an existing hardcoded choice through the arbiter Decision #28 already built.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W5.1 | **Executable policy cohort landed; architecture packets remain open.** Complete-backward samples and unique retained residual allocations produce exact evidence; only exact-device rows stamp compiler selection attributes. Counted regions execute candidate plans and report the policy actually implemented (`SAVE`, `RECOMPUTE`, or `HYBRID`) plus forward, replay, and backward work. Model-only candidates remain ineligible. Remaining: lower chosen plans into the C++ region adjoint and collect exact-family x86/gfx1151 packets. | Autodiff D5 + GA/EBM §1.5 | landing |
+| W5.1 | **Executable policy cohort landed; architecture packets remain open.** Complete-backward samples and unique retained residual allocations produce exact evidence; only exact-device rows stamp compiler selection attributes. Counted regions execute candidate plans and report the policy actually implemented (`SAVE`, `RECOMPUTE`, or `HYBRID`) plus forward, replay, and backward work. Model-only candidates remain ineligible. Remaining: lower chosen plans into the C++ region adjoint and collect exact-family x86/gfx1151 packets. The [deleted-functionality reassessment](#deleted-functionality-reassessment--2026-09-05) specifies the native policy-consumption gate; restoring inert EBM annotations is not completion. | Autodiff D5 + GA/EBM §1.5 | landing |
 | W5.2 | Scheduling decisions at Schedule IR — tile sizes, stage counts, raster order, warp roles chosen from `fusion_core` cost models via the measured arbiter, not from `--tile-q=64` | Frontend §U3 + IR Stack §U6 | 5w |
 | W5.2a | **COMP-SCHED-OVERLAP-1/R1 — closed 2026-08-10.** Python Schedule→Tile async carriers now produce explicit token results and token-consuming waits; internal `tessera.queue.*` markers are rejected instead of filtered. The registered `--tessera-await-sinking` pass moves collective awaits to the first true SSA use through the W2.2 registered semantic query. Mutation, RNG/sample identity, aliases/casts/views, regions, unknown operations, and ordered collectives are fail-closed barriers. x86/no-async is a recorded no-op; the existing gfx1151 global→LDS/LDS-WMMA cohort remains 16/16. | TileRT R1 + async reconciliation | closed |
 | W5.2b | **COMP-SCHED-OVERLAP-1/R2 — closed 2026-08-10.** Successful measured autotune rows now carry a validated `tessera.measured_resource_vector.v1` in canonical `hot_path_metadata`: compute time, dtype-correct bytes moved, communication bytes, queue/resource identity, timing provenance, and a content digest for the measured schedule candidate. Timing provenance survives SQLite warm-starts. Analytical rows cannot claim this vector, and the contract stamps `usage = composition_analysis_only` plus `selector_authority = latency_ms`; scalar measured latency remains the sole selector score. R3 is the first permitted composition consumer. | TileRT R2 + Evaluator | closed |
@@ -1569,7 +1569,7 @@ an existing hardcoded choice through the arbiter Decision #28 already built.
 | W5.2f | **Tiled SSD family.** Define one content-addressed Schedule→Tile program for chunked SSD GEMM, reduction, recurrent carry, checkpoint/residency, and mutation lineage. Existing ReplaySSM and backend-specific sequence kernels are candidates/oracles, not semantic authorities. Physical lowering and promotion remain architecture-owned. | Roadmap tiled-SSD design + E2E-REAL-6 | open |
 | W5.2g | **Scalable action-DAG search closed 2026-08-14.** Wide DAGs use deterministic critical-path/list scheduling and never enter factorial enumeration. DAGs through eight actions retain exhaustive enumeration as the declared oracle; tests compare feasibility, modeled makespan bounds, and deterministic identity. A lower bound combines dependency critical path, per-resource-lane work, and queue work. Proven lower-bound losers may be pruned; every inexact survivor remains rank/prune-only and scalar exact-device latency retains selection authority. Remaining producer wiring stays W5.2e, not a second scheduler. | PDE plan §IV.3/IV.4 routed into TileRT R3 | closed |
 | W5.3 | Generic fusion region discovery over a legality oracle (a W2.1 client); keep the measured cost models | Sweep §F3 | *(folded into W5.2)* |
-| W5.4 | **Typed placement lattice plus bounded reshard SSA landed; native execution remains open.** The compiler represents replicated, tiled, partial-reduction, and unknown placements and propagates registered pure rules to a content-digested fixed point. Consumer mismatches now produce digest-bound actions with exact consumer/operand identity; `all_gather`, `all_reduce`, `reduce_scatter`, and `all_to_all` are inserted as real Graph SSA, retain their def-use chain through `schedule.collective` and Tile IR, and carry plan digest, subgroup, and region path. Region values may flow only to the same or a nested region; sibling/escaping movement fails closed. The conflict-free collective scheduler gives all-to-all subgroups a deterministic cyclic 1-factorization whose rounds have unique senders and receivers and cover every directed peer pair exactly once. Replicated-to-tiled local slicing deliberately remains unmaterialized until mesh extent can determine a truthful result type. Remaining: encode and consume the 45 generated domain-specific/axis-changing contracts, typed local-shard shape materialization, general nested-region placement joins, mock-mesh family proofs, and native NCCL/RCCL/MPI/OFI/SHMEM packets. | Sweep §F4 + PDE plan §IV.1 | landing |
+| W5.4 | **Typed placement lattice plus bounded reshard SSA landed; native execution remains open.** The compiler represents replicated, tiled, partial-reduction, and unknown placements and propagates registered pure rules to a content-digested fixed point. Consumer mismatches now produce digest-bound actions with exact consumer/operand identity; `all_gather`, `all_reduce`, `reduce_scatter`, and `all_to_all` are inserted as real Graph SSA, retain their def-use chain through `schedule.collective` and Tile IR, and carry plan digest, subgroup, and region path. Region values may flow only to the same or a nested region; sibling/escaping movement fails closed. The conflict-free collective scheduler gives all-to-all subgroups a deterministic cyclic 1-factorization whose rounds have unique senders and receivers and cover every directed peer pair exactly once. The later W5.4-RESHARD-1 landing above adds exact mesh-sized local slices and mock-mesh execution; these are no longer missing prerequisites. Remaining: domain-specific/axis-changing contract coverage, general nested-region placement joins, broader family proofs, and native NCCL/RCCL/MPI/OFI/SHMEM packets. Evaluate native sharding/Shardy integration independently of TPU under the [reassessment](#deleted-functionality-reassessment--2026-09-05); existing placement and reshard evidence remains the baseline. | Sweep §F4 + PDE plan §IV.1 | landing |
 | W5.5 | Rule-table-driven canonicalization (PDL/PDLL). **Defer equality saturation** until the rule table is large enough that ordering demonstrably costs something | Sweep §F5 | 3w |
 
 **Exit:** no tile size, residual policy, or fusion boundary is chosen by a
@@ -1838,3 +1838,182 @@ This is the first bounded migration, not closure of E2E-REAL-3 or all native
 packaging: F2 still owns the remaining Graph package roots and typed producers.
 Validation and exact-device scope are recorded in the NVIDIA queue under
 `IR-NATIVE-FOUNDATION-1`. Physical kernel optimization is outside this cut.
+
+
+### Foundation F2 unary driver migration — 2026-09-05
+
+The first E2E-REAL-5 NVIDIA subset now traverses native Graph → Schedule → Tile
+before packaging: static f32 last-axis softmax and serial rank-reducing
+sum/mean/max on arbitrary axes. The native passes own the launch wrapper;
+Python validates/binds the artifact and does not synthesize a replacement body.
+The established SM120 approximate-exp policy and runtime scalar ABI are retained.
+
+Exact-device old/new numerical and ABI tests, independent Schedule replay,
+policy tampering, and extra-work rejection cover this subset. A discovered
+legacy canonical-reduce kind bug is fixed alongside the differential tests.
+This closes the default-driver migration for that envelope, not F2: direct
+Graph clients, narrow dtypes, min/keepdims/cooperative reductions and other
+backends' remaining package families retain explicit retirement obligations.
+See all four backend queues under `IR-NATIVE-FOUNDATION-1` for evidence boundaries.
+
+
+### F2 direct unary entry points — 2026-09-05
+
+The migrated NVIDIA static f32 envelope now shares one native scheduling path
+between driver and direct package clients. Supported requests require the
+native scheduling compiler; they do not silently reconstruct Tile IR when it
+is absent. Narrow dtypes and min/keepdims/cooperative reductions remain explicit
+unmigrated envelopes, with the old implementation retained privately until their
+own comparisons pass. Direct-client migration is closed for f32 softmax and
+serial sum/mean/max; full constructor retirement remains open.
+
+
+### Next ten unary foundation actions — 2026-09-05
+
+These are bounded cuts under F2 / E2E-REAL-5, in dependency order. Completion
+requires native replay, correct ABI and owning RTX numerical evidence; constructor
+retirement also requires all production callers to migrate.
+
+| Action | Deliverable | State |
+|---|---|---|
+| F2-U1 | f16 scheduled softmax | implemented; RTX parity passed |
+| F2-U2 | bf16 scheduled softmax | implemented; RTX parity passed |
+| F2-U3 | scheduled min reduction | implemented; validated |
+| F2-U4 | keepdims reduction carrier and scheduling | implemented; validated |
+| F2-U5 | f16 input / f32 output reduction | implemented; validated |
+| F2-U6 | bf16 input / f32 output reduction | implemented; validated |
+| F2-U7 | explicit cooperative_128 reduction scheduling | implemented; validated |
+| F2-U8 | retire production Graph softmax constructor | implemented; validated |
+| F2-U9 | retire production Graph reduction constructor | implemented; validated |
+| F2-U10 | close caller inventory, native replay and negative-policy gates | implemented; validated |
+
+F2-U1–U10 implementation evidence: 184 RTX 5070 execute-and-compare cases
+cover f32/f16/bf16 softmax and all 144 combinations of reduction storage, kind,
+axis, keepdims and serial/cooperative policy. New packages match the retained
+test-only baseline and NumPy. Another 24 cooperative cases cover 257-element
+contiguous/strided axes; no performance promotion is inferred. The old
+production unary constructors are removed. Native Schedule replay, policy
+mutation refusal, missing-compiler refusal, one Tile compilation and explicit
+unsupported-adjoint failure are regression gated. This closes the ten bounded
+unary actions, not all of F2: norm, attention, packed matmul and sibling direct
+package migrations remain open in the survey inventory.
+
+
+### F2 norm and forward-attention contracts — 2026-09-05
+
+Owning item: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Implemented native SM120 unweighted RMSNorm/RMSNormSafe/LayerNorm scheduling and
+forward attention packaging for f16/bf16/f32 storage. Native replay validates
+the Tile artifact before one target compilation; the driver records real adjacent
+Graph/Schedule/Tile lineage. The two Graph constructors are now test-only baselines.
+
+Attention forward hashes now preserve exact f32 policy bits on all architectures.
+The initial cut refused NVIDIA short-query causal/window masks; F2-A2 below
+removes that restriction after aligning both physical kernels.
+No new backward or saved-LSE support is implied. Numerical parity, not performance
+promotion, is the acceptance criterion for this migration.
+
+Next actions, in dependency order:
+
+1. F2-A2: align NVIDIA ragged forward/backward masks and audit backward float hashes.
+2. F2-A3: migrate the paired saved-LSE producer and backward consumer together.
+3. F2-P1: migrate packed matmul with native storage/packing and layout projections.
+4. F2-S1: native paged KV, replay-SSM and MoE state/workspace contracts.
+5. F2-C1: retire sibling direct package constructors using their existing scheduled
+   consumers only where storage, policy and ABI envelopes agree.
+
+The updated survey lists every remaining NVIDIA constructor family and retains
+all five backend package entry points in the broader census.
+
+
+### F2 aligned masks and package contracts — 2026-09-05
+
+Owning item: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+
+- **F2-A2 implemented:** NVIDIA forward/backward Tile kernels use
+  `q + max(Sk - Sq, 0)` for causal and window masks, including saved-LSE variants.
+  Short-query native scheduling is admitted. Backward Schedule identity now
+  encodes exact f32 scale/softcap/dropout bits; regenerate older serialized
+  backward artifacts. This changes no pointer ABI or physical schedule.
+- **F2-A3 contract step implemented; native migration open:** explicit paired
+  packaging checks shape, physical f32 policy, Q/K/V and saved-LSE bindings before
+  compiling either half. Both descriptors carry a checkpoint digest. Unsupported
+  score-modifier aliases and reordered gradient returns are refused. The current
+  Graph forward op has a single native result; the historical Python saved-LSE
+  API has two. Next add a native multi-result checkpoint producer and a consuming
+  Schedule contract, then retire both Python Tile constructors together. A digest
+  does not establish that a runtime LSE buffer came from the specified inputs.
+- **F2-P1 reviewed, native migration open:** packed physical fields now reject
+  lossy/noninteger values and negative offsets before target compilation. Next
+  start with unscaled signed INT4 A/B/i32 output: make native storage packing,
+  packing axis, container strides and output roles part of the Schedule identity;
+  replay the serialized artifact and compare odd-K output on SM120. NVFP4/MX
+  require scale-layout projections before admission. No packed route was promoted.
+- **F2-S1 reviewed, native migration open:** paged-KV bounds no longer coerce
+  strings/floats/bools, and unrelated function returns are refused. Shared replay
+  geometry/span validation rejects noninteger values and overflowing allocation
+  sizes. Next native paged read must retain table bounds and logical start/end;
+  replay decode/flush must share an effects/lifetime contract; MoE must retain
+  multi-entry capacities and workspace ownership. These are separate bounded
+  producer migrations, not another Python wrapper around Graph reconstruction.
+
+Validation includes 18 RTX 5070 attention cases, three forward-save/backward-load
+pairs (both rectangular directions and unmasked), and 13 packed/paged/replay
+regressions on the rebuilt NVIDIA compiler. This is correctness evidence, not
+latency evidence. Princess-Luna runs shared contracts and the existing ROCm
+backward lane (three gfx1151 device cases passed). The focused contract, registry
+and dtype suite passed 510 tests with seven explicit skips; 11 audit tests, three
+native IR fixtures, Ruff, the zero-error mypy ratchet and all 30 generated-doc
+gates passed. Apple owning-host evidence is still separate.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Owner: `IR-NATIVE-FOUNDATION-1`; this section routes reassessment into existing
+work items rather than creating a parallel implementation queue. Status: open
+architecture review, not authorization to restore deleted implementations or
+claim new backend support.
+
+Decisions #29/#31 remove unsupported production declarations and competing
+implementations. They do not establish that the underlying semantics are
+unhelpful. A bounded experiment may be retained with an owner, producer,
+consumer and exit criteria, explicitly outside production capability claims.
+The queue stays-deleted gate continues to prevent accidental restoration; change
+it only with an accepted replacement contract and executable positive/negative
+fixtures. No gate is weakened by this planning update.
+
+| Reassessment | Existing owner and priority | Producer, consumer and native boundary | Acceptance evidence |
+|---|---|---|---|
+| Queue/pipeline ownership semantics | W2.4a / CAKE / SO-2, with W5.2 scheduling; next bounded spike | One native staged GEMM or attention producer; existing Tile pipeline/token, role and barrier legality consumers; architecture-owned NVVM/ROCDL lowering. First determine whether current operations already express capacity, acquire/publish/consume/release, slot generation and safe buffer reuse. A separate dialect requires a demonstrated representational gap. | Parse/serialize/replay; reject premature reuse, wrong slot/phase, missing release and illegal effects; execute against the current baseline. Measure device latency, barrier count, shared memory, registers and occupancy on NVIDIA and ROCm separately. No gain is presumed from adding vocabulary. |
+| Native residual-policy consumption | W5.1 / AD D5 / foundation F3; existing high-priority work | Existing demand/retained-residual analysis and selected SAVE/RECOMPUTE/HYBRID plan feed the C++ region adjoint and native package. Do not re-enable the annotation-only EBM pass as a substitute. | Same forward/gradient results and stochastic identity; effectful replay refused; selected policy matches executed save/replay operations. Measure peak retained memory, complete forward/replay/backward work and device latency for each owning family. |
+| Deleted-verifier invariant inventory | W2.4 legality consolidation; bounded correctness audit | Extract useful invariants from deleted ScheduleOps.cpp/Target helpers; map each to current registered ODS/type verification, IRContractLegality or TileDataflowLegality. Canonical producers and their actual lowered output are the inputs. Restore only a missing, still-valid invariant in its current authority. | Disposition for every reviewed invariant: covered, obsolete, intentionally extensible or missing. Missing checks require minimal malformed-IR rejection and valid-production acceptance fixtures. Check compiler cost if an analysis becomes nonlocal; no runtime speedup claim is required. |
+| Native sharding / Shardy integration | W5.4 / W5.4-RESHARD-1 / foundation F3; architecture evaluation | Current typed placement lattice, mesh and explicit reshard SSA feed either native Tessera analysis or an evaluated typed Shardy bridge, then existing Schedule/Tile collectives and backend transport. Assess independently of TPU support. | Preserve partial reductions, local shapes, subgroup identity and nested-region constraints through round trips. Reject unknown metadata rather than silently treating it as replicated. Compare against existing mock-mesh semantics; require owning-host multi-rank packets before native transport or performance claims. Account for compile cost, communication bytes and device latency. |
+| Neighbors/halo pipeline composition | Existing PDE/distributed work, W5.4 and COMP-SCHED-OVERLAP-1 | Existing halo inference, stencil materialization and transport passes produce native dataflow; overlap and target/runtime consumers must carry true-use dependencies through pack/exchange/unpack/compute. Deleted plugin pipeline names are not the deliverable. | One serialized end-to-end stencil workload, correct boundaries and deterministic exchanges; negative dependency/lifetime tests. Compare sequential and overlapped device/transport timelines on the actual multi-rank backend before claiming hidden communication. |
+| StableHLO interoperability | Foundation F1/F3; deferred until a concrete external consumer is named | A bounded canonical Graph export/import boundary, with an identified framework/compiler or differential oracle as consumer. It is not a replacement for the native backend spine and does not reactivate TPU. | Preserve shapes, dtype, numerical policy and effects; explicitly refuse unsupported operations; round-trip and numerical checks with that consumer. Evaluate maintenance/compile cost; no performance benefit is assumed. |
+
+Disposition ledger from the source/history survey:
+
+- Queue MLIR implementation: remains deleted; evaluate ownership semantics above.
+- EBM checkpoint pass: remains experimental and registered, removed only from
+  the default pipeline. Its useful demand-aware behavior belongs to W5.1.
+- Duplicate attention ODS: remains deleted. Canonical `tessera_attn.lse.save`
+  and `lse.load` still exist; F2-A3 must evaluate those before defining another
+  checkpoint vocabulary. Their existence alone does not close native producer
+  or packaging gaps.
+- Duplicate Tile/Schedule dialects, private registration scaffolds, permissive
+  bare fragments and synchronization attribute escape hatches: keep removed.
+  Preserve useful invariants through current typed authorities.
+- Old TPP and scaling/resilience directories: implementations remain under
+  `src/solvers/tpp` and `src/solvers/scaling_resilience`; these are relocation/
+  consolidation cases, not lost capabilities. Likewise, deleting the collective
+  generated-type implementation file is not deletion of async collective semantics.
+- TPU, Metalium, Cerebras and Rubin CPX retirement remains a target-scope decision.
+  Reuse portable ideas only through a named consumer; backend reactivation needs
+  its own requirement, implementation owner and exact-device validation.
+
+Backend assessment: NVIDIA and ROCm own separate physical pipeline/transport
+experiments. Apple needs its own Metal synchronization and residency mapping;
+x86 needs CPU ownership/effect validation, with explicit no-async behavior where
+appropriate. Shared IR proofs do not transfer physical schedules or measurements.
+All four backend queues link this reassessment; implementation remains ordered
+by the existing owners above and the active F2 saved-LSE/packed/stateful sequence.

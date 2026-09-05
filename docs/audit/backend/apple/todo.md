@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -7669,3 +7669,88 @@ physical kernels and numerical policy are unchanged.
 Sibling outcome: not applicable to execution parity. Apple scheduled packagers and compiler-owned MSL/Metal paths are unchanged.
 The driver change is confined to the NVIDIA branch; no device evidence transfers
 to this backend. Its F2 migration obligations remain open.
+
+## Foundation F2 unary slice — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+Owning item: E2E-REAL-5 / foundation F2. The shared native scheduling passes now
+admit SM120 f32 softmax and serial rank-reducing sum/mean/max. They emit a raw
+LLVM launch wrapper with the established NVIDIA symbol/ABI, and retain the
+Schedule hash in Tile IR. NVIDIA packaging consumes that artifact directly.
+NVIDIA's existing `approx_exp2` policy is explicit and hashed; other architectures
+retain `accurate`. The verifier rejects a policy inconsistent with its architecture.
+The wrapper consumer refuses extra function work rather than erasing it.
+
+Sibling outcome: not applicable to native execution changes. The apple schedule
+policy is unchanged; shared compiler fixtures cover its existing boundary.
+No new apple exact-device evidence is claimed. Its F2 families remain open.
+
+## F2 direct unary clients — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The public NVIDIA unary package APIs now enter the same native Schedule/Tile
+boundary as the driver for the migrated f32 envelope. Missing `tessera-opt` is
+an explicit failure for that envelope, not a return to Python kernel emission.
+Private Graph constructors remain for unmigrated dtype/policy cases and retained
+differential baselines; they are not new production routes.
+
+Sibling outcome: not applicable. The apple package APIs, native passes,
+runtime ABI and numerical policy are unchanged; no device proof transfers.
+
+## F2-U1–U10 unary closure — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+NVIDIA unary packaging now consumes native Schedule/Tile for f16/bf16/f32
+softmax and sum/mean/max/min reductions with f32 accumulation/output, arbitrary
+static axes, keepdims and serial/cooperative_128 policy. Production Graph
+constructors were removed; differential baselines live only under test support.
+The shared Graph reduce verifier admits narrow-to-f32 and retained dimensions;
+reverse AD refuses those new envelopes explicitly. Generic Linalg lowering still
+declines them. No new dtype, operation, runtime ABI or physical schedule is added.
+
+Sibling outcome: follow-up required for any expansion to the new Graph reduce
+envelopes. Existing apple schedules and runtime ABI are unchanged and shared
+compiler fixtures remain gated. No new apple exact-device evidence is claimed;
+NVIDIA's cooperative schedule does not transfer to this architecture.
+
+## F2 norm/attention — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The shared compiler adds `schedule.norm` for SM120 unweighted f16/bf16/f32 row
+normalization and admits SM120 forward `schedule.attention` with explicit
+recompute policy. NVIDIA direct package/driver paths consume native Tile wrappers;
+old constructors are test-only baselines. Runtime ABI and physical kernels are
+unchanged. Norm rejects unsupported policy overrides and epsilon that cannot be
+represented as positive finite f32.
+
+Shared finding fixed: forward attention hashes now encode exact f32 policy bits
+instead of six-decimal strings. Regenerate old forward Schedule artifacts;
+stale serialized hashes fail closed. Backward hash encoding remains follow-up.
+
+Sibling outcome: shared forward hash correctness is regression gated; no new
+apple exact-device proof is claimed. Physical policies and runtime ABI are
+unchanged. Follow-up required for old Schedule regeneration, backward hash review
+and remaining direct Graph-package migration. NVIDIA norm admission is not
+apple execution support.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+Apple follow-up required for owning-host runtime validation and native direct
+constructor retirement. The NVIDIA physical mask edit and paired package API are
+not applicable to Apple MSL. Shared backward hash and replay validation changes
+apply; no Metal execution or new saved-LSE support is claimed in this cut.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Follow-up required for Metal synchronization/residency mapping and Apple owning-host proof; shared legality changes alone do not establish Metal overlap.

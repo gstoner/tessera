@@ -160,8 +160,21 @@ LogicalResult SoftmaxOp::verify() {
     return failure();
   if (getAxisAttr().getInt() != -1)
     return emitOpError("initial softmax contract requires the last axis");
-  if (getExpMode() != "accurate")
-    return emitOpError("initial softmax contract requires accurate exp");
+  if (getExpMode() != (getArch() == "sm_120" ? "approx_exp2" : "accurate"))
+    return emitOpError("softmax exp policy must match its architecture");
+  return success();
+}
+
+LogicalResult NormOp::verify() {
+  if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
+          getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  if (getArch() != "sm_120" || getAccum() != "f32" || getAxis() != -1 ||
+      getWorkgroupSize() != 128 ||
+      (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
+      (getKind() != "rmsnorm" && getKind() != "layernorm") ||
+      !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
+    return emitOpError("requires SM120 unweighted row normalization with positive finite f32 epsilon");
   return success();
 }
 
@@ -172,9 +185,9 @@ LogicalResult ReduceOp::verify() {
     return failure();
   if (getAxisAttr().getInt() < 0)
     return emitOpError("requires a normalized non-negative axis");
-  if (getKind() != "sum" && getKind() != "mean" && getKind() != "max")
+  if (getKind() != "sum" && getKind() != "mean" && getKind() != "max" && (getArch() != "sm_120" || getKind() != "min"))
     return emitOpError("kind must be sum, mean, or max");
-  if (getSchedule() != "serial" || getNanMode() != "propagate")
+  if ((getSchedule() != "serial" && (getArch() != "sm_120" || getSchedule() != "cooperative_128")) || getNanMode() != "propagate")
     return emitOpError("initial reduction contract requires serial/propagate policy");
   return success();
 }
@@ -395,7 +408,8 @@ LogicalResult AttentionOp::verify() {
   // (APPLE-ATTN-STREAM-1).
   if (getBackwardLsePolicy() != "save_lse" &&
       getBackwardLsePolicy() != "gfx1151_auto_128" &&
-      getBackwardLsePolicy() != "apple7_recompute")
+      getBackwardLsePolicy() != "apple7_recompute" &&
+      getBackwardLsePolicy() != "sm120_recompute")
     return emitOpError("requires an architecture-owned backward LSE policy");
   if (getBackwardLseSelection() != "saved" &&
       getBackwardLseSelection() != "recompute")

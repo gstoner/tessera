@@ -507,6 +507,9 @@ struct SemanticKernelSchedule {
   StringRef arch;
   StringRef storage;
   StringRef accum = "f32";
+  StringRef expMode = "accurate";
+  StringRef reductionSchedule = "serial";
+  double epsilon = 0.0;
   SmallVector<int64_t> inputShape;
   SmallVector<int64_t> outputShape;
   int64_t axis = -1;
@@ -550,14 +553,35 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   // only below.  The launch tile does not prescribe a workgroup for Apple (the
   // delegated MSL route owns its threadgroup), so workgroupSize stays 1.
   bool apple_gpu = schedule.target == "apple_gpu";
-  if (!x86 && !rocm && !apple_gpu)
+  bool nvidia = schedule.target == "nvidia_sm120" && schedule.arch == "sm_120";
+  if (nvidia) schedule.expMode = "approx_exp2";
+  if (!x86 && !rocm && !apple_gpu && !nvidia)
     return failure();
 
   StringRef opName = op->getName().getStringRef();
+  if (opName == "tessera.rmsnorm" || opName == "tessera.rmsnorm_safe" || opName == "tessera.layer_norm") {
+    auto eps = op->getAttrOfType<FloatAttr>("eps");
+    auto axis = op->getAttrOfType<IntegerAttr>("axis");
+    if (!nvidia || schedule.storage.empty() || input.getShape() != output.getShape() ||
+        input.getElementType() != output.getElementType() ||
+        (axis && axis.getInt() != -1 && axis.getInt() != input.getRank() - 1) ||
+        op->hasAttr("numeric_policy")) return failure();
+    schedule.epsilon = static_cast<float>(eps ? eps.getValueAsDouble() :
+        opName == "tessera.rmsnorm_safe" ? 1e-6 : 1e-5);
+    if (!std::isfinite(schedule.epsilon) || schedule.epsilon <= 0.0) return failure();
+    for (int64_t dim : input.getShape()) if (dim <= 0) return failure();
+    schedule.family = "norm";
+    schedule.kind = opName == "tessera.layer_norm" ? "layernorm" : "rmsnorm";
+    schedule.columns = input.getShape().back();
+    for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
+    schedule.workgroupSize = 128;
+    return schedule;
+  }
   if (opName == "tessera.softmax") {
     auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
     if ((axisAttr && axisAttr.getInt() != -1) || input != output ||
-        (x86 && schedule.storage != "f32") ||
+        (x86 && schedule.storage != "f32")
+        || (nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
         (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
         (apple_gpu && schedule.storage != "f32"))
       return failure();
@@ -565,7 +589,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.rows = 1;
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
     schedule.columns = input.getShape().back();
-    schedule.workgroupSize = rocm ? 256 : 1;
+    schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
     return schedule;
   }
 
@@ -579,14 +603,20 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   auto kindAttr = op->getAttrOfType<StringAttr>("kind");
   if (!kindAttr || (kindAttr.getValue() != "sum" &&
                     kindAttr.getValue() != "mean" &&
-                    kindAttr.getValue() != "max"))
+                    kindAttr.getValue() != "max" && (!nvidia || kindAttr.getValue() != "min")))
     return failure();
-  bool keepdims = false;
+  auto keepAttr = op->getAttrOfType<BoolAttr>("keepdims");
+  bool keepdims = keepAttr && keepAttr.getValue();
+  if (keepdims && !nvidia) return failure();
+  if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
+    schedule.reductionSchedule = mode.getValue();
+  if (schedule.reductionSchedule != "serial" &&
+      (!nvidia || schedule.reductionSchedule != "cooperative_128")) return failure();
   SmallVector<int64_t> expected(input.getShape().begin(), input.getShape().end());
   if (keepdims) expected[axis] = 1;
   else expected.erase(expected.begin() + axis);
   if (ArrayRef<int64_t>(expected) != output.getShape() ||
-      schedule.storage != "f32" ||
+      (schedule.storage != "f32" && (!nvidia || (schedule.storage != "f16" && schedule.storage != "bf16"))) ||
       (x86 && axis != input.getRank() - 1) ||
       // Apple's synthesized reduce kernel gives one thread per row and folds
       // over the trailing extent, so it expresses last-axis reductions only.
@@ -601,7 +631,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   for (int64_t dim : input.getShape().take_front(axis)) schedule.outer *= dim;
   schedule.axisExtent = input.getDimSize(axis);
   for (int64_t dim : input.getShape().drop_front(axis + 1)) schedule.inner *= dim;
-  schedule.workgroupSize = rocm ? 256 : 1;
+  schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
   return schedule;
 }
 
@@ -622,8 +652,12 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
        ";columns=" + Twine(schedule.columns) + ";outer=" +
        Twine(schedule.outer) + ";axis_extent=" + Twine(schedule.axisExtent) +
        ";inner=" + Twine(schedule.inner) + ";workgroup=" +
-       Twine(schedule.workgroupSize) + ";exp=accurate;ftz=0;schedule=serial;nan=propagate")
+       Twine(schedule.workgroupSize) + ";exp=" + schedule.expMode +
+       ";ftz=0;schedule=" + schedule.reductionSchedule + ";nan=propagate")
           .str();
+  if (schedule.family == "norm") {
+    contract += ";epsilon_bits=" + Twine(llvm::APFloat(static_cast<float>(schedule.epsilon)).bitcastToAPInt().getZExtValue()).str();
+  }
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -1339,7 +1373,8 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   // those bounds are enforced below.  Attention BACKWARD has no Apple scheduled
   // consumer and is gated separately.
   bool apple_gpu = schedule.target == "apple_gpu" && schedule.arch == "apple7";
-  if (!x86 && !rocm && !apple_gpu)
+  bool nvidia = schedule.target == "nvidia_sm120" && schedule.arch == "sm_120";
+  if (!x86 && !rocm && !apple_gpu && !nvidia)
     return failure();
   schedule.batch = q.getDimSize(0);
   schedule.queryHeads = q.getDimSize(1);
@@ -1365,7 +1400,8 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   if (k.getElementType() != qElement || v.getElementType() != qElement)
     return failure();
   schedule.storage = storageName(qElement);
-  if ((x86 && schedule.storage != "f32") ||
+  if ((nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
+      (x86 && schedule.storage != "f32") ||
       (rocm && (schedule.storage != "f16" && schedule.storage != "bf16")) ||
       (rocm && (schedule.headDim != schedule.valueDim ||
                 schedule.headDim % 16 != 0)) ||
@@ -1426,15 +1462,15 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
       static_cast<float>(dropoutP.getValueAsDouble()));
   schedule.dropoutSeed = dropoutSeed.getInt();
   schedule.tileQ = schedule.queryRows;
-  schedule.workgroupSize = rocm ? 256 : 1;
+  schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
   // Apple's attention backward recomputes m/l per query row and its ABI takes
   // no LSE buffer (APPLE-ATTN-STREAM-1), so it owns an explicit recompute
   // policy rather than inheriting x86's save_lse or the gfx1151 threshold.
-  schedule.backwardLsePolicy = apple_gpu   ? "apple7_recompute"
+  schedule.backwardLsePolicy = nvidia ? "sm120_recompute" : apple_gpu   ? "apple7_recompute"
                                : x86       ? "save_lse"
                                            : "gfx1151_auto_128";
   schedule.backwardLseSelection =
-      apple_gpu ? "recompute"
+      (apple_gpu || nvidia) ? "recompute"
                 : (x86 || schedule.queryRows >= 128) ? "saved" : "recompute";
   schedule.qShape.assign(q.getShape().begin(), q.getShape().end());
   schedule.kShape.assign(k.getShape().begin(), k.getShape().end());
@@ -1444,6 +1480,9 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
 }
 
 static std::string attentionScheduleDigest(const AttentionSchedule &schedule) {
+  auto bits = [](double value) {
+    return Twine(llvm::APFloat(static_cast<float>(value)).bitcastToAPInt().getZExtValue()).str();
+  };
   std::string contract =
       (Twine("family=attention;target=") + schedule.target +
        ";arch=" + schedule.arch + ";shape=" + Twine(schedule.batch) + "x" +
@@ -1451,13 +1490,13 @@ static std::string attentionScheduleDigest(const AttentionSchedule &schedule) {
        Twine(schedule.queryRows) + "x" + Twine(schedule.keyRows) + "x" +
        Twine(schedule.headDim) + "x" + Twine(schedule.valueDim) +
        ";storage=" + schedule.storage + ";accum=" + schedule.accum +
-       ";scale=" + std::to_string(schedule.scale) +
+       ";scale_bits=" + bits(schedule.scale) +
        ";causal=" + Twine(schedule.causal ? 1 : 0) +
        ";bias=" + Twine(schedule.bias ? 1 : 0) +
        ";window=" + Twine(schedule.windowLeft) + ":" +
-       Twine(schedule.windowRight) + ";softcap=" +
-       std::to_string(schedule.softcap) + ";dropout=" +
-       std::to_string(schedule.dropoutP) + ";seed=" +
+       Twine(schedule.windowRight) + ";softcap_bits=" +
+       bits(schedule.softcap) + ";dropout_bits=" +
+       bits(schedule.dropoutP) + ";seed=" +
        Twine(schedule.dropoutSeed) + ";tile=" + Twine(schedule.tileQ) + "x" +
        Twine(schedule.tileKV) + ";workgroup=" +
        Twine(schedule.workgroupSize) + ";recurrence=" + schedule.recurrence +
@@ -1671,19 +1710,22 @@ getAttentionBackwardSchedule(Operation *op) {
 
 static std::string
 attentionBackwardScheduleDigest(const AttentionBackwardSchedule &schedule) {
+  auto bits = [](double value) {
+    return Twine(llvm::APFloat(static_cast<float>(value)).bitcastToAPInt().getZExtValue()).str();
+  };
   std::string contract =
       (Twine("family=attention_backward;target=") + schedule.target +
        ";arch=" + schedule.arch + ";shape=" + Twine(schedule.batch) + "x" +
        Twine(schedule.queryHeads) + "x" + Twine(schedule.kvHeads) + "x" +
        Twine(schedule.queryRows) + "x" + Twine(schedule.keyRows) + "x" +
        Twine(schedule.headDim) + "x" + Twine(schedule.valueDim) +
-       ";storage=" + schedule.storage + ";accum=f32;scale=" +
-       std::to_string(schedule.scale) + ";causal=" +
+       ";storage=" + schedule.storage + ";accum=f32;scale_bits=" +
+       bits(schedule.scale) + ";causal=" +
        Twine(schedule.causal ? 1 : 0) + ";bias=" +
        Twine(schedule.bias ? 1 : 0) + ";window=" +
        Twine(schedule.windowLeft) + ":" + Twine(schedule.windowRight) +
-       ";softcap=" + std::to_string(schedule.softcap) + ";dropout=" +
-       std::to_string(schedule.dropoutP) + ";seed=" +
+       ";softcap_bits=" + bits(schedule.softcap) + ";dropout_bits=" +
+       bits(schedule.dropoutP) + ";seed=" +
        Twine(schedule.dropoutSeed) + ";blocks=" +
        Twine(schedule.queryBlock) + "x" + Twine(schedule.keyBlock) +
        ";splits=" + Twine(schedule.splitCount) + ";reduce=0,1;workspace=" +
@@ -1940,7 +1982,9 @@ struct GraphToSchedulePass
     SmallVector<Operation *> semanticKernels;
     mod.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
-      if (name == "tessera.softmax" || name == "tessera.reduce")
+      if (name == "tessera.softmax" || name == "tessera.reduce" ||
+          (moduleString(mod, "tessera.target", "target") == "nvidia_sm120" &&
+           (name == "tessera.rmsnorm" || name == "tessera.rmsnorm_safe" || name == "tessera.layer_norm")))
         semanticKernels.push_back(op);
     });
     for (Operation *op : semanticKernels) {
@@ -1954,6 +1998,7 @@ struct GraphToSchedulePass
       op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
       builder.setInsertionPointAfter(op);
       OperationState state(op->getLoc(),
+                           selected->family == "norm" ? "schedule.norm" :
                            selected->family == "softmax" ? "schedule.softmax"
                                                          : "schedule.reduce");
       state.addOperands(op->getResult(0));
@@ -1965,13 +2010,16 @@ struct GraphToSchedulePass
       state.addAttribute("axis", builder.getI64IntegerAttr(selected->axis));
       state.addAttribute("workgroup_size",
                          builder.getI64IntegerAttr(selected->workgroupSize));
-      if (selected->family == "softmax") {
-        state.addAttribute("exp_mode", builder.getStringAttr("accurate"));
+      if (selected->family == "norm") {
+        state.addAttribute("kind", builder.getStringAttr(selected->kind));
+        state.addAttribute("epsilon", builder.getF32FloatAttr(selected->epsilon));
+      } else if (selected->family == "softmax") {
+        state.addAttribute("exp_mode", builder.getStringAttr(selected->expMode));
         state.addAttribute("ftz", builder.getBoolAttr(false));
       } else {
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("keepdims", builder.getBoolAttr(selected->keepdims));
-        state.addAttribute("schedule", builder.getStringAttr("serial"));
+        state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("nan_mode", builder.getStringAttr("propagate"));
         state.addAttribute("inner_is_one", builder.getBoolAttr(selected->inner == 1));
       }
@@ -3377,10 +3425,11 @@ struct ScheduleToTilePass
     SmallVector<Operation *> scheduledKernels;
     mod.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
-      if (name == "schedule.softmax" || name == "schedule.reduce")
+      if (name == "schedule.softmax" || name == "schedule.reduce" || name == "schedule.norm")
         scheduledKernels.push_back(op);
     });
     for (Operation *scheduled : scheduledKernels) {
+      bool isNorm = scheduled->getName().getStringRef() == "schedule.norm";
       bool isSoftmax = scheduled->getName().getStringRef() == "schedule.softmax";
       Operation *graph = scheduled->getOperand(0).getDefiningOp();
       if (!graph || graph->getNumOperands() != 1 || graph->getNumResults() != 1) {
@@ -3392,7 +3441,8 @@ struct ScheduleToTilePass
       auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
       if (failed(selected) || !hash || semanticKernelDigest(*selected) != hash.getValue() ||
           (isSoftmax && selected->family != "softmax") ||
-          (!isSoftmax && selected->family != "reduce")) {
+          (isNorm && selected->family != "norm") ||
+          (!isSoftmax && !isNorm && selected->family != "reduce")) {
         scheduled->emitError(
             "scheduled decision does not match the retained Graph kernel contract");
         return signalPassFailure();
@@ -3414,13 +3464,17 @@ struct ScheduleToTilePass
                      attrString("accum") != selected->accum ||
                      attrInt("axis") != selected->axis ||
                      attrInt("workgroup_size") != selected->workgroupSize;
-      if (isSoftmax)
-        altered = altered || attrString("exp_mode") != "accurate" ||
+      if (isNorm) {
+        auto eps = scheduled->getAttrOfType<FloatAttr>("epsilon");
+        altered = altered || attrString("kind") != selected->kind ||
+                  !eps || eps.getValueAsDouble() != selected->epsilon;
+      } else if (isSoftmax)
+        altered = altered || attrString("exp_mode") != selected->expMode ||
                   attrBool("ftz") != false;
       else
         altered = altered || attrString("kind") != selected->kind ||
                   attrBool("keepdims") != selected->keepdims ||
-                  attrString("schedule") != "serial" ||
+                  attrString("schedule") != selected->reductionSchedule ||
                   attrString("nan_mode") != "propagate" ||
                   attrBool("inner_is_one") != (selected->inner == 1);
       if (altered) {
@@ -3438,6 +3492,66 @@ struct ScheduleToTilePass
         scheduled->emitError(
             "requires exactly one matching Graph hash and schedule.artifact");
         return signalPassFailure();
+      }
+
+      if (selected->target == "nvidia_sm120") {
+        auto function = graph->getParentOfType<func::FuncOp>();
+        if (!function || !llvm::hasSingleElement(function.getBody()) ||
+            function.getNumArguments() != 1 || function.getNumResults() != 1 ||
+            function.getBody().front().getOperations().size() != 4 ||
+            graph->getOperand(0) != function.getArgument(0)) {
+          scheduled->emitError("NVIDIA scheduled kernel requires one isolated unary function");
+          return signalPassFailure();
+        }
+        auto ret = dyn_cast<func::ReturnOp>(function.getBody().front().back());
+        if (!ret || ret.getNumOperands() != 1 ||
+            ret.getOperand(0) != scheduled->getResult(0)) {
+          scheduled->emitError("NVIDIA scheduled kernel must be the function result");
+          return signalPassFailure();
+        }
+        // Preserve the established runtime launch symbols and serial schedule.
+        std::string name = isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + "_" + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage).str() :
+            (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
+        if (SymbolTable::lookupSymbolIn(mod, name)) {
+          scheduled->emitError("NVIDIA scheduled kernel symbol already exists");
+          return signalPassFailure();
+        }
+        Location loc = scheduled->getLoc();
+        auto ptr = LLVM::LLVMPointerType::get(&getContext());
+        auto i64 = builder.getI64Type();
+        SmallVector<Type> inputs{ptr, ptr, i64, i64};
+        if (!isSoftmax && !isNorm) inputs.push_back(i64);
+        auto type = LLVM::LLVMFunctionType::get(
+            LLVM::LLVMVoidType::get(&getContext()), inputs, false);
+        OpBuilder mb(mod.getBody(), mod.getBody()->end());
+        auto kernel = LLVM::LLVMFuncOp::create(mb, loc, name, type);
+        kernel->setAttr("nvvm.kernel", mb.getUnitAttr());
+        Block *entry = kernel.addEntryBlock(mb);
+        OpBuilder kb(entry, entry->begin());
+        OperationState state(loc, isNorm ? "tile.norm_kernel" : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
+        state.addOperands(entry->getArguments());
+        if (isNorm) state.addOperands(kb.create<arith::ConstantOp>(loc, kb.getF32FloatAttr(selected->epsilon)).getResult());
+        for (StringRef key : {"storage", "accum", "axis"})
+          state.addAttribute(key, scheduled->getAttr(key));
+        if (isNorm) {
+          state.addAttribute("kind", scheduled->getAttr("kind"));
+          state.addAttribute("affine", kb.getBoolAttr(false));
+          state.addAttribute("tessera.norm_epsilon", kb.getF32FloatAttr(selected->epsilon));
+        } else if (isSoftmax) {
+          for (StringRef key : {"exp_mode", "ftz"})
+            state.addAttribute(key, scheduled->getAttr(key));
+        } else {
+          for (StringRef key : {"kind", "keepdims", "schedule", "nan_mode", "inner_is_one"})
+            state.addAttribute(key, scheduled->getAttr(key));
+        }
+        state.addAttribute("tessera.workgroup_size", kb.getI64IntegerAttr(128));
+        state.addAttribute("tessera.schedule_hash", hash);
+        kb.create(state);
+        LLVM::ReturnOp::create(kb, loc, ValueRange{});
+        // The isolated wrapper contains only the consumed Graph/Schedule pair,
+        // its durable artifact and return. No executable sibling is discarded.
+        function.erase();
+        continue;
       }
 
       auto inputType = cast<RankedTensorType>(graph->getOperand(0).getType());
@@ -4432,6 +4546,45 @@ struct ScheduleToTilePass
       Location loc = scheduled.getLoc();
       builder.setInsertionPoint(scheduled);
       auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      SmallVector<Value> operands;
+      Value outputBuffer;
+      func::FuncOp nativeGraph;
+      LLVM::LLVMFuncOp nativeKernel;
+      if (selected->target == "nvidia_sm120") {
+        nativeGraph = graph->getParentOfType<func::FuncOp>();
+        if (!nativeGraph || !llvm::hasSingleElement(nativeGraph.getBody()) ||
+            nativeGraph.getNumArguments() != graph->getNumOperands() ||
+            nativeGraph.getNumResults() != 1 ||
+            nativeGraph.getBody().front().getOperations().size() != 4) {
+          scheduled.emitError("NVIDIA scheduled attention requires one isolated function");
+          return signalPassFailure();
+        }
+        for (unsigned i = 0; i < graph->getNumOperands(); ++i)
+          if (graph->getOperand(i) != nativeGraph.getArgument(i)) {
+            scheduled.emitError("NVIDIA scheduled attention requires ordered argument operands");
+            return signalPassFailure();
+          }
+        auto ret = dyn_cast<func::ReturnOp>(nativeGraph.getBody().front().back());
+        if (!ret || ret.getNumOperands() != 1 || ret.getOperand(0) != scheduled.getScheduled()) {
+          scheduled.emitError("NVIDIA scheduled attention must be the function result");
+          return signalPassFailure();
+        }
+        std::string name = (Twine("tessera_tile_attention_") + selected->storage + "_" +
+            (selected->causal ? "causal_" : "full_") + scheduled.getArtifactHash().take_front(10)).str();
+        if (SymbolTable::lookupSymbolIn(mod, name)) {
+          scheduled.emitError("NVIDIA scheduled attention symbol already exists");
+          return signalPassFailure();
+        }
+        SmallVector<Type> inputs(4 + (selected->bias ? 1 : 0), pointerType);
+        inputs.append(7, builder.getI64Type());
+        auto type = LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(&getContext()), inputs, false);
+        OpBuilder mb(mod.getBody(), mod.getBody()->end());
+        nativeKernel = LLVM::LLVMFuncOp::create(mb, loc, name, type);
+        nativeKernel->setAttr("nvvm.kernel", mb.getUnitAttr());
+        Block *entry = nativeKernel.addEntryBlock(mb);
+        builder.setInsertionPointToStart(entry);
+        operands.assign(entry->getArguments().begin(), entry->getArguments().end());
+      } else {
       auto toPointer = [&](Value tensor) -> Value {
         auto type = cast<RankedTensorType>(tensor.getType());
         auto memrefType = MemRefType::get(type.getShape(), type.getElementType());
@@ -4443,7 +4596,6 @@ struct ScheduleToTilePass
             builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
       };
-      SmallVector<Value> operands;
       operands.push_back(toPointer(graph->getOperand(0)));
       operands.push_back(toPointer(graph->getOperand(1)));
       operands.push_back(toPointer(graph->getOperand(2)));
@@ -4453,7 +4605,7 @@ struct ScheduleToTilePass
       auto outputType = cast<RankedTensorType>(graph->getResult(0).getType());
       auto outputMemref =
           MemRefType::get(outputType.getShape(), outputType.getElementType());
-      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
       Value outputIndex =
           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
       Value outputInteger = builder.create<arith::IndexCastOp>(
@@ -4467,6 +4619,7 @@ struct ScheduleToTilePass
         operands.push_back(
             builder.create<arith::ConstantIntOp>(loc, dimension, 64));
 
+      }
       OperationState kernelState(loc, "tile.attention_kernel");
       kernelState.addOperands(operands);
       kernelState.addAttribute("storage",
@@ -4508,10 +4661,16 @@ struct ScheduleToTilePass
           builder.getStringAttr(selected->backwardLseSelection));
       kernelState.addAttribute("tessera.schedule_hash",
                                builder.getStringAttr(scheduled.getArtifactHash()));
+      if (nativeKernel) kernelState.addAttribute("lse_checkpoint", builder.getStringAttr("recompute"));
       builder.create(kernelState);
+      if (nativeKernel) {
+        LLVM::ReturnOp::create(builder, loc, ValueRange{});
+        nativeGraph.erase();
+        continue;
+      }
 
       Value result = builder.create<bufferization::ToTensorOp>(
-          loc, outputType, outputBuffer);
+          loc, cast<RankedTensorType>(graph->getResult(0).getType()), outputBuffer);
       scheduled.getScheduled().replaceAllUsesWith(result);
       scheduled.erase();
       if (graph->use_empty())

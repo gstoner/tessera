@@ -110,6 +110,17 @@ def Schedule_SoftmaxOp : Op<ScheduleDialect, "softmax", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Schedule_NormOp : Op<ScheduleDialect, "norm", [Pure]> {
+  let summary = "Scheduled unweighted row normalization with immutable epsilon";
+  let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,
+                       StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
+                       StrAttr:$kind, I64Attr:$axis, F32Attr:$epsilon,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_ReduceOp : Op<ScheduleDialect, "reduce", [Pure]> {
   let summary = "Scheduled Graph reduction with explicit numeric policy";
   let arguments = (ins AnyType:$subject,

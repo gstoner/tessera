@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -6652,3 +6652,89 @@ physical kernels and numerical policy are unchanged.
 Sibling outcome: not applicable to execution parity. ROCm scheduled packagers and ROCDL/HSACO generation are unchanged.
 The driver change is confined to the NVIDIA branch; no device evidence transfers
 to this backend. Its F2 migration obligations remain open.
+
+## Foundation F2 unary slice — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+Owning item: E2E-REAL-5 / foundation F2. The shared native scheduling passes now
+admit SM120 f32 softmax and serial rank-reducing sum/mean/max. They emit a raw
+LLVM launch wrapper with the established NVIDIA symbol/ABI, and retain the
+Schedule hash in Tile IR. NVIDIA packaging consumes that artifact directly.
+NVIDIA's existing `approx_exp2` policy is explicit and hashed; other architectures
+retain `accurate`. The verifier rejects a policy inconsistent with its architecture.
+The wrapper consumer refuses extra function work rather than erasing it.
+
+Sibling outcome: parity validated for the existing f32 scheduled softmax and
+reduction tests on Princess-Luna gfx1151 with the explicit device opt-in enabled.
+The ROCm schedule/hash policy is unchanged; no NVIDIA physical schedule transfers.
+Other ROCm Graph-owned families remain follow-up work.
+
+## F2 direct unary clients — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The public NVIDIA unary package APIs now enter the same native Schedule/Tile
+boundary as the driver for the migrated f32 envelope. Missing `tessera-opt` is
+an explicit failure for that envelope, not a return to Python kernel emission.
+Private Graph constructors remain for unmigrated dtype/policy cases and retained
+differential baselines; they are not new production routes.
+
+Sibling outcome: not applicable. The rocm package APIs, native passes,
+runtime ABI and numerical policy are unchanged; no device proof transfers.
+
+## F2-U1–U10 unary closure — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+NVIDIA unary packaging now consumes native Schedule/Tile for f16/bf16/f32
+softmax and sum/mean/max/min reductions with f32 accumulation/output, arbitrary
+static axes, keepdims and serial/cooperative_128 policy. Production Graph
+constructors were removed; differential baselines live only under test support.
+The shared Graph reduce verifier admits narrow-to-f32 and retained dimensions;
+reverse AD refuses those new envelopes explicitly. Generic Linalg lowering still
+declines them. No new dtype, operation, runtime ABI or physical schedule is added.
+
+Sibling outcome: existing scheduled f32 parity validated on Princess-Luna gfx1151.
+New NVIDIA narrow/keepdims/min/cooperative envelopes are not ROCm execution
+support; follow-up required for any ROCm expansion. Its 256-thread policy and
+runtime ABI remain unchanged. Shared compiler fixtures cover existing scheduling.
+
+## F2 norm/attention — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The shared compiler adds `schedule.norm` for SM120 unweighted f16/bf16/f32 row
+normalization and admits SM120 forward `schedule.attention` with explicit
+recompute policy. NVIDIA direct package/driver paths consume native Tile wrappers;
+old constructors are test-only baselines. Runtime ABI and physical kernels are
+unchanged. Norm rejects unsupported policy overrides and epsilon that cannot be
+represented as positive finite f32.
+
+Shared finding fixed: forward attention hashes now encode exact f32 policy bits
+instead of six-decimal strings. Regenerate old forward Schedule artifacts;
+stale serialized hashes fail closed. Backward hash encoding remains follow-up.
+
+Sibling outcome: existing gfx1151 scheduled attention/semantic-kernel parity is
+validated by the opted-in owning-host tests. The forward hash format changes;
+physical schedules and runtime ABI do not. Follow-up required for direct-package
+retirement and backward hash review. No NVIDIA norm support transfers to ROCm.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+ROCm follow-up required for native constructor retirement. The NVIDIA physical
+mask edit is not applicable to ROCm's already end-aligned split-reduced kernel.
+Princess-Luna parity validated: all three gfx1151 scheduled backward MHA/GQA/MQA
+cases passed with the new shared hashes. No NVIDIA schedule or saved-LSE pairing
+API is promoted into the gfx1151 production route.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Own the wave/LDS/ROCDL experiment and ROCm multi-rank transport evidence; no NVIDIA barrier protocol or physical schedule transfers.

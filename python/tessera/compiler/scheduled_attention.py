@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
 from dataclasses import dataclass
 
@@ -153,6 +154,9 @@ def lower_scheduled_attention(
     )
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
+    if target == "nvidia_sm120":
+        targeted.module_attrs["tessera.launch_bindings"] = json.dumps(
+            list(contract[3]) + ([contract[4]] if contract[4] is not None else []) + [contract[5]])
     graph_ir = targeted.to_mlir(target=target, canonical=True)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
@@ -171,7 +175,8 @@ def lower_scheduled_attention(
         tile_ir=tile_ir,
         target=contract[0],
         architecture=contract[1],
-        function_name=contract[2],
+        function_name=(f"tessera_tile_attention_{contract[7]}_{'causal' if contract[12] else 'full'}_{hashes[0][:10]}"
+                       if target == "nvidia_sm120" else contract[2]),
         q_name=contract[3][0],
         k_name=contract[3][1],
         v_name=contract[3][2],
@@ -243,6 +248,20 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         workgroup_size = 256
         backward_lse_policy = "gfx1151_auto_128"
         backward_lse_selection = "saved" if dims[3] >= 128 else "recompute"
+    elif target == "nvidia_sm120":
+        from .nvidia_native import _attention_contract as _nvidia_attention_contract
+
+        physical = _nvidia_attention_contract(module)
+        if physical is None:
+            raise ValueError("unsupported NVIDIA scheduled attention contract")
+        (dtype, dims, scale, causal, bias_name, window_left, window_right,
+         softcap, dropout_p, dropout_seed) = physical
+        q_name, k_name, v_name = (value.removeprefix("%") for value in module.functions[0].body[0].operands[:3])
+        names = (q_name, k_name, v_name)
+        output_name = module.functions[0].body[0].result or "output"
+        storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
+        compiler_target, architecture, workgroup_size = "nvidia_sm120", "sm_120", 128
+        backward_lse_policy, backward_lse_selection = "sm120_recompute", "recompute"
     elif target == "apple_gpu":
         from .apple_native import _attention_contract as _apple_attention_contract
 

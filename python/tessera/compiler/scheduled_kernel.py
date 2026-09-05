@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import math
 import re
+import struct
 from dataclasses import dataclass
 
 from .graph_ir import GraphIRModule
@@ -40,6 +41,8 @@ class ScheduledKernelArtifact:
     inner: int
     workgroup_size: int
     schedule_digest: str
+    schedule: str = "serial"
+    epsilon: float = 0.0
 
     @property
     def graph_digest(self) -> str:
@@ -55,7 +58,7 @@ class ScheduledKernelArtifact:
 
     def validate(self) -> None:
         schedule_op = f"schedule.{self.family}"
-        tile_op = f"tile.{self.family}_kernel" if self.family == "softmax" else "tile.reduce_kernel"
+        tile_op = f"tile.{self.family}_kernel"
         if len(re.findall(rf"(?m)^\s*%[^=]+ = {re.escape(schedule_op)}\b", self.schedule_ir)) != 1:
             raise ValueError(f"scheduled {self.family} artifact requires one scheduled SSA operation")
         if len(re.findall(r"(?m)^\s*schedule\.artifact\b", self.schedule_ir)) != 1:
@@ -88,7 +91,13 @@ def lower_scheduled_kernel(
     module: GraphIRModule,
     *,
     target: str,
+    schedule: str | None = None,
 ) -> ScheduledKernelArtifact:
+    if schedule is not None:
+        module = copy.deepcopy(module)
+        if (module.functions and module.functions[0].body
+                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin"}):
+            module.functions[0].body[0].kwargs["schedule"] = schedule
     contract = _graph_contract(module, target)
     tool = find_tessera_opt()
     if tool is None:
@@ -96,9 +105,13 @@ def lower_scheduled_kernel(
 
     targeted = copy.deepcopy(module)
     op = targeted.functions[0].body[0]
+    if contract[5] == "norm":
+        op.kwargs = {"eps": contract[21]}
     if contract[5] == "reduce":
         op.op_name = "tessera.reduce"
         op.kwargs = {"kind": contract[6], "axis": contract[14]}
+        if target == "nvidia_sm120":
+            op.kwargs.update(keepdims=contract[15], schedule=contract[20])
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
     graph_ir = targeted.to_mlir(target=target, canonical=True)
@@ -113,7 +126,8 @@ def lower_scheduled_kernel(
         tile_ir=tile_ir,
         target=contract[0],
         architecture=contract[1],
-        function_name=contract[2],
+        function_name=(f"tessera_tile_norm_{contract[6]}_{contract[10]}_{hashes[0][:10]}"
+                       if contract[5] == "norm" else contract[2]),
         input_name=contract[3],
         output_name=contract[4],
         family=contract[5],
@@ -132,6 +146,8 @@ def lower_scheduled_kernel(
         inner=contract[18],
         workgroup_size=contract[19],
         schedule_digest=hashes[0],
+        schedule=contract[20],
+        epsilon=contract[21],
     )
     artifact.validate()
     return artifact
@@ -158,32 +174,65 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if not input_shape or any(value <= 0 for value in input_shape):
         raise ValueError("scheduled semantic kernel requires a non-empty positive shape")
     dtype = args[input_name].ir_type.dtype
-    if dtype != "fp32" or function.result_types[0].dtype != "fp32":
+    output_dtype = function.result_types[0].dtype
+    if target == "nvidia_sm120":
+        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
+        if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
+            raise ValueError("NVIDIA scheduled unary storage contract is unsupported")
+    elif dtype != "fp32" or output_dtype != "fp32":
         raise ValueError("initial scheduled semantic-kernel contract requires f32")
+    mode = str(op.kwargs.get("schedule", "serial"))
+    if mode != "serial" and (target != "nvidia_sm120" or mode != "cooperative_128"):
+        raise ValueError("unsupported scheduled reduction policy")
     output_name = op.result or function.return_values[0].removeprefix("%")
     if target == "x86":
         compiler_target, architecture, workgroup_size = "x86", "zen5-avx512", 1
     elif target == "rocm_gfx1151":
         compiler_target, architecture, workgroup_size = "rocm", "gfx1151", 256
+    elif target == "nvidia_sm120":
+        compiler_target, architecture, workgroup_size = "nvidia_sm120", "sm_120", 128
     elif target == "apple_gpu":
         compiler_target, architecture, workgroup_size = "apple_gpu", "apple7", 1
     else:
         raise ValueError("unsupported scheduled semantic-kernel target")
 
-    if op.op_name == "tessera.softmax":
+    epsilon = 0.0
+    if op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}:
+        from .nvidia_native import _norm_contract
+
+        norm = _norm_contract(module) if target == "nvidia_sm120" else None
+        if norm is None or op.kwargs.get("numeric_policy") is not None or mode != "serial":
+            raise ValueError("unsupported scheduled normalization contract")
+        try:
+            epsilon = struct.unpack("f", struct.pack("f", norm[2]))[0]
+        except OverflowError as exc:
+            raise ValueError("normalization epsilon must fit f32") from exc
+        if not math.isfinite(epsilon) or epsilon <= 0.0:
+            raise ValueError("normalization epsilon must be positive finite f32")
+        family, kind, axis, keepdims = "norm", norm[1], -1, False
+        rows, columns = math.prod(input_shape[:-1]), input_shape[-1]
+        outer = axis_extent = inner = 1
+    elif op.op_name == "tessera.softmax":
+        if mode != "serial":
+            raise ValueError("reduction scheduling policy is not applicable to softmax")
         if op.kwargs.get("axis", -1) != -1 or output_shape != input_shape:
             raise ValueError("scheduled softmax requires shape-preserving last-axis semantics")
         family, kind, axis, keepdims = "softmax", "softmax", -1, False
         rows, columns = math.prod(input_shape[:-1]), input_shape[-1]
         outer = axis_extent = inner = 1
     elif op.op_name in {
-        "tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.amax"
+        "tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.amax", "tessera.min", "tessera.amin"
     }:
         kind = str(op.kwargs.get("kind", "")) if op.op_name == "tessera.reduce" else (
             "mean" if op.op_name == "tessera.mean" else
-            "max" if op.op_name in {"tessera.max", "tessera.amax"} else "sum"
+            "max" if op.op_name in {"tessera.max", "tessera.amax"} else
+            "min" if op.op_name in {"tessera.min", "tessera.amin"} else "sum"
         )
-        if kind not in {"sum", "mean", "max"} or bool(op.kwargs.get("keepdims", False)):
+        keepdims = op.kwargs.get("keepdims", False)
+        if not isinstance(keepdims, bool):
+            raise ValueError("scheduled reduction keepdims must be boolean")
+        allowed = {"sum", "mean", "max", "min"} if target == "nvidia_sm120" else {"sum", "mean", "max"}
+        if kind not in allowed or (keepdims and target != "nvidia_sm120"):
             raise ValueError("scheduled reduction requires rank-reducing sum/mean/max")
         raw_axis = op.kwargs.get("axis", -1)
         if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):
@@ -197,10 +246,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         # over the trailing extent, so it expresses last-axis reductions only.
         if target == "apple_gpu" and axis != len(input_shape) - 1:
             raise ValueError("Apple GPU scheduled reduction requires the last axis")
-        expected = input_shape[:axis] + input_shape[axis + 1 :]
+        expected = input_shape[:axis] + ((1,) if keepdims else ()) + input_shape[axis + 1 :]
         if output_shape != expected:
             raise ValueError("scheduled reduction output shape does not match its axis")
-        family, keepdims = "reduce", False
+        family = "reduce"
         rows = columns = 1
         outer = math.prod(input_shape[:axis])
         axis_extent = input_shape[axis]
@@ -208,8 +257,13 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     else:
         raise ValueError("unsupported scheduled semantic-kernel operation")
 
+    assert dtype is not None  # Rejected by the storage contract above.
+    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
+    entry = function.name
+    if target == "nvidia_sm120":
+        entry = f"tessera_tile_softmax_{storage}" if family == "softmax" else f"tessera_tile_reduce_{kind}_{storage}_{mode}"
     return (
-        compiler_target, architecture, function.name, input_name, output_name,
-        family, kind, input_shape, output_shape, dtype, "f32", "f32", rows,
-        columns, axis, keepdims, outer, axis_extent, inner, workgroup_size,
+        compiler_target, architecture, entry, input_name, output_name,
+        family, kind, input_shape, output_shape, dtype, storage, "f32", rows,
+        columns, axis, keepdims, outer, axis_extent, inner, workgroup_size, mode, epsilon,
     )

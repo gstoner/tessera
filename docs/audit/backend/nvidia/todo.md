@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -6317,3 +6317,138 @@ and macro-CTA tails. This used the host's existing LLVM 23 native tools and PTX
 bridge: C++ sources are unchanged. Set `CUDA_HOME=/usr/local/cuda-13.3`, source
 `scripts/_nvidia_env.sh`, and point `TESSERA_NVIDIA_OPT` at the host build's
 `src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt`.
+
+## Foundation F2 unary slice — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+Owning item: E2E-REAL-5 / foundation F2. The shared native scheduling passes now
+admit SM120 f32 softmax and serial rank-reducing sum/mean/max. They emit a raw
+LLVM launch wrapper with the established NVIDIA symbol/ABI, and retain the
+Schedule hash in Tile IR. NVIDIA packaging consumes that artifact directly.
+NVIDIA's existing `approx_exp2` policy is explicit and hashed; other architectures
+retain `accurate`. The verifier rejects a policy inconsistent with its architecture.
+The wrapper consumer refuses extra function work rather than erasing it.
+
+Implemented for the default static f32 driver path, with independent Schedule
+replay and descriptor/ABI checks. Narrow dtypes, min, keepdims and explicit
+cooperative reductions remain on their existing routes; direct Graph package
+clients also remain. Their migration and constructor deletion are still open.
+The comparison exposed and fixed a separate existing defect: canonical
+`tessera.reduce` ignored its `kind` in the Graph packager and always selected
+sum. It now preserves sum/mean/max/min and refuses unknown kinds.
+
+Validation runs use Super-Bear RTX 5070, CUDA 13.3 and LLVM 23, with a fresh
+`tessera-opt` built from this change on Princess-Luna and existing NVIDIA lowering
+tools/runtime (unchanged sources). Tests compare native scheduled and retained
+Graph packages against NumPy and each other; this is numerical/ABI proof, not
+performance promotion. Remaining dtype/axis-policy breadth is not closed.
+
+Validation results: 12/12 exact RTX comparison cases passed (softmax, sum,
+mean, max across `(2,3,5)`, `(7,19,257)` and `(2,3,1)`); old/new results were
+identical and matched NumPy. Princess-Luna passed 331 focused compiler, audit
+and registry tests with 24 environment skips, including the two enabled gfx1151
+semantic-kernel tests. Three native FileCheck fixtures passed. Mypy reports zero
+errors and Ruff passes. These builds are not assertions-enabled LLVM proof.
+
+## F2 direct unary clients — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The public NVIDIA unary package APIs now enter the same native Schedule/Tile
+boundary as the driver for the migrated f32 envelope. Missing `tessera-opt` is
+an explicit failure for that envelope, not a return to Python kernel emission.
+Private Graph constructors remain for unmigrated dtype/policy cases and retained
+differential baselines; they are not new production routes.
+
+Closed in this cut: direct `package_native`, `package_softmax`,
+`package_f32_softmax` and serial f32 sum/mean/max `package_reduction` callers.
+Narrow softmax/reduction, min, keepdims and cooperative schedules retain their
+previous implementations. Constructor deletion remains blocked on those cases.
+The RTX comparison now launches baseline, direct API and driver artifacts for
+all 12 shape/operation cases; outputs are identical and agree with NumPy. No
+native compiler, runtime ABI, physical schedule or numerical policy changes in
+this follow-through; the prior F2 compiler build is reused.
+
+Validation: 83 focused WSL routing, NVIDIA packaging and audit tests passed;
+mypy retained zero errors and Ruff passed. The 12 RTX comparison cases include
+singleton/tail widths and multiple blocks, with the direct API separately
+launched alongside the driver and retained baseline. Constructor retirement is
+still gated on the remaining dtype/policy envelopes, not on renaming helpers.
+
+## F2-U1–U10 unary closure — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+NVIDIA unary packaging now consumes native Schedule/Tile for f16/bf16/f32
+softmax and sum/mean/max/min reductions with f32 accumulation/output, arbitrary
+static axes, keepdims and serial/cooperative_128 policy. Production Graph
+constructors were removed; differential baselines live only under test support.
+The shared Graph reduce verifier admits narrow-to-f32 and retained dimensions;
+reverse AD refuses those new envelopes explicitly. Generic Linalg lowering still
+declines them. No new dtype, operation, runtime ABI or physical schedule is added.
+
+Owning outcome: parity validated on Super-Bear RTX 5070 / CUDA 13.3. All 184
+cases passed, including 144 reduction combinations and 24 cooperative
+257-element contiguous/strided cases; no timing/promotion claim.
+Native replay and policy refusal gates pass with the rebuilt LLVM 23 compiler.
+Next F2 work: native norm/attention contracts and the remaining packed families.
+
+Validation: 516 focused WSL unit/registry/dtype/routing/audit tests passed, with
+24 explicit environment/envelope skips; the final policy/doc follow-up passed
+43 tests. Seven native IR fixtures passed, including existing reverse-AD paths.
+Ruff and the zero-error mypy ratchet passed; all 30 generated-document drift
+gates passed. LLVM 23 `tessera-opt` was rebuilt on Princess-Luna and its matching
+Linux executable used for Super-Bear native scheduling. Assertions-enabled LLVM
+and new Apple/x86 hardware evidence remain outside this cut.
+
+## F2 norm/attention — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The shared compiler adds `schedule.norm` for SM120 unweighted f16/bf16/f32 row
+normalization and admits SM120 forward `schedule.attention` with explicit
+recompute policy. NVIDIA direct package/driver paths consume native Tile wrappers;
+old constructors are test-only baselines. Runtime ABI and physical kernels are
+unchanged. Norm rejects unsupported policy overrides and epsilon that cannot be
+represented as positive finite f32.
+
+Shared finding fixed: forward attention hashes now encode exact f32 policy bits
+instead of six-decimal strings. Regenerate old forward Schedule artifacts;
+stale serialized hashes fail closed. Backward hash encoding remains follow-up.
+
+Owning scope: native norm and forward attention, including bias, windows and
+seeded dropout. Short-query masked attention (`Sq < Sk`) is refused: its local
+query mask disagrees with canonical end-aligned ragged masking. F2-A2 must fix
+forward and backward together before that envelope is admitted. Saved-LSE,
+packed matmul, paged KV, replay-SSM and MoE remain Graph-owned follow-ups.
+
+Validation: rebuilt LLVM 23 `tessera-opt`; 36 Super-Bear RTX 5070 / CUDA 13.3
+comparisons passed (18 norm, 12 masked/bias attention, six GQA/dropout). Packages
+match the test-only historical baseline and NumPy/canonical streaming oracles.
+All-masked rows retain the existing NaNs; no zero-fill or performance promotion
+is claimed. 515 focused WSL contract/registry/dtype/routing tests passed with
+17 explicit skips, three native IR fixtures passed, and 11 audit tests passed.
+All 30 generated-document gates passed. New exact-device Apple/x86 evidence and
+assertions-enabled LLVM remain outside this cut.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+NVIDIA parity validated: 18 attention cases, three saved-LSE producer/consumer
+pairs and 13 packed/paged/replay cases on Super-Bear RTX 5070 / CUDA 13.3 with a
+fresh LLVM 23 target compiler. Both Tile masks are end-aligned; short-query masks
+are now admitted. Paired saved-LSE packaging validates physical policy and
+bindings before compilation, but both checkpoint constructors remain Python
+owned until a native multi-result producer and Schedule consumer exist. Packed
+metadata and paged-KV bounds/returns are stricter. No performance promotion.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Own the staged-kernel NVVM/PTX experiment and NVIDIA multi-rank transport evidence; no ROCm timing or physical schedule transfers.

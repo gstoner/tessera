@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 audit_role: reference
 ---
 
@@ -61,8 +61,8 @@ route fixtures and an inventory derived from those existing routes.
 
 | Route and current entry | What still comes from Python Graph state | Existing replacement / next migration |
 |---|---|---|
-| NVIDIA `nvidia_native.package_scheduled_matmul(module, artifact)` | Calls `package_matmul(module, ...)` to build a base package, including its own compilation, before compiling `artifact.tile_ir` and replacing the image. Dynamic input handling deep-copies and rewrites Graph shapes. The driver still records this branch through `_package_artifacts`. | **First cut:** derive descriptor facts from the validated scheduled artifact/IR ABI, remove the Graph argument and base-package compilation, then use the genuine scheduled parent chain. Test one compile, static/dynamic ABI preservation, no Graph access, carrier tampering and exact RTX 5070 numerics. Hash relabeling alone is not a fix. |
-| NVIDIA `package_native` | Graph classification routes matmul, NVFP4/INT4/MX matmul, softmax, reduction, norm, attention forward/backward/saved-LSE and paged KV to Graph-based constructors and `emit_*_tile_ir`. | Extend the scheduled semantic-kernel path to NVIDIA softmax/reduction first; then typed attention/paired-LSE and packed/quantized contracts. Reuse NVVM/PTX compilation. Each storage ABI retains its own negative and device tests. |
+| NVIDIA `nvidia_native.package_scheduled_matmul(artifact)` | F1 removed the Graph argument and base-package compilation. The consumer validates artifact shape/ABI facts and compiles Tile once; the driver retains adjacent boundary lineage. | Keep the one-compile, no-Graph and tampering gates. Broader matmul storage and dynamic envelopes remain separately scoped. |
+| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Backward/saved-LSE attention, paged KV and packed/quantized matmul still reconstruct Tile. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired and packed producers remain open; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
 | ROCm `rocm_native.package_native` | `package_softmax`, `package_reduction`, `package_paged_kv_read`, `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Matmul/softmax/reduction/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, static/dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
@@ -203,3 +203,65 @@ NVIDIA scheduled matmul. `package_scheduled_matmul` now accepts only the schedul
 artifact, checks its descriptor contract against Schedule/Tile IR, and compiles
 once. Driver ancestry follows the scheduled boundaries. The census above records
 the pre-migration finding; remaining Graph-owned package roots stay in F2.
+
+## Unary caller closure — 2026-09-05
+
+`driver.compile_graph_module` consumes the scheduled artifact directly.
+`package_native` dispatches unary requests to `package_softmax` / `package_reduction`,
+which enter `lower_scheduled_kernel`; `package_f32_softmax` delegates to the same
+entry. None invokes a Graph-to-Tile constructor after scheduling. The consumer
+accepts only `ScheduledKernelArtifact` and compiles its Tile IR once. Serialized
+Schedule IR replays through `tessera-opt` after discarding the Python Graph object.
+
+The removed constructors survive only in `tests/_support/nvidia_unary_baseline.py`
+for differential evidence. Public `emit_softmax_tile_ir`, `emit_reduce_tile_ir`
+and typed convenience emitters remain low-level compatibility/artifact utilities;
+production unary package routes no longer call them. Their continued existence
+is not a claim that every Python text emitter has been retired.
+
+Mixed-storage and keepdims reductions are legal Graph IR forward contracts.
+The generic Linalg reduction matcher still declines these envelopes, and reverse
+AD explicitly fails before producing an unsupported cotangent. NVIDIA forward
+proof does not confer AD or sibling-backend execution support.
+
+## Norm/attention migration and remaining constructor census
+
+The NVIDIA driver and direct `package_norm` / `package_attention` calls now use
+native scheduled artifacts. `schedule.norm` owns kind, storage, axis, f32 epsilon
+and workgroup size. Forward `schedule.attention` owns NVIDIA's explicit
+`sm120_recompute` policy. The emitted LLVM wrappers feed the existing NVVM/PTX
+pipeline without Python Graph-to-Tile emission. Their historical constructors
+are retained only in `tests/_support/nvidia_{norm,attention}_baseline.py`.
+
+Review findings fixed in this cut:
+
+- Forward attention hashes used six-decimal float strings, allowing distinct f32
+  scale/softcap/dropout policies to share an identity. Hashes now encode exact
+  f32 bits on every backend. Old serialized forward Schedule artifacts must be
+  regenerated; stale hashes fail validation.
+- The SM120 mask uses local query positions, while canonical ragged attention
+  aligns a shorter query to the key sequence's end. F2-A2 now aligns both physical
+  kernels and admits short-query masks after exact-device comparisons.
+- Norm admission now rejects epsilon that is nonpositive, nonfinite or not
+  representable as positive finite f32, and refuses unsupported numeric policy
+  overrides. This matches the native verifier and immutable runtime constant.
+
+The remaining NVIDIA Graph-owned constructors are explicit next work:
+
+| Entry/family | Native contract still required |
+|---|---|
+| `package_attention_backward` | dQ/dK/dV result roles, mask alignment, workspace/reduction policy |
+| `package_attention_lse`, `package_attention_backward_lse` | Paired O/LSE producer-consumer identity and checkpoint lifetime |
+| `package_matmul` and NVFP4/INT4/MX variants | Remaining dtype/layout/packing envelopes outside the scheduled consumer |
+| `package_paged_kv_read`, `package_paged_attention` | Page table, logical positions, ownership and bounds |
+| `package_replay_ssm_kernels` | Paired decode/flush state and ordered effects |
+| `package_moe_kernels` | Multi-entry routing, movement, capacities and workspace |
+
+ROCm, x86, Apple GPU and Apple CPU direct package paths remain as listed in the
+main census. Existing scheduled consumers do not establish direct-client
+retirement. The next cuts must migrate those callers with backend-owned evidence,
+not transplant NVIDIA's 128-thread schedule. F2-A2 also fixes backward float
+identity with exact f32 bits. F2-A3 adds checked paired packaging, but the native
+Graph two-result checkpoint producer is still missing. Packed/stateful integer,
+return-role and allocation overflow checks are implemented; their Python Tile
+constructors remain in the census until native producers replace them.

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 audit_role: theme
 ---
 
@@ -82,14 +82,24 @@ Deleted: the dialect (`Queue.td`, `QueueOps.cpp`, `QueueVerifiers.cpp`,
 headers, CMake targets, `tessera-opt` registration/feature `fa4-queue`), the
 orphaned Python twin `compiler/queue_dialect.py`, the unpassable
 `queue_show.mlir` fixture, the six `QUEUE_*` diagnostic codes, and the
-`dialects_manifest.py` row. **Kept, untouched:** the live Python tile IR
-queue vocabulary — `lower_schedule_to_tile_ir` emits
-`tessera.queue.{create,push,pop,barrier}` strings, `tile_ir.py` +
-`memory_verifier.py` verify them (happens-before), and they feed the
-`queue_depth` resource records. A stays-deleted gate lives in
-`tests/unit/test_mlir_verifier_sprint.py::test_queue_mlir_dialect_stays_deleted`;
-any revival must ship a parseable single-segment name, a real producer, and a
-passing fixture.
+`dialects_manifest.py` row.
+
+Current disposition, rechecked 2026-09-05: the subsequent
+`COMP-SCHED-OVERLAP-1/R1` migration replaced Python compatibility markers with
+explicit async token results and waits. `tile_ir.py` now rejects legacy
+`tessera.queue.*` operations with `TILE_IR_LEGACY_QUEUE`; `queue_depth` is a
+resource estimate derived from `num_stages`, not proof of a queue runtime.
+Native warp specialization uses pipeline-state/token SSA and typed role/barrier
+contracts. The stays-deleted gate remains in
+`tests/unit/test_mlir_verifier_sprint.py::test_queue_mlir_dialect_stays_deleted`.
+
+The deletion established that the old implementation had no usable native path;
+it did not measure the value of queue ownership semantics. The integrated
+plan's [deleted functionality reassessment](INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+compares the existing pipeline model against bounded capacity, safe reuse and
+slot/phase requirements before considering a replacement. Any new dialect must
+have a parseable name, real producer and consumer, native lowering, and passing
+positive/negative fixtures; performance claims require owning-host evidence.
 
 ## Dead verifier/plugin surfaces deleted (2026-08-10)
 

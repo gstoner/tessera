@@ -1772,6 +1772,12 @@ def Tessera_ReduceOp : Op<
    DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Reduction over a single axis (sum/max/min/mean)";
+  let description = [{
+    The optional boolean keepdims attribute retains the reduced dimension at
+    extent one. Floating f16/bf16 input may explicitly produce f32 output.
+    Target lowering and autodiff must independently support these envelopes;
+    verifier acceptance alone does not imply executable or adjoint support.
+  }];
   let arguments = (ins TensorType:$input, Tessera_ReductionKindAttr:$kind,
                        I64Attr:$axis);
   let results = (outs TensorType:$result);

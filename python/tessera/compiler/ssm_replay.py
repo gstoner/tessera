@@ -70,6 +70,9 @@ class ReplayStateDescriptor:
     ordering: OrderingSemantics
 
     def __post_init__(self) -> None:
+        if any(type(value) is not int or not 0 < value < (1 << 63)
+               for value in (self.batch, self.channels, self.state_dim, self.capacity, self.async_slots)):
+            raise ValueError("ReplaySSM physical geometry must use positive signed 64-bit integers")
         if min(self.batch, self.channels, self.state_dim, self.capacity) <= 0:
             raise ValueError("ReplaySSM state geometry must be positive")
         if self.async_slots < 2:
@@ -88,6 +91,8 @@ class ReplayStateDescriptor:
         return self.capacity * self.batch * (2 * self.channels + self.state_dim) * 4
 
     def validate_span(self, *, start: int, tokens: int) -> None:
+        if type(start) is not int or type(tokens) is not int:
+            raise ValueError("ReplaySSM submission span must use integer offsets and counts")
         if start < 0 or tokens <= 0 or start + tokens > self.capacity:
             raise ValueError(
                 "ReplaySSM submission must be a positive span contained in the persistent ring"
@@ -162,6 +167,9 @@ def replay_state_descriptor(
     capacity: int, async_slots: int, dtype: str = "fp32",
 ) -> ReplayStateDescriptor:
     """Build the shared state/ring descriptor used by backend resident handles."""
+    if any(type(value) is not int or not 0 < value < (1 << 63)
+           for value in (batch, channels, state_dim, capacity, async_slots)):
+        raise ValueError("ReplaySSM physical geometry must use positive signed 64-bit integers")
     if min(batch, channels, state_dim, capacity) <= 0:
         raise ValueError("ReplaySSM state geometry must be positive")
     if async_slots < 2:
@@ -175,8 +183,12 @@ def replay_state_descriptor(
     resident += (batch * state_dim + channels + batch * channels) * 4
     async_device = async_slots * capacity * batch * channels * 4
     device_bytes = replay + resident + async_device
+    if device_bytes >= (1 << 63):
+        raise ValueError("ReplaySSM device workspace exceeds the signed 64-bit ABI")
     # Each slot pins delta, x, B, C and Y for the maximum ring span.
     pinned_per_slot = capacity * batch * (3 * channels + 2 * state_dim) * 4
+    if async_slots * pinned_per_slot >= (1 << 63):
+        raise ValueError("ReplaySSM pinned workspace exceeds the signed 64-bit ABI")
     return ReplayStateDescriptor(
         target=target,
         batch=batch,

@@ -5353,9 +5353,12 @@ LogicalResult PagedKVReadOp::verify() {
   for (auto type : {pages, table, output})
     if (llvm::any_of(type.getShape(), [](int64_t d) { return d <= 0; }))
       return emitOpError("requires positive page and output dimensions");
-  if (getStart() < 0 || getEnd() <= getStart() ||
-      static_cast<__int128>(getEnd()) > static_cast<__int128>(table.getDimSize(0)) * pages.getDimSize(1) ||
-      output.getShape() != ArrayRef<int64_t>({getEnd()-getStart(), pages.getDimSize(2), pages.getDimSize(3)}))
+  // I64Attr value accessors may be unsigned; interval bounds are signed.
+  int64_t start = getStartAttr().getInt();
+  int64_t end = getEndAttr().getInt();
+  if (start < 0 || end <= start ||
+      static_cast<__int128>(end) > static_cast<__int128>(table.getDimSize(0)) * pages.getDimSize(1) ||
+      output.getShape() != ArrayRef<int64_t>({end-start, pages.getDimSize(2), pages.getDimSize(3)}))
     return emitOpError("page read interval or output shape disagrees with logical capacity");
   return success();
 }

@@ -49,7 +49,13 @@ def test_native_packed_state_rejects_swapped_pointers(kind, monkeypatch):
         package(kind, replace(scheduled, tile_ir=text))
 
 
-@pytest.mark.parametrize("dims", [(3, 4, 2, 2, 3, -1, 5), (3, 4, 2, 2, 3, 5, 4), (3, 4, 2, 2, 3, 0, 0)])
+@pytest.mark.parametrize("dims", [
+    (3, 4, 2, 2, 3, -1, 5),
+    (3, 4, 2, 2, 3, -(2**63), 5),
+    (3, 4, 2, 2, 3, -6, 5),
+    (3, 4, 2, 2, 3, 5, 4),
+    (3, 4, 2, 2, 3, 0, 0),
+])
 def test_native_paged_bounds_rejected(dims):
     with pytest.raises(RuntimeError):
         lower_scheduled_paged_kv(("pages", "table", "out"), dims)

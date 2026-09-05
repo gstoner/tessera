@@ -60,3 +60,32 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
     for output in results[1:]:
         np.testing.assert_array_equal(results[0], output)
     assert legacy.descriptor.abi_id == bundle.launch_descriptor.abi_id
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+@pytest.mark.parametrize("shape", [(3, 17), (129, 257)])
+def test_narrow_softmax_native_parity(dtype, shape):
+    storage = np.float16 if dtype == "fp16" else pytest.importorskip("ml_dtypes").bfloat16
+    module = _module(family="softmax", target="nvidia_sm120")
+    fn = module.functions[0]
+    fn.args[0].ir_type = tensor_ir_type(shape, dtype)
+    fn.result_types[0] = fn.args[0].ir_type
+    fn.body[0].operand_types = [str(fn.args[0].ir_type)]
+    fn.body[0].result_type = str(fn.result_types[0])
+    fn.body[0].inferred_type = fn.result_types[0]
+    legacy = nvidia_native._package_graph_softmax(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    direct = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    assert direct.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    x = np.random.default_rng(726).normal(size=shape).astype(storage)
+    ex = np.exp(x.astype(np.float32) - x.astype(np.float32).max(axis=-1, keepdims=True))
+    expected = ex / ex.sum(axis=-1, keepdims=True)
+    outputs = []
+    for package in (legacy, direct):
+        output = np.empty_like(x)
+        result = rt.launch(rt.RuntimeArtifact(metadata={"target": "nvidia_sm120"}, native_image=package.image,
+            launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir),
+            {"x": x, "o": output, "Rows": shape[0], "K": shape[1]})
+        assert result["ok"], result
+        np.testing.assert_allclose(output.astype(np.float32), expected, rtol=0.01, atol=2e-4)
+        outputs.append(output.astype(np.float32))
+    np.testing.assert_array_equal(*outputs)

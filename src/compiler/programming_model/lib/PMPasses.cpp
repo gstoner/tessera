@@ -560,7 +560,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   if (opName == "tessera.softmax") {
     auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
     if ((axisAttr && axisAttr.getInt() != -1) || input != output ||
-        ((x86 || nvidia) && schedule.storage != "f32") ||
+        (x86 && schedule.storage != "f32")
+        || (nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
         (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
         (apple_gpu && schedule.storage != "f32"))
       return failure();
@@ -3460,7 +3461,7 @@ struct ScheduleToTilePass
           return signalPassFailure();
         }
         // Preserve the established runtime launch symbols and serial schedule.
-        std::string name = isSoftmax ? "tessera_tile_softmax_f32" :
+        std::string name = isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage).str() :
             (Twine("tessera_tile_reduce_") + selected->kind + "_f32_serial").str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
           scheduled->emitError("NVIDIA scheduled kernel symbol already exists");

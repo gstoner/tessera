@@ -158,7 +158,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if not input_shape or any(value <= 0 for value in input_shape):
         raise ValueError("scheduled semantic kernel requires a non-empty positive shape")
     dtype = args[input_name].ir_type.dtype
-    if dtype != "fp32" or function.result_types[0].dtype != "fp32":
+    narrow_softmax = target == "nvidia_sm120" and op.op_name == "tessera.softmax" and dtype in {"fp16", "bf16"}
+    if (not narrow_softmax and dtype != "fp32") or function.result_types[0].dtype != (dtype if narrow_softmax else "fp32"):
         raise ValueError("initial scheduled semantic-kernel contract requires f32")
     output_name = op.result or function.return_values[0].removeprefix("%")
     if target == "x86":
@@ -210,11 +211,13 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     else:
         raise ValueError("unsupported scheduled semantic-kernel operation")
 
+    assert dtype is not None  # Rejected by the storage contract above.
+    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     entry = function.name
     if target == "nvidia_sm120":
-        entry = "tessera_tile_softmax_f32" if family == "softmax" else f"tessera_tile_reduce_{kind}_f32_serial"
+        entry = f"tessera_tile_softmax_{storage}" if family == "softmax" else f"tessera_tile_reduce_{kind}_f32_serial"
     return (
         compiler_target, architecture, entry, input_name, output_name,
-        family, kind, input_shape, output_shape, dtype, "f32", "f32", rows,
+        family, kind, input_shape, output_shape, dtype, storage, "f32", rows,
         columns, axis, keepdims, outer, axis_extent, inner, workgroup_size,
     )

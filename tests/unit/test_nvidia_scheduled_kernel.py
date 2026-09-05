@@ -13,7 +13,7 @@ def test_nvidia_f32_scheduled_kernel_admission(family):
     module = _module(family=family, target="nvidia_sm120")
     assert scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
     arg = module.functions[0].args[0]
-    arg.ir_type = replace(arg.ir_type, dtype="bf16")
+    arg.ir_type = replace(arg.ir_type, dtype="uint8")
     assert not scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
 
 
@@ -137,7 +137,7 @@ def test_explicit_cooperative_reduction_keeps_owning_route(monkeypatch):
     assert calls == ["cooperative_128"]
 
 
-@pytest.mark.parametrize("family", ["softmax", "reduce"])
+@pytest.mark.parametrize("family", ["reduce"])
 def test_narrow_direct_unary_retains_unmigrated_route(monkeypatch, family):
     from tessera.compiler.graph_ir import tensor_ir_type
 

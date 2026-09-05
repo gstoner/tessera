@@ -2752,8 +2752,10 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     """Consume the native scheduled f32 unary launch envelope without Graph re-entry."""
     artifact.validate()
     softmax = artifact.family == "softmax"
+    storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}.get(artifact.dtype)
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
-            or artifact.dtype != "fp32" or artifact.storage != "f32"
+            or storage is None or artifact.storage != storage
+            or (not softmax and artifact.dtype != "fp32")
             or artifact.accum != "f32" or artifact.workgroup_size != 128
             or artifact.family not in {"softmax", "reduce"} or artifact.keepdims):
         raise ValueError("unsupported NVIDIA scheduled unary contract")
@@ -2764,8 +2766,8 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     if softmax:
         if artifact.axis != -1 or shape != output_shape:
             raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis")
-        entry = "tessera_tile_softmax_f32"
-        abi = SM120_SOFTMAX_F32_ABI
+        entry = f"tessera_tile_softmax_{storage}"
+        abi = {"f16": SM120_SOFTMAX_F16_ABI, "bf16": SM120_SOFTMAX_BF16_ABI, "f32": SM120_SOFTMAX_F32_ABI}[storage]
         scalar_names = ("Rows", "K")
         geometry = "sm120_softmax_thread_per_row_128"
         required = {'exp_mode': '"approx_exp2"', 'ftz': 'false'}
@@ -2780,15 +2782,15 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         geometry = "sm120_reduce_serial"
         required = {'kind': f'"{artifact.kind}"', 'schedule': '"serial"',
                     'nan_mode': '"propagate"', 'keepdims': 'false'}
-    required.update({'storage': '"f32"', 'accum': '"f32"',
+    required.update({'storage': f'"{storage}"', 'accum': '"f32"',
                      'axis': f'{artifact.axis} : i64'})
     for field, value in required.items():
         pattern = rf"\b{field} = {re.escape(value)}(?=[,}}\s])"
         if not re.search(pattern, artifact.tile_ir) or not re.search(pattern, artifact.schedule_ir):
             raise ValueError(f"NVIDIA scheduled unary policy disagrees on {field}")
     # Require the Schedule wrapper to retain the input/output shape contract.
-    for dims in (shape, output_shape):
-        tensor = "tensor<" + "".join(f"{d}x" for d in dims) + "f32>"
+    for dims, element in ((shape, storage), (output_shape, storage if softmax else "f32")):
+        tensor = "tensor<" + "".join(f"{d}x" for d in dims) + element + ">"
         if tensor not in artifact.schedule_ir:
             raise ValueError("NVIDIA scheduled unary shape disagrees with Schedule IR")
     signature = re.search(rf"llvm\.func @{re.escape(entry)}\(([^)]*)\)", artifact.tile_ir)
@@ -2807,8 +2809,8 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry, abi_id=abi,
-        buffers=(BufferBinding(0, artifact.input_name, "input", "fp32", len(shape), "row_major", 4),
-                 BufferBinding(1, artifact.output_name, "output", "fp32", len(output_shape), "row_major", 4)),
+        buffers=(BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),
+                 BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax else "fp32", len(output_shape), "row_major", 2 if softmax and storage != "f32" else 4)),
         scalars=tuple(ScalarArgument(i + 2, name, "int64") for i, name in enumerate(scalar_names)),
         shape_guards=tuple(ShapeGuard(name, dim, "eq", value)
                            for name, dims in ((artifact.input_name, shape), (artifact.output_name, output_shape))
@@ -2817,7 +2819,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={"work_item": "E2E-REAL-5", "sync_key": "IR-NATIVE-FOUNDATION-1",
                     "route": "canonical_scheduled_tile_consumer", "schedule": "serial",
-                    "shape": list(shape), "storage": "f32", "accum": "f32",
+                    "shape": list(shape), "storage": storage, "accum": "f32",
                     "axis": artifact.axis, "kind": artifact.kind, "keepdims": False,
                     "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
     )

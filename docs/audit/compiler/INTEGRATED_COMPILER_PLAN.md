@@ -1866,3 +1866,23 @@ is absent. Narrow dtypes and min/keepdims/cooperative reductions remain explicit
 unmigrated envelopes, with the old implementation retained privately until their
 own comparisons pass. Direct-client migration is closed for f32 softmax and
 serial sum/mean/max; full constructor retirement remains open.
+
+
+### Next ten unary foundation actions — 2026-09-05
+
+These are bounded cuts under F2 / E2E-REAL-5, in dependency order. Completion
+requires native replay, correct ABI and owning RTX numerical evidence; constructor
+retirement also requires all production callers to migrate.
+
+| Action | Deliverable | State |
+|---|---|---|
+| F2-U1 | f16 scheduled softmax | implemented; RTX parity passed |
+| F2-U2 | bf16 scheduled softmax | implemented; RTX parity passed |
+| F2-U3 | scheduled min reduction | open |
+| F2-U4 | keepdims reduction carrier and scheduling | open |
+| F2-U5 | f16 input / f32 output reduction | open |
+| F2-U6 | bf16 input / f32 output reduction | open |
+| F2-U7 | explicit cooperative_128 reduction scheduling | open |
+| F2-U8 | retire production Graph softmax constructor | open |
+| F2-U9 | retire production Graph reduction constructor | open |
+| F2-U10 | close caller inventory, native replay and negative-policy gates | open |

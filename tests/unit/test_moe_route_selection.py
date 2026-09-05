@@ -66,7 +66,7 @@ def test_composed_is_the_default_for_every_dtype(dtype):
     rather than removing it.
     """
     x, wg, wd = _ops(dtype)
-    route, reason = R._apple_moe_select_route(x, wg, wd, G, {}, np)
+    route, reason = R._apple_moe_select_route(x, wg, wg, wd, G, {}, np)
     assert route == "composed", reason
 
 
@@ -76,7 +76,7 @@ def test_quantized_blocks_force_composed_even_under_an_opt_in(monkeypatch):
     them."""
     monkeypatch.setenv("TESSERA_APPLE_MOE_FUSED", "1")
     x, wg, wd = _ops(np.float32)
-    route, reason = R._apple_moe_select_route(x, wg, wd, G, {"quant": "int8"}, np)
+    route, reason = R._apple_moe_select_route(x, wg, wg, wd, G, {"quant": "int8"}, np)
     assert route == "composed" and "quant" in reason
 
 
@@ -85,12 +85,12 @@ def test_the_alternatives_are_reachable_but_only_by_name(monkeypatch):
     implicit any more."""
     monkeypatch.setenv("TESSERA_APPLE_MOE_FUSED", "1")
     x32, wg32, wd32 = _ops(np.float32)
-    assert R._apple_moe_select_route(x32, wg32, wd32, G, {}, np)[0] == "single_fused"
+    assert R._apple_moe_select_route(x32, wg32, wg32, wd32, G, {}, np)[0] == "single_fused"
 
     monkeypatch.delenv("TESSERA_APPLE_MOE_FUSED")
     monkeypatch.setenv("TESSERA_APPLE_MOE_LOWP", "1")
     x16, wg16, wd16 = _ops(np.float16)
-    assert R._apple_moe_select_route(x16, wg16, wd16, G, {}, np)[0] == "lowp"
+    assert R._apple_moe_select_route(x16, wg16, wg16, wd16, G, {}, np)[0] == "lowp"
 
 
 def test_an_opt_in_the_shape_cannot_honour_says_so(monkeypatch):
@@ -98,7 +98,7 @@ def test_an_opt_in_the_shape_cannot_honour_says_so(monkeypatch):
     naming the mismatch, rather than silently ignoring the request."""
     monkeypatch.setenv("TESSERA_APPLE_MOE_LOWP", "1")
     x, wg, wd = _ops(np.float32)
-    route, reason = R._apple_moe_select_route(x, wg, wd, G, {}, np)
+    route, reason = R._apple_moe_select_route(x, wg, wg, wd, G, {}, np)
     assert route == "composed"
     assert "f16" in reason or "bf16" in reason, reason
 
@@ -108,7 +108,7 @@ def test_every_reason_is_non_empty():
     for dtype in (np.float32, np.float16):
         x, wg, wd = _ops(dtype)
         for kw in ({}, {"quant": "int8"}):
-            _, reason = R._apple_moe_select_route(x, wg, wd, G, kw, np)
+            _, reason = R._apple_moe_select_route(x, wg, wg, wd, G, kw, np)
             assert reason and reason.strip()
 
 
@@ -148,9 +148,10 @@ def test_the_arbiter_is_still_consulted(monkeypatch):
 
     monkeypatch.setattr(apple_route_selector, "production_route_for", fake)
     x, wg, wd = _ops(np.float16)
-    route, reason = R._apple_moe_select_route(x, wg, wd, G, {}, np)
+    route, reason = R._apple_moe_select_route(x, wg, wg, wd, G, {}, np)
     assert route == "composed" and "ledger" in reason
     assert seen["op"] == "retune_moe_swiglu"
+    assert seen["dtype"] == "f16"
     assert seen["shape"] == "4x8x10x6_e2", seen
 
 
@@ -164,7 +165,7 @@ def test_an_unreadable_ledger_is_not_fatal(monkeypatch):
 
     monkeypatch.setattr(apple_route_selector, "production_route_for", boom)
     x, wg, wd = _ops(np.float32)
-    route, reason = R._apple_moe_select_route(x, wg, wd, G, {}, np)
+    route, reason = R._apple_moe_select_route(x, wg, wg, wd, G, {}, np)
     assert route == "composed" and "unavailable" in reason
 
 
@@ -180,5 +181,23 @@ def test_a_ledger_choice_the_shape_cannot_honour_is_declined(monkeypatch):
     x = rng.standard_normal((4, 8)).astype(np.float32)
     wg = rng.standard_normal((2, 8, big)).astype(np.float32)
     wd = rng.standard_normal((2, big, 6)).astype(np.float32)
-    route, reason = R._apple_moe_select_route(x, wg, wd, G, {}, np)
+    route, reason = R._apple_moe_select_route(x, wg, wg, wd, G, {}, np)
     assert route == "composed" and "out of its range" in reason
+
+
+def test_lowp_checks_up_projection_storage(monkeypatch):
+    monkeypatch.setenv("TESSERA_APPLE_MOE_LOWP", "1")
+    x, wg, wd = _ops(np.float16)
+    wu = wg.astype(np.float32)
+    route, reason = R._apple_moe_select_route(x, wg, wu, wd, G, {}, np)
+    assert route == "composed" and "uniform" in reason
+
+
+def test_mixed_storage_does_not_consume_uniform_ledger(monkeypatch):
+    from tessera.compiler import apple_route_selector
+    def unexpected(**kwargs):
+        pytest.fail("mixed dtypes must not consume a uniform-dtype row")
+    monkeypatch.setattr(apple_route_selector, "production_route_for", unexpected)
+    x, wg, wd = _ops(np.float16)
+    route, reason = R._apple_moe_select_route(x, wg, wg.astype(np.float32), wd, G, {}, np)
+    assert route == "composed" and "mixed" in reason

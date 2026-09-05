@@ -25,6 +25,7 @@ from typing import Any, Callable, Optional, Tuple, Union
 
 import numpy as np
 
+from tessera.ga.coordinates import OrthogonalCoordinates, coordinate_error
 from tessera.ga.multivector import Multivector
 from tessera.ga.ops import (
     geometric_product,
@@ -82,14 +83,16 @@ class MultivectorField:
     _algebra: Cl
     _spacing: Tuple[float, ...]
 
-    __slots__ = ("_values", "_algebra", "_spacing")
+    __slots__ = ("_values", "_algebra", "_spacing", "_coordinates", "_coordinate_reason")
 
     def __init__(
         self,
         values: Any,
         algebra: Cl,
         *,
-        spacing: Union[float, Tuple[float, ...]] = 1.0,
+        spacing: Optional[Union[float, Tuple[float, ...]]] = None,
+        coordinates: Optional[OrthogonalCoordinates] = None,
+        require_coordinates: bool = False,
     ) -> None:
         arr = np.asarray(values)
         if not isinstance(algebra, Cl):
@@ -105,6 +108,17 @@ class MultivectorField:
         if not np.issubdtype(arr.dtype, np.floating):
             arr = arr.astype(np.float64, copy=False)
         spatial_ndim = arr.ndim - 1
+        if coordinates is None and require_coordinates:
+            raise coordinate_error("this field requires an explicit coordinate declaration")
+        if coordinates is not None:
+            if not isinstance(coordinates, OrthogonalCoordinates):
+                raise coordinate_error("coordinates must be an OrthogonalCoordinates chart")
+            if coordinates.shape != arr.shape[:-1] or len(coordinates.axes) != algebra.n:
+                raise coordinate_error("chart axes must match the field grid and algebra dimension")
+            if coordinates.system != "cartesian" and (algebra.q or algebra.r):
+                raise coordinate_error("curvilinear fields require a non-degenerate Euclidean algebra")
+        if spacing is None:
+            spacing = coordinates.spacing if coordinates is not None else 1.0
         if isinstance(spacing, (int, float)):
             spacing_tuple = tuple(float(spacing) for _ in range(spatial_ndim))
         else:
@@ -114,9 +128,24 @@ class MultivectorField:
                 f"spacing must have {spatial_ndim} entries (one per spatial axis); "
                 f"got {len(spacing_tuple)}."
             )
+        if any(not np.isfinite(h) or h <= 0 for h in spacing_tuple):
+            raise coordinate_error("grid spacing must be finite and positive")
+        if coordinates is not None and not np.allclose(spacing_tuple, coordinates.spacing, rtol=1e-10, atol=1e-14):
+            raise coordinate_error("spacing disagrees with the declared chart")
+        self._coordinates = coordinates
+        self._coordinate_reason = ("explicit orthogonal chart" if coordinates is not None else
+                                  "legacy uniform-grid API assumes Cartesian coordinates")
         object.__setattr__(self, "_values", np.ascontiguousarray(arr))
         object.__setattr__(self, "_algebra", algebra)
         object.__setattr__(self, "_spacing", spacing_tuple)
+
+    @property
+    def coordinates(self) -> Optional[OrthogonalCoordinates]:
+        return self._coordinates
+
+    @property
+    def coordinate_reason(self) -> str:
+        return self._coordinate_reason
 
     @property
     def values(self) -> np.ndarray:
@@ -149,6 +178,7 @@ class MultivectorField:
         algebra: Cl,
         *,
         grid_points: list,
+        coordinates: Optional[OrthogonalCoordinates] = None,
     ) -> "MultivectorField":
         """Build a field by evaluating ``fn`` at every Cartesian-product point.
 
@@ -156,6 +186,9 @@ class MultivectorField:
         spatial axis. ``fn`` receives a coordinate vector and returns a
         ``Multivector`` over ``algebra``.
         """
+        chart = coordinates or OrthogonalCoordinates("cartesian", tuple(tuple(g) for g in grid_points))
+        if chart.axes != tuple(tuple(float(x) for x in g) for g in grid_points):
+            raise coordinate_error("grid_points disagree with the declared chart")
         mesh = np.meshgrid(*grid_points, indexing="ij")
         spatial_shape = mesh[0].shape
         out = np.zeros((*spatial_shape, algebra.dim), dtype=np.float64)
@@ -167,7 +200,7 @@ class MultivectorField:
         spacing = tuple(
             float(np.mean(np.diff(g))) if len(g) > 1 else 1.0 for g in grid_points
         )
-        return cls(out, algebra, spacing=spacing)
+        return cls(out, algebra, spacing=spacing, coordinates=chart)
 
     def at(self, *indices: int) -> Multivector:
         """Extract the multivector at the given grid index."""
@@ -179,16 +212,54 @@ class MultivectorField:
         for blade in self._algebra.blades():
             if blade.grade != k:
                 out[..., blade.mask] = 0
-        return MultivectorField(out, self._algebra, spacing=self._spacing)
+        return self.with_values(out)
+
+    def with_values(self, values: Any) -> "MultivectorField":
+        """Replace coefficients while preserving the coordinate contract."""
+        return MultivectorField(values, self.algebra, spacing=self.spacing, coordinates=self.coordinates)
+
+    def form_weights(self) -> np.ndarray:
+        """Convert orthonormal k-form coefficients to the coordinate coframe."""
+        weights = np.ones_like(self.values)
+        if self.coordinates is not None:
+            h = self.coordinates.scale_factors()
+            for mask in range(self.algebra.dim):
+                for axis in range(self.spatial_ndim):
+                    if mask & (1 << axis):
+                        weights[..., mask] *= h[..., axis]
+        return weights
+
+    def gradient(self) -> "MultivectorField":
+        self._require_grade(0)
+        return ext_deriv(self)
+
+    def divergence(self) -> "MultivectorField":
+        self._require_grade(1)
+        result = codiff(self)
+        return result.with_values(-result.values)
+
+    def curl(self) -> "MultivectorField":
+        self._require_grade(1)
+        if self.algebra.signature != (3, 0, 0):
+            raise coordinate_error("curl requires Cl(3,0)")
+        return hodge_star_field(ext_deriv(self))
+
+    def laplacian(self) -> "MultivectorField":
+        """Scalar Laplace-Beltrami operator, div(grad), on this grid."""
+        return self.gradient().divergence()
+
+    def _require_grade(self, grade: int) -> None:
+        if any(np.any(self.values[..., b.mask] != 0) for b in self.algebra.blades() if b.grade != grade):
+            raise coordinate_error(f"operation requires a pure grade-{grade} field")
 
     def __add__(self, other: "MultivectorField") -> "MultivectorField":
         if self._algebra != other._algebra:
             raise TesseraAlgebraError(
                 f"field algebra mismatch: {self._algebra!r} vs {other._algebra!r}."
             )
-        return MultivectorField(
-            self._values + other._values, self._algebra, spacing=self._spacing
-        )
+        if self.coordinates != other.coordinates or self.spacing != other.spacing or self.spatial_shape != other.spatial_shape:
+            raise coordinate_error("cannot add fields on different coordinate grids")
+        return self.with_values(self._values + other._values)
 
 
 # ---------------------------------------------------------------------------
@@ -274,11 +345,15 @@ def ext_deriv(field: MultivectorField) -> MultivectorField:
             f"ext_deriv requires field.spatial_ndim ({field.spatial_ndim}) to "
             f"equal algebra.n ({algebra.n})."
         )
+    # d(a_I h_I dq_I) / h_J in the orthonormal output coframe.
+    # The same weighted derivative handles every grade and preserves d²=0.
+    weights = field.form_weights()
+    coordinate_values = field.values * weights
     out = np.zeros_like(field.values)
     for axis in range(field.spatial_ndim):
-        d_axis = _partial(field.values, axis=axis, h=field.spacing[axis])
+        d_axis = _partial(coordinate_values, axis=axis, h=field.spacing[axis])
         out = out + _wedge_left_basis(algebra, axis, d_axis)
-    return MultivectorField(out, algebra, spacing=field.spacing)
+    return field.with_values(out / weights)
 
 
 def vec_deriv(field: MultivectorField) -> MultivectorField:
@@ -292,6 +367,8 @@ def vec_deriv(field: MultivectorField) -> MultivectorField:
     **Apple GPU fast path**: Cl(3,0) f32 fields on 3D grids route
     through ``tessera_apple_gpu_clifford_vec_deriv_cl30_f32``.
     """
+    if field.coordinates is not None and field.coordinates.system != "cartesian":
+        return field.with_values(ext_deriv(field).values - codiff(field).values)
     gpu_out = _try_apple_gpu_field_op_cl30_f32(
         field, "tessera_apple_gpu_clifford_vec_deriv_cl30_f32")
     if gpu_out is not None:
@@ -306,7 +383,7 @@ def vec_deriv(field: MultivectorField) -> MultivectorField:
     for axis in range(field.spatial_ndim):
         d_axis = _partial(field.values, axis=axis, h=field.spacing[axis])
         out = out + _apply_left_basis_product(algebra, axis, d_axis)
-    return MultivectorField(out, algebra, spacing=field.spacing)
+    return field.with_values(out)
 
 
 def hodge_star_field(field: MultivectorField) -> MultivectorField:
@@ -333,7 +410,7 @@ def hodge_star_field(field: MultivectorField) -> MultivectorField:
             out[..., result_mask] = out[..., result_mask] + rev_values[..., j]
         else:
             out[..., result_mask] = out[..., result_mask] - rev_values[..., j]
-    return MultivectorField(out, algebra, spacing=field.spacing)
+    return field.with_values(out)
 
 
 def _codifferential_sign(n: int, grade: int) -> int:
@@ -418,7 +495,7 @@ def codiff(field: MultivectorField) -> MultivectorField:
         return gpu_out
     raw = hodge_star_field(ext_deriv(hodge_star_field(field)))
     signs = codifferential_output_signs(algebra).astype(raw.values.dtype)
-    return MultivectorField(raw.values * signs, algebra, spacing=raw.spacing)
+    return raw.with_values(raw.values * signs)
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +526,8 @@ def _try_apple_gpu_field_op_cl30_f32(
     """
     from tessera.ga.signature import Cl  # noqa: F401
 
+    if field.coordinates is not None and field.coordinates.system != "cartesian":
+        return None
     if field.algebra.signature != (3, 0, 0):
         return None
     if field.spatial_ndim != 3:
@@ -487,7 +566,7 @@ def _try_apple_gpu_field_op_cl30_f32(
         return None
     if not ok:
         return None
-    return MultivectorField(out, field.algebra, spacing=field.spacing)
+    return field.with_values(out)
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +602,8 @@ def integral(
     weights = manifold.weights()
 
     if isinstance(integrand, MultivectorField):
+        if integrand.coordinates is not None and integrand.coordinates.system != "cartesian":
+            raise coordinate_error("field-mode manifold integration needs a chart-aware quadrature; use the chart volume density explicitly")
         if not isinstance(manifold, Euclidean):
             raise TesseraAlgebraError(
                 "Field-mode integral currently requires a Euclidean manifold."

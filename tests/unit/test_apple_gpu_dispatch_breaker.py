@@ -1472,27 +1472,22 @@ def test_every_converted_site_passes_a_finite_timeout():
 
 
 def test_each_bounded_wait_uses_its_own_event():
-    """Review of #710: the context-wide event reserves an increasing value
-    under a lock that is released before the command buffer is committed, so
-    two concurrent dispatches can submit out of reservation order. If the
-    value-2 buffer signals first, the value-1 waiter is already satisfied and
-    reads its results while its own command buffer is still running.
+    """No submission can satisfy another's wait, including allocation failure.
 
-    Both bounded waits now create a private event and wait for value 1, so no
-    other dispatch can satisfy this wait. The shared event survives only as the
-    fallback for a failed creation, which keeps a timeout rather than losing
-    one.
+    The old shared-event fallback reproduced the reservation/submission race.
+    Encode sessions must obey the same invariant as the ordinary helpers.
     """
-    text = _mm_text()
-    for helper in ("commit_and_wait_with_timeout", "commit_mpsgraph_and_wait_with_timeout"):
-        start = text.index(f"static bool {helper}(")
-        end = text.index("\nstatic ", start + 10)
-        segment = text[start:end]
-        creates, reserves = segment.index("newSharedEvent"), segment.find("++ctx.legacy_event_val")
-        assert "newSharedEvent" in segment, f"{helper} no longer makes its own event"
-        assert reserves == -1 or creates < reserves, (
-            f"{helper} reserves a shared-event value before trying a private "
-            f"event; the shared counter must be the fallback, not the default")
+    bodies = _mm_bodies(_mm_text())
+    for helper in ("commit_and_wait_with_timeout", "commit_mpsgraph_and_wait_with_timeout",
+                   "ts_enc_commit_wait", "ts_enc_commit_async"):
+        segment = bodies[helper][0]
+        assert "newSharedEvent" in segment, helper
+        assert "ctx.legacy_event" not in segment, helper
+    for helper in ("commit_and_wait_with_timeout", "commit_mpsgraph_and_wait_with_timeout",
+                   "ts_enc_commit_wait", "ts_enc_wait_destroy"):
+        assert "ts_wait_for_completion_with_timeout" in bodies[helper][0], helper
+
+
 # ── The encode-session commit: accounted, never skipped ──────────────────────
 # `ts_enc_commit_wait` is the one dispatch an open breaker must still perform.
 # Everything the session encoded runs only when its buffer is committed, so

@@ -198,3 +198,10 @@ def test_known_sentinels_present() -> None:
     actual = set(all_pass_names())
     missing = expected - actual
     assert not missing, f"locked Layer-B passes missing: {sorted(missing)}"
+
+
+def test_symbolic_dim_equality_declares_both_argument_carriers():
+    metadata = pass_lookup('tessera-symdim-equality')
+    for carrier in ('tessera.dim_names', 'tessera.arg_dim_names'):
+        assert carrier in metadata.required_attrs
+        assert carrier in metadata.preserved_attrs

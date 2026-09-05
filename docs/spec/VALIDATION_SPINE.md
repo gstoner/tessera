@@ -102,3 +102,33 @@ editable installs exercise the same import state.
   recorded in the generated execution matrix.
 - Tooling that auto-promotes a primitive's claim layer when the
   required tests appear — for now the audit drift gate is enough.
+
+## Checkout identity and generated coverage
+
+`scripts/validate.sh` now runs under `scripts/validation_tree.py`. The guard
+records the commit and hashes tracked and nonignored source files before the
+command, then rejects a passing result if the tree changed during execution.
+CI additionally binds `GITHUB_SHA`. For remote or branch-switch validation,
+capture the expected tree **before** switching and keep the manifest outside
+the repository:
+
+```sh
+python scripts/validation_tree.py --capture /tmp/expected-tree.json
+python scripts/validation_tree.py --expect /tmp/expected-tree.json \
+  --receipt /tmp/validation-receipt.json -- python -m pytest tests/unit/test_graph_ir.py
+```
+
+Run these commands in host WSL per `AGENTS.md`. Copy the expectation with the
+source when using another host. A receipt without an external expectation
+proves which tree ran; it cannot infer which tree the caller intended. Supply
+`TESSERA_EXPECTED_TREE` to bind the full validation spine, or
+`TESSERA_EXPECTED_HEAD` for a commit-only expectation. A manifest may carry a
+`files` subset with no `head` to bind selected files across detached worktrees.
+
+Tests that mention an operation change generated coverage even when the
+operation's implementation is unchanged. After merging authored source and
+tests, run `scripts/check_generated_docs.sh --refresh-coverage` in WSL. It
+regenerates coverage and freshness through the owning registry, checks them,
+and refuses unresolved authored conflicts. It does not stage files. Resolve
+`test_coverage.md` and its CSV by regeneration from the merged tree, never by
+hand-merging rows. The full generated-doc gate remains required.

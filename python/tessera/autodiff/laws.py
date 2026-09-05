@@ -765,6 +765,8 @@ def run_law_sweep() -> list[LawResult]:
     # Law 7 — field-calculus identities (MSW-4). Reference-free, so they run
     # unconditionally; a missing GA extra is reported, not silently skipped.
     results.extend(vector_identity_checks())
+    from .coordinate_laws import coordinate_identity_checks
+    results.extend(coordinate_identity_checks())
 
     return results
 

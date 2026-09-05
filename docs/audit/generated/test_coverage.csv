@@ -174,7 +174,7 @@ ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real 
 edm_loss_weight,3,0,0,3,0,fp16,directly_tested,3 direct test references
 edm_precondition,3,0,0,3,0,fp16,directly_tested,3 direct test references
 eigh,4,0,0,4,0,fp32,directly_tested,4 direct test references
-einsum,14,0,2,14,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,14 direct test references
+einsum,16,0,3,16,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,16 direct test references
 ema_update,1,0,0,1,1,fp32,structural_only,category default for 'grad_transform'
 empty_state_tree,2,0,0,2,0,,directly_tested,2 direct test references
 entmax15,1,0,0,1,1,fp64,directly_tested,public forward plus simplex and FD-VJP tests
@@ -288,7 +288,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,539,312,26,851,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,851 direct test references
+matmul,539,314,26,853,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,853 direct test references
 matrix_power,1,0,0,1,1,fp32,structural_only,unclassified — defaults to structural_only
 max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
@@ -373,7 +373,7 @@ quantize_nvfp4,21,0,3,21,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m
 quantized_matmul,5,0,0,5,0,f16 fp32 nvfp4,directly_tested,5 direct test references
 rearrange,13,0,1,13,0,fp16 fp32,directly_tested,13 direct test references
 reciprocal,5,0,0,5,0,bf16 f32 fp16 fp32,directly_tested,5 direct test references
-reduce,146,17,13,163,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,163 direct test references
+reduce,147,17,14,164,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,164 direct test references
 reduce_scatter,4,0,0,4,0,fp32,directly_tested,4 direct test references
 relu,139,39,11,178,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,178 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'

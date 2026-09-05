@@ -666,10 +666,15 @@ struct SymbolicDimEquality
 
   static std::optional<DimNameList>
   readArgDimNames(func::FuncOp fn, unsigned argIdx) {
-    auto arr = fn->getAttrOfType<ArrayAttr>("tessera.arg_dim_names");
-    if (!arr) return std::nullopt;
-    if (argIdx >= arr.size()) return std::nullopt;
-    auto inner = dyn_cast<ArrayAttr>(arr[argIdx]);
+    // The Python frontend emits standard func argument attributes. Keep the
+    // older aggregate carrier for textual producers, with the argument-local
+    // carrier as the authoritative source when present.
+    auto inner = fn.getArgAttrOfType<ArrayAttr>(argIdx, "tessera.dim_names");
+    if (!inner) {
+      auto arr = fn->getAttrOfType<ArrayAttr>("tessera.arg_dim_names");
+      if (!arr || argIdx >= arr.size()) return std::nullopt;
+      inner = dyn_cast<ArrayAttr>(arr[argIdx]);
+    }
     if (!inner) return std::nullopt;
     DimNameList names;
     for (Attribute a : inner) {

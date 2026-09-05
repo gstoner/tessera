@@ -15,3 +15,7 @@ endif()
 # Advanced examples with buildable C++ content
 # ------------------------------------------------------------------
 add_subdirectory(advanced)
+
+# Host-free mathematical reference tutorials (MSW-6/MSW-8).
+add_subdirectory(tensor_calculus)
+add_subdirectory(pde_learning)

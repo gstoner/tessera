@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-03
+last_updated: 2026-09-04
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -3306,9 +3306,14 @@ remain Apple-owned.
   this change; refusing under contention is the safe direction and preserves
   the shipped `composed` route. NVIDIA and ROCm
   are unaffected: this is the Apple route ledger's own aggregation, and no
-  parity is claimed for them. Two sibling lanes (`flash_attn_mha`, `softmax`)
-  consult the same ledger from their dispatchers; their corpora are not part of
-  this change and should be checked for the same self-reference.
+  parity is claimed for them. **Sibling-lane review correction:** the earlier
+  warning about `flash_attn_mha` and `softmax` overstated the scope. The attention
+  corpus passes `route_override`, bypassing ledger selection; the strict-route
+  sealer only aggregates existing reports, and the tile/simdgroup benchmark
+  binds implementations directly without ledger-based route selection. The
+  demonstrated self-reference was the MoE incumbent in the legacy retune
+  corpus, protected by `_measure_implementations_not_the_ledgers_choice`.
+  This closes that sibling investigation, not the statistical residual below.
   **Third root cause — warmup.** One warmup call per route left a process's
   *first* run cold: the fused MoE candidate measured ~2250 µs for all of run 0
   and ~990 µs in every run after, dragging that row's interval down in 2 of 8
@@ -7511,3 +7516,36 @@ revision post-multiplied the native output by the sign table, which made the
 assertion true by construction and tested nothing about the kernel. 56 GA/MSL
 tests and 134 benchmark tests pass. Requires a rebuilt
 `TesseraAppleRuntimeShared`.
+
+
+## Cross-backend sync `FRONTIER-MSW-2026-09-04`
+
+Owners: `FRONTEND-IR-MEDIUM-1`, `APPLE-DISPATCH-WEDGE-1`,
+`APPLE-MOE-ROUTE-1`, and `MSW-5` through `MSW-9`.
+
+Shared changes: pending metadata snapshots are verified before a new record and
+the preceding boundary's drop declarations are retired; einsum execution and
+AD/trace recording consume one alpha-normal equation; sampled reference fields
+carry orthogonal coordinate contracts with registered diagnostic
+`FIELD_COORDINATE_CONTRACT`. Coordinate laws extend the existing field-calculus
+registry. MSW-6/MSW-8 are host-free examples; MSW-9 is a design spike, with the
+native program-pair evaluator/fusion gate still open. No new ODS operation,
+backend candidate, physical schedule or native metric ABI is introduced.
+
+**apple outcome:** Follow-up required for native validation: private-event allocation failures now use bounded per-buffer polling in the legacy helpers and encode sessions. Sessions keep a separate commit counter. MoE selection checks all four operands and queries the actual uniform dtype; mixed storage uses composed execution. WSL validates the Python and source-contract tests but cannot compile or execute Metal. The local macOS TesseraAppleRuntimeShared build succeeded after these edits. Owning-host concurrency/fault-injection execution remains necessary; compilation alone is not device proof.
+
+Validation records live in `MATH_SOURCE_WORKSTREAM.md` and the focused review
+fixtures. The metadata pass was rebuilt on WSL; the positive/negative lifecycle
+fixtures pass. Reference proof does not transfer exact-device status.
+
+## Cross-backend sync `FRONTEND-RECIPE-2026-09-04`
+
+Owner: `FRONTEND-IR-MEDIUM-1`, staged rank/prune acceptance. Shared contracts:
+AST location fidelity and location-sensitive capture caching; argument-local
+symbolic dimension consumption; opt-in native parametric CSE with one recipe
+digest across constraint-checked buckets; strict source-loop matmul candidate
+raising. Existing passes and operations are reused; execution selection is
+unchanged. The validation spine now binds checkout fingerprints, and coverage
+conflicts are regenerated after authored inputs are resolved.
+
+Apple outcome: follow-up required for any future recipe-based native selection. No Metal execution or performance evidence is claimed.

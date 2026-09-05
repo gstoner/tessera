@@ -6,9 +6,9 @@ Reference date for staleness: **2026-09-04**.
 
 ## Headline
 
-- **152** docs catalogued across the canonical doc tree.
-- **151** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **51** updated within the last 30 days.
+- **153** docs catalogued across the canonical doc tree.
+- **152** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **52** updated within the last 30 days.
 - **24** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -142,13 +142,13 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 53 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 53 | ✓ |
 | `backend/apple/README.md` | - | 2026-07-13 | 53 | ✓ |
-| `backend/apple/todo.md` | - | 2026-09-03 | 1 | ✓ |
+| `backend/apple/todo.md` | - | 2026-09-04 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 72 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-18 | 48 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 47 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 53 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 72 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-09-03 | 1 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-09-04 | 0 | ✓ |
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 31 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 21 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 26 | ✓ |
@@ -156,9 +156,10 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 30 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 38 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 73 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-09-03 | 1 | ✓ |
-| `backend/x86/todo.md` | - | 2026-09-03 | 1 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-09-04 | 0 | ✓ |
+| `backend/x86/todo.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 38 | ✓ |
+| `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-18 | 17 | ✓ |
 | `compiler/AUTODIFF_NEXTGEN_PLAN.md` | - | 2026-08-20 | 15 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-18 | 17 | ✓ |
@@ -182,10 +183,10 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-08-27 | 8 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 33 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 39 | ✓ |
-| `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-01 | 3 | ✓ |
+| `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/MATRIX_CALCULUS_REVIEW.md` | - | 2026-08-20 | 15 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 27 | ✓ |
-| `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-08-14 | 21 | ✓ |
+| `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/README.md` | - | 2026-08-18 | 17 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 27 | ✓ |
 | `compiler/SCHEDULE_OBJECT_DESIGN.md` | - | 2026-08-16 | 19 | ✓ |

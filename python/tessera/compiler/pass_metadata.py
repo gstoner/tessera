@@ -787,7 +787,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "through MLIR integer Presburger analysis; verifies compatibility "
             "`tessera.dim_bindings` equations + "
             "per-op dim-name contracts (reshape / transpose / matmul), "
-            "with SSA-value propagation, concrete sum-of-products witness "
+            "with SSA-value propagation seeded by frontend argument-local "
+            "tessera.dim_names or legacy tessera.arg_dim_names, concrete sum-of-products witness "
             "checking, interprocedural cross-checks via func.call, and "
             "scf.for/scf.if/scf.while region recursion."
         ),
@@ -796,6 +797,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=(
             "tessera.dim_bindings",
             "tessera.dim_sizes",
+            "tessera.dim_names",
             "tessera.arg_dim_names",
         ),
         preserved_attrs=(
@@ -805,6 +807,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.nonlinear_shape_guard_digest",
             "tessera.dim_bindings",
             "tessera.dim_sizes",
+            "tessera.dim_names",
             "tessera.arg_dim_names",
         ),
         diagnostic_codes=(

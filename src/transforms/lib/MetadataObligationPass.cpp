@@ -100,6 +100,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
@@ -197,6 +198,17 @@ struct RecordMetadata
   void runOnOperation() override {
     ModuleOp module = getOperation();
     OpBuilder builder(module.getContext());
+
+    // A previous boundary (including the Python frontier) owns the existing
+    // snapshot and declarations. Check it before replacing its evidence, then
+    // retire its exceptions so they cannot authorize a later boundary's loss.
+    if (module->hasAttr(kSnapshotAttr)) {
+      OpPassManager pending("builtin.module");
+      pending.addPass(tessera::createVerifyMetadataObligationPass());
+      if (failed(runPipeline(pending, module)))
+        return signalPassFailure();
+      module.walk([](Operation *op) { op->removeAttr(kDroppedAttr); });
+    }
 
     // Encoding: {scope: {attr_name: ["<printed value>", <count>, ...]}}.
     // Flat pairs rather than a nested dictionary because a printed attribute is

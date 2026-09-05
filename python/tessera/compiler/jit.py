@@ -240,7 +240,7 @@ def _resolve_source_text(
     source: Optional[str] = None,
     source_path: Optional[str] = None,
 ) -> Tuple[Optional[str], str]:
-    """Return dedented function source and an origin label for diagnostics."""
+    """Return function source and its origin, preserving file-backed columns."""
 
     if source is not None and source_path is not None:
         raise TesseraJitError("Pass either source=... or source_path=..., not both")
@@ -248,7 +248,8 @@ def _resolve_source_text(
         return textwrap.dedent(source), "explicit"
     if source_path is not None:
         try:
-            return textwrap.dedent(Path(source_path).read_text(encoding="utf-8")), f"file:{source_path}"
+            path = Path(source_path).resolve()
+            return path.read_text(encoding="utf-8"), f"file:{path}"
         except OSError as exc:
             raise TesseraJitError(f"Could not read @jit source_path {source_path!r}: {exc}") from exc
     try:
@@ -560,7 +561,8 @@ class JitFn:
         """
         if self._legacy_graph_ir is None or not self._legacy_graph_ir.functions:
             builder = GraphIRBuilder()
-            builder.lower(self._fn, source_text=self._frontend_source_text)
+            builder.lower(self._fn, source_text=self._frontend_source_text,
+                          source_origin=self.source_origin)
             self._legacy_graph_ir = builder.module()
         return self._legacy_graph_ir
 
@@ -1029,6 +1031,23 @@ class JitFn:
             specialized = specialize_module_from_values(self.graph_ir, values)
         self._autodiff_specializations[signature] = specialized
         return specialized
+
+    def rank_parametric_buckets(self, buckets, *, tessera_opt: str):
+        """Opt-in native pre-elaboration analysis; never selects execution.
+
+        Reuses one optimized symbolic recipe across the supplied shape buckets.
+        Keep the decoration-time oracle even after concrete tracing replaces
+        ``graph_ir``. Unresolved element types fail before invoking MLIR.
+        """
+        from .parametric_recipe import prepare_recipe
+        from .presburger import presburger_system_from_constraints
+
+        from .constraints import Divisible, Equal, Range
+        if any(not isinstance(c, (Divisible, Equal, Range)) for c in self.constraints._constraints):
+            raise ValueError("parametric rank tier requires integer-affine constraints")
+        module = self._ensure_legacy_graph_ir()
+        system = presburger_system_from_constraints(self.constraints._constraints)
+        return prepare_recipe(module, tessera_opt=tessera_opt, system=system).rank_buckets(buckets)
 
     def specialized_autodiff_ir(self, *args: Any, **kwargs: Any) -> str:
         """Concrete Graph IR used for this autodiff call signature."""
@@ -2595,6 +2614,7 @@ def _recover_frontend_diagnostics(
     fn: Callable, *, source_text: Optional[str],
     effect_tag: Optional[str], target_attr: Optional[str],
     prefer_abstract_trace: bool,
+    source_origin: str = "inspect",
 ) -> List[JitDiagnostic]:
     """Re-derive the AST front end's diagnostics on the emission-failure path.
 
@@ -2612,7 +2632,7 @@ def _recover_frontend_diagnostics(
         builder = GraphIRBuilder()
         builder.lower(
             fn, effect_tag=effect_tag, target_attr=target_attr,
-            source_text=source_text,
+            source_text=source_text, source_origin=source_origin,
             prefer_abstract_trace=prefer_abstract_trace,
         )
         return _frontend_jit_diagnostics(builder)
@@ -2669,13 +2689,19 @@ def _jit_emit_graph_ir(
         # G4 memoization (2026-05-19) — process-local cache keyed on
         # source_text + effect_tag + target_attr.
         from . import graph_ir_cache as _gic
+        # Identical source at different call sites must not reuse stale locs.
+        from .graph_ir import _loc_path
+        source_location = (
+            f"{source_origin}:{_loc_path(fn.__code__.co_filename)}:{fn.__code__.co_firstlineno}"
+        )
         module = _gic.lookup(
-            source_text, effect_tag=effect_tag, target_attr=target_attr)
+            source_text, effect_tag=effect_tag, target_attr=target_attr,
+            source_location=source_location)
         if module is None:
             builder = GraphIRBuilder()
             builder.lower(
                 fn, effect_tag=effect_tag,
-                target_attr=target_attr, source_text=source_text,
+                target_attr=target_attr, source_text=source_text, source_origin=source_origin,
                 prefer_abstract_trace=inferred_effect == Effect.pure,
             )
             module = builder.module()
@@ -2684,6 +2710,7 @@ def _jit_emit_graph_ir(
             _gic.store(
                 source_text, module,
                 effect_tag=effect_tag, target_attr=target_attr,
+                source_location=source_location,
             )
         diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
         if source_text is None:
@@ -2772,7 +2799,7 @@ def _jit_emit_graph_ir(
         # back if the tracer then fails too (JIT_APPLE_GPU_TRACE_FAILED).
         if not frontend_diagnostics:
             frontend_diagnostics = _recover_frontend_diagnostics(
-                fn, source_text=source_text, effect_tag=effect_tag,
+                fn, source_text=source_text, source_origin=source_origin, effect_tag=effect_tag,
                 target_attr=target_attr,
                 prefer_abstract_trace=inferred_effect == Effect.pure,
             )

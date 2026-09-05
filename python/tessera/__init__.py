@@ -304,9 +304,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             antithetic=bool(antithetic), accum=str(policy.get("accum")),
         )
 
-    def einsum(spec: str, *tensors):
+    def einsum(*tensors, spec=None, equation=None):
+        from .compiler.contractions import canonical_call
+        options = {k: v for k, v in (("spec", spec), ("equation", equation)) if v is not None}
+        tensors, options = canonical_call(tensors, options)
         tensors = tuple(t._data if hasattr(t, "_data") else t for t in tensors)
-        return np.einsum(spec, *tensors)
+        return np.einsum(options["equation"], *tensors)
 
     def factorized_matmul(A, B, rank: int):
         out = gemm(A, B)

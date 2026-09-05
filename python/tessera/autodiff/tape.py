@@ -976,6 +976,9 @@ _WRAPPED: set[str] = set()
 
 def _make_wrapper(name: str, original: Callable) -> Callable:
     def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if name == "einsum":
+            from ..compiler.contractions import canonical_call
+            args, kwargs = canonical_call(args, kwargs)
         # Late import — avoids a load-time cycle through autodiff.__init__.
         from .mixed_precision import autocast_dtype, autocast_keep_fp32
 

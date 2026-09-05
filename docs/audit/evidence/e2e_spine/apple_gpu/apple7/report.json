@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1116434.58,
+      "median_ns": 1029744.5800000001,
       "repetitions": 750,
-      "resource_fingerprint": "e1ae90e6a9d76f0c83ff120df784846e021955285df126a843814de5bd965b44",
+      "resource_fingerprint": "43da21bc9a5e57af1add76d5aa42c3a319f09df0cfdd0ea0cd02f836c109f88a",
       "route": "apple_gpu_bmm_f32_batch1",
       "run_medians_ns": [
-        1120960.0,
-        1111909.16
+        1028874.16,
+        1030615.0
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -21,13 +21,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 488604.25,
+      "median_ns": 482759.67000000004,
       "repetitions": 750,
-      "resource_fingerprint": "e1ae90e6a9d76f0c83ff120df784846e021955285df126a843814de5bd965b44",
+      "resource_fingerprint": "43da21bc9a5e57af1add76d5aa42c3a319f09df0cfdd0ea0cd02f836c109f88a",
       "route": "apple_gpu_bmm_f32_batch1",
       "run_medians_ns": [
-        491298.82,
-        485909.68
+        481173.0,
+        484346.34
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -38,13 +38,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 440010.0,
+      "median_ns": 439131.25,
       "repetitions": 750,
-      "resource_fingerprint": "580a8891e929c11af20cfc0a6760f17e02de2b1858326dc297d951b21b1f2aa8",
+      "resource_fingerprint": "08a9f750f2aeb7cbede839ad23655ad0426b0e744e31ba1496478630356977d7",
       "route": "apple_gpu_msl_softmax_f32",
       "run_medians_ns": [
-        441975.0,
-        438045.0
+        438241.66,
+        440020.84
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -55,13 +55,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 104664.08,
+      "median_ns": 106970.73000000001,
       "repetitions": 750,
-      "resource_fingerprint": "580a8891e929c11af20cfc0a6760f17e02de2b1858326dc297d951b21b1f2aa8",
+      "resource_fingerprint": "08a9f750f2aeb7cbede839ad23655ad0426b0e744e31ba1496478630356977d7",
       "route": "apple_gpu_msl_softmax_f32",
       "run_medians_ns": [
-        104741.22,
-        104586.94
+        106713.64,
+        107227.82
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -73,32 +73,32 @@
   "cache_proofs": [
     {
       "cold": {
-        "cache_key": "001fa0bd660e0ca738e8ec3ff80b8185ebe7b43b6785b51c42502bbc7c814d47",
+        "cache_key": "e6791c2f4055a9475788bce7e8b4f4bf121ce713a8289c3d9895d5bba28a3d14",
         "compile_state": "prepackaged",
-        "descriptor_digest": "bda25129fd1c69d6509678f2b48de6c63b4007c74984c20066d1b2f76c495569",
-        "image_digest": "a76ba792a62b47c6eadb407e9d8a7fe3857caa6ea627f48f443e7b178450856e"
+        "descriptor_digest": "a27c3dc7d9891d57a1645264f7debdb54a4be265251acac1a7ede2388d733302",
+        "image_digest": "2311c0fab03bffe0a9e28695323704bc57dfcc0d04af83670af4646a2481669b"
       },
       "fixture_id": "matmul-f32-2x3x2-v1",
       "warm": {
-        "cache_key": "001fa0bd660e0ca738e8ec3ff80b8185ebe7b43b6785b51c42502bbc7c814d47",
+        "cache_key": "e6791c2f4055a9475788bce7e8b4f4bf121ce713a8289c3d9895d5bba28a3d14",
         "compile_state": "prepackaged",
-        "descriptor_digest": "bda25129fd1c69d6509678f2b48de6c63b4007c74984c20066d1b2f76c495569",
-        "image_digest": "a76ba792a62b47c6eadb407e9d8a7fe3857caa6ea627f48f443e7b178450856e"
+        "descriptor_digest": "a27c3dc7d9891d57a1645264f7debdb54a4be265251acac1a7ede2388d733302",
+        "image_digest": "2311c0fab03bffe0a9e28695323704bc57dfcc0d04af83670af4646a2481669b"
       }
     },
     {
       "cold": {
-        "cache_key": "595ff485de6160d969dc2590c5227b66283f59e68efa64b20115004f2e27216d",
+        "cache_key": "2fead60164420f404db480d7599cf62a173e2a349d6d1817feda55327d087db8",
         "compile_state": "prepackaged",
-        "descriptor_digest": "6cb992c666778ada9b107253e22a90e87721e13a7d6da640bb5160169cef2cf5",
-        "image_digest": "11e7027d86f6c09fca3657db5fd46378144c8b19ff917f08dce82db3f2375391"
+        "descriptor_digest": "0160b049c9d95ccad9526c60f0d376bf434f3a0049976f3581cd67341ee2e7de",
+        "image_digest": "47b418f304f05d60a627bc43c90e1310753663b2a6089f4361a960781ec7a41e"
       },
       "fixture_id": "softmax-f32-2x2-extreme-v1",
       "warm": {
-        "cache_key": "595ff485de6160d969dc2590c5227b66283f59e68efa64b20115004f2e27216d",
+        "cache_key": "2fead60164420f404db480d7599cf62a173e2a349d6d1817feda55327d087db8",
         "compile_state": "prepackaged",
-        "descriptor_digest": "6cb992c666778ada9b107253e22a90e87721e13a7d6da640bb5160169cef2cf5",
-        "image_digest": "11e7027d86f6c09fca3657db5fd46378144c8b19ff917f08dce82db3f2375391"
+        "descriptor_digest": "0160b049c9d95ccad9526c60f0d376bf434f3a0049976f3581cd67341ee2e7de",
+        "image_digest": "47b418f304f05d60a627bc43c90e1310753663b2a6089f4361a960781ec7a41e"
       }
     }
   ],
@@ -120,9 +120,9 @@
           ]
         ]
       ],
-      "descriptor_digest": "bda25129fd1c69d6509678f2b48de6c63b4007c74984c20066d1b2f76c495569",
+      "descriptor_digest": "a27c3dc7d9891d57a1645264f7debdb54a4be265251acac1a7ede2388d733302",
       "fixture_id": "matmul-f32-2x3x2-v1",
-      "image_digest": "a76ba792a62b47c6eadb407e9d8a7fe3857caa6ea627f48f443e7b178450856e",
+      "image_digest": "2311c0fab03bffe0a9e28695323704bc57dfcc0d04af83670af4646a2481669b",
       "levels": {
         "a": "proven",
         "b": "proven",
@@ -140,9 +140,9 @@
           0.5
         ]
       ],
-      "descriptor_digest": "6cb992c666778ada9b107253e22a90e87721e13a7d6da640bb5160169cef2cf5",
+      "descriptor_digest": "0160b049c9d95ccad9526c60f0d376bf434f3a0049976f3581cd67341ee2e7de",
       "fixture_id": "softmax-f32-2x2-extreme-v1",
-      "image_digest": "11e7027d86f6c09fca3657db5fd46378144c8b19ff917f08dce82db3f2375391",
+      "image_digest": "47b418f304f05d60a627bc43c90e1310753663b2a6089f4361a960781ec7a41e",
       "levels": {
         "a": "proven",
         "b": "proven",
@@ -159,7 +159,7 @@
     "matmul",
     "softmax"
   ],
-  "source_commit": "cd12ca2626ee80e1afd039733cb731ee5162efc6",
+  "source_commit": "364f76758a6b2568d2197e53e6690bfc2ea71f49",
   "target": "apple_gpu",
-  "toolchain_fingerprint": "5dcb86457d9936523b31787541a70303486ad1089e6361a58d19ad42fe9a8f23"
+  "toolchain_fingerprint": "ea61e5274b3783c9a943c784e595184fa412a474b261bfc189b2dacf233d5f42"
 }

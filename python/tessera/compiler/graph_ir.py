@@ -2520,6 +2520,7 @@ def _span_from_ast(node: ast.AST) -> SourceSpan:
         col=int(getattr(node, "col_offset", 0) or 0) + 1,
         end_line=getattr(node, "end_lineno", None),
         end_col=end_col,
+        source_name=getattr(node, "_tessera_source_name", None),
     )
 
 
@@ -4263,6 +4264,7 @@ class GraphIRBuilder:
         target_attr: Optional[str] = None,
         source_text: Optional[str] = None,
         prefer_abstract_trace: bool = False,
+        source_origin: Optional[str] = None,
     ) -> "GraphIRFunction":
         """
         Lower fn to a GraphIRFunction and add it to the module.
@@ -4274,6 +4276,7 @@ class GraphIRBuilder:
                           tessera.target on the module (Phase 3+)
             source_text : optional Python source text for functions whose
                           source cannot be retrieved with inspect.getsource()
+            source_origin: optional file:<absolute path> origin for supplied source
 
         Returns:
             GraphIRFunction — the emitted function IR
@@ -4337,7 +4340,8 @@ class GraphIRBuilder:
 
         # Extract ops from the retained AST compatibility frontend.
         arg_names = [a.name for a in args]
-        ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args}, source_text=source_text)
+        ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+                                source_text=source_text, source_origin=source_origin)
 
         # Build function attrs
         fn_attrs = {}
@@ -4361,12 +4365,42 @@ class GraphIRBuilder:
         arg_names: List[str],
         arg_types: Optional[Dict[str, IRType]] = None,
         source_text: Optional[str] = None,
+        source_origin: Optional[str] = None,
     ) -> List[IROp]:
         """Walk the function AST and extract recognized tessera op calls."""
         try:
-            source = source_text if source_text is not None else inspect.getsource(fn)
-            source = textwrap.dedent(source)
-            tree = ast.parse(source)
+            try:
+                inspected, first_line = inspect.getsourcelines(fn)
+            except (OSError, TypeError):
+                inspected, first_line = [], 1
+            source = source_text if source_text is not None else "".join(inspected)
+            matches_file = bool(inspected) and textwrap.dedent(source) == textwrap.dedent("".join(inspected))
+            source_name: Optional[str]
+            if source_origin is not None and source_origin.startswith("file:"):
+                first_line = 1
+                source_name = source_origin[len("file:"):]
+            elif matches_file:
+                source = "".join(inspected)
+                source_name = inspect.getsourcefile(fn)
+            else:
+                # Explicit source is a separate virtual document; the callable's
+                # file may contain different code.
+                first_line = 1
+                source_name = f"<tessera-source:{fn.__name__}>"
+            dedented = textwrap.dedent(source)
+            tree = ast.parse(dedented)
+            original_lines, parsed_lines = source.splitlines(), dedented.splitlines()
+            for node in ast.walk(tree):
+                if hasattr(node, "lineno"):
+                    line = node.lineno - 1
+                    removed = len(original_lines[line].encode()) - len(parsed_lines[line].encode())
+                    setattr(node, "col_offset", getattr(node, "col_offset") + removed)
+                    if getattr(node, "end_lineno", None) is not None:
+                        end = getattr(node, "end_lineno") - 1
+                        setattr(node, "end_col_offset", getattr(node, "end_col_offset")
+                                + len(original_lines[end].encode()) - len(parsed_lines[end].encode()))
+                setattr(node, "_tessera_source_name", source_name)
+            ast.increment_lineno(tree, first_line - 1)
         except (OSError, TypeError, SyntaxError):
             return []
 

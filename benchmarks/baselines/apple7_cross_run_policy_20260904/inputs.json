@@ -1,0 +1,7 @@
+{
+  "/private/tmp/apple-policy-fe3c59ed/benchmarks/apple_gpu/benchmark_legacy_retune.py": "41a0aaef69bcc8a4267ac599aecc8b628268794c898cc14b4eab6f2b4ca441f3",
+  "/private/tmp/apple-policy-fe3c59ed/benchmarks/apple_gpu/compare_cross_run_policy.py": "9fa63be90993c8c4fc0e96e1db48dfd347c7a1d90c63d592a44420de416bd046",
+  "/private/tmp/apple-policy-fe3c59ed/libTesseraAppleRuntime.dylib": "74519b04d8f4ff46daa3b246e69897288b6a625a74f2cc367173aee1f1036033",
+  "/private/tmp/apple-policy-fe3c59ed/python/tessera/compiler/apple_route_selector.py": "6d189a62d19735cebfdf59ea2246f74bf54062ff86a7dd89eb1d7515fc99ffa9",
+  "/private/tmp/apple-policy-fe3c59ed/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": "8b76813d50c55d0b647200df8200a877fcaf9363bff113908870e14fec102a85"
+}

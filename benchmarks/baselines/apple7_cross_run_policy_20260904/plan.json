@@ -1,0 +1,13 @@
+{
+  "first_seed": 1701,
+  "process_timeout_seconds": 300,
+  "profile": "extended",
+  "reps": 5,
+  "run_count": 8,
+  "synthetic_candidate_time_factors": [
+    1.5,
+    3.0
+  ],
+  "synthetic_run_index": 0,
+  "trials": 9
+}

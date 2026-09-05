@@ -1,5 +1,6 @@
 """The fixed-count policy experiment cannot retry or launder synthetic data."""
 import copy
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -109,3 +110,23 @@ def test_changed_runtime_invalidates_completed_collection(tmp_path, monkeypatch)
         module.collect(output)
     assert len(list(output.glob("run-*.json"))) == 8
     assert not (output / "comparison.json").exists()
+
+
+def test_owning_device_packet_replays_and_preserves_raw_report_hashes():
+    root = Path(__file__).resolve().parents[2]
+    packet = root / "benchmarks/baselines/apple7_cross_run_policy_20260904"
+    summary = json.loads((packet / "summary.json").read_text())
+    reports = []
+    for source in summary["source_reports"]:
+        raw = (packet / source["path"]).read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == source["sha256"]
+        reports.append(json.loads(raw))
+    replay = _module().compare_reports(reports)
+    assert replay["plan"] == summary["plan"]
+    for expected, actual in zip(summary["scenarios"], replay["scenarios"], strict=True):
+        assert expected["scenario"] == actual["scenario"]
+        assert expected["changed_decisions"] == actual["changed_decisions"]
+        for estimator, policy in expected["policies"].items():
+            for saved, row in zip(policy["decisions"], actual["policies"][estimator]["decisions"], strict=True):
+                assert saved == {key: row[key] for key in saved}
+    assert summary["promotion_allowed"] is False

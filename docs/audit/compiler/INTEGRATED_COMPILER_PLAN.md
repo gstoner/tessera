@@ -1342,7 +1342,7 @@ Bound 2026-09-03 from
 owns the finding and the KGEN-comparison rationale. Global ordering and
 promotion authority remain here.
 
-The finding that justifies an ID rather than a reference: **Tessera's system of
+The original 2026-09-03 finding that justified this ID was: **Tessera's system of
 record is the Python object graph, and the MLIR text is a lossy projection of
 it.** Measured on the checked-in `tessera-opt` (host-independent): symbolic
 shapes do not survive to the parser (`Tensor['M','K']` → malformed
@@ -1371,8 +1371,9 @@ Three sub-tracks, sequenced smallest-blast-radius first:
    (`trace._user_source_span`, first frame outside the package) and the
    canonical render emits a repo-relative `loc("file":line:col)` — relative so
    the content-addressed canonical text stays host-independent — verified
-   through `tessera-opt -mlir-print-debuginfo`. The AST `_OpExtractor` still
-   emits no `loc`, so its deletion no longer regresses Decision #13.
+   through `tessera-opt -mlir-print-debuginfo`. PR #721 also connected AST
+   `_OpExtractor` source spans to canonical locations, including file-backed
+   `source_path`; both frontend paths now retain diagnostic locations.
    (iii) **Landed 2026-09-03.** The symbolic→concrete elaboration boundary,
    the region-privilege (Decision #2) and the `ConstraintSolver` (Decision #4)
    drops are declared through the **existing** W1.3 metadata-obligation pass
@@ -1403,16 +1404,15 @@ Three sub-tracks, sequenced smallest-blast-radius first:
    unconsumed declaration of Decision #29, and the second silently licenses a
    real future drop.
 
-2. **Pre-elaboration parametric optimization (perf + rigor).** Elaboration is
-   entirely pre-MLIR today, so `tessera-opt` only sees concrete instances and
-   there is no tier that optimizes the parametric recipe once before it is
-   stamped per shape bucket. Build one on the existing `PresburgerSystem`
+2. **Pre-elaboration parametric optimization (perf + rigor).** The rank/prune
+   tier landed in PR #721: native optimization now sees the parametric recipe
+   once before bucket analysis. Next instantiate the optimized recipe through
+   a native, witness-checked boundary, preserving the existing `PresburgerSystem`
    substrate carried through `structured_cfg.py`. Arbiter payoff (Decision #28):
    buckets compared as instances of one optimized recipe, not N independently
    lowered programs, so a bucket-to-bucket regression is a real difference. Also
-   retires the Decision #29 producerless consumer — `SymbolicDimEqualityPass`
-   consumes `tessera.dim_names` that the frontend cannot currently emit
-   parseably.
+   connects the now-parseable frontend `tessera.dim_names` carrier to
+   `SymbolicDimEqualityPass`; that producer/consumer gap is already fixed.
 
 3. **Raising / idiom recognition (algorithmic).** No pass lifts a hand-written
    loop nest back to `tessera.matmul` / `tessera.flash_attn`, so user-written
@@ -1585,9 +1585,10 @@ exceeds-SOTA claims.
 `AMD RYZEN AI MAX+ 395 w/ Radeon 8060S`, Ubuntu 24.04 under WSL2, 32 threads,
 62 GB RAM, LLVM/MLIR 23 at `/usr/lib/llvm-23`, `gfx1151` visible to `rocminfo`.
 It is both faster and larger-memory than the Mac M1 Max for `tessera-opt`
-rebuilds, and it is the only box in the fleet with an executing GPU lane — so
-compile-time contract work and its hardware gate live on the same machine. The
-Mac is retained for Apple-backend work, which cannot move.
+rebuilds, so ROCm compile-time work and its hardware gate live on the same
+machine. It is not the fleet's only GPU lane: Super-Bear exposes an RTX 5070
+through CUDA, and the Mac M1 Max owns Metal validation. CUDA and gfx1151
+visibility were rechecked on 2026-09-04; visibility alone is not kernel proof.
 
 Most of this plan is compile-time contract work and runs anywhere. Two items are
 hardware-bound, and one of them is the highest-risk item in the plan.
@@ -1669,7 +1670,9 @@ cross-compiler priority.
 
 ### Engineering follow-through — 2026-09-04
 
-Published snapshot: [PR #721](https://github.com/gstoner/tessera/pull/721).
+Merged snapshots: [PR #721](https://github.com/gstoner/tessera/pull/721),
+[PR #722](https://github.com/gstoner/tessera/pull/722), and
+[PR #723](https://github.com/gstoner/tessera/pull/723).
 The following work remains independently gated; publishing the snapshot does
 not close native/compiler evidence gaps.
 
@@ -1682,10 +1685,28 @@ not close native/compiler evidence gaps.
 | DISPATCH-BREAKER cross-backend | CUDA and HIP waits remain unbounded. A replacement must poison the owning context on timeout and retain every outstanding buffer/module/event; adding a polling deadline followed by current synchronous cleanup would still hang or free live storage. First slices should target one owning bridge each, with injected not-ready/error cases before GPU proof. |
 | IKF-1 | Bind `INTRA_KERNEL_FEEDBACK_PLAN.md` here. P0 extends the existing D2 gfx1151 timing probe; P2 waits for green clocks and consumes Schedule-Object region identity. P1 host schema/math is independent. Shared D2 cache insertion/loading and dispatch admission now reject L2/L3 or malformed instrumentation levels. No IR instrumentation is authorized by a scalar clock sample alone. |
 | Toolchain evidence | Assertion-enabled LLVM remains an explicit fleet proof gap. Do not interpret release-build negative tests as assertion-enabled contract falsification. The sandbox/Metal mechanism remains unproven; no claim of its root cause is made. |
-| Apple cross-run decision | Default remains mean ± t·sd/√n. Opt-in `median_order_statistic` provides exact one-sided 95% median bounds, with every per-run safety floor retained and consumer recomputation. Owning-device fixed-size cohort comparison remains required before changing the default. |
+| Apple cross-run decision | Default remains mean ± t·sd/√n. The eight-process M1 Max cohort and predeclared synthetic 1.5x/3.0x slowdowns produced no policy disagreements across 24 decisions. Retain the mean default; the median remains opt-in. See `benchmarks/baselines/apple7_cross_run_policy_20260904/summary.json`. This comparison installs no ledger and does not establish robustness across workloads or physical stalls. |
 | Generated coverage | Decision #26 now assigns coverage evidence to revision-bound CI artifacts: source commit/tree digest, output hashes, run and attempt. The owning generator and semantic tests remain required; missing/expired evidence must be regenerated from the cited revision. |
 
 All numerical/backend promotion remains architecture-owned. The immediate
 reproduction priority is telemetry attribution; a scoped cleanup proves a
 state leak is fixed but does not establish the root cause of the reported
 order-dependent failure.
+
+#### Next acceptance steps after #723
+
+This sequence refines the engineering follow-through above; it does not replace
+the broader central queue or reopen its completed rows.
+
+| Order | Owner and next bounded deliverable | Acceptance before expanding scope |
+|---:|---|---|
+| 1 | APPLE-DISPATCH-WEDGE-1: capture the ordered failing session with `scripts.trace_apple_telemetry`, then minimize the prefix that changes capture state or breaks downstream MoE. | Fresh-runtime reproduction, first transition attributed after teardown, and the minimized order passes after a cause-specific fix. A test passing alone or another scoped state cleanup is not closure. |
+| 2 | FRONTEND-IR-MEDIUM-1: instantiate one optimized matmul recipe for two valid shape buckets through the native compiler. `ParametricRecipe.rank_buckets` currently emits only `BucketRank`. | Both instances bind the same recipe/compiler digest and complete shape witnesses; invalid witnesses fail before lowering; execute against the original oracle on the owning backend. Then connect the resulting native artifacts to arbiter admission. Broader attention recognition follows that working path. |
+| 3 | MSW-9: enumerate the Graph IR envelope for affine composition and ReLU identity extension, then wire one eligible program pair into a fusion candidate's evaluator gate. | `program_pair_equivalence` must see native provenance on both sides; wrong-shape, unsupported-policy and reference-only cases refuse admission. Reference `ann_identity_checks` is the oracle, not production proof. |
+| 4 | DISPATCH-BREAKER: implement one CUDA or HIP bridge's bounded wait with an explicit poisoned-context/resource-retention state. | Inject not-ready, error and timeout before exact-device tests; prove cleanup cannot free live storage or enter another unbounded wait. Migrate sibling bridges only after the owning state machine is sound. |
+| 5 | IKF-P1 host schema/math can proceed independently; IKF-P0 continues cross-CU, monotonicity and read-cost checks on gfx1151. | Validate synthetic slot/clock edge cases for P1; retain WSL regression-only limits on P0. P2/P3 instrumentation waits for the specified clock evidence and Schedule-Object identity. |
+
+The Apple policy experiment is complete for its declared cohort: retain the
+existing default. Lowp MoE ledger admission/cooperative kernel work and an
+assertions-enabled LLVM remain separately owned follow-ups; neither is closed
+by a policy comparison or a fleet visibility probe.

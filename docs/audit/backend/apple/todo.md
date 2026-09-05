@@ -7619,5 +7619,17 @@ processes reduce shared runtime state; they do not establish statistical
 independence from thermal or OS effects. Default migration requires reviewing the
 owning-device results; no migration or new Metal evidence is claimed here.
 
-Owning-Mac measurement is pending an exception to AGENTS.md's WSL-only validation
-rule. Logic tests run on Princess-Luna WSL. Sync: `APPLE-POLICY-COMPARE-20260904`.
+Owning-Mac measurement completed under the user's explicit exception to
+AGENTS.md's WSL-only validation rule. A fresh runtime was built from isolated
+commit `fe3c59ed`, then the declared eight processes ran once. The retained
+packet is `benchmarks/baselines/apple7_cross_run_policy_20260904/`: raw reports,
+pre-measurement plan/input hashes, source-report hashes and a replayable summary.
+Each run has 18 native-GPU rows and six explicitly reference-CPU rows; all 24
+pass numerical checks. Both policies produce five candidate wins, 13 incumbent
+retentions and six insufficient-evidence decisions. Neither the observed cohort
+nor the two synthetic slowdown scenarios produces a policy disagreement.
+
+Decision: retain `mean_student_t` as the default. No ledger was installed, no
+physical-stall robustness claim is made, and this packet does not admit lowp
+MoE. Logic and packet replay tests run on Princess-Luna WSL.
+Sync: `APPLE-POLICY-COMPARE-20260904`.

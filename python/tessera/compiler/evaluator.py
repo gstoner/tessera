@@ -747,21 +747,44 @@ def metamorphic_equivalence(
     ``output_map=None`` (identity) — softmax(x) must equal softmax(x+c).
     ``inconclusive`` unless both runs are native.
     """
+    return program_pair_equivalence(
+        target, fn, fn, args_a, args_b, output_map=output_map, rtol=rtol, atol=atol)
+
+
+def program_pair_equivalence(
+    target: str,
+    program_a: Any,
+    program_b: Any,
+    args_a: tuple[Any, ...],
+    args_b: tuple[Any, ...],
+    *,
+    output_map: Callable[[Any], Any] | None = None,
+    rtol: float = 1e-3,
+    atol: float = 1e-4,
+) -> HorizontalVerdict:
+    """Compare two programs using the evaluator's existing native boundary.
+
+    MSW-9 composition/identity laws require different programs, rather than
+    different inputs to one program. Both outputs must carry native provenance;
+    the reference law registry never supplies a substitute for that evidence.
+    """
     import numpy as np
 
-    out_a, na = run_native(target, fn, args_a)
-    out_b, nb = run_native(target, fn, args_b)
+    if not np.isfinite(rtol) or not np.isfinite(atol) or rtol < 0 or atol < 0:
+        raise ValueError("equivalence tolerances must be finite and nonnegative")
+    out_a, na = run_native(target, program_a, args_a)
+    out_b, nb = run_native(target, program_b, args_b)
 
     max_abs_err: float | None = None
     ref_scale = 1.0
     if na and nb and out_a is not None and out_b is not None:
-        a = np.asarray(out_a, dtype=np.float64)
+        a = np.asarray(out_a, dtype=np.complex128 if np.iscomplexobj(out_a) else np.float64)
         if output_map is not None:
-            a = np.asarray(output_map(a), dtype=np.float64)
-        b = np.asarray(out_b, dtype=np.float64)
+            a = np.asarray(output_map(a))
+        b = np.asarray(out_b, dtype=np.complex128 if np.iscomplexobj(out_b) else np.float64)
         if a.shape == b.shape and np.all(np.isfinite(a)) and np.all(np.isfinite(b)):
-            max_abs_err = float(np.max(np.abs(a - b)))
-            ref_scale = float(np.max(np.abs(b))) or 1.0
+            max_abs_err = float(np.max(np.abs(a - b), initial=0))
+            ref_scale = float(np.max(np.abs(b), initial=0)) or 1.0
 
     tol = atol + rtol * ref_scale
     relation, detail = _horizontal_relation(na, nb, max_abs_err, tol=tol)

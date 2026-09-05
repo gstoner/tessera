@@ -1,0 +1,103 @@
+{
+  "artifact_digests": {
+    "instrumented_probe": "f9997ac099cdfa84d171d4f621f2c559e7a0e20011bd80bcf60f52797284de2c"
+  },
+  "batch_size": 32,
+  "clocks": {
+    "device_wall_clock_ns": {
+      "calibrated_against": [
+        "hip_event_ns"
+      ],
+      "eligible_for_promotion": false,
+      "eligible_for_regression": true,
+      "instrumented": true,
+      "provenance": {
+        "architecture": "gfx1151",
+        "block_threads": 256,
+        "builtin": "wall_clock64",
+        "grid_blocks": 40,
+        "raw_ticks": 265548,
+        "wall_clock_rate_khz": 100000
+      },
+      "raw_value": 2655480,
+      "reason": null,
+      "slot": "device_wall_clock_ns",
+      "source": "device_wall_clock",
+      "unit": "ns",
+      "valid": true,
+      "value": 2655480
+    },
+    "hip_event_ns": {
+      "calibrated_against": [],
+      "eligible_for_promotion": false,
+      "eligible_for_regression": true,
+      "instrumented": false,
+      "provenance": {
+        "api": "hipEventElapsedTime",
+        "empty_launch_batch_ms": 0.041492998600006104
+      },
+      "raw_value": 2665967.9412841797,
+      "reason": null,
+      "slot": "hip_event_ns",
+      "source": "hip_event",
+      "unit": "ns",
+      "valid": true,
+      "value": 2665967.9412841797
+    },
+    "host_wall_ns": {
+      "calibrated_against": [],
+      "eligible_for_promotion": false,
+      "eligible_for_regression": true,
+      "instrumented": false,
+      "provenance": {
+        "batch_size": 32,
+        "empty_launch_batch_ns": 164210,
+        "terminal_synchronization": "hipEventSynchronize(stop)"
+      },
+      "raw_value": 2709466,
+      "reason": null,
+      "slot": "host_wall_ns",
+      "source": "steady_clock",
+      "unit": "ns",
+      "valid": true,
+      "value": 2709466
+    },
+    "profiler_activity_ns": {
+      "calibrated_against": [],
+      "eligible_for_promotion": false,
+      "eligible_for_regression": false,
+      "instrumented": false,
+      "provenance": {
+        "provider": "native_clock_probe"
+      },
+      "raw_value": null,
+      "reason": "ROCPROFILER_ACTIVITY_NOT_COLLECTED",
+      "slot": "profiler_activity_ns",
+      "source": "rocprofiler_activity",
+      "unit": "ns",
+      "valid": false,
+      "value": null
+    }
+  },
+  "environment": {
+    "architecture": "gfx1151",
+    "clock_agreement_valid": true,
+    "device_name": "AMD Radeon(TM) 8060S Graphics",
+    "native_capture": null,
+    "probe_error": "",
+    "probe_returncode": 0,
+    "source_commit": "72caa157fe5caa6a0dc1b648693a3571f8cc3b70",
+    "worktree_dirty": true
+  },
+  "execution_environment": "wsl2",
+  "resources": {
+    "blocks": 40,
+    "instrumented": true,
+    "threads": 256
+  },
+  "sample_id": "ikf-p0-baseline-20260904",
+  "schema": "tessera.profiler_timing.v1",
+  "synchronization": "one terminal hipEventSynchronize after asynchronous batch",
+  "target": "rocm_gfx1151",
+  "warm_state": "warm"
+}

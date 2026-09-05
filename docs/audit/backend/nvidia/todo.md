@@ -6230,3 +6230,16 @@ unchanged. The validation spine now binds checkout fingerprints, and coverage
 conflicts are regenerated after authored inputs are resolved.
 
 NVIDIA outcome: follow-up required for any future recipe-based native selection. No CUDA execution or performance evidence is claimed.
+
+## Engineering sync `EVAL-TELEMETRY-IKF-2026-09-04`
+
+Owners: MSW-9, APPLE-DISPATCH-WEDGE-1 and IKF-1. Program-pair evaluator
+comparison keeps both native provenance gates; ANN composition and ReLU
+identity checks are separately registered reference laws. IKF-1 is now bound
+in the integrated plan: P0 timing first, P2 after validated clocks and
+Schedule-Object region identity, P1 host schema/math independently.
+
+NVIDIA: follow-up required. No native ANN/IKF evidence transfers from WSL
+logic tests. Bounded device wait must include context poisoning and retention
+of outstanding resources before replacing CUDA synchronization; host API
+calls that themselves block need an owning process boundary.

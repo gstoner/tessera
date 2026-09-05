@@ -4486,7 +4486,12 @@ static bool mtl4_encode_and_wait(MetalDeviceContext &ctx, id<MTL4CommandQueue> q
   uint64_t v = ++ctx.mtl4_event_val;
   [queue signalEvent:ev value:v];
   const bool done = [ev waitUntilSignaledValue:v timeoutMS:10000];
-  if (done) mtl4_record_dispatch_telemetry(ctx, timestampHeap);
+  if (done) {
+    mtl4_record_dispatch_telemetry(ctx, timestampHeap);
+  } else {
+    g_last_gpu_error_kind = 1;
+    g_last_gpu_error_msg = "Metal 4 command buffer timed out after 10000 ms";
+  }
   return done;
 }
 

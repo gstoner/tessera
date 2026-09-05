@@ -180,7 +180,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-08-22 | 13 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-08-15 | 20 | ✓ |
 | `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-24 | 11 | ✓ |
-| `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-08-27 | 8 | ✓ |
+| `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 33 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 39 | ✓ |
 | `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-04 | 0 | ✓ |

@@ -6581,3 +6581,16 @@ unchanged. The validation spine now binds checkout fingerprints, and coverage
 conflicts are regenerated after authored inputs are resolved.
 
 ROCm outcome: host-free compiler contract validation on Princess-Luna WSL; exact-device recipe selection remains follow-up required. The current native route still serializes Tile IR, so the Graph IR unresolved-element preflight remains not applicable until a Graph IR parser consumer exists.
+
+## Engineering sync `EVAL-TELEMETRY-IKF-2026-09-04`
+
+Owners: MSW-9, APPLE-DISPATCH-WEDGE-1 and IKF-1. Program-pair evaluator
+comparison keeps both native provenance gates; ANN composition and ReLU
+identity checks are separately registered reference laws. IKF-1 is now bound
+in the integrated plan: P0 timing first, P2 after validated clocks and
+Schedule-Object region identity, P1 host schema/math independently.
+
+ROCm: follow-up required. WSL proves evaluator logic, not native ANN fusion.
+The P0 owning device is gfx1151. HIP timeout work must quarantine outstanding
+allocations instead of executing current hipFree cleanup after an uncompleted
+launch. Graph IR preflight remains conditional on a parser-bound Graph route.

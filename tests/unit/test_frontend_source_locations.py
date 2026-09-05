@@ -36,3 +36,26 @@ def test_source_cache_does_not_cross_call_sites():
     cache.store('same source', GraphIRModule(), source_location='a.py:1')
     assert cache.lookup('same source', source_location='a.py:1') is not None
     assert cache.lookup('same source', source_location='b.py:9') is None
+
+
+def test_jit_file_source_locations_survive_cache_and_lazy_recovery(tmp_path):
+    from tessera.compiler.graph_ir import GraphIRModule
+
+    def kernel(x: tessera.Tensor['M', 'K', 'f32'], y: tessera.Tensor['K', 'N', 'f32']):
+        pass
+
+    source = '\n\ndef kernel(x, y):\n    return tessera.matmul(x, y)\n'
+    for name in ('first.py', 'second.py'):
+        path = tmp_path / name
+        path.write_text(source)
+        compiled = tessera.jit(source_path=str(path))(kernel)
+        for recover in (False, True):
+            if recover:
+                compiled._legacy_graph_ir = GraphIRModule()
+            module = compiled._ensure_legacy_graph_ir()
+            function = module.functions[0]
+            span = function.body[0].source_span
+            assert span.source_name == str(path)
+            assert span.line == 4
+            assert span.col == 12
+            assert str(path) in function.to_mlir(canonical=True)

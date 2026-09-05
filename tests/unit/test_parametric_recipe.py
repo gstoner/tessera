@@ -95,3 +95,20 @@ def test_native_recipe_cse_happens_before_buckets():
     assert recipe.oracle_mlir.count('tessera.matmul') == 2
     assert recipe.optimized_mlir.count('tessera.matmul') == 1
     assert recipe.rank_buckets([{'M': 2, 'K': 4, 'N': 8}])[0].retained
+
+
+@pytest.mark.parametrize('empty_module', [True, False])
+def test_jit_rank_recovers_unmaterialized_ast_recipe(empty_module):
+    from tessera.compiler.graph_ir import GraphIRModule
+
+    @tessera.jit
+    def kernel(a: tessera.Tensor['M', 'K', 'f32'], b: tessera.Tensor['K', 'N', 'f32']):
+        return tessera.matmul(a, b)
+
+    # Trace-defer/auto_batch store an empty module; tracer-only starts at None.
+    kernel._legacy_graph_ir = GraphIRModule() if empty_module else None
+    kernel.graph_ir = GraphIRModule()
+    ranks = kernel.rank_parametric_buckets([{'M': 2, 'K': 4, 'N': 3}], tessera_opt=tool())
+    assert len(kernel._legacy_graph_ir.functions) == 1
+    assert ranks[0].retained
+    assert not ranks[0].promotion_eligible

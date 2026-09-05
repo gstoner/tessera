@@ -6261,3 +6261,7 @@ L2/L3 intra-kernel timings (`evidence.instr_level`) and malformed levels as
 dispatch evidence. L0/L1 and existing pre-instrumentation records retain their
 semantics. This is a host-contract check for this backend, not a device-clock
 or instrumentation implementation claim.
+
+Sync `APPLE-POLICY-COMPARE-20260904`: not applicable to CUDA route selection.
+The fixed-count Apple comparison is an analysis-only benchmark harness; no
+NVIDIA selector, timing policy, runtime ABI or device evidence changes.

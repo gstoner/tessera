@@ -588,11 +588,12 @@ def compile_graph_module(
                 if (scheduled_kernel.supports_scheduled_kernel(module, target=target_kind)
                         and (target_kind != "nvidia_sm120" or (
                             scheduled_matmul.find_tessera_opt() is not None
-                            and options.get("nvidia_reduction_schedule", "serial") == "serial"
                         ))):
                     scheduled_kernel_artifact = scheduled_kernel.lower_scheduled_kernel(
                         module,
                         target=target_kind,
+                        **({"schedule": options["nvidia_reduction_schedule"]}
+                           if target_kind == "nvidia_sm120" and "nvidia_reduction_schedule" in options else {}),
                     )
                     graph_text = scheduled_kernel_artifact.graph_ir
     elif bool(options.get("package_native", False)) and target_kind == "apple_gpu":

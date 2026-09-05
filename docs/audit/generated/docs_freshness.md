@@ -184,7 +184,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 40 | ✓ |
 | `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-04 | 1 | ✓ |
 | `compiler/MATRIX_CALCULUS_REVIEW.md` | - | 2026-08-20 | 16 | ✓ |
-| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-04 | 1 | ✓ |
+| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-05 | 0 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 28 | ✓ |
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-09-04 | 1 | ✓ |
 | `compiler/README.md` | - | 2026-09-04 | 1 | ✓ |

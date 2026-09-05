@@ -6678,3 +6678,18 @@ differential baselines; they are not new production routes.
 
 Sibling outcome: not applicable. The rocm package APIs, native passes,
 runtime ABI and numerical policy are unchanged; no device proof transfers.
+
+## F2-U1–U10 unary closure — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+NVIDIA unary packaging now consumes native Schedule/Tile for f16/bf16/f32
+softmax and sum/mean/max/min reductions with f32 accumulation/output, arbitrary
+static axes, keepdims and serial/cooperative_128 policy. Production Graph
+constructors were removed; differential baselines live only under test support.
+The shared Graph reduce verifier admits narrow-to-f32 and retained dimensions;
+reverse AD refuses those new envelopes explicitly. Generic Linalg lowering still
+declines them. No new dtype, operation, runtime ABI or physical schedule is added.
+
+Sibling outcome: existing scheduled f32 parity validated on Princess-Luna gfx1151.
+New NVIDIA narrow/keepdims/min/cooperative envelopes are not ROCm execution
+support; follow-up required for any ROCm expansion. Its 256-thread policy and
+runtime ABI remain unchanged. Shared compiler fixtures cover existing scheduling.

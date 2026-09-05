@@ -3368,14 +3368,23 @@ LogicalResult ReduceOp::verify() {
   int64_t rawAxis = getAxisAttr().getInt();
   if (failed(verifyAxisInRange(getOperation(), rawAxis, rank, "reduce")))
     return failure();
-  if (resultTy.getElementType() != inputTy.getElementType())
+  bool promoted = (inputTy.getElementType().isF16() || inputTy.getElementType().isBF16()) &&
+                  resultTy.getElementType().isF32();
+  if (resultTy.getElementType() != inputTy.getElementType() && !promoted)
     return emitOpError("result element type must match input");
-  if (resultTy.getRank() != rank - 1)
-    return emitOpError("result rank must be input rank minus one");
+  auto keepAttr = (*this)->getAttrOfType<BoolAttr>("keepdims");
+  if ((*this)->hasAttr("keepdims") && !keepAttr)
+    return emitOpError("keepdims must be a boolean");
+  bool keepdims = keepAttr && keepAttr.getValue();
+  if (resultTy.getRank() != rank - (keepdims ? 0 : 1))
+    return emitOpError("result rank must agree with keepdims");
   int64_t axis = rawAxis < 0 ? rawAxis + rank : rawAxis;
   for (int64_t inDim = 0, outDim = 0; inDim < rank; ++inDim) {
-    if (inDim == axis)
+    if (inDim == axis) {
+      if (keepdims && resultTy.getDimSize(outDim++) != 1)
+        return emitOpError("retained reduction dimension must equal one");
       continue;
+    }
     if (!dimsAgree(inputTy.getDimSize(inDim), resultTy.getDimSize(outDim)))
       return emitOpError("result dims must match input dims except axis");
     ++outDim;

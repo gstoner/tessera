@@ -508,6 +508,7 @@ struct SemanticKernelSchedule {
   StringRef storage;
   StringRef accum = "f32";
   StringRef expMode = "accurate";
+  StringRef reductionSchedule = "serial";
   SmallVector<int64_t> inputShape;
   SmallVector<int64_t> outputShape;
   int64_t axis = -1;
@@ -583,14 +584,20 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   auto kindAttr = op->getAttrOfType<StringAttr>("kind");
   if (!kindAttr || (kindAttr.getValue() != "sum" &&
                     kindAttr.getValue() != "mean" &&
-                    kindAttr.getValue() != "max"))
+                    kindAttr.getValue() != "max" && (!nvidia || kindAttr.getValue() != "min")))
     return failure();
-  bool keepdims = false;
+  auto keepAttr = op->getAttrOfType<BoolAttr>("keepdims");
+  bool keepdims = keepAttr && keepAttr.getValue();
+  if (keepdims && !nvidia) return failure();
+  if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
+    schedule.reductionSchedule = mode.getValue();
+  if (schedule.reductionSchedule != "serial" &&
+      (!nvidia || schedule.reductionSchedule != "cooperative_128")) return failure();
   SmallVector<int64_t> expected(input.getShape().begin(), input.getShape().end());
   if (keepdims) expected[axis] = 1;
   else expected.erase(expected.begin() + axis);
   if (ArrayRef<int64_t>(expected) != output.getShape() ||
-      schedule.storage != "f32" ||
+      (schedule.storage != "f32" && (!nvidia || (schedule.storage != "f16" && schedule.storage != "bf16"))) ||
       (x86 && axis != input.getRank() - 1) ||
       // Apple's synthesized reduce kernel gives one thread per row and folds
       // over the trailing extent, so it expresses last-axis reductions only.
@@ -627,7 +634,7 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
        Twine(schedule.outer) + ";axis_extent=" + Twine(schedule.axisExtent) +
        ";inner=" + Twine(schedule.inner) + ";workgroup=" +
        Twine(schedule.workgroupSize) + ";exp=" + schedule.expMode +
-       ";ftz=0;schedule=serial;nan=propagate")
+       ";ftz=0;schedule=" + schedule.reductionSchedule + ";nan=propagate")
           .str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -1976,7 +1983,7 @@ struct GraphToSchedulePass
       } else {
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("keepdims", builder.getBoolAttr(selected->keepdims));
-        state.addAttribute("schedule", builder.getStringAttr("serial"));
+        state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("nan_mode", builder.getStringAttr("propagate"));
         state.addAttribute("inner_is_one", builder.getBoolAttr(selected->inner == 1));
       }
@@ -3425,7 +3432,7 @@ struct ScheduleToTilePass
       else
         altered = altered || attrString("kind") != selected->kind ||
                   attrBool("keepdims") != selected->keepdims ||
-                  attrString("schedule") != "serial" ||
+                  attrString("schedule") != selected->reductionSchedule ||
                   attrString("nan_mode") != "propagate" ||
                   attrBool("inner_is_one") != (selected->inner == 1);
       if (altered) {
@@ -3462,7 +3469,7 @@ struct ScheduleToTilePass
         }
         // Preserve the established runtime launch symbols and serial schedule.
         std::string name = isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage).str() :
-            (Twine("tessera_tile_reduce_") + selected->kind + "_f32_serial").str();
+            (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
           scheduled->emitError("NVIDIA scheduled kernel symbol already exists");
           return signalPassFailure();

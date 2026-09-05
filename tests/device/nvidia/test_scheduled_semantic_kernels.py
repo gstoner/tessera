@@ -8,6 +8,7 @@ from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.graph_ir import tensor_ir_type
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests._support.nvidia import nvidia_cuda_host_ready
+from tests._support.nvidia_unary_baseline import baseline_reduction, baseline_softmax
 from tests.unit.test_scheduled_kernel_consumers import _module
 
 pytestmark = [pytest.mark.hardware_nvidia, pytest.mark.skipif(
@@ -29,7 +30,7 @@ def test_scheduled_unary_matches_legacy_and_oracle(kind, shape):
     fn.body[0].operand_types = [str(fn.args[0].ir_type)]
     fn.body[0].result_type = str(fn.result_types[0])
     fn.body[0].inferred_type = fn.result_types[0]
-    baseline = nvidia_native._package_graph_softmax if kind == "softmax" else nvidia_native._package_graph_reduction
+    baseline = baseline_softmax if kind == "softmax" else baseline_reduction
     legacy = baseline(module, pipeline_name="tessera-nvidia-pipeline-sm120")
     direct = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120")
     assert direct.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
@@ -73,7 +74,7 @@ def test_narrow_softmax_native_parity(dtype, shape):
     fn.body[0].operand_types = [str(fn.args[0].ir_type)]
     fn.body[0].result_type = str(fn.result_types[0])
     fn.body[0].inferred_type = fn.result_types[0]
-    legacy = nvidia_native._package_graph_softmax(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    legacy = baseline_softmax(module, pipeline_name="tessera-nvidia-pipeline-sm120")
     direct = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120")
     assert direct.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
     x = np.random.default_rng(726).normal(size=shape).astype(storage)
@@ -89,3 +90,50 @@ def test_narrow_softmax_native_parity(dtype, shape):
         np.testing.assert_allclose(output.astype(np.float32), expected, rtol=0.01, atol=2e-4)
         outputs.append(output.astype(np.float32))
     np.testing.assert_array_equal(*outputs)
+
+
+@pytest.mark.parametrize("dtype", ["fp32", "fp16", "bf16"])
+@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min"])
+@pytest.mark.parametrize("axis", [0, 1, 2])
+@pytest.mark.parametrize("keepdims", [False, True])
+@pytest.mark.parametrize("mode", ["serial", "cooperative_128"])
+def test_reduction_breadth_native_parity(dtype, kind, axis, keepdims, mode, shape=(2, 3, 5)):
+    storage = {"fp32": np.float32, "fp16": np.float16}.get(dtype)
+    if storage is None:
+        storage = pytest.importorskip("ml_dtypes").bfloat16
+    output_shape = shape[:axis] + ((1,) if keepdims else ()) + shape[axis + 1:]
+    module = _module(family="reduce", target="nvidia_sm120")
+    fn = module.functions[0]
+    fn.args[0].ir_type = tensor_ir_type(shape, dtype)
+    fn.result_types[0] = tensor_ir_type(output_shape, "fp32")
+    op = fn.body[0]
+    op.op_name = "tessera.reduce"
+    op.kwargs = {"kind": kind, "axis": axis, "keepdims": keepdims}
+    op.operand_types = [str(fn.args[0].ir_type)]
+    op.result_type = str(fn.result_types[0])
+    op.inferred_type = fn.result_types[0]
+    old = baseline_reduction(module, pipeline_name="tessera-nvidia-pipeline-sm120", schedule=mode)
+    new = nvidia_native.package_native(module, pipeline_name="tessera-nvidia-pipeline-sm120", options={"nvidia_reduction_schedule": mode})
+    assert new.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    assert new.descriptor.provenance["schedule"] == mode
+    x = np.random.default_rng(727).normal(size=shape).astype(storage)
+    expected = getattr(np, kind)(x.astype(np.float32), axis=axis, keepdims=keepdims)
+    scalars = {"Outer": int(np.prod(shape[:axis])), "AxisExtent": shape[axis], "Inner": int(np.prod(shape[axis+1:]))}
+    outputs = []
+    for package in (old, new):
+        output = np.empty(output_shape, dtype=np.float32)
+        result = rt.launch(rt.RuntimeArtifact(metadata={"target": "nvidia_sm120"}, native_image=package.image,
+            launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir),
+            {"x": x, "o": output, **scalars})
+        assert result["ok"], result
+        np.testing.assert_allclose(output, expected, rtol=2e-5, atol=2e-6)
+        outputs.append(output)
+    np.testing.assert_array_equal(*outputs)
+    assert old.descriptor.abi_id == new.descriptor.abi_id
+
+
+@pytest.mark.parametrize("dtype", ["fp32", "fp16", "bf16"])
+@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min"])
+@pytest.mark.parametrize("shape,axis", [((2, 257), 1), ((2, 257, 3), 1)])
+def test_cooperative_reduction_multi_iteration_parity(dtype, kind, shape, axis):
+    test_reduction_breadth_native_parity(dtype, kind, axis, True, "cooperative_128", shape)

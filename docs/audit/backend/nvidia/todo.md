@@ -6371,3 +6371,27 @@ mypy retained zero errors and Ruff passed. The 12 RTX comparison cases include
 singleton/tail widths and multiple blocks, with the direct API separately
 launched alongside the driver and retained baseline. Constructor retirement is
 still gated on the remaining dtype/policy envelopes, not on renaming helpers.
+
+## F2-U1–U10 unary closure — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+NVIDIA unary packaging now consumes native Schedule/Tile for f16/bf16/f32
+softmax and sum/mean/max/min reductions with f32 accumulation/output, arbitrary
+static axes, keepdims and serial/cooperative_128 policy. Production Graph
+constructors were removed; differential baselines live only under test support.
+The shared Graph reduce verifier admits narrow-to-f32 and retained dimensions;
+reverse AD refuses those new envelopes explicitly. Generic Linalg lowering still
+declines them. No new dtype, operation, runtime ABI or physical schedule is added.
+
+Owning outcome: parity validated on Super-Bear RTX 5070 / CUDA 13.3. All 184
+cases passed, including 144 reduction combinations and 24 cooperative
+257-element contiguous/strided cases; no timing/promotion claim.
+Native replay and policy refusal gates pass with the rebuilt LLVM 23 compiler.
+Next F2 work: native norm/attention contracts and the remaining packed families.
+
+Validation: 516 focused WSL unit/registry/dtype/routing/audit tests passed, with
+24 explicit environment/envelope skips; the final policy/doc follow-up passed
+43 tests. Seven native IR fixtures passed, including existing reverse-AD paths.
+Ruff and the zero-error mypy ratchet passed; all 30 generated-document drift
+gates passed. LLVM 23 `tessera-opt` was rebuilt on Princess-Luna and its matching
+Linux executable used for Super-Bear native scheduling. Assertions-enabled LLVM
+and new Apple/x86 hardware evidence remain outside this cut.

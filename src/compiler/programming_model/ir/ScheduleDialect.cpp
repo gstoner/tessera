@@ -172,9 +172,9 @@ LogicalResult ReduceOp::verify() {
     return failure();
   if (getAxisAttr().getInt() < 0)
     return emitOpError("requires a normalized non-negative axis");
-  if (getKind() != "sum" && getKind() != "mean" && getKind() != "max")
+  if (getKind() != "sum" && getKind() != "mean" && getKind() != "max" && (getArch() != "sm_120" || getKind() != "min"))
     return emitOpError("kind must be sum, mean, or max");
-  if (getSchedule() != "serial" || getNanMode() != "propagate")
+  if ((getSchedule() != "serial" && (getArch() != "sm_120" || getSchedule() != "cooperative_128")) || getNanMode() != "propagate")
     return emitOpError("initial reduction contract requires serial/propagate policy");
   return success();
 }

@@ -7694,3 +7694,18 @@ differential baselines; they are not new production routes.
 
 Sibling outcome: not applicable. The apple package APIs, native passes,
 runtime ABI and numerical policy are unchanged; no device proof transfers.
+
+## F2-U1–U10 unary closure — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+NVIDIA unary packaging now consumes native Schedule/Tile for f16/bf16/f32
+softmax and sum/mean/max/min reductions with f32 accumulation/output, arbitrary
+static axes, keepdims and serial/cooperative_128 policy. Production Graph
+constructors were removed; differential baselines live only under test support.
+The shared Graph reduce verifier admits narrow-to-f32 and retained dimensions;
+reverse AD refuses those new envelopes explicitly. Generic Linalg lowering still
+declines them. No new dtype, operation, runtime ABI or physical schedule is added.
+
+Sibling outcome: follow-up required for any expansion to the new Graph reduce
+envelopes. Existing apple schedules and runtime ABI are unchanged and shared
+compiler fixtures remain gated. No new apple exact-device evidence is claimed;
+NVIDIA's cooperative schedule does not transfer to this architecture.

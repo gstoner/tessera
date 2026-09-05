@@ -2749,39 +2749,40 @@ def package_mx_matmul(
 
 
 def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
-    """Consume the native scheduled f32 unary launch envelope without Graph re-entry."""
+    """Consume the native scheduled unary launch envelope without Graph re-entry."""
     artifact.validate()
     softmax = artifact.family == "softmax"
     storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}.get(artifact.dtype)
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
             or storage is None or artifact.storage != storage
-            or (not softmax and artifact.dtype != "fp32")
             or artifact.accum != "f32" or artifact.workgroup_size != 128
-            or artifact.family not in {"softmax", "reduce"} or artifact.keepdims):
+            or artifact.family not in {"softmax", "reduce"}
+            or artifact.schedule not in {"serial", "cooperative_128"}):
         raise ValueError("unsupported NVIDIA scheduled unary contract")
     shape, output_shape = artifact.input_shape, artifact.output_shape
     if not shape or any(type(d) is not int or d <= 0 for d in shape):
         raise ValueError("NVIDIA scheduled unary contract requires positive static shapes")
     scalar_names: tuple[str, ...]
     if softmax:
-        if artifact.axis != -1 or shape != output_shape:
-            raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis")
+        if (artifact.axis != -1 or shape != output_shape or artifact.keepdims is not False
+                or artifact.kind != "softmax" or artifact.schedule != "serial"):
+            raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis and fixed policy")
         entry = f"tessera_tile_softmax_{storage}"
         abi = {"f16": SM120_SOFTMAX_F16_ABI, "bf16": SM120_SOFTMAX_BF16_ABI, "f32": SM120_SOFTMAX_F32_ABI}[storage]
         scalar_names = ("Rows", "K")
         geometry = "sm120_softmax_thread_per_row_128"
         required = {'exp_mode': '"approx_exp2"', 'ftz': 'false'}
     else:
-        if (artifact.kind not in {"sum", "mean", "max"}
+        if (artifact.kind not in {"sum", "mean", "max", "min"}
                 or not 0 <= artifact.axis < len(shape)
-                or output_shape != shape[:artifact.axis] + shape[artifact.axis + 1:]):
+                or output_shape != shape[:artifact.axis] + ((1,) if artifact.keepdims else ()) + shape[artifact.axis + 1:]):
             raise ValueError("NVIDIA scheduled reduction has inconsistent axis/output")
-        entry = f"tessera_tile_reduce_{artifact.kind}_f32_serial"
-        abi = SM120_REDUCE_F32_ABI
+        entry = f"tessera_tile_reduce_{artifact.kind}_{storage}_{artifact.schedule}"
+        abi = {"f16": SM120_REDUCE_F16_ABI, "bf16": SM120_REDUCE_BF16_ABI, "f32": SM120_REDUCE_F32_ABI}[storage]
         scalar_names = ("Outer", "AxisExtent", "Inner")
-        geometry = "sm120_reduce_serial"
-        required = {'kind': f'"{artifact.kind}"', 'schedule': '"serial"',
-                    'nan_mode': '"propagate"', 'keepdims': 'false'}
+        geometry = f"sm120_reduce_{artifact.schedule}"
+        required = {'kind': f'"{artifact.kind}"', 'schedule': f'"{artifact.schedule}"',
+                    'nan_mode': '"propagate"', 'keepdims': str(artifact.keepdims).lower()}
     required.update({'storage': f'"{storage}"', 'accum': '"f32"',
                      'axis': f'{artifact.axis} : i64'})
     for field, value in required.items():
@@ -2818,9 +2819,9 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         geometry=LaunchGeometry(policy=geometry),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={"work_item": "E2E-REAL-5", "sync_key": "IR-NATIVE-FOUNDATION-1",
-                    "route": "canonical_scheduled_tile_consumer", "schedule": "serial",
+                    "route": "canonical_scheduled_tile_consumer", "schedule": artifact.schedule,
                     "shape": list(shape), "storage": storage, "accum": "f32",
-                    "axis": artifact.axis, "kind": artifact.kind, "keepdims": False,
+                    "axis": artifact.axis, "kind": artifact.kind, "keepdims": artifact.keepdims,
                     "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
     )
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
@@ -2832,105 +2833,15 @@ def package_reduction(
     pipeline_name: str,
     schedule: str = "serial",
 ) -> NVIDIANativePackage:
-    """Enter native scheduling for the migrated f32 serial envelope."""
+    """Compile supported reductions through native Schedule and Tile IR."""
     from . import scheduled_kernel
 
-    if schedule == "serial" and scheduled_kernel.supports_scheduled_kernel(
+    if scheduled_kernel.supports_scheduled_kernel(
         module, target="nvidia_sm120"
     ) and requests_reduction(module):
-        artifact = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120")
+        artifact = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule=schedule)
         return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
-    return _package_graph_reduction(module, pipeline_name=pipeline_name, schedule=schedule)
-
-
-def _package_graph_reduction(
-    module: GraphIRModule,
-    *,
-    pipeline_name: str,
-    schedule: str = "serial",
-) -> NVIDIANativePackage:
-    contract = _reduction_contract(module)
-    if contract is None:
-        raise ValueError(
-            "SM120 reduction packaging requires static f16/bf16/f32 input, f32 output, "
-            "one normalized axis and sum/mean/max/min semantics"
-        )
-    storage, kind, axis, keepdims = contract
-    if schedule not in {"serial", "cooperative_128"}:
-        raise ValueError("SM120 reduction schedule must be serial or cooperative_128")
-    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
-    entry = f"tessera_tile_reduce_{kind}_{storage_ir}_{schedule}"
-    abi_id = {
-        "fp16": SM120_REDUCE_F16_ABI,
-        "bf16": SM120_REDUCE_BF16_ABI,
-        "fp32": SM120_REDUCE_F32_ABI,
-    }[storage]
-    tile_ir = emit_reduce_tile_ir(
-        entry=entry, storage=storage_ir, kind=kind, axis=axis,
-        keepdims=keepdims, schedule=schedule,
-    )
-    (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
-        tile_ir, entry
-    )
-    image = NativeImageArtifact(
-        target="nvidia_sm120",
-        architecture="sm_120a",
-        pipeline_name=pipeline_name,
-        compiler_fingerprint=compiler_fp,
-        toolchain_fingerprint=toolchain_fp,
-        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
-        binary_format="ptx",
-        payload=ptx.encode("ascii"),
-        entry_points=(NativeEntryPoint(entry, abi_id),),
-        compile_state=compile_state,
-        device_libraries=device_libraries,
-        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
-    )
-    fn = module.functions[0]
-    op = fn.body[0]
-    input_name = op.operands[0].removeprefix("%")
-    output_name = op.result or "output"
-    shape = _shape(module, input_name)
-    assert shape is not None
-    outer = math.prod(shape[:axis]) if axis else 1
-    axis_extent = shape[axis]
-    inner = math.prod(shape[axis + 1:]) if axis + 1 < len(shape) else 1
-    output_shape = shape[:axis] + ((1,) if keepdims else ()) + shape[axis + 1:]
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest,
-        entry_symbol=entry,
-        abi_id=abi_id,
-        buffers=(
-            BufferBinding(0, input_name, "input", storage, len(shape), "row_major", 2 if storage in {"fp16", "bf16"} else 4),
-            BufferBinding(1, output_name, "output", "fp32", len(output_shape), "row_major", 4),
-        ),
-        scalars=(ScalarArgument(2, "Outer", "int64"),
-                 ScalarArgument(3, "AxisExtent", "int64"),
-                 ScalarArgument(4, "Inner", "int64")),
-        shape_guards=tuple(
-            [ShapeGuard(input_name, axis, "eq", extent) for axis, extent in enumerate(shape)]
-            + [ShapeGuard(output_name, axis, "eq", extent) for axis, extent in enumerate(output_shape)]
-        ),
-        geometry=LaunchGeometry(policy=f"sm120_reduce_{schedule}"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
-        provenance={
-            "work_item": "NVIDIA-E2E-2",
-            "sync_key": "E2E-SPINE-2026-07-18",
-            "schedule": schedule,
-            "shape": list(shape),
-            "storage": storage_ir,
-            "accum": "f32",
-            "kind": kind,
-            "axis": axis,
-            "keepdims": keepdims,
-            "nan_mode": "propagate",
-            "outer": outer,
-            "axis_extent": axis_extent,
-            "inner": inner,
-            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
-        },
-    )
-    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+    raise ValueError("SM120 reduction packaging requires a supported native scheduled reduction")
 
 
 def package_norm(
@@ -3680,7 +3591,7 @@ def package_softmax(
     *,
     pipeline_name: str,
 ) -> NVIDIANativePackage:
-    """Enter native scheduling for f32; retain the unmigrated narrow lane."""
+    """Compile supported softmax through native Schedule and Tile IR."""
     from . import scheduled_kernel
 
     if requests_softmax(module) and scheduled_kernel.supports_scheduled_kernel(
@@ -3688,89 +3599,7 @@ def package_softmax(
     ):
         artifact = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120")
         return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
-    return _package_graph_softmax(module, pipeline_name=pipeline_name)
-
-
-def _package_graph_softmax(
-    module: GraphIRModule,
-    *,
-    pipeline_name: str,
-) -> NVIDIANativePackage:
-    """Compile and package one static f16/bf16/f32 last-axis softmax request."""
-    storage = _softmax_storage(module)
-    if storage is None:
-        raise ValueError("SM120 native softmax packaging requires one static f16/bf16/f32 last-axis softmax")
-    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
-    entry = f"tessera_tile_softmax_{storage_ir}"
-    abi_id = {
-        "fp16": SM120_SOFTMAX_F16_ABI,
-        "bf16": SM120_SOFTMAX_BF16_ABI,
-        "fp32": SM120_SOFTMAX_F32_ABI,
-    }[storage]
-    alignment = 2 if storage in {"fp16", "bf16"} else 4
-    tile_ir = emit_softmax_tile_ir(entry=entry, storage=storage_ir)
-    (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
-        tile_ir, entry
-    )
-    image = NativeImageArtifact(
-        target="nvidia_sm120",
-        architecture="sm_120a",
-        pipeline_name=pipeline_name,
-        compiler_fingerprint=compiler_fp,
-        toolchain_fingerprint=toolchain_fp,
-        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
-        binary_format="ptx",
-        payload=ptx.encode("ascii"),
-        entry_points=(NativeEntryPoint(entry, abi_id),),
-        compile_state=compile_state,
-        device_libraries=device_libraries,
-        resource_record=ResourceRecord(
-            provenance="ptxas --arch=sm_120a -v",
-            metrics=metrics,
-        ),
-    )
-    fn = module.functions[0]
-    op = fn.body[0]
-    input_name = op.operands[0].removeprefix("%")
-    output_name = op.result or "output"
-    shape = _shape(module, input_name)
-    assert shape is not None
-    rows = math.prod(shape[:-1]) if len(shape) > 1 else 1
-    columns = shape[-1]
-    guards = tuple(
-        ShapeGuard(name, axis, "eq", extent) for name in (input_name, output_name) for axis, extent in enumerate(shape)
-    )
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest,
-        entry_symbol=entry,
-        abi_id=abi_id,
-        buffers=(
-            BufferBinding(0, input_name, "input", storage, len(shape), "row_major", alignment),
-            BufferBinding(1, output_name, "output", storage, len(shape), "row_major", alignment),
-        ),
-        scalars=(
-            ScalarArgument(2, "Rows", "int64"),
-            ScalarArgument(3, "K", "int64"),
-        ),
-        shape_guards=guards,
-        geometry=LaunchGeometry(policy="sm120_softmax_thread_per_row_128"),
-        ordering=OrderingSemantics(
-            ordered_submission=True,
-            residency="none",
-            synchronization=("completion",),
-        ),
-        provenance={
-            "work_item": "NVIDIA-E2E-2",
-            "sync_key": "E2E-SPINE-2026-07-18",
-            "schedule": "thread_per_row_128",
-            "shape": list(shape),
-            "storage": storage_ir,
-            "accum": "f32",
-            "axis": -1,
-            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
-        },
-    )
-    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+    raise ValueError("SM120 softmax packaging requires a supported native scheduled softmax")
 
 
 def package_f32_softmax(

@@ -38,3 +38,20 @@ module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
 // CHECK-SAME: tessera.schedule_hash
 // CHECK-SAME: tessera.workgroup_size = 128
 // CHECK: llvm.return
+
+// -----
+module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
+  func.func @retained_min(%x: tensor<2x3x5xbf16>) -> tensor<2x1x5xf32> {
+    %0 = "tessera.reduce"(%x) {axis = 1 : i64, kind = "min", keepdims = true, schedule = "cooperative_128"} : (tensor<2x3x5xbf16>) -> tensor<2x1x5xf32>
+    return %0 : tensor<2x1x5xf32>
+  }
+}
+// CHECK-NOT: func.func
+// CHECK-LABEL: llvm.func @tessera_tile_reduce_min_bf16_cooperative_128
+// CHECK-SAME: nvvm.kernel
+// CHECK: tile.reduce_kernel
+// CHECK-SAME: keepdims = true
+// CHECK-SAME: kind = "min"
+// CHECK-SAME: schedule = "cooperative_128"
+// CHECK-SAME: storage = "bf16"
+// CHECK: llvm.return

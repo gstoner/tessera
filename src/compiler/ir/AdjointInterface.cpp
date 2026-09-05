@@ -538,6 +538,14 @@ llvm::SmallVector<mlir::Value> ReduceOp::buildAdjoint(
     return {mlir::Value()};
 
   auto inTy = mlir::dyn_cast<mlir::RankedTensorType>(getInput().getType());
+  auto outTy = mlir::dyn_cast<mlir::RankedTensorType>(getResult().getType());
+  // Native unary forward breadth does not imply an adjoint for mixed storage
+  // or retained dimensions. Refuse before building rank-reducing AD carriers.
+  if (inTy && outTy && (inTy.getElementType() != outTy.getElementType() ||
+                        outTy.getRank() != inTy.getRank() - 1)) {
+    emitOpError("mixed-storage or keepdims reduction adjoint is not implemented");
+    return {}; // The autodiff pass rejects incomplete cotangent arity.
+  }
   mlir::Value dy = outputCotangents[0];
   llvm::StringRef kind = getKind();
   if (!inTy || !containsKind(kReduceNativeAdjointKinds, kind))

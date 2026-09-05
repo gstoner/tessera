@@ -1878,11 +1878,22 @@ retirement also requires all production callers to migrate.
 |---|---|---|
 | F2-U1 | f16 scheduled softmax | implemented; RTX parity passed |
 | F2-U2 | bf16 scheduled softmax | implemented; RTX parity passed |
-| F2-U3 | scheduled min reduction | open |
-| F2-U4 | keepdims reduction carrier and scheduling | open |
-| F2-U5 | f16 input / f32 output reduction | open |
-| F2-U6 | bf16 input / f32 output reduction | open |
-| F2-U7 | explicit cooperative_128 reduction scheduling | open |
-| F2-U8 | retire production Graph softmax constructor | open |
-| F2-U9 | retire production Graph reduction constructor | open |
-| F2-U10 | close caller inventory, native replay and negative-policy gates | open |
+| F2-U3 | scheduled min reduction | implemented; validated |
+| F2-U4 | keepdims reduction carrier and scheduling | implemented; validated |
+| F2-U5 | f16 input / f32 output reduction | implemented; validated |
+| F2-U6 | bf16 input / f32 output reduction | implemented; validated |
+| F2-U7 | explicit cooperative_128 reduction scheduling | implemented; validated |
+| F2-U8 | retire production Graph softmax constructor | implemented; validated |
+| F2-U9 | retire production Graph reduction constructor | implemented; validated |
+| F2-U10 | close caller inventory, native replay and negative-policy gates | implemented; validated |
+
+F2-U1–U10 implementation evidence: 184 RTX 5070 execute-and-compare cases
+cover f32/f16/bf16 softmax and all 144 combinations of reduction storage, kind,
+axis, keepdims and serial/cooperative policy. New packages match the retained
+test-only baseline and NumPy. Another 24 cooperative cases cover 257-element
+contiguous/strided axes; no performance promotion is inferred. The old
+production unary constructors are removed. Native Schedule replay, policy
+mutation refusal, missing-compiler refusal, one Tile compilation and explicit
+unsupported-adjoint failure are regression gated. This closes the ten bounded
+unary actions, not all of F2: norm, attention, packed matmul and sibling direct
+package migrations remain open in the survey inventory.

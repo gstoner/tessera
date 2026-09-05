@@ -10,7 +10,7 @@ W1.1 says, in its own text: **"Inventory every backend producer/consumer before
 tightening each op."** This is that inventory. It is a precondition, not the
 migration; nothing here changes an ODS file.
 
-> **Read [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) next — it supersedes
+> **Read [`W1_1_TYPING_DESIGN.md`](../W1_1_TYPING_DESIGN.md) next — it supersedes
 > this document's migration order.** Two experiments run on 2026-08-03 show the
 > typed fragment form **cannot cross a block-argument edge**: neither a function
 > argument nor an `scf.for` `iter_args` accumulator can satisfy
@@ -26,6 +26,17 @@ Every count below was measured on 2026-08-02 against the working tree and is
 reproducible with the commands in §5.
 
 ---
+
+## Archive disposition — 2026-09-04
+
+This August census is superseded for active work by the
+[current typing design](../W1_1_TYPING_DESIGN.md), its completion ledger, and the
+[live migration survey](../MLIR_NATIVE_FOUNDATION_SURVEY.md#typing-inventory-replacement--2026-09-04).
+The old producer counts, absent-verifier claims and proposed steps below are
+historical observations, not current instructions. The shared typed fragment
+contract and ROCm producers exist now. Two tensor-valued construction sites in
+`TileIRLoweringPass.cpp` remain a live NVIDIA migration obligation under W1.1
+and foundation cut F2; archiving this census does not retire that work.
 
 ## 1. The headline correction — W1.1 is a migration already in progress
 

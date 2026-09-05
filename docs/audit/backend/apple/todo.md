@@ -7633,3 +7633,39 @@ Decision: retain `mean_student_t` as the default. No ledger was installed, no
 physical-stall robustness claim is made, and this packet does not admit lowp
 MoE. Logic and packet replay tests run on Princess-Luna WSL.
 Sync: `APPLE-POLICY-COMPARE-20260904`.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+Both GPU value packages and Apple CPU Graph-owned descriptors are migration targets. Extend scheduled consumers and native IR-derived call/ABI records; compiler-owned MSL/Metal materialization is the GPU endpoint, LLVM is the general CPU endpoint. Follow-up required on M1 Max per family. No direct LLVM-to-Metal backend or new execution proof is assumed.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.
+
+## Compiler archive handoff — 2026-09-04
+
+The [August review](../../compiler/archive/CODE_REVIEW_2026-08-29.md)
+and [historical typing census](../../compiler/archive/W1_1_TYPING_INVENTORY.md)
+are archived. Their [reconciliation](../../compiler/COMPILER_AUDIT.md#archive-reconciliation--2026-09-04)
+retains unresolved work in live owners; archival does not close this backend's
+`P2-REVIEW-SHARED-PASSES-2026-08-29` proof obligations. This is a documentation
+and diagnostic-specification link change; runtime parity testing is not
+applicable, and no new device evidence is claimed.
+
+No backend execution contract changes in this archive handoff; existing
+shared-pass and native-foundation follow-ups retain their current status.
+
+## Foundation F1 — `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+NVIDIA scheduled matmul packaging now consumes its scheduled artifact without a
+`GraphIRModule` argument or a base-package compilation. Descriptor fields are
+checked against the durable Schedule record and Tile entry signature; the driver
+records adjacent Graph → Schedule → Tile → Target → PTX ancestry. Runtime ABI,
+physical kernels and numerical policy are unchanged.
+
+Sibling outcome: not applicable to execution parity. Apple scheduled packagers and compiler-owned MSL/Metal paths are unchanged.
+The driver change is confined to the NVIDIA branch; no device evidence transfers
+to this backend. Its F2 migration obligations remain open.

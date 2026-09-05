@@ -6616,3 +6616,39 @@ or instrumentation implementation claim.
 Sync `APPLE-POLICY-COMPARE-20260904`: host-free experiment-contract validation
 runs on Princess-Luna WSL. The Apple comparison does not consume HIP timings or
 change ROCm selection; owning-device performance parity is not applicable.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+Historical Graph package constructors for remaining movement and unsupported scheduled envelopes must migrate to canonical IR consumers. Existing Target/ROCDL/HSACO generators remain the lowering foundation. Follow-up required on Princess-Luna per gfx1151 family; WSL performance restrictions remain. No kernel changes or new device proof in this survey.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.
+
+## Compiler archive handoff — 2026-09-04
+
+The [August review](../../compiler/archive/CODE_REVIEW_2026-08-29.md)
+and [historical typing census](../../compiler/archive/W1_1_TYPING_INVENTORY.md)
+are archived. Their [reconciliation](../../compiler/COMPILER_AUDIT.md#archive-reconciliation--2026-09-04)
+retains unresolved work in live owners; archival does not close this backend's
+`P2-REVIEW-SHARED-PASSES-2026-08-29` proof obligations. This is a documentation
+and diagnostic-specification link change; runtime parity testing is not
+applicable, and no new device evidence is claimed.
+
+The previously recorded batch FFT and rank-4 dropout evidence remains bounded
+to its recorded gfx1151 route; it does not close other shared-pass obligations.
+
+## Foundation F1 — `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+NVIDIA scheduled matmul packaging now consumes its scheduled artifact without a
+`GraphIRModule` argument or a base-package compilation. Descriptor fields are
+checked against the durable Schedule record and Tile entry signature; the driver
+records adjacent Graph → Schedule → Tile → Target → PTX ancestry. Runtime ABI,
+physical kernels and numerical policy are unchanged.
+
+Sibling outcome: not applicable to execution parity. ROCm scheduled packagers and ROCDL/HSACO generation are unchanged.
+The driver change is confined to the NVIDIA branch; no device evidence transfers
+to this backend. Its F2 migration obligations remain open.

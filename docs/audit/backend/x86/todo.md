@@ -4018,3 +4018,39 @@ or instrumentation implementation claim.
 Sync `APPLE-POLICY-COMPARE-20260904`: not applicable to x86 selection. The Apple
 experiment keeps observed and synthetic sensitivity data separate; no CPU timing
 policy, runtime contract or execution claim changes.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+Migrate Graph-owned cohort/elementwise/breadth packages to verified IR inputs; use the existing MLIR-to-LLVM JIT for general bodies and preserve explicit tuned-library calls as distinct routes. Follow-up required for Zen 5 exact-host proof. A prebuilt shared-library call is native execution, not proof of a generated LLVM kernel body.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.
+
+## Compiler archive handoff — 2026-09-04
+
+The [August review](../../compiler/archive/CODE_REVIEW_2026-08-29.md)
+and [historical typing census](../../compiler/archive/W1_1_TYPING_INVENTORY.md)
+are archived. Their [reconciliation](../../compiler/COMPILER_AUDIT.md#archive-reconciliation--2026-09-04)
+retains unresolved work in live owners; archival does not close this backend's
+`P2-REVIEW-SHARED-PASSES-2026-08-29` proof obligations. This is a documentation
+and diagnostic-specification link change; runtime parity testing is not
+applicable, and no new device evidence is claimed.
+
+No backend execution contract changes in this archive handoff; existing
+shared-pass and native-foundation follow-ups retain their current status.
+
+## Foundation F1 — `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+NVIDIA scheduled matmul packaging now consumes its scheduled artifact without a
+`GraphIRModule` argument or a base-package compilation. Descriptor fields are
+checked against the durable Schedule record and Tile entry signature; the driver
+records adjacent Graph → Schedule → Tile → Target → PTX ancestry. Runtime ABI,
+physical kernels and numerical policy are unchanged.
+
+Sibling outcome: not applicable to execution parity. x86 scheduled packagers and LLVM/library execution paths are unchanged.
+The driver change is confined to the NVIDIA branch; no device evidence transfers
+to this backend. Its F2 migration obligations remain open.

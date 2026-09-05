@@ -6265,3 +6265,55 @@ or instrumentation implementation claim.
 Sync `APPLE-POLICY-COMPARE-20260904`: not applicable to CUDA route selection.
 The fixed-count Apple comparison is an analysis-only benchmark harness; no
 NVIDIA selector, timing policy, runtime ABI or device evidence changes.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+First migration: remove Graph re-entry and the base-package build from scheduled matmul, derive the ABI from verified scheduled IR, then extend semantic-kernel consumers. Follow-up required on Super-Bear for exact RTX 5070 numerics and resource/performance comparison; this survey adds no CUDA execution proof.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.
+
+## Compiler archive handoff — 2026-09-04
+
+The [August review](../../compiler/archive/CODE_REVIEW_2026-08-29.md)
+and [historical typing census](../../compiler/archive/W1_1_TYPING_INVENTORY.md)
+are archived. Their [reconciliation](../../compiler/COMPILER_AUDIT.md#archive-reconciliation--2026-09-04)
+retains unresolved work in live owners; archival does not close this backend's
+`P2-REVIEW-SHARED-PASSES-2026-08-29` proof obligations. This is a documentation
+and diagnostic-specification link change; runtime parity testing is not
+applicable, and no new device evidence is claimed.
+
+Follow-up required: induced allocation-failure cleanup remains untested. The
+two tensor-valued `tile.mma` construction sites remain owned by W1.1 / foundation
+F2; scheduled artifact packaging (F1) remains the first migration step.
+
+## Foundation F1 — `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+NVIDIA scheduled matmul packaging now consumes its scheduled artifact without a
+`GraphIRModule` argument or a base-package compilation. Descriptor fields are
+checked against the durable Schedule record and Tile entry signature; the driver
+records adjacent Graph → Schedule → Tile → Target → PTX ancestry. Runtime ABI,
+physical kernels and numerical policy are unchanged.
+
+Owning items: E2E-REAL-3 / NVIDIA-E2E-1. Static and bounded-dynamic f16/bf16,
+epilogue and reduced-output paths retain their binding contracts. Host tests
+reject stale shape/output/entry/arity metadata before compilation, require one
+compiler call, and prove Graph text is no longer a packaging input. Exact-device
+validation uses Super-Bear RTX 5070, CUDA 13.3 and its LLVM 23 tools. This removes
+the first scheduled Graph re-entry; other Graph-owned package families and
+NVIDIA typed materialization remain F2 work. No performance gain is claimed.
+
+Validation: Princess-Luna WSL passed 305 focused scheduled-consumer, NVIDIA
+packaging, audit, diagnostic-registry and pass-metadata tests (11 environment
+skips); Ruff passed. Super-Bear passed 52 tests from
+`tests/unit/test_scheduled_matmul_consumers.py` and
+`tests/device/nvidia/test_scheduled_matmul_consumers.py` (10 sibling-backend
+skips), including static f16/bf16, bounded-dynamic f16/bf16, fused/reduced output
+and macro-CTA tails. This used the host's existing LLVM 23 native tools and PTX
+bridge: C++ sources are unchanged. Set `CUDA_HOME=/usr/local/cuda-13.3`, source
+`scripts/_nvidia_env.sh`, and point `TESSERA_NVIDIA_OPT` at the host build's
+`src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt`.

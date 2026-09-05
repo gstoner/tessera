@@ -32,12 +32,105 @@ Status truth remains `MASTER_AUDIT.md` and `docs/audit/generated/`
 (Decision #26). Nothing here reclassifies a row. Effort figures are engineering
 estimates for a single track with no hardware gates, not commitments.
 
+## MLIR/LLVM native foundation program — 2026-09-04
+
+**Current sequencing authority.** The goal is one MLIR-owned semantic program
+lowered by native compiler passes into backend code. This section orders the
+remaining architectural migration. The older central queue, W0–W6 tables and
+engineering follow-through below retain their evidence and owning IDs; when
+they conflict on *next foundation work*, this section wins. Completed bounded
+slices stay completed. The [broad audit survey](MLIR_NATIVE_FOUNDATION_SURVEY.md)
+records all 42 prior live documents and the source-verified migration seams.
+
+Python remains the public API, capture/orchestration layer and independent
+oracle. After canonical MLIR is produced, backend generation must not
+reconstruct semantics from `GraphIRModule`, Python fusion objects, operation
+names or ad hoc descriptor dictionaries. Shapes, layouts, effects, derivative
+products, numeric policy and schedule choices needed by the compiler must
+survive as verified IR. Deployment facts and measurements remain explicit,
+identity-bound inputs. Runtime code loads images and executes their ABI.
+
+### Backend destination and proof boundaries
+
+| Backend | Native destination | Migration boundary and owning proof |
+|---|---|---|
+| x86 / Apple CPU | MLIR→linalg/vector/SCF as applicable→LLVM dialect/LLVM IR→native object or ORC JIT; explicit external-library calls remain legitimate IR operations. | Reuse `tools/tessera-jit`; distinguish compiled bodies from prebuilt AVX/Accelerate calls. Zen 5 validates AVX-512; M1 Max validates Apple CPU. AMX remains separately gated. |
+| NVIDIA | Verified Tile/Target IR→NVVM/LLVM→PTX and device assembly/image→CUDA launch descriptor. | Reuse the existing native packaging/compiler pipeline. Super-Bear RTX 5070 owns its exact architecture proof; Hopper/Blackwell-specific instructions require their matching envelope and device. |
+| ROCm | Verified Tile/Target IR→GPU/ROCDL/LLVM→AMDGPU code object/HSACO→HIP launch descriptor. | Reuse current architecture generators and serialization. Princess-Luna owns gfx1151 correctness; WSL timing retains its recorded limitations. No RDNA4/CDNA proof transfers. |
+| Apple GPU | Verified Tile/Apple Target IR→compiler-owned MSL/materialization→supported Metal compiler/metallib→Metal launch descriptor; explicit MPS calls are separate candidates. | M1 Max owns compile/launch/oracle proof. Do not assume an available direct LLVM-IR→Metal backend or confuse prepackaged runtime calls with generated kernel bodies. |
+
+Native code generation does not require discarding hand-tuned implementations.
+Their *selection and ABI* must be explicit in IR and measured against generated
+candidates. Existing source emitters and Graph-owned package constructors are
+migration baselines with deletion gates, not permanent alternative semantic
+foundations. Do not erase their performance or dtype coverage to simplify an API.
+
+### Ordered foundation cuts
+
+`IR-NATIVE-FOUNDATION-1` is the coordination key for these cuts, not a new
+operation, pass, status enum or registry. Each cut extends the listed existing
+owner and ships independently; each backend can advance after its own gates.
+
+| Cut | Existing owner / concrete deliverable | Depends on | Acceptance and retirement gate |
+|---|---|---|---|
+| F0 — live route census and executable migration baseline | E2E-REAL-3/5/6 + COMPILER-DEVEX-1. Derive a family/target/shape-policy map from current driver/package/plugin entry points, joining existing execution/lineage evidence. Include Apple CPU and the mixed NVIDIA scheduled wrapper. | Existing compiled slices; no new hardware prerequisite for census. | Route fixtures distinguish canonical IR input, Graph reconstruction, source-emitted bodies, explicit library calls and reference execution as separate facts. Name constructor, replacement, missing carrier, test and owning host. Establish an assertions-enabled MLIR lane for negative contract claims; release-build results remain separately labeled. |
+| F1 — remove the first live Graph re-entry | E2E-REAL-3 / NVIDIA-E2E-1. Refactor `nvidia_native.package_scheduled_matmul(module, artifact)` to build its descriptor from the validated scheduled IR/ABI, without `package_matmul(module)` or a second compilation. Correct driver ancestry only after the real consumer changes. | F0 fixture for this route; existing scheduled matmul artifact. | Static and bounded-dynamic f16/bf16 cases retain ABI/layout/shape guards; compile invocation count is one; mutating/discarding the original Graph cannot affect the artifact; altered IR is rejected or changes identity. Exact RTX 5070 numerical proof before retiring the old dependency. |
+| F2 — migrate historical package families | E2E-REAL-5/6, W3.7, backend E2E owners. Extend scheduled softmax/reduction to NVIDIA; close uncovered ROCm movement, x86 cohort/breadth, and Apple value/CPU call contracts one family at a time. | F0 route census; per-family IR carrier and backend lowering. | Old/new numerical and ABI comparison, unsupported-policy rejection, independent IR replay and target-owned execution. Delete each Graph constructor only after all driver, direct-client and family-plugin callers migrate. No newly added Graph reconstruction path. |
+| F3 — make optimization and specialization native IR consumers | FRONTEND-IR-MEDIUM-1, W5.1/W5.2, MSW-9. Instantiate one optimized parametric recipe for valid buckets; migrate fusion/region and candidate inputs to canonical IR; connect one ANN rewrite to native pair evaluation. | F1 working boundary; F2 for the selected family, not every backend. | Two buckets share recipe/compiler identity and complete witnesses; illegal witnesses fail before lowering; original and rewritten native programs satisfy numeric policy; candidate admission binds emitted image/resources to that IR. Broader attention raising follows this path. |
+| F4 — extend structured semantics through the same path | W4-PRODUCT-1/W4-EFFECTS-1, NUMPOL-CARRIER-1, LAYOUT-ALG-1, SO-2/3/4, AD-*/DIST-NATIVE-1. Expand control/effects/residuals, batching, memory, state and distributed products only through verified carriers. | F2/F3 on the workload's families and existing legality interfaces. | IR-only forward/backward execution, complete shape/effect/layout/policy preservation, unknown cases fail closed, actual transport for multi-rank claims. Preserve closed shared work; implement only missing producer/consumer or envelope rows. |
+| F5 — retire redundant semantic generators and expand workloads | COMPILER_REFACTOR_PLAN A–E, OPTIMIZING_COMPILER_PLAN, TSOL-* and domain owners. Replace Python semantic source synthesis per measured family; exercise spectral, PDE, mixer, sparse/ES and optimizer workloads as consumers. | A replacement has passed F2–F4 as required; evaluator/device gates below. | No surviving production caller depends on the retired semantic constructor; native-required requests cannot fall back to Python. Compare numerical envelope, compile cost, warm/cold latency and resources against the retained baseline before promotion. Explicit tuned/library candidates remain supported through IR. |
+
+F1 is the first code migration because it already has a canonical Tile artifact
+and a concrete redundant Graph dependency. F2 is not a giant all-backend rewrite:
+select the next family from measured usage and available IR support, retain its
+current envelope, and publish a small backend-owned change. F3 may start after
+one such family is complete. There is no blanket calendar estimate until the
+route census separates wrappers from missing semantics and missing codegen.
+
+### Cross-cutting evidence and operational work
+
+Telemetry attribution, CUDA/HIP bounded waits and artifact integrity are urgent
+support work; they must not disappear behind the foundation program. They do
+not serialize all host-free IR work. Performance promotion on an affected lane
+waits for valid telemetry and safe completion. Native wait timeouts must poison
+ownership and retain in-flight resources rather than free live buffers.
+
+Reuse EVIDENCE-PACKET-1, TPROF-NATIVE-1, the evaluator, existing artifact types,
+execution matrix and provenance fields. A derived route view may expose gaps;
+it must not become a second hand-maintained capability registry. Keep these
+questions independent: does it parse/verify, does lowering consume the incoming
+IR, does the runtime bind the resulting artifact, does the owning device execute
+it correctly, and is its performance evidence eligible? Neither hashes nor
+presence of native bytes answer all five.
+
+IKF-P1 schema/math may proceed independently. P0 clock validation gates P2/P3
+instrumentation and dispatch admission keeps L2/L3 evidence out. The Apple
+cross-run cohort in #724 supports retaining the mean default; it does not block
+this migration. The generated-coverage artifact change in #723 is complete and
+must not be reintroduced as an open implementation task.
+
+### Required PR evidence for a migrated route
+
+Each PR names the old constructor/callers, canonical IR replacement, preserved
+shape/dtype/layout/numeric-policy envelope, native compiler pipeline, runtime
+ABI and source→IR→image identities. It includes independent oracle comparisons,
+malformed-carrier tests and the exact owning-host command/result. Report missing
+hardware explicitly. Add a test that prevents the retired Graph entry from being
+called; test a real replacement, not an exception that simply disables the route.
+
+Core compiler tests and Git/GitHub operations use host WSL under AGENTS.md.
+Apple-only measurements require the applicable explicit Mac authorization.
+Assertions-enabled compiler testing remains a required evidence improvement;
+no assertion-related claim is closed by a release-only test. Broader compiler
+feature work must name which foundation boundary it improves or consumes.
+
 ## Central development plan — 2026-08-17
 
-This is the executable center of the compiler, TSOL, and compiler-tools work.
-The wave tables and scoped plans below remain the detailed design record, but
-they do not create parallel queues. Generated gap counts are inventories: a
-backend-kernel, direct-test, ABI, or benchmark count is not a list of equally
+This retained delivery ledger records the compiler, TSOL and compiler-tools
+commitments and their bounded landings. The MLIR/LLVM foundation program above
+now orders the remaining architectural work; neither this older ordering nor
+the wave tables creates a competing queue. Generated gap counts are inventories:
+a backend-kernel, direct-test, ABI or benchmark count is not a list of equally
 urgent implementations.
 
 ### Current baseline
@@ -1710,3 +1803,38 @@ The Apple policy experiment is complete for its declared cohort: retain the
 existing default. Lowp MoE ledger admission/cooperative kernel work and an
 assertions-enabled LLVM remain separately owned follow-ups; neither is closed
 by a policy comparison or a fleet visibility probe.
+
+### Archive follow-through — 2026-09-04
+
+The superseded code-review snapshot and typing inventory are archived with
+[owning-audit summaries](COMPILER_AUDIT.md#archive-reconciliation--2026-09-04).
+No new implementation queue is created. Surviving actions remain:
+
+- **W1.1 / foundation F2:** migrate the two tensor-valued MMA constructors in
+  `TileIRLoweringPass` and obtain NVIDIA Target/device proof before deleting
+  the checked tensor-value lane. The old bare-fragment permissive branch is
+  already gone; do not recreate that closed task.
+- **DISPATCH-BREAKER / NVIDIA `P3-SOURCE-ONLY-2026-08-30`:** inject allocation
+  failure in flash-backward cleanup and prove exactly-once release of acquired
+  resources. Recorded normal-path device tests do not establish this case.
+- **`P2-REVIEW-SHARED-PASSES-2026-08-29`:** preserve the existing backend
+  queue obligations and their exact-host acceptance. Reconcile later receipts
+  per row before claiming closure; the P3 closure note is not blanket P2 proof.
+
+Older architecture reviews and overlapping scoped plans remain live during
+reconciliation. Foundation F1 (NVIDIA scheduled matmul Graph re-entry) remains
+the first code migration; archiving neither replaces nor completes it.
+
+
+### Foundation F1 implementation — 2026-09-04
+
+`nvidia_native.package_scheduled_matmul(artifact)` now constructs the descriptor
+from the scheduled launch contract and compiles only its Tile IR. The Graph
+argument, dynamic Graph clone and discarded base-image build are removed.
+Schedule fields and Tile entry ABI must agree with descriptor metadata before
+compilation. The driver records the real adjacent scheduled ancestry.
+
+This is the first bounded migration, not closure of E2E-REAL-3 or all native
+packaging: F2 still owns the remaining Graph package roots and typed producers.
+Validation and exact-device scope are recorded in the NVIDIA queue under
+`IR-NATIVE-FOUNDATION-1`. Physical kernel optimization is outside this cut.

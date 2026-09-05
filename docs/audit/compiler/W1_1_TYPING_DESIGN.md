@@ -1,15 +1,16 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-09-04
 audit_role: reference
 owning_plan_item: W1.1
 ---
 
 # W1.1 — Tile IR typing design
 
-W1.1 is the 5-week long pole on the critical chain **W0 → W1.1 → W2.1 → W3.1**,
-and the plan asks for written scoping before code. This is that scoping.
-[`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md) is the precondition —
-*what exists*; this is *what to build and in what order*.
+The [archived typing inventory](archive/W1_1_TYPING_INVENTORY.md) records the
+original scoping. This design's completion ledger and the
+[current source census](MLIR_NATIVE_FOUNDATION_SURVEY.md#typing-inventory-replacement--2026-09-04)
+replace its stale counts for active work. The remaining tensor-valued NVIDIA
+producer migration is not closed by archiving the inventory.
 
 Status truth stays `INTEGRATED_COMPILER_PLAN.md` + `docs/audit/generated/`
 (Decision #26). Sections 1–4 retain the measurements that selected the design;

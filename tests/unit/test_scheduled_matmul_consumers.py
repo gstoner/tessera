@@ -270,9 +270,11 @@ def test_nvidia_large_bounded_dynamic_graph_selects_alignment_safe_macro_cta() -
     or scheduled_matmul.find_tessera_opt() is None,
     reason="requires the SM120 CUDA compiler, PTX bridge, and RTX host",
 )
-def test_sm120_bounded_dynamic_strided_matmul_exact_device() -> None:
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_bounded_dynamic_strided_matmul_exact_device(dtype) -> None:
+    storage_type = np.float16 if dtype == "fp16" else pytest.importorskip("ml_dtypes").bfloat16
     bundle = compile_graph_module(
-        _dynamic_module(),
+        _dynamic_module(dtype=dtype),
         source_origin="sm120-scheduled-dynamic-strided-exact-device",
         target="nvidia_sm120",
         options={"package_native": True},
@@ -280,18 +282,23 @@ def test_sm120_bounded_dynamic_strided_matmul_exact_device() -> None:
     )
     assert bundle.native_image is not None and bundle.launch_descriptor is not None
     assert bundle.tile is not None and bundle.target_ir is not None
+    assert bundle.schedule is not None
+    assert bundle.schedule.input_digest == bundle.graph.output_digest
+    assert bundle.tile.input_digest == bundle.schedule.output_digest
+    assert bundle.target_ir.input_digest == bundle.tile.output_digest
+    assert bundle.tile.producer == "tessera-opt.tessera-schedule-to-tile"
     assert [scalar.name for scalar in bundle.launch_descriptor.scalars] == [
         "M", "N", "K", "LDA", "LDB", "LDD"
     ]
     m, n, k = 17, 13, 19
     lda, ldb, ldd = 29, 31, 23
     rng = np.random.default_rng(17_013_019)
-    a_storage = np.zeros((m, lda), dtype=np.float16)
+    a_storage = np.zeros((m, lda), dtype=storage_type)
     a = a_storage[:, :k]
-    a[...] = rng.standard_normal((m, k)).astype(np.float16)
-    b_storage = np.zeros((ldb, n), dtype=np.float16, order="F")
+    a[...] = rng.standard_normal((m, k)).astype(storage_type)
+    b_storage = np.zeros((ldb, n), dtype=storage_type, order="F")
     b = b_storage[:k, :]
-    b[...] = rng.standard_normal((k, n)).astype(np.float16)
+    b[...] = rng.standard_normal((k, n)).astype(storage_type)
     d_storage = np.full((m, ldd), -123.0, dtype=np.float32)
     output = d_storage[:, :n]
     runtime_artifact = rt.RuntimeArtifact(
@@ -1181,3 +1188,68 @@ def test_apple_gpu_scheduled_simdgroup_f16_executes_exact_artifact(shape) -> Non
     np.testing.assert_allclose(
         output, a.astype(np.float32) @ b.astype(np.float32), rtol=2e-2, atol=2e-2
     )
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_nvidia_scheduled_package_compiles_once_without_graph(monkeypatch, dtype, dynamic):
+    from dataclasses import replace
+
+    artifact = _artifact(target="nvidia_sm120")
+    artifact = replace(
+        artifact, a_dtype=dtype, b_dtype=dtype,
+        storage="f16" if dtype == "fp16" else "bf16", dynamic_m=dynamic,
+        tile_ir=artifact.tile_ir.replace('storage = "f16"', f'storage = "{"f16" if dtype == "fp16" else "bf16"}"'),
+    )
+    fields = (
+        f'storage = "{artifact.storage}", accum = "f32", output = "f32", '
+        'activation = "none", arch = "sm_120", a_layout = "row_major", '
+        'b_layout = "col_major", bias = false, residual = false, '
+    )
+    artifact = replace(
+        artifact,
+        schedule_ir=artifact.schedule_ir.replace(
+            'schedule.matmul %graph {', 'schedule.matmul %graph {' + fields
+        ).replace('schedule.artifact {',
+                  f'schedule.artifact {{shape_key = "M=17;N=23;K=19;dtype={artifact.storage}", '),
+        tile_ir=artifact.tile_ir.replace('%k: i64)',
+            '%k: i64, %lda: i64, %ldb: i64, %ldd: i64)' if dynamic else '%k: i64)'),
+    )
+    calls = []
+
+    def compile_tile(text, entry):
+        calls.append((text, entry))
+        return (text, "// PTX", {}, "compiler", "toolchain", (), "cold")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("scheduled package re-entered Graph packaging")
+
+    monkeypatch.setattr(nvidia_native, "_compile_tile_ir", compile_tile)
+    monkeypatch.setattr(nvidia_native, "package_matmul", forbidden)
+    package = nvidia_native.package_scheduled_matmul(artifact, pipeline_name="tessera-nvidia-pipeline-sm120")
+    assert calls == [(artifact.tile_ir, artifact.function_name)]
+    expected_abi = (
+        nvidia_native.SM120_STRIDED_F16_ABI if dtype == "fp16" else nvidia_native.SM120_STRIDED_BF16_ABI
+    ) if dynamic else (
+        nvidia_native.SM120_F16_ABI if dtype == "fp16" else nvidia_native.SM120_BF16_ABI
+    )
+    assert package.descriptor.abi_id == expected_abi
+    assert [b.layout for b in package.descriptor.buffers] == (
+        ["strided"] * 3 if dynamic else ["row_major", "col_major", "row_major"]
+    )
+    assert {g.predicate for g in package.descriptor.shape_guards} == ({"max"} if dynamic else {"eq"})
+    # Graph text is provenance only once the scheduled artifact exists.
+    detached = replace(artifact, graph_ir="discarded frontend")
+    assert nvidia_native.package_scheduled_matmul(detached, pipeline_name="tessera-nvidia-pipeline-sm120") == package
+    changed = replace(artifact, tile_ir=artifact.tile_ir + "\n// changed compiler input")
+    assert nvidia_native.package_scheduled_matmul(changed, pipeline_name="tessera-nvidia-pipeline-sm120").image.image_digest != package.image.image_digest
+
+    for changed in (replace(artifact, m=99), replace(artifact, output_dtype="fp16"),
+                    replace(artifact, dynamic_m=not dynamic),
+                    replace(artifact, function_name="missing_entry")):
+        before = len(calls)
+        with pytest.raises(ValueError, match="disagrees"):
+            nvidia_native.package_scheduled_matmul(
+                changed, pipeline_name="tessera-nvidia-pipeline-sm120"
+            )
+        assert len(calls) == before

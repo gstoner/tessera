@@ -17,11 +17,10 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, cast
 
-from .graph_ir import GraphIRModule, tensor_ir_type
+from .graph_ir import GraphIRModule
 from .native_artifact import (
     BufferBinding,
     DeviceLibraryRecord,
@@ -2281,54 +2280,82 @@ def package_matmul(
 
 
 def package_scheduled_matmul(
-    module: GraphIRModule,
     artifact: Any,
     *,
     pipeline_name: str,
 ) -> NVIDIANativePackage:
-    """Consume the canonical Schedule -> launch-Tile matmul artifact.
-
-    Descriptor shape/buffer validation remains shared with ``package_matmul``;
-    the native image is compiled from the artifact's Tile IR, so NVIDIA no
-    longer re-emits a second vendor-local schedule for this path.
-    """
+    """Compile the scheduled Tile artifact once and bind its launch contract."""
     artifact.validate()
+    if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
+            or artifact.storage not in {"f16", "bf16"}
+            or artifact.a_dtype != artifact.b_dtype
+            or artifact.a_dtype != {"f16": "fp16", "bf16": "bf16"}[artifact.storage]
+            or artifact.output_dtype not in {"fp16", "fp32"}
+            or artifact.accum != "f32"):
+        raise ValueError("unsupported NVIDIA scheduled matmul launch contract")
     dynamic = artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
-    package_module = module
-    if dynamic:
-        # Reuse the static package constructor only for buffer/dtype metadata;
-        # the image below is always rebuilt from the original bounded dynamic
-        # Tile artifact and the descriptor is widened before it can escape.
-        import copy
-        package_module = copy.deepcopy(module)
-        fn = package_module.functions[0]
-        args = {arg.name: arg for arg in fn.args}
-        args[artifact.a_name].ir_type = tensor_ir_type(
-            (artifact.m, artifact.k), artifact.a_dtype
-        )
-        args[artifact.b_name].ir_type = tensor_ir_type(
-            (artifact.k, artifact.n), artifact.b_dtype
-        )
-        fn.result_types[0] = tensor_ir_type(
-            (artifact.m, artifact.n), artifact.output_dtype
-        )
-    base = package_matmul(package_module, pipeline_name=pipeline_name, schedule="shared")
     entry = artifact.function_name
+    storage = artifact.storage
+    bias, residual = artifact.bias_name, artifact.residual_name
+    suffix = "bias_residual_" if bias and residual else "bias_" if bias else "residual_" if residual else ""
+    abi_id = SM120_F16_ABI if storage == "f16" else SM120_BF16_ABI
+    if suffix:
+        abi_id = f"tessera.nvidia.matmul.a_b_{suffix}d_m_n_k.{storage}.v1"
+    if artifact.output_dtype == "fp16":
+        abi_id = f"tessera.nvidia.matmul.a_b_{suffix}d_m_n_k.{storage}.out_f16.v2"
+    if dynamic:
+        abi_id = SM120_STRIDED_F16_ABI if storage == "f16" else SM120_STRIDED_BF16_ABI
+    m, n, k = artifact.m, artifact.n, artifact.k
+    # The frontend names are binding labels; shape/storage and pointer arity
+    # must agree with the durable Schedule record and the emitted launch IR.
+    schedule_op = re.search(r"(?m)^\s*%[^=]+ = schedule\.matmul[^\n]+", artifact.schedule_ir)
+    if schedule_op is None:
+        raise ValueError("missing NVIDIA scheduled launch contract")
+    for field, value in (
+        ("storage", storage), ("accum", "f32"),
+        ("output", "f16" if artifact.output_dtype == "fp16" else "f32"),
+        ("activation", artifact.activation), ("arch", "sm_120"),
+        ("a_layout", "row_major"), ("b_layout", "col_major"),
+    ):
+        if f'{field} = "{value}"' not in schedule_op.group():
+            raise ValueError(f"NVIDIA scheduled launch contract disagrees on {field}")
+    for field, present in (("bias", bool(bias)), ("residual", bool(residual))):
+        if f"{field} = {str(present).lower()}" not in schedule_op.group():
+            raise ValueError(f"NVIDIA scheduled launch contract disagrees on {field}")
+    if f'shape_key = "M={m};N={n};K={k};dtype={storage}"' not in artifact.schedule_ir:
+        raise ValueError("NVIDIA scheduled launch contract disagrees on shape bounds")
+    signature = re.search(
+        rf"llvm\.func @{re.escape(entry)}\(([^)]*)\)", artifact.tile_ir
+    )
+    expected_types = ["!llvm.ptr"] * (3 + bool(bias) + bool(residual))
+    expected_types += ["i64"] * (6 if dynamic else 3)
+    actual_types = [] if signature is None else [
+        arg.split(":", 1)[-1].strip() for arg in signature.group(1).split(",")
+    ]
+    if actual_types != expected_types:
+        raise ValueError("NVIDIA scheduled launch contract disagrees with Tile entry ABI")
+    rows: list[tuple[str, str, str, tuple[int, ...], str, int]] = [
+        (artifact.a_name, "input", artifact.a_dtype, (m, k), "row_major", 2),
+        (artifact.b_name, "input", artifact.b_dtype, (k, n), "col_major", 2),
+    ]
+    if bias:
+        rows.append((bias, "input", "fp32", (n,), "row_major", 4))
+    if residual:
+        rows.append((residual, "input", "fp32", (m, n), "row_major", 4))
+    rows.append((artifact.output_name, "output", artifact.output_dtype, (m, n), "row_major", 4))
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = (
         _compile_tile_ir(artifact.tile_ir, entry)
     )
-    image = replace(
-        base.image,
+    image = NativeImageArtifact(
+        target="nvidia_sm120",
+        architecture="sm_120a",
+        pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
         target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx",
         payload=ptx.encode("ascii"),
-        entry_points=(NativeEntryPoint(
-            entry,
-            (SM120_STRIDED_F16_ABI if artifact.storage == "f16"
-             else SM120_STRIDED_BF16_ABI) if dynamic
-            else base.descriptor.abi_id,
-        ),),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state=compile_state,
         device_libraries=device_libraries,
         resource_record=ResourceRecord(
@@ -2348,44 +2375,50 @@ def package_scheduled_matmul(
         physical_route = f"macro_cta_masked_scalar_shared_ab_{artifact.storage}"
     else:
         physical_route = "typed_fragment_global"
-    descriptor = replace(
-        base.descriptor,
+    descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=(SM120_STRIDED_F16_ABI if artifact.storage == "f16"
-                else SM120_STRIDED_BF16_ABI) if dynamic
-               else base.descriptor.abi_id,
+        abi_id=abi_id,
         buffers=tuple(
-            replace(binding, layout="strided") if binding.rank == 2 else binding
-            for binding in base.descriptor.buffers
-        ) if dynamic else base.descriptor.buffers,
-        scalars=(
-            ScalarArgument(len(base.descriptor.buffers), "M", "int64"),
-            ScalarArgument(len(base.descriptor.buffers) + 1, "N", "int64"),
-            ScalarArgument(len(base.descriptor.buffers) + 2, "K", "int64"),
-            ScalarArgument(len(base.descriptor.buffers) + 3, "LDA", "int64"),
-            ScalarArgument(len(base.descriptor.buffers) + 4, "LDB", "int64"),
-            ScalarArgument(len(base.descriptor.buffers) + 5, "LDD", "int64"),
-        ) if dynamic else base.descriptor.scalars,
-        shape_guards=tuple(
-            ShapeGuard(guard.binding, guard.dimension, "max", guard.value)
-            for guard in base.descriptor.shape_guards
-        ) if dynamic else base.descriptor.shape_guards,
-        geometry=LaunchGeometry(
-            policy=(
-                "sm120_scheduled_macro_cta_32x32_mn"
-                if "_macro_kernel" in entry
-                else "sm120_scheduled_typed_16x8_mn"
+            BufferBinding(index, name, role, dtype, len(shape),
+                          "strided" if dynamic and len(shape) == 2 else layout, alignment)
+            for index, (name, role, dtype, shape, layout, alignment) in enumerate(rows)
+        ),
+        scalars=tuple(
+            ScalarArgument(len(rows) + index, name, "int64")
+            for index, name in enumerate(
+                ("M", "N", "K", "LDA", "LDB", "LDD") if dynamic else ("M", "N", "K")
             )
         ),
+        shape_guards=tuple(
+            ShapeGuard(name, dim, "max" if dynamic else "eq", size)
+            for name, _, _, shape, _, _ in rows
+            for dim, size in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(
+            policy=("sm120_scheduled_macro_cta_32x32_mn" if "_macro_kernel" in entry
+                    else "sm120_scheduled_typed_16x8_mn")
+        ),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("completion",),
+        ),
         provenance={
-            **base.descriptor.provenance,
+            "work_item": "NVIDIA-E2E-2",
+            "sync_key": "IR-NATIVE-FOUNDATION-1",
+            "schedule": "shared",
+            "shape": [m, n, k],
+            "storage": storage,
+            "epilogue": {
+                "bias": bool(bias), "activation": artifact.activation,
+                "residual": bool(residual),
+                "order": ["matmul", "bias", "activation", "residual"],
+                "output": "f16" if artifact.output_dtype == "fp16" else "f32",
+            },
             "route": "canonical_scheduled_tile_consumer",
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
             "physical_route": physical_route,
-            "dynamic_shape_bounds": [artifact.m, artifact.n, artifact.k]
-            if dynamic else None,
+            "dynamic_shape_bounds": [m, n, k] if dynamic else None,
             "leading_dimension_abi": "runtime_i64" if dynamic else "compact",
         },
     )

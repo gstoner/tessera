@@ -6,8 +6,8 @@ Reference date for staleness: **2026-09-04**.
 
 ## Headline
 
-- **153** docs catalogued across the canonical doc tree.
-- **152** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **152** docs catalogued across the canonical doc tree.
+- **151** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
 - **52** updated within the last 30 days.
 - **24** older than 90 days; **0** older than 180 days.
 
@@ -164,9 +164,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/AUTODIFF_NEXTGEN_PLAN.md` | - | 2026-08-20 | 15 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-18 | 17 | ✓ |
 | `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-08-13 | 22 | ✓ |
-| `compiler/CODE_REVIEW_2026-08-29.md` | - | 2026-08-29 | 6 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 24 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-08-10 | 25 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 27 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 38 | ✓ |
 | `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-24 | 11 | ✓ |
@@ -185,9 +184,10 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 39 | ✓ |
 | `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/MATRIX_CALCULUS_REVIEW.md` | - | 2026-08-20 | 15 | ✓ |
+| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 27 | ✓ |
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-09-04 | 0 | ✓ |
-| `compiler/README.md` | - | 2026-08-18 | 17 | ✓ |
+| `compiler/README.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 27 | ✓ |
 | `compiler/SCHEDULE_OBJECT_DESIGN.md` | - | 2026-08-16 | 19 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 27 | ✓ |
@@ -196,8 +196,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 33 | ✓ |
 | `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-14 | 21 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 36 | ✓ |
-| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-18 | 17 | ✓ |
-| `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 33 | ✓ |
+| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 10 | ✓ |
 | `compiler/compiler_enhancement.md` | - | 2026-08-18 | 17 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 0 | ✓ |

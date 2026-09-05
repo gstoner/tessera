@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-10
+last_updated: 2026-09-04
 audit_role: theme
 ---
 
@@ -7,6 +7,32 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## Archive reconciliation — 2026-09-04
+
+Two superseded documents moved to `compiler/archive/`; their original evidence
+remains available and linked. No active plan was closed.
+
+| Archived document | Reconciled result | Live residual owner |
+|---|---|---|
+| [2026-08-29 code review](archive/CODE_REVIEW_2026-08-29.md) | 103 listed severity rows (9/36/42/16), distinct from the original 102-confirmed aggregate; source dispositions are recorded, including three P2 rows needing no further change. Later `P3-DEVICE-VERIFIED-2026-08-30` backend records close the formerly unverified NVIDIA normal execution, ROCm FFT and rank-4 dropout lit gaps. This reconciliation does not rerun those measurements. | NVIDIA allocation-failure cleanup injection: `P3-SOURCE-ONLY-2026-08-30` / `DISPATCH-BREAKER`. Broader `P2-REVIEW-SHARED-PASSES-2026-08-29` backend obligations stay in the existing four queues; the P3 records do not close them. |
+| [August typing inventory](archive/W1_1_TYPING_INVENTORY.md) | Superseded by the [current source census](MLIR_NATIVE_FOUNDATION_SURVEY.md#typing-inventory-replacement--2026-09-04) and typing design. Typed fragments and ROCm producers now exist; the old zero-producer/no-verifier counts must not drive work. | W1.1 / foundation F2: two tensor-valued `TileIRLoweringPass` MMA constructors, NVIDIA typed materialization/Target proof and eventual checked-value-lane retirement. |
+
+The next archive candidates (architecture reviews and overlapping layout,
+Schedule Object and FORGE documents) stay live until their remaining contracts
+and consumers are reconciled. A successful archive move is not compiler closure.
+
+## MLIR/LLVM foundation survey — 2026-09-04
+
+The [live compiler survey](MLIR_NATIVE_FOUNDATION_SURVEY.md) separates native
+execution from compilation through the canonical IR. The driver still reaches
+historical Graph-owned package constructors beside newer scheduled consumers;
+the NVIDIA scheduled matmul wrapper itself re-enters the Graph packager before
+compiling the shared Tile artifact. These are migration targets, not a permanent
+second authority. The [integrated foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
+owns the cuts and retirement gates. Python stays the interface/oracle; native
+MLIR/LLVM transformations and backend generators own program compilation.
+This is source inspection and plan reconciliation, not new device evidence.
 
 ## TileRT assessment — composition scheduling direction (2026-08-10)
 

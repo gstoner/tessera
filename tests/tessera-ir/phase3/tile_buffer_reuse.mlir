@@ -25,6 +25,7 @@ func.func @reuse_disjoint(%arg0: memref<16x16xf16>, %arg1: memref<16x16xf16>,
   "tile.alloc_shared"(%arg1) : (memref<16x16xf16>) -> ()
   "tile.async_copy"(%arg1) : (memref<16x16xf16>) -> ()
   "tile.async_copy"(%arg0) : (memref<16x16xf16>) -> ()
+  "tile.wait_async"() : () -> ()
   "tile.alloc_shared"(%arg2) : (memref<16x16xf16>) -> ()
   "tile.async_copy"(%arg2) : (memref<16x16xf16>) -> ()
   return

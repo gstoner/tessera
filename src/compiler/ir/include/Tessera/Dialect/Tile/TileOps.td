@@ -195,6 +195,11 @@ def Tile_AllocOp : Tile_Op<"alloc"> {
 
 def Tile_DeallocOp : Tile_Op<"dealloc"> {
   let summary = "End the lifetime of a physical Tile buffer";
+  let description = [{
+    The buffer must derive from tile.alloc through declared SSA identity edges
+    (structured results/carries or CFG forwarding). The lifetime verifier checks
+    completion and possible prior deallocation on every incoming path.
+  }];
   let arguments = (ins Tile_BufferType:$buffer);
   let results = (outs);
   let assemblyFormat = "$buffer attr-dict `:` type($buffer)";
@@ -639,8 +644,8 @@ def Tile_AsyncCopyOp : Tile_Op<"async_copy"> {
         `tile.barrier_id` / `tile.depends_on` (the ROCm wave-LDS FIFO lane,
         still load-bearing there) or an integer `stage` (the Python reference
         spine's encoding; consumed conservatively by `TileBufferReusePass`,
-        which treats a key-less copy/wait as matching anything — the
-        lifetime-extending choice, so absence fails safe).
+        which matches every key present on the wait; a keyless wait
+        completes all copies. An unmatched copy stays live through exit).
 
     All attributes are OPTIONAL at this level; when present they must be well
     formed (`stage` >= 0 — enforced by the verifier). `tile_rows` /
@@ -670,8 +675,11 @@ def Tile_WaitAsyncOp : Tile_Op<"wait_async"> {
   let description = [{
     The consumer half of `tile.async_copy`, under the same single contract
     (see that op's description). Typed form: every `!tile.async_token` operand
-    must be produced by a `tile.async_copy` -- a wait on a token from anywhere
-    else is a dependency the backend cannot honor. Legacy form: no token
+    must derive from `tile.async_copy` through direct SSA, scf.if/scf.for
+    results and carries, or CFG forwarding. Opaque function arguments remain
+    unproven. The lifetime verifier tracks dynamic completion names across
+    these edges; static origin reachability alone never releases an access.
+    Legacy form: no token
     operand; the wait retires copies matched by its grouping key
     (`tile.barrier_id` on ROCm, `stage` on the Python spine), and a key-less
     wait retires everything outstanding -- the conservative reading every

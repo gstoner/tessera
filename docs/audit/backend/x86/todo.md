@@ -4186,3 +4186,49 @@ public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
 handle form remains unchanged and its Graph ODS declaration remains open.
 This shared-contract correction prevents the NVIDIA physical form from claiming
 Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.
+
+### Allocation lifetime analysis and device regression comparison — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+Shared analysis now retains all pending allocation accesses, scopes direct-token
+and keyed completion, joins branch/CFG paths, checks loop backedges and rejects
+premature frees and use-after-free. Thread rendezvous cannot retire DMA.
+Unknown origins/regions and loop-token generation remain conservatively gated;
+see the integrated plan's matching section for the exact admission boundary.
+Follow-up required: CPU ownership/alias contracts and the memref reuse-group consumer; no GPU timing is CPU evidence.
+
+
+### Dynamic completion generations and memref arena proof — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the direct-token-only and
+memref-planner limitations above. SSA edge renaming distinguishes dynamic
+completion generations; structured/CFG allocation identity is shared by operation
+and lifetime verifiers. Memref cast/view lifetimes now feed both reuse assignment
+and arena preflight; forged groups fail before physical materialization, and
+supported alias descriptors retain the arena address space. No runtime ABI,
+selector or architecture schedule changes.
+
+Shared static alias and SSA lifetime rules apply. GPU workgroup arenas and asynchronous ring schedules are not applicable to the CPU route; CPU ownership/escape summaries and CPU-specific reuse consumers remain follow-up required.
+
+
+### Structured-path reuse, private borrowing and device ring experiment — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the blanket structured-region
+and direct-call exclusions above. Coalescing requires all-path completion,
+derived uniform branch exclusivity and release before loop backedges. Private
+callee bodies establish borrowing; the arena preserves the existing helper ABI.
+External/recursive ownership and general CFGs remain conservatively excluded.
+
+Body-derived private-call borrowing is shared analysis; workgroup address-space
+arenas and GPU ring timing are not applicable to CPU execution. Follow-up
+required: CPU ownership/ABI consumers, general CFG coalescing and CPU-specific
+reuse measurements. GPU occupancy and barrier results are not CPU evidence.
+
+**Async experiment assessment (2026-09-05), W2.4a / `IR-NATIVE-FOUNDATION-1`:**
+The [native asynchronous GEMM benchmark](../../../../benchmarks/nvidia/ASYNC_PRODUCER_CONSUMER.md)
+is a CUDA-specific matched wait ablation. Physical schedule parity is not
+applicable here: this backend does not consume the SM120 `cp.async`/MMA kernel.
+No runtime, selector or shared ownership contract changes in this experiment;
+existing backend-specific lifetime follow-ups remain open.

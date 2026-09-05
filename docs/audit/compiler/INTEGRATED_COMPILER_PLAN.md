@@ -2111,3 +2111,194 @@ fixtures passed, including strict registered parsing for the changed reuse
 fixture. Ruff and the zero-error mypy ratchet passed. The ROCm SSA/LDS compiler
 probe preserved allocation/token ownership through target lowering at one, two
 and four stages; it measures host compiler cost only, not device latency.
+
+### Allocation lifetime analysis and device regression comparison — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+This increment supersedes the blanket-release and preorder-walk limitations in
+the five-action loop for the bounded registered `!tile.buffer` vocabulary.
+
+- Track all pending storage footprints and async accesses per allocation. A
+  typed wait retires only its direct SSA copy producer; a keyed legacy wait
+  retires matching copies. An arrival-only mbarrier wait does not prove buffer
+  completion. Preserve the declared keyless legacy wait-all envelope.
+- Thread barriers retire synchronous write hazards, not outstanding DMA.
+  Check explicit copy destinations, source borrows, premature deallocation,
+  use-after-free, and overlapping writes, including earlier disjoint writes.
+- Merge `scf.if` branches and CFG predecessors by union of may-live facts.
+  Iterate `scf.for` and CFG backedges to a finite fixed point; statically empty
+  and single-trip loops do not invent backedge accesses. Follow supported
+  allocation aliases across structured results and loop carries without
+  recursive cycles. Preserve signed-stride footprint bounds.
+- Unknown allocation origins, unsupported buffer-access operations and region
+  forms fail closed. Loop-carried async tokens cannot release by static producer
+  identity alone: dynamic slot/generation correlation remains open. Function/CFG
+  buffer arguments need an alias/ownership contract before admission. This is
+  not a universal interprocedural lifetime proof or a new queue dialect.
+
+`benchmarks/record_allocation_lifetime_comparison.py` compares baseline and
+candidate compilers on each owning GPU, preserves timing domains, validates
+outputs and requires identical native images. It measures existing native attention/GEMM
+routes, not a new queue schedule. This verifier does not optimize physical
+schedules; selector promotion and occupancy gains are not implied. The older
+memref reuse-group planner and backend consumption of its allocation groups
+remain a separate integration task.
+
+Exact-host results are stored in
+`benchmarks/baselines/allocation_lifetime_{nvidia,rocm}.json` with the same
+baseline/candidate compiler hashes on both hosts. All measured native images
+are byte-identical; no runtime optimization or queue-depth improvement is claimed.
+
+| Host / workload | Before → after median | Domain / proof |
+|---|---|---|
+| Super-Bear RTX 5070, saved-LSE forward 1×2×1×8×8×8×8 | 0.01023 → 0.01212 ms | CUDA events; f32 output/LSE oracle passed. |
+| Super-Bear, matching saved backward | 0.08166 → 0.08176 ms | CUDA events; dQ/dK/dV oracle passed. |
+| Princess-Luna gfx1151, 512³ f16 direct GEMM | 0.02278 → 0.02217 ms | Synchronized host wall time, not HIP events; relative error 2.28e-6. |
+| Princess-Luna, same GEMM via Tile route | 0.02265 → 0.02234 ms | Same clock/oracle and identical HSACO. |
+
+CUDA resources are unchanged: forward/backward use 40/56 registers per thread,
+zero local/shared bytes, and 12/9 active blocks per SM at the measured launch.
+The packets retain all five samples and separate end-to-end CUDA timings.
+CUDA variants ran before-then-after; ordering/clock noise prevents interpreting
+small differences as compiler performance changes. These are regression
+comparisons of existing executable paths, not device proof of a new queue protocol.
+
+Validation: 161 native fixtures passed (four feature-gated exclusions), including
+real WarpSpecialization buffer markers and 22 positive/negative lifetime cases.
+The inherited-access rule prevents role-local waits from clearing other roles.
+
+
+### Dynamic completion generations and memref arena proof — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
+This section supersedes the preceding increment's open direct-token, CFG-alias
+and memref-planner boundaries within the following native envelope.
+
+1. **Dynamic completion:** pending accesses carry SSA completion names. Structured
+   branch results, loop initial/carry/backedge/exit edges and CFG forwarding rename
+   those names. Backedges discard expired local names before a new dynamic copy
+   executes; an unforwarded outstanding generation remains pending. Static
+   producer reachability never releases an access. `tile.wait_async` and
+   `tile.dealloc` share a declared-origin resolver with the lifetime verifier.
+2. **Alias contracts:** allocation roots flow through supported structured and CFG
+   identity edges. The memref planner follows cast and view interfaces transitively,
+   retaining the entire backing allocation for unknown/subview offsets. Unknown
+   users and non-linear control flow prevent reuse. Unannotated external Tile
+   buffer ownership remains unproven; this does not add interprocedural noalias.
+3. **Physical consumer:** `TileBufferReusePass` and `TileBufferArenaPass` use one
+   native memref lifetime service. Missing/wrong waits retain in-flight copies
+   through exit; stage and barrier keys both match. Synchronous loads/stores
+   require a thread rendezvous before storage reassignment. The arena consumer
+   rejects forged overlapping groups and pre-existing/escaping/nonidentity aliases,
+   then propagates workgroup address space through supported view/cast chains.
+   Static byte-size and arena-offset arithmetic are checked before materialization.
+
+Native fixtures cover a legal rolling token pipeline, dropped generations,
+branch-result and CFG token forwarding, opaque origins, transitive alias uses,
+missing/wrong/conditional waits, physical arena alias types and forged reuse.
+The real arena consumer is exercised; parser acceptance alone is not the evidence.
+
+**Remaining:** path-sensitive memref group coalescing across branches/loops;
+interprocedural ownership/escape summaries; offset-disjoint subview optimization;
+physical ring slot/phase protocols and architecture-owned performance promotion.
+The existing native GEMM/attention comparison remains a regression workload, not
+measurement of a new ring schedule. Each backend's queue records its own device
+boundary and follow-up; no cross-architecture performance transfer.
+
+
+Validation for this increment: **167 native fixtures passed** (four feature-gated
+exclusions), **252 focused unit/registry/audit tests passed**, Ruff passed and
+mypy remained at zero errors. Owning-host packets are
+`benchmarks/baselines/token_memref_nvidia.json` and
+`benchmarks/baselines/token_memref_rocm.json`; both record final compiler SHA-256
+`a6697e6cd41fffa24e57d0461da6ddbc96d21944987b539a9e319190c5c88a87`.
+Existing CUDA saved-LSE forward/backward and gfx1151 direct/Tile GEMM outputs
+passed their oracles, with byte-identical baseline/candidate native images.
+CUDA event measurements remain separate from synchronized ROCm host timing.
+Outlier runs remain in the packets; no latency/occupancy improvement is claimed.
+
+
+### Structured-path coalescing, private borrowing and device ring experiment — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
+
+**Native compiler increment.** The shared memref lifetime service now proves
+completion on every `scf.if` path, coalesces opposite arms only with a derived
+workgroup-uniform predicate, and permits loop-local reuse only when accesses
+complete before the backedge. Uniformity follows registered constants, GPU
+block/grid dimensions and deterministic arithmetic; thread IDs and opaque
+arguments do not establish it. The planner checks every member of a reuse group,
+and the physical arena consumer independently uses the same proof.
+
+Private direct calls can borrow memrefs when their bodies and transitive callees
+prove no escape, free, returned alias or outstanding asynchronous access. External
+symbols, recursion and opaque consumers remain unproven. The arena admits these
+calls only with an existing workgroup-space ABI; it does not change a helper's
+signature behind other callers. Native positive and negative fixtures exercise
+both planning and physical `memref.view` materialization.
+
+**Measured ring protocol.** `benchmarks/record_device_ring_protocol.py` emits a
+native MLIR GPU kernel and lowers it through LLVM to NVPTX or AMDGPU. Direct
+streaming and depths 1/2/4 implement identical neighbor-lane math. Shared slots
+carry full generation tags, a publish barrier and a release barrier. Fill/drain
+and wrap tests cover short and uneven trip counts through 257 rounds; an
+intentionally stale generation must fail the output oracle. This is a standalone
+cooperative protocol experiment, not a product Tile ring producer or proof of
+asynchronous transfer/compute overlap.
+
+Five unprofiled trials, 20 repetitions, 64 workgroups of 128 threads and 257
+rounds produced the following medians. The fixed small grid is not an occupancy
+saturation study. Each backend was compiled and measured on its own host.
+
+| Backend / clock | Direct | Depth 1 | Depth 2 | Depth 4 |
+|---|---:|---:|---:|---:|
+| RTX 5070 / CUDA events | 0.037504 ms | 0.048861 ms | 0.049038 ms | 0.049131 ms |
+| gfx1151 / HIP events | 0.078530 ms | 0.132742 ms | 0.120325 ms | 0.129554 ms |
+
+Packets: `benchmarks/baselines/ring_protocol_{nvidia,rocm}.json`. Both numerical
+and stale-generation negative controls passed. CUDA registers were 26 for direct
+and 16 for the rings; API-reported active-block capacity stayed at 12 per SM.
+ROCm reported 11/10/13/11 registers and capacity 16 blocks per compute unit.
+Shared storage was 0/520/1040/2080 bytes; no local-memory allocation was reported.
+API capacity is theoretical, not measured active occupancy.
+
+**CUDA profiler evidence.** Isolated Nsight Compute direct and depth-2 captures
+are exported as `ring_protocol_nvidia_ncu_{direct,depth2}.csv` in the same baseline
+directory. The ring adds barrier stalls (2.017 stalled-barrier warps per issue
+active versus zero); achieved active occupancy stays about 11.1% on this grid.
+Profiler replay times are not the unprofiled event medians above. Nsight Systems
+exports `ring_protocol_nvidia_nsys_{kernels,api}.csv`: the ring kernel median is
+48.048 microseconds across four launches; context creation dominates the short
+process API trace and must not be attributed to kernel execution. Reproduce
+isolated profiling with `--profile-depth 0` or `2` after the normal run has emitted
+its binaries under `--artifacts`; profile-only runs never write timing packets.
+
+**Disposition.** Rings are correct but slower for this streaming experiment on
+both devices. Do not promote a selector candidate or restore a queue dialect on
+these results. Next: connect a real asynchronous producer/consumer to the proven
+release protocol, then measure representative compute intensity and saturated
+grids. General CFG coalescing, symbolic kernel-argument uniformity, recursive or
+external ownership summaries and private-helper ABI specialization remain open.
+
+### Real asynchronous GEMM comparison — 2026-09-05
+
+W2.4a / CAKE / SO-2, `IR-NATIVE-FOUNDATION-1`: the next experiment now uses the
+production SM120 macro-CTA F16 GEMM producer. Its next-panel `cp.async` overlaps
+current-panel MMA; a benchmark-only immediate-wait control preserves the native
+instruction body, two slots and launch geometry. See
+[method, reproduction and evidence](../../../benchmarks/nvidia/ASYNC_PRODUCER_CONSUMER.md).
+
+On RTX 5070, unprofiled resident CUDA-event medians improve 6.1% / 2.9% / 2.3%
+for 512 / 1024 / 2048 square GEMMs. Six shapes pass the numerical oracle. Both
+images have 56 registers/thread, 4 KiB static shared memory and zero spills.
+Native SASS confirms MMA before the deferred wait; Nsight Compute reports fewer
+long-scoreboard stalls. These are single-process observations, not promotion or
+cross-run confidence evidence. Compute Sanitizer cannot initialize the WSL WDDM
+debugger interface; synchronization sanitizer proof remains open.
+
+This closes the useful-compute asynchronous benchmark gap on NVIDIA, but does
+not connect the generic allocation/release-token pass to the macro kernel.
+That integration, sanitizer validation and independent timing repetitions remain
+open. ROCm needs a target-specific async producer; Apple and x86 have no physical
+schedule parity claim. The previous synchronous ring remains a distinct negative
+experiment and must not be relabeled as asynchronous.

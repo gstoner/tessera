@@ -7,7 +7,7 @@
 // and `tile.tmem.alloc` (Blackwell TMEM) buffers. When two such buffers have
 // **disjoint live ranges**, they can share one physical backing — cutting peak
 // shared-memory footprint, which directly gates occupancy. This pass computes a
-// conservative per-buffer live range (first-to-last reference in program order),
+// conservative alias-inclusive live range (including async completion),
 // greedily colors buffers of identical memref type into reuse groups (a classic
 // interval-coloring / left-edge assignment), and stamps the group on each alloc:
 //
@@ -15,12 +15,11 @@
 //
 // It also records the static footprint saved as function attributes
 // (`tile.buffer_reuse.bytes_before/after/groups`). Correctness is by construction
-// — only NON-overlapping live ranges share a group, so no live buffer is ever
-// clobbered. Like LayoutAssignmentPass v1 the output is IR metadata: a
-// shared-memory-aware backend reads `tile.buffer_group` to alias the physical
-// allocation; hardware-free here so it is lit-testable before any emission.
+// — only proven NON-overlapping live ranges share a group. TileBufferArenaPass
+// rechecks the same proof before physically materializing workgroup storage.
 
 #include "Tessera/Transforms/Passes.h"
+#include "TileMemrefLifetime.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -50,16 +49,7 @@ static bool isAllocOp(Operation *op) {
 // Static byte size of a memref value, or -1 when it is not statically known (a
 // dynamic dim / non-memref) — such a buffer never joins a reuse group.
 static int64_t staticByteSize(Value v) {
-  auto mr = dyn_cast<MemRefType>(v.getType());
-  if (!mr || !mr.hasStaticShape())
-    return -1;
-  int64_t elems = 1;
-  for (int64_t d : mr.getShape())
-    elems *= d;
-  int64_t bits = mr.getElementType().getIntOrFloatBitWidth();
-  if (bits <= 0)
-    return -1;
-  return elems * ((bits + 7) / 8);
+  return tessera::memory::staticBytes(v);
 }
 
 struct Buffer {
@@ -82,7 +72,7 @@ struct TileBufferReuse
            "range tile.alloc_shared / tile.tmem.alloc buffers of identical type "
            "to shared reuse groups (tile.buffer_group), cutting peak shared "
            "memory. The assignment half of shared-memory planning; "
-           "TileBarrierReuseLegalityPass verifies it.";
+           "TileBufferArenaPass rechecks the shared lifetime proof.";
   }
 
   void runOnOperation() override {
@@ -94,38 +84,7 @@ struct TileBufferReuse
 
   // Plan one function body: index ops, derive live ranges, color, stamp.
   void planRegion(Operation *fn) {
-    llvm::DenseMap<Operation *, int64_t> index;
-    int64_t next = 0;
-    fn->walk([&](Operation *op) { index[op] = next++; });
-
-    // Collect wait_async ops as (index, stage) — stage = -1 when the wait names
-    // no stage (waits for everything). A tile.async_copy keeps its shared buffer
-    // in flight until the matching wait, but the wait carries only the stage, not
-    // the memref — so the buffer's live range must be stretched to that wait, or a
-    // later same-typed alloc could reuse the group and clobber the in-flight copy.
-    SmallVector<std::pair<int64_t, int64_t>> waits;
-    fn->walk([&](Operation *op) {
-      if (op->getName().getStringRef() != "tile.wait_async")
-        return;
-      int64_t stage = -1;
-      if (auto s = op->getAttrOfType<IntegerAttr>("stage"))
-        stage = s.getInt();
-      waits.push_back({index[op], stage});
-    });
-    llvm::sort(waits, [](auto &a, auto &b) { return a.first < b.first; });
-
-    // The earliest wait after `copyIdx` whose stage matches (a stageless copy or
-    // stageless wait matches anything — the conservative, lifetime-extending
-    // choice). -1 if none: leave the range at its direct users.
-    auto waitFor = [&](int64_t copyIdx, int64_t copyStage) -> int64_t {
-      for (const auto &w : waits) {
-        if (w.first <= copyIdx)
-          continue;
-        if (copyStage < 0 || w.second < 0 || w.second == copyStage)
-          return w.first;
-      }
-      return -1;
-    };
+    tessera::memory::Lifetimes lifetimes(fn);
 
     SmallVector<Buffer> buffers;
     fn->walk([&](Operation *op) {
@@ -134,29 +93,17 @@ struct TileBufferReuse
       Value buf = op->getOperand(0);
       if (!isa<MemRefType>(buf.getType()))
         return;
-      int64_t start = index[op], end = index[op];
-      for (Operation *user : buf.getUsers()) {
-        int64_t ui = index.lookup(user);
-        end = std::max(end, ui);
-        // Stretch an async_copy's lifetime to its matching wait_async.
-        if (user->getName().getStringRef() == "tile.async_copy") {
-          int64_t stage = -1;
-          if (auto s = user->getAttrOfType<IntegerAttr>("stage"))
-            stage = s.getInt();
-          int64_t w = waitFor(ui, stage);
-          if (w >= 0)
-            end = std::max(end, w);
-        }
-      }
+      auto live = lifetimes.get(op);
+      int64_t start = live.start, end = live.end;
       buffers.push_back({op, buf, op->getName().getStringRef(), start, end,
                          staticByteSize(buf), -1});
     });
     if (buffers.empty())
       return;
 
-    // Left-edge greedy coloring: process by ascending start; a buffer joins the
-    // first group whose last member's live range ended strictly before this one
-    // begins AND whose memref type matches exactly (same backing size/layout).
+    // Deterministic interference coloring: every existing group member must
+    // prove noninterference, including exclusive structured paths. Comparing
+    // only the last member is insufficient once intervals span branches.
     SmallVector<unsigned> order(llvm::to_vector(llvm::seq<unsigned>(
         0, buffers.size())));
     llvm::sort(order, [&](unsigned a, unsigned b) {
@@ -170,6 +117,7 @@ struct TileBufferReuse
       Type type;
       StringRef kind;
       int64_t bytes;
+      SmallVector<Operation *> members;
     };
     SmallVector<Group> groups;
     for (unsigned i : order) {
@@ -182,8 +130,8 @@ struct TileBufferReuse
       // type (identical backing size + element type + layout + memory space).
       if (b.bytes >= 0) {
         for (unsigned g = 0; g < groups.size(); ++g) {
-          if (groups[g].lastEnd < b.start && groups[g].kind == b.kind &&
-              groups[g].type == b.memref.getType()) {
+          if (groups[g].kind == b.kind && groups[g].type == b.memref.getType() &&
+              llvm::all_of(groups[g].members, [&](Operation *member) { return lifetimes.disjoint(member, b.alloc); })) {
             chosen = g;
             break;
           }
@@ -191,16 +139,17 @@ struct TileBufferReuse
       }
       if (chosen < 0) {
         chosen = groups.size();
-        groups.push_back({b.end, b.memref.getType(), b.kind, b.bytes});
+        groups.push_back({b.end, b.memref.getType(), b.kind, b.bytes, {}});
       } else {
         groups[chosen].lastEnd = b.end;
       }
+      groups[chosen].members.push_back(b.alloc);
       b.group = chosen;
     }
 
     // Stamp the group on each alloc; tally static footprint before/after.
     OpBuilder builder(fn->getContext());
-    int64_t bytesBefore = 0;
+    __int128 bytesBefore = 0;
     SmallVector<int64_t> groupBytes(groups.size(), 0);
     for (const Buffer &b : buffers) {
       b.alloc->setAttr(kGroupAttr,
@@ -210,12 +159,12 @@ struct TileBufferReuse
         groupBytes[b.group] = std::max(groupBytes[b.group], b.bytes);
       }
     }
-    int64_t bytesAfter = 0;
+    __int128 bytesAfter = 0;
     for (int64_t gb : groupBytes)
       bytesAfter += gb;
 
-    fn->setAttr(kBytesBefore, builder.getI64IntegerAttr(bytesBefore));
-    fn->setAttr(kBytesAfter, builder.getI64IntegerAttr(bytesAfter));
+    fn->setAttr(kBytesBefore, builder.getI64IntegerAttr(bytesBefore <= std::numeric_limits<int64_t>::max() ? static_cast<int64_t>(bytesBefore) : -1));
+    fn->setAttr(kBytesAfter, builder.getI64IntegerAttr(bytesAfter <= std::numeric_limits<int64_t>::max() ? static_cast<int64_t>(bytesAfter) : -1));
     fn->setAttr(kGroups, builder.getI64IntegerAttr((int64_t)groups.size()));
   }
 };

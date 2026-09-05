@@ -23,6 +23,7 @@
 // already keeps them in distinct groups).
 
 #include "Tessera/Transforms/Passes.h"
+#include "TileMemrefLifetime.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -51,21 +52,7 @@ static bool isTmemAlloc(Operation *op) {
 }
 
 static int64_t staticByteSize(Value v) {
-  auto mr = dyn_cast<MemRefType>(v.getType());
-  if (!mr || !mr.hasStaticShape())
-    return -1;
-  // getIntOrFloatBitWidth asserts on anything else, so a vector/complex/index
-  // element type must reach the unplaceable-group path the same way an unknown
-  // static size does — not take the pass down.
-  if (!mr.getElementType().isIntOrFloat())
-    return -1;
-  int64_t elems = 1;
-  for (int64_t d : mr.getShape())
-    elems *= d;
-  int64_t bits = mr.getElementType().getIntOrFloatBitWidth();
-  if (bits <= 0)
-    return -1;
-  return elems * ((bits + 7) / 8);
+  return tessera::memory::staticBytes(v);
 }
 
 // Natural alignment (bytes) of a memref's element — a backend casts
@@ -141,9 +128,14 @@ struct TileBufferArena
       if (groupBytes[g] < 0)
         continue;                               // unplaceable — leave unstamped
       int64_t a = std::max<int64_t>(groupAlign[g], 1);
-      cursor = ((cursor + a - 1) / a) * a;      // pad up to the group's alignment
-      offset[g] = cursor;
-      cursor += groupBytes[g];
+      __int128 aligned = ((static_cast<__int128>(cursor) + a - 1) / a) * a;
+      if (aligned + groupBytes[g] > std::numeric_limits<int64_t>::max()) {
+        allocs.front()->emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: arena size exceeds signed index range");
+        signalPassFailure();
+        return -1;
+      }
+      offset[g] = static_cast<int64_t>(aligned);
+      cursor = static_cast<int64_t>(aligned + groupBytes[g]);
     }
     for (Operation *op : allocs) {
       int64_t g = op->getAttrOfType<IntegerAttr>(kGroupAttr).getInt();
@@ -154,7 +146,69 @@ struct TileBufferArena
     return cursor;
   }
 
+  // View/cast descriptors preserve the arena address space throughout the
+  // alias chain; changing only their source operand creates invalid memref IR.
+  void retargetAliases(Value value, Attribute space) {
+    for (Operation *user : value.getUsers()) {
+      if (tessera::memory::viewSource(user) != value) continue;
+      for (Value result : user->getResults()) {
+        auto type = dyn_cast<MemRefType>(result.getType());
+        if (!type) continue;
+        result.setType(MemRefType::get(type.getShape(), type.getElementType(), type.getLayout(), space));
+        retargetAliases(result, space);
+      }
+    }
+  }
+
   void layoutRegion(Operation *fn) {
+    tessera::memory::Lifetimes lifetimes(fn);
+    SmallVector<Operation *> planned;
+    fn->walk([&](Operation *op) {
+      if (tessera::memory::isMarker(op) && op->hasAttr(kGroupAttr)) planned.push_back(op);
+    });
+    for (auto [i, op] : llvm::enumerate(planned)) {
+      auto type = dyn_cast<MemRefType>(op->getOperand(0).getType());
+      if (isSharedAlloc(op) && type) {
+        bool unsafeAlias = !type.getLayout().isIdentity();
+        if (Operation *def = op->getOperand(0).getDefiningOp())
+          unsafeAlias |= static_cast<bool>(tessera::memory::viewSource(def));
+        DominanceInfo dominance(fn);
+        for (Operation *user : op->getOperand(0).getUsers())
+          if (tessera::memory::viewSource(user) && !dominance.properlyDominates(op, user)) unsafeAlias = true;
+        SmallVector<Value> aliases{op->getOperand(0)};
+        llvm::SmallPtrSet<Value, 16> visited;
+        while (!aliases.empty()) {
+          Value alias = aliases.pop_back_val();
+          if (!visited.insert(alias).second) continue;
+          for (Operation *user : alias.getUsers()) {
+            if (tessera::memory::viewSource(user) == alias) {
+              for (Value result : user->getResults()) aliases.push_back(result);
+            } else {
+              auto name = user->getName().getStringRef();
+              bool known = tessera::memory::isMarker(user) ||
+                           isa<memref::LoadOp, memref::StoreOp, memref::DimOp>(user) ||
+                           name == "tile.async_copy" || name == "tile.wait_async" ||
+                           name == "tile.mma" || tessera::memory::borrowedCall(user, alias, true);
+              unsafeAlias |= !known;
+            }
+          }
+        }
+        if (unsafeAlias) {
+          op->emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: arena cannot rebase a pre-existing, escaping or nonidentity alias");
+          signalPassFailure();
+          return;
+        }
+      }
+      for (Operation *other : ArrayRef<Operation *>(planned).take_front(i)) {
+        if (op->getName() == other->getName() &&
+            op->getAttr(kGroupAttr) == other->getAttr(kGroupAttr) &&
+            !lifetimes.disjoint(op, other)) {
+          op->emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: arena reuse group lacks a disjoint lifetime proof");
+          signalPassFailure();
+          return;
+        }
+      }
+    }
     OpBuilder b(fn->getContext());
     SmallVector<Operation *> smem, tmem;
     fn->walk([&](Operation *op) {
@@ -225,6 +279,7 @@ struct TileBufferArena
     }
     int64_t smemBytes = layoutSpace(smem, "tile.smem_offset", b);
     int64_t tmemBytes = layoutSpace(tmem, "tile.tmem_offset", b);
+    if (smemBytes < 0 || tmemBytes < 0) return;
     if (!smem.empty() && !dynamicSmem)
       fn->setAttr("tile.smem_arena_bytes", b.getI64IntegerAttr(smemBytes));
     if (!tmem.empty())
@@ -342,6 +397,7 @@ struct TileBufferArena
       viewState.addTypes(viewType);
       Operation *view = b.create(viewState);
       Value original = alloc->getOperand(0);
+      retargetAliases(original, memorySpace);
       for (OpOperand &use :
            llvm::make_early_inc_range(original.getUses())) {
         if (use.getOwner() != alloc &&
@@ -398,6 +454,7 @@ struct TileBufferArena
       viewState.addTypes(viewType);
       Operation *view = b.create(viewState);
       Value original = alloc->getOperand(0);
+      retargetAliases(original, memorySpace);
       for (OpOperand &use :
            llvm::make_early_inc_range(original.getUses())) {
         if (use.getOwner() != alloc &&

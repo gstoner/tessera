@@ -189,5 +189,3 @@ def baseline_softmax(
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
-
-

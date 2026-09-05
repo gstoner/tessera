@@ -116,5 +116,3 @@ def baseline_norm(
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
-
-

@@ -126,5 +126,3 @@ def baseline_attention(
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
-
-

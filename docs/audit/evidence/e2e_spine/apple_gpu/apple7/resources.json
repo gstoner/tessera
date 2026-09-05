@@ -48,7 +48,7 @@
       },
       "source_fingerprint": {
         "state": "measured",
-        "value": "sha256:5b63fddfc10a23525ba1ab5f6aabd0b7eb645543850b010c9761b9bc978f201d"
+        "value": "sha256:fba74f08594ad927df7affe754c97015a1388d3ce5d538036109d8e7f84634d7"
       },
       "spill_count": {
         "state": "no_public_api",
@@ -76,7 +76,7 @@
           2
         ]
       ],
-      "image_digest": "a76ba792a62b47c6eadb407e9d8a7fe3857caa6ea627f48f443e7b178450856e",
+      "image_digest": "2311c0fab03bffe0a9e28695323704bc57dfcc0d04af83670af4646a2481669b",
       "placement": {
         "fixture": {
           "gpu_placement_proven": true,
@@ -89,7 +89,7 @@
           "status_symbol": "tessera_apple_gpu_bmm_f32_status"
         }
       },
-      "resource_fingerprint": "e1ae90e6a9d76f0c83ff120df784846e021955285df126a843814de5bd965b44",
+      "resource_fingerprint": "43da21bc9a5e57af1add76d5aa42c3a319f09df0cfdd0ea0cd02f836c109f88a",
       "route": "apple_gpu_bmm_f32_batch1",
       "timing_shape": [
         1,
@@ -107,7 +107,7 @@
           2
         ]
       ],
-      "image_digest": "11e7027d86f6c09fca3657db5fd46378144c8b19ff917f08dce82db3f2375391",
+      "image_digest": "47b418f304f05d60a627bc43c90e1310753663b2a6089f4361a960781ec7a41e",
       "placement": {
         "fixture": {
           "execution_width": 32,
@@ -136,7 +136,7 @@
           ]
         }
       },
-      "resource_fingerprint": "580a8891e929c11af20cfc0a6760f17e02de2b1858326dc297d951b21b1f2aa8",
+      "resource_fingerprint": "08a9f750f2aeb7cbede839ad23655ad0426b0e744e31ba1496478630356977d7",
       "route": "apple_gpu_msl_softmax_f32",
       "timing_shape": [
         64,

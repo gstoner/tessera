@@ -175,7 +175,7 @@ def _test_row(test_rows: list[dict[str, str]]) -> ProgressRow:
         total=total,
         open=total - ready,
         detail=_breakdown(test_rows, "bucket"),
-        source="docs/audit/generated/test_coverage.csv",
+        source="tessera.compiler.generated_docs:test_coverage (live renderer)",
         next_action="Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof.",
     )
 
@@ -408,7 +408,7 @@ def _dashboard_map_rows() -> list[ProgressRow]:
             "test_coverage",
             "integration",
             "Direct, structural, family, and hardware-gated test evidence by op.",
-            "docs/audit/generated/test_coverage.csv",
+            "tessera.compiler.generated_docs:test_coverage (live renderer)",
             "Use for proof-quality triage.",
         ),
         (

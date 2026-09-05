@@ -77,3 +77,13 @@ def test_no_unregistered_generated_markdown() -> None:
         f"generated Markdown not in the registry: {orphans}. "
         f"Register them in tessera.compiler.generated_docs.REGISTRY."
     )
+
+
+def test_ci_coverage_renders_without_committed_files(tmp_path):
+    from dataclasses import replace
+    doc = replace(gd.get('test_coverage'), md_path=tmp_path / 'test_coverage.md',
+                  csv_path=tmp_path / 'test_coverage.csv')
+    assert not doc.committed
+    assert gd.check(doc) is None
+    assert not doc.md_path.exists()
+    assert not doc.csv_path.exists()

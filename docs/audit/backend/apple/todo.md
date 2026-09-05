@@ -3323,7 +3323,7 @@ remain Apple-owned.
   fresh recordings give 15/16 rows identical; `retune_moe_swiglu`
   16x32x64x32_e4 refused once, when a single run hit an external stall
   (2538 µs against ~1000 µs either side) on a host carrying background load.
-  The cross-run bound is a mean ± t·sd and is not robust to one outlier run, so
+  The cross-run bound is a mean ± t·sd/√n and is not robust to one outlier run, so
   a transient stall reads as instability and the row is refused. That is the
   safe direction — it errs toward the incumbent, never toward a promotion — and
   the row is recorded as `retain_incumbent_unstable_candidate` rather than as
@@ -7564,3 +7564,36 @@ tracer attributes transitions after teardown. The reported latch is not yet
 root-caused. Metal 4 direct wait stamps timeout kind/message; device re-seal
 and exact triggering order remain outstanding. No lowp ledger promotion,
 cooperative-kernel performance claim, or change to mean ± t·sd is made.
+
+
+## Cross-backend sync `EVIDENCE-POLICY-20260904`
+
+Decision #26 coverage snapshots move to revision-bound CI artifacts with source
+commit/tree fingerprints and output hashes. The canonical renderer and semantic
+coverage checks remain shared; this changes evidence delivery, not backend
+capability or execution status. Host-free validation applies to this contract.
+No device measurements or schedule parity are inferred.
+
+### APPLE-ROUTE-1: explicit robust cross-run policy
+
+The sealer now accepts `--cross-run-estimator median_order_statistic`. It uses
+exact binomial order-statistic bounds for the population median of independent
+run medians, each at least 95% one-sided coverage. This is a different estimand
+from the existing mean, not a trimmed mean relabeled as the same proof. Fewer
+than five runs yield no finite bound; eight runs can tolerate one extreme
+value in the bound. Every run must still clear the existing speedup and win
+floors, and placement, numerical, resource, paired-trial and provenance checks
+remain mandatory. A losing run cannot be discarded as a stall. The consumer
+recomputes the median bound and rejects unknown estimator tags.
+
+Default selection remains `mean_student_t`; existing ledgers are unchanged.
+Use a fixed, predeclared run count when evaluating the opt-in policy; do not
+keep recording until a confidence bound passes. Owning-device comparison and
+any default-policy migration remain follow-up work, separate from CI re-seals.
+Method reference: [NIST median confidence limits](https://itl.nist.gov/div898/software/dataplot/refman1/auxillar/mediancl.htm).
+
+IKF-1 admission guard: the shared D2 cache and persisted-record consumer refuse
+L2/L3 intra-kernel timings (`evidence.instr_level`) and malformed levels as
+dispatch evidence. L0/L1 and existing pre-instrumentation records retain their
+semantics. This is a host-contract check for this backend, not a device-clock
+or instrumentation implementation claim.

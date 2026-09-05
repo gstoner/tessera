@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-09-04
 audit_role: theme
 ---
 
@@ -15,7 +15,7 @@ dashboards:
   API→Graph→Schedule→Tile→Target→runtime state;
 - [`s_series_status.md`](../generated/s_series_status.md) — primitive contract
   axes and exact-target backend proof;
-- [`test_coverage.md`](../generated/test_coverage.md) — direct, family,
+- [revision-bound test coverage](#test-coverage-evidence) — direct, family,
   structural, and hardware-gated evidence;
 - [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) —
   paths that actually launch;
@@ -112,3 +112,27 @@ labels. Select concrete rows from the generated support and backend tables.
 - `archive/kv_cache_coverage_matrix.md`
 - `archive/partial_ops_uplift_plan.md`
 - `archive/primitive_coverage_state.md`
+
+## Test coverage evidence
+
+Decision #26 assigns `test_coverage.csv` and its Markdown companion to the
+required Validate audit job's `coverage-evidence-<tested SHA>-<attempt>` artifact.
+Find the [Validate run](https://github.com/gstoner/tessera/actions/workflows/validate.yml)
+for the revision being assessed, then download its coverage artifact. Check
+`manifest.json` for the source commit/tree digest and file hashes before citing
+rows. PR runs describe the tested merge revision, not necessarily the PR head.
+Artifacts expire after 90 days; unavailable evidence must not be cited as current.
+For an older revision, check out that revision and regenerate, recording that
+the evidence was regenerated rather than recovered from the original run.
+
+Local command (from the repository root):
+
+```sh
+PYTHONPATH=python python scripts/coverage_evidence.py --output /tmp/coverage-evidence
+```
+
+For a convenient local dashboard, use the existing
+`python -m tessera.compiler.generated_docs --write test_coverage` command. Its
+outputs are ignored by Git. CI checks generator determinism and the semantic
+row/heading contracts; static test references do not prove that tests passed
+or that a kernel executed on a device. Other dashboards remain committed.

@@ -3996,3 +3996,21 @@ Schedule-Object region identity, P1 host schema/math independently.
 x86: not applicable to Apple capture state and GPU wait mechanics. Native
 ANN fusion remains follow-up required. IKF indexed-slot instrumentation stays
 deferred to a measured CPU need under the existing TPROF-X86 owner.
+
+
+## Cross-backend sync `EVIDENCE-POLICY-20260904`
+
+Decision #26 coverage snapshots move to revision-bound CI artifacts with source
+commit/tree fingerprints and output hashes. The canonical renderer and semantic
+coverage checks remain shared; this changes evidence delivery, not backend
+capability or execution status. Host-free validation applies to this contract.
+No device measurements or schedule parity are inferred.
+
+The optional median bound is Apple-route-only and is not applicable here:
+this backend does not consume the Apple route ledger or inherit its timings.
+
+IKF-1 admission guard: the shared D2 cache and persisted-record consumer refuse
+L2/L3 intra-kernel timings (`evidence.instr_level`) and malformed levels as
+dispatch evidence. L0/L1 and existing pre-instrumentation records retain their
+semantics. This is a host-contract check for this backend, not a device-clock
+or instrumentation implementation claim.

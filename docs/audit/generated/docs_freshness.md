@@ -133,7 +133,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-08-11 | 24 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-09-04 | 0 | ✓ |
 | `README.md` | - | 2026-08-08 | 27 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 35 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 39 | ✓ |
@@ -179,7 +179,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 1 | ✓ |
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-08-22 | 13 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-08-15 | 20 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-24 | 11 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-04 | 0 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 33 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 39 | ✓ |
@@ -200,7 +200,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 33 | ✓ |
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 10 | ✓ |
 | `compiler/compiler_enhancement.md` | - | 2026-08-18 | 17 | ✓ |
-| `coverage/COVERAGE_AUDIT.md` | - | 2026-08-11 | 24 | ✓ |
+| `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 0 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 85 | ✓ |
 | `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 33 | ✓ |
 | `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 66 | ✓ |

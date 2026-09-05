@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-24
+last_updated: 2026-09-04
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -1678,12 +1678,12 @@ not close native/compiler evidence gaps.
 | APPLE-DISPATCH-WEDGE-1 / telemetry | Scoped telemetry capture restores prior process state, including nested/error paths; two device-clock tests adopted it. An opt-in pytest order tracer records transitions after teardown without resetting them. The original process latch and downstream MoE failures still require the triggering order and exact Metal reproduction. |
 | MSW-9 | Program-pair native evaluator adapter and separate reference composition/identity law family implemented. Graph IR fragment inventory and the actual fusion consumer remain open. |
 | FRONTEND-IR-MEDIUM-1 | PR #721 contains native pre-bucket CSE and narrow source-loop recognition in rank/prune mode. Native instantiation, arbiter consumption, tracer/MLIR raising and attention remain open. |
-| APPLE-DISPATCH-WEDGE-1 | Metal 4 direct wait now stamps timeout kind/message. Local runtime compilation and WSL source contracts are separate from the outstanding exact-device re-seal. Lowp MoE remains opt-in without a measured ledger row; cooperative rewrite remains open. |
+| APPLE-DISPATCH-WEDGE-1 | Metal 4 direct wait now stamps timeout kind/message. Branch-specific M1 Max E2E re-seals were recorded in commits `3e0ccb21` (#721) and `9773db8f` (#722); this is separate from timeout fault injection and telemetry-order reproduction. Lowp MoE remains opt-in without a measured ledger row; cooperative rewrite remains open. |
 | DISPATCH-BREAKER cross-backend | CUDA and HIP waits remain unbounded. A replacement must poison the owning context on timeout and retain every outstanding buffer/module/event; adding a polling deadline followed by current synchronous cleanup would still hang or free live storage. First slices should target one owning bridge each, with injected not-ready/error cases before GPU proof. |
-| IKF-1 | Bind `INTRA_KERNEL_FEEDBACK_PLAN.md` here. P0 extends the existing D2 gfx1151 timing probe; P2 waits for green clocks and consumes Schedule-Object region identity. P1 host schema/math is independent; no IR instrumentation is authorized by a scalar clock sample alone. |
+| IKF-1 | Bind `INTRA_KERNEL_FEEDBACK_PLAN.md` here. P0 extends the existing D2 gfx1151 timing probe; P2 waits for green clocks and consumes Schedule-Object region identity. P1 host schema/math is independent. Shared D2 cache insertion/loading and dispatch admission now reject L2/L3 or malformed instrumentation levels. No IR instrumentation is authorized by a scalar clock sample alone. |
 | Toolchain evidence | Assertion-enabled LLVM remains an explicit fleet proof gap. Do not interpret release-build negative tests as assertion-enabled contract falsification. The sandbox/Metal mechanism remains unproven; no claim of its root cause is made. |
-| Apple cross-run decision | Preserve mean ± t·sd and incumbent-biased refusal. A robust alternative must be evaluated on recorded clean/outlier cohorts with unchanged promotion semantics before adoption. |
-| Generated coverage | Preserve Decision #26 committed primary evidence. Continue regeneration from merged authored input via the owning generator. Moving evidence to CI-only artifacts requires a replacement immutable evidence contract, not merely deleting the files. |
+| Apple cross-run decision | Default remains mean ± t·sd/√n. Opt-in `median_order_statistic` provides exact one-sided 95% median bounds, with every per-run safety floor retained and consumer recomputation. Owning-device fixed-size cohort comparison remains required before changing the default. |
+| Generated coverage | Decision #26 now assigns coverage evidence to revision-bound CI artifacts: source commit/tree digest, output hashes, run and attempt. The owning generator and semantic tests remain required; missing/expired evidence must be regenerated from the cited revision. |
 
 All numerical/backend promotion remains architecture-owned. The immediate
 reproduction priority is telemetry attribution; a scoped cleanup proves a

@@ -392,3 +392,13 @@ instrumentation or fitted-cost-model promotion follows from this packet.
 Princess-Luna LLVM 23 reports assertions OFF; it cannot supply assertions-on
 MLIR contract evidence. Super-Bear has an RTX 5070 visible in WSL, but no
 `llvm-config` on the non-interactive PATH used for this inspection.
+
+### 2026-09-04: shared arbiter admission guard
+
+IKF-1's explain-versus-decide boundary is enforced at `MeasureCache.put`,
+`MeasureCache.load_dict`, and the shared `record_is_admissible` consumer.
+`evidence.instr_level` accepts only integer L0/L1 for selection; L2/L3,
+unknown levels, booleans and missing-value placeholders are refused. Existing
+records without the field predate instrumentation and retain L0 semantics.
+This closes the admission guard only. P1 slot schema/math, native producers,
+P0 cross-CU clock proof, and P2/P3 instrumentation remain open.

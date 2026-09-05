@@ -156,6 +156,19 @@ jobs:
           PYTHONPATH: python
         run: bash scripts/check_generated_docs.sh
 
+      - name: Generate revision-bound coverage evidence
+        env:
+          PYTHONPATH: python
+        run: python scripts/coverage_evidence.py --output "$RUNNER_TEMP/coverage-evidence"
+
+      - name: Publish coverage evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/coverage-evidence/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Public-doc claim_lint
         env:
           PYTHONPATH: python

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-09-04
 audit_role: root
 ---
 
@@ -139,7 +139,7 @@ Owners:
 | Which primitive contracts remain? | [`generated/s_series_status.md`](generated/s_series_status.md) |
 | Which target paths launch? | [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) |
 | Which ABI symbols are real? | [`generated/runtime_abi.md`](generated/runtime_abi.md) |
-| Which tests are direct or structural? | [`generated/test_coverage.md`](generated/test_coverage.md) |
+| Which tests are direct or structural? | [revision-bound coverage evidence](coverage/COVERAGE_AUDIT.md#test-coverage-evidence) |
 | Which verifiers are registered? | [`generated/verifier_coverage.md`](generated/verifier_coverage.md) |
 | Which target rows are exact, packaged, or reference? | Generated target maps plus the backend plan |
 | What work is software-actionable? | [`generated/single_gpu_closeout.md`](generated/single_gpu_closeout.md) and [`stub_surface.md`](stub_surface.md) |

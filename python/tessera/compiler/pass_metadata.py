@@ -797,6 +797,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=(
             "tessera.dim_bindings",
             "tessera.dim_sizes",
+            "tessera.dim_names",
             "tessera.arg_dim_names",
         ),
         preserved_attrs=(
@@ -806,6 +807,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.nonlinear_shape_guard_digest",
             "tessera.dim_bindings",
             "tessera.dim_sizes",
+            "tessera.dim_names",
             "tessera.arg_dim_names",
         ),
         diagnostic_codes=(

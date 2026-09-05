@@ -2017,3 +2017,15 @@ x86 needs CPU ownership/effect validation, with explicit no-async behavior where
 appropriate. Shared IR proofs do not transfer physical schedules or measurements.
 All four backend queues link this reassessment; implementation remains ordered
 by the existing owners above and the active F2 saved-LSE/packed/stateful sequence.
+
+
+### F2 unary artifact replay correction — 2026-09-05
+
+E2E-REAL-5 / `IR-NATIVE-FOUNDATION-1`, review follow-up to PR #726: native
+Schedule-to-Tile replay is now mandatory in the shared NVIDIA unary package
+consumer, covering softmax, serial/cooperative reductions and norm. Matching
+attributes, entry ABI and a retained schedule hash cannot prove that serialized
+Tile operands still implement the recorded schedule. Regressions mutate source/
+destination operands without changing those markers and require rejection before
+target compilation; missing production `tessera-opt` also fails closed. This
+corrects the earlier F2-U10 replay-coverage claim rather than opening a new queue.

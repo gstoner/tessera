@@ -4140,3 +4140,12 @@ consumer. This is planning only: no dialect restoration, capability promotion,
 or new hardware evidence. Existing F2 implementation ordering is unchanged.
 
 Assess CPU ownership/effects and native adjoint/sharding consumption; retain explicit no-async behavior where appropriate and require CPU-specific performance evidence.
+
+
+### Scheduled unary replay review fix — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Not applicable to x86 physical lowering: this change is confined to the
+NVIDIA scheduled unary package consumer. Shared IR and runtime ABIs are unchanged.
+Existing x86 package validation and owning-host evidence remain separate;
+no sibling replay completeness or performance claim follows from this fix.

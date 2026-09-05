@@ -6452,3 +6452,15 @@ consumer. This is planning only: no dialect restoration, capability promotion,
 or new hardware evidence. Existing F2 implementation ordering is unchanged.
 
 Own the staged-kernel NVVM/PTX experiment and NVIDIA multi-rank transport evidence; no ROCm timing or physical schedule transfers.
+
+
+### Scheduled unary replay review fix — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+PR #726 follow-up: all NVIDIA scheduled unary packages now require exact native
+Schedule-to-Tile replay before target compilation. Softmax and serial/cooperative
+reductions previously checked attributes, signature and hash without proving
+Tile dataflow. Altered pointer operands and a missing replay compiler now fail
+before target compilation; norm retains replay through the same shared path.
+No kernel, pointer ABI or runtime schedule changes; this is compiler-validation
+coverage, with no new device-performance claim.

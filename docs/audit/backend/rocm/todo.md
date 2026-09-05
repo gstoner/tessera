@@ -6738,3 +6738,12 @@ consumer. This is planning only: no dialect restoration, capability promotion,
 or new hardware evidence. Existing F2 implementation ordering is unchanged.
 
 Own the wave/LDS/ROCDL experiment and ROCm multi-rank transport evidence; no NVIDIA barrier protocol or physical schedule transfers.
+
+
+### Scheduled unary replay review fix — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Not applicable to rocm physical lowering: this change is confined to the
+NVIDIA scheduled unary package consumer. Shared IR and runtime ABIs are unchanged.
+Existing rocm package validation and owning-host evidence remain separate;
+no sibling replay completeness or performance claim follows from this fix.

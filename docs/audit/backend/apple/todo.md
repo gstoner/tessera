@@ -3306,9 +3306,14 @@ remain Apple-owned.
   this change; refusing under contention is the safe direction and preserves
   the shipped `composed` route. NVIDIA and ROCm
   are unaffected: this is the Apple route ledger's own aggregation, and no
-  parity is claimed for them. Two sibling lanes (`flash_attn_mha`, `softmax`)
-  consult the same ledger from their dispatchers; their corpora are not part of
-  this change and should be checked for the same self-reference.
+  parity is claimed for them. **Sibling-lane review correction:** the earlier
+  warning about `flash_attn_mha` and `softmax` overstated the scope. The attention
+  corpus passes `route_override`, bypassing ledger selection; the strict-route
+  sealer only aggregates existing reports, and the tile/simdgroup benchmark
+  binds implementations directly without ledger-based route selection. The
+  demonstrated self-reference was the MoE incumbent in the legacy retune
+  corpus, protected by `_measure_implementations_not_the_ledgers_choice`.
+  This closes that sibling investigation, not the statistical residual below.
   **Third root cause — warmup.** One warmup call per route left a process's
   *first* run cold: the fused MoE candidate measured ~2250 µs for all of run 0
   and ~990 µs in every run after, dragging that row's interval down in 2 of 8

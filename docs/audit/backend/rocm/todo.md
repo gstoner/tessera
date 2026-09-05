@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -6652,3 +6652,18 @@ physical kernels and numerical policy are unchanged.
 Sibling outcome: not applicable to execution parity. ROCm scheduled packagers and ROCDL/HSACO generation are unchanged.
 The driver change is confined to the NVIDIA branch; no device evidence transfers
 to this backend. Its F2 migration obligations remain open.
+
+## Foundation F2 unary slice — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+Owning item: E2E-REAL-5 / foundation F2. The shared native scheduling passes now
+admit SM120 f32 softmax and serial rank-reducing sum/mean/max. They emit a raw
+LLVM launch wrapper with the established NVIDIA symbol/ABI, and retain the
+Schedule hash in Tile IR. NVIDIA packaging consumes that artifact directly.
+NVIDIA's existing `approx_exp2` policy is explicit and hashed; other architectures
+retain `accurate`. The verifier rejects a policy inconsistent with its architecture.
+The wrapper consumer refuses extra function work rather than erasing it.
+
+Sibling outcome: parity validated for the existing f32 scheduled softmax and
+reduction tests on Princess-Luna gfx1151 with the explicit device opt-in enabled.
+The ROCm schedule/hash policy is unchanged; no NVIDIA physical schedule transfers.
+Other ROCm Graph-owned families remain follow-up work.

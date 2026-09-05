@@ -160,8 +160,8 @@ LogicalResult SoftmaxOp::verify() {
     return failure();
   if (getAxisAttr().getInt() != -1)
     return emitOpError("initial softmax contract requires the last axis");
-  if (getExpMode() != "accurate")
-    return emitOpError("initial softmax contract requires accurate exp");
+  if (getExpMode() != (getArch() == "sm_120" ? "approx_exp2" : "accurate"))
+    return emitOpError("softmax exp policy must match its architecture");
   return success();
 }
 

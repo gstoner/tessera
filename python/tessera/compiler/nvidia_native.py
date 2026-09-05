@@ -1548,6 +1548,10 @@ def _reduction_contract(module: GraphIRModule) -> tuple[str, str, int, bool] | N
         if op.op_name in {"tessera.reduce", "tessera.sum"}
         else "mean"
     )
+    if op.op_name == "tessera.reduce":
+        kind = str(op.kwargs.get("kind", "sum"))
+        if kind not in {"sum", "mean", "max", "min"}:
+            return None
     return arg.ir_type.dtype, kind, axis, keepdims
 
 
@@ -2744,6 +2748,82 @@ def package_mx_matmul(
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 
+def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Consume the native scheduled f32 unary launch envelope without Graph re-entry."""
+    artifact.validate()
+    softmax = artifact.family == "softmax"
+    if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
+            or artifact.dtype != "fp32" or artifact.storage != "f32"
+            or artifact.accum != "f32" or artifact.workgroup_size != 128
+            or artifact.family not in {"softmax", "reduce"} or artifact.keepdims):
+        raise ValueError("unsupported NVIDIA scheduled unary contract")
+    shape, output_shape = artifact.input_shape, artifact.output_shape
+    if not shape or any(type(d) is not int or d <= 0 for d in shape):
+        raise ValueError("NVIDIA scheduled unary contract requires positive static shapes")
+    scalar_names: tuple[str, ...]
+    if softmax:
+        if artifact.axis != -1 or shape != output_shape:
+            raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis")
+        entry = "tessera_tile_softmax_f32"
+        abi = SM120_SOFTMAX_F32_ABI
+        scalar_names = ("Rows", "K")
+        geometry = "sm120_softmax_thread_per_row_128"
+        required = {'exp_mode': '"approx_exp2"', 'ftz': 'false'}
+    else:
+        if (artifact.kind not in {"sum", "mean", "max"}
+                or not 0 <= artifact.axis < len(shape)
+                or output_shape != shape[:artifact.axis] + shape[artifact.axis + 1:]):
+            raise ValueError("NVIDIA scheduled reduction has inconsistent axis/output")
+        entry = f"tessera_tile_reduce_{artifact.kind}_f32_serial"
+        abi = SM120_REDUCE_F32_ABI
+        scalar_names = ("Outer", "AxisExtent", "Inner")
+        geometry = "sm120_reduce_serial"
+        required = {'kind': f'"{artifact.kind}"', 'schedule': '"serial"',
+                    'nan_mode': '"propagate"', 'keepdims': 'false'}
+    required.update({'storage': '"f32"', 'accum': '"f32"',
+                     'axis': f'{artifact.axis} : i64'})
+    for field, value in required.items():
+        pattern = rf"\b{field} = {re.escape(value)}(?=[,}}\s])"
+        if not re.search(pattern, artifact.tile_ir) or not re.search(pattern, artifact.schedule_ir):
+            raise ValueError(f"NVIDIA scheduled unary policy disagrees on {field}")
+    # Require the Schedule wrapper to retain the input/output shape contract.
+    for dims in (shape, output_shape):
+        tensor = "tensor<" + "".join(f"{d}x" for d in dims) + "f32>"
+        if tensor not in artifact.schedule_ir:
+            raise ValueError("NVIDIA scheduled unary shape disagrees with Schedule IR")
+    signature = re.search(rf"llvm\.func @{re.escape(entry)}\(([^)]*)\)", artifact.tile_ir)
+    types = [] if signature is None else [a.split(":", 1)[-1].strip() for a in signature.group(1).split(",")]
+    if artifact.function_name != entry or types != ["!llvm.ptr", "!llvm.ptr"] + ["i64"] * len(scalar_names):
+        raise ValueError("NVIDIA scheduled unary Tile entry ABI disagrees")
+    lowered, ptx, metrics, compiler, toolchain, libraries, state = _compile_tile_ir(artifact.tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx", payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, abi),), compile_state=state,
+        device_libraries=libraries,
+        resource_record=ResourceRecord(provenance="scheduled Tile IR; ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=abi,
+        buffers=(BufferBinding(0, artifact.input_name, "input", "fp32", len(shape), "row_major", 4),
+                 BufferBinding(1, artifact.output_name, "output", "fp32", len(output_shape), "row_major", 4)),
+        scalars=tuple(ScalarArgument(i + 2, name, "int64") for i, name in enumerate(scalar_names)),
+        shape_guards=tuple(ShapeGuard(name, dim, "eq", value)
+                           for name, dims in ((artifact.input_name, shape), (artifact.output_name, output_shape))
+                           for dim, value in enumerate(dims)),
+        geometry=LaunchGeometry(policy=geometry),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={"work_item": "E2E-REAL-5", "sync_key": "IR-NATIVE-FOUNDATION-1",
+                    "route": "canonical_scheduled_tile_consumer", "schedule": "serial",
+                    "shape": list(shape), "storage": "f32", "accum": "f32",
+                    "axis": artifact.axis, "kind": artifact.kind, "keepdims": False,
+                    "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
+    )
+    return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
+
+
 def package_reduction(
     module: GraphIRModule,
     *,
@@ -3767,6 +3847,7 @@ __all__ = [
     "package_f16_softmax",
     "package_matmul",
     "package_scheduled_matmul",
+    "package_scheduled_kernel",
     "package_mx_matmul",
     "package_reduction",
     "package_norm",

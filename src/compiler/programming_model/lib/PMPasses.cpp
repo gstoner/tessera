@@ -507,6 +507,7 @@ struct SemanticKernelSchedule {
   StringRef arch;
   StringRef storage;
   StringRef accum = "f32";
+  StringRef expMode = "accurate";
   SmallVector<int64_t> inputShape;
   SmallVector<int64_t> outputShape;
   int64_t axis = -1;
@@ -550,14 +551,16 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   // only below.  The launch tile does not prescribe a workgroup for Apple (the
   // delegated MSL route owns its threadgroup), so workgroupSize stays 1.
   bool apple_gpu = schedule.target == "apple_gpu";
-  if (!x86 && !rocm && !apple_gpu)
+  bool nvidia = schedule.target == "nvidia_sm120" && schedule.arch == "sm_120";
+  if (nvidia) schedule.expMode = "approx_exp2";
+  if (!x86 && !rocm && !apple_gpu && !nvidia)
     return failure();
 
   StringRef opName = op->getName().getStringRef();
   if (opName == "tessera.softmax") {
     auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
     if ((axisAttr && axisAttr.getInt() != -1) || input != output ||
-        (x86 && schedule.storage != "f32") ||
+        ((x86 || nvidia) && schedule.storage != "f32") ||
         (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
         (apple_gpu && schedule.storage != "f32"))
       return failure();
@@ -565,7 +568,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.rows = 1;
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
     schedule.columns = input.getShape().back();
-    schedule.workgroupSize = rocm ? 256 : 1;
+    schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
     return schedule;
   }
 
@@ -601,7 +604,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   for (int64_t dim : input.getShape().take_front(axis)) schedule.outer *= dim;
   schedule.axisExtent = input.getDimSize(axis);
   for (int64_t dim : input.getShape().drop_front(axis + 1)) schedule.inner *= dim;
-  schedule.workgroupSize = rocm ? 256 : 1;
+  schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
   return schedule;
 }
 
@@ -622,7 +625,8 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
        ";columns=" + Twine(schedule.columns) + ";outer=" +
        Twine(schedule.outer) + ";axis_extent=" + Twine(schedule.axisExtent) +
        ";inner=" + Twine(schedule.inner) + ";workgroup=" +
-       Twine(schedule.workgroupSize) + ";exp=accurate;ftz=0;schedule=serial;nan=propagate")
+       Twine(schedule.workgroupSize) + ";exp=" + schedule.expMode +
+       ";ftz=0;schedule=serial;nan=propagate")
           .str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -1966,7 +1970,7 @@ struct GraphToSchedulePass
       state.addAttribute("workgroup_size",
                          builder.getI64IntegerAttr(selected->workgroupSize));
       if (selected->family == "softmax") {
-        state.addAttribute("exp_mode", builder.getStringAttr("accurate"));
+        state.addAttribute("exp_mode", builder.getStringAttr(selected->expMode));
         state.addAttribute("ftz", builder.getBoolAttr(false));
       } else {
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
@@ -3415,7 +3419,7 @@ struct ScheduleToTilePass
                      attrInt("axis") != selected->axis ||
                      attrInt("workgroup_size") != selected->workgroupSize;
       if (isSoftmax)
-        altered = altered || attrString("exp_mode") != "accurate" ||
+        altered = altered || attrString("exp_mode") != selected->expMode ||
                   attrBool("ftz") != false;
       else
         altered = altered || attrString("kind") != selected->kind ||
@@ -3438,6 +3442,61 @@ struct ScheduleToTilePass
         scheduled->emitError(
             "requires exactly one matching Graph hash and schedule.artifact");
         return signalPassFailure();
+      }
+
+      if (selected->target == "nvidia_sm120") {
+        auto function = graph->getParentOfType<func::FuncOp>();
+        if (!function || !llvm::hasSingleElement(function.getBody()) ||
+            function.getNumArguments() != 1 || function.getNumResults() != 1 ||
+            function.getBody().front().getOperations().size() != 4 ||
+            graph->getOperand(0) != function.getArgument(0)) {
+          scheduled->emitError("NVIDIA scheduled kernel requires one isolated unary function");
+          return signalPassFailure();
+        }
+        auto ret = dyn_cast<func::ReturnOp>(function.getBody().front().back());
+        if (!ret || ret.getNumOperands() != 1 ||
+            ret.getOperand(0) != scheduled->getResult(0)) {
+          scheduled->emitError("NVIDIA scheduled kernel must be the function result");
+          return signalPassFailure();
+        }
+        // Preserve the established runtime launch symbols and serial schedule.
+        std::string name = isSoftmax ? "tessera_tile_softmax_f32" :
+            (Twine("tessera_tile_reduce_") + selected->kind + "_f32_serial").str();
+        if (SymbolTable::lookupSymbolIn(mod, name)) {
+          scheduled->emitError("NVIDIA scheduled kernel symbol already exists");
+          return signalPassFailure();
+        }
+        Location loc = scheduled->getLoc();
+        auto ptr = LLVM::LLVMPointerType::get(&getContext());
+        auto i64 = builder.getI64Type();
+        SmallVector<Type> inputs{ptr, ptr, i64, i64};
+        if (!isSoftmax) inputs.push_back(i64);
+        auto type = LLVM::LLVMFunctionType::get(
+            LLVM::LLVMVoidType::get(&getContext()), inputs, false);
+        OpBuilder mb(mod.getBody(), mod.getBody()->end());
+        auto kernel = LLVM::LLVMFuncOp::create(mb, loc, name, type);
+        kernel->setAttr("nvvm.kernel", mb.getUnitAttr());
+        Block *entry = kernel.addEntryBlock(mb);
+        OpBuilder kb(entry, entry->begin());
+        OperationState state(loc, isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
+        state.addOperands(entry->getArguments());
+        for (StringRef key : {"storage", "accum", "axis"})
+          state.addAttribute(key, scheduled->getAttr(key));
+        if (isSoftmax) {
+          for (StringRef key : {"exp_mode", "ftz"})
+            state.addAttribute(key, scheduled->getAttr(key));
+        } else {
+          for (StringRef key : {"kind", "keepdims", "schedule", "nan_mode", "inner_is_one"})
+            state.addAttribute(key, scheduled->getAttr(key));
+        }
+        state.addAttribute("tessera.workgroup_size", kb.getI64IntegerAttr(128));
+        state.addAttribute("tessera.schedule_hash", hash);
+        kb.create(state);
+        LLVM::ReturnOp::create(kb, loc, ValueRange{});
+        // The isolated wrapper contains only the consumed Graph/Schedule pair,
+        // its durable artifact and return. No executable sibling is discarded.
+        function.erase();
+        continue;
       }
 
       auto inputType = cast<RankedTensorType>(graph->getOperand(0).getType());

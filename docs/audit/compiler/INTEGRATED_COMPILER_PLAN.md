@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -74,7 +74,7 @@ owner and ships independently; each backend can advance after its own gates.
 | Cut | Existing owner / concrete deliverable | Depends on | Acceptance and retirement gate |
 |---|---|---|---|
 | F0 — live route census and executable migration baseline | E2E-REAL-3/5/6 + COMPILER-DEVEX-1. Derive a family/target/shape-policy map from current driver/package/plugin entry points, joining existing execution/lineage evidence. Include Apple CPU and the mixed NVIDIA scheduled wrapper. | Existing compiled slices; no new hardware prerequisite for census. | Route fixtures distinguish canonical IR input, Graph reconstruction, source-emitted bodies, explicit library calls and reference execution as separate facts. Name constructor, replacement, missing carrier, test and owning host. Establish an assertions-enabled MLIR lane for negative contract claims; release-build results remain separately labeled. |
-| F1 — remove the first live Graph re-entry | E2E-REAL-3 / NVIDIA-E2E-1. Refactor `nvidia_native.package_scheduled_matmul(module, artifact)` to build its descriptor from the validated scheduled IR/ABI, without `package_matmul(module)` or a second compilation. Correct driver ancestry only after the real consumer changes. | F0 fixture for this route; existing scheduled matmul artifact. | Static and bounded-dynamic f16/bf16 cases retain ABI/layout/shape guards; compile invocation count is one; mutating/discarding the original Graph cannot affect the artifact; altered IR is rejected or changes identity. Exact RTX 5070 numerical proof before retiring the old dependency. |
+| F1 — remove the first live Graph re-entry | E2E-REAL-3 / NVIDIA-E2E-1. Landed in PR #725: refactored `nvidia_native.package_scheduled_matmul(artifact)` to build its descriptor from the validated scheduled IR/ABI, without `package_matmul(module)` or a second compilation. Correct driver ancestry only after the real consumer changes. | F0 fixture for this route; existing scheduled matmul artifact. | Static and bounded-dynamic f16/bf16 cases retain ABI/layout/shape guards; compile invocation count is one; mutating/discarding the original Graph cannot affect the artifact; altered IR is rejected or changes identity. Exact RTX 5070 numerical proof before retiring the old dependency. |
 | F2 — migrate historical package families | E2E-REAL-5/6, W3.7, backend E2E owners. Extend scheduled softmax/reduction to NVIDIA; close uncovered ROCm movement, x86 cohort/breadth, and Apple value/CPU call contracts one family at a time. | F0 route census; per-family IR carrier and backend lowering. | Old/new numerical and ABI comparison, unsupported-policy rejection, independent IR replay and target-owned execution. Delete each Graph constructor only after all driver, direct-client and family-plugin callers migrate. No newly added Graph reconstruction path. |
 | F3 — make optimization and specialization native IR consumers | FRONTEND-IR-MEDIUM-1, W5.1/W5.2, MSW-9. Instantiate one optimized parametric recipe for valid buckets; migrate fusion/region and candidate inputs to canonical IR; connect one ANN rewrite to native pair evaluation. | F1 working boundary; F2 for the selected family, not every backend. | Two buckets share recipe/compiler identity and complete witnesses; illegal witnesses fail before lowering; original and rewritten native programs satisfy numeric policy; candidate admission binds emitted image/resources to that IR. Broader attention raising follows this path. |
 | F4 — extend structured semantics through the same path | W4-PRODUCT-1/W4-EFFECTS-1, NUMPOL-CARRIER-1, LAYOUT-ALG-1, SO-2/3/4, AD-*/DIST-NATIVE-1. Expand control/effects/residuals, batching, memory, state and distributed products only through verified carriers. | F2/F3 on the workload's families and existing legality interfaces. | IR-only forward/backward execution, complete shape/effect/layout/policy preservation, unknown cases fail closed, actual transport for multi-rank claims. Preserve closed shared work; implement only missing producer/consumer or envelope rows. |
@@ -1838,3 +1838,20 @@ This is the first bounded migration, not closure of E2E-REAL-3 or all native
 packaging: F2 still owns the remaining Graph package roots and typed producers.
 Validation and exact-device scope are recorded in the NVIDIA queue under
 `IR-NATIVE-FOUNDATION-1`. Physical kernel optimization is outside this cut.
+
+
+### Foundation F2 unary driver migration — 2026-09-05
+
+The first E2E-REAL-5 NVIDIA subset now traverses native Graph → Schedule → Tile
+before packaging: static f32 last-axis softmax and serial rank-reducing
+sum/mean/max on arbitrary axes. The native passes own the launch wrapper;
+Python validates/binds the artifact and does not synthesize a replacement body.
+The established SM120 approximate-exp policy and runtime scalar ABI are retained.
+
+Exact-device old/new numerical and ABI tests, independent Schedule replay,
+policy tampering, and extra-work rejection cover this subset. A discovered
+legacy canonical-reduce kind bug is fixed alongside the differential tests.
+This closes the default-driver migration for that envelope, not F2: direct
+Graph clients, narrow dtypes, min/keepdims/cooperative reductions and other
+backends' remaining package families retain explicit retirement obligations.
+See all four backend queues under `IR-NATIVE-FOUNDATION-1` for evidence boundaries.

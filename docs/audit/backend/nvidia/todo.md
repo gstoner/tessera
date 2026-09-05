@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -6317,3 +6317,34 @@ and macro-CTA tails. This used the host's existing LLVM 23 native tools and PTX
 bridge: C++ sources are unchanged. Set `CUDA_HOME=/usr/local/cuda-13.3`, source
 `scripts/_nvidia_env.sh`, and point `TESSERA_NVIDIA_OPT` at the host build's
 `src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt`.
+
+## Foundation F2 unary slice — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+Owning item: E2E-REAL-5 / foundation F2. The shared native scheduling passes now
+admit SM120 f32 softmax and serial rank-reducing sum/mean/max. They emit a raw
+LLVM launch wrapper with the established NVIDIA symbol/ABI, and retain the
+Schedule hash in Tile IR. NVIDIA packaging consumes that artifact directly.
+NVIDIA's existing `approx_exp2` policy is explicit and hashed; other architectures
+retain `accurate`. The verifier rejects a policy inconsistent with its architecture.
+The wrapper consumer refuses extra function work rather than erasing it.
+
+Implemented for the default static f32 driver path, with independent Schedule
+replay and descriptor/ABI checks. Narrow dtypes, min, keepdims and explicit
+cooperative reductions remain on their existing routes; direct Graph package
+clients also remain. Their migration and constructor deletion are still open.
+The comparison exposed and fixed a separate existing defect: canonical
+`tessera.reduce` ignored its `kind` in the Graph packager and always selected
+sum. It now preserves sum/mean/max/min and refuses unknown kinds.
+
+Validation runs use Super-Bear RTX 5070, CUDA 13.3 and LLVM 23, with a fresh
+`tessera-opt` built from this change on Princess-Luna and existing NVIDIA lowering
+tools/runtime (unchanged sources). Tests compare native scheduled and retained
+Graph packages against NumPy and each other; this is numerical/ABI proof, not
+performance promotion. Remaining dtype/axis-policy breadth is not closed.
+
+Validation results: 12/12 exact RTX comparison cases passed (softmax, sum,
+mean, max across `(2,3,5)`, `(7,19,257)` and `(2,3,1)`); old/new results were
+identical and matched NumPy. Princess-Luna passed 331 focused compiler, audit
+and registry tests with 24 environment skips, including the two enabled gfx1151
+semantic-kernel tests. Three native FileCheck fixtures passed. Mypy reports zero
+errors and Ruff passes. These builds are not assertions-enabled LLVM proof.

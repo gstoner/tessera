@@ -165,6 +165,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, workgroup_size = "x86", "zen5-avx512", 1
     elif target == "rocm_gfx1151":
         compiler_target, architecture, workgroup_size = "rocm", "gfx1151", 256
+    elif target == "nvidia_sm120":
+        compiler_target, architecture, workgroup_size = "nvidia_sm120", "sm_120", 128
     elif target == "apple_gpu":
         compiler_target, architecture, workgroup_size = "apple_gpu", "apple7", 1
     else:
@@ -208,8 +210,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     else:
         raise ValueError("unsupported scheduled semantic-kernel operation")
 
+    entry = function.name
+    if target == "nvidia_sm120":
+        entry = "tessera_tile_softmax_f32" if family == "softmax" else f"tessera_tile_reduce_{kind}_f32_serial"
     return (
-        compiler_target, architecture, function.name, input_name, output_name,
+        compiler_target, architecture, entry, input_name, output_name,
         family, kind, input_shape, output_shape, dtype, "f32", "f32", rows,
         columns, axis, keepdims, outer, axis_extent, inner, workgroup_size,
     )

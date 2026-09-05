@@ -585,10 +585,11 @@ def compile_graph_module(
             else:
                 from . import scheduled_kernel
 
-                if scheduled_kernel.supports_scheduled_kernel(
-                    module,
-                    target=target_kind,
-                ):
+                if (scheduled_kernel.supports_scheduled_kernel(module, target=target_kind)
+                        and (target_kind != "nvidia_sm120" or (
+                            scheduled_matmul.find_tessera_opt() is not None
+                            and options.get("nvidia_reduction_schedule", "serial") == "serial"
+                        ))):
                     scheduled_kernel_artifact = scheduled_kernel.lower_scheduled_kernel(
                         module,
                         target=target_kind,
@@ -805,6 +806,10 @@ def compile_graph_module(
                 scheduled_matmul_artifact,
                 pipeline_name=producer,
             )
+        elif scheduled_kernel_artifact is not None:
+            nvidia_package = nvidia_native.package_scheduled_kernel(
+                scheduled_kernel_artifact, pipeline_name=producer,
+            )
         else:
             nvidia_package = nvidia_native.package_native(
                 module,
@@ -815,6 +820,11 @@ def compile_graph_module(
         if scheduled_matmul_artifact is not None:
             schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
                 graph, scheduled_matmul_artifact.schedule_ir, nvidia_package.tile_ir,
+                target_kind, nvidia_package.target_ir, nvidia_package.backend_ir,
+            )
+        elif scheduled_kernel_artifact is not None:
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_kernel_artifact.schedule_ir, nvidia_package.tile_ir,
                 target_kind, nvidia_package.target_ir, nvidia_package.backend_ir,
             )
         else:

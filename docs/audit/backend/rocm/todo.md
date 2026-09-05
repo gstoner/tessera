@@ -6786,3 +6786,67 @@ public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
 handle form remains unchanged and its Graph ODS declaration remains open.
 This shared-contract correction prevents the NVIDIA physical form from claiming
 Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.
+
+### Allocation lifetime analysis and device regression comparison — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+Shared analysis now retains all pending allocation accesses, scopes direct-token
+and keyed completion, joins branch/CFG paths, checks loop backedges and rejects
+premature frees and use-after-free. Thread rendezvous cannot retire DMA.
+Unknown origins/regions and loop-token generation remain conservatively gated;
+see the integrated plan's matching section for the exact admission boundary.
+ROCm owns gfx1151 direct/Tile-route comparison using synchronized host timing; do not label it HIP device-event timing.
+
+Owning-host comparison recorded in `benchmarks/baselines/allocation_lifetime_rocm.json`:
+outputs match the oracle and baseline/candidate native images are identical.
+See the integrated plan for timings and clock domains; no selector promotion.
+
+
+### Dynamic completion generations and memref arena proof — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the direct-token-only and
+memref-planner limitations above. SSA edge renaming distinguishes dynamic
+completion generations; structured/CFG allocation identity is shared by operation
+and lifetime verifiers. Memref cast/view lifetimes now feed both reuse assignment
+and arena preflight; forged groups fail before physical materialization, and
+supported alias descriptors retain the arena address space. No runtime ABI,
+selector or architecture schedule changes.
+
+Shared native legality and arena IR parity validated on Princess-Luna WSL. Follow-up required: a gfx1151 producer using the admitted rolling generations and a device performance/resource comparison. Existing direct/Tile GEMM comparison does not establish that protocol.
+
+Final compiler regression: `benchmarks/baselines/token_memref_rocm.json`
+records passing numerical oracles and byte-identical native images. It measures
+existing routes, not performance of the newly admitted rolling-token protocol.
+
+
+### Structured-path reuse, private borrowing and device ring experiment — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the blanket structured-region
+and direct-call exclusions above. Coalescing requires all-path completion,
+derived uniform branch exclusivity and release before loop backedges. Private
+callee bodies establish borrowing; the arena preserves the existing helper ABI.
+External/recursive ownership and general CFGs remain conservatively excluded.
+
+gfx1151 native MLIR ring experiment and stale-generation negative control
+passed on Princess-Luna. HIP-event direct/depth-2 medians were 0.078530/0.120325 ms;
+this packet uses device events, unlike the preceding GEMM host-clock packet.
+Follow-up required: a production ROCDL asynchronous producer/consumer protocol
+and representative/saturated-grid measurements. No NVIDIA schedule is promoted
+on ROCm; this is separately compiled shared algorithm/protocol evidence.
+
+**Async experiment assessment (2026-09-05), W2.4a / `IR-NATIVE-FOUNDATION-1`:**
+NVIDIA now has a [useful asynchronous GEMM ablation](../../../../benchmarks/nvidia/ASYNC_PRODUCER_CONSUMER.md).
+Follow-up required on gfx1151: choose an ISA-supported asynchronous producer and
+measure its own wait/compute protocol. The existing HIP ring was synchronous;
+CUDA `cp.async` timing and synchronization do not establish ROCm parity. Shared
+benchmark-control regressions run on Princess-Luna WSL; no new ROCm device result.
+
+**PR #729 review correction — IR-NATIVE-FOUNDATION-1:** forwarded TMA
+descriptors now contribute all derivable source allocations to lifetime checks;
+unknown descriptor origins fail closed. Arena diagnostics register both emitting
+passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
+now explicitly selects the consumed NVIDIA lowerer and restores its environment.
+Shared verifier/registry validation applies to this backend; no new device or
+physical schedule proof is claimed by this correction.

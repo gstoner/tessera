@@ -1,0 +1,285 @@
+{
+  "schema": "tessera.native-ring-protocol.v1",
+  "backend": "nvidia",
+  "sync_key": "IR-NATIVE-FOUNDATION-1",
+  "threads": 128,
+  "timing_shape": {
+    "rounds": 257,
+    "blocks": 64
+  },
+  "repetitions": 20,
+  "stale_generation_rejected": true,
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "clock": "CUDA events",
+  "compiler_sha256": "6a18ad10ba826cdb2709263b31e7e9b504e963ce7014a2e2935e57983ab8bb5d",
+  "compiler_version": "Ubuntu LLVM version 23.1.1\n  Optimized build.",
+  "scope": "native MLIR cooperative protocol experiment; no asynchronous overlap or production-route promotion",
+  "rows": [
+    {
+      "depth": 0,
+      "oracle_rounds": [
+        1,
+        37,
+        257
+      ],
+      "samples": [
+        {
+          "event_ms": 0.036776000261306764,
+          "host_ms": 0.04555039922706783,
+          "resources": {
+            "shared_bytes": 0,
+            "local_bytes": 0,
+            "registers": 26,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.03792319893836975,
+          "host_ms": 0.045685950317420065,
+          "resources": {
+            "shared_bytes": 0,
+            "local_bytes": 0,
+            "registers": 26,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.037503999471664426,
+          "host_ms": 0.04533994942903519,
+          "resources": {
+            "shared_bytes": 0,
+            "local_bytes": 0,
+            "registers": 26,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.037859201431274414,
+          "host_ms": 0.04535540065262467,
+          "resources": {
+            "shared_bytes": 0,
+            "local_bytes": 0,
+            "registers": 26,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.03650720119476318,
+          "host_ms": 0.04421390185598284,
+          "resources": {
+            "shared_bytes": 0,
+            "local_bytes": 0,
+            "registers": 26,
+            "active_blocks_per_multiprocessor": 12
+          }
+        }
+      ],
+      "image_sha256": "0dd72a14c002921f0edd527bad26de5e6e7c260b19a863dd36c5d8e507291ee3",
+      "source_sha256": "99614b2618a8195e88c80f740fbfe16b84b85316ec8ccbebf3551ab399f4a002",
+      "declared_shared_bytes": 0,
+      "barriers_per_round": 0,
+      "event_median_ms": 0.037503999471664426
+    },
+    {
+      "depth": 1,
+      "oracle_rounds": [
+        1,
+        2,
+        37,
+        257
+      ],
+      "samples": [
+        {
+          "event_ms": 0.048860800266265866,
+          "host_ms": 0.05649650120176375,
+          "resources": {
+            "shared_bytes": 520,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.04795520007610321,
+          "host_ms": 0.05562900041695684,
+          "resources": {
+            "shared_bytes": 520,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.04805279970169067,
+          "host_ms": 0.05561800207942724,
+          "resources": {
+            "shared_bytes": 520,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.049711999297142026,
+          "host_ms": 0.05751950084231794,
+          "resources": {
+            "shared_bytes": 520,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.05101280212402344,
+          "host_ms": 0.05878305237274617,
+          "resources": {
+            "shared_bytes": 520,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        }
+      ],
+      "image_sha256": "49da1287a6540d902a8312e9a847f77fa5b31b3ac814c73e1e24fe52a905f9dc",
+      "source_sha256": "a60116162ce30e4864af32f89073d96d8a702cfb2ca0878acd7cf8a3da921ad8",
+      "declared_shared_bytes": 520,
+      "barriers_per_round": 2,
+      "event_median_ms": 0.048860800266265866
+    },
+    {
+      "depth": 2,
+      "oracle_rounds": [
+        1,
+        2,
+        3,
+        37,
+        257
+      ],
+      "samples": [
+        {
+          "event_ms": 0.04903840124607086,
+          "host_ms": 0.05689550016541034,
+          "resources": {
+            "shared_bytes": 1040,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.04906719923019409,
+          "host_ms": 0.05635900015477091,
+          "resources": {
+            "shared_bytes": 1040,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.04863359928131104,
+          "host_ms": 0.05641000170726329,
+          "resources": {
+            "shared_bytes": 1040,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.05237280130386353,
+          "host_ms": 0.05831654998473823,
+          "resources": {
+            "shared_bytes": 1040,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.048660799860954285,
+          "host_ms": 0.056340001174248755,
+          "resources": {
+            "shared_bytes": 1040,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        }
+      ],
+      "image_sha256": "f16fa12fa88052d34998bcf48ff55039d6023e23dc08523565aa70f55ca01a59",
+      "source_sha256": "3aab20f9fad841507d25ddca764b8bbfda3935504acfe51abdc46f19873463ff",
+      "declared_shared_bytes": 1040,
+      "barriers_per_round": 2,
+      "event_median_ms": 0.04903840124607086
+    },
+    {
+      "depth": 4,
+      "oracle_rounds": [
+        1,
+        3,
+        4,
+        5,
+        37,
+        257
+      ],
+      "samples": [
+        {
+          "event_ms": 0.04862239956855774,
+          "host_ms": 0.05613249959424138,
+          "resources": {
+            "shared_bytes": 2080,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.05060480237007141,
+          "host_ms": 0.05856255011167377,
+          "resources": {
+            "shared_bytes": 2080,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.04913119971752167,
+          "host_ms": 0.056919551570899785,
+          "resources": {
+            "shared_bytes": 2080,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.05037279725074768,
+          "host_ms": 0.05879749951418489,
+          "resources": {
+            "shared_bytes": 2080,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        },
+        {
+          "event_ms": 0.048635199666023254,
+          "host_ms": 0.05630799860227853,
+          "resources": {
+            "shared_bytes": 2080,
+            "local_bytes": 0,
+            "registers": 16,
+            "active_blocks_per_multiprocessor": 12
+          }
+        }
+      ],
+      "image_sha256": "0a6603a87e47038d80c31b00b91cad56800474d025e4fe5d27791ff24d162b12",
+      "source_sha256": "74d610e8766d3e8e236b41a3e7705b035b4a0925d526383b42bd039e75a8da56",
+      "declared_shared_bytes": 2080,
+      "barriers_per_round": 2,
+      "event_median_ms": 0.04913119971752167
+    }
+  ]
+}

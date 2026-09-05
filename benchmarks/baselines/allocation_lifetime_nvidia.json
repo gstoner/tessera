@@ -1,0 +1,11 @@
+{
+  "schema": "tessera.withdrawn-evidence.v1",
+  "status": "withdrawn",
+  "backend": "nvidia",
+  "reason": "The runner set TESSERA_OPT while native lowering consumed TESSERA_NVIDIA_OPT. Supplied before/after binaries were not the measured native lowerers. Timing and image-equality claims are withdrawn.",
+  "invalid_recorded_compiler_sha256": {
+    "after": "4cc8030a2a09cdd62957902570a55f460ab9c487fa6c2e87f15d909c783cbf97",
+    "before": "830c362b442d392f18f254c1a1dc67873bc5a581fbe197efdbfd502bfcf9dd42"
+  },
+  "replacement": "Requires new owning-host measurements with explicit tessera-nvidia-opt binaries; no replacement measurement is claimed."
+}

@@ -8,10 +8,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/Dialect/Tile/TileSSAOrigins.h"
 #include "tessera/LayoutAlgebra.h"
 #include "tessera/Rank2Index.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1137,6 +1141,8 @@ LogicalResult WaitAsyncOp::verify() {
   for (Value in : getInputs()) {
     if (!isa<AsyncTokenType>(in.getType()))
       continue;
+    auto origins = resolveSSAOrigins(in);
+    if (origins.complete && llvm::all_of(origins.roots, [](Value root) { return root.getDefiningOp<AsyncCopyOp>(); })) continue;
     Operation *producer = in.getDefiningOp();
     if (!producer)
       return emitOpError(
@@ -1769,7 +1775,8 @@ LogicalResult AllocOp::verify() {
 }
 
 LogicalResult DeallocOp::verify() {
-  if (!getBuffer().getDefiningOp<AllocOp>())
+  auto origins = resolveSSAOrigins(getBuffer());
+  if (!origins.complete || !llvm::all_of(origins.roots, [](Value root) { return root.getDefiningOp<AllocOp>(); }))
     return emitOpError("buffer must be the SSA result of tile.alloc");
   return success();
 }

@@ -837,18 +837,39 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-tile-barrier-reuse-legality",
         cpp_class="TileBarrierReuseLegality",
         summary=(
-            "C2 (TIRx): barriers as a layout-reuse correctness property — two "
-            "writes to overlapping storage-axis (m/tlane/tcol) footprints of one "
-            "!tile.buffer SSA allocation root with no intervening barrier are "
-            "a race. Allocation identity is exclusively SSA-owned across "
-            "NVIDIA, Apple/shared fixtures, and ROCm."
+            "Allocation-scoped asynchronous completion and all pending storage "
+            "footprints; may-live scf.if/scf.for and CFG joins reject reuse, "
+            "premature deallocation and use-after-free. Unknown allocation "
+            "provenance and unsupported region lifetimes fail closed. "
+            "SSA edge renaming distinguishes loop/CFG token generations; static "
+            "origin reachability alone never releases an access."
         ),
-        input_dialects=("tessera", "tile", "func"),
-        output_dialects=("tessera", "tile", "func"),
-        required_attrs=("tile.layout",),
+        input_dialects=("tessera", "tile", "func", "scf", "cf", "schedule"),
+        output_dialects=("tessera", "tile", "func", "scf", "cf", "schedule"),
+        required_attrs=(),
         diagnostic_codes=("TILE_BARRIER_REUSE_MISSING_BARRIER",),
         pass_kind="verifier",
         sprint="C2 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-tile-buffer-arena",
+        cpp_class="TileBufferArena",
+        summary="Recheck path-sensitive reuse lifetimes and private-call ownership before materializing workgroup arenas; propagate view/cast address space and preserve call ABIs.",
+        input_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf"),
+        output_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf"),
+        required_attrs=("tile.buffer_group", "stage", "tile.barrier_id", "callee", "sym_visibility"),
+        diagnostic_codes=("TILE_BARRIER_REUSE_MISSING_BARRIER",),
+        can_run_after=("tessera-tile-buffer-reuse",),
+        sprint="W2.4a / CAKE / SO-2",
+    ),
+    PassMetadata(
+        name="tessera-tile-buffer-reuse",
+        cpp_class="TileBufferReuse",
+        summary="Assign memref reuse groups using all-path completion, uniform branch exclusivity, released loop-local lifetimes and body-derived private-call borrowing summaries; unknown ownership prevents reuse.",
+        input_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf"),
+        output_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf"),
+        required_attrs=("stage", "tile.barrier_id", "callee", "sym_visibility"),
+        sprint="W2.4a / CAKE / SO-2",
     ),
     PassMetadata(
         name="tessera-tile-dataflow-legality",

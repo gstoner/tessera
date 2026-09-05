@@ -7800,3 +7800,57 @@ public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
 handle form remains unchanged and its Graph ODS declaration remains open.
 This shared-contract correction prevents the NVIDIA physical form from claiming
 Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.
+
+### Allocation lifetime analysis and device regression comparison — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+Shared analysis now retains all pending allocation accesses, scopes direct-token
+and keyed completion, joins branch/CFG paths, checks loop backedges and rejects
+premature frees and use-after-free. Thread rendezvous cannot retire DMA.
+Unknown origins/regions and loop-token generation remain conservatively gated;
+see the integrated plan's matching section for the exact admission boundary.
+Follow-up required: Metal owning-host integration and asynchronous event lifetime mapping; no new Apple device proof.
+
+
+### Dynamic completion generations and memref arena proof — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the direct-token-only and
+memref-planner limitations above. SSA edge renaming distinguishes dynamic
+completion generations; structured/CFG allocation identity is shared by operation
+and lifetime verifiers. Memref cast/view lifetimes now feed both reuse assignment
+and arena preflight; forged groups fail before physical materialization, and
+supported alias descriptors retain the arena address space. No runtime ABI,
+selector or architecture schedule changes.
+
+Follow-up required: Metal event/residency mapping and owning-host validation. Native shared-IR proof does not establish Metal asynchronous lifetime support or occupancy gains.
+
+
+### Structured-path reuse, private borrowing and device ring experiment — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the blanket structured-region
+and direct-call exclusions above. Coalescing requires all-path completion,
+derived uniform branch exclusivity and release before loop backedges. Private
+callee bodies establish borrowing; the arena preserves the existing helper ABI.
+External/recursive ownership and general CFGs remain conservatively excluded.
+
+Shared native control-flow and private-borrow proofs apply where consumed.
+Follow-up required: Metal uniformity/ownership integration, event/residency
+mapping and an Apple protocol measurement. CUDA/HIP ring results do not establish
+Metal behavior; no Apple runtime or physical schedule changed.
+
+**Async experiment assessment (2026-09-05), W2.4a / `IR-NATIVE-FOUNDATION-1`:**
+The [native asynchronous GEMM benchmark](../../../../benchmarks/nvidia/ASYNC_PRODUCER_CONSUMER.md)
+is a CUDA-specific matched wait ablation. Physical schedule parity is not
+applicable here: this backend does not consume the SM120 `cp.async`/MMA kernel.
+No runtime, selector or shared ownership contract changes in this experiment;
+existing backend-specific lifetime follow-ups remain open.
+
+**PR #729 review correction — IR-NATIVE-FOUNDATION-1:** forwarded TMA
+descriptors now contribute all derivable source allocations to lifetime checks;
+unknown descriptor origins fail closed. Arena diagnostics register both emitting
+passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
+now explicitly selects the consumed NVIDIA lowerer and restores its environment.
+Shared verifier/registry validation applies to this backend; no new device or
+physical schedule proof is claimed by this correction.

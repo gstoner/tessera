@@ -2585,10 +2585,10 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     # C2 — TileBarrierReuseLegalityPass.
     DiagnosticCode(
-        code="TILE_BARRIER_REUSE_MISSING_BARRIER", pass_origin="TileBarrierReuseLegality",
+        code="TILE_BARRIER_REUSE_MISSING_BARRIER", pass_origin="TileBarrierReuseLegality/TileBufferArena",
         severity="error",
-        summary="A buffer is written over an overlapping storage footprint with no intervening barrier — a reuse race.",
-        fix_hint="Insert an mbarrier / wait_async between the two writes to the reused region.",
+        summary="Tile allocation reuse, arena materialization, deallocation, or provenance lacks a proven lifetime/completion path.",
+        fix_hint="Complete the allocation-specific async token before reuse/free on every path; preserve derivable allocation identity.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
     ),
     # C3 — TilePipelineLegalityPass.
@@ -3306,7 +3306,8 @@ def code_lookup(code: str) -> DiagnosticCode | None:
 
 def codes_by_pass(pass_origin: str) -> tuple[DiagnosticCode, ...]:
     """Return all codes emitted by a given pass / verifier."""
-    return tuple(c for c in REGISTERED_CODES if c.pass_origin == pass_origin)
+    return tuple(c for c in REGISTERED_CODES
+                 if c.pass_origin == pass_origin or pass_origin in c.pass_origin.split("/"))
 
 
 def codes_by_sprint(sprint: str) -> tuple[DiagnosticCode, ...]:

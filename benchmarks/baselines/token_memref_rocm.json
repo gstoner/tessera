@@ -1,0 +1,96 @@
+{
+  "backend": "rocm",
+  "clock": "synchronized host wall time; not HIP device events",
+  "compiler_sha256": {
+    "after": "a6697e6cd41fffa24e57d0461da6ddbc96d21944987b539a9e319190c5c88a87",
+    "before": "830c362b442d392f18f254c1a1dc67873bc5a581fbe197efdbfd502bfcf9dd42"
+  },
+  "device": "gfx1151",
+  "images_equal": true,
+  "measurements": [
+    {
+      "image_sha256": "1797487da3ca19ee9179b288b15783bcdee0c78e3187f7896b3193e1beaa3a26",
+      "median_ms": 0.022637296933680773,
+      "mode": "direct",
+      "oracle_relative_error": 2.2745180103811435e-06,
+      "repetitions": 30,
+      "samples_ms": [
+        0.7399406322898964,
+        0.02205889904871583,
+        0.022637296933680773,
+        0.023147964384406805,
+        0.021845230367034674
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "variant": "before"
+    },
+    {
+      "image_sha256": "1797487da3ca19ee9179b288b15783bcdee0c78e3187f7896b3193e1beaa3a26",
+      "median_ms": 0.022290600463747978,
+      "mode": "fork_a",
+      "oracle_relative_error": 2.2745180103811435e-06,
+      "repetitions": 30,
+      "samples_ms": [
+        0.3154916999240716,
+        0.022290600463747978,
+        0.022225935632983845,
+        0.021859231249739725,
+        0.0225809325153629
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "variant": "before"
+    },
+    {
+      "image_sha256": "1797487da3ca19ee9179b288b15783bcdee0c78e3187f7896b3193e1beaa3a26",
+      "median_ms": 0.022331268216172855,
+      "mode": "direct",
+      "oracle_relative_error": 2.2745180103811435e-06,
+      "repetitions": 30,
+      "samples_ms": [
+        0.06484700134024024,
+        0.022331268216172855,
+        0.021869235206395388,
+        0.023662667566289503,
+        0.02178056553627054
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "variant": "after"
+    },
+    {
+      "image_sha256": "1797487da3ca19ee9179b288b15783bcdee0c78e3187f7896b3193e1beaa3a26",
+      "median_ms": 0.023854368676741917,
+      "mode": "fork_a",
+      "oracle_relative_error": 2.2745180103811435e-06,
+      "repetitions": 30,
+      "samples_ms": [
+        0.23224720110495886,
+        0.43752156586075824,
+        0.023854368676741917,
+        0.021916899519662063,
+        0.02231159790729483
+      ],
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "variant": "after"
+    }
+  ],
+  "schema": "tessera.allocation-lifetime-comparison.v1",
+  "scope": "existing native attention/GEMM regression; no new queue schedule or performance promotion",
+  "selector_changed": false,
+  "sync_key": "IR-NATIVE-FOUNDATION-1"
+}

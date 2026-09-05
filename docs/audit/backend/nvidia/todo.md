@@ -6503,3 +6503,70 @@ public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
 handle form remains unchanged and its Graph ODS declaration remains open.
 This shared-contract correction prevents the NVIDIA physical form from claiming
 Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.
+
+### Allocation lifetime analysis and device regression comparison — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+Shared analysis now retains all pending allocation accesses, scopes direct-token
+and keyed completion, joins branch/CFG paths, checks loop backedges and rejects
+premature frees and use-after-free. Thread rendezvous cannot retire DMA.
+Unknown origins/regions and loop-token generation remain conservatively gated;
+see the integrated plan's matching section for the exact admission boundary.
+NVIDIA owns CUDA-event and end-to-end native-image regression comparison on Super-Bear; no schedule or selector change.
+
+The comparison in `benchmarks/baselines/allocation_lifetime_nvidia.json` is
+withdrawn: the supplied core compiler hashes did not identify the NVIDIA lowerers
+actually selected. New exact-host comparison evidence is required.
+
+
+### Dynamic completion generations and memref arena proof — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the direct-token-only and
+memref-planner limitations above. SSA edge renaming distinguishes dynamic
+completion generations; structured/CFG allocation identity is shared by operation
+and lifetime verifiers. Memref cast/view lifetimes now feed both reuse assignment
+and arena preflight; forged groups fail before physical materialization, and
+supported alias descriptors retain the arena address space. No runtime ABI,
+selector or architecture schedule changes.
+
+Follow-up required: SM120 lowering and measured slot/phase protocol/resource proof for a producer using the new dynamic completion edges. Existing attention image/oracle regression is recorded separately; it is not queue throughput evidence.
+
+`benchmarks/baselines/token_memref_nvidia.json` is also withdrawn for the native
+compiler-selection defect. No before/after claim is retained from this packet;
+the independently recorded ring and async GEMM experiments are unaffected.
+
+
+### Structured-path reuse, private borrowing and device ring experiment — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
+The integrated plan's matching section supersedes the blanket structured-region
+and direct-call exclusions above. Coalescing requires all-path completion,
+derived uniform branch exclusivity and release before loop backedges. Private
+callee bodies establish borrowing; the arena preserves the existing helper ABI.
+External/recursive ownership and general CFGs remain conservatively excluded.
+
+RTX 5070 native MLIR ring experiment and stale-generation negative control
+passed. CUDA-event direct/depth-2 medians were 0.037504/0.049038 ms. Nsight Compute
+and Systems exports are linked by the integrated plan; barrier cost increased
+without an occupancy-capacity gain. Follow-up required: production Tile ring
+producer, actual asynchronous overlap and representative/saturated-grid tests.
+No selector promotion or restored queue dialect is justified by this prototype.
+
+**Real async follow-up (2026-09-05), W2.4a / `IR-NATIVE-FOUNDATION-1`:**
+[Native GEMM benchmark](../../../../benchmarks/nvidia/ASYNC_PRODUCER_CONSUMER.md)
+now measures useful next-panel `cp.async`/current-panel MMA against an immediate
+wait control. RTX 5070 medians improve 6.1/2.9/2.3% at 512/1024/2048 square shapes;
+all six oracle shapes pass. Matching resources and Nsight/SASS support the
+scheduling interpretation. Follow-up required: generic release-token integration,
+independent runs, and sanitizer validation (WDDM debugger initialization blocked).
+No selector promotion. Sibling ROCm needs its own physical producer; Apple/x86
+schedule parity is not applicable to this CUDA-only experiment.
+
+**PR #729 review correction — IR-NATIVE-FOUNDATION-1:** forwarded TMA
+descriptors now contribute all derivable source allocations to lifetime checks;
+unknown descriptor origins fail closed. Arena diagnostics register both emitting
+passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
+now explicitly selects the consumed NVIDIA lowerer and restores its environment.
+Shared verifier/registry validation applies to this backend; no new device or
+physical schedule proof is claimed by this correction.

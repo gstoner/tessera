@@ -418,3 +418,12 @@ def test_locked_sentinel_code_present(code: str) -> None:
     )
     assert entry.summary, f"empty summary for {code}"
     assert entry.fix_hint, f"empty fix_hint for {code}"
+
+
+def test_allocation_diagnostic_is_attributed_to_both_emitting_passes():
+    code = code_lookup("TILE_BARRIER_REUSE_MISSING_BARRIER")
+    assert code is not None
+    assert set(code.pass_origin.split("/")) == {"TileBarrierReuseLegality", "TileBufferArena"}
+    assert code in codes_by_pass("TileBarrierReuseLegality")
+    assert code in codes_by_pass("TileBufferArena")
+    assert code in codes_by_pass(code.pass_origin)

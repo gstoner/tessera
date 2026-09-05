@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-09-04
 audit_role: index
 ---
 
@@ -37,25 +37,19 @@ surface.
 
 ## Re-indexed live tree
 
-The 2026-08-17 re-index found **33 live Markdown documents** in this directory
-and **11 archived documents**. The live set had one index, one narrative theme,
-16 scoped or integrated plans, and 15 references. Six plans were `landing` and
-ten were `open`; no live plan satisfied the lifecycle rule for moving to
-`archive/`. **These counts are as of the re-index date and have drifted**
-(a 2026-08-27 spot-check found 38 top-level documents and 20 carrying
-`plan_state`, so plans have landed since without this paragraph being
-updated); trust the tables below for membership and the files' own
-frontmatter for state, and recount at the next re-index. Added since:
-`INTRA_KERNEL_FEEDBACK_PLAN.md` (2026-08-27) and
-`MATH_SOURCE_WORKSTREAM.md` (2026-09-01).
+The 2026-09-04 survey inventories **43 live Markdown documents** (including
+its new reference) and **11 archived documents**. There are 22 plans: 14 open
+and eight landing. No lifecycle state was promoted by this survey. Counts are
+revision-specific; frontmatter and the integrated plan determine current state.
 
 | Class | Count | What it may decide |
 |---|---:|---|
-| Index | 1 | Routes readers and records the authority hierarchy; it does not sequence implementation. |
-| Theme/audit | 1 | Summarizes architectural findings and current truth; it is not a queue. |
-| Plans | 16 | Own domain contracts and acceptance gates. Only the integrated plan may order work across domains. |
-| References | 15 | Preserve design rationale, inventories, theory, and source assessments. They cannot establish completion. |
-| Archive | 11 | Preserves point-in-time evidence only; archived files are never active work queues. |
+| Index | 1 | Navigation and authority hierarchy. |
+| Theme/audit | 1 | Architecture and evidence narrative. |
+| Plans | 22 | Domain contracts; only the integrated plan sequences across domains. |
+| References | 18 | Rationale, inventories and assessments; not completion evidence. |
+| Snapshot | 1 | Historical review findings; reconcile row-specific proof before reuse. |
+| Archive | 11 | Historical evidence, never an active queue. |
 
 The complete file-by-file catalog is below. Its practical summary is:
 
@@ -74,35 +68,31 @@ The complete file-by-file catalog is below. Its practical summary is:
 - The four backend `todo.md` files own promotion on Apple, NVIDIA, ROCm, and
   x86. A shared contract can land host-free; exact-device evidence cannot move
   between architectures.
-- [`CODE_REVIEW_2026-08-29.md`](CODE_REVIEW_2026-08-29.md) holds the 102
-  verified findings from the 2026-08-29 review of the Python numeric core and
-  the MLIR passes, each with a reproduction. Its nine P0 rows are fixed; the
-  P1/P2/P3 rows are an open follow-up queue and are **findings, not a
-  schedule** — the integrated plan still orders cross-domain work.
+- [`CODE_REVIEW_2026-08-29.md`](CODE_REVIEW_2026-08-29.md) records source
+  fixes across all severity tiers and specific remaining device-proof gaps.
+  Its aggregate counts and device-verification summaries disagree internally;
+  consult the individual finding and owning backend evidence rather than
+  treating the snapshot as a fresh open-fix queue.
+- [`MLIR_NATIVE_FOUNDATION_SURVEY.md`](MLIR_NATIVE_FOUNDATION_SURVEY.md)
+  inventories every live compiler document and identifies historical Graph-owned
+  packaging, source emitters and their canonical IR migration targets.
 
 ## Central plan at a glance
 
-Work proceeds through three connected tracks, in this order:
+The [MLIR/LLVM native foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
+owns the current architectural sequence:
 
-1. **Compiler authority and executable IR:** finish E2E-REAL-6 family-plugin
-   migration and exact-device arbitrary-CFG region products. Dynamic saved-slot
-   envelopes and exact nonlinear specialization guards are compiler-owned;
-   effectful products remain fail closed without an operation-owned recorded
-   product. Then complete Schedule Object SO-3/SO-4,
-   inferred-DAG adoption, layout algebra L3/L4, and explicit reshard SSA.
-2. **TSOL physical closure:** make native STFT/ISTFT backward and the expanded
-   spectral policy envelope consume the same artifact boundary, then add
-   ND/strided/large-transform execution, close the remaining TSOL sharding
-   contracts, and promote high-value solver/sparse/segment rows per target.
-   Apple/NVIDIA and new AMD generations remain independent physical consumers.
-3. **Tools and selector evidence:** graduate the profiler's native providers,
-   standardize selector-grade benchmark packets, and make `tessera-opt` plus
-   integration/numerical test surfaces reproducibly runnable.
+1. Inventory live routes and their actual IR/native boundaries.
+2. Remove NVIDIA scheduled matmul's remaining Graph re-entry and duplicate build.
+3. Migrate historical package families to verified IR consumers, one envelope at a time.
+4. Connect parametric instantiation, fusion and arbiter admission to those artifacts.
+5. Expand structured AD/effects/memory/distributed programs through the same path.
+6. Retire redundant semantic source generators only after target-owned differential proof.
 
-The detailed dependency order, PR cuts, and acceptance gates live in
-[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md#central-development-plan--2026-08-17).
-Generated totals are triage inputs to that queue, never an alternate priority
-list.
+Python remains the interface, orchestration and oracle. MLIR/LLVM and backend
+native generators own compilation; deployment/runtime data stays explicitly bound
+to the artifact. Telemetry, safe waits and clock evidence remain support work.
+The older landed ledger below is historical context, not a second work order.
 
 ## Landed foundation and active-boundary ledger
 
@@ -234,4 +224,5 @@ none is an active setup or execution guide.
 
 MSW-9's bounded ANN-calculus prototype and integration decisions are recorded in
 [`ANN_CALCULUS_DESIGN_SPIKE.md`](ANN_CALCULUS_DESIGN_SPIKE.md). The spike separates
-reference laws from the still-open native program-pair and fusion consumers.
+reference laws from native proof. The program-pair evaluator adapter is implemented;
+the Graph IR fragment and fusion consumers remain open.

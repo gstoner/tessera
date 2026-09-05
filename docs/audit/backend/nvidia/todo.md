@@ -6265,3 +6265,14 @@ or instrumentation implementation claim.
 Sync `APPLE-POLICY-COMPARE-20260904`: not applicable to CUDA route selection.
 The fixed-count Apple comparison is an analysis-only benchmark harness; no
 NVIDIA selector, timing policy, runtime ABI or device evidence changes.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+First migration: remove Graph re-entry and the base-package build from scheduled matmul, derive the ABI from verified scheduled IR, then extend semantic-kernel consumers. Follow-up required on Super-Bear for exact RTX 5070 numerics and resource/performance comparison; this survey adds no CUDA execution proof.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.

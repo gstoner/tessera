@@ -7633,3 +7633,14 @@ Decision: retain `mean_student_t` as the default. No ledger was installed, no
 physical-stall robustness claim is made, and this packet does not admit lowp
 MoE. Logic and packet replay tests run on Princess-Luna WSL.
 Sync: `APPLE-POLICY-COMPARE-20260904`.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+Both GPU value packages and Apple CPU Graph-owned descriptors are migration targets. Extend scheduled consumers and native IR-derived call/ABI records; compiler-owned MSL/Metal materialization is the GPU endpoint, LLVM is the general CPU endpoint. Follow-up required on M1 Max per family. No direct LLVM-to-Metal backend or new execution proof is assumed.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.

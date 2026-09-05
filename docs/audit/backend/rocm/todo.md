@@ -6616,3 +6616,14 @@ or instrumentation implementation claim.
 Sync `APPLE-POLICY-COMPARE-20260904`: host-free experiment-contract validation
 runs on Princess-Luna WSL. The Apple comparison does not consume HIP timings or
 change ROCm selection; owning-device performance parity is not applicable.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+Historical Graph package constructors for remaining movement and unsupported scheduled envelopes must migrate to canonical IR consumers. Existing Target/ROCDL/HSACO generators remain the lowering foundation. Follow-up required on Princess-Luna per gfx1151 family; WSL performance restrictions remain. No kernel changes or new device proof in this survey.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.

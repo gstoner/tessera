@@ -4018,3 +4018,14 @@ or instrumentation implementation claim.
 Sync `APPLE-POLICY-COMPARE-20260904`: not applicable to x86 selection. The Apple
 experiment keeps observed and synthetic sensitivity data separate; no CPU timing
 policy, runtime contract or execution claim changes.
+
+
+## Compiler foundation sync `IR-NATIVE-FOUNDATION-1` — 2026-09-04
+
+Migrate Graph-owned cohort/elementwise/breadth packages to verified IR inputs; use the existing MLIR-to-LLVM JIT for general bodies and preserve explicit tuned-library calls as distinct routes. Follow-up required for Zen 5 exact-host proof. A prebuilt shared-library call is native execution, not proof of a generated LLVM kernel body.
+
+Sequencing and acceptance are owned by
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+Shared change in this slice: architectural migration plan only; runtime, ABI,
+selector and physical schedules are unchanged. Historical routes have explicit
+replacement and deletion gates, not permanent compatibility exemptions.

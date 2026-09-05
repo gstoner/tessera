@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-10
+last_updated: 2026-09-04
 audit_role: theme
 ---
 
@@ -7,6 +7,18 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## MLIR/LLVM foundation survey — 2026-09-04
+
+The [live compiler survey](MLIR_NATIVE_FOUNDATION_SURVEY.md) separates native
+execution from compilation through the canonical IR. The driver still reaches
+historical Graph-owned package constructors beside newer scheduled consumers;
+the NVIDIA scheduled matmul wrapper itself re-enters the Graph packager before
+compiling the shared Tile artifact. These are migration targets, not a permanent
+second authority. The [integrated foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
+owns the cuts and retirement gates. Python stays the interface/oracle; native
+MLIR/LLVM transformations and backend generators own program compilation.
+This is source inspection and plan reconciliation, not new device evidence.
 
 ## TileRT assessment — composition scheduling direction (2026-08-10)
 

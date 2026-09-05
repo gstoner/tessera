@@ -6395,3 +6395,31 @@ Ruff and the zero-error mypy ratchet passed; all 30 generated-document drift
 gates passed. LLVM 23 `tessera-opt` was rebuilt on Princess-Luna and its matching
 Linux executable used for Super-Bear native scheduling. Assertions-enabled LLVM
 and new Apple/x86 hardware evidence remain outside this cut.
+
+## F2 norm/attention — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The shared compiler adds `schedule.norm` for SM120 unweighted f16/bf16/f32 row
+normalization and admits SM120 forward `schedule.attention` with explicit
+recompute policy. NVIDIA direct package/driver paths consume native Tile wrappers;
+old constructors are test-only baselines. Runtime ABI and physical kernels are
+unchanged. Norm rejects unsupported policy overrides and epsilon that cannot be
+represented as positive finite f32.
+
+Shared finding fixed: forward attention hashes now encode exact f32 policy bits
+instead of six-decimal strings. Regenerate old forward Schedule artifacts;
+stale serialized hashes fail closed. Backward hash encoding remains follow-up.
+
+Owning scope: native norm and forward attention, including bias, windows and
+seeded dropout. Short-query masked attention (`Sq < Sk`) is refused: its local
+query mask disagrees with canonical end-aligned ragged masking. F2-A2 must fix
+forward and backward together before that envelope is admitted. Saved-LSE,
+packed matmul, paged KV, replay-SSM and MoE remain Graph-owned follow-ups.
+
+Validation: rebuilt LLVM 23 `tessera-opt`; 36 Super-Bear RTX 5070 / CUDA 13.3
+comparisons passed (18 norm, 12 masked/bias attention, six GQA/dropout). Packages
+match the test-only historical baseline and NumPy/canonical streaming oracles.
+All-masked rows retain the existing NaNs; no zero-fill or performance promotion
+is claimed. 515 focused WSL contract/registry/dtype/routing tests passed with
+17 explicit skips, three native IR fixtures passed, and 11 audit tests passed.
+All 30 generated-document gates passed. New exact-device Apple/x86 evidence and
+assertions-enabled LLVM remain outside this cut.

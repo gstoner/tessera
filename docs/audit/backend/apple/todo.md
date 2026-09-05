@@ -7709,3 +7709,22 @@ Sibling outcome: follow-up required for any expansion to the new Graph reduce
 envelopes. Existing apple schedules and runtime ABI are unchanged and shared
 compiler fixtures remain gated. No new apple exact-device evidence is claimed;
 NVIDIA's cooperative schedule does not transfer to this architecture.
+
+## F2 norm/attention — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The shared compiler adds `schedule.norm` for SM120 unweighted f16/bf16/f32 row
+normalization and admits SM120 forward `schedule.attention` with explicit
+recompute policy. NVIDIA direct package/driver paths consume native Tile wrappers;
+old constructors are test-only baselines. Runtime ABI and physical kernels are
+unchanged. Norm rejects unsupported policy overrides and epsilon that cannot be
+represented as positive finite f32.
+
+Shared finding fixed: forward attention hashes now encode exact f32 policy bits
+instead of six-decimal strings. Regenerate old forward Schedule artifacts;
+stale serialized hashes fail closed. Backward hash encoding remains follow-up.
+
+Sibling outcome: shared forward hash correctness is regression gated; no new
+apple exact-device proof is claimed. Physical policies and runtime ABI are
+unchanged. Follow-up required for old Schedule regeneration, backward hash review
+and remaining direct Graph-package migration. NVIDIA norm admission is not
+apple execution support.

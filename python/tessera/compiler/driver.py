@@ -807,6 +807,8 @@ def compile_graph_module(
                 scheduled_matmul_artifact,
                 pipeline_name=producer,
             )
+        elif scheduled_attention_artifact is not None:
+            nvidia_package = nvidia_native.package_scheduled_attention(scheduled_attention_artifact, pipeline_name=producer)
         elif scheduled_kernel_artifact is not None:
             nvidia_package = nvidia_native.package_scheduled_kernel(
                 scheduled_kernel_artifact, pipeline_name=producer,
@@ -821,6 +823,11 @@ def compile_graph_module(
         if scheduled_matmul_artifact is not None:
             schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
                 graph, scheduled_matmul_artifact.schedule_ir, nvidia_package.tile_ir,
+                target_kind, nvidia_package.target_ir, nvidia_package.backend_ir,
+            )
+        elif scheduled_attention_artifact is not None:
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_attention_artifact.schedule_ir, nvidia_package.tile_ir,
                 target_kind, nvidia_package.target_ir, nvidia_package.backend_ir,
             )
         elif scheduled_kernel_artifact is not None:

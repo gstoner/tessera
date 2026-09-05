@@ -1897,3 +1897,30 @@ mutation refusal, missing-compiler refusal, one Tile compilation and explicit
 unsupported-adjoint failure are regression gated. This closes the ten bounded
 unary actions, not all of F2: norm, attention, packed matmul and sibling direct
 package migrations remain open in the survey inventory.
+
+
+### F2 norm and forward-attention contracts — 2026-09-05
+
+Owning item: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Implemented native SM120 unweighted RMSNorm/RMSNormSafe/LayerNorm scheduling and
+forward attention packaging for f16/bf16/f32 storage. Native replay validates
+the Tile artifact before one target compilation; the driver records real adjacent
+Graph/Schedule/Tile lineage. The two Graph constructors are now test-only baselines.
+
+Attention forward hashes now preserve exact f32 policy bits on all architectures.
+NVIDIA short-query causal/window masks are explicitly refused because the current
+physical kernel's local query alignment differs from canonical ragged semantics.
+No new backward or saved-LSE support is implied. Numerical parity, not performance
+promotion, is the acceptance criterion for this migration.
+
+Next actions, in dependency order:
+
+1. F2-A2: align NVIDIA ragged forward/backward masks and audit backward float hashes.
+2. F2-A3: migrate the paired saved-LSE producer and backward consumer together.
+3. F2-P1: migrate packed matmul with native storage/packing and layout projections.
+4. F2-S1: native paged KV, replay-SSM and MoE state/workspace contracts.
+5. F2-C1: retire sibling direct package constructors using their existing scheduled
+   consumers only where storage, policy and ABI envelopes agree.
+
+The updated survey lists every remaining NVIDIA constructor family and retains
+all five backend package entry points in the broader census.

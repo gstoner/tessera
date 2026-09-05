@@ -165,6 +165,19 @@ LogicalResult SoftmaxOp::verify() {
   return success();
 }
 
+LogicalResult NormOp::verify() {
+  if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
+          getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  if (getArch() != "sm_120" || getAccum() != "f32" || getAxis() != -1 ||
+      getWorkgroupSize() != 128 ||
+      (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
+      (getKind() != "rmsnorm" && getKind() != "layernorm") ||
+      !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
+    return emitOpError("requires SM120 unweighted row normalization with positive finite f32 epsilon");
+  return success();
+}
+
 LogicalResult ReduceOp::verify() {
   if (failed(verifyContentAddressedKernel(
           *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),
@@ -395,7 +408,8 @@ LogicalResult AttentionOp::verify() {
   // (APPLE-ATTN-STREAM-1).
   if (getBackwardLsePolicy() != "save_lse" &&
       getBackwardLsePolicy() != "gfx1151_auto_128" &&
-      getBackwardLsePolicy() != "apple7_recompute")
+      getBackwardLsePolicy() != "apple7_recompute" &&
+      getBackwardLsePolicy() != "sm120_recompute")
     return emitOpError("requires an architecture-owned backward LSE policy");
   if (getBackwardLseSelection() != "saved" &&
       getBackwardLseSelection() != "recompute")

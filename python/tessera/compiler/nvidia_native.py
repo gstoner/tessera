@@ -10,15 +10,17 @@ runtime consumes only the resulting :class:`NativeImageArtifact` and
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import re
 import shutil
 import subprocess
+import struct
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import TYPE_CHECKING, Any, Mapping, cast
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -35,6 +37,10 @@ from .native_artifact import (
     WorkspaceRequirement,
 )
 from .nvidia_math_contract import CUDA_MATH_CONTRACT_VERSION
+
+
+if TYPE_CHECKING:
+    from .scheduled_attention import ScheduledAttentionArtifact
 
 
 SM120_F16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.v1"
@@ -1586,10 +1592,10 @@ def _norm_contract(
     if result_shape != shape:
         return None
     axis = op.kwargs.get("axis", -1)
-    if axis not in {-1, len(shape) - 1}:
+    if type(axis) is not int or axis not in {-1, len(shape) - 1}:
         return None
     if any(
-        op.kwargs.get(name) not in {None, False}
+        op.kwargs.get(name) is not None and op.kwargs.get(name) is not False
         for name in ("weight", "gamma", "bias", "beta")
     ):
         return None
@@ -1606,6 +1612,14 @@ def _norm_contract(
         or not math.isfinite(float(raw_epsilon))
         or float(raw_epsilon) < 0.0
     ):
+        return None
+    if op.kwargs.get("numeric_policy") is not None:
+        return None
+    try:
+        physical_epsilon = struct.unpack("f", struct.pack("f", float(raw_epsilon)))[0]
+    except OverflowError:
+        return None
+    if not math.isfinite(physical_epsilon) or physical_epsilon <= 0.0:
         return None
     kind = "layernorm" if op.op_name == "tessera.layer_norm" else "rmsnorm"
     return arg.ir_type.dtype, kind, float(raw_epsilon), shape
@@ -2748,6 +2762,13 @@ def package_mx_matmul(
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 
+def _mlir_f32_bits(text: str) -> bytes:
+    # MLIR may print a float as decimal or as IEEE double bits for an exact
+    # spelling. Compare at the declared f32 boundary rather than by tolerance.
+    value = struct.unpack(">d", int(text, 16).to_bytes(8, "big"))[0] if text.startswith("0x") else float(text)
+    return struct.pack("f", value)
+
+
 def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     """Consume the native scheduled unary launch envelope without Graph re-entry."""
     artifact.validate()
@@ -2756,14 +2777,39 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
             or storage is None or artifact.storage != storage
             or artifact.accum != "f32" or artifact.workgroup_size != 128
-            or artifact.family not in {"softmax", "reduce"}
+            or artifact.family not in {"softmax", "reduce", "norm"}
             or artifact.schedule not in {"serial", "cooperative_128"}):
         raise ValueError("unsupported NVIDIA scheduled unary contract")
     shape, output_shape = artifact.input_shape, artifact.output_shape
     if not shape or any(type(d) is not int or d <= 0 for d in shape):
         raise ValueError("NVIDIA scheduled unary contract requires positive static shapes")
     scalar_names: tuple[str, ...]
-    if softmax:
+    norm = artifact.family == "norm"
+    if norm:
+        if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1
+                or output_shape != shape or artifact.schedule != "serial"
+                or artifact.keepdims is not False or type(artifact.epsilon) is not float
+                or not math.isfinite(artifact.epsilon) or artifact.epsilon <= 0.0):
+            raise ValueError("unsupported NVIDIA scheduled norm contract")
+        entry = f"tessera_tile_norm_{artifact.kind}_{storage}_{artifact.schedule_digest[:10]}"
+        abi = {"f16": SM120_NORM_F16_ABI, "bf16": SM120_NORM_BF16_ABI, "f32": SM120_NORM_F32_ABI}[storage]
+        scalar_names = ("Rows", "Columns")
+        geometry = "sm120_norm_serial_rows"
+        required = {"kind": f'"{artifact.kind}"'}
+        epsilon_attr = re.search(r"epsilon = ([^ ]+) : f32", artifact.schedule_ir)
+        tile_epsilon = re.search(r"tessera.norm_epsilon = ([^ ]+) : f32", artifact.tile_ir)
+        if (epsilon_attr is None or tile_epsilon is None
+                or _mlir_f32_bits(epsilon_attr[1]) != _mlir_f32_bits(tile_epsilon[1])
+                or _mlir_f32_bits(epsilon_attr[1]) != struct.pack("f", artifact.epsilon)):
+            raise ValueError("scheduled norm epsilon disagrees with native IR")
+        from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+        tool = find_tessera_opt()
+        if tool is None:
+            raise RuntimeError("scheduled norm validation requires production tessera-opt")
+        if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+            raise ValueError("norm Tile IR disagrees with native Schedule replay")
+    elif softmax:
         if (artifact.axis != -1 or shape != output_shape or artifact.keepdims is not False
                 or artifact.kind != "softmax" or artifact.schedule != "serial"):
             raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis and fixed policy")
@@ -2790,7 +2836,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         if not re.search(pattern, artifact.tile_ir) or not re.search(pattern, artifact.schedule_ir):
             raise ValueError(f"NVIDIA scheduled unary policy disagrees on {field}")
     # Require the Schedule wrapper to retain the input/output shape contract.
-    for dims, element in ((shape, storage), (output_shape, storage if softmax else "f32")):
+    for dims, element in ((shape, storage), (output_shape, storage if softmax or norm else "f32")):
         tensor = "tensor<" + "".join(f"{d}x" for d in dims) + element + ">"
         if tensor not in artifact.schedule_ir:
             raise ValueError("NVIDIA scheduled unary shape disagrees with Schedule IR")
@@ -2811,7 +2857,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry, abi_id=abi,
         buffers=(BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),
-                 BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax else "fp32", len(output_shape), "row_major", 2 if softmax and storage != "f32" else 4)),
+                 BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax or norm else "fp32", len(output_shape), "row_major", 2 if (softmax or norm) and storage != "f32" else 4)),
         scalars=tuple(ScalarArgument(i + 2, name, "int64") for i, name in enumerate(scalar_names)),
         shape_guards=tuple(ShapeGuard(name, dim, "eq", value)
                            for name, dims in ((artifact.input_name, shape), (artifact.output_name, output_shape))
@@ -2822,6 +2868,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                     "route": "canonical_scheduled_tile_consumer", "schedule": artifact.schedule,
                     "shape": list(shape), "storage": storage, "accum": "f32",
                     "axis": artifact.axis, "kind": artifact.kind, "keepdims": artifact.keepdims,
+                    "epsilon": artifact.epsilon,
                     "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
     )
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
@@ -2844,135 +2891,73 @@ def package_reduction(
     raise ValueError("SM120 reduction packaging requires a supported native scheduled reduction")
 
 
-def package_norm(
-    module: GraphIRModule,
-    *,
-    pipeline_name: str,
-) -> NVIDIANativePackage:
-    contract = _norm_contract(module)
-    if contract is None:
-        raise ValueError(
-            "SM120 norm packaging requires static f16/bf16/f32 input and "
-            "same-storage output, last-axis unweighted RMSNorm/LayerNorm, and "
-            "finite nonnegative epsilon"
-        )
-    storage, kind, epsilon, shape = contract
-    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
-    epsilon_key = hashlib.sha256(f"{epsilon:.17g}".encode()).hexdigest()[:10]
-    entry = f"tessera_tile_norm_{kind}_{storage_ir}_{epsilon_key}"
-    abi_id = {
-        "fp16": SM120_NORM_F16_ABI,
-        "bf16": SM120_NORM_BF16_ABI,
-        "fp32": SM120_NORM_F32_ABI,
-    }[storage]
-    tile_ir = emit_norm_tile_ir(
-        entry=entry,
-        storage=storage_ir,
-        kind=kind,
-        epsilon=epsilon,
-    )
-    (
-        lowered,
-        ptx,
-        metrics,
-        compiler_fp,
-        toolchain_fp,
-        device_libraries,
-        compile_state,
-    ) = _compile_tile_ir(tile_ir, entry)
-    image = NativeImageArtifact(
-        target="nvidia_sm120",
-        architecture="sm_120a",
-        pipeline_name=pipeline_name,
-        compiler_fingerprint=compiler_fp,
-        toolchain_fingerprint=toolchain_fp,
-        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
-        binary_format="ptx",
-        payload=ptx.encode("ascii"),
-        entry_points=(NativeEntryPoint(entry, abi_id),),
-        compile_state=compile_state,
-        device_libraries=device_libraries,
-        resource_record=ResourceRecord(
-            provenance="ptxas --arch=sm_120a -v", metrics=metrics
-        ),
-    )
-    fn = module.functions[0]
-    op = fn.body[0]
-    input_name = op.operands[0].removeprefix("%")
-    output_name = op.result or "output"
-    rows = math.prod(shape[:-1]) if len(shape) > 1 else 1
-    columns = shape[-1]
-    alignment = 2 if storage in {"fp16", "bf16"} else 4
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest,
-        entry_symbol=entry,
-        abi_id=abi_id,
-        buffers=(
-            BufferBinding(
-                0, input_name, "input", storage, len(shape), "row_major", alignment
-            ),
-            BufferBinding(
-                1,
-                output_name,
-                "output",
-                storage,
-                len(shape),
-                "row_major",
-                alignment,
-            ),
-        ),
-        scalars=(
-            ScalarArgument(2, "Rows", "int64"),
-            ScalarArgument(3, "Columns", "int64"),
-        ),
-        shape_guards=tuple(
-            [ShapeGuard(input_name, axis, "eq", extent) for axis, extent in enumerate(shape)]
-            + [ShapeGuard(output_name, axis, "eq", extent) for axis, extent in enumerate(shape)]
-        ),
-        geometry=LaunchGeometry(policy="sm120_norm_serial_rows"),
-        ordering=OrderingSemantics(
-            ordered_submission=True,
-            residency="none",
-            synchronization=("completion",),
-        ),
-        provenance={
-            "work_item": "NVIDIA-BF16-CANONICAL-BREADTH",
-            "schedule": "serial_rows",
-            "shape": list(shape),
-            "storage": storage_ir,
-            "accum": "f32",
-            "kind": kind,
-            "epsilon": epsilon,
-            "rows": rows,
-            "columns": columns,
-            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
-        },
-    )
-    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+def package_norm(module: GraphIRModule, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Compile row normalization through native Schedule and Tile IR."""
+    from .scheduled_kernel import lower_scheduled_kernel
+
+    if not requests_norm(module):
+        raise ValueError("requires one supported normalization")
+    artifact = lower_scheduled_kernel(module, target="nvidia_sm120")
+    return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
-def package_attention(
-    module: GraphIRModule,
-    *,
-    pipeline_name: str,
-) -> NVIDIANativePackage:
-    contract = _attention_contract(module)
-    if contract is None:
-        raise ValueError(
-            "SM120 attention packaging requires static rank-4 f16/bf16/f32 Q/K/V, "
-            "f32 output, MHA/GQA-compatible heads, and scale/causal semantics; "
-            "bias, window, softcap, and dropout remain planned"
-        )
-    (
-        storage, dims, scale, causal, bias_name, window_left, window_right,
-        softcap, dropout_p, dropout_seed,
-    ) = contract
-    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
-    semantic_key = hashlib.sha256(
-        f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:"
-        f"{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}".encode()
-    ).hexdigest()[:10]
-    entry = f"tessera_tile_attention_{storage_ir}_{'causal' if causal else 'full'}_{semantic_key}"
+def package_attention(module: GraphIRModule, *, pipeline_name: str) -> NVIDIANativePackage:
+    from .scheduled_attention import lower_scheduled_attention
+
+    artifact = lower_scheduled_attention(module, target="nvidia_sm120")
+    return package_scheduled_attention(artifact, pipeline_name=pipeline_name)
+
+
+def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Package native attention Tile IR without reconstructing Graph semantics."""
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+    artifact.validate()
+    if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
+            or artifact.workgroup_size != 128 or artifact.accum != "f32"
+            or artifact.backward_lse_policy != "sm120_recompute"
+            or artifact.backward_lse_selection != "recompute"):
+        raise ValueError("unsupported NVIDIA scheduled attention policy")
+    # Native replay verifies every Schedule policy against its retained typed
+    # Graph text. It uses no Python Graph object and performs no target compile.
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled attention validation requires production tessera-opt")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("attention Tile IR disagrees with native Schedule replay")
+    storage, dims, scale, causal = artifact.dtype, artifact.dims, artifact.scale, artifact.causal
+    bias_name = artifact.bias_name
+    window_left, window_right = artifact.window_left, artifact.window_right
+    softcap, dropout_p, dropout_seed = artifact.softcap, artifact.dropout_p, artifact.dropout_seed
+    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}.get(storage)
+    if storage_ir is None or storage_ir != artifact.storage or len(dims) != 7 or any(type(d) is not int or d <= 0 for d in dims):
+        raise ValueError("unsupported NVIDIA scheduled attention shape/storage")
+    entry = f"tessera_tile_attention_{storage_ir}_{'causal' if causal else 'full'}_{artifact.schedule_digest[:10]}"
+    if artifact.function_name != entry:
+        raise ValueError("scheduled attention entry disagrees")
+    for field, value in {"causal": str(causal).lower(), "bias": str(bias_name is not None).lower(),
+                         "window_left": f"{window_left} : i64", "window_right": f"{window_right} : i64",
+                         "dropout_seed": f"{dropout_seed} : i64"}.items():
+        if not re.search(rf"\b{field} = {re.escape(value)}(?=[,}}\s])", artifact.tile_ir):
+            raise ValueError(f"scheduled attention {field} disagrees")
+    for field, float_value in {"scale": scale, "softcap": softcap, "dropout_p": dropout_p}.items():
+        match = re.search(rf"\b{field} = ([^ ]+) : f32", artifact.tile_ir)
+        if match is None or _mlir_f32_bits(match[1]) != struct.pack("f", float_value):
+            raise ValueError(f"scheduled attention {field} disagrees")
+    b, hq, hkv, sq, sk, d, dv = dims
+    shapes = [(b, hq, sq, d), (b, hkv, sk, d), (b, hkv, sk, dv)]
+    names = [artifact.q_name, artifact.k_name, artifact.v_name]
+    if bias_name is not None:
+        shapes.append((b, hq, sq, sk))
+        names.append(bias_name)
+    for index, (name, shape) in enumerate(zip(names, shapes)):
+        element = storage_ir if index < 3 else "f32"
+        typed = "tensor<" + "".join(f"{dim}x" for dim in shape) + element + ">"
+        if f"%arg{index}: {typed}" not in artifact.schedule_ir:
+            raise ValueError("scheduled attention argument shape disagrees")
+    binding_attr = "tessera.launch_bindings = " + json.dumps(names + [artifact.output_name])
+    if binding_attr not in artifact.schedule_ir or binding_attr not in artifact.tile_ir:
+        raise ValueError("scheduled attention launch bindings disagree")
     abi_id = ({
         "fp16": SM120_ATTN_BIAS_F16_ABI,
         "bf16": SM120_ATTN_BIAS_BF16_ABI,
@@ -2982,12 +2967,7 @@ def package_attention(
         "bf16": SM120_ATTN_BF16_ABI,
         "fp32": SM120_ATTN_F32_ABI,
     })[storage]
-    tile_ir = emit_attention_tile_ir(
-        entry=entry, storage=storage_ir, scale=scale, causal=causal,
-        bias=bias_name is not None, window_left=window_left,
-        window_right=window_right, softcap=softcap,
-        dropout_p=dropout_p, dropout_seed=dropout_seed,
-    )
+    tile_ir = artifact.tile_ir
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
     )
@@ -3007,10 +2987,8 @@ def package_attention(
             provenance="ptxas --arch=sm_120a -v", metrics=metrics
         ),
     )
-    fn = module.functions[0]
-    op = fn.body[0]
-    q_name, k_name, v_name = (value.removeprefix("%") for value in op.operands[:3])
-    output_name = op.result or "output"
+    q_name, k_name, v_name = artifact.q_name, artifact.k_name, artifact.v_name
+    output_name = artifact.output_name
     b, hq, hkv, sq, sk, d, dv = dims
     alignment = 2 if storage in {"fp16", "bf16"} else 4
     descriptor = LaunchDescriptor(
@@ -3045,8 +3023,10 @@ def package_attention(
             ordered_submission=True, residency="none", synchronization=("completion",)
         ),
         provenance={
-            "work_item": "NVIDIA-E2E-2",
-            "sync_key": "E2E-SPINE-2026-07-18",
+            "work_item": "E2E-REAL-5",
+            "sync_key": "IR-NATIVE-FOUNDATION-1",
+            "route": "canonical_scheduled_tile_consumer",
+            "schedule_digest": artifact.schedule_digest,
             "schedule": "thread_per_output_128",
             "storage": storage_ir,
             "accum": "f32",

@@ -6693,3 +6693,21 @@ Sibling outcome: existing scheduled f32 parity validated on Princess-Luna gfx115
 New NVIDIA narrow/keepdims/min/cooperative envelopes are not ROCm execution
 support; follow-up required for any ROCm expansion. Its 256-thread policy and
 runtime ABI remain unchanged. Shared compiler fixtures cover existing scheduling.
+
+## F2 norm/attention — `IR-NATIVE-FOUNDATION-1` — 2026-09-05
+
+The shared compiler adds `schedule.norm` for SM120 unweighted f16/bf16/f32 row
+normalization and admits SM120 forward `schedule.attention` with explicit
+recompute policy. NVIDIA direct package/driver paths consume native Tile wrappers;
+old constructors are test-only baselines. Runtime ABI and physical kernels are
+unchanged. Norm rejects unsupported policy overrides and epsilon that cannot be
+represented as positive finite f32.
+
+Shared finding fixed: forward attention hashes now encode exact f32 policy bits
+instead of six-decimal strings. Regenerate old forward Schedule artifacts;
+stale serialized hashes fail closed. Backward hash encoding remains follow-up.
+
+Sibling outcome: existing gfx1151 scheduled attention/semantic-kernel parity is
+validated by the opted-in owning-host tests. The forward hash format changes;
+physical schedules and runtime ABI do not. Follow-up required for direct-package
+retirement and backward hash review. No NVIDIA norm support transfers to ROCm.

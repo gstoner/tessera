@@ -7741,3 +7741,16 @@ Apple follow-up required for owning-host runtime validation and native direct
 constructor retirement. The NVIDIA physical mask edit and paired package API are
 not applicable to Apple MSL. Shared backward hash and replay validation changes
 apply; no Metal execution or new saved-LSE support is claimed in this cut.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Follow-up required for Metal synchronization/residency mapping and Apple owning-host proof; shared legality changes alone do not establish Metal overlap.

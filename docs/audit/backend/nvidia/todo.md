@@ -6439,3 +6439,16 @@ are now admitted. Paired saved-LSE packaging validates physical policy and
 bindings before compilation, but both checkpoint constructors remain Python
 owned until a native multi-result producer and Schedule consumer exist. Packed
 metadata and paged-KV bounds/returns are stricter. No performance promotion.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Own the staged-kernel NVVM/PTX experiment and NVIDIA multi-rank transport evidence; no ROCm timing or physical schedule transfers.

@@ -6725,3 +6725,16 @@ mask edit is not applicable to ROCm's already end-aligned split-reduced kernel.
 Princess-Luna parity validated: all three gfx1151 scheduled backward MHA/GQA/MQA
 cases passed with the new shared hashes. No NVIDIA schedule or saved-LSE pairing
 API is promoted into the gfx1151 production route.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Own the wave/LDS/ROCDL experiment and ROCm multi-rank transport evidence; no NVIDIA barrier protocol or physical schedule transfers.

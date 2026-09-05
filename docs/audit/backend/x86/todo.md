@@ -4127,3 +4127,16 @@ on Princess-Luna WSL. NVIDIA physical mask and paired package API changes are no
 applicable to x86's split-reduced kernel. Persistent ReplaySSM execution is not
 added; native constructor retirement and dedicated owning-host performance proof
 remain follow-up required.
+
+
+### Deleted functionality reassessment — 2026-09-05
+
+Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
+[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
+native residual policy to W5.1, and sharding/halo composition to W5.4 and
+COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
+consumer. This is planning only: no dialect restoration, capability promotion,
+or new hardware evidence. Existing F2 implementation ordering is unchanged.
+
+Assess CPU ownership/effects and native adjoint/sharding consumption; retain explicit no-async behavior where appropriate and require CPU-specific performance evidence.

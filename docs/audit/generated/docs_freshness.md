@@ -165,7 +165,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-18 | 18 | ✓ |
 | `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-08-13 | 23 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 25 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-09-04 | 1 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-09-05 | 0 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 28 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 39 | ✓ |
 | `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-24 | 12 | ✓ |
@@ -194,7 +194,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 50 | ✓ |
 | `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 24 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 34 | ✓ |
-| `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-14 | 22 | ✓ |
+| `compiler/TILERT_ASSESSMENT.md` | - | 2026-09-05 | 0 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 37 | ✓ |
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-09-04 | 1 | ✓ |
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 11 | ✓ |

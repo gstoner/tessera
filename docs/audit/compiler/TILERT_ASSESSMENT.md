@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-09-05
 audit_role: reference
 ---
 
@@ -306,10 +306,14 @@ representation that survives into IR.
 Disposition after PR #544:
 
 1. **`tessera.queue` MLIR dialect — deleted.** The unparseable dead dialect and
-   orphan Python dialect module are gone. Internal Python pipeline markers
-   remain a compatibility carrier and must migrate to explicit Schedule/action
-   DAG plus token lineage under `COMP-SCHED-OVERLAP-1`; they are not evidence
-   that the deleted dialect is live.
+   orphan Python dialect module are gone. The subsequent
+   `COMP-SCHED-OVERLAP-1/R1` migration replaced internal Python queue markers
+   with explicit async token lineage; legacy markers are now rejected.
+   `queue_depth` remains a stage-count resource estimate. The historical §2.1
+   finding describes the pre-deletion tree, not current capability. Ownership
+   semantics are reconsidered under the integrated plan's
+   [reassessment](INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05),
+   without restoring the deleted implementation.
 2. **Phantom `CollectiveScheduler`/`ChunkPlanner` names — corrected.** Live
    documentation now points to the real runtime/planner surfaces.
 3. **Dual `tile.async_copy` contracts — reconciled.** ODS is authoritative:

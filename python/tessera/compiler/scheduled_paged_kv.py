@@ -45,7 +45,7 @@ def lower_scheduled_paged_kv(names: tuple[str, str, str], dims: tuple[int, ...])
     graph = f"""module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "sm_120"}} {{
       func.func @paged_read(%pages: tensor<{p}x{ps}x{h}x{d}xf32>, %table: tensor<{lp}xi32>) -> tensor<{tokens}x{h}x{d}xf32>
           attributes {{tessera.bindings = {json.dumps(names)}}} {{
-        %out = tessera.kv_cache.read %pages, %table {{start = {start} : i64, end = {start + tokens} : i64}}
+        %out = tessera.paged_kv_read %pages, %table {{start = {start} : i64, end = {start + tokens} : i64}}
           : (tensor<{p}x{ps}x{h}x{d}xf32>, tensor<{lp}xi32>) -> tensor<{tokens}x{h}x{d}xf32>
         return %out : tensor<{tokens}x{h}x{d}xf32>
       }}

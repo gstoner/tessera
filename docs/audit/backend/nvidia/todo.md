@@ -6494,3 +6494,12 @@ ABI: backward attention dispatch depends on its prefix. No latency improvement
 or selector promotion is claimed. Follow-up required: full queue release proof,
 queue performance/resource packet, scaled packing, recompute backward, replay-SSM
 and MoE native ownership contracts.
+
+### Physical paged-read mnemonic isolation — PR #728 review
+
+Owner E2E-REAL-5 / F2-S1; sync `IR-NATIVE-FOUNDATION-1`.
+The bounded native tensor producer is `tessera.paged_kv_read`, distinct from the
+public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
+handle form remains unchanged and its Graph ODS declaration remains open.
+This shared-contract correction prevents the NVIDIA physical form from claiming
+Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.

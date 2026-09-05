@@ -3392,7 +3392,7 @@ def Tessera_CPUMsaBlockSparseOp : Op<Tessera_Dialect, "cpu.msa_block_sparse"> {
 }
 
 // F2-S1: bounded tensor view of explicit physical pages and a logical page map.
-def Tessera_KVCacheReadOp : Op<Tessera_Dialect, "kv_cache.read", [MemoryEffects<[MemRead]>]> {
+def Tessera_PagedKVReadOp : Op<Tessera_Dialect, "paged_kv_read", [MemoryEffects<[MemRead]>]> {
   let arguments = (ins AnyRankedTensor:$pages, AnyRankedTensor:$page_table,
                        I64Attr:$start, I64Attr:$end);
   let results = (outs AnyRankedTensor:$output);

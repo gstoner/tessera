@@ -5340,7 +5340,7 @@ LogicalResult CPUMsaBlockSparseOp::verify() {
   return requireStrAttrs(*this, {"source", "abi", "arch", "kernel", "status"});
 }
 
-LogicalResult KVCacheReadOp::verify() {
+LogicalResult PagedKVReadOp::verify() {
   auto pages = cast<RankedTensorType>(getPages().getType());
   auto table = cast<RankedTensorType>(getPageTable().getType());
   auto output = cast<RankedTensorType>(getOutput().getType());

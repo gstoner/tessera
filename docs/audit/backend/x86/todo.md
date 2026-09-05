@@ -4177,3 +4177,12 @@ Not applicable to x86 physical package generation: SM120 pointer launchers and
 packed views are not CPU schedules. Shared native verification applies where
 used. Follow-up required for CPU-specific packed/state consumers and lifetime
 proof; retain explicit no-async behavior and separate CPU performance evidence.
+
+### Physical paged-read mnemonic isolation — PR #728 review
+
+Owner E2E-REAL-5 / F2-S1; sync `IR-NATIVE-FOUNDATION-1`.
+The bounded native tensor producer is `tessera.paged_kv_read`, distinct from the
+public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
+handle form remains unchanged and its Graph ODS declaration remains open.
+This shared-contract correction prevents the NVIDIA physical form from claiming
+Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.

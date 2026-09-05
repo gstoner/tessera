@@ -7791,3 +7791,12 @@ Not applicable to Metal physical package generation: the new native package
 producers are SM120-gated. Shared prefetch/reuse verification applies where the
 Tile route uses it. Follow-up required for Metal allocation release, event/residency
 mapping and owning-host validation; no new Apple execution or performance proof.
+
+### Physical paged-read mnemonic isolation — PR #728 review
+
+Owner E2E-REAL-5 / F2-S1; sync `IR-NATIVE-FOUNDATION-1`.
+The bounded native tensor producer is `tessera.paged_kv_read`, distinct from the
+public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
+handle form remains unchanged and its Graph ODS declaration remains open.
+This shared-contract correction prevents the NVIDIA physical form from claiming
+Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.

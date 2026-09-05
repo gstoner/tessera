@@ -6777,3 +6777,12 @@ lower only to SM120; ROCm package migration remains follow-up required. The
 existing Tile route remains parser-bound below Graph IR, so Graph unresolved-type
 preflight remains conditional. No NVIDIA packing schedule or barrier protocol
 is transferred, and no queue performance claim follows from this test run.
+
+### Physical paged-read mnemonic isolation — PR #728 review
+
+Owner E2E-REAL-5 / F2-S1; sync `IR-NATIVE-FOUNDATION-1`.
+The bounded native tensor producer is `tessera.paged_kv_read`, distinct from the
+public `tessera.kv_cache.read(cache, start, end) -> (K, V)` contract. The public
+handle form remains unchanged and its Graph ODS declaration remains open.
+This shared-contract correction prevents the NVIDIA physical form from claiming
+Apple, ROCm or x86 public cache semantics; no sibling runtime or ABI changes.

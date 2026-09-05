@@ -52,7 +52,7 @@ static FailureOr<NativePagedKV> pagedKVContract(Operation *graph) {
 }
 static LogicalResult scheduleNativePagedKV(ModuleOp mod) {
   SmallVector<Operation *> ops;
-  mod.walk([&](Operation *op) { if (op->getName().getStringRef() == "tessera.kv_cache.read") ops.push_back(op); });
+  mod.walk([&](Operation *op) { if (op->getName().getStringRef() == "tessera.paged_kv_read") ops.push_back(op); });
   for (Operation *graph : ops) {
     auto c = pagedKVContract(graph); if (failed(c)) return failure();
     auto ret = dyn_cast<func::ReturnOp>(c->function.getBody().front().back());
@@ -73,7 +73,7 @@ static LogicalResult lowerNativePagedKV(ModuleOp mod) {
   mod.walk([&](Operation *op) { if (op->getName().getStringRef() == "schedule.paged_kv_read") ops.push_back(op); });
   for (Operation *scheduled : ops) {
     auto graph = scheduled->getOperand(0).getDefiningOp();
-    if (!graph || graph->getName().getStringRef() != "tessera.kv_cache.read")
+    if (!graph || graph->getName().getStringRef() != "tessera.paged_kv_read")
       return scheduled->emitError("paged schedule requires retained native producer");
     auto c = pagedKVContract(graph); if (failed(c)) return failure();
     auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");

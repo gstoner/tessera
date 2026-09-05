@@ -122,7 +122,6 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `KVCacheAppendOp` | `real` |
 | `KVCacheCreateOp` | `real` |
 | `KVCachePruneOp` | `real` |
-| `KVCacheReadOp` | `real` |
 | `KimiDeltaAttentionOp` | `real` |
 | `LUOp` | `real` |
 | `LatentKVCompressOp` | `real` |
@@ -174,6 +173,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `NeighborsTopologyCreateOp` | `real` |
 | `NesterovOp` | `real` |
 | `NormalizationStatsOp` | `real` |
+| `PagedKVReadOp` | `real` |
 | `PermuteOp` | `real` |
 | `PowerAttnOp` | `real` |
 | `QROp` | `real` |

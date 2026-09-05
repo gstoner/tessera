@@ -2064,7 +2064,7 @@ families listed here. It does not close all packed or stateful execution.
    scales in typed packed views. Serialized Schedule replay rejects edited Tile
    operands before compilation. The fixed runtime entry ABI is preserved.
    NVFP4/MX scale layouts remain open; no performance promotion occurred.
-5. **F2-S1 bounded paged read implemented:** registered `tessera.kv_cache.read`
+5. **F2-S1 bounded paged read implemented:** registered physical `tessera.paged_kv_read`
    verifies static f32 pages, i32 table, logical interval and output shape.
    Native Schedule binds read-only borrowing, runtime physical-index validation,
    layout and names; the package consumes the replayed artifact. Runtime still

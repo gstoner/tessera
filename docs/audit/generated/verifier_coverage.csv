@@ -103,7 +103,6 @@ src/compiler/ir/TesseraOps.td,KLDivergenceLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheAppendOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheCreateOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCachePruneOp,1,1,real
-src/compiler/ir/TesseraOps.td,KVCacheReadOp,1,1,real
 src/compiler/ir/TesseraOps.td,KimiDeltaAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LUOp,1,1,real
 src/compiler/ir/TesseraOps.td,LatentKVCompressOp,1,1,real
@@ -155,6 +154,7 @@ src/compiler/ir/TesseraOps.td,NeighborsStencilDefineOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsTopologyCreateOp,1,1,real
 src/compiler/ir/TesseraOps.td,NesterovOp,1,1,real
 src/compiler/ir/TesseraOps.td,NormalizationStatsOp,1,1,real
+src/compiler/ir/TesseraOps.td,PagedKVReadOp,1,1,real
 src/compiler/ir/TesseraOps.td,PermuteOp,1,1,real
 src/compiler/ir/TesseraOps.td,PowerAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,QROp,1,1,real

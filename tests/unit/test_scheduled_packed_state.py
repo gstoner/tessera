@@ -128,3 +128,11 @@ def test_new_native_packages_reject_unplumbed_argument_layout(kind):
         supports = native.supports_attention_backward_lse if kind == "backward" else native.supports_attention_lse
     module.functions[0].args[0].layout = "column_major"
     assert not supports(module)
+
+
+def test_physical_paged_read_has_distinct_native_mnemonic():
+    scheduled = artifact("paged")
+    assert "tessera.paged_kv_read" in scheduled.graph_ir
+    assert "tessera.paged_kv_read" in scheduled.schedule_ir
+    assert "tessera.kv_cache.read" not in scheduled.graph_ir
+    assert "tile.paged_kv_read_kernel" in scheduled.tile_ir

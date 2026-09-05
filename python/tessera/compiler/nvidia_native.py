@@ -2334,7 +2334,7 @@ def package_scheduled_matmul(
     ]
     if actual_types != expected_types:
         raise ValueError("NVIDIA scheduled launch contract disagrees with Tile entry ABI")
-    rows = [
+    rows: list[tuple[str, str, str, tuple[int, ...], str, int]] = [
         (artifact.a_name, "input", artifact.a_dtype, (m, k), "row_major", 2),
         (artifact.b_name, "input", artifact.b_dtype, (k, n), "col_major", 2),
     ]

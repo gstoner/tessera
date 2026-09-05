@@ -693,6 +693,14 @@ def package_packed_decode(
     pipeline_name: str = "tessera-lower-to-nvidia-sm120",
 ) -> NVIDIANativePackage:
     """Compile one generic packed physical-view decode for exact SM120 use."""
+    integer_fields = (rows, columns, source_bytes, packing_axis, offset, alignment,
+                      scale_bytes, scale_block_size, scale_axis, scale_stride,
+                      scale_offset, scale_alignment)
+    if any(type(value) is not int or not -(1 << 63) <= value < (1 << 63)
+           for value in integer_fields):
+        raise ValueError("packed decode physical fields must be signed 64-bit integers")
+    if offset < 0 or scale_offset < 0:
+        raise ValueError("packed decode offsets must be nonnegative")
     if logical not in {"int4", "nvfp4", "fp4_e2m1", "fp6_e2m3", "fp6_e3m2"}:
         raise ValueError(f"unsupported SM120 packed logical dtype {logical!r}")
     if rows <= 0 or columns <= 0 or source_bytes <= 0:
@@ -728,7 +736,7 @@ def package_packed_decode(
             (columns + factor - 1) // factor,
             1,
         ) if packing_axis == 1 else (1, rows)
-    if len(strides) != 2 or any(value <= 0 for value in strides):
+    if len(strides) != 2 or any(type(value) is not int or not 0 < value < (1 << 63) for value in strides):
         raise ValueError("packed decode requires two positive container strides")
 
     entry = f"tessera_tile_packed_decode_{logical}"
@@ -1217,8 +1225,12 @@ def _paged_kv_contract(
         return None
     p, page_size, heads, dim = pages_shape
     logical_pages = table_shape[0]
-    start = int(op.kwargs.get("start", -1))
-    end = int(op.kwargs.get("end", -1))
+    start = op.kwargs.get("start", -1)
+    end = op.kwargs.get("end", -1)
+    if any(type(value) is not int or not 0 <= value < (1 << 63) for value in (start, end)):
+        return None
+    if fn.return_values != ["%" + (op.result or "")]:
+        return None
     tokens = end - start
     result = fn.result_types[0]
     try:
@@ -1409,6 +1421,43 @@ def supports_attention_backward(module: GraphIRModule) -> bool:
     return _attention_backward_contract(module) is not None
 
 
+def _saved_lse_policy(op: Any, head_dim: int) -> tuple[float, bool] | None:
+    """The paired ABI supports plain scaled attention, without score modifiers."""
+    scale = op.kwargs.get("scale", 1.0 / math.sqrt(float(head_dim)))
+    causal = op.kwargs.get("causal", False)
+    if type(causal) is not bool or isinstance(scale, bool) or not isinstance(scale, (int, float)):
+        return None
+    try:
+        physical_scale = struct.unpack("f", struct.pack("f", float(scale)))[0]
+    except (OverflowError, ValueError):
+        return None
+    if not math.isfinite(physical_scale) or physical_scale <= 0.0:
+        return None
+    if op.kwargs.get("bias") is not None and op.kwargs.get("bias") is not False:
+        return None
+    window = op.kwargs.get("window")
+    if window is not None and not (type(window) is int and window == -1) and not (
+            isinstance(window, tuple) and window == (-1, -1)
+            and all(type(value) is int for value in window)):
+        return None
+    for name in ("window_left", "window_right"):
+        value = op.kwargs.get(name, -1)
+        if type(value) is not int or value != -1:
+            return None
+    for name in ("softcap", "logit_softcap", "dropout_p", "dropout"):
+        value = op.kwargs.get(name, 0.0)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or value != 0.0):
+            return None
+    return physical_scale, causal
+
+
+def _checkpoint_identity(dims: tuple[int, ...], scale: float, causal: bool) -> str:
+    policy = {"schema": "tessera.attention_checkpoint.v1", "shape": list(dims),
+              "scale_f32_bits": struct.pack("!f", scale).hex(), "causal": causal,
+              "mask_alignment": "end_aligned_v1", "storage": "f32", "lse": "natural_log"}
+    return hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def _attention_lse_contract(
     module: GraphIRModule,
 ) -> tuple[tuple[str, str, str, str, str], tuple[int, int, int, int, int, int, int], float, bool] | None:
@@ -1448,17 +1497,11 @@ def _attention_lse_contract(
     if any(value.removeprefix("%") != expected for value, expected in zip(
             fn.return_values, (output_name, lse_name), strict=True)):
         return None
-    scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
-    if not math.isfinite(scale) or scale <= 0.0:
+    policy = _saved_lse_policy(op, d)
+    if policy is None:
         return None
-    # The P0 checkpoint package has one semantic envelope; features that alter
-    # the score function land only with their own paired ABI and proof.
-    if any((bool(op.kwargs.get("bias", False)), op.kwargs.get("window_left", -1) != -1,
-            op.kwargs.get("window_right", -1) != -1,
-            float(op.kwargs.get("softcap", 0.0) or 0.0) != 0.0,
-            float(op.kwargs.get("dropout_p", 0.0) or 0.0) != 0.0)):
-        return None
-    return (q_name, k_name, v_name, output_name, lse_name), (b, hq, hkv, sq, sk, d, dv), scale, bool(op.kwargs.get("causal", False))
+    scale, causal = policy
+    return (q_name, k_name, v_name, output_name, lse_name), (b, hq, hkv, sq, sk, d, dv), scale, causal
 
 
 def supports_attention_lse(module: GraphIRModule) -> bool:
@@ -1503,16 +1546,16 @@ def _attention_backward_lse_contract(
         return None
     if result_shapes != (q_shape, k_shape, v_shape):
         return None
-    scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
-    if not math.isfinite(scale) or scale <= 0.0:
+    if any(value.removeprefix("%") != expected for value, expected in zip(
+            fn.return_values, (dq_name, dk_name, dv_name), strict=True)):
         return None
-    if str(op.kwargs.get("route", "deterministic_direct")) != "deterministic_direct":
+    policy = _saved_lse_policy(op, d)
+    if policy is None or op.kwargs.get("deterministic", True) is not True:
         return None
-    if any((op.kwargs.get("window_left", -1) != -1, op.kwargs.get("window_right", -1) != -1,
-            float(op.kwargs.get("softcap", 0.0) or 0.0) != 0.0,
-            float(op.kwargs.get("dropout_p", 0.0) or 0.0) != 0.0)):
+    if op.kwargs.get("route", "deterministic_direct") != "deterministic_direct":
         return None
-    return (do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name), (b, hq, hkv, sq, sk, d, dv), scale, bool(op.kwargs.get("causal", False))
+    scale, causal = policy
+    return (do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name), (b, hq, hkv, sq, sk, d, dv), scale, causal
 
 
 def supports_attention_backward_lse(module: GraphIRModule) -> bool:
@@ -3210,6 +3253,8 @@ def package_attention_lse(
         workspace=WorkspaceRequirement(bytes=0, alignment=4),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal),
+            "mask_alignment": "end_aligned_v1",
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "forward_save",
             "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
             "accum": "f32", "output": "f32", "row_lse": "f32[B,Hq,Sq]",
@@ -3273,6 +3318,8 @@ def package_attention_backward_lse(
         workspace=WorkspaceRequirement(bytes=0, alignment=4),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal),
+            "mask_alignment": "end_aligned_v1",
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "backward_load",
             "route": "deterministic_direct", "deterministic": True,
             "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
@@ -3282,6 +3329,36 @@ def package_attention_backward_lse(
         },
     )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+@dataclass(frozen=True)
+class AttentionCheckpointPair:
+    """Compiler-checked saved-LSE producer/consumer pair; execution stays explicit."""
+    forward: NVIDIANativePackage
+    backward: NVIDIANativePackage
+    contract_digest: str
+
+
+def package_attention_checkpoint_pair(
+    forward: GraphIRModule, backward: GraphIRModule, *, pipeline_name: str
+) -> AttentionCheckpointPair:
+    forward_contract = _attention_lse_contract(forward)
+    backward_contract = _attention_backward_lse_contract(backward)
+    if forward_contract is None or backward_contract is None:
+        raise ValueError("requires a supported saved-LSE producer and consumer")
+    f_names, f_dims, f_scale, f_causal = forward_contract
+    b_names, b_dims, b_scale, b_causal = backward_contract
+    identity = _checkpoint_identity(f_dims, f_scale, f_causal)
+    if identity != _checkpoint_identity(b_dims, b_scale, b_causal):
+        raise ValueError("saved-LSE producer and consumer policies disagree")
+    if f_names[:3] != b_names[1:4] or f_names[4] != b_names[4]:
+        raise ValueError("saved-LSE producer and consumer bindings disagree")
+    # All contract checks precede either target compilation.
+    return AttentionCheckpointPair(
+        package_attention_lse(forward, pipeline_name=pipeline_name),
+        package_attention_backward_lse(backward, pipeline_name=pipeline_name),
+        identity,
+    )
 
 
 def package_paged_kv_read(
@@ -3685,6 +3762,8 @@ __all__ = [
     "package_bf16_softmax",
     "package_attention",
     "package_attention_backward",
+    "AttentionCheckpointPair",
+    "package_attention_checkpoint_pair",
     "package_attention_lse",
     "package_attention_backward_lse",
     "package_f16_matmul",

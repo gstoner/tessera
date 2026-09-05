@@ -104,22 +104,20 @@ def test_attention_refuses_edited_binding_names():
 
 
 @pytest.mark.parametrize("kwargs", [{"causal": True}, {"window_left": 3, "window_right": 0}])
-def test_attention_refuses_short_query_mask_alignment(kwargs):
+def test_attention_accepts_short_query_mask_alignment(kwargs):
     module = attention_module(target="nvidia_sm120", query_rows=3)
     module.functions[0].body[0].kwargs.update(kwargs)
-    assert not scheduled_attention.supports_scheduled_attention(module, target="nvidia_sm120")
-    with pytest.raises(ValueError, match="alignment"):
-        nvidia_native.package_attention(module, pipeline_name="tessera-nvidia-pipeline-sm120")
+    assert scheduled_attention.supports_scheduled_attention(module, target="nvidia_sm120")
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
-def test_native_pass_refuses_short_query_mask_alignment():
+def test_native_pass_accepts_short_query_mask_alignment():
     module = attention_module(target="nvidia_sm120", query_rows=3)
     artifact = scheduled_attention.lower_scheduled_attention(module, target="nvidia_sm120")
     changed = artifact.graph_ir.replace("causal = false", "causal = true")
     assert changed != artifact.graph_ir
-    with pytest.raises(RuntimeError, match="attention"):
-        run_tessera_opt(find_tessera_opt(), changed, "--tessera-graph-to-schedule")
+    result = run_tessera_opt(find_tessera_opt(), changed, "--tessera-graph-to-schedule")
+    assert "schedule.attention" in result
 
 
 def test_norm_policy_overrides_are_not_silently_dropped():

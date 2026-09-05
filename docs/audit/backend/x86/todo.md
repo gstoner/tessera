@@ -4113,3 +4113,17 @@ x86 exact-device proof is claimed. Physical policies and runtime ABI are
 unchanged. Follow-up required for old Schedule regeneration, backward hash review
 and remaining direct Graph-package migration. NVIDIA norm admission is not
 x86 execution support.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+x86 native Schedule replay and adjacent-f32 backward hash regression are covered
+on Princess-Luna WSL. NVIDIA physical mask and paired package API changes are not
+applicable to x86's split-reduced kernel. Persistent ReplaySSM execution is not
+added; native constructor retirement and dedicated owning-host performance proof
+remain follow-up required.

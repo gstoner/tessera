@@ -62,7 +62,7 @@ route fixtures and an inventory derived from those existing routes.
 | Route and current entry | What still comes from Python Graph state | Existing replacement / next migration |
 |---|---|---|
 | NVIDIA `nvidia_native.package_scheduled_matmul(artifact)` | F1 removed the Graph argument and base-package compilation. The consumer validates artifact shape/ABI facts and compiles Tile once; the driver retains adjacent boundary lineage. | Keep the one-compile, no-Graph and tampering gates. Broader matmul storage and dynamic envelopes remain separately scoped. |
-| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Backward/saved-LSE attention, paged KV and packed/quantized matmul still reconstruct Tile. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Next: aligned ragged masks and typed backward/paired-LSE contracts, then packed/quantized contracts; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
+| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Backward/saved-LSE attention, paged KV and packed/quantized matmul still reconstruct Tile. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired and packed producers remain open; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
 | ROCm `rocm_native.package_native` | `package_softmax`, `package_reduction`, `package_paged_kv_read`, `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Matmul/softmax/reduction/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, static/dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
@@ -240,8 +240,8 @@ Review findings fixed in this cut:
   f32 bits on every backend. Old serialized forward Schedule artifacts must be
   regenerated; stale hashes fail validation.
 - The SM120 mask uses local query positions, while canonical ragged attention
-  aligns a shorter query to the key sequence's end. The new native route refuses
-  `Sq < Sk` with causal or window masks until forward/backward alignment is fixed.
+  aligns a shorter query to the key sequence's end. F2-A2 now aligns both physical
+  kernels and admits short-query masks after exact-device comparisons.
 - Norm admission now rejects epsilon that is nonpositive, nonfinite or not
   representable as positive finite f32, and refuses unsupported numeric policy
   overrides. This matches the native verifier and immutable runtime constant.
@@ -260,5 +260,8 @@ The remaining NVIDIA Graph-owned constructors are explicit next work:
 ROCm, x86, Apple GPU and Apple CPU direct package paths remain as listed in the
 main census. Existing scheduled consumers do not establish direct-client
 retirement. The next cuts must migrate those callers with backend-owned evidence,
-not transplant NVIDIA's 128-thread schedule. Backward attention's float identity
-encoding also needs an audit; this cut changes forward hashes only.
+not transplant NVIDIA's 128-thread schedule. F2-A2 also fixes backward float
+identity with exact f32 bits. F2-A3 adds checked paired packaging, but the native
+Graph two-result checkpoint producer is still missing. Packed/stateful integer,
+return-role and allocation overflow checks are implemented; their Python Tile
+constructors remain in the census until native producers replace them.

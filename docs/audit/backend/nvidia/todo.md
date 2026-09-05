@@ -6423,3 +6423,19 @@ is claimed. 515 focused WSL contract/registry/dtype/routing tests passed with
 17 explicit skips, three native IR fixtures passed, and 11 audit tests passed.
 All 30 generated-document gates passed. New exact-device Apple/x86 evidence and
 assertions-enabled LLVM remain outside this cut.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+NVIDIA parity validated: 18 attention cases, three saved-LSE producer/consumer
+pairs and 13 packed/paged/replay cases on Super-Bear RTX 5070 / CUDA 13.3 with a
+fresh LLVM 23 target compiler. Both Tile masks are end-aligned; short-query masks
+are now admitted. Paired saved-LSE packaging validates physical policy and
+bindings before compilation, but both checkpoint constructors remain Python
+owned until a native multi-result producer and Schedule consumer exist. Packed
+metadata and paged-KV bounds/returns are stricter. No performance promotion.

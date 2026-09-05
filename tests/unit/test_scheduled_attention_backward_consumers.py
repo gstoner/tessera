@@ -485,3 +485,13 @@ def test_gfx1151_scheduled_attention_backward_exact_mha_gqa_mqa(
     )
     for observed, reference in zip(result["outputs"], expected, strict=True):
         np.testing.assert_allclose(observed, reference, rtol=0, atol=2e-2)
+
+
+@_needs_opt
+def test_backward_schedule_identity_distinguishes_adjacent_f32_policy():
+    module = _x86_module(2, 1, 3, 4)
+    module.functions[0].body[0].kwargs["scale"] = 0.5
+    first = lower_scheduled_attention_backward(module, target="x86")
+    module.functions[0].body[0].kwargs["scale"] = 0.5 + 2 ** -24
+    second = lower_scheduled_attention_backward(module, target="x86")
+    assert first.schedule_digest != second.schedule_digest

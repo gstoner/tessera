@@ -259,8 +259,6 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         q_name, k_name, v_name = (value.removeprefix("%") for value in module.functions[0].body[0].operands[:3])
         names = (q_name, k_name, v_name)
         output_name = module.functions[0].body[0].result or "output"
-        if dims[3] < dims[4] and (causal or window_left >= 0 or window_right >= 0):
-            raise ValueError("SM120 scheduled attention requires aligned query/key masking; short-query masked attention needs native alignment support")
         storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
         compiler_target, architecture, workgroup_size = "nvidia_sm120", "sm_120", 128
         backward_lse_policy, backward_lse_selection = "sm120_recompute", "recompute"

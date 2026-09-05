@@ -6711,3 +6711,17 @@ Sibling outcome: existing gfx1151 scheduled attention/semantic-kernel parity is
 validated by the opted-in owning-host tests. The forward hash format changes;
 physical schedules and runtime ABI do not. Follow-up required for direct-package
 retirement and backward hash review. No NVIDIA norm support transfers to ROCm.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+ROCm follow-up required for native constructor retirement. The NVIDIA physical
+mask edit is not applicable to ROCm's already end-aligned split-reduced kernel.
+Princess-Luna parity validated: all three gfx1151 scheduled backward MHA/GQA/MQA
+cases passed with the new shared hashes. No NVIDIA schedule or saved-LSE pairing
+API is promoted into the gfx1151 production route.

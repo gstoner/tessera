@@ -2333,20 +2333,23 @@ static LogicalResult materializeSm120AttentionKernel(
             builder, loc, cap,
             tessera::tile::emitBoundedTanhApprox(builder, loc, normalized));
       }
+      Value alignedQuery = addI64(builder, loc, q,
+          arith::MaxSIOp::create(builder, loc,
+              arith::SubIOp::create(builder, loc, Sk, Sq), zero));
       Value legal = arith::ConstantIntOp::create(builder, loc, 1, 1);
       if (causalAttr.getValue())
         legal = arith::AndIOp::create(
             builder, loc, legal,
-            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ule, key, q));
+            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ule, key, alignedQuery));
       if (windowLeftAttr.getInt() >= 0) {
         Value lower = arith::SubIOp::create(
-            builder, loc, q, i64Constant(builder, loc, windowLeftAttr.getInt()));
+            builder, loc, alignedQuery, i64Constant(builder, loc, windowLeftAttr.getInt()));
         legal = arith::AndIOp::create(
             builder, loc, legal,
             arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::sge, key, lower));
       }
       if (windowRightAttr.getInt() >= 0) {
-        Value upper = addI64(builder, loc, q,
+        Value upper = addI64(builder, loc, alignedQuery,
                              i64Constant(builder, loc, windowRightAttr.getInt()));
         legal = arith::AndIOp::create(
             builder, loc, legal,
@@ -2569,20 +2572,23 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
                     addI64(builder, loc, mulI64(builder, loc, b, Hq), h), Sq), q), Dv), d);
   };
   auto legalKey = [&](Value q, Value key) -> Value {
+    Value alignedQuery = addI64(builder, loc, q,
+        arith::MaxSIOp::create(builder, loc,
+            arith::SubIOp::create(builder, loc, Sk, Sq), zero));
     Value legal = arith::ConstantIntOp::create(builder, loc, 1, 1);
     if (causalAttr.getValue())
       legal = arith::AndIOp::create(
           builder, loc, legal,
-          arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ule, key, q));
+          arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ule, key, alignedQuery));
     if (windowLeftAttr.getInt() >= 0) {
       Value lower = arith::SubIOp::create(
-          builder, loc, q, i64Constant(builder, loc, windowLeftAttr.getInt()));
+          builder, loc, alignedQuery, i64Constant(builder, loc, windowLeftAttr.getInt()));
       legal = arith::AndIOp::create(
           builder, loc, legal,
           arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::sge, key, lower));
     }
     if (windowRightAttr.getInt() >= 0) {
-      Value upper = addI64(builder, loc, q,
+      Value upper = addI64(builder, loc, alignedQuery,
                            i64Constant(builder, loc, windowRightAttr.getInt()));
       legal = arith::AndIOp::create(
           builder, loc, legal,

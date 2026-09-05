@@ -1451,12 +1451,6 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   if (apple_gpu && (windowLeft.getInt() != -1 || windowRight.getInt() != -1 ||
                     dropoutP.getValueAsDouble() != 0.0))
     return failure();
-  // The existing SM120 kernel masks against the local query index. Canonical
-  // ragged attention aligns a shorter query to the end of the key sequence.
-  // Refuse the mismatch until the native forward/backward alignment is migrated.
-  if (nvidia && schedule.queryRows < schedule.keyRows &&
-      (causal.getValue() || windowLeft.getInt() >= 0 || windowRight.getInt() >= 0))
-    return failure();
   schedule.scale = static_cast<double>(
       static_cast<float>(scale.getValueAsDouble()));
   schedule.causal = causal.getValue();
@@ -1716,19 +1710,22 @@ getAttentionBackwardSchedule(Operation *op) {
 
 static std::string
 attentionBackwardScheduleDigest(const AttentionBackwardSchedule &schedule) {
+  auto bits = [](double value) {
+    return Twine(llvm::APFloat(static_cast<float>(value)).bitcastToAPInt().getZExtValue()).str();
+  };
   std::string contract =
       (Twine("family=attention_backward;target=") + schedule.target +
        ";arch=" + schedule.arch + ";shape=" + Twine(schedule.batch) + "x" +
        Twine(schedule.queryHeads) + "x" + Twine(schedule.kvHeads) + "x" +
        Twine(schedule.queryRows) + "x" + Twine(schedule.keyRows) + "x" +
        Twine(schedule.headDim) + "x" + Twine(schedule.valueDim) +
-       ";storage=" + schedule.storage + ";accum=f32;scale=" +
-       std::to_string(schedule.scale) + ";causal=" +
+       ";storage=" + schedule.storage + ";accum=f32;scale_bits=" +
+       bits(schedule.scale) + ";causal=" +
        Twine(schedule.causal ? 1 : 0) + ";bias=" +
        Twine(schedule.bias ? 1 : 0) + ";window=" +
        Twine(schedule.windowLeft) + ":" + Twine(schedule.windowRight) +
-       ";softcap=" + std::to_string(schedule.softcap) + ";dropout=" +
-       std::to_string(schedule.dropoutP) + ";seed=" +
+       ";softcap_bits=" + bits(schedule.softcap) + ";dropout_bits=" +
+       bits(schedule.dropoutP) + ";seed=" +
        Twine(schedule.dropoutSeed) + ";blocks=" +
        Twine(schedule.queryBlock) + "x" + Twine(schedule.keyBlock) +
        ";splits=" + Twine(schedule.splitCount) + ";reduce=0,1;workspace=" +

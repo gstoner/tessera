@@ -7728,3 +7728,16 @@ apple exact-device proof is claimed. Physical policies and runtime ABI are
 unchanged. Follow-up required for old Schedule regeneration, backward hash review
 and remaining direct Graph-package migration. NVIDIA norm admission is not
 apple execution support.
+
+
+### F2-A2/A3/P1/S1 package-contract synchronization — 2026-09-05
+
+Owner: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+Shared backward Schedule hashes now encode exact f32 policy bits. Regenerate
+older backward Schedule artifacts; no runtime pointer ABI changes. Shared
+ReplaySSM geometry and spans reject lossy integer inputs and overflowing native
+workspace sizes. Native packed/stateful producers remain follow-up required.
+Apple follow-up required for owning-host runtime validation and native direct
+constructor retirement. The NVIDIA physical mask edit and paired package API are
+not applicable to Apple MSL. Shared backward hash and replay validation changes
+apply; no Metal execution or new saved-LSE support is claimed in this cut.

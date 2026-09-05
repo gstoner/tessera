@@ -1908,8 +1908,8 @@ the Tile artifact before one target compilation; the driver records real adjacen
 Graph/Schedule/Tile lineage. The two Graph constructors are now test-only baselines.
 
 Attention forward hashes now preserve exact f32 policy bits on all architectures.
-NVIDIA short-query causal/window masks are explicitly refused because the current
-physical kernel's local query alignment differs from canonical ragged semantics.
+The initial cut refused NVIDIA short-query causal/window masks; F2-A2 below
+removes that restriction after aligning both physical kernels.
 No new backward or saved-LSE support is implied. Numerical parity, not performance
 promotion, is the acceptance criterion for this migration.
 
@@ -1924,3 +1924,44 @@ Next actions, in dependency order:
 
 The updated survey lists every remaining NVIDIA constructor family and retains
 all five backend package entry points in the broader census.
+
+
+### F2 aligned masks and package contracts — 2026-09-05
+
+Owning item: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
+
+- **F2-A2 implemented:** NVIDIA forward/backward Tile kernels use
+  `q + max(Sk - Sq, 0)` for causal and window masks, including saved-LSE variants.
+  Short-query native scheduling is admitted. Backward Schedule identity now
+  encodes exact f32 scale/softcap/dropout bits; regenerate older serialized
+  backward artifacts. This changes no pointer ABI or physical schedule.
+- **F2-A3 contract step implemented; native migration open:** explicit paired
+  packaging checks shape, physical f32 policy, Q/K/V and saved-LSE bindings before
+  compiling either half. Both descriptors carry a checkpoint digest. Unsupported
+  score-modifier aliases and reordered gradient returns are refused. The current
+  Graph forward op has a single native result; the historical Python saved-LSE
+  API has two. Next add a native multi-result checkpoint producer and a consuming
+  Schedule contract, then retire both Python Tile constructors together. A digest
+  does not establish that a runtime LSE buffer came from the specified inputs.
+- **F2-P1 reviewed, native migration open:** packed physical fields now reject
+  lossy/noninteger values and negative offsets before target compilation. Next
+  start with unscaled signed INT4 A/B/i32 output: make native storage packing,
+  packing axis, container strides and output roles part of the Schedule identity;
+  replay the serialized artifact and compare odd-K output on SM120. NVFP4/MX
+  require scale-layout projections before admission. No packed route was promoted.
+- **F2-S1 reviewed, native migration open:** paged-KV bounds no longer coerce
+  strings/floats/bools, and unrelated function returns are refused. Shared replay
+  geometry/span validation rejects noninteger values and overflowing allocation
+  sizes. Next native paged read must retain table bounds and logical start/end;
+  replay decode/flush must share an effects/lifetime contract; MoE must retain
+  multi-entry capacities and workspace ownership. These are separate bounded
+  producer migrations, not another Python wrapper around Graph reconstruction.
+
+Validation includes 18 RTX 5070 attention cases, three forward-save/backward-load
+pairs (both rectangular directions and unmasked), and 13 packed/paged/replay
+regressions on the rebuilt NVIDIA compiler. This is correctness evidence, not
+latency evidence. Princess-Luna runs shared contracts and the existing ROCm
+backward lane (three gfx1151 device cases passed). The focused contract, registry
+and dtype suite passed 510 tests with seven explicit skips; 11 audit tests, three
+native IR fixtures, Ruff, the zero-error mypy ratchet and all 30 generated-doc
+gates passed. Apple owning-host evidence is still separate.

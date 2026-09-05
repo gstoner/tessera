@@ -1,0 +1,1432 @@
+{
+  "build_compiler": "Apple clang 21.0.0 (clang-2100.1.1.101), arm64-apple-darwin25.6.0",
+  "decision": "retain mean_student_t default; no policy disagreement in the predeclared cohort or sensitivity scenarios",
+  "default_policy_changed": false,
+  "plan": {
+    "first_seed": 1701,
+    "process_timeout_seconds": 300,
+    "profile": "extended",
+    "reps": 5,
+    "run_count": 8,
+    "synthetic_candidate_time_factors": [
+      1.5,
+      3.0
+    ],
+    "synthetic_run_index": 0,
+    "trials": 9
+  },
+  "promotion_allowed": false,
+  "runtime_build": "xcrun clang++ -std=c++17 -O3 -dynamiclib -fobjc-arc apple_cpu_runtime.cpp apple_gpu_runtime.mm -framework Accelerate -framework Foundation -framework Metal -framework MetalPerformanceShaders -framework MetalPerformanceShadersGraph",
+  "scenarios": [
+    {
+      "changed_decisions": [],
+      "policies": {
+        "mean_student_t": {
+          "decisions": [
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "single_fused",
+              "shape": "16x32x64x32_e4",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "16x32x64x32_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "32x64x128x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "32x64x128x64_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            }
+          ],
+          "status_counts": {
+            "insufficient_evidence": 6,
+            "promote_candidate": 5,
+            "retain_incumbent": 13
+          }
+        },
+        "median_order_statistic": {
+          "decisions": [
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "single_fused",
+              "shape": "16x32x64x32_e4",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "16x32x64x32_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "32x64x128x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "32x64x128x64_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            }
+          ],
+          "status_counts": {
+            "insufficient_evidence": 6,
+            "promote_candidate": 5,
+            "retain_incumbent": 13
+          }
+        }
+      },
+      "scenario": "observed",
+      "synthetic": false
+    },
+    {
+      "changed_decisions": [],
+      "policies": {
+        "mean_student_t": {
+          "decisions": [
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "single_fused",
+              "shape": "16x32x64x32_e4",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "16x32x64x32_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "32x64x128x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "32x64x128x64_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            }
+          ],
+          "status_counts": {
+            "insufficient_evidence": 6,
+            "promote_candidate": 5,
+            "retain_incumbent": 13
+          }
+        },
+        "median_order_statistic": {
+          "decisions": [
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "single_fused",
+              "shape": "16x32x64x32_e4",
+              "status": "promote_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "16x32x64x32_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "32x64x128x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "32x64x128x64_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            }
+          ],
+          "status_counts": {
+            "insufficient_evidence": 6,
+            "promote_candidate": 5,
+            "retain_incumbent": 13
+          }
+        }
+      },
+      "scenario": "synthetic_candidate_slowdown_1.5x",
+      "synthetic": true
+    },
+    {
+      "changed_decisions": [],
+      "policies": {
+        "mean_student_t": {
+          "decisions": [
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "explicit",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "retain_incumbent_unstable_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "explicit",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "retain_incumbent_unstable_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "16x32x64x32_e4",
+              "status": "retain_incumbent_unstable_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "16x32x64x32_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "32x64x128x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "32x64x128x64_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            }
+          ],
+          "status_counts": {
+            "insufficient_evidence": 6,
+            "promote_candidate": 2,
+            "retain_incumbent": 13,
+            "retain_incumbent_unstable_candidate": 3
+          }
+        },
+        "median_order_statistic": {
+          "decisions": [
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "32x64x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_grouped_gemm",
+              "selected_route": "grouped_fused",
+              "shape": "64x128x128_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "explicit",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "retain_incumbent_unstable_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x128x32x16x32x64",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "explicit",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "retain_incumbent_unstable_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_mla_decode",
+              "selected_route": "absorbed",
+              "shape": "1x4x1x64x16x8x16x32",
+              "status": "promote_candidate",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "16x32x64x32_e4",
+              "status": "retain_incumbent_unstable_candidate",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "16x32x64x32_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": "composed",
+              "shape": "32x64x128x64_e4",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_moe_swiglu",
+              "selected_route": null,
+              "shape": "32x64x128x64_e4",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "128x514_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_reduce_sum",
+              "selected_route": "mpsgraph",
+              "shape": "64x257_axis1",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x32x16_t8",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_replay_decode",
+              "selected_route": "fused_block",
+              "shape": "1x64x32_t16",
+              "status": "retain_incumbent",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "128x32x8",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "end_to_end"
+            },
+            {
+              "device": "apple7",
+              "dtype": "f32",
+              "op": "retune_resident_kv_read",
+              "selected_route": null,
+              "shape": "256x64x16",
+              "status": "insufficient_evidence",
+              "timing_domain": "device"
+            }
+          ],
+          "status_counts": {
+            "insufficient_evidence": 6,
+            "promote_candidate": 2,
+            "retain_incumbent": 13,
+            "retain_incumbent_unstable_candidate": 3
+          }
+        }
+      },
+      "scenario": "synthetic_candidate_slowdown_3.0x",
+      "synthetic": true
+    }
+  ],
+  "schema": "tessera.apple.cross-run-policy-comparison.v1",
+  "scope": "policy_analysis_not_sealed_device_evidence",
+  "source_commit": "fe3c59edd255173436183ebbf82bc645f7b367ae",
+  "source_reports": [
+    {
+      "path": "run-00.json",
+      "sha256": "a1459584ac8c62e3955e17dda85c2162b3b253c21d10fe53495107671a9aae3a"
+    },
+    {
+      "path": "run-01.json",
+      "sha256": "ce781f0c105b7d0a8b425d453cd6dc37a4df71bd5ee3e2c807f71d14ee4390c1"
+    },
+    {
+      "path": "run-02.json",
+      "sha256": "71330d2049beba881b15806af3ba6947d36f7151e4da8a6cc1a8651461c61841"
+    },
+    {
+      "path": "run-03.json",
+      "sha256": "6134ee2fdeda9ee97b3f6c425933a89e4cc113fbdc359c17823968de267cf907"
+    },
+    {
+      "path": "run-04.json",
+      "sha256": "70761826c4e01218366a17801e0725a76fd3ee7686c26c419b43d387f31e5a9b"
+    },
+    {
+      "path": "run-05.json",
+      "sha256": "8902b9a87b0199fe0151a49098c281b053281a17a5005a10991f564026e6c33d"
+    },
+    {
+      "path": "run-06.json",
+      "sha256": "1997cd9c3178e64cc3ab4099278118062f6da67e8156cc1e82efb232f0c3dfe6"
+    },
+    {
+      "path": "run-07.json",
+      "sha256": "bb7428dab6a386e43aea444452a736ebc93db2184dd7333d3f501c119296d1e7"
+    }
+  ]
+}

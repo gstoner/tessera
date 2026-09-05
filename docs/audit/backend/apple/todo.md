@@ -7597,3 +7597,39 @@ L2/L3 intra-kernel timings (`evidence.instr_level`) and malformed levels as
 dispatch evidence. L0/L1 and existing pre-instrumentation records retain their
 semantics. This is a host-contract check for this backend, not a device-clock
 or instrumentation implementation claim.
+
+### APPLE-ROUTE-1 follow-up: fixed-count policy experiment
+
+`benchmarks/apple_gpu/compare_cross_run_policy.py` prepares eight fresh processes
+using the extended retune corpus, seeds 1701--1708, five repetitions and nine
+paired trials per run. Each process warms both routes. The plan and source/runtime
+hashes precede measurement; failed runs are retained without replacement, and a
+changed source or dylib invalidates collection. Use a fresh, explicit
+`TESSERA_APPLE_GPU_RUNTIME_LIB` and an unused output directory:
+
+```sh
+PYTHONPATH=python python benchmarks/apple_gpu/compare_cross_run_policy.py --output /tmp/apple-policy-eight-run
+```
+
+The observed reports feed both estimators unchanged. Separate synthetic scenarios
+multiply every candidate timing in run zero by 1.5 and 3.0, retaining all per-run
+floors. These are sensitivity calculations, not measurements of a physical stall.
+The output is analysis-only and cannot install a production ledger. Eight fresh
+processes reduce shared runtime state; they do not establish statistical
+independence from thermal or OS effects. Default migration requires reviewing the
+owning-device results; no migration or new Metal evidence is claimed here.
+
+Owning-Mac measurement completed under the user's explicit exception to
+AGENTS.md's WSL-only validation rule. A fresh runtime was built from isolated
+commit `fe3c59ed`, then the declared eight processes ran once. The retained
+packet is `benchmarks/baselines/apple7_cross_run_policy_20260904/`: raw reports,
+pre-measurement plan/input hashes, source-report hashes and a replayable summary.
+Each run has 18 native-GPU rows and six explicitly reference-CPU rows; all 24
+pass numerical checks. Both policies produce five candidate wins, 13 incumbent
+retentions and six insufficient-evidence decisions. Neither the observed cohort
+nor the two synthetic slowdown scenarios produces a policy disagreement.
+
+Decision: retain `mean_student_t` as the default. No ledger was installed, no
+physical-stall robustness claim is made, and this packet does not admit lowp
+MoE. Logic and packet replay tests run on Princess-Luna WSL.
+Sync: `APPLE-POLICY-COMPARE-20260904`.

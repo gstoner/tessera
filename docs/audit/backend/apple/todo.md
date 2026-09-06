@@ -7907,3 +7907,32 @@ See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOL
 **Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 Parity validated on M1 Max: 21 mixed-shape primal/derivative cases, including scalar-cotangent reduction VJP; 12 fenced producer/consumer generations remain passing. Five independent processes provide 270 matched queue interval measurements and exact outputs. Command interval overlap is observed, but spans include host submission gaps and do not prove instruction concurrency or kernel speedup. Native constant-index pointer lowering closes the scalar load. Follow-up required for attention device products, persistent/nested tapes and multi-pending Metal ownership; no runtime seal changed.
 See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Outstanding cohorts / saved LSE / queue attribution — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared compiler contracts assessed. NVGPU multi-copy cohorts and CUDA/HIP queue events are not applicable to MSL synchronization or Metal proof. No Apple runtime ABI changed. Follow-up required for device-owned persistent/nested tape storage, saved-LSE package binding and Q/K JVP; previous Metal queue evidence is unchanged.
+See the [shared evidence and next boundaries](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Persistent snapshots / attention export / MSW-9 — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared AD checkpoint export and MSW-9 inventories assessed; CUDA/HIP tape allocation APIs are not applicable to Metal buffers. Follow-up required for Apple-owned persistent/saved-state tapes, resident LSE and Q/K JVP. No Apple runtime ABI changed and no new exact-Metal claim is made.
+See [implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Resident LSE / native ANN constants — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native ANN constant-composition policy assessed. CUDA resident allocation and module ownership are not applicable to Metal buffers/command queues. Follow-up required for Metal resident LSE, split nested tapes, Q/K JVP and native ANN equivalence/performance. No Apple runtime source or seal changed; no new Metal execution claim.
+See the integrated plan’s native ANN composition and resident attention generation section.
+
+
+**Typed nested exports / resident score tangents / promotion admission — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Follow-up required: native typed AD exports and cache admission are shared contracts. The new resident score tangent binds CUDA pointers and SM120 images; Metal needs its own MSL/threadgroup lowering and completion-owned LSE/tape allocations. No new Apple device result or ANN promotion is claimed.
+See the integrated plan’s typed nested exports and resident score tangents section.
+
+
+**Automatic score JVP / control-flow inventory — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native Q/K product verification is implemented. Metal product lowering, MSL storage and completion-owned persistent tensor tapes remain follow-ups; CUDA evidence is not applicable. The control-flow document no longer incorrectly calls Apple the only device-control backend.
+
+
+**Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Follow-up required: shared readonly product inputs and dense attention metadata apply, but Metal needs MSL lowering and completion-owned buffer allocations for split tensor tapes and resident Q/K products. CUDA/HIP pointer consumers are not applicable to Apple; no new Metal execution or runtime seal change.
+See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

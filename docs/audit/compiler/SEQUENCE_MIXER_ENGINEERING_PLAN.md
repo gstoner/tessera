@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-09-06
 audit_role: plan
 plan_state: landing
 ---
@@ -440,3 +440,17 @@ This lands faithful KDA as a TSOL primitive with green oracles — a shippable,
 self-contained unit — and establishes the protocol every later workstream builds
 on. Everything after is "register another tag / another facet," each its own
 oracle-gated PR.
+
+
+## FA-4 recurrence-stability ownership
+
+The [integrated plan](INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership)
+assigns the remaining FA-4 work here. Preserve the hypotheses in the
+[archived mathematical design](archive/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md),
+but bind each certificate to a concrete recurrence, norm, admissible domain
+and discretization. The oracle may precede public-op admission; certificate
+production alone does not close the task. Completion requires a recurrence
+consumer that checks timestep/domain assumptions and rejects unsupported
+cases, tests for nonnormal transient amplification and discretization-specific
+stability, and separate native execution evidence on each claimed backend.
+Do not infer discrete stability from continuous-time eigenvalues alone.

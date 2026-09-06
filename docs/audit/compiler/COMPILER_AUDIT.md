@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-05
+last_updated: 2026-09-06
 audit_role: theme
 ---
 
@@ -2021,3 +2021,53 @@ targets.
 - `archive/compiler_layer_gap_remediation.md`
 - `archive/compiler_spec_gap_audit.md`
 - `archive/docs/audit/compiler/COMPILER_AUDIT.md`
+
+
+## 2026-09-06 substrate review and AD consolidation
+
+The [active AD plan](AUTODIFF_EXECUTION_PLAN.md) consolidates remaining work from
+three archived designs while preserving P/D/AD IDs and mathematical obligations.
+Archiving changes ownership, not completion status. Native split static tensor
+tapes and isolated Q/K JIT programs remain bounded evidence; general persistent
+control tapes, composition, native jets and independent backend promotion remain
+open. The refreshed [domain](../domain/DOMAIN_AUDIT.md) and
+[Target IR](TARGET_IR_REVIEW.md) reviews carry current source findings.
+
+`CORE_SUBSTRATE_VIEW.md` was **reviewed only**, as requested. Its shared-substrate
+rationale is useful, but its present-tense inventory is stale:
+
+- S1's loop-carry fail-open baseline is historical; `TileValueProvenance` and
+  legality/lifetime passes now cover substantial forwarded and generation-owned
+  cases. General control/alias coverage still must be assessed independently.
+- S2's missing IR schedule datum predates `ScheduleObject` and SO-2/SO-4
+  consumers. Preserve remaining producer/physical breadth, not a second datum.
+- S8's “implicit-diff hardening has no row” predates `OperatorTangent`,
+  `RootConditionCertificate` and AD-OPERATOR-1. These certify the implemented
+  root envelope, not all KKT/complementarity problems. Real batching remains open.
+- S9's “entire pair unowned” is superseded by LAYOUT-ALG-1 L3 factorization and
+  `cosize` residency plus Schedule Object bindings; the integrated plan records
+  these consumers explicitly.
+- S3 says calibration “never run” while its own P1b records a gfx1151 WSL
+  pruning sweep. The remaining question is selector-eligible calibration and
+  attribution, not whether any measurement has ever been collected.
+- S6's proposed scan/segment additions conflict with its own corrections that
+  they already exist. Retain consumer/breadth tasks and genuinely missing
+  structural operators. S5's closing recommendation likewise must not remint
+  NUMPOL-CARRIER-1, which the same document already identifies as owned.
+
+A future revision should retain its mathematics/demand matrix and replace the
+historical status/build sequence with links to current owners. Its external
+paper comparisons and empirical numbers were not revalidated in this document
+review. No new compiler/runtime capability is inferred from the consolidation.
+
+
+## 2026-09-06 functional-analysis consolidation
+
+The former FUNCTIONAL_ANALYSIS_TSOL_PLAN.md is now a reference redirect; its
+mathematical models and verification log are preserved in the archive.
+[FA-1–FA-7 ownership](INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership)
+keeps numerical-budget composition, spectral multiplier consumption and
+consumer-gated low-rank legality open. Existing AD laws are reused, recurrence
+stability belongs to the sequence-mixer plan, and broad functional calculus
+and PDE coercivity remain deferred. This removes a competing execution queue;
+it does not close these features or change backend evidence states.

@@ -118,3 +118,42 @@ def lower_scheduled_checkpoint(names, dims, scale, causal, *, backward=False):
     )
     artifact.validate()
     return artifact
+
+
+def lower_generated_checkpoint(source: str, *, backward: bool = False):
+    """Export a fresh native AD checkpoint through the existing Schedule path.
+
+    Source is parser-bound MLIR with the explicit SM120 target. No GraphIRModule
+    reconstruction occurs; the native pass owns operand ordering and AD lineage.
+    """
+    if type(backward) is not bool:
+        raise ValueError('checkpoint role must be boolean')
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError('checkpoint AD export requires production tessera-opt')
+    role = 'backward' if backward else 'forward'
+    graph = run_tessera_opt(tool, source, '--tessera-autodiff-paired=checkpoint-product='+role)
+    schedule = run_tessera_opt(tool, graph, '--tessera-graph-to-schedule')
+    tile = run_tessera_opt(tool, schedule, '--tessera-schedule-to-tile')
+    # Read the native physical contract; embedded lineage may itself contain
+    # tensor types, so never rediscover dimensions from arbitrary type strings.
+    contract = re.search(r'tessera.native_contract = \{([^\n]*)\}', tile)
+    if contract is None:
+        raise ValueError('native checkpoint export lost its physical contract')
+    text = contract[1]
+    shape = re.search(r'shape = array<i64: ([0-9, ]+)>',text)
+    scale = re.search(r'scale = ([^ ,}]+) : f32',text)
+    causal = re.search(r'causal = (true|false)',text)
+    if shape is None or scale is None or causal is None:
+        raise ValueError('native checkpoint export lost shape or numeric policy')
+    value = scale[1]
+    scale_value = struct.unpack('>d',int(value,16).to_bytes(8,'big'))[0] if value.startswith('0x') else float(value)
+    hashes = re.findall(r'tessera.schedule_hash = "([0-9a-f]{64})"',tile)
+    entries = re.findall(r'llvm.func @([\w]+)\(',tile)
+    if len(hashes)!=1 or len(entries)!=1:
+        raise ValueError('native checkpoint export requires one entry')
+    names = ('dO','q','k','v','lse','dq','dk','dv') if backward else ('q','k','v','output','lse')
+    artifact = ScheduledCheckpointArtifact(graph,schedule,tile,entries[0],hashes[0],backward,names,
+        tuple(map(int,shape[1].split(','))),scale_value,causal[1]=='true')
+    artifact.validate()
+    return artifact

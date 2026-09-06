@@ -403,13 +403,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffForwardPass",
         summary=(
             "Emits a separate paired JVP function from compiler-owned Graph "
-            "TangentInterface implementations, including V-only dense f32 attention. Optional emit-storage-child scalarizes "
+            "TangentInterface implementations, including dense f32 Q/K/V attention with same-generation O/LSE. Optional export-attention-jvp projects an isolated verified product into a physical binding contract. Optional emit-storage-child scalarizes "
             "one rank-one f32 arithmetic/sigmoid/tanh/stop-gradient or power-of-two sum/mean pair into a native GPU storage child, preserving requested tangent argument order."
         ),
         input_dialects=("tessera", "func", "arith"),
         output_dialects=("tessera", "tessera.attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.autodiff.jvp", "tessera.autodiff.role",
+        preserved_attrs=("tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
                          "tessera.native_jvp_pair", "tessera.native_jvp_inputs",
                          "tessera.native_jvp_input_widths", "tessera.native_jvp_output_widths",
                          "tessera.native_jvp_width", "tessera.native_jvp_output_width", "tessera.native_jvp_wrt"),
@@ -439,6 +439,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(
+            "Optional export-product preserves full typed nested residual forward/backward ABIs and paired lineage without scalarization. "
             "Emits paired forward and backward functions under the explicit "
             "residual ABI: recompute-all by default, SAVE state tapes for "
             "control_scan and generic multi-state counted loops, plus saved "
@@ -446,13 +447,15 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "emit-storage-child fuses one single-input rank-one f32 with explicit straight-line saved residuals or recomputation "
             "forward/backward pair with an explicit output cotangent into a native child, "
             "including scalar sum/mean VJP. Dense f32 attention reverse products use "
-            "checkpoint forward/backward ops with recomputed natural-log LSE."
+            "checkpoint forward/backward ops with natural-log LSE returned by forward "
+            "and consumed as an explicit backward residual. Optional checkpoint-product exports "
+            "one generated forward/backward checkpoint with canonical physical argument order."
         ),
         input_dialects=("tessera", "func", "arith", "scf", "tensor"),
         output_dialects=("tessera", "tessera.attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=(
-            "tessera.native_vjp_pair", "tessera.native_vjp_inputs",
+        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair",
+            "tessera.attention_ad_pair", "tessera.native_vjp_pair", "tessera.native_vjp_inputs",
             "tessera.native_vjp_input_widths", "tessera.native_vjp_output_widths",
             "tessera.native_vjp_width", "tessera.native_vjp_output_width", "tessera.native_vjp_wrt",
             "tessera.autodiff.activity",
@@ -489,6 +492,14 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         can_run_after=("tessera-adjoint-collective-insertion",),
         pass_kind="transform",
         sprint="COMP-SCHED-OVERLAP-1-R1-2026-08-10",
+    ),
+    PassMetadata(
+        name="tessera-canonicalize",
+        cpp_class="Canon",
+        summary="Canonicalizes native Tessera patterns; opt-in ann-reassociate composes single-use affine chains with finite frozen fp32 constants, bounded folding work, and no intervening activation or numeric-policy overrides.",
+        input_dialects=("tessera", "arith"),
+        output_dialects=("tessera", "arith"),
+        sprint="MSW-9",
     ),
     PassMetadata(
         name="tessera-compute-legalize",
@@ -647,6 +658,16 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         preserved_attrs=("world_size", "dtype", "chunk_bytes"),
         pass_kind="lowering",
         sprint="COLLECTIVE-TARGET-FUNCTIONAL-1",
+    ),
+    PassMetadata(
+        name="tessera-native-tape-to-gpu",
+        cpp_class="NativeTapeToGPUPass",
+        summary="Lowers isolated static f32 bufferized AD products to serial GPU entries, preserving full residual shapes. Bounded for/if temporaries are limited to 4096 logical bytes, with distinct slots per iteration path. The backend option selects NVVM generic or AMDGPU private allocation addressing; dynamic extents and while loops refuse.",
+        input_dialects=("func", "arith", "math", "scf", "memref"),
+        output_dialects=("gpu", "llvm", "arith", "math", "scf", "memref", "tile"),
+        required_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair"),
+        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.temporary_bytes"),
+        diagnostic_codes=(), pass_kind="lowering", sprint="W2.4a",
     ),
     PassMetadata(
         name="tessera-newton-autodiff",

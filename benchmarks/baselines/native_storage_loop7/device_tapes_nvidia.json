@@ -1,0 +1,109 @@
+{
+  "backend": "nvidia",
+  "rows": [
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "package_digest": "59f71a7233dd5122b38e29ceba60551eab14ba80f75026dc9f3fc80d2f43e78b",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "package_digest": "1e157714c3e683b3c0b530ccea89b43aa87c166e2f00ab0d68d7913f93132d7f",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "package_digest": "0c88cfc22fae5014e117019b7e7dc8ee0883ffc490ff558c293c9f7f979ca25b",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "package_digest": "7c986643fdd734ac8c72ce5f0d71ffdbddd607e3b130f74c8932781c14a949b9",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "package_digest": "5f91675a3ebccbd5c5036e7fdb2ed0c07d347763ae94ca5f1b608ceb188e6af8",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "package_digest": "c333221e6632dc2c9bea29c5b4e0bc67f65519d0fdf114f109462090b34c2295",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "sum_vjp",
+      "width": 32,
+      "package_digest": "83693e43a03cfcc9aa119cb7043937e53802047a7aeb738103955b37eafc56aa",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "sum_vjp",
+      "width": 64,
+      "package_digest": "4704cf153d447899b33221c3d67a0e8f40446a14e84a9a40ba6a776a85a97b55",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "sum_vjp",
+      "width": 256,
+      "package_digest": "88027cd64581964da56b04c32c0411dccbe3b4b4598b4bebcf39278039c704b3",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "mean_vjp",
+      "width": 32,
+      "package_digest": "55546d700b0536818f44dbed10dfa55cf35a9169262e195340f74e4ea90bb677",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "mean_vjp",
+      "width": 64,
+      "package_digest": "2c566c54cc7e853e4912e25539edb1ddb815c5b9f535c11e1aef290af5697170",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "mean_vjp",
+      "width": 256,
+      "package_digest": "db1f86f838a89897af3cfa945df9c62cb925932cbc510e49d40fd5e69552cb91",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    }
+  ],
+  "compiler_sha256": "cbb0a13362b9711d1cdd8bd96888e960e6c31a22edbe955af62598c19de5b2ea",
+  "recorder_sha256": "8486232135f1b0a71c97e06ecf3b1d25402094fd8baf12def10e160169cd280e",
+  "implementation_sha256": {
+    "native_device_tape.py": "dc42d13215f1da78d881d9fcc68f6aab7109b0e14fb4da01044242a669e85d1c",
+    "native_storage_pair.py": "e509f79acb684a4b24ae694eceb6970d96b9502aeced1d2b496ea4113577d720"
+  },
+  "higher_order_ad": false,
+  "control_flow_tape": false
+}

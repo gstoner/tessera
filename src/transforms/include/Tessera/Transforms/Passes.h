@@ -178,6 +178,7 @@ std::unique_ptr<mlir::Pass> createAutodiffPass();
 // Additive: the in-place `--tessera-autodiff` stays as the bootstrap.
 // Body: src/transforms/lib/AutodiffPairedPass.cpp
 std::unique_ptr<mlir::Pass> createAutodiffPairedPass();
+std::unique_ptr<mlir::Pass> createNativeTapeToGPUPass();
 
 // AutodiffForwardPass — AD-FWD-CORE-1. Emits a separate paired JVP:
 //   @f__jvp(inputs..., input_tangents...) -> (primals..., output_tangents...)

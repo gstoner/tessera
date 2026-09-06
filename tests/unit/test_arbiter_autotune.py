@@ -473,3 +473,23 @@ def test_a_legacy_device_cache_hit_is_re_measured():
     assert refreshed.declares_its_field(), (
         "the legacy row should have been replaced by a re-measurement")
     assert refreshed.latency_ms != 99.0
+
+
+@pytest.mark.parametrize('rejection',['selector','separation','missing_separation'])
+def test_exact_cache_hit_cannot_reuse_ineligible_promotion(rejection):
+    target='promotion_cache_'+rejection
+    old=_FakeCand('old_'+rejection,'old',device_ms=9.0)
+    fresh=_FakeCand('new_'+rejection,'new',device_ms=1.0)
+    for candidate in (old,fresh):
+        candidate.target=target
+        C.register_candidate(candidate)
+    cache=AT.MeasureCache()
+    key=(AT._device_id(target),target,OP_MATMUL,(4,4,4),'bfloat16',AT.TIMING_DEVICE)
+    cache.put(key,AT.MeasureRecord(winner=old.name,latency_ms=1.0,
+        candidates={old.name:1.0,fresh.name:9.0},unmeasured={},
+        separation=None if rejection=='missing_separation' else {'separated':rejection!='separation'},
+        evidence={'selector_eligible':False} if rejection=='selector' else {}))
+    winner=AT.measured_arbitrate(_FakeRegion(),OP_MATMUL,target,*_mm(),dims=(4,4,4),
+        dtype='bfloat16',cache=cache,reps=1,warmup=0,timing=AT.TIMING_DEVICE)
+    assert winner.name==fresh.name
+    assert old.runs and fresh.runs, 'promotion admission must rerun native-candidate verification'

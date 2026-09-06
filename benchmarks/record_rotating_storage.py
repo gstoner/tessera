@@ -22,7 +22,12 @@ def main():
     p.add_argument('--pending-swap', action='store_true')
     p.add_argument('--slots', type=int, default=2)
     p.add_argument('--nested', action='store_true')
+    p.add_argument('--outstanding', type=int, default=1)
     args = p.parse_args()
+    if args.outstanding > 1 and (args.slot_alias or args.pending_swap or args.slots != 2):
+        p.error('--outstanding selects its own matched slot/token protocol')
+    if not 1 <= args.outstanding <= 4:
+        p.error('outstanding count must be 1..4')
     if not 2 <= args.slots <= 8:
         p.error('slot count must be 2..8')
     fixture = 'tile_dynamic_gpu_slot_alias.mlir' if args.slot_alias else 'tile_dynamic_gpu_rotating.mlir'
@@ -51,6 +56,10 @@ def main():
             'scf.yield %new_group, %total, %write_slot, ' + ', '.join([f'%slot{i}' for i in range(extra)] + ['%read_slot']) +
             ' : !nvgpu.device.async.token, f32' + ', memref<?xf32, 3>'*args.slots)
         slots = args.slots
+    if args.outstanding > 1:
+        from benchmarks.pending_storage_source import pending_cohort
+        source = pending_cohort(args.outstanding)
+        slots = 2 * args.outstanding
     if args.nested:
         source = source.replace('      %a = memref.alloca', '      %outerTrips = arith.constant 3 : index\n      scf.for %outer = %zero to %outerTrips step %one {\n      %a = memref.alloca')
         source = source.replace('      gpu.return', '      }\n      gpu.return')
@@ -61,7 +70,7 @@ def main():
     bound = package.bind()
     try:
         for width, rounds in [(32, 0), (32, 1), (32, 2), (64, 7), (128, 16), (128, 17), (256, 33)]:
-            x = (np.arange((rounds+1)*32*width, dtype=np.float32) % 127).reshape(rounds+1,32,width)
+            x = (np.arange(args.outstanding*(rounds+1)*32*width, dtype=np.float32) % 127).reshape(args.outstanding,rounds+1,32,width)
             y = np.zeros((32,width),dtype=np.float32)
             src, dst = ct.c_void_p(), ct.c_void_p()
             try:
@@ -71,7 +80,7 @@ def main():
                 assert bound._size(src, dst, ct.c_int64(width), ct.c_int64(rounds)) == slots*width*4
                 bound.launch((src.value, dst.value, width, rounds), grid=(32,1,1), block=(width,1,1))
                 device.check(device.dtoh(y.ctypes.data, dst, y.nbytes))
-                np.testing.assert_array_equal(y, np.roll(x[:-1], -1, axis=-1).sum(axis=0))
+                np.testing.assert_array_equal(y, np.roll(x[:, :-1], -1, axis=-1).sum(axis=(0, 1)))
                 rows.append(dict(width=width, rounds=rounds, oracle='exact', native_bytes=slots*width*4,
                                  proof='successive generations use different input values; post-loop scratch reuses released slot'))
             finally:
@@ -80,7 +89,7 @@ def main():
                         device.check(device.free(ptr))
     finally:
         bound.close()
-    args.output.write_text(json.dumps(dict(backend='nvidia', slot_alias=args.slot_alias, slots=slots, nested=args.nested, pending_swap=args.pending_swap, device=subprocess.check_output(
+    args.output.write_text(json.dumps(dict(backend='nvidia', outstanding=args.outstanding, slot_alias=args.slot_alias, slots=slots, nested=args.nested, pending_swap=args.pending_swap or args.outstanding > 1, device=subprocess.check_output(
         ['nvidia-smi','--query-gpu=name,uuid,driver_version','--format=csv,noheader'],text=True), source_sha256=hashlib.sha256(source.encode()).hexdigest(),
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(), package_digest=package.binding_digest,
         recorder_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), rows=rows,

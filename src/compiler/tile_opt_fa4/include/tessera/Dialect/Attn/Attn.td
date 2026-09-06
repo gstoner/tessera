@@ -299,3 +299,15 @@ def CheckpointBackwardOp : Op<Tessera_Attn_Dialect, "checkpoint_backward", [Pure
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
+
+// Internal AD product, not a new public Graph operation.
+def CheckpointJVPOp : Op<Tessera_Attn_Dialect, "checkpoint_jvp", [Pure]> {
+  let summary = "Compute Q/K/V attention tangents from the paired O and row LSE";
+  let arguments = (ins AnyRankedTensor:$query, AnyRankedTensor:$key,
+      AnyRankedTensor:$value, AnyRankedTensor:$output, AnyRankedTensor:$row_lse,
+      AnyRankedTensor:$d_query, AnyRankedTensor:$d_key, AnyRankedTensor:$d_value,
+      F32Attr:$scale, BoolAttr:$causal);
+  let results = (outs AnyRankedTensor:$d_output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}

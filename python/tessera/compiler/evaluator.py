@@ -903,3 +903,17 @@ def grad_cost_ratio(
     total_cost = float(gbox[0])
 
     return baur_strassen_ratio(forward_cost, total_cost, bound=bound)
+
+
+def ann_composition_equivalence(target, original, transformed, original_args, transformed_args,
+                                *, before, after, allow_reassociation=False,
+                                rtol=1e-5, atol=1e-8):
+    """Consume MSW-9 parameter provenance before testing a native fusion candidate.
+
+    This explicit candidate gate does not discover or promote a backend route.
+    Reference-only execution remains inconclusive in program_pair_equivalence.
+    """
+    from .ann_fragment import validate_affine_composition
+    validate_affine_composition(before, after, allow_reassociation=allow_reassociation)
+    return program_pair_equivalence(target, original, transformed, original_args,
+                                    transformed_args, rtol=rtol, atol=atol)

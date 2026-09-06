@@ -4293,3 +4293,32 @@ See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOL
 **Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 Shared compiler/ABI assessment: mixed primal/cotangent shapes, attention interfaces and fused saved-residual forwarding are implemented. Host LLVM sizing remains validated through device packages. Native CPU attention/AD compute and persistent tape execution require follow-up. GPU ring and queue interval performance are not applicable evidence for x86.
 See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Outstanding cohorts / saved LSE / queue attribution — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared compiler ownership and saved-LSE ABI assessed; x86 remains the host sizing/ownership companion. CUDA/HIP copy protocols and GPU counters are not applicable to CPU execution proof. Follow-up required for host tape allocation/reclamation and split-product ABI support; no x86 attention/device performance claim.
+See the [shared evidence and next boundaries](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Persistent snapshots / attention export / MSW-9 — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared AD export and MSW-9 contracts assessed. Persistent CUDA/HIP snapshots and GPU profiling APIs are not applicable to x86 execution. Follow-up required for CPU tape storage and native ANN fusion integration. The incoming Ryzen9800X3D can supply a separate host lane after commissioning; no CPU performance evidence is inferred from its GPU.
+See [implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Resident LSE / native ANN constants — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native ANN constant-composition policy assessed. CUDA resident allocations and GPU device proof are not applicable to host execution. Follow-up required for host-owned split tapes and native ANN equivalence/performance; the host sizing companion remains separate from attention compute proof.
+See the integrated plan’s native ANN composition and resident attention generation section.
+
+
+**Typed nested exports / resident score tangents / promotion admission — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Follow-up required: native typed AD exports and cache admission are shared contracts, but host tensor tape execution and ANN original/fused execution need native x86 consumers. CUDA shared-memory JVP and resident ownership are not applicable to the host ABI; no x86 execution or performance parity is inferred.
+See the integrated plan’s typed nested exports and resident score tangents section.
+
+
+**Automatic score JVP / control-flow inventory — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native Q/K product verification is implemented. Attention JVP host product execution and full typed persistent tensor tapes remain follow-ups. Existing W4 bounded state-machine forward/backward execution through ORC JIT is retained as recorded native proof; sizing and portable SCF lowering alone do not establish broader execution.
+
+
+**Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native product readonly inputs and dense attention metadata apply. The CUDA/HIP tape consumer uses x86 only for its checked host sizing companion; this does not establish x86 tensor-tape execution. Follow-up required for an independently validated CPU product consumer and attention integration.
+See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

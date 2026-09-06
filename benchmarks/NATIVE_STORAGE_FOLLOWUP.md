@@ -332,3 +332,300 @@ Validation workflow: broad tests must use an immutable compiler executable.
 Re-linking tessera-opt during tests caused transient permission failures in an
 invalidated run; subsequent validation uses tessera-opt-loop5-validated with no
 concurrent builds. Do not count the invalidated run as evidence.
+
+
+## Multiple pending cohorts and persisted attention LSE — 2026-09-06
+
+W2.4a / CAKE / SO-2; synchronization key **IR-NATIVE-FOUNDATION-1**.
+
+The shared memref proof now tracks a set of matched seed/refill/token/slot
+relationships. Every member must complete before collective publication;
+all reads must release before the backedge, and every final token must drain
+before arena reuse. This covers multiple independent pending cohorts under
+uniform nesting, not arbitrary CFG joins or a FIFO that waits only its head.
+The arena repeats the proof before consuming a reuse assignment.
+
+`record_rotating_storage.py --outstanding {2,3,4} --nested` passed seven cases
+per cohort count on RTX5070: zero, one, odd/even and longer trips. Each cohort
+uses a distinct input slab; the oracle sums all consumed generations and checks
+scratch reuse after the final drain. [Packets](baselines/native_storage_loop6/)
+bind source, compiler and package digests. These are correctness measurements,
+not evidence that additional outstanding groups improve throughput.
+
+Paired dense-f32 attention AD now returns natural-log row LSE from forward and
+accepts it as a named backward residual. The standalone attention backward no
+longer invokes checkpoint forward to rediscover LSE. Causal alignment and the
+f32 scale remain shared between producer and consumer. This is an MLIR ABI
+change with native compiler tests; persisted device allocation ownership and
+AD-to-device package integration are still required. The in-place adjoint
+interface retains its recompute behavior because it has no external tape ABI.
+
+### Queue measurements and attribution
+
+`record_native_queue_overlap.py` compiles one cooperative native MLIR ring
+workload and compares serial/parallel launches using disjoint inputs/outputs,
+a common GPU event anchor, alternating measurement order and exact oracles.
+Each backend ran five repetitions at 8/32/128 blocks, for 30 measured pairs.
+These are driver-level protocol measurements, not production tensor/JIT binding
+validation. Every packet identifies its actual compiler; CUDA used LLVM23
+`mlir-opt`, while HIP used the core compiler with its registered ROCm pipeline.
+
+| Backend | Blocks | Median serial span ms | Median parallel span ms | Median interval intersection ms |
+|---|---:|---:|---:|---:|
+| RTX5070 | 8 | 0.132384 | 0.098080 | 0.032256 |
+| RTX5070 | 32 | 0.118208 | 0.113728 | 0.025888 |
+| RTX5070 | 128 | 0.243968 | 0.170176 | 0.085120 |
+| gfx1151 | 8 | 0.218220 | 0.133234 | 0.072196 |
+| gfx1151 | 32 | 0.788756 | 0.439157 | 0.381118 |
+| gfx1151 | 128 | 0.941002 | 0.576973 | 0.517147 |
+
+This single-process sample is exploratory; event intervals include scheduling
+and event overhead. It does not establish a repeatable application speedup.
+A separate Nsight Systems run captured 30 CUDA kernel intervals (including
+warmups), with 17 cross-stream intersections. Among the three measured parallel
+pairs, kernel intersection was 0 / 16032 / 99008 ns at 8 / 32 / 128 blocks;
+the smallest profiled pair did not overlap. The extracted intervals and raw
+SQLite digest are in `baselines/native_storage_loop6/nsight_systems.json`.
+Nsight Compute 2026.2.1 separately profiled one 8-block kernel: duration
+102880 ns, SM throughput 0.78% and DRAM throughput 1.55% of sustained peak.
+Its replayed, isolated counters are workload characterization, not attribution
+of concurrent instruction issue. No selector was promoted.
+
+HIP counter attribution remains unavailable on the current gfx1151 WSL stack;
+GPU events do not fill that gap. Apple and x86 do not inherit either GPU result.
+
+### Next architecture boundaries
+
+1. Persistent tapes need owned device snapshots, immutable generation and
+   package identity, repeated-backward lifetime rules, and completion-aware
+   reclamation. Keeping raw input pointers alive does not protect against input
+   mutation. Separate forward/backward packages must replace the current fused
+   native child's two-output assumption before this can be called persistent.
+2. Nested tapes need per-invocation frames with branch identity, executed trip
+   counts and saved state; nested Python recording is not a device tape proof.
+3. Attention Q/K JVP needs a cooperative product lowering for
+   `dP = P * (dS - rowsum(P*dS))`, with
+   `dS = scale * (dQ*K^T + Q*dK^T)` and `dO = dP*V + P*dV`.
+   Reuse the same causal/LSE convention and avoid materializing a quadratic
+   score tensor. Ship the registered producer and native consumer together.
+4. Bind compiler-produced attention forward/backward functions to physical
+   packages with the saved-LSE owner/generation checked at consumption. Measure
+   each backend independently; existing hand-authored packages do not prove it.
+5. Extend queue evidence through production submissions and fresh-process runs;
+   obtain ROCm tracing/counters on a supporting host. GPU timestamp overlap is
+   insufficient to attribute which execution units overlapped.
+
+Validation on Princess-Luna WSL: 17977 non-slow tests passed, 2309 skipped,
+870 deselected; 125 native lit fixtures passed and 3 were unsupported. The
+subsequently added two-attention residual-slot case also passed in the final
+18-test attention/audit run. Registry-focused tests, Ruff, the zero-error mypy
+ratchet and all 30 generated-document checks pass. Tests used an immutable
+`build/tools/tessera-opt/tessera-opt-loop6-validated` executable.
+
+
+## Persistent snapshots and generated attention exports — 2026-09-06
+
+`record_native_device_tape.py` validates 12 cases each on RTX5070 and gfx1151:
+square/tanh/sum/mean, widths32/64/256, input mutation after capture, two backward
+cotangents with independently retained results, and nested-frame cleanup.
+`NativeStoragePair.capture` owns a device copy; results remain frame-owned until
+close. Calls are synchronous and recompute the paired product. This does not
+claim higher-order AD, arbitrary control-flow tapes, stream overlap or reduced
+compute. Explicit close remains required; package close releases its frames.
+
+`record_generated_attention_ad.py` validates six RTX5070 cases starting from a
+fresh reverse-marked MLIR function. `checkpoint-product=forward|backward` exports
+one compiler-generated product with canonical arguments and full paired lineage;
+`lower_generated_checkpoint` then uses native Schedule/Tile and the existing
+NVIDIA descriptor packages. No historical Graph module is reconstructed.
+Forward output, natural-log LSE and Q/K/V gradients match independent float64
+oracles within3e-5 for Sq/Sk3/5,5/3,4/4, each causal/noncausal. The named
+`end_aligned_v1` policy is `key <= q + max(Sk-Sq,0)`; negative offsets are not
+part of this contract. LSE crosses the host-buffer runtime bridge; resident
+attention tape ownership is still open. Q/K JVP remains unimplemented.
+
+Packets live in [native_storage_loop7](baselines/native_storage_loop7/).
+The incoming native gfx1201 host has a read-only commissioning probe and
+[profiling plan](../docs/audit/backend/rocm/NATIVE_RDNA4_COMMISSIONING.md).
+No counter validation is claimed before that machine is available.
+
+The streaming Q/K/V JVP spike has 17 passing reference cases, including block
+sizes1/3/8/32, directional finite differences, max rescaling and empty masks.
+It establishes an algorithm for the next cooperative lowering; it supplies no
+native tangent registration, package, timing or device evidence. MSW-9 now
+separates dense, unique storage and unique trainable slot counts, including
+frozen/shared snapshots. Its automatic fusion and executable-identity bindings
+remain open.
+
+Loop7 validation: 17990 non-slow tests passed, 2309 skipped, 870 deselected;
+125 native fixtures passed, 3 unsupported. The final focused run passed87 tests,
+including the subsequently added streaming/ANN cases and tape lifecycle checks.
+The lifecycle test was then rerun with bounded daemon-thread joins (2 passed).
+Ruff, zero-error mypy and all30 generated-doc checks pass. The 12 cases on each
+GPU were rerun after serializing pair capture/calls against close; packets record
+the Python implementation hashes. Counts overlap and must not be added.
+
+## Loop 8: native frozen ANN composition and resident LSE
+
+Owners: W2.4a / CAKE / SO-2 and MSW-9; sync **IR-NATIVE-FOUNDATION-1**.
+
+`AttentionCheckpointPair.capture` now supplies a synchronous CUDA frame owning
+private Q/K/V snapshots and the generated forward's LSE allocation. Its backward
+launch directly consumes those pointers, bypassing the host tensor bridge.
+Multiple backward results have separate allocations. Context checks precede
+use/free; allocation bounds, complete descriptor ABI/policy and shape guards
+are validated before execution. Closing invalidates exposed read-only views.
+An injected failed backward releases only that attempt's allocations.
+
+The [resident attention packet](baselines/native_storage_loop8/resident_attention_nvidia.json)
+records six RTX 5070 cases: Sq/Sk = 3/5, 5/3 and 4/4, each causal and noncausal,
+with grouped heads, mutated caller inputs after capture and repeated backward
+with doubled cotangents. Independent float64 output/gradient oracles use 3e-5
+absolute and relative tolerance. This is correctness/ownership evidence only;
+there is no timing comparison or overlap claim. The native kernel/compiler is
+unchanged from loop7; the new frame binds its images directly.
+
+MSW-9's native consumer now lives in `tessera-canonicalize`, enabled explicitly
+with `ann-reassociate=true`. It discovers a two-affine constant chain and folds
+weights/biases with deterministic APFloat arithmetic. Registered `tessera.add`
+requires equal-rank tensors, so the native rewrite consumes matrix biases and
+preserves per-row values. It refuses runtime parameters, intervening activations,
+shared intermediates, transpose/policy overrides, nonfinite folded results and
+excessive compile-time work. Default pipelines retain existing association.
+The rewrite emits existing native MLIR operations; it does not rebuild Graph IR.
+
+General nested control-flow tapes and native Q/K JVP remain open. The integrated
+plan now specifies the split product/residual ABI and same-generation O/LSE
+score-tangent consumer needed to close them. Automatic JIT/arbiter ANN promotion
+and native original/fused performance evidence also remain open. CUDA allocation
+ownership does not establish HIP, Metal or x86 execution support.
+
+Validation: 261 focused ownership/ANN/lifecycle/audit/registry tests on WSL;
+67 native AD and canonicalization fixtures; six resident CUDA cases. Ruff,
+zero-baseline mypy and all 30 generated-document checks passed. The shared
+compiler was rebuilt on Princess-Luna and tested through an immutable copy.
+No full-suite or new ROCm/Metal/x86 device execution result is claimed for loop8.
+
+
+## Loop 9: typed nested products and native resident Q/K JVP
+
+Owners: W2.4a / CAKE / SO-2 and MSW-9; sync **IR-NATIVE-FOUNDATION-1**.
+
+The split native AD exporter preserves full tensor/index/bool residual types,
+common paired lineage and native control-flow regions. Saved if/while products,
+nested SAVE loops, zero outer loops and zero inner loops have compiler tests.
+Nested replay forwards its own residual results into the registered pullback.
+This is typed artifact proof; general persistent nested device tape allocation
+and execution remain open. Replay of a nested pure region from saved outer
+state is not a claim that every inner tape persists across device invocations.
+
+The [resident JVP packet](baselines/native_storage_loop9/resident_attention_jvp_nvidia.json)
+records eight RTX 5070 cases, causal/noncausal Sq/Sk = 3/5, 5/3, 4/4 and 3/129.
+Each tests four tangent modes: Q, K, Q+K, Q+K+V (32 total). Independent float64
+analytic derivatives agree with centered finite differences; native results use
+3e-5 absolute/relative tolerance. The native GPU MLIR consumer reconstructs P
+from the owned LSE, reduces with bounded shared storage and uses the same grouped
+heads and end-aligned mask. Its explicit resident API requires `prepare_jvp`
+before `jvp`. It does not change the automatic V-only TangentInterface. The
+129-key backward oracle also caught and fixed a launch grid using the maximum
+gradient range instead of their concatenated total.
+
+The packet was generated using the loop9 compiler built on Princess-Luna and
+copied immutably to Super-Bear. It contains source hashes and package identities.
+There is no latency or overlap comparison. This bounded kernel recomputes scores
+per output column; no performance promotion is justified by these results.
+
+Shared arbiter cache admission now requires explicit admissibility both for
+exact hits and retained incumbents. Three regressions reject ineligible or
+unseparated cached records. ANN candidate registration and native original/fused
+comparison remain open; no ANN route was promoted. HIP, Metal and x86 execution
+proof must be established by their own consumers and owning hosts.
+
+Validation: 307 focused native-product, ownership, arbiter and registry tests;
+11 audit tests; 125 native AD/IR fixtures passed (three unsupported fixtures).
+Ruff and the zero-error mypy ratchet passed on Princess-Luna WSL. Eight resident
+CUDA cases and 32 tangent directions passed on Super-Bear. No full-suite or new
+ROCm, Metal or x86 device result is claimed for this loop.
+
+
+## Loop 10: automatic Q/K product binding and persistent failure isolation
+
+The [automatic attention packet](baselines/native_storage_loop10/automatic_attention_jvp_nvidia.json)
+uses native `TangentInterface` generation and `export-attention-jvp`, then binds
+the resulting product to the resident forward generation. Eight RTX 5070 cases
+exercise 32 directional probes including 129 keys, both causal policies and
+grouped heads. Analytic and centered finite-difference oracles match within the
+same tolerances as loop9. This is correctness evidence only. The core compiler
+was rebuilt on Princess-Luna and copied immutably to Super-Bear; Python source
+hashes in the packet match the local implementation.
+
+The new internal checkpoint JVP verifier enforces the same forward SSA producer
+for O/LSE and identical Q/K/V and policy. The physical export rejects composed
+functions or indirect argument/return mappings; inactive tangent slots are
+zeroed in native IR. General JIT composition and HIP/Metal/x86 lowering remain
+open. V-only retains its linear checkpoint-forward implementation.
+
+Persistent snapshot allocation now rejects invalid/overflowing extents before
+calling the driver and rolls back partial backward-result allocation failure.
+A fault-injection regression verifies that existing frame allocations survive.
+This is a shared allocation contract test, not new HIP/CUDA tape execution
+proof. General persistent nested tensor tapes still need split bufferized native
+products; the current snapshot consumer recomputes the backward residuals.
+
+Validation: 298 distinct focused AD/ownership/operator/dtype/registry tests,
+135 additional dialect/native binding tests, 17 audit/frontend tests, and 99
+native AD/control-flow fixtures passed on Princess-Luna WSL. Ruff and the
+zero-error mypy ratchet passed. No full-suite run is claimed for loop10.
+
+
+## Loop 11: split persistent tensor products and JIT-owned attention
+
+The native producer exports two independently callable products. Upstream
+one-shot bufferization turns full tensor results/residuals into output buffers;
+input arguments are explicitly readonly to prevent in-place reuse of captured
+snapshots. `tessera-native-tape-to-gpu` consumes the bufferized body and preserves
+bounded for/if control. Each temporary receives an entry-owned byte allocation
+with separate slices for its entire enclosing iteration path. Zero-trip bodies
+still count reserved storage against the 4096-byte logical budget.
+
+[CUDA](baselines/native_storage_loop11/persistent_tape_nvidia.json) and
+[ROCm](baselines/native_storage_loop11/persistent_tape_rocm.json) each pass widths
+4, 8 and 16 for a two-level SAVE loop (two outer and three inner iterations).
+Forward residuals have full `tensor<1xNxf32>` shape. Both recorders verify private
+input snapshots after caller mutation, repeated backward with different seeds,
+unchanged retained residuals, and invalid views after close. Deliberately zeroing
+the retained outer residual changes the derivative as predicted, establishing
+that backward consumes that allocation instead of silently rerunning the outer
+forward. The inner state is still replayed by the compiler's backward product.
+
+Physical lowering differs: AMDGPU needs explicit private address space 5 to
+select its FrameIndex; NVVM uses generic allocas and owns their local addressing.
+A forced common private representation failed the CUDA backward execution check.
+The final backend-specific implementation passes on RTX 5070 and gfx1151 using
+the same immutable core compiler. These serial, one-thread entries provide
+correctness evidence, not latency, overlap or production performance evidence.
+
+The [JIT attention packet](baselines/native_storage_loop11/jit_attention_nvidia.json)
+contains ten RTX 5070 cases: Q, K, Q/K, reversed K/Q and Q/K/V requests, each with
+5 and 129 keys, grouped heads and aligned causal masks. The recorder starts with
+an ordinary decorated function and calls `compile_native_attention_jvp`; callers
+supply no native IR. A captured resident forward owns O/LSE, and `jvp` accepts
+only active directions in request order. Primal and centered float64 finite-
+difference checks use 3e-5 absolute/relative tolerance. Native reverse/forward
+products use the same selected compiler. Dense frontend attention now supplies
+its required head width and a precise pure effect only for the known dropout-
+free three-tensor form. Cache and unrecognized variants remain conservative.
+
+Both APIs remain explicit native compilation entries. General JIT compositions,
+dynamic or mixed-type tape slots (including saved predicates), persistent while
+tapes, asynchronous backward retirement and parallel tape scheduling remain
+open. Apple requires MSL/buffer ownership integration; x86 currently supplies
+the host sizing companion, not execution proof. Source hashes and immutable
+compiler digests are included in the packets; no sibling performance claim or
+ANN promotion is made.
+
+Validation: 333 focused product, ownership, registry, dtype, frontend and audit
+tests plus 99 native AD/control-flow fixtures passed on Princess-Luna WSL.
+Ruff and the zero-error mypy ratchet passed. Three tape cases passed on each GPU
+and ten JIT attention cases on RTX 5070. All 30 generated-document checks passed;
+no full-suite run or new Apple/x86 execution evidence is claimed.

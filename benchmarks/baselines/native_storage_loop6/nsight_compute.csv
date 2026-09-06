@@ -1,0 +1,6 @@
+==PROF== Connected to process 96469 (/usr/bin/python3.14)
+==PROF== Disconnected from process 96469
+"ID","Process ID","Process Name","Host Name","Kernel Name","Context","Stream","Block Size","Grid Size","Device","CC","Section Name","Metric Name","Metric Unit","Metric Value"
+"0","96469","python3.14","127.0.0.1","ring","1","14","(128, 1, 1)","(8, 1, 1)","0","12.0","Command line profiler metrics","dram__throughput.avg.pct_of_peak_sustained_elapsed","%","1.55"
+"0","96469","python3.14","127.0.0.1","ring","1","14","(128, 1, 1)","(8, 1, 1)","0","12.0","Command line profiler metrics","gpu__time_duration.sum","ns","102880"
+"0","96469","python3.14","127.0.0.1","ring","1","14","(128, 1, 1)","(8, 1, 1)","0","12.0","Command line profiler metrics","sm__throughput.avg.pct_of_peak_sustained_elapsed","%","0.78"

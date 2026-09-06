@@ -118,10 +118,12 @@ def module(depth: int) -> str:
 '''
 
 
-def compile_image(tool: Path, backend: str, source: str, directory: Path):
+def compile_image(tool: Path, backend: str, source: str, directory: Path, *, chip: str | None = None):
     from benchmarks.rocm.benchmark_rocm_gemm_pipeline_vs_direct import _extract_hsaco
     target = 'nvvm' if backend == 'nvidia' else 'rocdl'
-    chip = 'sm_120' if backend == 'nvidia' else 'gfx1151'
+    chip = chip or ('sm_120' if backend == 'nvidia' else 'gfx1151')
+    if not re.fullmatch(r'sm_[0-9]+|gfx[0-9a-f]+', chip):
+        raise ValueError('invalid GPU compiler chip')
     pipeline = ('builtin.module(gpu.module(convert-scf-to-cf,'
                 f'convert-gpu-to-{target},reconcile-unrealized-casts),'
                 f'{target}-attach-target{{chip={chip}}},gpu-module-to-binary)')

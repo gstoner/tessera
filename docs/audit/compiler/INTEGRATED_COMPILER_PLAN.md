@@ -1,19 +1,19 @@
 ---
-last_updated: 2026-09-05
+last_updated: 2026-09-06
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
   - COMPILER_ARCHITECTURE_SWEEP.md §4
   - FRONTEND_GRAPH_SCHEDULE_REVIEW.md §5
   - IR_STACK_INTEGRATION_REVIEW.md §5
-  - AUTODIFF_ARCHITECTURE_REVIEW.md §5
-  - TARGET_IR_REVIEW.md §5
-  - AUTODIFF_UNIFICATION_PLAN.md §7
+  - archive/AUTODIFF_ARCHITECTURE_REVIEW.md §5
+  - archive/TARGET_IR_REVIEW_2026-08-02.md §5
+  - archive/AUTODIFF_UNIFICATION_PLAN.md §7
   - COMPILER_REFACTOR_PLAN.md §9
   - EVALUATOR_PLAN.md §10
   - OPTIMIZING_COMPILER_PLAN.md §5
   - SEQUENCE_MIXER_ENGINEERING_PLAN.md §7
-  - ../domain/GA_EBM_ARCHITECTURE_REVIEW.md §4
+  - ../domain/archive/GA_EBM_ARCHITECTURE_REVIEW_2026-08-02.md §4
   - RIEMANNIAN_OT_PLAN.md §4
 ---
 
@@ -571,7 +571,7 @@ E2E-REAL-0:
    clears the Law-3 adjoint sweep (`⟨Jv,u⟩ = ⟨v,Jᵀu⟩` at dimension-scaled
    probe counts) before its duplicate authority is deleted. The oracle
    exists and is swept: AD-LAW-1's spec growth closed
-   ([`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) §7) — 300
+   ([archived AD-LAW-1 record](archive/AUTODIFF_NEXTGEN_PLAN.md) §7) — 300
    tensor pairs + the full geometric registry pass, the `vjp_only` class
    is empty, and the only unswept rows are eight rule-capability gaps
    pinned with named reasons (`_OPEN_UNSWEEPABLE_RULES` in
@@ -676,7 +676,7 @@ inverse C2C execution independently.
 
 **Source reviews:**
 [GA/EBM](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) ·
-[Autodiff](AUTODIFF_ARCHITECTURE_REVIEW.md) ·
+[Autodiff](AUTODIFF_EXECUTION_PLAN.md) ·
 [Sweep](COMPILER_ARCHITECTURE_SWEEP.md) ·
 [Frontend→Graph→Schedule](FRONTEND_GRAPH_SCHEDULE_REVIEW.md) ·
 [IR Stack Integration](IR_STACK_INTEGRATION_REVIEW.md) ·
@@ -1582,11 +1582,11 @@ constant; sharding a model requires O(few) annotations, not O(layers).
 | # | Item | Source | Effort |
 |---|---|---|---|
 | W6.1 | **Bounded native products plus exact compiler HVP composition landed (`AD-FWD-CORE-1` / `AD-FWD-PRODUCT-2` / `AD-FWD-NATIVE-1` / `AD-FWD-DIST-3` / `AD-HIGHER-1`).** `TangentInterface`, paired functions, public request/provenance, stable `wrt_indices`, and direct tangent families are live. `--tessera-autodiff-hvp-pipeline` now emits the paired reverse program, marks only original differentiable primals tangent-active, and applies the exact forward transform to produce `@f__bwd__jvp`; the emitted product is numerically executed against an independent quadratic oracle. `JitFn.compiled_hvp_ir` exposes that fail-closed compiler product without finite-difference substitution. The eager `tessera.autodiff.hvp` compatibility helper still uses finite differences and is not this compiler proof. Remaining: broaden second-order TangentInterface coverage, broader ISTFT layouts/dtypes, MPI/OFI/SHMEM and subgroup transport, native multi-rank packets, clean performance packets, and Apple/NVIDIA packages. | Autodiff D2 | landing |
-| W6.2 | Sparse AD — sparsity detection + coloring (client of W2.1/W4.2). PyTorch, TF, and JAX all lack this | Autodiff D7 | 5w |
-| W6.3 | **Taylor/jet mode over Weil algebras — design landed, estimate supplied.** [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) owns the design and acceptance detail: one `DerivativeContract` datum per primitive evaluated under an explicit `DifferentialAlgebra` codomain parameter, so `Dual`, `TruncatedJet(k)` (Weil, dim k+1 vs nested 2ᵏ), `CliffordTangent`, `OperatorTangent`, and `TaylorModel` are instances of one interpreter rather than parallel registries. That protocol is the generic algebra representation this row asked for; the W6.4 shared-substrate hypothesis becomes a falsifiable acceptance criterion (run `Cl(3,0)` over the same multiplication-table substrate with `ga/signature.py` as oracle) rather than a sequencing assumption. Correctness is executable algebraic law (adjoint, homomorphism-exact-by-nilpotency, jet-vs-nested differential proof) with a machine-checked math harness per `CORE_SUBSTRATE_VIEW.md` §0.1. Slices: **AD-LAW-1** (~1–1.5w, host-free, no dependencies — law oracles over today's registries; may start in parallel like Orders 12–13), **AD-WEIL-1** (~3w, host-free), **AD-JET-STRUCT-1** (~4w), **AD-JET-IR-1** (~5–6w, research-adjacent; depends on W4-PRODUCT-1, LAYOUT-ALG-1 L1/L5, real `batching_rule`s, and the S5 `numeric_policy` carrier), plus **AD-OPERATOR-1** (~2w, independent — absorbs S8's unowned implicit-diff strict-complementarity item) and consumer-gated **AD-CERT-1**. No hand rule is retired before its jet-vs-nested proof is green (Decision #31 ordering). | Autodiff D6 | ~10w excl. AD-JET-IR-1 (open) |
-| W6.4 | Table-driven GA kernel synthesis via `emit/`; then PGA `Cl(3,0,1)` | GA/EBM §2.3–2.4 | 5w |
+| W6.2 | **AD-SPARSE-1:** propagate structural sparsity, color seeds and reconstruct Jacobian/Hessian products through the shared transform and scheduling path. Require dense-oracle equivalence, structural-zero safety and measured scaling with colors. | [Active AD plan](AUTODIFF_EXECUTION_PLAN.md), D7 | open |
+| W6.3 | **Law/algebra/operator reference foundations implemented; native jets remain open.** [Active AD plan](AUTODIFF_EXECUTION_PLAN.md) consolidates the remaining AD-JET-STRUCT-1 breadth, safe retirement/geometric absorption, derivative-registry integration, and AD-JET-IR-1 physical descent. Dual/TruncatedJet, derivative contracts, laws and OperatorTangent already exist; do not rebuild them. Native jets require W4 product ownership, real batching, LAYOUT-ALG-1 and NUMPOL-CARRIER-1, plus conditioning/footprint and exact-device scaling evidence. AD-CERT-1 remains consumer-gated. Archived mathematical design is retained as reference, not a competing queue. | Autodiff D6 / AD-JET-IR-1 | landing |
+| W6.4 | **Native finite-algebra lowering shared by GA and jets.** Extend W3.6 batched/grade-aware products through MLIR/linalg/vector/LLVM with explicit algebra, layout and numeric policy. Existing Python table/jet code is the oracle; `emit/` is not the new production owner. Packed grades, PGA/CGA and exp/log policies require separate semantic, derivative and device proof before promotion. | [GA/EBM review](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) / W6.3 | open |
 
-**Exit:** a defensible "exceeds SOTA" claim with a benchmark behind it — sparse
+**Exit:** a measured improvement under a fixed correctness budget — sparse
 Jacobian scaling `O(colors)` not `O(rows)`; order-`k` derivatives sharing the
 tuned GA kernels. W6.3's half of that exit is sharpened by its plan to a
 measured curve: order-`k` directional derivatives of a real workload via fused
@@ -1595,13 +1595,12 @@ budget. If the curve does not separate by `k = 3`, the IR descent is not worth
 its cost and the program stops at the reference + law infrastructure — a
 falsifiable stop condition, not an open-ended track.
 
-> W6.4 can supply useful table-lowering machinery, and W6.3's generic algebra
-> representation and AD semantics are now specified in
-> [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md). **The reuse
-> hypothesis is still a hypothesis to prove, not a sequencing-based cost
-> reduction** — it is now an explicit AD-WEIL-1 acceptance criterion
-> (`Cl(3,0)` over the shared multiplication-table substrate, `ga/signature.py`
-> as oracle), so it is settled early and cheaply rather than assumed.
+> The shared finite-algebra representation is implemented and reference-tested
+> against the Clifford oracle. What remains unproved is a shared **native**
+> lowering and its physical scaling/performance benefit. The
+> [active AD plan](AUTODIFF_EXECUTION_PLAN.md) owns the native jet gates;
+> W6.4 supplies the corresponding batched GA consumer. Do not repeat
+> AD-WEIL-1 or infer native equivalence from its Python proof.
 
 ### Riemannian OT — re-scoped as validation, not a track
 
@@ -2602,3 +2601,267 @@ supersedes the previous next-action list:
 
 Keep compiler builds separate from tests: pin the validated executable before
 starting a suite, record its digest, and avoid re-linking under running tests.
+
+
+### Outstanding cohorts and saved attention LSE — 2026-09-06
+
+W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. This supersedes the
+single-pending and recomputed-LSE boundaries above. See the
+[implementation, measurements and next architecture boundaries](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+- Multiple matched pending cohorts now carry distinct generation ownership
+  facts. RTX5070 validates 2/3/4 outstanding copies under uniform nesting;
+  arbitrary CFG joins and head-only FIFO waits remain open.
+- Paired attention forward now returns LSE and backward consumes that explicit
+  residual. This closes compiler SSA persistence, not device-owned tape storage.
+- CUDA/HIP matched queue experiments have exact numerical and event evidence;
+  CUDA additionally has Nsight kernel intervals and an isolated counter sample.
+  ROCm hardware attribution remains open, and no selection policy changes.
+- Next ordered work: owned persistent tape frames and split native products;
+  nested invocation/state ownership; cooperative Q/K JVP lowering with its native
+  consumer; attention package/LSE generation binding; production queue and
+  fresh-process hardware attribution. Do not register an unsupported attention
+  product merely to advertise an interface.
+
+MSW status rechecked: MSW-5/6/7/8 are implemented in the reference lane;
+36 focused tests, both tutorials and all 15 ANN reference-spike checks pass.
+MSW-9's design spike and native program-pair evaluator adapter are implemented;
+fragment/parameter extraction and the fusion candidate consumer remain open.
+These statuses do not imply native backend closure for the math examples.
+
+
+### Persistent snapshots and generated checkpoint packages — 2026-09-06
+
+W2.4a / CAKE / SO-2 / MSW-9; **IR-NATIVE-FOUNDATION-1**.
+
+- CUDA/HIP reverse packages now expose `NativeStoragePair.capture`: owned
+  snapshots survive source mutation, repeated backward results have distinct
+  allocations, and nested invocation frames release with their parent. Twelve
+  cases per GPU validate square/tanh/sum/mean. This is synchronous recomputation
+  from snapshots, not higher-order AD or a lowering of nested control-flow tapes.
+- Paired AD can export an isolated forward/backward attention checkpoint with
+  canonical physical argument order and full paired-IR provenance. It feeds the
+  existing native Schedule/Tile and NVIDIA package paths without Graph rebuilding.
+  Six RTX5070 cases validate forward, LSE and Q/K/V VJP for causal/noncausal and
+  unequal-length inputs. The host-buffer bridge persists LSE between calls;
+  resident attention tape ownership and Q/K JVP remain open.
+- MSW-9 has bounded immutable fragment extraction and an explicit composition
+  candidate gate. Automatic fusion discovery, executable-to-fragment identity
+  and backend promotion remain open; reference evidence never supplies native
+  provenance.
+- Incoming native Ubuntu26.04 RX9070XT profiling uses **gfx1201**, not gfx1200.
+  The [commissioning plan](../backend/rocm/NATIVE_RDNA4_COMMISSIONING.md) includes
+  a read-only probe, assertions-enabled compiler build, rocprofv3 and Systems
+  Profiler capture. Hardware/counter validation awaits the actual host.
+
+Next: split native forward/backward packages to avoid recomputation; integrate
+saved-state control-flow frames; implement cooperative attention Q/K JVP with a
+registered native consumer; bind resident LSE generation ownership; connect ANN
+inventories to automatic fusion candidates; commission gfx1201 counters.
+
+Q/K JVP algorithm spike: `tools/attention_jvp_spike.py` maintains rescaled
+normalization/value/directional-score moments per row. Seventeen reference
+cases cover Q-only, K-only, combined directions, block-size variation, extreme
+logits and empty masks. It avoids full score materialization. Native tangent
+registration is deliberately unchanged until the cooperative consumer exists.
+The saved-LSE variant should consume the same generation's output and LSE,
+compute `sum(P*dS*V + P*dV) - O*sum(P*dS)`, and share the canonical mask policy.
+
+
+## 2026-09-06 native ANN composition and resident attention generation
+
+Owner: W2.4a / CAKE / SO-2; MSW-9. Sync: **IR-NATIVE-FOUNDATION-1**.
+
+Implemented this increment:
+
+- `AttentionCheckpointPair.capture(q,k,v)` binds the existing native forward and
+  backward images directly to CUDA allocations. The frame copies Q/K/V into
+  private device storage and retains the exact forward-produced natural-log LSE.
+  Repeated backward calls use that generation and return independently owned
+  results. Dtype, strides, full allocation bounds, CUDA context, image/descriptor
+  ABI, shape guards and pair policy are checked. Close invalidates views and
+  unloads images; failed backward allocations do not reclaim earlier results.
+  Six RTX 5070 cases cover both causal modes, unequal sequence lengths, caller
+  input mutation and repeated backward. This is synchronous correctness evidence,
+  not stream overlap, kernel speedup, or sibling-backend execution proof.
+- `tessera-canonicalize=ann-reassociate=true` now automatically recognizes a
+  single-use two-affine chain in native MLIR and folds constant weights and
+  constant matrix biases with deterministic fp32 arithmetic. No replacement
+  GraphIRModule or hand-written backend source is generated. Runtime parameters,
+  intervening activations, transposition, policy overrides, nonfinite folding and
+  excessive folding work refuse. The option defaults off because association
+  changes rounding. This establishes a native MSW-9 fusion consumer for frozen
+  inference constants, not automatic JIT/arbiter promotion or trainable fusion.
+
+The next architecture work remains open, with these concrete boundaries:
+
+1. **General nested control-flow tapes:** replace NativeStorageJVP's hard-coded
+   two-output scalarizer with a split forward/backward product ABI. The ABI must
+   carry every residual's dtype, full shape, ownership and indexing; nested loop
+   state requires an iteration path, valid extent and branch selection, not just
+   a stack of invocation frames. Preserve zero-trip and untaken-region behavior.
+   Lower compiler-produced tensor tape reads/writes before accepting a new family;
+   never infer a backward from an independently replayed control path. Establish
+   allocation-size overflow checks and fail-before-launch capacity checks.
+2. **Native Q/K JVP:** retain the paired O/LSE generation and lower
+   `sum(P*dS*V + P*dV) - O*sum(P*dS)`, with
+   `dS = scale*(dQ*K + Q*dK)` and `P = exp(S-LSE)`. The row consumer must use the
+   exact `end_aligned_v1` mask and grouped-head mapping of forward. A registered
+   tangent producer must ship with a real bounded-storage native consumer and
+   exact-device finite-difference cases. The streaming Python spike remains a
+   numerical oracle; V-only is still the public native tangent interface.
+3. **Resident concurrency and siblings:** use completion-owned allocation
+   generations before adding stream submission; private allocations alone do
+   not establish concurrent lifetime safety. Add HIP/Metal ownership on those
+   hosts independently. x86 needs its own host tape execution path.
+4. **ANN promotion:** connect frozen parameter materialization and explicit
+   reassociation policy to pipeline selection, then require native original/fused
+   program-pair comparison and performance evidence before arbiter promotion.
+   The earlier Python fragment view is an inventory, not executable identity.
+
+Evidence: [loop8 implementation and validation](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+## 2026-09-06 typed nested exports and resident score tangents
+
+Owners **W2.4a / CAKE / SO-2**, **MSW-9**; synchronization key
+**IR-NATIVE-FOUNDATION-1**. This section supersedes the loop8 next-step status.
+
+- `tessera-autodiff-paired=export-product=forward|backward` exports native
+  products with a compiler-produced, full-type residual ABI and common paired
+  lineage. Saved if/while products and nested SAVE loops retain native regions.
+  Nested pullbacks now receive their cloned region residuals; statically empty
+  positive-step loops are removed before tape sizing. This closes the export
+  boundary, not general device tape lowering: nested inner residuals may be
+  reconstructed from the saved outer state. General persistent device tapes
+  still need allocation ownership, tensor tape lowering, dynamic iteration-path
+  indexing, capacity checks and backend execution proof.
+- Explicit CUDA resident `prepare_jvp`/`jvp` products now implement Q, K and V
+  directions through native GPU MLIR, shared-memory reduction and the saved
+  forward O/LSE generation. The bounded consumer uses grouped heads and the
+  same end-aligned causal mask. The automatic FlashAttnOp TangentInterface is
+  still V-only; wiring this consumer into automatic AD remains open. This
+  consumer recomputes scores for each output column; it is correctness evidence,
+  not a hand-tuned performance candidate.
+- Resident backward launch sizing now covers the concatenated dQ/dK/dV range.
+  The 129-key case exposed the old maximum-of-ranges grid under-launch.
+- Arbiter exact-cache reuse and incumbent retention now require admissible
+  selection evidence, including explicit eligibility and timing separation.
+  Malformed or ineligible cached records trigger a fresh comparison. This is a
+  shared admission prerequisite; no ANN candidate was promoted. MSW-9 still
+  needs frozen-parameter native candidate registration, policy-bound identity,
+  original/fused backend comparison and measured selection evidence.
+
+See [loop9 evidence and backend boundaries](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+## 2026-09-06 control-flow contract correction and automatic score JVP
+
+Owners W4 / W2.4a / CAKE / SO-2; sync **IR-NATIVE-FOUNDATION-1**.
+`docs/spec/CONTROL_FLOW_CONTRACT.md` now distinguishes frontend acceptance,
+portable control-to-SCF lowering, native packaging and owning-device proof.
+The previous Apple-only sentence contradicted ROCm support; the table also
+omitted cooperative ROCm paths, bounded native x86 state-machine proof and narrow handwritten CUDA control helpers, and confused incomplete direct CUDA graph packaging
+with absence of native CUDA control flow. Historical CF0–CF4 narrative is
+replaced by the active ownership links; this changes no backend execution state.
+
+The FlashAttnOp TangentInterface now emits a registered internal
+`checkpoint_jvp` for Q/K directions, with a same-producer O/LSE verifier and
+explicit inactive tangent slots. `export-attention-jvp` accepts one isolated
+attention function with direct argument/return mapping. The resident CUDA
+consumer lowers this native contract and binds its product digest into package
+identity. Eight CUDA cases / 32 directions pass analytic and finite-difference
+oracles. Generic JIT compositions and sibling backend consumers remain open.
+
+Persistent snapshot allocations now check byte overflow before allocation;
+partial backward allocation failure rolls back only the attempted outputs.
+This closes a lifetime defect, not general persistent nested tensor tapes.
+The next tape implementation must replace NativeStorageJVP's combined
+forward/recomputed-backward scalarizer with two independently callable native
+products: bufferize full typed residual outputs, preserve iteration-path and
+valid-extent indexing, then retain those allocations until all backward users
+complete. Start with static nested SAVE loops; reject dynamic capacities until
+native size derivation and fail-before-launch checks exist. A host-only arena
+or another residual inventory would not close this item.
+
+Evidence: [loop10](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+## 2026-09-06 split persistent tensor tapes and JIT-owned Q/K programs
+
+Owners **W4 / W2.4a / CAKE / SO-2**; sync **IR-NATIVE-FOUNDATION-1**.
+The first physical split-tape consumer now runs fresh native forward and backward
+products independently. Upstream one-shot bufferization preserves full f32 tensor
+residual shapes; readonly product inputs prevent in-place mutation of retained
+snapshots. The new `tessera-native-tape-to-gpu` pass materializes bounded static
+for/if bodies with per-iteration-path temporary slots. Backend-owned allocation
+addressing is explicit: generic allocas for NVVM and private address space 5 for
+AMDGPU. Repeated backward calls consume retained forward residuals and produce
+independent outputs. The owning frame retains all allocations until explicit
+close. These synchronous, serial GPU entries establish correctness, not a
+parallel schedule or performance improvement.
+
+The public JIT object now exposes `compile_persistent_device_tape` for reverse
+requests and `compile_native_attention_jvp` for isolated SM120 forward attention
+requests. The latter traces the function, runs native AD, binds the same resident
+forward O/LSE generation and accepts tangent arguments in `wrt` order. Dense
+three-tensor, dropout-free attention now emits its required head dimension and
+precise pure effect; cache, dropout and unrecognized forms remain conservative.
+
+Remaining: dynamic/mixed-type residual capacities (including saved predicates),
+persistent while/general control tapes, concurrent backward retirement, parallel
+physical tape schedules, composed automatic attention AD and sibling native
+attention consumers. Static f32 slots are limited to 1024 elements each and
+logical temporary storage to 4096 bytes. Native for/if acceptance does not imply
+that every frontend control-flow or saved-state form fits this envelope.
+See [loop11 evidence](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+## 2026-09-06 domain and autodiff documentation consolidation
+
+The scoped [AD execution plan](AUTODIFF_EXECUTION_PLAN.md) now owns remaining
+P0–P6/A–B/D/AD-NEXTGEN acceptance gates. The three prior documents are archived
+as superseded designs, with small routing files preserving source links. Their
+uncompleted work is transferred, not marked complete. W4/W5.1/W6 sequencing and
+IR-NATIVE-FOUNDATION-1 remain the active owners.
+
+The [domain audit](../domain/DOMAIN_AUDIT.md) and
+[GA/EBM review](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) correct stale manifold,
+grade-consumer and CPU-performance claims. The next domain sequence is W3.6
+batched GA/native rotor consumption; W3.5/W4 typed energy/gradient programs;
+W5.1/W2.4a resident state and measured policy; W6.4 native finite-algebra lowering.
+No independent domain emitter or rematerialization stack is commissioned.
+
+[Target IR review](TARGET_IR_REVIEW.md) now recognizes the x86 dialect, semantic
+string constraints and mixed native/compatibility ownership. Standalone loose
+matrix contracts and spelling-only smoke tests remain real scoped gaps.
+`CORE_SUBSTRATE_VIEW.md` was reviewed without modification; the
+[compiler audit](COMPILER_AUDIT.md#2026-09-06-substrate-review-and-ad-consolidation)
+records its outdated status/ownership passages. This update changes no target
+execution status and adds no new device/performance claim.
+
+
+## Functional-analysis contracts — consolidated ownership
+
+Updated 2026-09-06. This section replaces the independent FA-1–FA-7 execution
+sequence. The [archived design](archive/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md)
+retains the mathematics and original IDs. These are remaining tasks, not new
+support claims. Numerical-policy transport is an existing foundation;
+composable error bounds are an additional analysis obligation.
+
+| Item and owner | Remaining work and dependencies | Acceptance gate |
+|---|---|---|
+| **FA-1 — numerical legality / evaluator and arbiter** | First deliver one bounded reduction or fused-epilogue consumer. Extend NUMPOL-CARRIER-1 semantics with explicit norm, admissible domain, shape/reduction length and absolute error budget; preserve analysis facts across native MLIR boundaries. No independent Python production lowering stack or unused coverage axis. | A real candidate is accepted/refused using the budget. Composition checks perturbed intermediate-domain containment and uses justified downstream Lipschitz constants. Reduction bounds enforce their accumulation-algorithm, Ku < 1 and under/overflow assumptions. Unknown bounds fail closed for budget-based promotion. Oracle evidence, analytic bounds and device measurements stay distinct; norm-to-tolerance conversions are explicit. |
+| **FA-2 — AD-LAW / AD-CLOSEOUT-1** | Reuse the implemented adjoint and canonical-forward laws; carry only public debug adapter, norm-aware tolerance and derivative-coverage evidence integration into AUTODIFF_EXECUTION_PLAN.md. Does not wait on invention of FA-1 or a new harness. | Planted incorrect and matched-incorrect derivative pairs remain detected; coverage changes cite the actual law result and evidence tier. Public adapter tests exercise the existing engine. Amend the coverage contract explicitly before tightening automatic status transitions. |
+| **FA-3 — spectral family / numerical legality** | Audit existing spectral laws, then fill normalization, window/domain and multiplier-bound gaps. Error-budget consumption depends on FA-1; independent oracle coverage does not. | FFT normalization and adjoints agree; STFT/ISTFT round trips declare window/overlap assumptions. A spectral transformation consumes a justified multiplier bound, with negative legality cases and native-boundary preservation. Existing adjoint tests alone do not close this consumer. |
+| **FA-4 — sequence-mixer stability** | Sequence-mixer plan owns recurrence/discretization-specific certificates and eventual op wiring. No new generic certificate registry without a recurrence consumer. | Domain and timestep assumptions are checked; nonnormal transient amplification and discretization-specific stability are covered. Reference oracle and native-device execution remain separate evidence. |
+| **FA-5 — functional-calculus admission, deferred** | Require a named workload and a specific missing operation before reopening broad admission. Reuse spectral/solver owners; not a prerequisite for FA-1/2/3/6. | An admission proposal names semantics, domain, derivative rules, native producer/consumer and measurable benefit. An abstract common interface is insufficient. |
+| **FA-6 — approximation legality / arbiter, consumer-gated** | After FA-1, attach norm-specific truncation bounds to an actual low-rank substitution candidate. Preserve the distinction between exact factorization and approximation. | Candidate selection respects the caller's budget and composition domain; over-budget substitutions reject. Sampled estimates cannot masquerade as certified upper bounds, and no automatic tolerance relaxation is allowed. |
+| **FA-7 — PDE/forms, deferred** | Reopen under PDE_STENCIL_CAPABILITY_PLAN.md only when a solver or rewrite needs coercivity. | Concrete discrete operator, boundary/domain hypotheses and a certificate-consuming solver or transformation. |
+
+Order: FA-1's bounded consumer first; FA-3/FA-6 numerical promotion builds on
+it. Existing AD and spectral law improvements proceed independently. FA-4 is
+sequenced by its domain owner; FA-5/FA-7 are explicitly deferred. Introduce
+registry/schema changes together with their first consumer and focused drift
+gates. CUDA, ROCm, Apple and x86 each require their own lowering-preservation
+and exact-device evidence before hardware promotion; this consolidation changes
+no backend support state or physical schedule.

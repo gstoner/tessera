@@ -3,6 +3,7 @@ import hashlib
 import inspect
 import json
 import re
+import threading
 from .native_gpu_storage import _run, _decode_image, build_native_gpu_storage
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
@@ -79,9 +80,36 @@ class NativeStoragePair:
         from types import MappingProxyType
         data['output_order'] = tuple(data['output_order'])
         self.package, self.contract = package, MappingProxyType(data)
+        self._frames = []
+        self._frame_lock = threading.RLock()
+        self._closed = False
 
     def __call__(self, *args, **kwargs):
-        return tuple(self.binding(*args, **kwargs))
+        with self._frame_lock:
+            if self._closed:
+                raise ValueError('native storage pair is closed')
+            return tuple(self.binding(*args, **kwargs))
+
+    def capture(self, value):
+        """Capture a persistent device snapshot for this native reverse product."""
+        from .native_device_tape import NativeDeviceTape
+        with self._frame_lock:
+            if self._closed:
+                raise ValueError('native storage pair is closed')
+            frame = NativeDeviceTape(self, value)
+            self._frames = [active for active in self._frames if not active.closed]
+            self._frames.append(frame)
+            return frame
 
     def close(self):
-        self.binding.close()
+        # Publish closure before releasing frames. Do not hold this lock while
+        # acquiring frame locks: backward/child calls take them in the reverse
+        # order, and must be able to observe closure and unwind.
+        with self._frame_lock:
+            self._closed = True
+            frames = tuple(self._frames)
+        for frame in frames:
+            frame.close()
+        with self._frame_lock:
+            self._frames.clear()
+            self.binding.close()

@@ -39,6 +39,7 @@ add_library(TesseraPasses
   # Phase F4 autodiff (reverse-mode via AdjointInterface).
   # ODS scaffold lives at src/compiler/ir/include/Tessera/AdjointInterface.td.
   AutodiffPass.cpp
+  NativeTapeToGPUPass.cpp
   AutodiffPairedPass.cpp
   AutodiffForwardPass.cpp
 

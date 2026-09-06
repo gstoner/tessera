@@ -1506,6 +1506,35 @@ class JitFn:
             )
         return transformed.stdout
 
+    def compile_persistent_device_tape(self, *args, compiler, llvm_bin, backend, chip, **kwargs):
+        """Compile split native products with persistent static tensor residuals."""
+        import re
+        from .native_persistent_tape import materialize_persistent_tape
+        request = self.differentiation_request
+        if request is None or request.mode != "reverse":
+            raise TesseraJitError("persistent device tape requires reverse autodiff")
+        module = self._specialized_autodiff_module(args, kwargs)
+        source = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
+        return materialize_persistent_tape(source, compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
+
+    def compile_native_attention_jvp(self, *args, compiler, llvm_bin, **kwargs):
+        """Compile an isolated Q/K attention JVP from this JIT function's trace.
+
+        The returned program captures resident CUDA inputs and accepts only the
+        requested tangent arguments. General JIT graphs remain unsupported.
+        """
+        import re
+        from .native_attention_program import compile_attention_program
+        request = self.differentiation_request
+        if request is None or request.mode != "forward" or normalize_target_kind(self.target) != "nvidia_sm120":
+            raise TesseraJitError("native attention JVP requires forward autodiff on exact nvidia_sm120")
+        module = self._specialized_autodiff_module(args, kwargs)
+        from dataclasses import replace
+        module = replace(module, module_attrs={**module.module_attrs,
+                         "tessera.target": '"nvidia_sm120"', "tessera.arch": '"sm_120"'})
+        source = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
+        return compile_attention_program(source, request.wrt_indices, compiler=compiler, llvm_bin=llvm_bin)
+
     def compile_native_storage_pair(self, *args, compiler, llvm_bin, backend, chip=None, **kwargs):
         """Compile the actual traced forward/reverse pair; Apple returns a host export."""
         import re

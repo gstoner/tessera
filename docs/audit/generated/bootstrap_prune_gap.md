@@ -22,14 +22,14 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 4 |
-| `package_*` functions total | 55 |
+| `package_*` functions total | 56 |
 | — **bootstrap** (re-enter Graph IR; prune target) | 34 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 15 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 1 |
 |   ·  of the bootstrap, both | 1 |
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 17 |
-| — compiled-route packagers (consume a lowered artifact) | 21 |
-| Lines in those modules | 8747 |
+| — compiled-route packagers (consume a lowered artifact) | 22 |
+| Lines in those modules | 8766 |
 | Classified families | 24 |
 | — covered by a compiled route | 6 |
 | — **gap (no compiled route)** | 18 |
@@ -39,7 +39,7 @@ the bootstrap row can go.
 
 | Target | Module | bootstrap | compiled-route | Families | Lines |
 |---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 11 | 12 | 3792 |
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 12 | 12 | 3811 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 5 | 2894 |
 | `x86` | `x86_native.py` | 7 | 5 | 7 | 1846 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 215 |

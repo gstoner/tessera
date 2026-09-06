@@ -124,7 +124,8 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     if backend == 'rocm' and 'nvgpu.' in device:
         raise ValueError('NVGPU producer has no ROCm lowering')
     target = 'nvvm' if backend == 'nvidia' else 'rocdl'
-    pipeline = ('builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,'
+    metadata = 'expand-strided-metadata,lower-affine,' if 'memref.subview' in device else ''
+    pipeline = ('builtin.module(gpu.module(' + metadata + 'convert-nvgpu-to-nvvm,convert-scf-to-cf,'
                 f'convert-gpu-to-{target},convert-math-to-llvm,reconcile-unrealized-casts),'
                 f'{target}-attach-target{{chip={chip}}},gpu-module-to-binary)')
     binary = _run(llvm_bin / 'mlir-opt', '--pass-pipeline=' + pipeline, source=device)

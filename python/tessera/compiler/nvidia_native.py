@@ -3300,6 +3300,11 @@ class AttentionCheckpointPair:
     backward: NVIDIANativePackage
     contract_digest: str
 
+    def capture(self, q, k, v):
+        """Capture one resident CUDA forward generation with private saved LSE."""
+        from .resident_attention import ResidentAttentionTape
+        return ResidentAttentionTape(self, q, k, v)
+
 
 def package_attention_checkpoint_pair(
     forward: GraphIRModule, backward: GraphIRModule, *, pipeline_name: str
@@ -3789,3 +3794,17 @@ __all__ = [
     "supports_native_package",
     "tools_available",
 ]
+
+
+def package_generated_attention_checkpoint_pair(source: str, *, pipeline_name: str) -> AttentionCheckpointPair:
+    """Package compiler-generated paired AD directly through native Schedule IR."""
+    from .scheduled_checkpoint import lower_generated_checkpoint
+    forward = lower_generated_checkpoint(source)
+    backward = lower_generated_checkpoint(source, backward=True)
+    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal)
+    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal):
+        raise ValueError('generated checkpoint producer and consumer policies disagree')
+    if forward.names[:3] != backward.names[1:4] or forward.names[4] != backward.names[4]:
+        raise ValueError('generated checkpoint bindings disagree')
+    return AttentionCheckpointPair(package_scheduled_checkpoint(forward,pipeline_name=pipeline_name),
+        package_scheduled_checkpoint(backward,pipeline_name=pipeline_name),identity)

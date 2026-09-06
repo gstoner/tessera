@@ -18,6 +18,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "NativeStorageJVP.h"
+#include "llvm/Support/JSON.h"
 
 namespace tessera {
 namespace {
@@ -507,6 +508,8 @@ class AutodiffForwardPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffForwardPass)
   AutodiffForwardPass() = default;
   AutodiffForwardPass(const AutodiffForwardPass &other) : PassWrapper(other) {}
+  mlir::Pass::Option<bool> exportAttentionJVP{*this, "export-attention-jvp",
+      llvm::cl::desc("Export a verified isolated attention JVP physical binding contract"), llvm::cl::init(false)};
   mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
       llvm::cl::desc("Materialize a bounded native child from the paired SSA program"), llvm::cl::init(false)};
 
@@ -535,6 +538,27 @@ class AutodiffForwardPass
     if (emitStorageChild && forwards.size() != 1) {
       module.emitError("native storage JVP requires exactly one forward request to generate its child");
       return signalPassFailure();
+    }
+
+    if (exportAttentionJVP) {
+      if (emitStorageChild || forwards.size()!=1 ||
+          std::distance(module.getOps<mlir::func::FuncOp>().begin(), module.getOps<mlir::func::FuncOp>().end())!=1) {
+        module.emitError("attention JVP export requires one isolated forward request");
+        return signalPassFailure();
+      }
+      auto fn=forwards.front();
+      if (!fn.getBody().hasOneBlock() || fn.getNumArguments()!=3 || fn.getNumResults()!=1 ||
+          fn.getBody().front().getOperations().size()!=2) {
+        fn.emitError("attention JVP export requires one direct attention operation");
+        return signalPassFailure();
+      }
+      auto &op=fn.getBody().front().front();
+      if (op.getName().getStringRef()!="tessera.flash_attn" || op.getNumOperands()!=3 ||
+          op.getOperands()!=fn.getArguments() ||
+          fn.getBody().front().getTerminator()->getOperands()!=op.getResults()) {
+        fn.emitError("attention JVP export requires direct Q/K/V and return bindings");
+        return signalPassFailure();
+      }
     }
 
     for (mlir::func::FuncOp forward : forwards) {
@@ -680,6 +704,31 @@ class AutodiffForwardPass
       module.push_back(jvp);
       forward->setAttr("tessera.autodiff.jvp",
                        mlir::FlatSymbolRefAttr::get(&getContext(), jvpName));
+    }
+    if (exportAttentionJVP) {
+      llvm::SmallVector<mlir::Operation *> products;
+      module.walk([&](mlir::Operation *op) {
+        if (op->getName().getStringRef()=="tessera_attn.checkpoint_jvp") products.push_back(op);
+      });
+      if (products.size()!=1) {
+        module.emitError("attention JVP export requires an active Q or K product");
+        return signalPassFailure();
+      }
+      auto *op=products.front();
+      auto q=mlir::cast<mlir::RankedTensorType>(op->getOperand(0).getType());
+      auto k=mlir::cast<mlir::RankedTensorType>(op->getOperand(1).getType());
+      auto v=mlir::cast<mlir::RankedTensorType>(op->getOperand(2).getType());
+      llvm::json::Array dims;
+      for (auto d : {q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)}) dims.push_back(d);
+      llvm::json::Array active;
+      for (auto tangent : op->getOperands().drop_front(5))
+        active.push_back(mlir::isa<mlir::BlockArgument>(tangent));
+      llvm::json::Object contract{{"schema",1},{"dims",std::move(dims)},
+        {"active",std::move(active)},
+        {"scale",op->getAttrOfType<mlir::FloatAttr>("scale").getValueAsDouble()},
+        {"causal",op->getAttrOfType<mlir::BoolAttr>("causal").getValue()}};
+      std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
+      module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));
     }
     if (emitStorageChild && mlir::failed(emitNativeStorageJVP(module)))
       signalPassFailure();

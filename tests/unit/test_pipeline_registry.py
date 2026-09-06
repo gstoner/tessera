@@ -129,7 +129,7 @@ def test_required_dialects_are_registered() -> None:
     standard_mlir_dialects = {
         "func", "scf", "arith", "memref", "tensor", "linalg",
         "llvm", "math", "builtin", "vector", "affine", "bufferization",
-        "nvvm", "rocdl", "gpu",
+        "nvvm", "rocdl", "gpu", "nvgpu",
         # Tessera-side dialects not yet in REGISTERED_DIALECTS today —
         # add them to the manifest if we want full coverage.  For now,
         # accept the ones that exist as known C++ dialects.

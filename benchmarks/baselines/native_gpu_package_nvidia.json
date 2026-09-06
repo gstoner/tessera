@@ -1,0 +1,139 @@
+{
+  "backend": "nvidia",
+  "device_identity": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "compiler_sha256": "d29c52e5aeb87d6b436671f7760fcd1e3479c03af6ea687d036157bf5314bafc",
+  "recorder_sha256": "86eae37a775070cf78055e51f6feeba0a16ac52d5af477b08985f981ea6db251",
+  "status": "raw native package execution proven",
+  "sync_key": "IR-NATIVE-FOUNDATION-1",
+  "timing_claim": null,
+  "cases": [
+    {
+      "mode": "nested",
+      "width": 32,
+      "rounds": 1,
+      "blocks": 32,
+      "dynamic_bytes": 128,
+      "oracle": "exact",
+      "binding_digest": "edb77c07fd7a68e4fe6ae5dcdaa7d94acaab8a307fa2bc57e4c222bb77525422",
+      "fixture_sha256": "ba6ebf9e5730c7a1f4ef57cc52d0a704af2ddf704ade0f1a779b55c98b438a01",
+      "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7",
+      "host_library_sha256": "9fc6a397c9e6b59f16503141919228ecf1563af13e868578fa289a3b2034fb20",
+      "rejected_protocols": [],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "nested",
+      "width": 64,
+      "rounds": 7,
+      "blocks": 32,
+      "dynamic_bytes": 256,
+      "oracle": "exact",
+      "binding_digest": "edb77c07fd7a68e4fe6ae5dcdaa7d94acaab8a307fa2bc57e4c222bb77525422",
+      "fixture_sha256": "ba6ebf9e5730c7a1f4ef57cc52d0a704af2ddf704ade0f1a779b55c98b438a01",
+      "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7",
+      "host_library_sha256": "9fc6a397c9e6b59f16503141919228ecf1563af13e868578fa289a3b2034fb20",
+      "rejected_protocols": [],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "nested",
+      "width": 128,
+      "rounds": 17,
+      "blocks": 32,
+      "dynamic_bytes": 512,
+      "oracle": "exact",
+      "binding_digest": "edb77c07fd7a68e4fe6ae5dcdaa7d94acaab8a307fa2bc57e4c222bb77525422",
+      "fixture_sha256": "ba6ebf9e5730c7a1f4ef57cc52d0a704af2ddf704ade0f1a779b55c98b438a01",
+      "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7",
+      "host_library_sha256": "9fc6a397c9e6b59f16503141919228ecf1563af13e868578fa289a3b2034fb20",
+      "rejected_protocols": [],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "nested",
+      "width": 256,
+      "rounds": 33,
+      "blocks": 32,
+      "dynamic_bytes": 1024,
+      "oracle": "exact",
+      "binding_digest": "edb77c07fd7a68e4fe6ae5dcdaa7d94acaab8a307fa2bc57e4c222bb77525422",
+      "fixture_sha256": "ba6ebf9e5730c7a1f4ef57cc52d0a704af2ddf704ade0f1a779b55c98b438a01",
+      "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7",
+      "host_library_sha256": "9fc6a397c9e6b59f16503141919228ecf1563af13e868578fa289a3b2034fb20",
+      "rejected_protocols": [],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "async",
+      "width": 32,
+      "rounds": 1,
+      "blocks": 32,
+      "dynamic_bytes": 128,
+      "oracle": "exact",
+      "binding_digest": "7d7f51c07284892082c78a25b6a2a655ca905e910df5ccc1864810f6b0e20027",
+      "fixture_sha256": "159a0923d918a9470bbb655e27305183baed6762e76cb56c514a45defac2d427",
+      "image_sha256": "3be8ae4d8c5dfc69599cb78fe9bb21f32c8bd745a3f1b63d923ce642fe218f3f",
+      "host_library_sha256": "6e26b8fdf345db93270bb08fbf881edd2d419a8fc7b872d88e9ef7ff67daaeb1",
+      "rejected_protocols": [
+        "missing_wait",
+        "partial_wait",
+        "wrong_group"
+      ],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "async",
+      "width": 64,
+      "rounds": 7,
+      "blocks": 32,
+      "dynamic_bytes": 256,
+      "oracle": "exact",
+      "binding_digest": "7d7f51c07284892082c78a25b6a2a655ca905e910df5ccc1864810f6b0e20027",
+      "fixture_sha256": "159a0923d918a9470bbb655e27305183baed6762e76cb56c514a45defac2d427",
+      "image_sha256": "3be8ae4d8c5dfc69599cb78fe9bb21f32c8bd745a3f1b63d923ce642fe218f3f",
+      "host_library_sha256": "6e26b8fdf345db93270bb08fbf881edd2d419a8fc7b872d88e9ef7ff67daaeb1",
+      "rejected_protocols": [
+        "missing_wait",
+        "partial_wait",
+        "wrong_group"
+      ],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "async",
+      "width": 128,
+      "rounds": 17,
+      "blocks": 32,
+      "dynamic_bytes": 512,
+      "oracle": "exact",
+      "binding_digest": "7d7f51c07284892082c78a25b6a2a655ca905e910df5ccc1864810f6b0e20027",
+      "fixture_sha256": "159a0923d918a9470bbb655e27305183baed6762e76cb56c514a45defac2d427",
+      "image_sha256": "3be8ae4d8c5dfc69599cb78fe9bb21f32c8bd745a3f1b63d923ce642fe218f3f",
+      "host_library_sha256": "6e26b8fdf345db93270bb08fbf881edd2d419a8fc7b872d88e9ef7ff67daaeb1",
+      "rejected_protocols": [
+        "missing_wait",
+        "partial_wait",
+        "wrong_group"
+      ],
+      "oversized_launch": "rejected before dispatch"
+    },
+    {
+      "mode": "async",
+      "width": 256,
+      "rounds": 33,
+      "blocks": 32,
+      "dynamic_bytes": 1024,
+      "oracle": "exact",
+      "binding_digest": "7d7f51c07284892082c78a25b6a2a655ca905e910df5ccc1864810f6b0e20027",
+      "fixture_sha256": "159a0923d918a9470bbb655e27305183baed6762e76cb56c514a45defac2d427",
+      "image_sha256": "3be8ae4d8c5dfc69599cb78fe9bb21f32c8bd745a3f1b63d923ce642fe218f3f",
+      "host_library_sha256": "6e26b8fdf345db93270bb08fbf881edd2d419a8fc7b872d88e9ef7ff67daaeb1",
+      "rejected_protocols": [
+        "missing_wait",
+        "partial_wait",
+        "wrong_group"
+      ],
+      "oversized_launch": "rejected before dispatch"
+    }
+  ]
+}

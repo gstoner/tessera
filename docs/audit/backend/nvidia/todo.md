@@ -6570,3 +6570,31 @@ passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
 now explicitly selects the consumed NVIDIA lowerer and restores its environment.
 Shared verifier/registry validation applies to this backend; no new device or
 physical schedule proof is claimed by this correction.
+
+**Symbolic kernel reuse — W2.4a / IR-NATIVE-FOUNDATION-1:** registered GPU
+kernel scalar launch arguments and induction values can prove uniform control
+for memref reuse; real GPU barriers release synchronous accesses. Static arenas
+materialize in GPU modules; the dynamic extension is assessed below.
+Static shared globals remain in the GPU module for NVVM lowering. Follow-up required: native producer/package integration and exact-device proof on Super-Bear; no new CUDA timing claim.
+
+
+**Dynamic GPU storage — W2.4a / IR-NATIVE-FOUNDATION-1:** entry-block GPU
+arenas now use native dynamic shared memory plus a checked native host sizing
+companion; local gpu.launch_func byte counts are wired to that companion.
+Exact-device experiment validated on Super-Bear RTX 5070: native LLVM host sizing supplies CUDA launch bytes, with exact cross-lane numerical checks for four runtime widths. Follow-up required: production package binding, nested dynamic lifetimes and asynchronous producer integration. No selector promotion or general speedup claim.
+See the [shared experiment](../../../../benchmarks/DYNAMIC_GPU_STORAGE.md).
+
+
+**Native package / nested lifetime / async producer — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated for the bounded raw native package on RTX 5070: four nested and four native async-copy cases pass after serialization/reload. Missing/partial/wrong-group waits and oversized sizing are rejected. Follow-up required: macro-GEMM schedule integration, token forwarding, tensor/JIT binding and sanitizer proof; no overlap or performance claim.
+See the [package proof](../../../../benchmarks/NATIVE_GPU_STORAGE_PACKAGE.md) and integrated plan for the bounded ABI and remaining work.
+
+
+**Tensor/JIT and producer integration — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on RTX 5070: four exact explicit tensor/JIT cases and six macro-GEMM shapes in both deferred/immediate-wait forms. Production macro-GEMM now emits NVGPU copy/group/wait tokens before conversion. Generic arena proofs accept identity forwarding, not changing-generation macro ownership. Follow-up required: automatic descriptors/arbiter and paired AD; exploratory timings do not promote a route.
+See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
+
+
+**ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on RTX 5070 for four generated-descriptor/JIT/arbiter/two-stream cases, including loop-external token replacement. Event completion retains allocation owners and orders conflicts. Follow-up required for rotating generations, Schedule-authored manifests/oracles, paired-AD producer/device proof and concurrency measurements; no new selector promotion.
+See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).

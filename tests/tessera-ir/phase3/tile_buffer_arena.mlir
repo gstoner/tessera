@@ -128,7 +128,9 @@ func.func @arena_dynamic(%arg0: memref<?x16xf16>,
 // DYNAMIC-NOT: tile.smem_arena_dynamic_unresolved
 // DYNAMIC: scf.if %{{.*}} {
 // DYNAMIC: %[[LOCAL:.*]] = memref.alloca(%{{.*}}) : memref<?xf16>
-// DYNAMIC: memref.dim %[[LOCAL]], %c0
+// The alloca dimension folds to the original extent; no private descriptor
+// needs to survive LLVM lowering.
+// DYNAMIC: arith.muli %{{.*}}, %arg1 : index
 // DYNAMIC: %[[ARENA:.*]] = memref.alloca(%{{.*}}) {alignment = 16 : i64} : memref<?xi8, 3>
 // DYNAMIC: memref.view %[[ARENA]]
 // DYNAMIC-NOT: tile.alloc_shared

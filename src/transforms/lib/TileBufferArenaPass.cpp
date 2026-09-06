@@ -27,6 +27,10 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -37,6 +41,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include <functional>
 
 using namespace mlir;
 
@@ -84,12 +89,13 @@ struct TileBufferArena
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, memref::MemRefDialect>();
+    registry.insert<arith::ArithDialect, memref::MemRefDialect, func::FuncDialect,
+                    gpu::GPUDialect, cf::ControlFlowDialect, DLTIDialect, nvgpu::NVGPUDialect>();
   }
 
   void runOnOperation() override {
     getOperation().walk([&](Operation *fn) {
-      if (fn->getName().getStringRef() == "func.func" && fn->getNumRegions())
+      if (isa<func::FuncOp, gpu::GPUFuncOp>(fn) && fn->getNumRegions())
         layoutRegion(fn);
     });
   }
@@ -188,6 +194,7 @@ struct TileBufferArena
               bool known = tessera::memory::isMarker(user) ||
                            isa<memref::LoadOp, memref::StoreOp, memref::DimOp>(user) ||
                            name == "tile.async_copy" || name == "tile.wait_async" ||
+                           isa<nvgpu::DeviceAsyncCopyOp>(user) ||
                            name == "tile.mma" || tessera::memory::borrowedCall(user, alias, true);
               unsafeAlias |= !known;
             }
@@ -222,6 +229,38 @@ struct TileBufferArena
     if (smem.empty() && tmem.empty())
       return;
     bool dynamicSmem = llvm::any_of(smem, hasDynamicShape);
+    if (dynamicSmem && isa<gpu::GPUFuncOp>(fn)) {
+      auto kernel = cast<gpu::GPUFuncOp>(fn);
+      if (!kernel.isKernel() || llvm::any_of(smem, [&](Operation *op) {
+            if (op->getBlock() != &kernel.getBody().front() && !lifetimes.get(op).reusable) return true;
+            for (auto *parent = op->getParentOp(); parent != fn; parent = parent->getParentOp()) {
+              if (auto branch = dyn_cast<scf::IfOp>(parent)) {
+                if (!tessera::memory::workgroupUniform(branch.getCondition())) return true;
+              } else if (auto loop = dyn_cast<scf::ForOp>(parent)) {
+                if (!tessera::memory::workgroupUniform(loop.getLowerBound()) ||
+                    !tessera::memory::workgroupUniform(loop.getUpperBound()) ||
+                    !tessera::memory::workgroupUniform(loop.getStep())) return true;
+              } else return true;
+            }
+            return false;
+          })) {
+        fn->emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic GPU arena requires uniform structured kernel regions");
+        signalPassFailure();
+        return;
+      }
+      bool existing = false;
+      kernel.walk([&](gpu::DynamicSharedMemoryOp) { existing = true; });
+      if (existing) {
+        fn->emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic GPU arena cannot overlap an existing dynamic shared allocation");
+        signalPassFailure();
+        return;
+      }
+      materializeDynamicSharedArena(fn, smem, &kernel.getBody().front().front(), b);
+      int64_t tmemBytes = layoutSpace(tmem, "tile.tmem_offset", b);
+      if (!tmem.empty() && tmemBytes >= 0)
+        fn->setAttr("tile.tmem_arena_bytes", b.getI64IntegerAttr(tmemBytes));
+      return;
+    }
     if (dynamicSmem) {
       auto func = dyn_cast<func::FuncOp>(fn);
       DominanceInfo dominance(func);
@@ -288,15 +327,103 @@ struct TileBufferArena
       materializeSharedArena(fn, smem, smemBytes, b);
   }
 
+  // Export the exact kernel layout expression as a native host function and
+  // wire all local launch sites to it. Every intermediate is in [0, INT32_MAX]:
+  // adding or multiplying two checked operands cannot overflow a 64-bit index.
+  LogicalResult materializeLaunchSizer(gpu::GPUFuncOp kernel, Value bytes) {
+    auto module = kernel->getParentOfType<gpu::GPUModuleOp>()->getParentOfType<ModuleOp>();
+    if (DataLayout(module).getTypeSizeInBits(IndexType::get(&getContext())) != 64)
+      return kernel.emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic launch sizing requires a 64-bit host index");
+    OpBuilder host(module.getContext());
+    host.setInsertionPoint(kernel->getParentOp());
+    auto gpuModule = kernel->getParentOfType<gpu::GPUModuleOp>();
+    std::string name = ("__tessera_shared_bytes_" + gpuModule.getName() + "_" + kernel.getName()).str();
+    if (SymbolTable::lookupSymbolIn(module, name))
+      return kernel.emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: launch sizing symbol already exists");
+    auto type = host.getFunctionType(kernel.getFunctionType().getInputs(), {host.getIndexType()});
+    auto sizing = func::FuncOp::create(host, kernel.getLoc(), name, type);
+    sizing->setAttr("llvm.emit_c_interface", host.getUnitAttr());
+    Block *entry = sizing.addEntryBlock();
+    Block *invalid = sizing.addBlock();
+    host.setInsertionPointToStart(invalid);
+    auto failure = arith::ConstantIndexOp::create(host, kernel.getLoc(), -1);
+    func::ReturnOp::create(host, kernel.getLoc(), failure.getResult());
+    host.setInsertionPointToStart(entry);
+    IRMapping mapping;
+    for (auto [source, target] : llvm::zip(kernel.getArguments().take_front(type.getNumInputs()), sizing.getArguments()))
+      mapping.map(source, target);
+    llvm::SmallPtrSet<Value, 16> checked;
+    auto check = [&](Value value) {
+      if (!checked.insert(value).second) return;
+      auto zero = arith::ConstantIndexOp::create(host, kernel.getLoc(), 0);
+      auto limit = arith::ConstantIndexOp::create(host, kernel.getLoc(), INT32_MAX);
+      auto nonnegative = arith::CmpIOp::create(host, kernel.getLoc(), arith::CmpIPredicate::sge, value, zero);
+      auto bounded = arith::CmpIOp::create(host, kernel.getLoc(), arith::CmpIPredicate::sle, value, limit);
+      auto valid = arith::AndIOp::create(host, kernel.getLoc(), nonnegative, bounded);
+      Block *next = sizing.addBlock();
+      cf::CondBranchOp::create(host, kernel.getLoc(), valid, next, ValueRange{}, invalid, ValueRange{});
+      host.setInsertionPointToStart(next);
+    };
+    std::function<Value(Value)> clone = [&](Value value) -> Value {
+      if (!value.getType().isIndex()) return {};
+      if (mapping.contains(value)) {
+        auto result = mapping.lookup(value);
+        check(result);
+        return result;
+      }
+      Operation *def = value.getDefiningOp();
+      if (!def) return {};
+      if (auto dim = dyn_cast<memref::DimOp>(def)) {
+        if (!mapping.contains(dim.getSource()) || !clone(dim.getIndex())) return {};
+      } else if (isa<arith::ConstantIndexOp>(def)) {
+        // no operands
+      } else if (isa<arith::AddIOp, arith::MulIOp, arith::MaxUIOp, arith::DivUIOp>(def)) {
+        if (isa<arith::DivUIOp>(def)) {
+          APInt divisor;
+          if (!matchPattern(def->getOperand(1), m_ConstantInt(&divisor)) || !divisor.isStrictlyPositive()) return {};
+        }
+        for (Value operand : def->getOperands()) if (!clone(operand)) return {};
+      } else return {};
+      auto result = host.clone(*def, mapping)->getResult(0);
+      check(result);
+      return result;
+    };
+    Value computed = clone(bytes);
+    if (!computed) {
+      sizing.erase();
+      return kernel.emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic size is not a supported launch-argument expression");
+    }
+    func::ReturnOp::create(host, kernel.getLoc(), computed);
+    kernel->setAttr("tile.dynamic_shared_size", FlatSymbolRefAttr::get(host.getContext(), name));
+    module.walk([&](gpu::LaunchFuncOp launch) {
+      auto target = SymbolTable::lookupNearestSymbolFrom<gpu::GPUFuncOp>(launch, launch.getKernelAttr());
+      if (target != kernel) return;
+      host.setInsertionPoint(launch);
+      auto call = func::CallOp::create(host, launch.getLoc(), sizing, launch.getKernelOperands());
+      auto zero = arith::ConstantIndexOp::create(host, launch.getLoc(), 0);
+      auto valid = arith::CmpIOp::create(host, launch.getLoc(), arith::CmpIPredicate::sge, call.getResult(0), zero);
+      cf::AssertOp::create(host, launch.getLoc(), valid,
+                          "TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic launch size exceeds nonnegative i32 range");
+      auto count = arith::IndexCastOp::create(host, launch.getLoc(), host.getI32Type(), call.getResult(0));
+      if (Value supplied = launch.getDynamicSharedMemorySize()) {
+        auto equal = arith::CmpIOp::create(host, launch.getLoc(), arith::CmpIPredicate::eq, supplied, count);
+        cf::AssertOp::create(host, launch.getLoc(), equal,
+                            "TILE_BARRIER_REUSE_MISSING_BARRIER: explicit dynamic launch bytes disagree with arena");
+      }
+      launch.getDynamicSharedMemorySizeMutable().assign(count);
+    });
+    return success();
+  }
+
   // Runtime-sized shared/LDS arena for one dominance cohort. Reuse groups keep
   // the maximum member size, just like the static planner; offsets are runtime
   // index expressions with natural alignment. The caller chooses the earliest
   // legal insertion point, so descriptors created in nested regions can own a
   // scoped arena rather than being illegally hoisted to function entry.
   void materializeDynamicSharedArena(
-      func::FuncOp func, const SmallVector<Operation *> &allocs,
+      Operation *func, const SmallVector<Operation *> &allocs,
       Operation *insertionPoint, OpBuilder &b) {
-    if (!func || func.empty() || allocs.empty() || !insertionPoint)
+    if (!func || func->getRegion(0).empty() || allocs.empty() || !insertionPoint)
       return;
     // byteSize below needs a scalar element width. Decide that for every member
     // before any IR is built, so an unsupported element type leaves the cohort
@@ -311,15 +438,35 @@ struct TileBufferArena
     Value zero = arith::ConstantIndexOp::create(b, loc, 0);
     Value one = arith::ConstantIndexOp::create(b, loc, 1);
 
+    IRMapping hoisted;
+    if (auto kernel = dyn_cast<gpu::GPUFuncOp>(func))
+      for (Value arg : kernel.getArguments()) hoisted.map(arg, arg);
+    std::function<Value(Value)> hoistSize = [&](Value value) -> Value {
+      if (hoisted.contains(value)) return hoisted.lookup(value);
+      auto *def = value.getDefiningOp();
+      if (!def || !value.getType().isIndex()) return {};
+      if (auto dim = dyn_cast<memref::DimOp>(def)) {
+        if (!hoisted.contains(dim.getSource()) || !hoistSize(dim.getIndex())) return {};
+      } else if (isa<arith::ConstantIndexOp>(def)) {
+      } else if (isa<arith::AddIOp, arith::MulIOp, arith::MaxUIOp, arith::DivUIOp>(def)) {
+        for (Value operand : def->getOperands()) if (!hoistSize(operand)) return {};
+      } else return {};
+      return b.clone(*def, hoisted)->getResult(0);
+    };
+
     auto byteSize = [&](Value value) {
       auto type = cast<MemRefType>(value.getType());
       Value elements = one;
       for (auto [index, extent] : llvm::enumerate(type.getShape())) {
         Value dim;
         if (extent == ShapedType::kDynamic)
-          dim = memref::DimOp::create(b, loc, value, index).getResult();
+          dim = b.createOrFold<memref::DimOp>(loc, value, index);
         else
           dim = arith::ConstantIndexOp::create(b, loc, extent);
+        if (isa<gpu::GPUFuncOp>(func)) {
+          dim = hoistSize(dim);
+          if (!dim) return Value();
+        }
         elements = arith::MulIOp::create(b, loc, elements, dim);
       }
       int64_t bits = type.getElementType().getIntOrFloatBitWidth();
@@ -335,6 +482,11 @@ struct TileBufferArena
       int64_t group =
           op->getAttrOfType<IntegerAttr>(kGroupAttr).getInt();
       Value size = byteSize(op->getOperand(0));
+      if (!size) {
+        func->emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic size is not a supported launch-argument expression");
+        signalPassFailure();
+        return;
+      }
       auto found = groupBytes.find(group);
       if (found == groupBytes.end()) {
         groupBytes[group] = size;
@@ -365,13 +517,23 @@ struct TileBufferArena
       cursor = arith::AddIOp::create(b, loc, cursor, groupBytes[group]);
     }
 
-    auto memorySpace = b.getI64IntegerAttr(3);
-    auto arenaType = MemRefType::get(
-        {ShapedType::kDynamic}, b.getI8Type(), MemRefLayoutAttrInterface(),
-        memorySpace);
-    auto arena = memref::AllocaOp::create(
-        b, loc, arenaType, ValueRange{cursor}, ValueRange{},
-        b.getI64IntegerAttr(16));
+    Attribute memorySpace = b.getI64IntegerAttr(3);
+    Value arena;
+    if (auto kernel = dyn_cast<gpu::GPUFuncOp>(func)) {
+      if (failed(materializeLaunchSizer(kernel, cursor))) {
+        signalPassFailure();
+        return;
+      }
+      memorySpace = gpu::AddressSpaceAttr::get(b.getContext(), gpu::AddressSpace::Workgroup);
+      auto arenaType = MemRefType::get({ShapedType::kDynamic}, b.getI8Type(),
+                                      MemRefLayoutAttrInterface(), memorySpace);
+      arena = gpu::DynamicSharedMemoryOp::create(b, loc, arenaType).getResult();
+    } else {
+      auto arenaType = MemRefType::get({ShapedType::kDynamic}, b.getI8Type(),
+                                      MemRefLayoutAttrInterface(), memorySpace);
+      arena = memref::AllocaOp::create(b, loc, arenaType, ValueRange{cursor},
+                                     ValueRange{}, b.getI64IntegerAttr(16));
+    }
     DominanceInfo dominance(func);
 
     for (Operation *alloc : allocs) {
@@ -388,10 +550,10 @@ struct TileBufferArena
       for (auto [index, extent] : llvm::enumerate(originalType.getShape()))
         if (extent == ShapedType::kDynamic)
           dynamicSizes.push_back(
-              memref::DimOp::create(b, alloc->getLoc(),
-                                    alloc->getOperand(0), index).getResult());
+              b.createOrFold<memref::DimOp>(alloc->getLoc(),
+                                           alloc->getOperand(0), index));
       OperationState viewState(alloc->getLoc(), "memref.view");
-      viewState.addOperands(arena.getResult());
+      viewState.addOperands(arena);
       viewState.addOperands(offsets[group]);
       viewState.addOperands(dynamicSizes);
       viewState.addTypes(viewType);
@@ -418,24 +580,23 @@ struct TileBufferArena
   void materializeSharedArena(Operation *fn,
                               const SmallVector<Operation *> &allocs,
                               int64_t arenaBytes, OpBuilder &b) {
-    auto func = dyn_cast<func::FuncOp>(fn);
-    if (!func || func.empty())
+    if (fn->getNumRegions() != 1 || fn->getRegion(0).empty())
       return;
-    Location loc = func.getLoc();
+    Location loc = fn->getLoc();
     auto memorySpace = b.getI64IntegerAttr(3);
     auto arenaType = MemRefType::get(
         {arenaBytes}, b.getI8Type(), MemRefLayoutAttrInterface(), memorySpace);
-    auto functionName = func.getSymName();
+    auto functionName = SymbolTable::getSymbolName(fn).getValue();
     std::string arenaName =
         ("__tessera_smem_arena_" + functionName).str();
     b.setInsertionPoint(fn);
     memref::GlobalOp::create(
         b, loc, arenaName, b.getStringAttr("private"), arenaType,
         b.getUnitAttr(), false, b.getI64IntegerAttr(16));
-    b.setInsertionPointToStart(&func.front());
+    b.setInsertionPointToStart(&fn->getRegion(0).front());
     auto arena =
         memref::GetGlobalOp::create(b, loc, arenaType, arenaName);
-    DominanceInfo dominance(func);
+    DominanceInfo dominance(fn);
 
     for (Operation *alloc : allocs) {
       auto offset = alloc->getAttrOfType<IntegerAttr>("tile.smem_offset");

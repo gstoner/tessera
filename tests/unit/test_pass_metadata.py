@@ -107,7 +107,9 @@ _STANDARD_MLIR_DIALECTS = frozenset({
     "llvm", "math", "builtin", "vector", "affine", "bufferization",
     # `gpu` is upstream MLIR (mlir/Dialect/GPU) and passes that emit
     # `gpu.thread_id` -- e.g. lower-tile-to-rocm -- legitimately name it.
-    "gpu", "nvvm", "rocdl",
+    "gpu", "nvvm", "rocdl", "nvgpu",
+    # Upstream data-layout interfaces: dynamic launch sizing reads host index width.
+    "dlti",
     # Tessera-side dialects not yet in Arch-4's manifest — see Arch-4
     # rollout (today only the 3 already-registered dialects are
     # captured; this set absorbs the rest).

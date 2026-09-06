@@ -77,7 +77,7 @@ struct TileBufferReuse
 
   void runOnOperation() override {
     getOperation().walk([&](Operation *fn) {
-      if (fn->getName().getStringRef() == "func.func" && fn->getNumRegions())
+      if (isa<func::FuncOp, gpu::GPUFuncOp>(fn) && fn->getNumRegions())
         planRegion(fn);
     });
   }
@@ -123,12 +123,17 @@ struct TileBufferReuse
     for (unsigned i : order) {
       Buffer &b = buffers[i];
       int chosen = -1;
-      // A buffer of unknown static size is never aliased (own group). Two buffers
+      // GPU dynamic groups reserve the maximum member size in the arena. Two buffers
       // share a group only if their live ranges are disjoint AND they are the same
       // alloc kind (SMEM `alloc_shared` vs TMEM `tmem.alloc` are distinct physical
       // spaces — a backend cannot realize one group as both) AND the same memref
       // type (identical backing size + element type + layout + memory space).
-      if (b.bytes >= 0) {
+      auto kernel = dyn_cast<gpu::GPUFuncOp>(fn);
+      auto memrefType = cast<MemRefType>(b.memref.getType());
+      bool dynamicGPU = kernel && kernel.isKernel() &&
+                        b.kind == "tile.alloc_shared" && memrefType.getLayout().isIdentity() &&
+                        memrefType.getElementType().isIntOrFloat();
+      if (b.bytes >= 0 || dynamicGPU) {
         for (unsigned g = 0; g < groups.size(); ++g) {
           if (groups[g].kind == b.kind && groups[g].type == b.memref.getType() &&
               llvm::all_of(groups[g].members, [&](Operation *member) { return lifetimes.disjoint(member, b.alloc); })) {

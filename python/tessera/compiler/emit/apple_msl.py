@@ -17,6 +17,7 @@ the same interface. Vocab snippets are now requested through ``EpilogueOp.emit``
 from __future__ import annotations
 
 import ctypes
+from ..apple_threadgroup import TILED_SCORES, tiled_threadgroup_available
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -345,7 +346,7 @@ kernel void {_ENTRY_TILED}(
     constant int&       M   [[buffer(3)]],
     constant int&       N   [[buffer(4)]],
     constant int&       K   [[buffer(5)]],
-{bias_param}    threadgroup float* tg_scores [[threadgroup(0)]],
+{bias_param}    {TILED_SCORES.declaration()},
     uint tg_pos [[threadgroup_position_in_grid]],
     uint lid    [[thread_position_in_threadgroup]])
 {{
@@ -915,6 +916,8 @@ def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         res_arr = np.ascontiguousarray(residual, bf16).reshape(M, N)
         res_ptr = u16p(res_arr)
     is_tiled = 0 if N <= SYNTH_MAX_N else 1
+    if is_tiled and not tiled_threadgroup_available(region, N):
+        return None, "fallback"
     if is_tiled:
         source = synthesize_matmul_epilogue_msl_tiled(region, dtype="bf16")
         entry = _ENTRY_TILED
@@ -965,6 +968,8 @@ def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     n_cap = SYNTH_MAX_N if region.has_residual else SYNTH_MAX_N_TILED
     if N > SYNTH_MAX_N and not tiled_reduction_eligible(region):
         sym = None                # tiled kernel cannot emit this reduction
+    if N > SYNTH_MAX_N and not tiled_threadgroup_available(region, N):
+        sym = None
     if sym is not None and N <= n_cap:
         is_tiled = 0 if N <= SYNTH_MAX_N else 1
         if is_tiled:
@@ -1065,7 +1070,8 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     tiled = _synth_tiled_symbol()
     if (tiled is not None and not region.has_residual
             and tiled_reduction_eligible(region)
-            and SYNTH_MAX_N < N <= SYNTH_MAX_N_TILED):
+            and SYNTH_MAX_N < N <= SYNTH_MAX_N_TILED
+            and tiled_threadgroup_available(region, N)):
         source = synthesize_matmul_epilogue_msl_tiled(region).encode("utf-8")
         out = np.zeros((M, N), np.float32)
         rc = tiled(source, _ENTRY_TILED.encode("utf-8"), fp(A), fp(B), bias_ptr,

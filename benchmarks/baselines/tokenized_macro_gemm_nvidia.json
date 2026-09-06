@@ -1,0 +1,199 @@
+{
+  "schema": "native_async_gemm_ablation_v1",
+  "experimental_only": true,
+  "timing": "resident CUDA events; alternating variant order; profiler runs excluded",
+  "source_sha256": "8f5afd22523f09ab1d7e99853dc76b48396bc9b951fc55bf246d6107aa1d63f3",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "images_sha256": {
+    "async": "3edcde0b051987565ce913781f6bfd0b44b1ca70083c47156c9dbaa0e033b7cc",
+    "serialized": "20e7abbde28916beff10b2b09994afbe7b2d859dd33cad0aaf5c176225a2d94b"
+  },
+  "tools": {
+    "tessera-nvidia-opt": {
+      "path": "/home/angstorms/programming/tessera/build-nvidia-cuda/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "4784d8b539680c7d975fea82c97d2665ba4b444b824fc939f930baeab9527823"
+    },
+    "mlir-opt": {
+      "path": "/usr/lib/llvm-23/bin/mlir-opt",
+      "sha256": "6a18ad10ba826cdb2709263b31e7e9b504e963ce7014a2e2935e57983ab8bb5d"
+    },
+    "mlir-translate": {
+      "path": "/usr/lib/llvm-23/bin/mlir-translate",
+      "sha256": "50245958b66159db8677abef1a37212d299568e47ef3b111d30d85338e003d24"
+    },
+    "llc": {
+      "path": "/usr/lib/llvm-23/bin/llc",
+      "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6"
+    },
+    "ptxas": {
+      "path": "/usr/local/cuda/bin/ptxas",
+      "sha256": "afd8d1e1fa6e310f7faee44f6621e4c1315fb7fd6da7d4d87414358e12a651dc"
+    }
+  },
+  "profile": null,
+  "repeats": 5,
+  "rows": [
+    {
+      "shape_mkn": [
+        1,
+        8,
+        1
+      ],
+      "max_abs_error": {
+        "async": 0.0,
+        "serialized": 0.0
+      },
+      "cuda_event_ms": {
+        "async": [
+          0.011417599767446518,
+          0.021855999529361726,
+          0.007123199850320816
+        ],
+        "serialized": [
+          0.007680000364780426,
+          0.010067199915647506,
+          0.007936000078916549
+        ]
+      },
+      "median_ms": {
+        "async": 0.011417599767446518,
+        "serialized": 0.007936000078916549
+      }
+    },
+    {
+      "shape_mkn": [
+        33,
+        24,
+        65
+      ],
+      "max_abs_error": {
+        "async": 2.384185791015625e-07,
+        "serialized": 2.384185791015625e-07
+      },
+      "cuda_event_ms": {
+        "async": [
+          0.009836799651384353,
+          0.03162879943847656,
+          0.006841599941253662
+        ],
+        "serialized": [
+          0.011462400108575821,
+          0.007686399668455124,
+          0.012806400656700134
+        ]
+      },
+      "median_ms": {
+        "async": 0.009836799651384353,
+        "serialized": 0.011462400108575821
+      }
+    },
+    {
+      "shape_mkn": [
+        257,
+        520,
+        257
+      ],
+      "max_abs_error": {
+        "async": 6.198883056640625e-06,
+        "serialized": 6.198883056640625e-06
+      },
+      "cuda_event_ms": {
+        "async": [
+          0.020377600193023683,
+          0.01996160000562668,
+          0.013286399841308593
+        ],
+        "serialized": [
+          0.015360000729560851,
+          0.0161408007144928,
+          0.01992959976196289
+        ]
+      },
+      "median_ms": {
+        "async": 0.01996160000562668,
+        "serialized": 0.0161408007144928
+      }
+    },
+    {
+      "shape_mkn": [
+        512,
+        512,
+        512
+      ],
+      "max_abs_error": {
+        "async": 7.62939453125e-06,
+        "serialized": 7.62939453125e-06
+      },
+      "cuda_event_ms": {
+        "async": [
+          0.022547200322151184,
+          0.022809599339962006,
+          0.023801599442958832
+        ],
+        "serialized": [
+          0.029977598786354066,
+          0.023263999819755556,
+          0.024089600145816802
+        ]
+      },
+      "median_ms": {
+        "async": 0.022809599339962006,
+        "serialized": 0.024089600145816802
+      }
+    },
+    {
+      "shape_mkn": [
+        1024,
+        1024,
+        1024
+      ],
+      "max_abs_error": {
+        "async": 1.811981201171875e-05,
+        "serialized": 1.811981201171875e-05
+      },
+      "cuda_event_ms": {
+        "async": [
+          0.12713600397109986,
+          0.12639360427856444,
+          0.12696319818496704
+        ],
+        "serialized": [
+          0.1312831997871399,
+          0.13104000091552734,
+          0.1307968020439148
+        ]
+      },
+      "median_ms": {
+        "async": 0.12696319818496704,
+        "serialized": 0.13104000091552734
+      }
+    },
+    {
+      "shape_mkn": [
+        2048,
+        2048,
+        2048
+      ],
+      "max_abs_error": {
+        "async": 4.9114227294921875e-05,
+        "serialized": 4.9114227294921875e-05
+      },
+      "cuda_event_ms": {
+        "async": [
+          0.9345664024353028,
+          0.936070442199707,
+          0.9371583938598633
+        ],
+        "serialized": [
+          0.9566656112670898,
+          0.9565952301025391,
+          0.9606528282165527
+        ]
+      },
+      "median_ms": {
+        "async": 0.936070442199707,
+        "serialized": 0.9566656112670898
+      }
+    }
+  ]
+}

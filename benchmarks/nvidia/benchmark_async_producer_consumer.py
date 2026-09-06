@@ -10,6 +10,7 @@ import argparse
 import ctypes as ct
 import hashlib
 import json
+import re
 from pathlib import Path
 import statistics
 import subprocess
@@ -29,7 +30,14 @@ def serialize_prefetch(lowered: str) -> str:
     commits = [i for i, line in enumerate(lines) if 'nvvm.cp.async.commit.group' in line]
     if len(commits) != 2:
         raise ValueError('expected exactly prime and loop-prefetch commit sites')
-    pending = [i for i in commits if 'nvvm.cp.async.wait.group 0' not in lines[i + 1]]
+    def immediate_wait(i):
+        following = i + 1
+        # NVGPU tokens lower to a zero-valued placeholder before canonicalization.
+        while following < len(lines) and re.fullmatch(
+                r"\s*%[\w]+ = llvm\.mlir\.constant\(0 : i32\) : i32\s*", lines[following]):
+            following += 1
+        return following < len(lines) and lines[following].strip() == 'nvvm.cp.async.wait.group 0'
+    pending = [i for i in commits if not immediate_wait(i)]
     if pending != [commits[1]]:
         raise ValueError('expected only loop prefetch to defer its wait')
     i = pending[0]

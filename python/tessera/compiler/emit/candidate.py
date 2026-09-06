@@ -284,6 +284,12 @@ def register_candidate(candidate: Candidate) -> None:
             continue
 
 
+def unregister_candidate(candidate: Candidate) -> None:
+    """Retire exactly this instance without removing a same-name replacement."""
+    key = (candidate.target, candidate.op)
+    _CANDIDATES[key] = [existing for existing in _CANDIDATES.get(key, []) if existing is not candidate]
+
+
 def candidates_for(target: str, op: str) -> list[Candidate]:
     """All registered candidates for ``(target, op)`` (a copy; registration order)."""
     return list(_CANDIDATES.get((target, op), ()))

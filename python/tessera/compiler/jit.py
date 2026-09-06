@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 if TYPE_CHECKING:
     from ..runtime import RuntimeArtifact
     from .explain import Explain
+    from .native_gpu_tensor import NativeTensorCall
 
 from .constraints import Constraint, ConstraintSolver, TesseraConstraintError
 from .effects import Effect, EffectLattice
@@ -531,6 +532,7 @@ class JitFn:
         # GEMM hot-path is dominated by metadata dict construction + the
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
         self._cached_artifact: Optional["RuntimeArtifact"] = None
+        self._native_storage_call: Optional["NativeTensorCall"] = None
         self._autodiff_specializations: Dict[Any, GraphIRModule] = {}
         # E2E-REAL-6: concrete tensor signatures are tracer-owned by default.
         # The decoration-time AST module remains a named candidate until a
@@ -760,6 +762,93 @@ class JitFn:
             return _PKG_FALLBACK
         return np.frombuffer(raw, dtype=np.float32).reshape(out_shape)
 
+    def bind_native_storage(self, package, specs=None, *, grid=None, block=None):
+        """Explicitly bind a native kernel ABI; no Graph re-lowering or fallback.
+
+        The caller supplies the tensor/scalar contract for this native program;
+        binding is not an automatic equivalence proof against the Python body.
+        """
+        from .native_gpu_tensor import NativeTensorCall
+        if specs is None:
+            if grid is not None or block is not None:
+                raise ValueError("generated tensor contracts do not permit geometry overrides")
+            from .native_storage_contract import generate_tensor_binding
+            binding = generate_tensor_binding(package, inspect.signature(self._fn))
+        else:
+            if grid is None or block is None:
+                raise ValueError("explicit tensor contracts require launch geometry")
+            binding = NativeTensorCall(package, inspect.signature(self._fn), tuple(specs),
+                                       grid=tuple(grid), block=tuple(block))
+        previous = getattr(self, "_native_storage_call", None)
+        if previous is not None:
+            previous.close()
+        pair = getattr(self, "_native_storage_jvp", None)
+        if pair is not None:
+            pair.close()
+        candidate = getattr(self, "_native_storage_candidate", None)
+        if candidate is not None:
+            candidate.close()
+        self._native_storage_candidate = None
+        self._native_storage_jvp = None
+        self._native_storage_call = binding
+        self._cached_artifact = None
+        return self
+
+    def enable_native_storage_arbiter(self, oracle):
+        """Generate a Tier-2 candidate; execution still requires its F4 oracle."""
+        from .emit.native_storage_candidate import register_native_storage_candidate
+        binding = getattr(self, "_native_storage_call", None)
+        if binding is None:
+            raise ValueError("no native storage binding")
+        candidate = register_native_storage_candidate(binding.package, inspect.signature(self._fn), oracle)
+        previous = getattr(self, "_native_storage_candidate", None)
+        if previous is not None:
+            previous.close()
+        self._native_storage_candidate = candidate
+        return self
+
+    def bind_native_storage_jvp(self, artifact):
+        """Bind an existing compiler-produced paired program to native children."""
+        from .native_storage_jvp import NativeStorageJVP
+        if self.differentiation_request is not None and self.differentiation_request.mode != "forward":
+            raise ValueError("paired native storage currently supports forward AD only")
+        pair = NativeStorageJVP(artifact)
+        if tuple(pair.signature.parameters) != tuple(inspect.signature(self._fn).parameters):
+            pair.close()
+            raise ValueError("paired storage signature differs from JIT signature")
+        previous = getattr(self, "_native_storage_jvp", None)
+        if previous is not None:
+            previous.close()
+        self.close_native_storage()
+        self._native_storage_call = None
+        self._native_storage_candidate = None
+        self._native_storage_jvp = pair
+        self._cached_artifact = None
+        return self
+
+    def submit_native_storage(self, stream: int, /, *args, **kwargs):
+        """Submit the configured native program on a caller-owned stream."""
+        binding = getattr(self, "_native_storage_call", None)
+        if binding is None:
+            raise ValueError("no native storage binding")
+        self._enforce_call_time_constraints(args, kwargs)
+        self._enforce_call_time_stochastic_certificate(args, kwargs)
+        if self.differentiation_request is not None:
+            raise ValueError("native storage binding has no paired differentiation contract")
+        return binding.submit(stream, *args, **kwargs)
+
+    def close_native_storage(self) -> None:
+        """Release the native module; keep the descriptor for lazy rebinding."""
+        binding = getattr(self, "_native_storage_call", None)
+        if binding is not None:
+            binding.close()
+        pair = getattr(self, "_native_storage_jvp", None)
+        if pair is not None:
+            pair.close()
+        candidate = getattr(self, "_native_storage_candidate", None)
+        if candidate is not None:
+            candidate.close()
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
         Execute through the narrow CPU lowering path when available; otherwise
@@ -775,6 +864,25 @@ class JitFn:
         """
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
+        paired_storage = getattr(self, "_native_storage_jvp", None)
+        if paired_storage is not None:
+            return paired_storage(*args, **kwargs)
+        native_storage = getattr(self, "_native_storage_call", None)
+        if native_storage is not None:
+            if self.differentiation_request is not None:
+                raise ValueError("native storage binding has no paired differentiation contract")
+            candidate = getattr(self, "_native_storage_candidate", None)
+            if candidate is not None:
+                from .emit.candidate import arbitrate
+                arguments = native_storage.signature.bind(*args, **kwargs)
+                arguments.apply_defaults()
+                inputs = tuple(arguments.arguments.values())
+                region = candidate.binding.package.binding_digest
+                winner = arbitrate(region, candidate.op, candidate.target, inputs=inputs)
+                if winner is None:
+                    raise ValueError("no oracle-verified native storage candidate")
+                return winner.run(region, *inputs)[0]
+            return native_storage(*args, **kwargs)
         self._establish_tracer_authority(args, kwargs)
         if self.differentiation_request is not None:
             self._specialized_autodiff_module(args, kwargs)
@@ -2009,6 +2117,8 @@ class JitFn:
 
     @property
     def execution_kind(self) -> str:
+        if getattr(self, "_native_storage_call", None) is not None or getattr(self, "_native_storage_jvp", None) is not None:
+            return "native_gpu"
         if self._uses_rocm_compiled_default():
             return "native_gpu"
         if self._uses_rocm_sparse_attn_default():
@@ -2087,6 +2197,20 @@ class JitFn:
         """Construct a fresh RuntimeArtifact. Called once per JitFn."""
 
         from tessera.runtime import RuntimeArtifact
+
+        pair = getattr(self, "_native_storage_jvp", None)
+        if pair is not None:
+            return RuntimeArtifact(metadata=pair.artifact.runtime_metadata())
+        binding = getattr(self, "_native_storage_call", None)
+        if binding is not None:
+            return RuntimeArtifact(
+                tile_ir=binding.package.arena_ir,
+                metadata={"target": binding.package.backend, "execution_kind": "native_gpu",
+                    "executable": True, "compiler_path": "explicit_native_storage",
+                    "runtime_status": "ready", "binding_digest": binding.binding_digest,
+                    "package_digest": binding.package.binding_digest,
+                    "python_equivalence": "caller_declared", "automatic_selection": False},
+                abi_signature="tessera.native_storage.v1")
 
         diagnostics = [d.format() for d in self.lowering_diagnostics]
         bundle_metadata = self.compile_bundle.to_metadata() if self.compile_bundle is not None else {}

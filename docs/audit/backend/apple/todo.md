@@ -7854,3 +7854,31 @@ passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
 now explicitly selects the consumed NVIDIA lowerer and restores its environment.
 Shared verifier/registry validation applies to this backend; no new device or
 physical schedule proof is claimed by this correction.
+
+**Symbolic kernel reuse — W2.4a / IR-NATIVE-FOUNDATION-1:** registered GPU
+kernel scalar launch arguments and induction values can prove uniform control
+for memref reuse; real GPU barriers release synchronous accesses. Static arenas
+materialize in GPU modules; the dynamic extension is assessed below.
+The shared GPU-kernel proof is available where this IR is consumed. Follow-up required: Metal launch-ABI and storage mapping; there is no Apple execution or timing claim.
+
+
+**Dynamic GPU storage — W2.4a / IR-NATIVE-FOUNDATION-1:** entry-block GPU
+arenas now use native dynamic shared memory plus a checked native host sizing
+companion; local gpu.launch_func byte counts are wired to that companion.
+Follow-up required: MSL dynamic threadgroup arguments and their Metal launch ABI need an Apple-owned materializer. CUDA/HIP dynamic shared storage does not establish Metal parity; no new Apple device evidence.
+See the [shared experiment](../../../../benchmarks/DYNAMIC_GPU_STORAGE.md).
+
+
+**Native package / nested lifetime / async producer — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Follow-up required: Apple-owned MSL dynamic threadgroup materialization and Metal package ABI. The raw CUDA/HIP binding and NVGPU producer do not apply to Metal; no Apple execution or timing proof is transferred.
+See the [package proof](../../../../benchmarks/NATIVE_GPU_STORAGE_PACKAGE.md) and integrated plan for the bounded ABI and remaining work.
+
+
+**Tensor/JIT and producer integration — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Not applicable to CUDA/HIP execution: Apple still requires its own MSL dynamic threadgroup/tensor binding. Shared JIT descriptor changes assessed; no M1 execution or overlap evidence is transferred.
+See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
+
+
+**ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Follow-up required for generic GPU-arena-to-MSL lowering and an Apple-native sizing companion. The existing tiled MSL/runtime slot now shares a declaration/preflight contract; dynamic bytes include static reduction scratch and must satisfy the legacy alignment ABI. Host-free tests on WSL do not establish Metal execution or performance.
+See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).

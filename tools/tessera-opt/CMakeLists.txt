@@ -8,11 +8,13 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRSupport
   MLIRTransforms
   MLIRArithDialect
+  MLIRDLTIDialect
   MLIRBufferizationDialect
   MLIRBufferizationTransforms
   MLIRFuncDialect
   MLIRLLVMDialect
   MLIRNVVMDialect
+  MLIRNVGPUDialect
   MLIRROCDLDialect
   MLIRLinalgDialect
   MLIRLinalgTransforms

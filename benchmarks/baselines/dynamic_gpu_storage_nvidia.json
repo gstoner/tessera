@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "status": "experiment",
+  "sync_key": "IR-NATIVE-FOUNDATION-1",
+  "backend": "nvidia",
+  "device_identity": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "compiler_sha256": "cc3bcd8912478b0f031cd92e942716897072144a508d1478e0b10876f73bacea",
+  "compiler_path": "/tmp/tessera-opt-dynamic-gpu",
+  "mlir_opt_sha256": "6a18ad10ba826cdb2709263b31e7e9b504e963ce7014a2e2935e57983ab8bb5d",
+  "sizer_sha256": "291e4653e09a984cf9a27c7aa50f87f9c4d19782a966cc7ae3a80ef5246645ea",
+  "fixture_sha256": "35947a6c18683c7b6f4abc4222b64d939e2607a54f5be72ee309317fc867c815",
+  "recorder_sha256": "4b03efb35fb72fe88ce815c5596467caf60508c705035d9c382420adbcbc3f6d",
+  "native_rejected_sizes": [
+    -1,
+    1073741824,
+    9223372036854775807
+  ],
+  "samples": 5,
+  "reps": 20,
+  "timing": "CUDA/HIP device events; each sample averages reps launches",
+  "claim": "dynamic storage and native host sizing proof; no product integration or async-overlap claim",
+  "cases": [
+    {
+      "threads": 32,
+      "rounds": 17,
+      "blocks": 256,
+      "dynamic": {
+        "oracle": "exact",
+        "event_ms": [
+          0.010129600018262862,
+          0.01210239976644516,
+          0.008819200098514557,
+          0.008399999886751174,
+          0.00939520001411438
+        ],
+        "median_event_ms": 0.00939520001411438,
+        "dynamic_shared_bytes": 128,
+        "resources": {
+          "static_shared_bytes": 1,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 24
+        },
+        "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7"
+      },
+      "static": {
+        "oracle": "exact",
+        "event_ms": [
+          0.008699200302362441,
+          0.008603200316429138,
+          0.009078399837017059,
+          0.013484799861907959,
+          0.009958399832248688
+        ],
+        "median_event_ms": 0.009078399837017059,
+        "dynamic_shared_bytes": 0,
+        "resources": {
+          "static_shared_bytes": 128,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 24
+        },
+        "image_sha256": "7f9a3c61e41989393b69d7517caeba0aa4e97cefa5d545ec7a5f23710ba21610"
+      },
+      "dynamic_over_static": 1.0348960370533111
+    },
+    {
+      "threads": 64,
+      "rounds": 17,
+      "blocks": 256,
+      "static": {
+        "oracle": "exact",
+        "event_ms": [
+          0.009004800021648407,
+          0.009937600046396256,
+          0.019116799533367156,
+          0.011638399958610535,
+          0.009222400188446046
+        ],
+        "median_event_ms": 0.009937600046396256,
+        "dynamic_shared_bytes": 0,
+        "resources": {
+          "static_shared_bytes": 256,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 24
+        },
+        "image_sha256": "c22394c2cc981f6b3b01ee989cc2f81cfe425c30898ee387cb3732a6644920d1"
+      },
+      "dynamic": {
+        "oracle": "exact",
+        "event_ms": [
+          0.012142399698495865,
+          0.010118400305509567,
+          0.014283199608325959,
+          0.011857599765062333,
+          0.008686400204896926
+        ],
+        "median_event_ms": 0.011857599765062333,
+        "dynamic_shared_bytes": 256,
+        "resources": {
+          "static_shared_bytes": 1,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 24
+        },
+        "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7"
+      },
+      "dynamic_over_static": 1.1932055737504086
+    },
+    {
+      "threads": 128,
+      "rounds": 17,
+      "blocks": 256,
+      "dynamic": {
+        "oracle": "exact",
+        "event_ms": [
+          0.011451199650764465,
+          0.010342399775981902,
+          0.009414400160312652,
+          0.010396800190210342,
+          0.009964799880981446
+        ],
+        "median_event_ms": 0.010342399775981902,
+        "dynamic_shared_bytes": 512,
+        "resources": {
+          "static_shared_bytes": 1,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 12
+        },
+        "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7"
+      },
+      "static": {
+        "oracle": "exact",
+        "event_ms": [
+          0.012484800070524216,
+          0.009851200133562088,
+          0.008782400190830231,
+          0.01202080026268959,
+          0.012670400738716125
+        ],
+        "median_event_ms": 0.01202080026268959,
+        "dynamic_shared_bytes": 0,
+        "resources": {
+          "static_shared_bytes": 512,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 12
+        },
+        "image_sha256": "9e9902dc04c6e4757e1b3c8a1916dd2254f4d731e4a44756adbcd4f9e0cf9fd2"
+      },
+      "dynamic_over_static": 0.8603753119567968
+    },
+    {
+      "threads": 256,
+      "rounds": 17,
+      "blocks": 256,
+      "static": {
+        "oracle": "exact",
+        "event_ms": [
+          0.011059200018644333,
+          0.01120320037007332,
+          0.010897599905729295,
+          0.010276799649000167,
+          0.009352000057697296
+        ],
+        "median_event_ms": 0.010897599905729295,
+        "dynamic_shared_bytes": 0,
+        "resources": {
+          "static_shared_bytes": 1024,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 6
+        },
+        "image_sha256": "541d7938bd410ca61507cb19cc772762cd6bae51aef5a4d58f1bb02ed3aadfc9"
+      },
+      "dynamic": {
+        "oracle": "exact",
+        "event_ms": [
+          0.009796799719333648,
+          0.009670399874448777,
+          0.00904960036277771,
+          0.011956799775362015,
+          0.009545599669218063
+        ],
+        "median_event_ms": 0.009670399874448777,
+        "dynamic_shared_bytes": 1024,
+        "resources": {
+          "static_shared_bytes": 1,
+          "local_bytes": 0,
+          "registers": 16,
+          "active_blocks_per_multiprocessor": 6
+        },
+        "image_sha256": "1cceba5b93ef3dbfda647520706395593932f8f1007239d1422eb245da48b1d7"
+      },
+      "dynamic_over_static": 0.8873880449001132
+    }
+  ]
+}

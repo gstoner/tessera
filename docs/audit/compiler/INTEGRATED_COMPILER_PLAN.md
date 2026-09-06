@@ -2297,3 +2297,173 @@ That integration, sanitizer validation and independent timing repetitions remain
 open. ROCm needs a target-specific async producer; Apple and x86 have no physical
 schedule parity claim. The previous synchronous ring remains a distinct negative
 experiment and must not be relabeled as asynchronous.
+
+### Symbolic kernel uniformity for memref reuse — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
+Reuse assignment and static arena materialization now also visit registered
+`gpu.func` bodies. Scalar entry arguments of actual GPU kernels provide a launch
+uniformity proof; induction values are uniform when all three `scf.for` controls
+are uniform. Arithmetic may propagate that proof. Ordinary function arguments,
+GPU helper arguments, thread IDs and unproven loop-carried values remain unknown.
+A `gpu.kernel` attribute on `func.func` does not override this boundary.
+
+Native `gpu.barrier` releases synchronous memref accesses but never pending DMA.
+The static arena consumer creates the shared global inside the owning GPU module
+and replaces descriptors with address-space-3 views. The dynamic GPU extension
+below supplies the native launch-size consumer; the existing dynamic `func.func`
+path keeps its region-local allocation behavior.
+
+The native fixture checks symbolic loops, induction-dependent exclusive arms,
+real memref loads/stores and GPU barriers, divergent controls, missing release,
+helper and forged-kernel annotations, and dynamic storage. These uniformity
+fixtures establish compiler legality/materialization; the device experiment below
+separately establishes its bounded dynamic-storage workload.
+The remaining symbolic boundary is loop-carried scalar and general CFG uniformity.
+Generic release-token integration with the production async macro kernel,
+external ownership summaries and architecture-owned execution remain open.
+
+
+### Native dynamic GPU storage and owning-device proof — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
+`TileBufferArena` now materializes entry-block runtime-sized GPU scratch through
+`gpu.dynamic_shared_memory`, with workgroup-address-space memref views. Its exact
+layout expression also produces a native `func.func` sizing companion, referenced
+by `tile.dynamic_shared_size`. Local `gpu.launch_func` sites call that companion
+and use its i32 byte count; an explicit count must agree. No Python or generated
+CUDA/HIP expression is the authority for those launch sizes.
+
+Admission is deliberately bounded: actual registered GPU kernels, identity-layout
+scalar-element memrefs, and a size expression derived from kernel arguments or
+their memref dimensions using constants/add/multiply/max/positive-constant divide.
+Every host intermediate must lie in `[0, INT32_MAX]`; the host index must be
+64-bit so the checked arithmetic itself cannot overflow. The driver registers
+upstream DLTI so a supplied data layout is interpreted. Existing independent
+dynamic shared allocation, nested markers, GPU helpers and device-local size
+provenance fail closed. This does not infer a device's physical shared-memory
+capacity; the native runtime still rejects launches exceeding that capacity.
+
+The [recorder](../../../benchmarks/record_dynamic_gpu_storage.py) compiles the
+emitted host companion through LLVM into a native shared library, obtains the
+launch count from that function, and separately lowers the emitted GPU module
+to NVPTX or ROCDL. Negative and oversized extents must abort in fresh native
+processes. Both owning-device packets cover four runtime widths, cross-lane
+scratch reads, publish/release barriers, 17 iterations and 256 blocks, against
+exact output oracles and independently compiled static arenas. Device-event
+samples remain experiment evidence, with no selector promotion or speedup claim.
+
+**Follow-on scope (bounded implementation below):** bind the companion and kernel
+fingerprints together in a production native package; admit path-dependent/nested dynamic storage only with
+a host-evaluable lifetime/size envelope; establish dynamic-size reuse equivalence
+before coalescing unknown-size buffers; extend symbolic loop-carried/CFG uniformity;
+and integrate release tokens with an actual asynchronous producer. Apple MSL
+threadgroup arguments need their own materializer/ABI, and x86 retains its host
+allocation route. See the [experiment report](../../../benchmarks/DYNAMIC_GPU_STORAGE.md)
+for owning-host evidence and timing limits.
+
+
+### Bound native packages, nested dynamic lifetimes and NVGPU completion — 2026-09-05
+
+Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
+The [native storage package API](../../../python/tessera/compiler/native_gpu_storage.py)
+now builds a single immutable pair from compiler-emitted IR. The binding digest
+covers the GPU image, host sizing library, entry symbols, argument ABI, target,
+compiler fingerprints and arena IR. Serialization requires the caller's pinned
+digest on reload; mutations are rejected before native loading. Synchronous
+launches use the loaded companion and the same argument tuple as the loaded
+kernel. Invalid extents return `-1` from native sizing and raise before dispatch;
+`gpu.launch_func` retains a checked assertion for this failure. This supersedes
+the earlier companion's process-abort behavior.
+
+The implemented runtime boundary is a raw device-pointer/index ABI on the
+caller's current CUDA/HIP context. It does not allocate tensors, infer logical
+shape guards, own scheduling, select a route, or regenerate lower-level IR from
+Graph. Callers retain responsibility for pointer sizes and kernel launch geometry.
+The loader owns target-image compatibility; this first build envelope is sm_120
+and gfx1151, with x86 native host companions. It is not automatic JIT/arbiter
+integration or a new general tensor operation.
+
+Uniform `scf.if`/`scf.for` regions now admit dynamic markers when every nested
+lifetime completes before region exit/backedge. Launch-derived size arithmetic
+is hoisted without hoisting payload operations. Disjoint same-type dynamic GPU
+buffers can share a group whose capacity is the maximum member size; unrelated
+groups retain separate offsets. The envelope reserves even untaken branch sizes
+conservatively. Iteration-dependent sizes, divergent control and escaping or
+incomplete lifetimes remain rejected.
+
+Native `nvgpu.device_async_copy` tokens now participate in the allocation proof.
+Only the copy's direct commit-group token, a full drain (absent/zero numGroups),
+and a following GPU barrier establish completion/publication. Missing, partial
+and unrelated-group waits fail closed for nested arena reuse. This admits a real
+NVGPU producer through NVVM `cp.async` into runtime-sized shared storage; it does
+not claim overlap with useful compute or migration of the separate macro-GEMM
+schedule. Loop-carried async token forwarding remains outside this direct-group
+proof.
+
+Owning-device evidence is in the [package report](../../../benchmarks/NATIVE_GPU_STORAGE_PACKAGE.md):
+serialized/reloaded nested packages pass four exact cases on gfx1151 and RTX 5070;
+RTX 5070 additionally passes four async-copy cases and native protocol-negative
+checks. Native sizing rejects oversized requests before GPU dispatch. No timing
+or sanitizer claim is made by this increment.
+
+**Next:** typed tensor/package descriptors and JIT/arbiter consumer wiring;
+path-dependent size selection and iteration-varying bounded envelopes; async
+token forwarding and integration into the production macro-GEMM schedule; and
+ROCm's own physical asynchronous producer. Apple MSL dynamic threadgroup argument
+binding remains separate. Keep existing compiler-comparison tombstones withdrawn.
+
+### Explicit tensor/JIT and native producer integration — 2026-09-05
+
+W2.4a / CAKE / SO-2, synchronization `IR-NATIVE-FOUNDATION-1`.
+The [native tensor/producer report](../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md)
+supersedes the preceding increment's tensor and direct-token limitations:
+explicit tensor/index descriptors now bind native storage packages directly to
+`JitFn`, preserving frontend checks while bypassing Graph regeneration. Native
+allocation extent/device checks precede dispatch; Python equivalence is explicitly
+caller-declared. Automatic lowering/arbiter selection and paired AD remain open.
+
+NVGPU completion follows unanimous branch forwarding and identity loop carries;
+changing backedges remain rejected by generic lifetime analysis. SM120 production
+macro-GEMM emits typed copy/group/wait tokens and lowers through NVGPU-to-NVVM;
+its static two-panel ownership is not inferred by the dynamic arena proof.
+
+Exact-device validation: four tensor/JIT cases each on RTX 5070 and gfx1151;
+six macro-GEMM shapes in both deferred/immediate-wait variants on RTX 5070.
+ROCm uses an ISA-supported register-prefetch producer. Immediate VMEM drains at
+several emitted barriers prevent an overlap claim; direct async global-to-LDS
+is gfx1250-only. Next: ROCm barrier/scheduling ablation, automatic descriptor and
+arbiter production, and changing-generation lifetime proofs. No performance
+policy promotion or Apple runtime parity is implied.
+
+### ABI manifests, paired-program consumption and streams — 2026-09-05
+
+W2.4a / CAKE / SO-2; `IR-NATIVE-FOUNDATION-1`.
+The [integration matrix](../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md)
+records implementation separately from native and device proof.
+
+- Compiler-preserved ABI manifests now generate tensor descriptors and optional
+  Tier-2 arbiter candidates. The existing numerical oracle still gates selection;
+  general Schedule producers must supply their ABI manifests and operation oracle.
+- An existing compiler `NativeJVPArtifact` can bind pinned storage children with
+  full ABI preflight. This is a host-tested consumer, not automatic derivative
+  production or device-proven AD. The production AD planner remains the next
+  producer integration; reverse mode stays unsupported by this adapter.
+- Caller-owned CUDA/HIP streams use event dependencies and retained allocation
+  owners; four exact generated/JIT/arbiter/stream cases pass on each owning GPU.
+  Conflicting submissions through one binding are ordered. External writes still
+  require published producer streams; no concurrency performance claim.
+- Generic token provenance now handles loop-external generation replacement
+  without dropping zero-trip seeds. Fresh loop-issued and rotating generations
+  remain rejected; inter-iteration coalescing is not inferred from static origins.
+- ROCm has a measured immediate-wait ablation: three exact workloads, seven
+  alternating HIP-event samples. The control is 2–4.5% slower in this run, but
+  added instructions and scheduling changes prevent an overlap/promotion claim.
+- Apple MSL uses a shared slot declaration/preflight contract for its existing
+  tiled runtime ABI, including static scratch. Generic dynamic-arena materialization,
+  an Apple-native companion and exact Metal validation remain open. x86 continues
+  to supply host sizing; GPU results do not establish CPU kernel performance.
+
+**Next producer work:** Schedule-authored manifests and operation-specific arbiter
+oracles; storage children from real compiler AD output; rotating-generation
+ownership; independent ROCm profiling; Apple generic dynamic-arena materialization.

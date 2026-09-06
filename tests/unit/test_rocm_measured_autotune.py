@@ -330,7 +330,7 @@ def test_live_rocm_device_tag():
 
 @pytest.mark.skipif(not _rocm_hip_live(),
                     reason="needs a live gfx1151 + hipcc")
-def test_live_measured_arbitrate_caches_per_bucket():
+def test_live_measured_arbitrate_caches_per_bucket(monkeypatch):
     region = F.FusedRegion(epilogue=("bias", "gelu"))
     rng = np.random.default_rng(0)
     cache = AT.MeasureCache()
@@ -347,11 +347,30 @@ def test_live_measured_arbitrate_caches_per_bucket():
     assert w_small is not None
     assert cache.misses == 1 and cache.size == 1
 
-    # Re-query the same bucket → cache hit, no re-measure.
+    # A lookup hit is reusable only when the measured ranking is admissible.
+    # Live timing noise must not force an unsupported winner into production.
+    previous = next(iter(cache._store.values()))
+    samples = AT.measure_latency_samples
+    measurements = []
+
+    def tracked_samples(*args, **kwargs):
+        measurements.append(1)
+        return samples(*args, **kwargs)
+
+    monkeypatch.setattr(AT, "measure_latency_samples", tracked_samples)
     before = cache.hits
     w_small2 = _run(64)
     assert cache.hits == before + 1
-    assert w_small2.name == w_small.name
+    assert w_small2 is not None
+    current = next(iter(cache._store.values()))
+    if AT.record_is_admissible(previous):
+        assert current is previous
+        assert not measurements
+        assert w_small2.name == w_small.name
+    else:
+        assert current is not previous
+        assert measurements
+        assert w_small2.name == current.winner
 
     # A distinct bucket measures separately.
     w_big = _run(512)

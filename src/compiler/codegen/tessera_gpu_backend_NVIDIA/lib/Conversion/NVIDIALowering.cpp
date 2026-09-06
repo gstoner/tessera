@@ -8,6 +8,8 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
+#include "mlir/Conversion/NVGPUToNVVM/NVGPUToNVVM.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -1312,11 +1314,39 @@ static LogicalResult materializeSm120MatmulKernel(
     return Value(mulI64(builder, loc, slot,
                         i64Constant(builder, loc, 1024)));
   };
+  // Keep copy/commit/completion as SSA values until the final NVGPU lowering.
+  // Each descriptor is the exact 16-byte window already selected by the panel
+  // address calculation; partial panels retain zero-fill via srcElements.
+  builder.getContext()->getOrLoadDialect<nvgpu::NVGPUDialect>();
+  Type asyncToken = nvgpu::DeviceAsyncTokenType::get(builder.getContext());
+  auto panelView = [&](Value ptr, unsigned space) {
+    auto i64 = builder.getI64Type();
+    auto array = LLVM::LLVMArrayType::get(i64, 1);
+    auto desc = LLVM::LLVMStructType::getLiteral(builder.getContext(),
+        {ptr.getType(), ptr.getType(), i64, array, array});
+    Value value = LLVM::UndefOp::create(builder, loc, desc);
+    value = LLVM::InsertValueOp::create(builder, loc, value, ptr, ArrayRef<int64_t>{0});
+    value = LLVM::InsertValueOp::create(builder, loc, value, ptr, ArrayRef<int64_t>{1});
+    value = LLVM::InsertValueOp::create(builder, loc, value, zeroI64, ArrayRef<int64_t>{2});
+    value = LLVM::InsertValueOp::create(builder, loc, value, i64Constant(builder, loc, 8), ArrayRef<int64_t>{3, 0});
+    value = LLVM::InsertValueOp::create(builder, loc, value, i64Constant(builder, loc, 1), ArrayRef<int64_t>{4, 0});
+    auto type = MemRefType::get({8}, inputType, MemRefLayoutAttrInterface{}, builder.getI64IntegerAttr(space));
+    return UnrealizedConversionCastOp::create(builder, loc, TypeRange{type}, ValueRange{value}).getResult(0);
+  };
+  auto issuePanelCopy = [&](Value sharedPtr, Value globalPtr, Value bytes) {
+    Value zero = arith::ConstantIndexOp::create(builder, loc, 0);
+    Value elements = arith::DivUIOp::create(builder, loc, bytes,
+        arith::ConstantIntOp::create(builder, loc, 2, 32));
+    elements = arith::IndexCastOp::create(builder, loc, builder.getIndexType(), elements);
+    return nvgpu::DeviceAsyncCopyOp::create(builder, loc, panelView(sharedPtr, 3),
+        ValueRange{zero}, panelView(globalPtr, 1), ValueRange{zero},
+        builder.getIndexAttr(8), elements, UnitAttr()).getAsyncToken();
+  };
   auto stageAsyncPanel = [&](Value panelK, Value slotOffset) {
     Value eight = i64Constant(builder, loc, 8);
     Value isA = lessI64(builder, loc, tid64,
                         i64Constant(builder, loc, 64));
-    auto branch = scf::IfOp::create(builder, loc, isA,
+    auto branch = scf::IfOp::create(builder, loc, TypeRange{asyncToken}, isA,
                                     /*withElseRegion=*/true);
     {
       OpBuilder::InsertionGuard branchGuard(builder);
@@ -1364,8 +1394,8 @@ static LogicalResult materializeSm120MatmulKernel(
       Value sharedPtr = LLVM::GEPOp::create(
           builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
           ValueRange{sharedLinear});
-      NVVM::CpAsyncOp::create(builder, loc, sharedPtr, globalPtr, 16,
-                              NVVM::LoadCacheModifierKind::CA, copyBytes);
+      Value token = issuePanelCopy(sharedPtr, globalPtr, copyBytes);
+      scf::YieldOp::create(builder, loc, token);
     }
     {
       OpBuilder::InsertionGuard branchGuard(builder);
@@ -1416,20 +1446,22 @@ static LogicalResult materializeSm120MatmulKernel(
       Value sharedPtr = LLVM::GEPOp::create(
           builder, loc, (*sharedBase).getType(), inputType, *sharedBase,
           ValueRange{sharedLinear});
-      NVVM::CpAsyncOp::create(builder, loc, sharedPtr, globalPtr, 16,
-                              NVVM::LoadCacheModifierKind::CA, copyBytes);
+      Value token = issuePanelCopy(sharedPtr, globalPtr, copyBytes);
+      scf::YieldOp::create(builder, loc, token);
     }
     builder.setInsertionPointAfter(branch);
-    NVVM::CpAsyncCommitGroupOp::create(builder, loc);
+    return nvgpu::DeviceAsyncCreateGroupOp::create(builder, loc, asyncToken, ValueRange{branch.getResult(0)}).getAsyncToken();
   };
+  Value primeToken;
   if (asyncSharedPanel) {
-    stageAsyncPanel(zeroI64, zeroI64);
-    NVVM::CpAsyncWaitGroupOp::create(builder, loc, 0);
+    primeToken = stageAsyncPanel(zeroI64, zeroI64);
+    nvgpu::DeviceAsyncWaitOp::create(builder, loc, primeToken, builder.getI32IntegerAttr(0));
     NVVM::BarrierOp::create(builder, loc);
   }
   // A shared-staged warp computes two adjacent m16n8 fragments so each pair of
   // CTA barriers is amortized over eight MMA instructions rather than four.
   SmallVector<Value> init(sharedStaging ? 8 : 4, zeroF32);
+  if (asyncSharedPanel) init.push_back(primeToken);
   auto loop = scf::ForOp::create(builder, loc, zeroI64, k, kStep, init);
   {
     OpBuilder::InsertionGuard guard(builder);
@@ -1444,18 +1476,23 @@ static LogicalResult materializeSm120MatmulKernel(
     Value currentSlotOffset = asyncSharedPanel
         ? asyncSlotOffset(kOrigin) : zeroI64;
 
+    Value nextPanelToken;
     if (sharedStaging) {
       if (asyncSharedPanel) {
         Value nextK = addI64(builder, loc, kOrigin, kStep);
         Value hasNext = lessI64(builder, loc, nextK, k);
-        auto prefetch = scf::IfOp::create(builder, loc, hasNext,
-                                          /*withElseRegion=*/false);
+        auto prefetch = scf::IfOp::create(builder, loc, TypeRange{asyncToken}, hasNext,
+                                          /*withElseRegion=*/true);
         {
           OpBuilder::InsertionGuard prefetchGuard(builder);
           builder.setInsertionPointToStart(prefetch.thenBlock());
-          stageAsyncPanel(nextK, asyncSlotOffset(nextK));
+          Value issued = stageAsyncPanel(nextK, asyncSlotOffset(nextK));
+          scf::YieldOp::create(builder, loc, issued);
+          builder.setInsertionPointToStart(prefetch.elseBlock());
+          scf::YieldOp::create(builder, loc, loop.getRegionIterArgs().back());
         }
         builder.setInsertionPointAfter(prefetch);
+        nextPanelToken = prefetch.getResult(0);
       } else if (vectorizedSharedPanel) {
         // Exactly 128 threads move the complete 2 KiB panel: warps 0-1 each
         // own one aligned 16-byte A vector and warps 2-3 one B vector. Full
@@ -1681,8 +1718,9 @@ static LogicalResult materializeSm120MatmulKernel(
     if (sharedStaging) {
       NVVM::BarrierOp::create(builder, loc);
       if (asyncSharedPanel) {
-        NVVM::CpAsyncWaitGroupOp::create(builder, loc, 0);
+        nvgpu::DeviceAsyncWaitOp::create(builder, loc, nextPanelToken, builder.getI32IntegerAttr(0));
         NVVM::BarrierOp::create(builder, loc);
+        next.push_back(nextPanelToken);
       }
     }
     scf::YieldOp::create(builder, loc, next);
@@ -4800,7 +4838,7 @@ struct LowerTileToNVIDIAPass
 
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
-                    func::FuncDialect,
+                    func::FuncDialect, memref::MemRefDialect, nvgpu::NVGPUDialect,
                     LLVM::LLVMDialect, math::MathDialect, NVVM::NVVMDialect,
                     scf::SCFDialect,
                     tessera::nvidia::TesseraNVIDIADialect>();
@@ -6061,6 +6099,7 @@ void buildTesseraConsumerBlackwellBackendPipeline(OpPassManager &pm) {
   pm.addPass(createTileBufferArenaPass());
   pm.addPass(createLowerTileToNVIDIAPass(kConsumerBlackwellSM));
   pm.addPass(createLowerNVIDIAToNVVMPass());
+  pm.addPass(createConvertNVGPUToNVVMPass());
 }
 
 void registerTesseraNVIDIABackendPasses() {
@@ -6098,7 +6137,7 @@ void registerTesseraNVIDIABackendPasses() {
 }
 
 void registerTesseraNVIDIATargetDialect(DialectRegistry &registry) {
-  registry.insert<arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
+  registry.insert<nvgpu::NVGPUDialect, arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
                   math::MathDialect, memref::MemRefDialect, scf::SCFDialect,
                   LLVM::LLVMDialect, NVVM::NVVMDialect,
                   tessera::nvidia::TesseraNVIDIADialect>();

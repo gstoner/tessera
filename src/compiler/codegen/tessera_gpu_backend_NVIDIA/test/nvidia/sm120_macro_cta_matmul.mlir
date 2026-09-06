@@ -1,4 +1,5 @@
 // RUN: %tnv --lower-tile-to-nvidia='sm=120' %s | FileCheck %s
+// RUN: %tnv --tessera-lower-to-nvidia-sm120 %s | FileCheck %s --check-prefix=NATIVE
 
 module {
   llvm.func @macro(%a: !llvm.ptr, %b: !llvm.ptr, %d: !llvm.ptr,
@@ -23,10 +24,16 @@ module {
 // CHECK: nvvm.read.ptx.sreg.ctaid.x
 // CHECK: nvvm.read.ptx.sreg.ctaid.y
 // CHECK: nvvm.read.ptx.sreg.tid.x
-// CHECK: nvvm.cp.async.shared.global
-// CHECK: nvvm.cp.async.commit.group
-// CHECK: nvvm.cp.async.wait.group 0
+// CHECK: nvgpu.device_async_copy
+// CHECK: nvgpu.device_async_create_group
+// CHECK: nvgpu.device_async_wait
 // CHECK: nvvm.barrier
 // CHECK: tessera_nvidia.mma_sync
 // CHECK: nvvm.barrier
 // CHECK-NOT: tessera_nvidia.macro_cta_matmul
+
+// NATIVE: nvvm.cp.async.shared.global
+// NATIVE: nvvm.cp.async.commit.group
+// NATIVE: nvvm.cp.async.wait.group 0
+// NATIVE: nvvm.mma.sync
+// NATIVE-NOT: nvgpu.

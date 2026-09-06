@@ -3,7 +3,9 @@
 #define TESSERA_TRANSFORMS_TILEMEMREFLIFETIME_H
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
@@ -34,7 +36,76 @@ inline mlir::Value viewSource(mlir::Operation *op) {
   if (auto view = mlir::dyn_cast<mlir::ViewLikeOpInterface>(op)) return view.getViewSource();
   return {};
 }
+// Prove a token's current generation through forwarding, not merely a shared
+// defining-op origin. Identity loop carries include the zero-trip init path;
+// changing backedges remain unknown until an iteration-sensitive proof exists.
+inline bool forwardedToken(mlir::Value value,
+                           llvm::function_ref<bool(mlir::Value)> leaf,
+                           llvm::SmallPtrSetImpl<mlir::Value> &active) {
+  if (!active.insert(value).second) return false;
+  bool result = leaf(value);
+  if (!result) {
+    if (auto output = mlir::dyn_cast<mlir::OpResult>(value)) {
+      auto *owner = output.getOwner();
+      unsigned i = output.getResultNumber();
+      if (auto branch = mlir::dyn_cast<mlir::scf::IfOp>(owner)) {
+        auto yes = mlir::cast<mlir::scf::YieldOp>(branch.thenBlock()->getTerminator());
+        auto no = mlir::cast<mlir::scf::YieldOp>(branch.elseBlock()->getTerminator());
+        result = forwardedToken(yes.getOperand(i), leaf, active) &&
+                 forwardedToken(no.getOperand(i), leaf, active);
+      } else if (auto loop = mlir::dyn_cast<mlir::scf::ForOp>(owner)) {
+        auto yield = mlir::cast<mlir::scf::YieldOp>(loop.getBody()->getTerminator());
+        if (yield.getOperand(i) == loop.getRegionIterArgs()[i]) {
+          result = forwardedToken(loop.getInitArgs()[i], leaf, active);
+        } else {
+          // A replacement token must name a generation defined outside this
+          // loop. A token freshly issued by the body cannot stand for every
+          // iteration merely because its defining operation is the same.
+          auto invariantLeaf = [&](mlir::Value candidate) {
+            auto *definition = candidate.getDefiningOp();
+            return definition && !loop->isProperAncestor(definition) && leaf(candidate);
+          };
+          bool replaced = forwardedToken(yield.getOperand(i), invariantLeaf, active);
+          llvm::APInt lower, upper, step;
+          bool nonempty = mlir::matchPattern(loop.getLowerBound(), mlir::m_ConstantInt(&lower)) &&
+              mlir::matchPattern(loop.getUpperBound(), mlir::m_ConstantInt(&upper)) &&
+              mlir::matchPattern(loop.getStep(), mlir::m_ConstantInt(&step)) &&
+              step.isStrictlyPositive() &&
+              (loop.getUnsignedCmp() ? lower.ult(upper) : lower.slt(upper));
+          result = replaced && (nonempty || forwardedToken(loop.getInitArgs()[i], leaf, active));
+        }
+      }
+    } else if (auto arg = mlir::dyn_cast<mlir::BlockArgument>(value)) {
+      if (auto loop = mlir::dyn_cast<mlir::scf::ForOp>(arg.getOwner()->getParentOp())) {
+        if (arg.getArgNumber() > 0) {
+          unsigned i = arg.getArgNumber() - 1;
+          auto yield = mlir::cast<mlir::scf::YieldOp>(loop.getBody()->getTerminator());
+          if (yield.getOperand(i) == arg)
+            result = forwardedToken(loop.getInitArgs()[i], leaf, active);
+        }
+      }
+    }
+  }
+  active.erase(value);
+  return result;
+}
+inline bool committedCopy(mlir::Value token, mlir::Operation *copy) {
+  llvm::SmallPtrSet<mlir::Value, 16> groups;
+  return forwardedToken(token, [&](mlir::Value candidate) {
+    auto group = candidate.getDefiningOp<mlir::nvgpu::DeviceAsyncCreateGroupOp>();
+    if (!group || group->getBlock() != copy->getBlock()) return false;
+    return llvm::any_of(group.getInputTokens(), [&](mlir::Value input) {
+      llvm::SmallPtrSet<mlir::Value, 16> copies;
+      return forwardedToken(input, [&](mlir::Value v) { return v == copy->getResult(0); }, copies);
+    });
+  }, groups);
+}
 inline bool completes(mlir::Operation *wait, mlir::Operation *copy) {
+  if (auto nativeWait = mlir::dyn_cast<mlir::nvgpu::DeviceAsyncWaitOp>(wait)) {
+    if (!mlir::isa<mlir::nvgpu::DeviceAsyncCopyOp>(copy)) return false;
+    if (auto pending = nativeWait.getNumGroupsAttr(); pending && pending.getInt() != 0) return false;
+    return committedCopy(nativeWait.getAsyncDependencies(), copy);
+  }
   if (wait->getName().getStringRef() != "tile.wait_async") return false;
   if (wait->getNumOperands()) {
     for (mlir::Value result : copy->getResults())
@@ -100,6 +171,25 @@ inline bool borrowedCall(mlir::Operation *op, mlir::Value value,
 }
 
 inline bool workgroupUniform(mlir::Value value) {
+  if (auto arg = mlir::dyn_cast<mlir::BlockArgument>(value)) {
+    auto *block = arg.getOwner();
+    if (auto kernel = mlir::dyn_cast<mlir::gpu::GPUFuncOp>(block->getParentOp())) {
+      // Only launch arguments of a registered kernel have the per-workgroup
+      // value contract. Helper/function arguments and attribution buffers do not.
+      return kernel.isKernel() && block == &kernel.getBody().front() &&
+             arg.getArgNumber() < kernel.getFunctionType().getNumInputs() &&
+             mlir::isa<mlir::IntegerType, mlir::IndexType, mlir::FloatType>(arg.getType());
+    }
+    if (auto loop = mlir::dyn_cast<mlir::scf::ForOp>(block->getParentOp())) {
+      // All participating threads visit the same induction values when the
+      // three loop controls agree. Loop-carried values need a separate proof.
+      return value == loop.getInductionVar() &&
+             workgroupUniform(loop.getLowerBound()) &&
+             workgroupUniform(loop.getUpperBound()) &&
+             workgroupUniform(loop.getStep());
+    }
+    return false;
+  }
   auto *op = value.getDefiningOp();
   if (!op || !op->isRegistered()) return false;
   auto name = op->getName().getStringRef();
@@ -113,7 +203,7 @@ inline bool workgroupUniform(mlir::Value value) {
 inline bool completesIn(mlir::Region &region, mlir::Operation *copy, bool sync);
 inline bool completionOp(mlir::Operation *op, mlir::Operation *copy, bool sync) {
   auto name = op->getName().getStringRef();
-  if (sync ? (name == "tile.cta_sync" || name == "tile.sbarrier") : completes(op, copy)) return true;
+  if (sync ? (name == "tile.cta_sync" || name == "tile.sbarrier" || name == "gpu.barrier") : completes(op, copy)) return true;
   if (auto branch = mlir::dyn_cast<mlir::scf::IfOp>(op)) {
     if (sync && !workgroupUniform(branch.getCondition())) return false;
     llvm::APInt condition;
@@ -183,10 +273,18 @@ public:
           continue;
         }
         auto name = user->getName().getStringRef();
-        if (name == "tile.async_copy" || name == "tile.tma.copy_async") {
+        if (name == "tile.async_copy" || name == "tile.tma.copy_async" || mlir::isa<mlir::nvgpu::DeviceAsyncCopyOp>(user)) {
           int64_t completion = end;
           for (mlir::Operation *next = user->getNextNode(); next; next = next->getNextNode())
-            if (completionOp(next, user, false)) { completion = index.lookup(next); break; }
+            if (completionOp(next, user, false)) {
+              if (mlir::isa<mlir::nvgpu::DeviceAsyncCopyOp>(user)) {
+                // NVGPU waits are per-thread; shared storage also requires a
+                // workgroup rendezvous before publication/reuse.
+                for (auto *publish = next->getNextNode(); publish; publish = publish->getNextNode())
+                  if (mlir::isa<mlir::gpu::BarrierOp>(publish)) { completion = index.lookup(publish); break; }
+              } else completion = index.lookup(next);
+              break;
+            }
           live.end = std::max(live.end, completion);
         } else if (mlir::isa<mlir::memref::LoadOp, mlir::memref::StoreOp>(user) || borrowedCall(user, value)) {
           // Workgroup storage cannot be reassigned until all threads finish

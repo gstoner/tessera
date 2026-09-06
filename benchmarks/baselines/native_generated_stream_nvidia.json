@@ -1,0 +1,53 @@
+{
+  "backend": "nvidia",
+  "device_identity": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "sync_key": "IR-NATIVE-FOUNDATION-1",
+  "status": "explicit tensor/JIT package execution proven",
+  "timing_claim": null,
+  "generated_descriptors": true,
+  "arbiter": true,
+  "stream_submissions": true,
+  "producer": "token_replacement",
+  "cases": [
+    {
+      "width": 32,
+      "rounds": 1,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "960e41f286735619ae194c1533887a90f7be2dbb55985841d07b535d3c7076de"
+    },
+    {
+      "width": 64,
+      "rounds": 7,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "960e41f286735619ae194c1533887a90f7be2dbb55985841d07b535d3c7076de"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "960e41f286735619ae194c1533887a90f7be2dbb55985841d07b535d3c7076de"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "960e41f286735619ae194c1533887a90f7be2dbb55985841d07b535d3c7076de"
+    }
+  ],
+  "binding_digest": "070019dba94211b74103f7c6a583d81bc46e4bff4404d68b73e55ff82ead6451",
+  "runtime_sources": {
+    "python/tessera/compiler/jit.py": "d0c9df07b6848fa35935b1f22ac98b08158361e3eb2f963491e5e5201899ce6b",
+    "python/tessera/compiler/native_gpu_storage.py": "6a85699c55075b68ba22eb84183b7fef30ccdef99035171ad23a8686002ea0c7",
+    "python/tessera/compiler/native_gpu_tensor.py": "32cf44fc3c266404ddb8fd7e7a3f84d2691b03fc84d6a8f52d53da19c2b09489",
+    "python/tessera/compiler/native_storage_contract.py": "f18acfc60daad8e38783604e2b3353c14723b6c1e3bb9d74f948b1f0119bb318",
+    "python/tessera/compiler/emit/native_storage_candidate.py": "d545c7b498eb9a37d739e91e88e7be020cd6fd9f40efc7eacd3a733b01cce749"
+  },
+  "source_sha256": "701f2b0b1bf8f09b2b94a37d5fb0adb049df7c990acffb23246b69cf5060ab01",
+  "recorder_sha256": "6d8c1980f3866efea35731e2c1590ac9e7cd4a0c22f9195f77f00bf05addad2b",
+  "image_sha256": "85e7722168769f85de46a2baef8bd47f5d570e9a06cd2bc62293937e187501ca",
+  "compiler_sha256": "2fd47e30268dd7313e1cfc0e7a7ec71f9d511d2db238ded7e66669d4d5269132"
+}

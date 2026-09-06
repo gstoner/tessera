@@ -29,3 +29,10 @@ def test_serialized_control_retains_all_original_instructions():
 def test_ablation_rejects_changed_native_protocol(source):
     with pytest.raises(ValueError):
         serialize_prefetch(source)
+
+
+def test_token_placeholder_does_not_turn_prime_into_prefetch():
+    source = SOURCE.replace('commit.group\n', 'commit.group\n  %token = llvm.mlir.constant(0 : i32) : i32\n')
+    result = serialize_prefetch(source)
+    assert result.count('nvvm.cp.async.wait.group 0') == 3
+    assert result.count('llvm.mlir.constant') == 2

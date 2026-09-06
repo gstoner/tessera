@@ -299,9 +299,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
     ),
     PipelineSpec(
         name="tessera-lower-to-nvidia-sm120",
-        passes=("lower-tile-to-nvidia", "lower-tessera-nvidia-to-nvvm"),
+        passes=("lower-tile-to-nvidia", "lower-tessera-nvidia-to-nvvm", "convert-nvgpu-to-nvvm"),
         required_dialects=(
-            "tile", "tessera_nvidia", "llvm", "nvvm", "func", "scf", "arith",
+            "tile", "tessera_nvidia", "llvm", "nvvm", "nvgpu", "memref", "func", "scf", "arith",
         ),
         targets=("nvidia_sm120",),
         lit_fixtures=(

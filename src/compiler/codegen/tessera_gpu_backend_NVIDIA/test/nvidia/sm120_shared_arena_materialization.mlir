@@ -13,8 +13,10 @@ module {
     "tile.alloc_shared"(%b) : (memref<16x16xf16>) -> ()
     "tile.async_copy"(%b) : (memref<16x16xf16>) -> ()
     "tile.async_copy"(%a) : (memref<16x16xf16>) -> ()
+    "tile.wait_async"() : () -> ()
     "tile.alloc_shared"(%c) : (memref<16x16xf16>) -> ()
     "tile.async_copy"(%c) : (memref<16x16xf16>) -> ()
+    "tile.wait_async"() : () -> ()
     return
   }
 }

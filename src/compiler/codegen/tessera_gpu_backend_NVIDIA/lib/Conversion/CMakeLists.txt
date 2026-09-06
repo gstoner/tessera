@@ -16,6 +16,8 @@ add_mlir_library(TesseraNVIDIAConversion
     MLIRMathDialect
     MLIRMemRefDialect
     MLIRNVVMDialect
+    MLIRNVGPUDialect
+    MLIRNVGPUToNVVM
     MLIRPass
     MLIRSCFDialect
     MLIRSCFTransforms

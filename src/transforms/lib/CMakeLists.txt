@@ -145,6 +145,7 @@ target_link_libraries(TesseraPasses
     MLIRFuncDialect
     MLIRArithDialect
     MLIRControlFlowDialect
+    MLIRDLTIDialect
     MLIRSCFDialect
     MLIRTensorDialect
     MLIRLinalgDialect
@@ -155,6 +156,7 @@ target_link_libraries(TesseraPasses
     # Phase 3 dialect dependencies
     TesseraAttnDialect
     MLIRNVVMDialect
+    MLIRNVGPUDialect
     MLIRGPUDialect
 )
 

@@ -1,0 +1,43 @@
+{
+  "backend": "nvidia",
+  "device_identity": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "sync_key": "IR-NATIVE-FOUNDATION-1",
+  "status": "explicit tensor/JIT package execution proven",
+  "timing_claim": null,
+  "producer": "async_forwarded",
+  "cases": [
+    {
+      "width": 32,
+      "rounds": 1,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "1831b82939d09b3a423f528605b73d2c86b8dc7e62f90bb88bd749e070c17b26"
+    },
+    {
+      "width": 64,
+      "rounds": 7,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "1831b82939d09b3a423f528605b73d2c86b8dc7e62f90bb88bd749e070c17b26"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "1831b82939d09b3a423f528605b73d2c86b8dc7e62f90bb88bd749e070c17b26"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "blocks": 32,
+      "oracle": "exact",
+      "tensor_binding": "1831b82939d09b3a423f528605b73d2c86b8dc7e62f90bb88bd749e070c17b26"
+    }
+  ],
+  "binding_digest": "708545aa349540eb0ddea9031f3962c46aa07208a432ba3eafbf88352583e0b5",
+  "source_sha256": "dd9738ee233fc2837c7b559f8b176f5c66e21263ea7fd06b3a6d5aebdbb2a2e4",
+  "recorder_sha256": "c856132b8d172a586d8c89fa3bed9fb67eaa5172a0bfce107f3c9b7f899d0918",
+  "image_sha256": "3be8ae4d8c5dfc69599cb78fe9bb21f32c8bd745a3f1b63d923ce642fe218f3f",
+  "compiler_sha256": "f03a91cfa2084cebf794bf5ca636dcea8e491eda2c27bd6de32ebc12fc54d5ff"
+}

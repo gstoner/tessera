@@ -2587,8 +2587,8 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="TILE_BARRIER_REUSE_MISSING_BARRIER", pass_origin="TileBarrierReuseLegality/TileBufferArena",
         severity="error",
-        summary="Tile allocation reuse, arena materialization, deallocation, or provenance lacks a proven lifetime/completion path.",
-        fix_hint="Complete the allocation-specific async token before reuse/free on every path; preserve derivable allocation identity.",
+        summary="Tile allocation reuse, arena materialization, deallocation, or provenance lacks a proven lifetime/completion path or a safe dynamic launch size.",
+        fix_hint="Complete the allocation-specific async token before reuse/free on every path; preserve derivable allocation identity. Dynamic GPU arenas require uniform structured regions, completed nested lifetimes and a checked launch-argument size with a 64-bit host index.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
     ),
     # C3 — TilePipelineLegalityPass.

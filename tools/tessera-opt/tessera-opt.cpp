@@ -3,10 +3,12 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
@@ -377,7 +379,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   tessera::registerPMPipelinesV11(registry);
-  registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+  registry.insert<mlir::nvgpu::NVGPUDialect, mlir::DLTIDialect, mlir::arith::ArithDialect, mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect,
                   mlir::ROCDL::ROCDLDialect, mlir::scf::SCFDialect,
@@ -487,7 +489,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   tessera::registerPMPipelinesV11(registry);
-  registry.insert<mlir::arith::ArithDialect,
+  registry.insert<mlir::nvgpu::NVGPUDialect, mlir::DLTIDialect, mlir::arith::ArithDialect,
                   mlir::bufferization::BufferizationDialect,
                   mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect,

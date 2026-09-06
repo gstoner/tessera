@@ -6850,3 +6850,31 @@ passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
 now explicitly selects the consumed NVIDIA lowerer and restores its environment.
 Shared verifier/registry validation applies to this backend; no new device or
 physical schedule proof is claimed by this correction.
+
+**Symbolic kernel reuse — W2.4a / IR-NATIVE-FOUNDATION-1:** registered GPU
+kernel scalar launch arguments and induction values can prove uniform control
+for memref reuse; real GPU barriers release synchronous accesses. Static arenas
+materialize in GPU modules; the dynamic extension is assessed below.
+The shared static arena retains address space 3 for later ROCDL consumption. Follow-up required: gfx1151 producer/package integration and device proof; native fixtures on Princess-Luna establish compiler behavior only.
+
+
+**Dynamic GPU storage — W2.4a / IR-NATIVE-FOUNDATION-1:** entry-block GPU
+arenas now use native dynamic shared memory plus a checked native host sizing
+companion; local gpu.launch_func byte counts are wired to that companion.
+Exact-device experiment validated on Princess-Luna gfx1151: the same emitted layout is independently lowered through ROCDL, and native LLVM host sizing supplies HIP launch bytes. Four runtime widths pass exact cross-lane numerical checks. Follow-up required: production package binding and an ISA-supported asynchronous producer; CUDA timing/protocols do not establish ROCm performance.
+See the [shared experiment](../../../../benchmarks/DYNAMIC_GPU_STORAGE.md).
+
+
+**Native package / nested lifetime / async producer — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated for serialized raw native package binding and nested dynamic scratch on gfx1151 (four exact cases). Follow-up required: a ROCm-native asynchronous producer and tensor/JIT integration. NVGPU completion support is NVIDIA-specific and does not establish a ROCm async route.
+See the [package proof](../../../../benchmarks/NATIVE_GPU_STORAGE_PACKAGE.md) and integrated plan for the bounded ABI and remaining work.
+
+
+**Tensor/JIT and producer integration — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on gfx1151: four exact tensor/JIT register-prefetch producer cases. Disassembly shows global loads/LDS/waits but several barriers immediately drain VMEM; useful overlap remains unproven. Follow-up required: architecture-owned barrier/scheduling ablation with HIP events. Direct async global-to-LDS requires gfx1250 and is not applicable to gfx1151.
+See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
+
+
+**ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on gfx1151 for four generated-descriptor/JIT/arbiter/two-stream cases. The matched immediate-wait ablation passes three exact workloads and is 2–4.5% slower in one seven-sample run; extra instructions and scheduling changes prevent a useful-overlap claim. Follow-up required: independent runs/profiling, real AD storage children and automatic Schedule producers.
+See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).

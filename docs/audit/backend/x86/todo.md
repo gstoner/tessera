@@ -4240,3 +4240,31 @@ passes. NVIDIA's two core-compiler comparison packets are withdrawn; the runner
 now explicitly selects the consumed NVIDIA lowerer and restores its environment.
 Shared verifier/registry validation applies to this backend; no new device or
 physical schedule proof is claimed by this correction.
+
+**Symbolic kernel reuse — W2.4a / IR-NATIVE-FOUNDATION-1:** registered GPU
+kernel scalar launch arguments and induction values can prove uniform control
+for memref reuse; real GPU barriers release synchronous accesses. Static arenas
+materialize in GPU modules; the dynamic extension is assessed below.
+Ordinary func.func arguments remain unknown; a gpu.kernel marker cannot confer uniformity. GPU launch semantics and shared address-space-3 materialization are not CPU execution evidence. CPU-specific ownership/uniformity work remains open.
+
+
+**Dynamic GPU storage — W2.4a / IR-NATIVE-FOUNDATION-1:** entry-block GPU
+arenas now use native dynamic shared memory plus a checked native host sizing
+companion; local gpu.launch_func byte counts are wired to that companion.
+GPU shared-memory materialization is not applicable to the x86 execution backend. The native host sizing companion executes on the WSL x86 hosts, while ordinary func.func region-local allocation remains intact. Follow-up required for production GPU package consumption; no x86 kernel performance claim.
+See the [shared experiment](../../../../benchmarks/DYNAMIC_GPU_STORAGE.md).
+
+
+**Native package / nested lifetime / async producer — W2.4a / IR-NATIVE-FOUNDATION-1:**
+GPU raw-pointer dispatch and NVGPU production are not applicable to x86 kernels. The native sizing companion executes on the two WSL x86 hosts and now returns recoverable failure. Existing func.func host allocation remains intact; no CPU kernel performance claim.
+See the [package proof](../../../../benchmarks/NATIVE_GPU_STORAGE_PACKAGE.md) and integrated plan for the bounded ABI and remaining work.
+
+
+**Tensor/JIT and producer integration — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated for native host sizing companions used by the CUDA/HIP tensor adapter. GPU token lowering and LDS producer are not applicable to x86 device execution. Follow-up required: automatic descriptor/arbiter integration remains shared; GPU device results do not establish x86 performance.
+See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
+
+
+**ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Native host sizing remains validated by the GPU package experiments on the WSL x86 hosts. Descriptor/paired-program/stream contracts have host-free regression coverage; GPU event timing and LDS/register scheduling are not applicable to x86 kernel performance. Follow-up required for CPU-native operation/AD producers; no transferred GPU compute evidence.
+See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).

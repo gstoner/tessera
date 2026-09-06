@@ -1,0 +1,109 @@
+{
+  "backend": "rocm",
+  "rows": [
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "package_digest": "b0e6895cbcb8e5805962abc0a5cdb75379abcb2307fae8971e5bdb6ffc9f7542",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "package_digest": "1c478e043afaf8981401d0145352f07c7ece1d5e563d98417fca6ad58d941292",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "package_digest": "45d61c7050ba8829093227ad60456a705e755faeebf97b60d8a8f5ee246268a8",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "package_digest": "def9d297f31b754027d12b49bd407d7c526d03512e6b13c5af59e816de2c4fdc",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "package_digest": "afdebbbe86d7e65e90cc6fa7027d77c61497763e2576857e3e94573e04fcad01",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "package_digest": "656e1574483052cd4762826704da50614cefbbae37b964dc76e5c030bd1b10aa",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "sum_vjp",
+      "width": 32,
+      "package_digest": "1b5d9aa8553241f107e79f03e58bcb09d50d271878278468de6c34357a1351b7",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "sum_vjp",
+      "width": 64,
+      "package_digest": "56b5cabcce05c285c805cafba5056ab3b5c30fb33b6817dd39b09e319f50a9bb",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "sum_vjp",
+      "width": 256,
+      "package_digest": "b72474ac7a567437f06ed02a626eb33c1bae08c30d788399a99f0c81f29c3d3e",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "mean_vjp",
+      "width": 32,
+      "package_digest": "40ca3cf4732a8693987fa257c2afd6deeefdb4573c776e9e1e2f82aa188503de",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "mean_vjp",
+      "width": 64,
+      "package_digest": "f606e24be19c0308bd8b8324fc87713e674cf2b96117278966b2d396fcde0dc7",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    },
+    {
+      "family": "mean_vjp",
+      "width": 256,
+      "package_digest": "740dd360f82bec96552f1095af2b1fddc7d9b9fac62138342a697f0274990012",
+      "snapshot_after_input_mutation": true,
+      "repeated_backward": true,
+      "nested_lifetime": true
+    }
+  ],
+  "compiler_sha256": "cbb0a13362b9711d1cdd8bd96888e960e6c31a22edbe955af62598c19de5b2ea",
+  "recorder_sha256": "8486232135f1b0a71c97e06ecf3b1d25402094fd8baf12def10e160169cd280e",
+  "implementation_sha256": {
+    "native_device_tape.py": "dc42d13215f1da78d881d9fcc68f6aab7109b0e14fb4da01044242a669e85d1c",
+    "native_storage_pair.py": "e509f79acb684a4b24ae694eceb6970d96b9502aeced1d2b496ea4113577d720"
+  },
+  "higher_order_ad": false,
+  "control_flow_tape": false
+}

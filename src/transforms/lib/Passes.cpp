@@ -511,6 +511,7 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createAutodiffPass(); });
   // Phase 2 — paired forward/backward autodiff (separate @f__bwd function).
   ::mlir::registerPass([]() { return createAutodiffPairedPass(); });
+  ::mlir::registerPass([]() { return createNativeTapeToGPUPass(); });
   // AD-FWD-CORE-1 — paired forward-mode JVP through TangentInterface.
   ::mlir::registerPass([]() { return createAutodiffForwardPass(); });
   ::mlir::registerPass([]() { return createAutodiffHvpPreparePass(); });

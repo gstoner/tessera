@@ -187,8 +187,8 @@ work. This entry supersedes the dated baseline's absence claims.
 - **MSW-9:** [design spike](ANN_CALCULUS_DESIGN_SPIKE.md) and
   `tools/ann_calculus_spike.py` establish the restricted laws, mutation probes,
   dense-slot accounting and the proposed Graph IR/fusion consumers. The spike
-  is complete; native program-pair evaluator integration and the production
-  fusion gate remain open. Reference results never count as native evidence.
+  and native program-pair adapter are complete; automatic production fusion
+  integration remains open. Reference results never count as native evidence.
 
 Validation: the new coordinate suite plus existing GA calculus passed 37 tests;
 combined review/coordinate/contraction regressions passed 45 (one Apple hardware
@@ -206,3 +206,9 @@ tape recording. Lint passes, mypy checks 492 source files cleanly, and all 30
 generated-doc gates pass. The local macOS Apple runtime rebuild succeeds;
 no new Metal numerical/concurrency execution is claimed. Graphify's AST graph
 was refreshed. Counts above overlap and are not additive.
+
+
+2026-09-06: MSW-9 now has bounded static-f32 affine/ReLU fragment extraction,
+immutable/shared parameter inventories, and an explicit composition candidate
+gate before native program-pair evaluation. Automatic fusion discovery and
+executable-to-fragment identity binding remain open; see the design spike update.

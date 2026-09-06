@@ -59,6 +59,7 @@
 #include "Tessera/LinearTransposeInterface.h.inc"
 #include "Tessera/Transforms/GraphDataflow.h"
 #include "Tessera/Transforms/Passes.h"
+#include "llvm/Support/JSON.h"
 #include "Tessera/Transforms/LoopBodyYield.h"
 #include "Tessera/Transforms/RegionAdjointInterface.h"
 #include "Tessera/Transforms/SemanticEffects.h"
@@ -68,6 +69,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "NativeStorageJVP.h"
+#include "../../compiler/ir/AttentionADContract.h"
 
 namespace tessera {
 
@@ -1149,6 +1151,21 @@ static mlir::LogicalResult materializeWhileResiduals(
 // must restart from their checkpoint values rather than from final state. The
 // explicit state-index map keeps mixed state lossless and makes unknown storage
 // fail closed.
+static void eraseStaticallyEmptyLoops(mlir::func::FuncOp function) {
+  // SAVE has no residual allocation for a body that never executes. Do this
+  // before tape sizing, including empty loops nested inside active regions.
+  function.walk<mlir::WalkOrder::PostOrder>([](mlir::scf::ForOp loop) {
+    llvm::APInt lb,ub,step;
+    if (loop->hasAttr("unsignedCmp") ||
+        !mlir::matchPattern(loop.getLowerBound(),mlir::m_ConstantInt(&lb)) ||
+        !mlir::matchPattern(loop.getUpperBound(),mlir::m_ConstantInt(&ub)) ||
+        !mlir::matchPattern(loop.getStep(),mlir::m_ConstantInt(&step)) ||
+        !step.isStrictlyPositive() || lb.slt(ub)) return;
+    loop->replaceAllUsesWith(loop.getInitArgs());
+    loop.erase();
+  });
+}
+
 static mlir::LogicalResult materializeGenericForResiduals(
     mlir::func::FuncOp function) {
   llvm::SmallVector<mlir::scf::ForOp> loops;
@@ -1457,6 +1474,12 @@ public:
   mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
       llvm::cl::desc("Generate a bounded native primal/VJP child"), llvm::cl::init(false)};
 
+  mlir::Pass::Option<std::string> checkpointProduct{*this, "checkpoint-product",
+      llvm::cl::desc("Export one isolated generated attention forward/backward checkpoint"), llvm::cl::init("")};
+
+  mlir::Pass::Option<std::string> exportProduct{*this, "export-product",
+      llvm::cl::desc("Export a typed generated forward/backward product without scalarizing residual tapes"), llvm::cl::init("")};
+
   llvm::StringRef getArgument() const final {
     return "tessera-autodiff-paired";
   }
@@ -1510,6 +1533,16 @@ public:
           !fn->hasAttr("tessera.autodiff.role"))
         targets.push_back(fn);
     });
+    if (!exportProduct.empty() && (emitStorageChild || !checkpointProduct.empty() || targets.size()!=1 ||
+        (exportProduct!="forward" && exportProduct!="backward"))) {
+      module.emitError("typed product export requires one fresh reverse request and one forward/backward role");
+      return signalPassFailure();
+    }
+    if (!checkpointProduct.empty() && (emitStorageChild || targets.size() != 1 ||
+        (checkpointProduct != "forward" && checkpointProduct != "backward"))) {
+      module.emitError("checkpoint product requires one fresh reverse request and forward/backward role");
+      return signalPassFailure();
+    }
     if (emitStorageChild && targets.size() != 1) {
       module.emitError("native VJP requires exactly one fresh reverse request");
       return signalPassFailure();
@@ -1517,10 +1550,118 @@ public:
     for (auto fn : targets)
       if (failed(buildBackward(fn)))
         return signalPassFailure();
+    if (!exportProduct.empty() && failed(exportTypedProduct(module,exportProduct)))
+      return signalPassFailure();
     if (emitStorageChild && failed(emitNativeStorageJVP(module, true))) signalPassFailure();
+    if (!checkpointProduct.empty() && failed(exportCheckpoint(module, checkpointProduct))) signalPassFailure();
   }
 
 private:
+  mlir::LogicalResult exportTypedProduct(mlir::ModuleOp module, llvm::StringRef role) {
+    llvm::SmallVector<mlir::func::FuncOp> functions;
+    mlir::func::FuncOp backward;
+    for (auto fn:module.getOps<mlir::func::FuncOp>()) {
+      functions.push_back(fn);
+      if (auto attr=fn->getAttrOfType<mlir::StringAttr>("tessera.autodiff.role"); attr && attr.getValue()=="backward") backward=fn;
+    }
+    if (functions.size()!=2 || !backward)
+      return module.emitError("typed product export requires an isolated generated pair");
+    auto ref=backward->getAttrOfType<mlir::FlatSymbolRefAttr>("tessera.autodiff.forward");
+    auto forward=ref ? module.lookupSymbol<mlir::func::FuncOp>(ref.getValue()) : mlir::func::FuncOp();
+    if (!forward || forward==backward) return module.emitError("typed product export lost its forward owner");
+    bool calls=false;
+    module.walk([&](mlir::func::CallOp){calls=true;});
+    if (calls) return module.emitError("typed product export requires inlined symbol dependencies");
+    auto residuals=forward->getAttrOfType<mlir::ArrayAttr>("tessera.autodiff.residual_sources");
+    unsigned residualCount=residuals ? residuals.size() : 0;
+    if (residualCount>forward.getNumResults() || backward.getNumArguments()!=forward.getNumArguments()+forward.getNumResults())
+      return module.emitError("typed product residual ABI disagrees");
+    unsigned primalCount=forward.getNumResults()-residualCount;
+    for (unsigned i=0;i<residualCount;++i)
+      if (forward.getResultTypes()[primalCount+i]!=backward.getArgumentTypes()[forward.getNumArguments()+primalCount+i])
+        return module.emitError("typed product residual type disagrees");
+    std::string lineage; llvm::raw_string_ostream lineOS(lineage); module.print(lineOS); lineOS.flush();
+    auto selected=role=="forward" ? forward : backward;
+    llvm::json::Array args,results,sources;
+    auto typeText=[](mlir::Type type){std::string text; llvm::raw_string_ostream os(text);type.print(os);os.flush();return text;};
+    for (auto t:selected.getArgumentTypes()) args.push_back(typeText(t));
+    for (auto t:selected.getResultTypes()) results.push_back(typeText(t));
+    if (residuals) for (auto attr:residuals) {
+      auto text=mlir::dyn_cast<mlir::StringAttr>(attr);
+      if (!text) return module.emitError("typed product residual source must be a string");
+      sources.push_back(text.getValue().str());
+    }
+    llvm::json::Object abi{{"schema",1},{"role",role.str()},{"entry",selected.getName().str()},
+      {"inputs",std::move(args)},{"results",std::move(results)},
+      {"primal_inputs",int64_t(forward.getNumArguments())},{"primal_results",int64_t(primalCount)},
+      {"residual_sources",std::move(sources)}};
+    std::string json; llvm::raw_string_ostream jsonOS(json);jsonOS<<llvm::json::Value(std::move(abi));jsonOS.flush();
+    // The complete pair remains in lineage. The executable export has no
+    // dangling cross-product symbol attributes and retains every nested region.
+    selected->removeAttr("tessera.autodiff.forward");
+    selected->removeAttr("tessera.autodiff.backward");
+    selected->removeAttr("tessera.autodiff.paired");
+    (role=="forward" ? backward : forward).erase();
+    mlir::Builder b(module.getContext());
+    // Forward inputs and backward residuals belong to the persistent frame.
+    // Bufferization must not reuse their storage for mutable intermediates.
+    for (unsigned i=0;i<selected.getNumArguments();++i)
+      selected.setArgAttr(i,"bufferization.writable",b.getBoolAttr(false));
+    module->setAttr("tessera.autodiff.product_abi",b.getStringAttr(json));
+    module->setAttr("tessera.autodiff.product_pair",b.getStringAttr(lineage));
+    return mlir::success();
+  }
+
+  mlir::LogicalResult exportCheckpoint(mlir::ModuleOp module, llvm::StringRef role) {
+    llvm::SmallVector<mlir::func::FuncOp> functions;
+    mlir::Operation *selected = nullptr;
+    unsigned forwards = 0, backwards = 0;
+    for (auto fn : module.getOps<mlir::func::FuncOp>()) {
+      functions.push_back(fn);
+      if (!fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 2)
+        return fn.emitError("checkpoint export requires isolated generated attention products");
+      auto *op = &fn.getBody().front().front();
+      auto name = op->getName().getStringRef();
+      bool forward = name == "tessera_attn.checkpoint_forward";
+      bool backward = name == "tessera_attn.checkpoint_backward";
+      if (!forward && !backward) return fn.emitError("checkpoint export found another product family");
+      forwards += forward; backwards += backward;
+      if ((role == "forward" && forward) || (role == "backward" && backward)) selected = op;
+      auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(fn.getBody().front().back());
+      if (!ret || ret.getOperands() != op->getResults()) return fn.emitError("checkpoint return roles disagree");
+      for (auto operand : op->getOperands()) {
+        auto arg = mlir::dyn_cast<mlir::BlockArgument>(operand);
+        if (!arg || arg.getOwner() != &fn.getBody().front()) return fn.emitError("checkpoint operands must be entry arguments");
+      }
+    }
+    if (functions.size() != 2 || forwards != 1 || backwards != 1 || !selected)
+      return module.emitError("checkpoint export requires exactly one generated forward/backward pair");
+    std::string lineage; llvm::raw_string_ostream stream(lineage); module.print(stream); stream.flush();
+    mlir::OpBuilder builder(module.getContext());
+    builder.setInsertionPointToEnd(module.getBody());
+    auto fn = mlir::func::FuncOp::create(builder, selected->getLoc(),
+        ("attention_" + role + "_checkpoint").str(),
+        builder.getFunctionType(selected->getOperandTypes(), selected->getResultTypes()));
+    auto *block = fn.addEntryBlock();
+    builder.setInsertionPointToStart(block);
+    mlir::IRMapping mapping;
+    for (auto [operand, arg] : llvm::zip(selected->getOperands(), block->getArguments())) mapping.map(operand, arg);
+    auto *product = builder.clone(*selected, mapping);
+    mlir::func::ReturnOp::create(builder, selected->getLoc(), product->getResults());
+    llvm::SmallVector<mlir::Attribute> args, results;
+    llvm::SmallVector<llvm::StringRef> argumentNames = role == "forward" ?
+        llvm::SmallVector<llvm::StringRef>{"q", "k", "v"} : llvm::SmallVector<llvm::StringRef>{"dO", "q", "k", "v", "lse"};
+    llvm::SmallVector<llvm::StringRef> resultNames = role == "forward" ?
+        llvm::SmallVector<llvm::StringRef>{"output", "lse"} : llvm::SmallVector<llvm::StringRef>{"dq", "dk", "dv"};
+    for (auto name : argumentNames) args.push_back(builder.getStringAttr(name));
+    for (auto name : resultNames) results.push_back(builder.getStringAttr(name));
+    fn->setAttr("tessera.argument_bindings", builder.getArrayAttr(args));
+    fn->setAttr("tessera.result_bindings", builder.getArrayAttr(results));
+    for (auto old : functions) old.erase();
+    module->setAttr("tessera.attention_ad_pair", builder.getStringAttr(lineage));
+    return mlir::success();
+  }
+
   llvm::DenseMap<mlir::Operation *, llvm::SmallVector<mlir::Value>>
       explicitRegionResiduals;
 
@@ -1534,8 +1675,10 @@ private:
       return mlir::failure();
     }
     if (mlir::failed(structurizeNativeDiamonds(fwd)) ||
-        mlir::failed(structurizeBoundedNativeCFGs(fwd)) ||
-        mlir::failed(materializeIfResiduals(fwd)) ||
+        mlir::failed(structurizeBoundedNativeCFGs(fwd)))
+      return mlir::failure();
+    eraseStaticallyEmptyLoops(fwd);
+    if (mlir::failed(materializeIfResiduals(fwd)) ||
         mlir::failed(materializeWhileResiduals(fwd)) ||
         mlir::failed(materializeGenericForResiduals(fwd)))
       return mlir::failure();
@@ -1606,6 +1749,7 @@ private:
     llvm::SmallVector<mlir::Type> fwdResTypes(
         fwd.getResultTypes().begin(), fwd.getResultTypes().end());
 
+    llvm::DenseMap<mlir::Operation *, mlir::Operation *> attentionForwards;
     llvm::SmallVector<mlir::Value> forwardResiduals;
     llvm::SmallVector<mlir::Attribute> residualSources;
     bool hasHybridResidual = false;
@@ -1618,7 +1762,14 @@ private:
       auto materialized = op->getAttrOfType<mlir::BoolAttr>(
           "tessera.autodiff.residual_materialized");
       llvm::SmallVector<mlir::Value> values;
-      if (materialized && materialized.getValue()) {
+      if (op->getName().getStringRef() == "tessera.flash_attn" && denseAttentionAD(op)) {
+        mlir::OpBuilder attentionBuilder(op);
+        auto saved = attentionCheckpoint(attentionBuilder, op, false, op->getOperands());
+        if (!saved) return mlir::failure();
+        attentionForwards.try_emplace(op, saved);
+        values.push_back(saved->getResult(1));
+        residualSources.push_back(mlir::StringAttr::get(ctx, "tessera.flash_attn:lse"));
+      } else if (materialized && materialized.getValue()) {
         auto indices = op->getAttrOfType<mlir::DenseI64ArrayAttr>(
             "tessera.autodiff.residual_result_indices");
         if (!indices || indices.empty()) {
@@ -1816,7 +1967,7 @@ private:
       // shaped state with no cotangent seed makes buildZeroLike emit a
       // zeros_like taking the clone's result, and erasing under that live use
       // is a dangling reference on the fleet's NDEBUG builds.
-      if (eraseSavedPrimal && op->use_empty())
+      if ((eraseSavedPrimal || op->getName().getStringRef() == "tessera.flash_attn") && op->use_empty())
         op->erase();
     }
 
@@ -1892,6 +2043,12 @@ private:
     if (!residualSources.empty())
       fwd->setAttr("tessera.autodiff.residual_sources",
                    builder.getArrayAttr(residualSources));
+    // Replace forward primals only after building the derivative cone: its
+    // original SSA values key activity and cotangent maps during construction.
+    for (auto [original, saved] : attentionForwards) {
+      original->getResult(0).replaceAllUsesWith(saved->getResult(0));
+      original->erase();
+    }
     eraseStopGradientBarriers(bwd);
     eraseStopGradientBarriers(fwd);
     return mlir::success();
@@ -1988,9 +2145,37 @@ private:
         clone->erase();
         continue;
       }
-      if (active && failed(differentiateOperation(
-                        clone, resultCotangents, builder, cotangents)))
-        return mlir::failure();
+      if (active) {
+        // Nested replay constructs its own residual results. Forward these to
+        // the region model just as the top-level backward ABI forwards saved
+        // residual arguments; the primal result alone is not a state tape.
+        auto materialized = clone->getAttrOfType<mlir::BoolAttr>(
+            "tessera.autodiff.residual_materialized");
+        if (materialized && materialized.getValue()) {
+          auto indices = clone->getAttrOfType<mlir::DenseI64ArrayAttr>(
+              "tessera.autodiff.residual_result_indices");
+          if (!indices || indices.empty())
+            return mlir::failure();
+          llvm::SmallVector<mlir::Value> residuals;
+          if (auto ifOp = mlir::dyn_cast<mlir::scf::IfOp>(clone))
+            residuals.push_back(ifOp.getCondition());
+          else if (auto whileOp = mlir::dyn_cast<mlir::scf::WhileOp>(clone))
+            residuals.push_back(whileOp.getResult(0));
+          for (int64_t index : indices.asArrayRef()) {
+            if (index < 0 || index >= clone->getNumResults())
+              return mlir::failure();
+            mlir::Value result = clone->getResult(index);
+            mlir::Value saved = cloneResultToSaved.lookup(result);
+            residuals.push_back(saved ? saved : result);
+          }
+          explicitRegionResiduals[clone] = std::move(residuals);
+        }
+        auto differentiated = differentiateOperation(
+            clone, resultCotangents, builder, cotangents);
+        explicitRegionResiduals.erase(clone);
+        if (failed(differentiated))
+          return mlir::failure();
+      }
       bool allResultsSaved = clone->getNumResults() != 0;
       for (mlir::Value result : clone->getResults()) {
         mlir::Value saved = cloneResultToSaved.lookup(result);
@@ -2111,7 +2296,17 @@ private:
       return mlir::success();
 
     llvm::SmallVector<mlir::Value> inputCotangents;
-    if (auto adjoint = mlir::dyn_cast<AdjointInterface>(op)) {
+    auto savedAttention = explicitRegionResiduals.find(op);
+    if (op->getName().getStringRef() == "tessera.flash_attn" &&
+        savedAttention != explicitRegionResiduals.end()) {
+      if (!denseAttentionAD(op) || savedAttention->second.size() != 1 ||
+          outputCotangents.size() != 1 || !outputCotangents[0]) return mlir::failure();
+      llvm::SmallVector<mlir::Value> args{outputCotangents[0], op->getOperand(0),
+          op->getOperand(1), op->getOperand(2), savedAttention->second[0]};
+      auto backward = attentionCheckpoint(builder, op, true, args);
+      if (!backward) return mlir::failure();
+      llvm::append_range(inputCotangents, backward->getResults());
+    } else if (auto adjoint = mlir::dyn_cast<AdjointInterface>(op)) {
       if (!adjoint.isDifferentiable()) {
         op->emitError() << "[AUTODIFF_PAIRED] op " << op->getName()
                         << " declares AdjointInterface but isDifferentiable() "

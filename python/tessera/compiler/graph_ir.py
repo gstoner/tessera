@@ -983,6 +983,19 @@ class IROp:
             f"{key} = {_format_named_attr(key, value)}"
             for key, value in self.kwargs.items()
         )
+        # Dense attention carries its physical head width in ODS. Infer it
+        # from Q when the caller did not supply it; keep explicit values so
+        # the verifier can diagnose disagreement instead of silently fixing it.
+        dense_attention = (
+            self.op_name == "tessera.flash_attn"
+            and len(self.operand_types) == 3
+            and all(re.fullmatch(r"tensor<(?:[0-9]+|\?)x(?:[0-9]+|\?)x(?:[0-9]+|\?)x[0-9]+x(?:f16|bf16|f32|f64)>", t)
+                    for t in self.operand_types)
+        )
+        if (dense_attention and "head_dim" not in self.kwargs
+                and "head_dim" not in (self.attrs or "")):
+            width = self.operand_types[0].split("x")[-2]
+            attr_parts.append(f"head_dim = {width} : i64")
         # W2.2: carry registered semantics into Graph IR. Emit ``pure`` too:
         # absence means "unregistered/unknown", never "probably pure".
         if "tessera.effect_kind" not in (self.attrs or "") and \
@@ -990,8 +1003,15 @@ class IROp:
             from .op_catalog import get_op_spec
             spec = get_op_spec(self.op_name)
             if spec is not None:
+                effect = spec.effect
+                # The public catalog also covers cache-backed/stateful forms.
+                # Only the explicit dense, dropout-free variant is pure.
+                if (dense_attention and not self.attrs
+                        and set(self.kwargs) <= {"causal", "head_dim", "numeric_policy", "dropout_p"}
+                        and self.kwargs.get("dropout_p", 0) == 0):
+                    effect = "pure"
                 attr_parts.append(
-                    f'tessera.effect_kind = "{spec.effect}"'
+                    f'tessera.effect_kind = "{effect}"'
                 )
                 if spec.aliasing != "none":
                     attr_parts.append(f'tessera.aliasing = "{spec.aliasing}"')

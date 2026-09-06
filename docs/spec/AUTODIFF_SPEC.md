@@ -461,3 +461,46 @@ oracle (see `jet.py` and `tests/unit/test_jet_struct.py`).
   adjoint collective insertion (`--tessera-adjoint-collective-insertion`).
 - `src/transforms/lib/ActivationRematerializationPass.cpp` — Phase F2 IR-form
   activation rematerialization (`--tessera-activation-rematerialization`).
+
+
+## Native dense attention forward products (2026-09-06)
+
+The registered FlashAttnOp TangentInterface emits an internal
+`tessera_attn.checkpoint_jvp` for active Q/K directions. Its operands are
+Q, K, V, output, natural-log row LSE, dQ, dK and dV; its result is dO.
+The verifier requires output and LSE from the same `checkpoint_forward` SSA
+producer with identical Q/K/V, scale and causal policy. The envelope is static
+positive rank-4 fp32, grouped heads and no dropout, bias, cache or numeric-policy
+override. V-only retains the linear checkpoint-forward implementation.
+
+`--tessera-autodiff-forward=export-attention-jvp` projects one isolated direct
+attention function into a physical binding contract, including active tangent
+slots. `ResidentAttentionTape.prepare_jvp(source=..., compiler=..., llvm_bin=...)`
+uses this native export to select the bounded CUDA score-tangent consumer and
+checks it against the captured forward generation. Inactive slots are zeroed in
+the native recipe. The verified product digest contributes to package identity.
+This is an explicit native product binding; general JIT composition, higher-order
+AD and HIP/Metal/x86 consumers remain separate work. This internal op is not a
+new public frontend operation or a claim that arbitrary attention variants work.
+
+
+### Explicit JIT-owned native programs
+
+For an isolated `@jit(target="nvidia_sm120", autodiff="forward", wrt=(...))`
+attention function, `compile_native_attention_jvp(*shape_examples, compiler=...,
+llvm_bin=...)` returns a program. `program.capture(q, k, v)` owns resident forward
+O/LSE; `frame.jvp(*tangents)` takes only the requested tangents in `wrt` order.
+At least one of Q/K must be active. Captures must be closed (or used as context
+managers). This explicit JIT compilation entry does not change generic `jvp`
+dispatch or support attention composed with arbitrary surrounding operations.
+
+`compile_persistent_device_tape` accepts reverse JIT requests and returns split
+native products; the lower-level `materialize_persistent_tape` also accepts native
+IR directly. A capture privately snapshots inputs and retains full exported
+residual tensors. `backward` may be called repeatedly before `close`, producing
+independent owned outputs. The current CUDA/HIP consumer executes serially and
+accepts static f32 tensor slots of at most 1024 elements, bounded for/if native
+bodies and at most 4096 logical temporary bytes. Inner states may still be
+replayed by the compiler's backward product. Dynamic capacities, mixed-type
+saved predicates, general while tapes and asynchronous retirement are outside
+this physical envelope and must refuse rather than silently fall back.

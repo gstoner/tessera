@@ -93,3 +93,49 @@ sets. Generated law evidence labels these as reference algebra. Slice A
 (Graph IR fragment and immutable/shared parameter inventory) and slice C
 (fusion-boundary consumer and exact-device mutation evidence) remain open.
 The spike itself has not become a product execution path.
+
+
+## 2026-09-06 fragment and candidate-gate integration
+
+`ann_fragment.extract_ann_fragment` now reads a bounded static-f32 affine/bias/
+ReLU chain from the existing Graph IR. It snapshots immutable parameter bytes
+with explicit storage identity, checks sharing, rejects unknown ownership,
+regions and unsupported numeric policies, and reports dense slots separately
+from unique storage and unique trainable slots, including frozen parameters. It emits no replacement Graph IR or new operation.
+
+`evaluator.ann_composition_equivalence` consumes a concrete two-affine-to-one
+composition inventory before invoking native program-pair evaluation. Weight,
+bias, activation and shape mutations refuse before execution; reference-only
+programs remain inconclusive. Reassociation requires explicit permission.
+This is an explicit candidate-evaluation gate, not automatic fusion discovery
+or proof that a separately supplied callable is bound to the inventoried graph.
+Automatic extraction from production candidates, executable-to-fragment identity
+binding, identity extension/parallelization/sums, and backend fusion promotion
+remain open. Slice A is implemented within this envelope; slice C is partial.
+
+
+## 2026-09-06 native automatic constant composition
+
+Slice C now includes an executable native rewrite consumer in
+`tessera-canonicalize=ann-reassociate=true`. It discovers two affine layers in
+registered MLIR SSA with constant fp32 weights and matrix biases, folds their
+parameters using APFloat round-to-nearest-even, and emits existing matmul/add
+operations. Matrix biases respect the registered equal-rank add contract;
+row-dependent biases are preserved. Runtime parameters, additional consumers,
+intervening activations, transposition and numeric-policy overrides refuse.
+Folding is bounded and nonfinite folded values refuse. The option defaults off.
+
+Compiler tests establish transformation and refusal behavior. Native backend
+original/fused equivalence, performance comparison, automatic JIT selection and
+arbiter promotion remain open. Constants are frozen inference parameters; this
+rewrite does not preserve a trainable parameterization. No backend performance
+claim follows from reducing the number of matmul operations.
+
+## 2026-09-06 promotion admission prerequisite
+
+The shared arbiter now refuses exact-cache hits and incumbent retention when
+selection eligibility or timing separation evidence is absent or false. Tests
+force a fresh comparison for these states. This closes a cache admission gap;
+it does not register or promote the native ANN rewrite. Slice C remains partial:
+frozen-parameter native candidates, explicit reassociation in executable identity,
+backend original/fused equivalence and measured promotion remain open.

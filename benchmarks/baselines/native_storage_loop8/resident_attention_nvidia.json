@@ -1,0 +1,71 @@
+{
+  "rows": [
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": false,
+      "source_sha256": "0f84ac1c1862e5eae9f3abad0b42bbc2eeb76244acb2acb2161ab3060df8c7e0",
+      "forward_image": "9d1f31f76348bd257cd225905ba2fabcf57f9f291127df65db6a7133f96e799d",
+      "backward_image": "c3a13ff6e3dd6cbc967e9f3fb30c29014374cf46db440359d261e9e1d67a0fe9",
+      "checkpoint_contract": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "oracle": "3e-5"
+    },
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": true,
+      "source_sha256": "0e90a390cb8fb03c1586d96e680042c89ba62df2f341df4832e9b9b60ff1bf79",
+      "forward_image": "ef737b0b0dac515bbd64f749c63748598bfccbadca7bd461f905fbeda13d370c",
+      "backward_image": "50a2c884b7c430781b8cd0d574fb96599fece5fe52a8b20742b9beb86cf0b08a",
+      "checkpoint_contract": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "oracle": "3e-5"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": false,
+      "source_sha256": "20064166c48c6cef932757302d003fa6c3631b61662c95e1288a8ed60ad7a38a",
+      "forward_image": "a671c3a309638acd53325d6b49d427d3ac636571429d9e0cef8a5aa1120ab253",
+      "backward_image": "2de495fa6c26c8d2ec452c55dc79542b51f2422a2a8e07f7cbce557ccdc0546e",
+      "checkpoint_contract": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+      "oracle": "3e-5"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": true,
+      "source_sha256": "5920c1b42b496addb24c7d286da4ae67e59cfd618a5d2ee88aff74d100654dc9",
+      "forward_image": "d1594f34247709352725a5b2b2a071770f52bd5e0c6d317bae72abe48319a683",
+      "backward_image": "806e4d766d09a508f3c0a346ba8bd342d7419ab6512aa308ed5163451697642f",
+      "checkpoint_contract": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+      "oracle": "3e-5"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": false,
+      "source_sha256": "71254c446672c7560a07f37f206f74ec6850deb35de46105fb4b129919625b4d",
+      "forward_image": "8f1d84fffbdc7ede5bc77786401bb217a76d5b1eb563eddfb16f8118a107850d",
+      "backward_image": "ccada2ec73045029280924e7e562084ab13a5b0d3972afff871277219a6718b6",
+      "checkpoint_contract": "3b4da43f6201c8c8188cbf8934948d6ddcedd4fd6ed014abd346eb94451c992b",
+      "oracle": "3e-5"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": true,
+      "source_sha256": "a581ade0a1aca974c6b31e2b847fbbaeb63e1970bdd518bd1dd19f03490d85a7",
+      "forward_image": "1ecf7061530e90adb2ae4a18f5b4179c0e3a45b20a5cd027de79f246e20dd35d",
+      "backward_image": "67a2937c5feabdd5ce0444dff0d9d270b3ab8cbe966307d992d703d606aa1287",
+      "checkpoint_contract": "dfa00ebb90ad8f24c62c372ca8c04da21aa4d34c6b041cdc1b1f7625431f0b81",
+      "oracle": "3e-5"
+    }
+  ],
+  "backend": "nvidia_sm120",
+  "recorder_sha256": "65fc7c8c59fa9c62057432f3b1fe8d16328d50c146b24e38788d54d304591a42",
+  "resident_lse_tape": true,
+  "implementation_sha256": {
+    "resident_attention.py": "67f54fd36eee77be9b08e5acf472453dfe2260c0faa5a0b6f7b1608c3d0cd795",
+    "nvidia_native.py": "40b74b97b5e04a28c747a5a1bc2dc32fdcd38305fa584c15813bf11203f991ec"
+  }
+}

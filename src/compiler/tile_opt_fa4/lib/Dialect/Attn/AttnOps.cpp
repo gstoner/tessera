@@ -640,6 +640,38 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
 mlir::LogicalResult CheckpointForwardOp::verify() { return verifyCheckpointTensorOp(*this,false); }
 mlir::LogicalResult CheckpointBackwardOp::verify() { return verifyCheckpointTensorOp(*this,true); }
 
+mlir::LogicalResult CheckpointJVPOp::verify() {
+  using namespace mlir;
+  SmallVector<RankedTensorType> types;
+  for (Type type : getOperandTypes()) {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32() ||
+        llvm::any_of(tensor.getShape(), [](int64_t d) { return d <= 0; }))
+      return emitOpError("JVP operands require positive static f32 tensors");
+    types.push_back(tensor);
+  }
+  auto q=types[0], k=types[1], v=types[2];
+  if (q.getRank()!=4 || k.getRank()!=4 || v.getRank()!=4)
+    return emitOpError("JVP Q/K/V require rank four");
+  auto tensor=[&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
+  auto b=q.getDimSize(0), h=q.getDimSize(1), n=q.getDimSize(2);
+  if (k.getDimSize(0)!=b || v.getDimSize(0)!=b || h%k.getDimSize(1) ||
+      k.getDimSize(1)!=v.getDimSize(1) || k.getDimSize(2)!=v.getDimSize(2) ||
+      q.getDimSize(3)!=k.getDimSize(3) || types[3]!=tensor({b,h,n,v.getDimSize(3)}) ||
+      types[4]!=tensor({b,h,n}) || types[5]!=q || types[6]!=k || types[7]!=v ||
+      getResult().getType()!=types[3])
+    return emitOpError("JVP tangent, output or LSE shapes disagree");
+  auto scale=(*this)->getAttrOfType<FloatAttr>("scale").getValue();
+  if (!scale.isFinite() || scale.isNegative() || scale.isZero())
+    return emitOpError("JVP scale must be finite and positive");
+  auto producer=getOutput().getDefiningOp<CheckpointForwardOp>();
+  if (!producer || getRowLse()!=producer.getRowLse() ||
+      getQuery()!=producer.getQuery() || getKey()!=producer.getKey() || getValue()!=producer.getValue() ||
+      getScaleAttr()!=producer.getScaleAttr() || getCausalAttr()!=producer.getCausalAttr())
+    return emitOpError("JVP requires the same forward Q/K/V, output, LSE and policy generation");
+  return success();
+}
+
 } // namespace attn
 } // namespace tessera
 

@@ -10,15 +10,33 @@ namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (!denseAttentionAD(*this) || tangents.size() != 3 || !tangents[2]) return {};
-  // Attention is linear in V. Q/K products require a score-product kernel,
-  // rather than pretending another ordinary attention invocation computes it.
+  if (!denseAttentionAD(*this) || tangents.size() != 3) return {};
+  bool scoresActive = false;
   for (auto value : tangents.take_front(2)) {
     if (!value) continue;
     auto constant = value.getDefiningOp<mlir::arith::ConstantOp>();
     auto dense = constant ? mlir::dyn_cast<mlir::DenseFPElementsAttr>(constant.getValue()) : mlir::DenseFPElementsAttr();
-    if (!dense || !dense.isSplat() || !dense.getSplatValue<llvm::APFloat>().isZero()) return {};
+    scoresActive |= !dense || !dense.isSplat() || !dense.getSplatValue<llvm::APFloat>().isZero();
   }
+  if (scoresActive) {
+    auto forward=attentionCheckpoint(builder,*this,false,getOperands());
+    if (!forward) return {};
+    mlir::OperationState state(getLoc(),"tessera_attn.checkpoint_jvp");
+    state.addOperands(getOperands());
+    state.addOperands(forward->getResults());
+    for (auto [primal,tangent] : llvm::zip(getOperands(),tangents)) {
+      if (!tangent) {
+        auto type=mlir::cast<mlir::RankedTensorType>(primal.getType());
+        tangent=builder.create<mlir::arith::ConstantOp>(getLoc(),
+            mlir::DenseElementsAttr::get(type,builder.getF32FloatAttr(0.0))).getResult();
+      }
+      state.addOperands(tangent);
+    }
+    state.addTypes(getResult().getType());
+    state.addAttributes(forward->getAttrs());
+    return {builder.create(state)->getResult(0)};
+  }
+  if (!tangents[2]) return {};
   llvm::SmallVector<mlir::Value> args{getOperand(0), getOperand(1), tangents[2]};
   auto product = attentionCheckpoint(builder, *this, false, args);
   return product ? llvm::SmallVector<mlir::Value>{product->getResult(0)} : llvm::SmallVector<mlir::Value>{};

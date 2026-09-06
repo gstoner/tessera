@@ -10,6 +10,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include <limits>
@@ -391,9 +392,9 @@ public:
         return Interval{index.lookup(marker), index.lookup(loop.getBody()->getTerminator()), true};
     return std::nullopt;
   }
-  // A pending copy token and its destination slot cross the same backedge.
-  // Prove their coupled permutation inductively, instead of collapsing either
-  // SSA value to a static origin. The seed also covers the zero-trip path.
+  // Pending copy tokens and their destination slots cross the same backedge.
+  // Prove each matched read/refill cohort inductively; every token must be
+  // drained before publication and final reuse. Seeds cover zero trips.
   std::optional<Interval> pendingSwap(mlir::Operation *marker) const {
     using namespace mlir;
     Value root = marker->getOperand(0);
@@ -413,13 +414,12 @@ public:
     for (unsigned i : slots) {
       if (!roots.insert(loop.getInitArgs()[i].getAsOpaquePointer()).second ||
           !backedges.insert(yield.getOperand(i).getAsOpaquePointer()).second ||
-          !llvm::any_of(slots, [&](unsigned j) {
-            return yield.getOperand(i) == loop.getRegionIterArgs()[j];
-          })) return std::nullopt;
+          !llvm::any_of(slots, [&](unsigned j) { return yield.getOperand(i) == loop.getRegionIterArgs()[j]; }))
+        return std::nullopt;
     }
-    nvgpu::DeviceAsyncCopyOp seed, refill;
-    unsigned readIndex = 0, writeIndex = 0;
+    llvm::DenseMap<unsigned, nvgpu::DeviceAsyncCopyOp> seeds, refills;
     llvm::SmallVector<Operation *> reads;
+    llvm::SmallDenseSet<unsigned, 8> readSlots;
     for (unsigned i : slots) {
       Value init = loop.getInitArgs()[i], arg = loop.getRegionIterArgs()[i];
       if (!init.getDefiningOp() || !isa<memref::AllocOp, memref::AllocaOp>(init.getDefiningOp()) ||
@@ -433,46 +433,61 @@ public:
       for (auto *user : init.getUsers()) {
         if (user == ownerMarker || user == loop) continue;
         auto copy = dyn_cast<nvgpu::DeviceAsyncCopyOp>(user);
-        if (!copy || seed || copy.getDst() != init || copy->getBlock() != loop->getBlock() ||
+        if (!copy || seeds.count(i) || copy.getDst() != init || copy->getBlock() != loop->getBlock() ||
             !ownerMarker->isBeforeInBlock(copy) || !copy->isBeforeInBlock(loop)) return std::nullopt;
-        seed = copy; readIndex = i;
+        seeds[i] = copy;
       }
       for (auto *user : arg.getUsers()) {
         if (user == yield) continue;
         if (user->getBlock() != loop.getBody()) return std::nullopt;
         if (auto copy = dyn_cast<nvgpu::DeviceAsyncCopyOp>(user)) {
-          if (refill || copy.getDst() != arg) return std::nullopt;
-          refill = copy; writeIndex = i;
-        } else if (isa<memref::LoadOp>(user)) reads.push_back(user);
-        else return std::nullopt;
+          if (refills.count(i) || copy.getDst() != arg) return std::nullopt;
+          refills[i] = copy;
+        } else if (auto read = dyn_cast<memref::LoadOp>(user)) {
+          if (read.getMemRef() != arg) return std::nullopt;
+          reads.push_back(user); readSlots.insert(i);
+        } else return std::nullopt;
       }
     }
-    if (!seed || !refill || reads.empty() || readIndex == writeIndex ||
-        yield.getOperand(readIndex) != loop.getRegionIterArgs()[writeIndex]) return std::nullopt;
-    for (auto *read : reads)
-      if (cast<memref::LoadOp>(read).getMemRef() != loop.getRegionIterArgs()[readIndex]) return std::nullopt;
-    for (unsigned i = 0; i < loop.getNumRegionIterArgs(); ++i) {
-      if (!committedCopy(loop.getInitArgs()[i], seed) || !committedCopy(yield.getOperand(i), refill)) continue;
-      Operation *wait = nullptr, *publish = nullptr, *release = nullptr;
-      for (auto &op : *loop.getBody()) {
-        if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+    if (seeds.empty() || seeds.size() != refills.size() || readSlots.size() != seeds.size()) return std::nullopt;
+    llvm::SmallDenseSet<unsigned, 8> tokens, writes;
+    for (auto [readIndex, seed] : seeds) {
+      if (!readSlots.contains(readIndex) || refills.count(readIndex)) return std::nullopt;
+      std::optional<unsigned> writeIndex;
+      for (auto [i, copy] : refills)
+        if (yield.getOperand(readIndex) == loop.getRegionIterArgs()[i]) writeIndex = i;
+      if (!writeIndex || !writes.insert(*writeIndex).second) return std::nullopt;
+      std::optional<unsigned> tokenIndex;
+      for (unsigned i = 0; i < loop.getNumRegionIterArgs(); ++i)
+        if (committedCopy(loop.getInitArgs()[i], seed) && committedCopy(yield.getOperand(i), refills.lookup(*writeIndex))) {
+          if (tokenIndex) return std::nullopt;
+          tokenIndex = i;
+        }
+      if (!tokenIndex || !tokens.insert(*tokenIndex).second) return std::nullopt;
+    }
+    // A cohort is admitted only when every pending generation has a matching
+    // destination fact and is collectively published before any slot is read.
+    llvm::SmallDenseSet<unsigned, 8> waited;
+    Operation *publish = nullptr, *release = nullptr;
+    for (auto &op : *loop.getBody()) {
+      if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+        for (unsigned i : tokens)
           if (w.getAsyncDependencies() == loop.getRegionIterArgs()[i] &&
-              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) wait = &op;
-        if (wait && !publish && isa<gpu::BarrierOp>(op)) publish = &op;
-      }
-      if (!publish || !publish->isBeforeInBlock(refill) || !llvm::all_of(reads, [&](Operation *r) {
-        return publish->isBeforeInBlock(r);
-      })) continue;
-      for (auto *op = publish->getNextNode(); op && op != yield; op = op->getNextNode())
-        if (isa<gpu::BarrierOp>(op) && llvm::all_of(reads, [&](Operation *r) { return r->isBeforeInBlock(op); })) release = op;
-      if (!release) continue;
-      Operation *finalWait = nullptr;
-      for (auto *op = loop->getNextNode(); op; op = op->getNextNode()) {
-        if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) waited.insert(i);
+      if (waited.size() == tokens.size() && isa<gpu::BarrierOp>(op)) { publish = &op; break; }
+    }
+    if (!publish || !llvm::all_of(reads, [&](Operation *r) { return publish->isBeforeInBlock(r); }) ||
+        !llvm::all_of(refills, [&](auto entry) { return publish->isBeforeInBlock(entry.second); })) return std::nullopt;
+    for (auto *op = publish->getNextNode(); op && op != yield; op = op->getNextNode())
+      if (isa<gpu::BarrierOp>(op) && llvm::all_of(reads, [&](Operation *r) { return r->isBeforeInBlock(op); })) release = op;
+    if (!release) return std::nullopt;
+    waited.clear();
+    for (auto *op = loop->getNextNode(); op; op = op->getNextNode()) {
+      if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+        for (unsigned i : tokens)
           if (w.getAsyncDependencies() == loop.getResult(i) &&
-              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) finalWait = op;
-        if (finalWait && isa<gpu::BarrierOp>(op)) return Interval{index.lookup(marker), index.lookup(op), true};
-      }
+              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) waited.insert(i);
+      if (waited.size() == tokens.size() && isa<gpu::BarrierOp>(op)) return Interval{index.lookup(marker), index.lookup(op), true};
     }
     return std::nullopt;
   }

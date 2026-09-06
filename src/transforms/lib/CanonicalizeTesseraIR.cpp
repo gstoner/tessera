@@ -1,6 +1,7 @@
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/StringSet.h"
@@ -182,8 +183,15 @@ struct EraseIdentityCast : public RewritePattern {
     return success();
   }
 };
+#include "ANNConstantComposition.h"
+
 struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Canon)
+  Canon() = default;
+  Canon(const Canon &other) : PassWrapper(other) {}
+  Option<bool> annReassociate{*this, "ann-reassociate",
+      llvm::cl::desc("Permit frozen ANN affine composition with changed fp32 association"),
+      llvm::cl::init(false)};
   StringRef getArgument() const override { return "tessera-canonicalize"; }
   StringRef getDescription() const override {
     return "Canonicalize high-level Tessera IR patterns";
@@ -192,6 +200,7 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
                  TransposeThroughPointwise, EraseIdentityCast>(&getContext());
+    if (annReassociate) patterns.add<ComposeConstantANN>(&getContext());
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));
     if (failed(applyPatternsGreedily(getOperation(), frozenPatterns)))
       getOperation()->emitWarning()

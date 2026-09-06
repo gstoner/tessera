@@ -330,3 +330,30 @@ def test_native_reverse_does_not_mistake_second_primal_for_residual(compiler):
     result = run(compiler, source, '--tessera-autodiff-paired=emit-storage-child=true')
     assert result.returncode != 0
     assert 'one primal result' in result.stderr
+
+
+from benchmarks.pending_storage_source import pending_cohort  # noqa: E402
+
+@pytest.mark.parametrize('count', [2, 3, 4])
+def test_multiple_pending_generations_coalesce_after_all_drains(compiler, count):
+    result = run(compiler, pending_cohort(count), '--tessera-tile-buffer-reuse')
+    assert result.returncode == 0, result.stderr
+    assert groups(result.stdout) == [str(i) for i in range(2 * count)] + ['0']
+    arena = run(compiler, result.stdout, '--tessera-tile-buffer-arena')
+    assert arena.returncode == 0, arena.stderr
+
+
+@pytest.mark.parametrize('before,after', [
+    ('nvgpu.device_async_wait %token1', 'nvgpu.device_async_wait %token'),
+    ('nvgpu.device_async_wait %last#4', 'nvgpu.device_async_wait %last#0'),
+    ('%new_group1, %write_slot1, %read_slot1 :', '%new_group, %write_slot1, %read_slot1 :'),
+    ('nvgpu.device_async_wait %token1', 'nvgpu.device_async_wait %token1 {numGroups = 1 : i32}'),
+])
+def test_multiple_pending_generations_reject_incomplete_cohort(compiler, before, after):
+    source = pending_cohort(2)
+    assert before in source
+    result = run(compiler, source.replace(before, after), '--tessera-tile-buffer-reuse')
+    assert result.returncode == 0, result.stderr
+    assert groups(result.stdout) == ['0', '1', '2', '3', '4']
+    forged = result.stdout.replace('tile.buffer_group = 4', 'tile.buffer_group = 0')
+    assert run(compiler, forged, '--tessera-tile-buffer-arena').returncode != 0

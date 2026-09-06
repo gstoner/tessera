@@ -6623,3 +6623,32 @@ See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOL
 **Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 Parity validated on RTX5070: 21 AD pair cases including reduction VJP and seven exact cases each for uniformly nested 3/4/8-slot single-pending rings. Follow-up required for multiple outstanding generations, compound attention AD device products, persisted LSE/tapes and cross-stream overlap attribution. Metal GPU timestamps are not CUDA performance evidence.
 See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Outstanding cohorts / saved LSE / queue attribution — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX5070 for 21 nested multi-cohort cases (2/3/4 pending copies). Thirty matched queue pairs pass exact oracles; Nsight Systems records cross-stream kernel intersections and Nsight Compute supplies an isolated workload counter sample. Follow-up required for production submission attribution, fresh-process performance evidence, Q/K JVP and device-owned attention tapes.
+See the [shared evidence and next boundaries](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Persistent snapshots / attention export / MSW-9 — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Twelve persistent snapshot/repeated-backward/nested-frame cases and six compiler-generated attention checkpoint package cases pass on RTX5070. Native Schedule/Tile consumes the AD export directly. Attention uses the existing host-buffer bridge; resident LSE ownership and Q/K JVP still require follow-up. MSW-9 candidate inventories do not promote a native route.
+See [implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Resident LSE / native ANN constants — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX 5070 for six resident Q/K/V + saved-LSE generations, caller-buffer mutation, repeated backward, and close invalidation. No host tensor bridge participates in backward. Native ANN constant composition has compiler tests; exact-device ANN equivalence/performance and promotion require follow-up. Native Q/K JVP, general nested residual tapes and event-owned concurrent generations remain open.
+See the integrated plan’s native ANN composition and resident attention generation section.
+
+
+**Typed nested exports / resident score tangents / promotion admission — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX 5070 for eight resident forward/backward cases and 32 Q-only, K-only, Q+K and Q+K+V JVP directions, including 129 keys. Native MLIR uses bounded shared storage and the private O/LSE generation. Backward grid sizing now covers concatenated gradient ranges. Automatic TangentInterface integration, general device tapes, concurrency and ANN performance promotion remain follow-ups.
+See the integrated plan’s typed nested exports and resident score tangents section.
+
+
+**Automatic score JVP / control-flow inventory — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated for the isolated native automatic Q/K/V attention export bound to resident CUDA O/LSE: eight cases and 32 directions on RTX 5070. This is correctness, not performance or overlap evidence. General JIT composition and persistent nested tensor tape execution remain follow-ups.
+
+
+**Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+The bounded split f32 tape consumer and JIT-owned isolated Q/K program are implemented for owning-device validation on RTX 5070. NVVM retains generic alloca lowering; AMDGPU private descriptor addressing is not transferred. Follow-up required for dynamic/mixed-type tapes, parallel scheduling, asynchronous retirement and composed attention AD. No latency/overlap or arbiter promotion claim.
+See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

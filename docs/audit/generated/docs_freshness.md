@@ -6,9 +6,9 @@ Reference date for staleness: **2026-09-06**.
 
 ## Headline
 
-- **152** docs catalogued across the canonical doc tree.
-- **151** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **56** updated within the last 30 days.
+- **154** docs catalogued across the canonical doc tree.
+- **153** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **61** updated within the last 30 days.
 - **24** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -28,7 +28,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `CLIFFORD_SPEC.md` | - | 2026-05-17 | 112 | ✓ |
 | `COMPILER_REFERENCE.md` | Normative | 2026-06-25 | 73 | ✓ |
 | `CONFORMANCE.md` | Normative | 2026-06-11 | 87 | ✓ |
-| `CONTROL_FLOW_CONTRACT.md` | - | 2026-08-11 | 26 | ✓ |
+| `CONTROL_FLOW_CONTRACT.md` | - | 2026-09-06 | 0 | ✓ |
 | `EBM_SPEC.md` | - | 2026-05-16 | 113 | ✓ |
 | `GA_EBM_EXECUTION_STATUS.md` | - | 2026-07-18 | 50 | ✓ |
 | `GRAPH_IR_SPEC.md` | Normative | 2026-07-14 | 54 | ✓ |
@@ -134,7 +134,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
 | `MASTER_AUDIT.md` | - | 2026-09-04 | 2 | ✓ |
-| `README.md` | - | 2026-08-08 | 29 | ✓ |
+| `README.md` | - | 2026-09-06 | 0 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-09-05 | 1 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-09-05 | 1 | ✓ |
 | `backend/README.md` | - | 2026-09-05 | 1 | ✓ |
@@ -152,6 +152,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 33 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 23 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 28 | ✓ |
+| `backend/rocm/NATIVE_RDNA4_COMMISSIONING.md` | - | 2026-09-06 | 0 | ✓ |
 | `backend/rocm/ROCM_AUDIT.md` | - | 2026-09-05 | 1 | ✓ |
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 32 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 40 | ✓ |
@@ -160,12 +161,13 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/x86/todo.md` | - | 2026-09-05 | 1 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 40 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 2 | ✓ |
-| `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-18 | 19 | ✓ |
-| `compiler/AUTODIFF_NEXTGEN_PLAN.md` | - | 2026-08-20 | 17 | ✓ |
-| `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-18 | 19 | ✓ |
+| `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 0 | ✓ |
+| `compiler/AUTODIFF_EXECUTION_PLAN.md` | - | 2026-09-06 | 0 | ✓ |
+| `compiler/AUTODIFF_NEXTGEN_PLAN.md` | - | 2026-09-06 | 0 | ✓ |
+| `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-08-13 | 24 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 26 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-09-05 | 1 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 29 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 40 | ✓ |
 | `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-24 | 13 | ✓ |
@@ -176,32 +178,32 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FORGE_ASSESSMENT.md` | - | 2026-08-15 | 22 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 35 | ✓ |
 | `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 3 | ✓ |
-| `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-08-22 | 15 | ✓ |
+| `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-08-15 | 22 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-05 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-04 | 2 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 35 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 41 | ✓ |
 | `compiler/MATH_SOURCE_WORKSTREAM.md` | - | 2026-09-04 | 2 | ✓ |
 | `compiler/MATRIX_CALCULUS_REVIEW.md` | - | 2026-08-20 | 17 | ✓ |
-| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-05 | 1 | ✓ |
+| `compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 29 | ✓ |
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-09-04 | 2 | ✓ |
-| `compiler/README.md` | - | 2026-09-04 | 2 | ✓ |
+| `compiler/README.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 29 | ✓ |
 | `compiler/SCHEDULE_OBJECT_DESIGN.md` | - | 2026-08-16 | 21 | ✓ |
-| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 29 | ✓ |
+| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 51 | ✓ |
 | `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 25 | ✓ |
-| `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 35 | ✓ |
+| `compiler/TARGET_IR_REVIEW.md` | - | 2026-09-06 | 0 | ✓ |
 | `compiler/TILERT_ASSESSMENT.md` | - | 2026-09-05 | 1 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 38 | ✓ |
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-09-04 | 2 | ✓ |
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 12 | ✓ |
 | `compiler/compiler_enhancement.md` | - | 2026-08-18 | 19 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 2 | ✓ |
-| `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 87 | ✓ |
-| `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 35 | ✓ |
+| `domain/DOMAIN_AUDIT.md` | - | 2026-09-06 | 0 | ✓ |
+| `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 0 | ✓ |
 | `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 68 | ✓ |
 | `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-08-12 | 25 | ✓ |
 | `roadmap/ROADMAP_AUDIT.md` | - | 2026-08-11 | 26 | ✓ |

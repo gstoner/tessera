@@ -1,0 +1,65 @@
+{
+  "backend": "nvidia",
+  "outstanding": 2,
+  "slot_alias": false,
+  "slots": 4,
+  "nested": true,
+  "pending_swap": true,
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "source_sha256": "9178c4be4abca2e591e1df9108375757f8940a8d18661f43de53d40048927f0e",
+  "compiler_sha256": "43863544e60279a1b978b0ed2b4514a5acca01f9cb8a56d71f64be9272747207",
+  "package_digest": "b0c6eb70d0e2e26fce9ae7f5047d380217060e2ce2d556bfdc94da912f5630f9",
+  "recorder_sha256": "6fd2b2b1065edfe115dffaa72fa92b04f24459fb78401902f4225ea2a0d224b8",
+  "rows": [
+    {
+      "width": 32,
+      "rounds": 0,
+      "oracle": "exact",
+      "native_bytes": 512,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 1,
+      "oracle": "exact",
+      "native_bytes": 512,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 2,
+      "oracle": "exact",
+      "native_bytes": 512,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 64,
+      "rounds": 7,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 16,
+      "oracle": "exact",
+      "native_bytes": 2048,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "oracle": "exact",
+      "native_bytes": 2048,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "oracle": "exact",
+      "native_bytes": 4096,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    }
+  ],
+  "selector_promotion": false
+}

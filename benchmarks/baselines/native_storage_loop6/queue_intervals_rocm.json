@@ -1,0 +1,493 @@
+{
+  "backend": "rocm",
+  "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "rows": [
+    {
+      "blocks": 8,
+      "repeat": 0,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.07846599817276001,
+        0.1703920066356659
+      ],
+      "interval_b_ms": [
+        0.17519299685955048,
+        0.2892819941043854
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.21081599593162537,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 0,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.11145900189876556,
+        0.20562699437141418
+      ],
+      "interval_b_ms": [
+        0.10089799761772156,
+        0.2241480052471161
+      ],
+      "intersection_ms": 0.09416799247264862,
+      "span_ms": 0.12325000762939453,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 1,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.05707699805498123,
+        0.1750209927558899
+      ],
+      "interval_b_ms": [
+        0.11422400176525116,
+        0.21773900091648102
+      ],
+      "intersection_ms": 0.06079699099063873,
+      "span_ms": 0.1606620028614998,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 1,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.08337599784135818,
+        0.17677199840545654
+      ],
+      "interval_b_ms": [
+        0.18637099862098694,
+        0.30310600996017456
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.21973001211881638,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 2,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.08324699848890305,
+        0.17292200028896332
+      ],
+      "interval_b_ms": [
+        0.1865219920873642,
+        0.29816699028015137
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.21491999179124832,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 2,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.11052499711513519,
+        0.20392100512981415
+      ],
+      "interval_b_ms": [
+        0.08556599915027618,
+        0.21879999339580536
+      ],
+      "intersection_ms": 0.09339600801467896,
+      "span_ms": 0.13323399424552917,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 3,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.14036299288272858,
+        0.25189799070358276
+      ],
+      "interval_b_ms": [
+        0.1935809999704361,
+        0.2983759939670563
+      ],
+      "intersection_ms": 0.05831699073314667,
+      "span_ms": 0.1580130010843277,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 3,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.08659599721431732,
+        0.17719200253486633
+      ],
+      "interval_b_ms": [
+        0.19107100367546082,
+        0.30481600761413574
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.21822001039981842,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 4,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.08099599927663803,
+        0.17079199850559235
+      ],
+      "interval_b_ms": [
+        0.1804320067167282,
+        0.30022600293159485
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.21923000365495682,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 8,
+      "repeat": 4,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.10202500224113464,
+        0.19693900644779205
+      ],
+      "interval_b_ms": [
+        0.12474299967288971,
+        0.21665799617767334
+      ],
+      "intersection_ms": 0.07219600677490234,
+      "span_ms": 0.1146329939365387,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 0,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.10869500041007996,
+        0.21366900205612183
+      ],
+      "interval_b_ms": [
+        0.21818900108337402,
+        0.3354629874229431
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.22676798701286316,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 0,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.14246900379657745,
+        0.5449860095977783
+      ],
+      "interval_b_ms": [
+        0.1702290028333664,
+        0.5611060261726379
+      ],
+      "intersection_ms": 0.3747570067644119,
+      "span_ms": 0.4186370223760605,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 1,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.1972689926624298,
+        0.6364259719848633
+      ],
+      "interval_b_ms": [
+        0.2270289957523346,
+        0.6081470251083374
+      ],
+      "intersection_ms": 0.3811180293560028,
+      "span_ms": 0.43915697932243347,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 1,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.16237899661064148,
+        0.5404970049858093
+      ],
+      "interval_b_ms": [
+        0.5649369955062866,
+        0.951134979724884
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.7887559831142426,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 2,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.21129900217056274,
+        0.5875369906425476
+      ],
+      "interval_b_ms": [
+        0.6066169738769531,
+        1.007135033607483
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.7958360314369202,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 2,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.1156499981880188,
+        0.5133680105209351
+      ],
+      "interval_b_ms": [
+        0.10628999769687653,
+        0.5212879776954651
+      ],
+      "intersection_ms": 0.39771801233291626,
+      "span_ms": 0.41499797999858856,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 3,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.1405400037765503,
+        0.5672100186347961
+      ],
+      "interval_b_ms": [
+        0.1907700002193451,
+        0.5942099690437317
+      ],
+      "intersection_ms": 0.37644001841545105,
+      "span_ms": 0.4536699652671814,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 3,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.2041199952363968,
+        0.582040011882782
+      ],
+      "interval_b_ms": [
+        0.6012799739837646,
+        1.0032010078430176
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.7990810126066208,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 4,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.15657000243663788,
+        0.52013099193573
+      ],
+      "interval_b_ms": [
+        0.5393710136413574,
+        0.9232509732246399
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.766680970788002,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 32,
+      "repeat": 4,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.23678000271320343,
+        0.6193810105323792
+      ],
+      "interval_b_ms": [
+        0.20226000249385834,
+        0.6477010250091553
+      ],
+      "intersection_ms": 0.3826010078191757,
+      "span_ms": 0.44544102251529694,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 0,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.07455100119113922,
+        0.2314320057630539
+      ],
+      "interval_b_ms": [
+        0.2451930046081543,
+        0.4844770133495331
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.40992601215839386,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 0,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.16371199488639832,
+        0.6808589696884155
+      ],
+      "interval_b_ms": [
+        0.1556359976530075,
+        0.7171409726142883
+      ],
+      "intersection_ms": 0.5171469748020172,
+      "span_ms": 0.5615049749612808,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 1,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.14766599237918854,
+        0.6784489750862122
+      ],
+      "interval_b_ms": [
+        0.20382799208164215,
+        0.7254909873008728
+      ],
+      "intersection_ms": 0.47462098300457,
+      "span_ms": 0.5778249949216843,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 1,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.21848000586032867,
+        0.6755800247192383
+      ],
+      "interval_b_ms": [
+        0.6973009705543518,
+        1.1594820022583008
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.9410019963979721,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 2,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.263482004404068,
+        0.7403839826583862
+      ],
+      "interval_b_ms": [
+        0.7599449753761292,
+        1.1662629842758179
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.9027809798717499,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 2,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.15864400565624237,
+        0.7178959846496582
+      ],
+      "interval_b_ms": [
+        0.14092299342155457,
+        0.7037749886512756
+      ],
+      "intersection_ms": 0.5451309829950333,
+      "span_ms": 0.5769729912281036,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 3,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.2437029927968979,
+        0.7812340259552002
+      ],
+      "interval_b_ms": [
+        0.26970601081848145,
+        0.7905550003051758
+      ],
+      "intersection_ms": 0.5115280151367188,
+      "span_ms": 0.5468520075082779,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 3,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.22351500391960144,
+        0.6957870125770569
+      ],
+      "interval_b_ms": [
+        0.7208690047264099,
+        1.1965420246124268
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.9730270206928253,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 4,
+      "mode": "serial",
+      "interval_a_ms": [
+        0.22379599511623383,
+        0.6922289729118347
+      ],
+      "interval_b_ms": [
+        0.7137899994850159,
+        1.1971139907836914
+      ],
+      "intersection_ms": 0.0,
+      "span_ms": 0.9733179956674576,
+      "oracle": "exact"
+    },
+    {
+      "blocks": 128,
+      "repeat": 4,
+      "mode": "parallel",
+      "interval_a_ms": [
+        0.28627699613571167,
+        0.8751630187034607
+      ],
+      "interval_b_ms": [
+        0.3081200122833252,
+        0.8838040232658386
+      ],
+      "intersection_ms": 0.5670430064201355,
+      "span_ms": 0.597527027130127,
+      "oracle": "exact"
+    }
+  ],
+  "source_sha256": "3aab20f9fad841507d25ddca764b8bbfda3935504acfe51abdc46f19873463ff",
+  "compiler_sha256": "43863544e60279a1b978b0ed2b4514a5acca01f9cb8a56d71f64be9272747207",
+  "image_sha256": "3f0411bce52a60e50c0592003f5b2e265d0b6327b51f9e2ecb0905cee015f34f",
+  "recorder_sha256": "20bbb0d0e19f3d7af3e618a30fb944e6516468c3e7aea1a0c0458e9fc0d8e5e4",
+  "timing": "device events relative to a shared recorded anchor; disjoint allocations",
+  "hardware_counter_attribution": false,
+  "selector_promotion": false
+}

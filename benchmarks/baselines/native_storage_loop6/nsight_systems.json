@@ -1,0 +1,389 @@
+{
+  "sqlite_sha256": "c7a7fefe5ea92dff5c942782c158f13e67e894a9566119da214d6a3e7a92c2f2",
+  "owning_host": "Super-Bear RTX5070",
+  "raw_report": "/tmp/loop6-queue-profile.nsys-rep",
+  "command": "nsys profile --trace=cuda --sample=none --cpuctxsw=none --force-overwrite=true -o /tmp/loop6-queue-profile .venv/bin/python benchmarks/record_native_queue_overlap.py --backend nvidia --compiler /usr/lib/llvm-23/bin/mlir-opt --repeats 1 --output /tmp/loop6-queues-profiled.json",
+  "kernel_intervals": [
+    {
+      "start_ns": 1717471820,
+      "end_ns": 1717522252,
+      "stream": 14,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1717513484,
+      "end_ns": 1717558572,
+      "stream": 15,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1717527596,
+      "end_ns": 1717572268,
+      "stream": 14,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1717562540,
+      "end_ns": 1717606604,
+      "stream": 15,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1717577260,
+      "end_ns": 1717621900,
+      "stream": 14,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1717608684,
+      "end_ns": 1717652748,
+      "stream": 15,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1718078380,
+      "end_ns": 1718122956,
+      "stream": 14,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1718128524,
+      "end_ns": 1718173036,
+      "stream": 14,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1740424856,
+      "end_ns": 1740469464,
+      "stream": 14,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1740469880,
+      "end_ns": 1740514392,
+      "stream": 15,
+      "blocks": 8,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770228840,
+      "end_ns": 1770277928,
+      "stream": 14,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770251048,
+      "end_ns": 1770297640,
+      "stream": 15,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770281096,
+      "end_ns": 1770326216,
+      "stream": 14,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770301480,
+      "end_ns": 1770346536,
+      "stream": 15,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770329352,
+      "end_ns": 1770374504,
+      "stream": 14,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770349864,
+      "end_ns": 1770394792,
+      "stream": 15,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770515240,
+      "end_ns": 1770559880,
+      "stream": 14,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1770564648,
+      "end_ns": 1770609160,
+      "stream": 14,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1796125590,
+      "end_ns": 1796170550,
+      "stream": 14,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1796154518,
+      "end_ns": 1796199446,
+      "stream": 15,
+      "blocks": 32,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1918874071,
+      "end_ns": 1918982583,
+      "stream": 14,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1918926807,
+      "end_ns": 1919051320,
+      "stream": 15,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1918986071,
+      "end_ns": 1919122680,
+      "stream": 14,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1919055704,
+      "end_ns": 1919197688,
+      "stream": 15,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1919124600,
+      "end_ns": 1919266520,
+      "stream": 14,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1919200376,
+      "end_ns": 1919327640,
+      "stream": 15,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1919410648,
+      "end_ns": 1919528952,
+      "stream": 14,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 1919533688,
+      "end_ns": 1919654200,
+      "stream": 14,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 2008405095,
+      "end_ns": 2008530823,
+      "stream": 14,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    },
+    {
+      "start_ns": 2008431815,
+      "end_ns": 2008532391,
+      "stream": 15,
+      "blocks": 128,
+      "registers": 16,
+      "shared_bytes": 1040,
+      "name": "ring"
+    }
+  ],
+  "cross_stream_intersections": [
+    {
+      "first": 0,
+      "second": 1,
+      "intersection_ns": 8768
+    },
+    {
+      "first": 1,
+      "second": 2,
+      "intersection_ns": 30976
+    },
+    {
+      "first": 2,
+      "second": 3,
+      "intersection_ns": 9728
+    },
+    {
+      "first": 3,
+      "second": 4,
+      "intersection_ns": 29344
+    },
+    {
+      "first": 4,
+      "second": 5,
+      "intersection_ns": 13216
+    },
+    {
+      "first": 10,
+      "second": 11,
+      "intersection_ns": 26880
+    },
+    {
+      "first": 11,
+      "second": 12,
+      "intersection_ns": 16544
+    },
+    {
+      "first": 12,
+      "second": 13,
+      "intersection_ns": 24736
+    },
+    {
+      "first": 13,
+      "second": 14,
+      "intersection_ns": 17184
+    },
+    {
+      "first": 14,
+      "second": 15,
+      "intersection_ns": 24640
+    },
+    {
+      "first": 18,
+      "second": 19,
+      "intersection_ns": 16032
+    },
+    {
+      "first": 20,
+      "second": 21,
+      "intersection_ns": 55776
+    },
+    {
+      "first": 21,
+      "second": 22,
+      "intersection_ns": 65249
+    },
+    {
+      "first": 22,
+      "second": 23,
+      "intersection_ns": 66976
+    },
+    {
+      "first": 23,
+      "second": 24,
+      "intersection_ns": 73088
+    },
+    {
+      "first": 24,
+      "second": 25,
+      "intersection_ns": 66144
+    },
+    {
+      "first": 28,
+      "second": 29,
+      "intersection_ns": 99008
+    }
+  ],
+  "includes_warmup": true,
+  "simultaneous_instruction_issue_proven": false,
+  "selector_promotion": false,
+  "measured_parallel_pairs": [
+    {
+      "blocks": 8,
+      "first_correlation_id": 46,
+      "second_correlation_id": 49,
+      "intersection_ns": 0
+    },
+    {
+      "blocks": 32,
+      "first_correlation_id": 97,
+      "second_correlation_id": 100,
+      "intersection_ns": 16032
+    },
+    {
+      "blocks": 128,
+      "first_correlation_id": 148,
+      "second_correlation_id": 151,
+      "intersection_ns": 99008
+    }
+  ],
+  "pair_extraction": "Per gridX, order 10 launches by correlationId: six warmups, two serial-control launches, two measured parallel launches. Intersect the last two kernel intervals."
+}

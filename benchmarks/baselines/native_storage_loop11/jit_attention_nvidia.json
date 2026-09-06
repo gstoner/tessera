@@ -1,0 +1,103 @@
+{
+  "rows": [
+    {
+      "sk": 5,
+      "wrt": [
+        "q"
+      ],
+      "package": "5a6ab63f81cb356354da0909c825153a2319df9343b17bd6805a4eaad78e62bd",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051"
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "k"
+      ],
+      "package": "3134515ab0786d0a192c7a149414f717ffe4458c61eacd99a96c0723f08e06c5",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051"
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "q",
+        "k"
+      ],
+      "package": "77eff636ae0a5d12d7bf32ce43c8ee5ae74c7670c30a7783c387d1173d0b6c7f",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051"
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "package": "4f8a09e2d0dd13e2bedde30551b9f9d5d07ec7c63e0b06ceef402be98f65b298",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051"
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "package": "47264204008adc1720a5bfeae14266c1246aebc13c931f470fd9fa93ac4f457c",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051"
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "q"
+      ],
+      "package": "b4d4cc4cad257322000fcaf3af81c2e392248971e65aed9c11ea1d8606bdcfba",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3"
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "k"
+      ],
+      "package": "22aeb26931f3c6840810eddadb1696cb161ef84b6ca0b677ac20826194900b21",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3"
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "q",
+        "k"
+      ],
+      "package": "57594a39ff7868774a8891573790f324bda931630d8cc111ea372a0b67124af0",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3"
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "package": "34b06bb102c81393c68c53073944d010cf62b758297b1890721fc87d4fc6affb",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3"
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "package": "0fd786b7e5eff339c73f67651dec821c0d5f1789dda32c11216816ec5b8651f4",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3"
+    }
+  ],
+  "backend": "nvidia_sm120",
+  "compiler_sha256": "cc5f81fac979e7043249cfc299c556b0e7d1af21863c4457131047dd639d59d0",
+  "source_hashes": {
+    "python/tessera/compiler/jit.py": "3251b9c453626068c885c705467a5d7b1803c390383b3f4d44b5bdf1a2a9665a",
+    "python/tessera/compiler/graph_ir.py": "52923c22ed361b08ca132d08739a8f46500e0f3c5bc1a8e410541c2a961f7e48",
+    "python/tessera/compiler/native_attention_program.py": "20185252a800549e9ebaeebfb3da09784cc0c10d41842a3e8485b3ab318b645d",
+    "python/tessera/compiler/native_attention_jvp.py": "d67ab532a31ce34752f567fef9f293154b1f60f9039c2eb151b2dbaa6a208003",
+    "python/tessera/compiler/resident_attention.py": "225bef56d8c11a4b8b058b248c09871507047b3d0963f166a5b7ecb9ee80f4bd",
+    "python/tessera/compiler/nvidia_native.py": "40b74b97b5e04a28c747a5a1bc2dc32fdcd38305fa584c15813bf11203f991ec"
+  },
+  "recorder_sha256": "20eee406896fc9a66abc3e94283d571f84373e53f473e66cb5b051eea2d2bf5a"
+}

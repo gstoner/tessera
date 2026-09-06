@@ -6903,3 +6903,32 @@ See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOL
 **Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 Parity validated on gfx1151 for 21 AD pair cases including sum/mean VJP. Attention interfaces and saved-residual forwarding have shared compiler evidence; follow-up required for native compound attention AD, AMD pending-ring execution, persistent tapes and measured HIP stream overlap. Existing WSL profiler counter limitations remain; CUDA NVGPU proofs and Metal command intervals do not transfer.
 See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Outstanding cohorts / saved LSE / queue attribution — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared ownership and saved-LSE contracts compile and pass on the owning WSL compiler host. Thirty gfx1151 serial/parallel queue pairs pass exact oracles and record GPU event intervals. NVGPU pending cohorts are not a HIP producer implementation. Follow-up required for HIP-specific multi-pending ownership/device proof, production attention/tapes and hardware attribution; current WSL profiler agents do not supply PMC/SPM evidence.
+See the [shared evidence and next boundaries](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Persistent snapshots / attention export / MSW-9 — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Twelve persistent snapshot/repeated-backward/nested-frame cases pass on gfx1151 WSL. Native attention checkpoint package export remains NVIDIA-only; follow-up required for ROCm consumers and Q/K JVP. Incoming RX9070XT is gfx1201 and will run native Ubuntu26.04; see [commissioning](NATIVE_RDNA4_COMMISSIONING.md). The probe correctly refuses current WSL/gfx1151 as incoming-host proof. Counter attribution remains unvalidated until the new host arrives. MSW-9 gates retain native/reference separation.
+See [implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Resident LSE / native ANN constants — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native ANN constant-composition policy assessed; compiler tests pass on Princess-Luna. CUDA context/module/allocation ownership is not applicable HIP execution evidence. Follow-up required for HIP resident attention, native Q/K JVP, split nested tapes and exact-device ANN equivalence/performance. Hardware-counter attribution remains awaiting the native gfx1201 host.
+See the integrated plan’s native ANN composition and resident attention generation section.
+
+
+**Typed nested exports / resident score tangents / promotion admission — W2.4a / MSW-9 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Follow-up required: the typed native AD export and arbiter admission contracts are shared and tested on the WSL host, but the new resident JVP consumer binds CUDA SM120 images. HIP tensor tape materialization, resident score tangents and ANN original/fused device evidence require independent ROCm implementation and validation. No CUDA evidence establishes gfx1151 support.
+See the integrated plan’s typed nested exports and resident score tangents section.
+
+
+**Automatic score JVP / control-flow inventory — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared native Q/K product verification and persistent snapshot allocation rollback are implemented; HIP Q/K product lowering and general persistent tensor tapes require follow-up. The CUDA consumer is not ROCm device proof. Control-flow documentation now includes existing cooperative ROCm envelopes without expanding them.
+
+
+**Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+The bounded split f32 tape consumer has a gfx1151 owning-device recorder. AMDGPU requires explicit private allocation address space 5, with distinct slots per nested iteration path. Follow-up required for dynamic/mixed-type tapes, parallel schedules and native attention Q/K consumers; CUDA attention results are not ROCm evidence. Hardware-counter attribution remains open.
+See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

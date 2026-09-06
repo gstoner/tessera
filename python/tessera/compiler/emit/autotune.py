@@ -680,7 +680,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
     live = live_candidates(region, op, target, inputs)
 
     rec = cache.get(key)
-    if rec is not None and _record_raced_the_live_field(rec, live, timing):
+    if rec is not None and record_is_admissible(rec) and _record_raced_the_live_field(rec, live, timing):
         # The exact-key hit is only usable if it beat the field racing now.
         # Validating solely that the winner is still live -- what this did
         # before -- accepted a legacy device row, or a partial one naming a
@@ -762,7 +762,7 @@ def measured_arbitrate(region: Any, op: str, target: str, *inputs: Any,
 
     separation = separation_verdict(latencies, spreads, winner.name)
     if (separation is not None and not separation["separated"]
-            and rec is not None and rec.winner in live
+            and rec is not None and record_is_admissible(rec) and rec.winner in live
             and rec.winner in latencies):
         # A tie must not thrash the selection. When this race cannot tell the
         # candidates apart and a previous run already picked one of them, keep

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-05
+last_updated: 2026-09-06
 audit_role: reference
 ---
 
@@ -14,6 +14,11 @@ This survey supplies evidence and disposition to
 [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
 Only that plan sequences work. [`README.md`](README.md) owns navigation; existing
 registries and their generated projections retain status authority.
+
+> September 6 routing update: the three AD documents in the dated catalog below
+> are now historical redirects. [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
+> owns their remaining work. The catalog counts below describe the original
+> survey, not the current live tree.
 
 ## Scope and confidence
 

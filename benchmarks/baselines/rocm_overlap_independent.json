@@ -1,0 +1,1001 @@
+{
+  "matched_isa": {
+    "instruction_count": 348,
+    "changed_wait_indices": [
+      114,
+      130,
+      149,
+      168,
+      225
+    ],
+    "all_other_instructions_identical": true
+  },
+  "processes": 5,
+  "selector_promotion": false,
+  "interpretation": "Includes instruction-count-matched vmcnt(63) control. Verify disassembly/resource parity; timing alone is not a hardware-counter causality proof.",
+  "summaries": [
+    {
+      "blocks": 32,
+      "width": 64,
+      "rounds": 7,
+      "control_over_prefetch": [
+        0.9995759956881163,
+        1.0295156566173105,
+        0.9987972621706396,
+        1.0681925134716064,
+        1.045265033064139
+      ],
+      "median_ratio": 1.0295156566173105,
+      "min_ratio": 0.9987972621706396,
+      "max_ratio": 1.0681925134716064,
+      "runs_favoring_prefetch": 3,
+      "control_over_nonblocking": [
+        1.0147007019107146,
+        1.0920628041289333,
+        0.9863384231182781,
+        1.0436514207597765,
+        0.9806055589027184
+      ],
+      "matched_median_ratio": 1.0147007019107146,
+      "matched_runs_favoring_nonblocking": 3
+    },
+    {
+      "blocks": 256,
+      "width": 256,
+      "rounds": 33,
+      "control_over_prefetch": [
+        1.0165975824783449,
+        1.0019668936597168,
+        1.0340110722536417,
+        1.011014433760718,
+        0.9991466490556623
+      ],
+      "median_ratio": 1.011014433760718,
+      "min_ratio": 0.9991466490556623,
+      "max_ratio": 1.0340110722536417,
+      "runs_favoring_prefetch": 4,
+      "control_over_nonblocking": [
+        1.0171444997111254,
+        1.0044699597874795,
+        1.0256449098230034,
+        1.0250413569561279,
+        1.0166688843633978
+      ],
+      "matched_median_ratio": 1.0171444997111254,
+      "matched_runs_favoring_nonblocking": 5
+    },
+    {
+      "blocks": 256,
+      "width": 256,
+      "rounds": 65,
+      "control_over_prefetch": [
+        1.0227904072602638,
+        1.0294597849440406,
+        1.0191812916734098,
+        1.0309891443341084,
+        1.0223983359718074
+      ],
+      "median_ratio": 1.0227904072602638,
+      "min_ratio": 1.0191812916734098,
+      "max_ratio": 1.0309891443341084,
+      "runs_favoring_prefetch": 5,
+      "control_over_nonblocking": [
+        1.0221062403139407,
+        1.0244278514230045,
+        1.014774659997364,
+        1.0273385555104035,
+        1.0207310955493596
+      ],
+      "matched_median_ratio": 1.0221062403139407,
+      "matched_runs_favoring_nonblocking": 5
+    }
+  ],
+  "packets": [
+    {
+      "backend": "rocm",
+      "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+      "source_sha256": "2072d9936a19842c2cb9dadcb43208cd9ea639360d3c4801be6f1fd0e368b004",
+      "recorder_sha256": "3d4325ed8957bc314b156491d3ef72bee6af4dc4e8f5c4605b59275980a8126d",
+      "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+      "images": {
+        "prefetch": "39a7bdebfbcf5072a1e32311e93dc9e01d1bab907c65936047b4aec94f9e6ce6",
+        "immediate_wait": "064cf67aac8b51dc3d39a5dce8604153bb24a0e65e7dc31f953d0d4e6ca0ceee",
+        "nonblocking_wait": "f59f6e6516ce1c586b1d82aafa158e6f09bc0d99ca6101b991939f92872968d5"
+      },
+      "timing": "resident HIP events; randomized per-trial order",
+      "process_id": 2753681,
+      "seed": 0,
+      "trials": 11,
+      "launches": 50,
+      "resources": {
+        "prefetch": "\nFile: /tmp/rocm-release-evidence/run-0/prefetch.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "immediate_wait": "\nFile: /tmp/rocm-release-evidence/run-0/immediate_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "nonblocking_wait": "\nFile: /tmp/rocm-release-evidence/run-0/nonblocking_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n"
+      },
+      "selector_promotion": false,
+      "rows": [
+        {
+          "blocks": 32,
+          "width": 64,
+          "rounds": 7,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.005055360198020935,
+              0.0034053000807762147,
+              0.003507919907569885,
+              0.0034385201334953307,
+              0.0032605201005935667,
+              0.003302119970321655,
+              0.003567120134830475,
+              0.003256700038909912,
+              0.002918500006198883,
+              0.003266119956970215,
+              0.0031461000442504885
+            ],
+            "immediate_wait": [
+              0.0033007198572158813,
+              0.0033461201190948487,
+              0.00357371985912323,
+              0.0033175000548362732,
+              0.003235499858856201,
+              0.0033184999227523805,
+              0.0032953199744224547,
+              0.003624919950962067,
+              0.0032708999514579774,
+              0.00326990008354187,
+              0.0031362998485565184
+            ],
+            "nonblocking_wait": [
+              0.0032528999447822573,
+              0.003241119980812073,
+              0.0034387201070785523,
+              0.0034429198503494263,
+              0.003568719923496246,
+              0.0034922999143600464,
+              0.0031797000765800476,
+              0.0032921001315116883,
+              0.0032256999611854553,
+              0.003152099847793579,
+              0.003216499984264374
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.003302119970321655,
+            "immediate_wait": 0.0033007198572158813,
+            "nonblocking_wait": 0.0032528999447822573
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 33,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.017108160257339477,
+              0.017342180013656616,
+              0.01736978054046631,
+              0.016458740234375,
+              0.016464560031890868,
+              0.016319539546966553,
+              0.01677736043930054,
+              0.01639973998069763,
+              0.01681555986404419,
+              0.01673856019973755,
+              0.016716760396957398
+            ],
+            "immediate_wait": [
+              0.017612780332565307,
+              0.01750659942626953,
+              0.01685538053512573,
+              0.017039380073547362,
+              0.016713759899139403,
+              0.017087579965591432,
+              0.017016379833221434,
+              0.016771160364151,
+              0.01687675952911377,
+              0.016944559812545775,
+              0.017099159955978393
+            ],
+            "nonblocking_wait": [
+              0.017022780179977416,
+              0.017251579761505126,
+              0.01737977981567383,
+              0.016679359674453734,
+              0.016729559898376465,
+              0.016768159866333007,
+              0.016523139476776125,
+              0.016297140121459962,
+              0.016700359582901,
+              0.016813160181045533,
+              0.01650156021118164
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.01673856019973755,
+            "immediate_wait": 0.017016379833221434,
+            "nonblocking_wait": 0.016729559898376465
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 65,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.030912261009216308,
+              0.031351079940795896,
+              0.030520238876342774,
+              0.03034804105758667,
+              0.030267620086669923,
+              0.03217849969863892,
+              0.030163838863372802,
+              0.030413041114807127,
+              0.030987460613250733,
+              0.030444839000701905,
+              0.03047863960266113
+            ],
+            "immediate_wait": [
+              0.03199709892272949,
+              0.03213350057601929,
+              0.032083899974823,
+              0.030932660102844237,
+              0.03085926055908203,
+              0.03018824100494385,
+              0.03134068012237549,
+              0.03159847974777222,
+              0.03117326021194458,
+              0.030703439712524414,
+              0.031151061058044435
+            ],
+            "nonblocking_wait": [
+              0.031007859706878662,
+              0.03144808053970337,
+              0.03002542018890381,
+              0.03036806106567383,
+              0.030309441089630126,
+              0.03061366081237793,
+              0.03040884017944336,
+              0.03069406032562256,
+              0.030543439388275147,
+              0.030499041080474854,
+              0.03020684003829956
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.03047863960266113,
+            "immediate_wait": 0.03117326021194458,
+            "nonblocking_wait": 0.030499041080474854
+          }
+        }
+      ]
+    },
+    {
+      "backend": "rocm",
+      "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+      "source_sha256": "2072d9936a19842c2cb9dadcb43208cd9ea639360d3c4801be6f1fd0e368b004",
+      "recorder_sha256": "3d4325ed8957bc314b156491d3ef72bee6af4dc4e8f5c4605b59275980a8126d",
+      "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+      "images": {
+        "prefetch": "39a7bdebfbcf5072a1e32311e93dc9e01d1bab907c65936047b4aec94f9e6ce6",
+        "immediate_wait": "064cf67aac8b51dc3d39a5dce8604153bb24a0e65e7dc31f953d0d4e6ca0ceee",
+        "nonblocking_wait": "f59f6e6516ce1c586b1d82aafa158e6f09bc0d99ca6101b991939f92872968d5"
+      },
+      "timing": "resident HIP events; randomized per-trial order",
+      "process_id": 2753876,
+      "seed": 1,
+      "trials": 11,
+      "launches": 50,
+      "resources": {
+        "prefetch": "\nFile: /tmp/rocm-release-evidence/run-1/prefetch.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "immediate_wait": "\nFile: /tmp/rocm-release-evidence/run-1/immediate_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "nonblocking_wait": "\nFile: /tmp/rocm-release-evidence/run-1/nonblocking_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n"
+      },
+      "selector_promotion": false,
+      "rows": [
+        {
+          "blocks": 32,
+          "width": 64,
+          "rounds": 7,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.00312171995639801,
+              0.003586539924144745,
+              0.0036793598532676697,
+              0.0033895400166511535,
+              0.0036491599678993227,
+              0.00319132000207901,
+              0.0036671599745750428,
+              0.00341513991355896,
+              0.003509339988231659,
+              0.003386339843273163,
+              0.003289540112018585
+            ],
+            "immediate_wait": [
+              0.006630679965019226,
+              0.003603540062904358,
+              0.003176740109920502,
+              0.00371755987405777,
+              0.004238980114459992,
+              0.003594540059566498,
+              0.0033403399586677553,
+              0.0032639399170875548,
+              0.003515940010547638,
+              0.003352740108966827,
+              0.003459340035915375
+            ],
+            "nonblocking_wait": [
+              0.003188120126724243,
+              0.0033809399604797364,
+              0.003665759861469269,
+              0.003300740122795105,
+              0.0035459598898887634,
+              0.00339354008436203,
+              0.0032195401191711425,
+              0.003120740056037903,
+              0.003118540048599243,
+              0.0032007399201393126,
+              0.003194139897823334
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.00341513991355896,
+            "immediate_wait": 0.003515940010547638,
+            "nonblocking_wait": 0.0032195401191711425
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 33,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.016685960292816163,
+              0.017125799655914306,
+              0.017244199514389037,
+              0.017123780250549316,
+              0.01672577977180481,
+              0.016168160438537596,
+              0.017182600498199464,
+              0.016481159925460814,
+              0.016200560331344604,
+              0.015828540325164796,
+              0.01580351948738098
+            ],
+            "immediate_wait": [
+              0.017452419996261598,
+              0.017249399423599245,
+              0.017020180225372314,
+              0.017108999490737915,
+              0.016328760385513306,
+              0.016495360136032103,
+              0.018253040313720704,
+              0.016698360443115234,
+              0.01670878052711487,
+              0.01671877980232239,
+              0.01658336043357849
+            ],
+            "nonblocking_wait": [
+              0.016759979724884033,
+              0.01664438009262085,
+              0.017108399868011475,
+              0.016829580068588257,
+              0.01664337992668152,
+              0.016835579872131346,
+              0.016787199974060057,
+              0.016531779766082763,
+              0.016184760332107542,
+              0.015809340476989744,
+              0.016345360279083253
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.016685960292816163,
+            "immediate_wait": 0.01671877980232239,
+            "nonblocking_wait": 0.01664438009262085
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 65,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.030844180583953856,
+              0.03051055908203125,
+              0.029886140823364257,
+              0.02954011917114258,
+              0.02947751998901367,
+              0.030237960815429687,
+              0.03160621881484985,
+              0.030332560539245604,
+              0.029577119350433348,
+              0.029547719955444335,
+              0.02957792043685913
+            ],
+            "immediate_wait": [
+              0.03128159999847412,
+              0.0315322208404541,
+              0.030464959144592286,
+              0.03078577995300293,
+              0.03076658010482788,
+              0.0300913405418396,
+              0.03145279884338379,
+              0.031017799377441407,
+              0.02979491949081421,
+              0.030599958896636963,
+              0.03032495975494385
+            ],
+            "nonblocking_wait": [
+              0.030704779624938963,
+              0.030506160259246826,
+              0.03003293991088867,
+              0.029610118865966796,
+              0.029592320919036866,
+              0.030652558803558348,
+              0.030574560165405273,
+              0.029861519336700438,
+              0.030103540420532225,
+              0.029500899314880372,
+              0.029467499256134032
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.029886140823364257,
+            "immediate_wait": 0.03076658010482788,
+            "nonblocking_wait": 0.03003293991088867
+          }
+        }
+      ]
+    },
+    {
+      "backend": "rocm",
+      "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+      "source_sha256": "2072d9936a19842c2cb9dadcb43208cd9ea639360d3c4801be6f1fd0e368b004",
+      "recorder_sha256": "3d4325ed8957bc314b156491d3ef72bee6af4dc4e8f5c4605b59275980a8126d",
+      "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+      "images": {
+        "prefetch": "39a7bdebfbcf5072a1e32311e93dc9e01d1bab907c65936047b4aec94f9e6ce6",
+        "immediate_wait": "064cf67aac8b51dc3d39a5dce8604153bb24a0e65e7dc31f953d0d4e6ca0ceee",
+        "nonblocking_wait": "f59f6e6516ce1c586b1d82aafa158e6f09bc0d99ca6101b991939f92872968d5"
+      },
+      "timing": "resident HIP events; randomized per-trial order",
+      "process_id": 2754035,
+      "seed": 2,
+      "trials": 11,
+      "launches": 50,
+      "resources": {
+        "prefetch": "\nFile: /tmp/rocm-release-evidence/run-2/prefetch.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "immediate_wait": "\nFile: /tmp/rocm-release-evidence/run-2/immediate_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "nonblocking_wait": "\nFile: /tmp/rocm-release-evidence/run-2/nonblocking_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n"
+      },
+      "selector_promotion": false,
+      "rows": [
+        {
+          "blocks": 32,
+          "width": 64,
+          "rounds": 7,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.004985100030899048,
+              0.0033862000703811647,
+              0.0031891798973083495,
+              0.0033574000000953673,
+              0.0032853999733924865,
+              0.0036600199341773987,
+              0.0032361999154090883,
+              0.00340362012386322,
+              0.0033017998933792115,
+              0.0033092001080513,
+              0.00328359991312027
+            ],
+            "immediate_wait": [
+              0.0033052200078964233,
+              0.0036656400561332703,
+              0.003475799858570099,
+              0.004016639888286591,
+              0.0038684400916099548,
+              0.003242799937725067,
+              0.003514019846916199,
+              0.0032534000277519228,
+              0.003215399980545044,
+              0.0032299798727035522,
+              0.0032493999600410463
+            ],
+            "nonblocking_wait": [
+              0.0033509999513626097,
+              0.0033776000142097472,
+              0.003585219979286194,
+              0.003365600109100342,
+              0.0031433799862861634,
+              0.0033184000849723816,
+              0.0036064198613166808,
+              0.003130980134010315,
+              0.003158780038356781,
+              0.0030970001220703126,
+              0.004005059897899628
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.0033092001080513,
+            "immediate_wait": 0.0033052200078964233,
+            "nonblocking_wait": 0.0033509999513626097
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 33,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.017114280462265014,
+              0.016948280334472657,
+              0.016924879550933837,
+              0.01686228036880493,
+              0.016044420003890992,
+              0.016454639434814452,
+              0.016437660455703735,
+              0.016153219938278198,
+              0.016535439491271973,
+              0.01641584038734436,
+              0.016330440044403077
+            ],
+            "immediate_wait": [
+              0.017779120206832887,
+              0.017243080139160157,
+              0.01738510012626648,
+              0.01725849986076355,
+              0.017291699647903443,
+              0.016805659532546997,
+              0.016879680156707762,
+              0.016732460260391234,
+              0.01670207977294922,
+              0.016706459522247315,
+              0.01701427936553955
+            ],
+            "nonblocking_wait": [
+              0.018415980339050293,
+              0.017022279500961305,
+              0.016887279748916625,
+              0.01718089938163757,
+              0.016836860179901124,
+              0.016394039392471315,
+              0.01658885955810547,
+              0.016458640098571776,
+              0.0163482403755188,
+              0.016225240230560302,
+              0.016239639520645142
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.016454639434814452,
+            "immediate_wait": 0.01701427936553955,
+            "nonblocking_wait": 0.01658885955810547
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 65,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.030853359699249266,
+              0.031509780883789064,
+              0.030039498805999754,
+              0.030124518871307373,
+              0.030145919322967528,
+              0.030110700130462645,
+              0.03028752088546753,
+              0.03026711940765381,
+              0.030446720123291016,
+              0.030084500312805174,
+              0.030259718894958498
+            ],
+            "immediate_wait": [
+              0.03144577980041504,
+              0.03164860010147095,
+              0.03070094108581543,
+              0.03067214012145996,
+              0.030589540004730225,
+              0.030840139389038086,
+              0.03092655897140503,
+              0.030727739334106444,
+              0.031447179317474365,
+              0.030879158973693848,
+              0.030734739303588866
+            ],
+            "nonblocking_wait": [
+              0.030763158798217772,
+              0.03338212013244629,
+              0.03098036050796509,
+              0.029948298931121827,
+              0.029534459114074707,
+              0.03027211904525757,
+              0.030470540523529054,
+              0.030391120910644533,
+              0.030527939796447755,
+              0.030191121101379396,
+              0.030105700492858888
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.030259718894958498,
+            "immediate_wait": 0.030840139389038086,
+            "nonblocking_wait": 0.030391120910644533
+          }
+        }
+      ]
+    },
+    {
+      "backend": "rocm",
+      "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+      "source_sha256": "2072d9936a19842c2cb9dadcb43208cd9ea639360d3c4801be6f1fd0e368b004",
+      "recorder_sha256": "3d4325ed8957bc314b156491d3ef72bee6af4dc4e8f5c4605b59275980a8126d",
+      "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+      "images": {
+        "prefetch": "39a7bdebfbcf5072a1e32311e93dc9e01d1bab907c65936047b4aec94f9e6ce6",
+        "immediate_wait": "064cf67aac8b51dc3d39a5dce8604153bb24a0e65e7dc31f953d0d4e6ca0ceee",
+        "nonblocking_wait": "f59f6e6516ce1c586b1d82aafa158e6f09bc0d99ca6101b991939f92872968d5"
+      },
+      "timing": "resident HIP events; randomized per-trial order",
+      "process_id": 2754192,
+      "seed": 3,
+      "trials": 11,
+      "launches": 50,
+      "resources": {
+        "prefetch": "\nFile: /tmp/rocm-release-evidence/run-3/prefetch.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "immediate_wait": "\nFile: /tmp/rocm-release-evidence/run-3/immediate_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "nonblocking_wait": "\nFile: /tmp/rocm-release-evidence/run-3/nonblocking_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n"
+      },
+      "selector_promotion": false,
+      "rows": [
+        {
+          "blocks": 32,
+          "width": 64,
+          "rounds": 7,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.003476879894733429,
+              0.003545680046081543,
+              0.0036204999685287478,
+              0.0035958799719810488,
+              0.003478679955005646,
+              0.003539099991321564,
+              0.0033306801319122315,
+              0.003442299962043762,
+              0.0032822799682617186,
+              0.0039013200998306275,
+              0.003255079984664917
+            ],
+            "immediate_wait": [
+              0.007325779795646668,
+              0.0038537201285362243,
+              0.0037240999937057494,
+              0.0037158998847007753,
+              0.0035071000456809998,
+              0.003262679874897003,
+              0.0036039000749588015,
+              0.00371969997882843,
+              0.00413670003414154,
+              0.0036421000957489015,
+              0.0033992999792099
+            ],
+            "nonblocking_wait": [
+              0.003342280089855194,
+              0.0036326998472213743,
+              0.0035604798793792726,
+              0.003411099910736084,
+              0.003453480005264282,
+              0.0033084800839424133,
+              0.003996320068836212,
+              0.003732300102710724,
+              0.0035916998982429504,
+              0.0036581000685691834,
+              0.003288680016994476
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.003478679955005646,
+            "immediate_wait": 0.0037158998847007753,
+            "nonblocking_wait": 0.0035604798793792726
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 33,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.017332860231399537,
+              0.017098660469055175,
+              0.01705325961112976,
+              0.017126059532165526,
+              0.016997640132904054,
+              0.016027599573135376,
+              0.016733039617538453,
+              0.016100599765777587,
+              0.01767348051071167,
+              0.01673923969268799,
+              0.01655503988265991
+            ],
+            "immediate_wait": [
+              0.017588679790496827,
+              0.01730926036834717,
+              0.017630879878997804,
+              0.01727365970611572,
+              0.01648882031440735,
+              0.01672144055366516,
+              0.016604219675064088,
+              0.017231459617614745,
+              0.017054259777069092,
+              0.017039439678192138,
+              0.01718485951423645
+            ],
+            "nonblocking_wait": [
+              0.01702664017677307,
+              0.018144500255584717,
+              0.017153860330581666,
+              0.01741145968437195,
+              0.016813639402389526,
+              0.016415820121765137,
+              0.01637079954147339,
+              0.016196999549865723,
+              0.016765040159225465,
+              0.01648982048034668,
+              0.01664504051208496
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.016997640132904054,
+            "immediate_wait": 0.01718485951423645,
+            "nonblocking_wait": 0.016765040159225465
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 65,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.031734540462493896,
+              0.03131112098693847,
+              0.030653500556945802,
+              0.02990828037261963,
+              0.029671640396118165,
+              0.02980046033859253,
+              0.030232279300689696,
+              0.02975666046142578,
+              0.029681060314178467,
+              0.03004987955093384,
+              0.030269479751586913
+            ],
+            "immediate_wait": [
+              0.03169234037399292,
+              0.03160072088241577,
+              0.030536079406738283,
+              0.031066899299621583,
+              0.03048788070678711,
+              0.030814499855041505,
+              0.030445880889892578,
+              0.031138300895690918,
+              0.030808899402618408,
+              0.03126790046691894,
+              0.0309810996055603
+            ],
+            "nonblocking_wait": [
+              0.030941700935363768,
+              0.031021900177001953,
+              0.0298482608795166,
+              0.03028546094894409,
+              0.02982546091079712,
+              0.029829258918762206,
+              0.029942259788513184,
+              0.02992825984954834,
+              0.030156660079956054,
+              0.030438880920410156,
+              0.030431280136108397
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.03004987955093384,
+            "immediate_wait": 0.0309810996055603,
+            "nonblocking_wait": 0.030156660079956054
+          }
+        }
+      ]
+    },
+    {
+      "backend": "rocm",
+      "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+      "source_sha256": "2072d9936a19842c2cb9dadcb43208cd9ea639360d3c4801be6f1fd0e368b004",
+      "recorder_sha256": "3d4325ed8957bc314b156491d3ef72bee6af4dc4e8f5c4605b59275980a8126d",
+      "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+      "images": {
+        "prefetch": "39a7bdebfbcf5072a1e32311e93dc9e01d1bab907c65936047b4aec94f9e6ce6",
+        "immediate_wait": "064cf67aac8b51dc3d39a5dce8604153bb24a0e65e7dc31f953d0d4e6ca0ceee",
+        "nonblocking_wait": "f59f6e6516ce1c586b1d82aafa158e6f09bc0d99ca6101b991939f92872968d5"
+      },
+      "timing": "resident HIP events; randomized per-trial order",
+      "process_id": 2754348,
+      "seed": 4,
+      "trials": 11,
+      "launches": 50,
+      "resources": {
+        "prefetch": "\nFile: /tmp/rocm-release-evidence/run-4/prefetch.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "immediate_wait": "\nFile: /tmp/rocm-release-evidence/run-4/immediate_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n",
+        "nonblocking_wait": "\nFile: /tmp/rocm-release-evidence/run-4/nonblocking_wait.bin\nFormat: elf64-amdgpu\nArch: amdgpu\nAddressSize: 64bit\nLoadName: <Not found>\nNoteSections [\n  NoteSection {\n    Name: .note\n    Offset: 0x200\n    Size: 0x508\n    Notes [\n      {\n        Owner: AMDGPU\n        Data size: 0x4F2\n        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)\n        AMDGPU Metadata: ---\namdhsa.kernels:\n  - .args:\n      - .address_space:  global\n        .offset:         0\n        .size:           8\n        .value_kind:     global_buffer\n      - .address_space:  global\n        .offset:         8\n        .size:           8\n        .value_kind:     global_buffer\n      - .offset:         16\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         24\n        .size:           8\n        .value_kind:     by_value\n      - .offset:         32\n        .size:           4\n        .value_kind:     hidden_block_count_x\n      - .offset:         36\n        .size:           4\n        .value_kind:     hidden_block_count_y\n      - .offset:         40\n        .size:           4\n        .value_kind:     hidden_block_count_z\n      - .offset:         44\n        .size:           2\n        .value_kind:     hidden_group_size_x\n      - .offset:         46\n        .size:           2\n        .value_kind:     hidden_group_size_y\n      - .offset:         48\n        .size:           2\n        .value_kind:     hidden_group_size_z\n      - .offset:         50\n        .size:           2\n        .value_kind:     hidden_remainder_x\n      - .offset:         52\n        .size:           2\n        .value_kind:     hidden_remainder_y\n      - .offset:         54\n        .size:           2\n        .value_kind:     hidden_remainder_z\n      - .offset:         72\n        .size:           8\n        .value_kind:     hidden_global_offset_x\n      - .offset:         80\n        .size:           8\n        .value_kind:     hidden_global_offset_y\n      - .offset:         88\n        .size:           8\n        .value_kind:     hidden_global_offset_z\n      - .offset:         96\n        .size:           2\n        .value_kind:     hidden_grid_dims\n    .group_segment_fixed_size: 0\n    .kernarg_segment_align: 8\n    .kernarg_segment_size: 288\n    .max_flat_workgroup_size: 256\n    .name:           scratch\n    .private_segment_fixed_size: 0\n    .sgpr_count:     28\n    .sgpr_spill_count: 0\n    .symbol:         scratch.kd\n    .uniform_work_group_size: 1\n    .uses_dynamic_stack: false\n    .vgpr_count:     16\n    .vgpr_spill_count: 0\n    .wavefront_size: 32\n    .workgroup_processor_mode: 1\namdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1151\namdhsa.version:\n  - 1\n  - 2\n...\n\n      }\n    ]\n  }\n]\n"
+      },
+      "selector_promotion": false,
+      "rows": [
+        {
+          "blocks": 32,
+          "width": 64,
+          "rounds": 7,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.0032797199487686157,
+              0.003685719966888428,
+              0.0034257200360298156,
+              0.0034247198700904846,
+              0.0034427198767662047,
+              0.0035085400938987734,
+              0.003360520005226135,
+              0.003526340126991272,
+              0.0033625200390815734,
+              0.003248319923877716,
+              0.003263919949531555
+            ],
+            "immediate_wait": [
+              0.0036213400959968565,
+              0.0034755200147628786,
+              0.0031762999296188355,
+              0.003752340078353882,
+              0.0034873199462890623,
+              0.003595939874649048,
+              0.0037699198722839357,
+              0.003513520061969757,
+              0.0038077399134635926,
+              0.0035797399282455444,
+              0.0035011398792266844
+            ],
+            "nonblocking_wait": [
+              0.0037445399165153504,
+              0.003822140097618103,
+              0.0034049201011657716,
+              0.0036589199304580687,
+              0.0034307199716567993,
+              0.004044159948825836,
+              0.005125179886817932,
+              0.0035821399092674255,
+              0.0036505401134490968,
+              0.003418920040130615,
+              0.0033357200026512147
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.0034247198700904846,
+            "immediate_wait": 0.0035797399282455444,
+            "nonblocking_wait": 0.0036505401134490968
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 33,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.01712321996688843,
+              0.017019820213317872,
+              0.016997220516204833,
+              0.01708184003829956,
+              0.01622820019721985,
+              0.016396019458770752,
+              0.016218400001525878,
+              0.016873819828033446,
+              0.01690003991127014,
+              0.01609660029411316,
+              0.01602097988128662
+            ],
+            "immediate_wait": [
+              0.01753306031227112,
+              0.017518839836120605,
+              0.017461639642715455,
+              0.017565239667892456,
+              0.017363640069961547,
+              0.016479599475860595,
+              0.01685942053794861,
+              0.016497600078582763,
+              0.016751819849014284,
+              0.016577019691467285,
+              0.016656219959259033
+            ],
+            "nonblocking_wait": [
+              0.01712321996688843,
+              0.017358839511871338,
+              0.016976020336151122,
+              0.017670060396194457,
+              0.01696723937988281,
+              0.016290799379348755,
+              0.01623819947242737,
+              0.01658300042152405,
+              0.016287800073623657,
+              0.016315399408340453,
+              0.016271400451660156
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.016873819828033446,
+            "immediate_wait": 0.01685942053794861,
+            "nonblocking_wait": 0.01658300042152405
+          }
+        },
+        {
+          "blocks": 256,
+          "width": 256,
+          "rounds": 65,
+          "oracle": "exact",
+          "hip_event_ms": {
+            "prefetch": [
+              0.03121649980545044,
+              0.030989499092102052,
+              0.030891480445861815,
+              0.029880440235137938,
+              0.03024425983428955,
+              0.029968440532684326,
+              0.030488879680633546,
+              0.03005903959274292,
+              0.030103259086608887,
+              0.02988624095916748,
+              0.030373260974884034
+            ],
+            "immediate_wait": [
+              0.03182192087173462,
+              0.033359799385070804,
+              0.03064307928085327,
+              0.03138750076293945,
+              0.03082547903060913,
+              0.030862081050872802,
+              0.030757498741149903,
+              0.031179699897766113,
+              0.03102669954299927,
+              0.03069988012313843,
+              0.03092168092727661
+            ],
+            "nonblocking_wait": [
+              0.030981700420379638,
+              0.030992100238800047,
+              0.029228200912475587,
+              0.030319859981536867,
+              0.030293660163879396,
+              0.030197460651397705,
+              0.03044708013534546,
+              0.029669620990753175,
+              0.029986438751220704,
+              0.030531680583953856,
+              0.029197020530700682
+            ]
+          },
+          "median_ms": {
+            "prefetch": 0.03024425983428955,
+            "immediate_wait": 0.03092168092727661,
+            "nonblocking_wait": 0.030293660163879396
+          }
+        }
+      ]
+    }
+  ],
+  "driver_sha256": "d852e5419f06e102ff01655ae470385d5a960f037e554d3893e1917a1b51ca7a"
+}

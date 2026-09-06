@@ -1,0 +1,53 @@
+{
+  "rows": [
+    {
+      "width": 1,
+      "rounds": 0,
+      "native_bytes": 16,
+      "oracle": "exact"
+    },
+    {
+      "width": 17,
+      "rounds": 1,
+      "native_bytes": 80,
+      "oracle": "exact"
+    },
+    {
+      "width": 32,
+      "rounds": 7,
+      "native_bytes": 128,
+      "oracle": "exact"
+    },
+    {
+      "width": 64,
+      "rounds": 17,
+      "native_bytes": 256,
+      "oracle": "exact"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "native_bytes": 512,
+      "oracle": "exact"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "native_bytes": 1024,
+      "oracle": "exact"
+    }
+  ],
+  "package_digest": "9bb39e02dd9b88ab4a2ed44c794ba9fa9a630867c4f6222df2d10e2ff71414e6",
+  "device": "Apple M1 Max",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "runtime_sha256": "d8edb2a230d57683d5d00e1f16145394af4b1f8c1732d61ed4ddca609111d364",
+  "binding_sha256": "a76882f8b8468b7c015ec0b34994e65ca4576d41de9f8d460e6e76d60bd1ac66",
+  "compiler_sha256": "df81b4dc39e6344650748d243c27735c659ec0c6165cbf0549176593903185fe",
+  "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin\n",
+  "artifact_digest": "e312530511733af684c6061256c4fcdfe6c4e782d78a47ffa26fb41b946becdc",
+  "bridge_sha256": "b20081b29208d173775ede6d006db543a1f73fbdf688c83c471d736a21c3968b",
+  "recorder_sha256": "cdf92aea227bd8a35e3e3ada6c598936de5c3b29c94d39bed291f5b1d4cd9b95",
+  "placement": "resident Metal DeviceTensor on runtime device and queue",
+  "selector_promotion": false,
+  "boundary": "explicit raw buffer/index package; caller owns extents and launch geometry"
+}

@@ -1,0 +1,112 @@
+{
+  "backend": "rocm",
+  "rows": [
+    {
+      "family": "sum",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "696e4f7b2fa13340e94612b87496c1aa5e6e40b994fa496ae54463d5cf0b6024"
+    },
+    {
+      "family": "sum",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "482245f73d88b769e8a57cd2eb87bf0036bc19a01a0477a98ba8f7863320c7ea"
+    },
+    {
+      "family": "sum",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "b669d9bfb3ed876ea14edfa91bd5f4264c0e65c225fa63ce54211c34961d7aa9"
+    },
+    {
+      "family": "mean",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "854a5433b29391f1c0635e9c425cbf1f931f1fa87f321b9403a4596d101792cc"
+    },
+    {
+      "family": "mean",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "377812b0f6fb580266f167bc5756ff4efc400da256fae509fc9867c7e545721f"
+    },
+    {
+      "family": "mean",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "8832515f703c7b6897432be79f328990c676e1175ac6c4616e07443f981cea59"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "6a5834eb9538a00e24563eaf44ebb3be181e7e786a976abd51d0848c7f256518"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "0f8641345174cc710013643f03dbe26eb7e8c7ee4d46871fb3272acf013d5674"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "0e22569f98fb8022504dc7cb2e6c137e4042a1759444b06d8de4962f4b33ebb8"
+    },
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "fa925459c82eeb5cca36579a42afeffe18de7b5c39e114bb35c7270b85c4ceb1"
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "e0a7541e30d811a27c4fd9e205735d309273e6d7f1aff2f53bb4c9752c564bcf"
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "9cf6e59776e2271baa1f35f5bfadac7cd56d3960ad6b0981a383836c4230ddb1"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "4d522644a8cb68645d4c58c3ec7125a2dbde5809cf946eed2fe7ca99aa208cc8"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "73be1684aeaaf4faf2e80bb9327afd6d19407da81483aff97b709927dc141d15"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "a71e59fd3f032fbed8b8f3c24f58250b1db32abb244f30cf052367fefa5cafed"
+    }
+  ],
+  "compiler_sha256": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+  "recorder_sha256": "cd2648b5f79a532aec29ace9acff00d045193f8642ca6e8a34f52fee1b81970f"
+}

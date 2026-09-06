@@ -1,0 +1,46 @@
+{
+  "backend": "nvidia",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "source_sha256": "5e6006577f5efa870a309ebb93d930befa0e24bdd1586d01f5a5f80707b831d6",
+  "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+  "package_digest": "59b45acf4f0f0ecdd17d6216472b254fb18b3aca7d54d0d0933a68fd57a15f7f",
+  "recorder_sha256": "3a35d5187340a45a26865a80dd7c14b7ac7a66996190ee27fe7f0bed82eccd43",
+  "rows": [
+    {
+      "width": 32,
+      "rounds": 0,
+      "oracle": "exact",
+      "native_bytes": 128,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 1,
+      "oracle": "exact",
+      "native_bytes": 128,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 64,
+      "rounds": 7,
+      "oracle": "exact",
+      "native_bytes": 256,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "oracle": "exact",
+      "native_bytes": 512,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    }
+  ],
+  "selector_promotion": false
+}

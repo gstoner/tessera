@@ -1,0 +1,105 @@
+{
+  "backend": "rocm",
+  "device": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "runtime_sources": {
+    "python/tessera/compiler/jit.py": "96ef30127b393deee9f65f286177655927876eaeb53609e65fc8139564144c85",
+    "python/tessera/compiler/native_storage_jvp.py": "e860b139281578d52e039542d4a3e1f8254a8a53ba0d156be89cb0c8baf1f410",
+    "python/tessera/compiler/native_gpu_storage.py": "b003c195761a287e60e54ca1c406b1c767c694dea32dacaeea4b76123104127c",
+    "python/tessera/compiler/native_gpu_tensor.py": "6416e26421b5822330164069acc02ee610d251fc78cf5ffec6154507d5950cbf"
+  },
+  "compiler_sha256": "5d1b5a3604004ebe564f10c1236a2b3072e507d3a34fa4f6d4de492731bbec89",
+  "recorder_sha256": "5fb37a2c890a8d1ced26e94e71f7d7075a0d83b3c68f16d45f4e5ec3b143d528",
+  "rows": [
+    {
+      "family": "sigmoid",
+      "width": 32,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "484ea74282c8b5c1fa5961ab0941917d77a5bd358ccf16b0a1d892a3114bb0ae",
+      "source_graph_ir_digest": "493b89953ade1d7be792ede00b79846e8beabedd8547a508ed475cb7b1e4b050",
+      "paired_jvp_ir_digest": "540bb82aba447842e46596f6700f96099cac63a94e6a10a0049b4515423c50b1",
+      "child_digest": "018b6d2baf0c997d1d87372feb25405a2bc13be06de3c6d4c324df5f5e84375c"
+    },
+    {
+      "family": "sigmoid",
+      "width": 64,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "52d8fc711a3906d5cbb623fda7573ff7dfe58229471267758457554d651ce9a4",
+      "source_graph_ir_digest": "cab63781aca2680f0736a04c5835fdde34b217f18a3ea2b5d35d839affdcd163",
+      "paired_jvp_ir_digest": "73a83ba7fc67190b2131d3835a6b45270669fc95df56a7394b46e9e560f54323",
+      "child_digest": "ae7692f511c0934bb0fcef8eecaa89aa7c7f973cb9022c09a4773b91e7cd6723"
+    },
+    {
+      "family": "sigmoid",
+      "width": 256,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "77992b9ee7016060e438145d67c742c67c27bba34bd3e7812f149e11e59bc443",
+      "source_graph_ir_digest": "c68c076947329aaab74b4beb96497efdfc375160e8dce68330c9897fb5f9bb22",
+      "paired_jvp_ir_digest": "847447370f9e4742673f79e1c868f2a5dc6d0958417ab081d479cc57a68074d7",
+      "child_digest": "808e5831e6509b89a1002858980ceb9edfc22f1c28f68e54258050e374f1930e"
+    },
+    {
+      "family": "tanh",
+      "width": 32,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "06ef904c0b2c8e343e347369e439b5b7ffb4031d81975d73ab7c23544144147f",
+      "source_graph_ir_digest": "2f6a23b31e0488d80274b72cdaa5566b039977c549c55287e3994853155c2e36",
+      "paired_jvp_ir_digest": "c721e42baaed173c1e3737577281bb2c0d2eead7895e5d3bbd31c9f648c55cad",
+      "child_digest": "986980a82ff8965fe58496ad60529632017dcff472f9f1a0f71485b861c77ea7"
+    },
+    {
+      "family": "tanh",
+      "width": 64,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "01c2231f21d67ba6cda16a2c0f3d0ca7370306fc6ef9d668235a28e84e84991c",
+      "source_graph_ir_digest": "c3b848ed035ce743d3d039bdc990dc18b16a6360ddd9f479b29d8d4dbf6c94e5",
+      "paired_jvp_ir_digest": "6c8efa6a8541bf46963e94f99afe81680afba29d4b4ff806fea26cb5e713fad9",
+      "child_digest": "1268f7286ee849ec235b908febcbce61a455fb8c7b965166490514a3458a17fd"
+    },
+    {
+      "family": "tanh",
+      "width": 256,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "e6dd919bd345ec8eb3a2cfc09559cdff2911febd9dd97dd7463641cb9dcd7f23",
+      "source_graph_ir_digest": "ab5f951575eeaadb62a427e1addfa43c05d9b0b9f3f0ffc2b99c3da89f2a7329",
+      "paired_jvp_ir_digest": "c531b453a217952b32361eb3e56e51d7362bb12753590fd25bbe18090415946b",
+      "child_digest": "b4bd0f38abcdd8f6ecbde7ee1031301343ed053b1033c38ed89e07be459831f9"
+    },
+    {
+      "family": "composed",
+      "width": 32,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "f15190d9eb3d797bfda6f693cf69752592805877cfc9bf9d9788146dd1c7258c",
+      "source_graph_ir_digest": "f108f285103e6392e1f4aa97ef98129cb1b220af71ac856e82428bdffabb726d",
+      "paired_jvp_ir_digest": "305b62aaf238c42eaaf7bae69821472a08645f36452fb66354f8b70214b2c137",
+      "child_digest": "ee0eddf5287dbe7dcdedcecfaf7ae60602e6a25c7de09b782a5f523fc02406a2"
+    },
+    {
+      "family": "composed",
+      "width": 64,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "09d8d8b29945dc573e9d50e82397419b27b1a3c5e1948731629f775626c7b205",
+      "source_graph_ir_digest": "c77084f3cf731a862a0b699a43abab01b601e11a5b6f5195699d1261cd555160",
+      "paired_jvp_ir_digest": "7d9445d6e15ab74ecb60440a842b8496e845796b43a6352d6b65420a456fbf44",
+      "child_digest": "02f50569967c2e416fb90121599e9a73a88d9c013692338f463d5f5599db2da0"
+    },
+    {
+      "family": "composed",
+      "width": 256,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "79b824a7730c1a09e595e456f15a8cffe91aea52f1c78df0f153f1daf8e82398",
+      "source_graph_ir_digest": "f4f6adb1060b4da8db8505ae82205b34e0a1b8d3df428efcbe651de7bf4a1fab",
+      "paired_jvp_ir_digest": "65223ace09aa4d9f6d78e4da81631c6f707858cc21a3f65c0ec981100fd24e80",
+      "child_digest": "b93406a7142c08dfc674ceef62fb51b9d18c7f7e566a48e5b5da3a303ddd12c7"
+    }
+  ],
+  "boundary": "rank-one f32 nonlinear forward products including tails, signed zero and NaN; no reverse AD or performance claim"
+}

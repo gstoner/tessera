@@ -70,3 +70,55 @@ class NativeStorageJVP:
     def close(self):
         for binding, _, _ in self.steps:
             binding.close()
+
+
+def build_native_storage_jvp(source_graph_ir, *, compiler, llvm_bin, backend, chip):
+    """Compile one bounded forward product and bind its generated physical child.
+
+    The C++ transform supplies the primal and tangent SSA graph, scalarizes its
+    admitted operations, and emits the shared-storage child. Python only binds
+    that compiler output to the native package ABI; it defines no derivative.
+    """
+    import re
+    from .native_gpu_storage import _run, _decode_image, build_native_gpu_storage
+    from .native_gpu_tensor import TensorSpec, IndexSpec
+    from .native_storage_contract import attach_tensor_contract
+    from .native_jvp import build_native_jvp_artifact
+
+    if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151')):
+        raise ValueError('native storage JVP needs an owning GPU target')
+    if 'tessera.frontend.authority = "tracer"' not in source_graph_ir:
+        raise ValueError('native storage JVP requires tracer-owned source IR')
+    generated = _run(compiler, '--allow-unregistered-dialect',
+                     '--tessera-autodiff-forward=emit-storage-child=true', source=source_graph_ir)
+    def integer(name):
+        match = re.search(r'tessera.native_jvp_' + name + r' = (\d+) : i64', generated)
+        if not match:
+            raise ValueError('compiler child lacks its ABI dimensions')
+        return int(match[1])
+    width, count = integer('width'), integer('inputs')
+    output_width = integer('output_width')
+    pair = re.search(r'tessera.native_jvp_pair = "((?:\\.|[^"\\])*)"', generated)
+    wrt = re.search(r'tessera.native_jvp_wrt = \[([0-9, ]+)\]', generated)
+    if pair is None or wrt is None:
+        raise ValueError('compiler child lacks its paired-program lineage')
+    paired_ir = _decode_image(pair[1]).decode()
+    # Compiler metadata is consumed here; the package records its own ABI
+    # manifest, while the parent records both source and paired-program hashes.
+    recipe, replaced = re.subn(r'^module attributes .* \{$', 'module {', generated, count=1, flags=re.M)
+    if replaced != 1:
+        raise ValueError('compiler child module header is malformed')
+    specs: tuple[TensorSpec | IndexSpec, ...] = tuple(TensorSpec(f'arg{i}', 'float32', (width,)) for i in range(count)) + (
+        TensorSpec('out', 'float32', (output_width,), True), TensorSpec('dout', 'float32', (output_width,), True),
+        IndexSpec('n', width, width))
+    recipe = attach_tensor_contract(recipe, specs, grid=(1, 1, 1), block=(width, 1, 1))
+    package = build_native_gpu_storage(recipe, compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
+    names = [s.name for s in specs]
+    return build_native_jvp_artifact(
+        target='nvidia_sm120' if backend == 'nvidia' else 'rocm',
+        architecture='sm120' if backend == 'nvidia' else chip, family='native_storage',
+        source_graph_ir=source_graph_ir, paired_jvp_ir=paired_ir,
+        wrt_indices=[int(i) for i in wrt[1].split(',')], arg_names=names,
+        steps=[dict(id='paired_child', child_digest=package.binding_digest,
+                    child_artifact={'native_storage_json': package.to_json()}, inputs=names,
+                    outputs=['primal', 'tangent'])])

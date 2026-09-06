@@ -1041,7 +1041,8 @@ def Tessera_Conv2DNHWCOp : Op<
 
 def Tessera_FlashAttnOp : Op<
   Tessera_Dialect, "flash_attn",
-  [Pure, AttrSizedOperandSegments]
+  [Pure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "FlashAttention fused op";
   let description = [{

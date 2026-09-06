@@ -24,6 +24,7 @@
 
 #include "Tessera/Transforms/Passes.h"
 #include "TileMemrefLifetime.h"
+#include "AppleArenaMSL.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -79,6 +80,9 @@ static bool hasDynamicShape(Operation *op) {
 struct TileBufferArena
     : public PassWrapper<TileBufferArena, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileBufferArena)
+  TileBufferArena() = default;
+  TileBufferArena(const TileBufferArena &other) : PassWrapper(other) {}
+  Option<bool> emitAppleMSL{*this, "emit-apple-msl", llvm::cl::desc("Materialize a bounded dynamic arena kernel as Apple MSL"), llvm::cl::init(false)};
 
   StringRef getArgument() const override { return "tessera-tile-buffer-arena"; }
   StringRef getDescription() const override {
@@ -98,6 +102,8 @@ struct TileBufferArena
       if (isa<func::FuncOp, gpu::GPUFuncOp>(fn) && fn->getNumRegions())
         layoutRegion(fn);
     });
+    if (emitAppleMSL && failed(tessera::AppleArenaMSL().materialize(getOperation())))
+      signalPassFailure();
   }
 
   // Lay out one space's arena: group -> max member size, offset = cumsum in
@@ -156,6 +162,16 @@ struct TileBufferArena
   // alias chain; changing only their source operand creates invalid memref IR.
   void retargetAliases(Value value, Attribute space) {
     for (Operation *user : value.getUsers()) {
+      if (auto loop = dyn_cast<scf::ForOp>(user)) {
+        for (auto [i, init] : llvm::enumerate(loop.getInitArgs())) {
+          if (init != value) continue;
+          auto type = cast<MemRefType>(value.getType());
+          auto changed = MemRefType::get(type.getShape(), type.getElementType(), type.getLayout(), space);
+          loop.getRegionIterArgs()[i].setType(changed);
+          loop.getResult(i).setType(changed);
+        }
+        continue;
+      }
       if (tessera::memory::viewSource(user) != value) continue;
       for (Value result : user->getResults()) {
         auto type = dyn_cast<MemRefType>(result.getType());
@@ -176,6 +192,7 @@ struct TileBufferArena
       auto type = dyn_cast<MemRefType>(op->getOperand(0).getType());
       if (isSharedAlloc(op) && type) {
         bool unsafeAlias = !type.getLayout().isIdentity();
+        bool permutedSlots = (lifetimes.permuted(op).has_value() || lifetimes.pendingSwap(op).has_value());
         if (Operation *def = op->getOperand(0).getDefiningOp())
           unsafeAlias |= static_cast<bool>(tessera::memory::viewSource(def));
         DominanceInfo dominance(fn);
@@ -191,7 +208,7 @@ struct TileBufferArena
               for (Value result : user->getResults()) aliases.push_back(result);
             } else {
               auto name = user->getName().getStringRef();
-              bool known = tessera::memory::isMarker(user) ||
+              bool known = (permutedSlots && isa<scf::ForOp>(user)) || tessera::memory::isMarker(user) ||
                            isa<memref::LoadOp, memref::StoreOp, memref::DimOp>(user) ||
                            name == "tile.async_copy" || name == "tile.wait_async" ||
                            isa<nvgpu::DeviceAsyncCopyOp>(user) ||
@@ -392,6 +409,17 @@ struct TileBufferArena
     if (!computed) {
       sizing.erase();
       return kernel.emitOpError("TILE_BARRIER_REUSE_MISSING_BARRIER: dynamic size is not a supported launch-argument expression");
+    }
+    if (emitAppleMSL) {
+      // Metal dynamic threadgroup lengths are 16-byte multiples. Keep this
+      // rounding in the checked native companion, not a Python size formula.
+      auto fifteen = arith::ConstantIndexOp::create(host, kernel.getLoc(), 15);
+      auto sixteen = arith::ConstantIndexOp::create(host, kernel.getLoc(), 16);
+      computed = arith::AddIOp::create(host, kernel.getLoc(), computed, fifteen);
+      check(computed);
+      computed = arith::DivUIOp::create(host, kernel.getLoc(), computed, sixteen);
+      computed = arith::MulIOp::create(host, kernel.getLoc(), computed, sixteen);
+      check(computed);
     }
     func::ReturnOp::create(host, kernel.getLoc(), computed);
     kernel->setAttr("tile.dynamic_shared_size", FlatSymbolRefAttr::get(host.getContext(), name));

@@ -63,6 +63,11 @@ def _contracts() -> tuple[DerivativeProofContract, ...]:
     ]
     out.extend((
         DerivativeProofContract(
+            "flash_attn", ProofKind.LINEAR_IDENTITY,
+            "d_V attention(Q,K,V)=attention(Q,K,dV) for fixed Q,K",
+            "static dense rank-four f32, grouped heads and end-aligned causal mask",
+            "Only V-active JVP; Q/K activity, bias, dropout, cache and numeric-policy variants are rejected. Reverse uses explicit recomputed natural-log LSE."),
+        DerivativeProofContract(
             "mul", ProofKind.DIRECTIONAL_AND_DUALITY,
             "d(x*y)=dx*y+x*dy", "floating tensors"),
         DerivativeProofContract(

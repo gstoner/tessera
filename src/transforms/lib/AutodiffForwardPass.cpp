@@ -1,5 +1,6 @@
 //===- AutodiffForwardPass.cpp - Paired Graph IR JVP -----------*- C++ -*-===//
 
+#include "tessera/Dialect/Attn/AttnDialect.h"
 #include "Tessera/Transforms/Passes.h"
 #include "Tessera/IR/TesseraOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -12,6 +13,11 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "NativeStorageJVP.h"
 
 namespace tessera {
 namespace {
@@ -499,6 +505,10 @@ class AutodiffForwardPass
                                mlir::OperationPass<mlir::ModuleOp>> {
  public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffForwardPass)
+  AutodiffForwardPass() = default;
+  AutodiffForwardPass(const AutodiffForwardPass &other) : PassWrapper(other) {}
+  mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
+      llvm::cl::desc("Materialize a bounded native child from the paired SSA program"), llvm::cl::init(false)};
 
   llvm::StringRef getArgument() const final {
     return "tessera-autodiff-forward";
@@ -507,8 +517,10 @@ class AutodiffForwardPass
     return "Emit a paired Graph IR JVP through TangentInterface";
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<tessera::attn::TesseraAttnDialect>();
     registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
-                    mlir::scf::SCFDialect, mlir::tensor::TensorDialect>();
+                    mlir::scf::SCFDialect, mlir::tensor::TensorDialect,
+                    mlir::math::MathDialect, mlir::gpu::GPUDialect, mlir::LLVM::LLVMDialect, mlir::memref::MemRefDialect>();
   }
 
   void runOnOperation() override {
@@ -519,6 +531,11 @@ class AutodiffForwardPass
       if (mode && mode.getValue() == "forward")
         forwards.push_back(func);
     });
+
+    if (emitStorageChild && forwards.size() != 1) {
+      module.emitError("native storage JVP requires exactly one forward request to generate its child");
+      return signalPassFailure();
+    }
 
     for (mlir::func::FuncOp forward : forwards) {
       if (forward.isDeclaration() || !forward.getBody().hasOneBlock()) {
@@ -618,11 +635,13 @@ class AutodiffForwardPass
 
       ForwardState state;
       unsigned argumentCount = forward.getNumArguments();
-      unsigned tangentIndex = argumentCount;
+      llvm::DenseMap<unsigned, unsigned> tangentPosition;
+      for (auto [position, index] : llvm::enumerate(wrtIndices))
+        tangentPosition[index] = argumentCount + position;
       for (auto [index, argument] : llvm::enumerate(forward.getArguments())) {
         state.primals.map(argument, body->getArgument(index));
         if (wrtSet.contains(index)) {
-          state.tangents[argument] = body->getArgument(tangentIndex++);
+          state.tangents[argument] = body->getArgument(tangentPosition.lookup(index));
           state.active.insert(argument);
         } else {
           state.tangents[argument] = mlir::Value{};
@@ -662,6 +681,8 @@ class AutodiffForwardPass
       forward->setAttr("tessera.autodiff.jvp",
                        mlir::FlatSymbolRefAttr::get(&getContext(), jvpName));
     }
+    if (emitStorageChild && mlir::failed(emitNativeStorageJVP(module)))
+      signalPassFailure();
   }
 };
 

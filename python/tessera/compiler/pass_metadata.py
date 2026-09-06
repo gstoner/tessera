@@ -391,7 +391,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "linear-transposition interfaces with SSA activity propagation."
         ),
         input_dialects=("tessera", "func", "arith"),
-        output_dialects=("tessera", "func", "arith"),
+        output_dialects=("tessera", "tessera.attn", "func", "arith"),
         required_attrs=("tessera.autodiff",),
         preserved_attrs=("tessera.autodiff.activity",),
         diagnostic_codes=("AUTODIFF_STOCHASTIC_EFFECT",),
@@ -403,12 +403,16 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffForwardPass",
         summary=(
             "Emits a separate paired JVP function from compiler-owned Graph "
-            "TangentInterface implementations."
+            "TangentInterface implementations, including V-only dense f32 attention. Optional emit-storage-child scalarizes "
+            "one rank-one f32 arithmetic/sigmoid/tanh/stop-gradient or power-of-two sum/mean pair into a native GPU storage child, preserving requested tangent argument order."
         ),
         input_dialects=("tessera", "func", "arith"),
-        output_dialects=("tessera", "func", "arith"),
+        output_dialects=("tessera", "tessera.attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.autodiff.jvp", "tessera.autodiff.role"),
+        preserved_attrs=("tessera.autodiff.jvp", "tessera.autodiff.role",
+                         "tessera.native_jvp_pair", "tessera.native_jvp_inputs",
+                         "tessera.native_jvp_input_widths", "tessera.native_jvp_output_widths",
+                         "tessera.native_jvp_width", "tessera.native_jvp_output_width", "tessera.native_jvp_wrt"),
         diagnostic_codes=(),
         pass_kind="transform",
         sprint="AD-FWD-CORE-1",
@@ -438,12 +442,19 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "Emits paired forward and backward functions under the explicit "
             "residual ABI: recompute-all by default, SAVE state tapes for "
             "control_scan and generic multi-state counted loops, plus saved "
-            "branch/trip identity for scf.if and canonical bounded scf.while."
+            "branch/trip identity for scf.if and canonical bounded scf.while. Optional "
+            "emit-storage-child fuses one single-input rank-one f32 with explicit straight-line saved residuals or recomputation "
+            "forward/backward pair with an explicit output cotangent into a native child, "
+            "including scalar sum/mean VJP. Dense f32 attention reverse products use "
+            "checkpoint forward/backward ops with recomputed natural-log LSE."
         ),
         input_dialects=("tessera", "func", "arith", "scf", "tensor"),
-        output_dialects=("tessera", "func", "arith", "scf", "tensor"),
+        output_dialects=("tessera", "tessera.attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
         required_attrs=("tessera.autodiff",),
         preserved_attrs=(
+            "tessera.native_vjp_pair", "tessera.native_vjp_inputs",
+            "tessera.native_vjp_input_widths", "tessera.native_vjp_output_widths",
+            "tessera.native_vjp_width", "tessera.native_vjp_output_width", "tessera.native_vjp_wrt",
             "tessera.autodiff.activity",
             "tessera.autodiff.residual_policy",
             "tessera.autodiff.residual_sources",
@@ -854,7 +865,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-tile-buffer-arena",
         cpp_class="TileBufferArena",
-        summary="Recheck path-sensitive reuse lifetimes, GPU kernel scalar uniformity and private-call ownership before materializing workgroup arenas; uniform nested dynamic GPU arenas reserve group maxima and export a recoverable checked native host sizer and wire gpu.launch_func byte counts. Propagate view/cast address space and preserve call ABIs. NVGPU completion accepts unanimous branch and identity loop token forwarding; loop-external generation replacement requires a proven nonempty loop or a matching zero-trip seed; fresh loop-issued generations remain unknown.",
+        summary="Recheck path-sensitive reuse lifetimes, GPU kernel scalar uniformity and private-call ownership before materializing workgroup arenas; uniform nested dynamic GPU arenas reserve group maxima and export a recoverable checked native host sizer and wire gpu.launch_func byte counts. Propagate view/cast address space and preserve call ABIs. NVGPU completion accepts unanimous branch and identity loop token forwarding; loop-external generation replacement requires a proven nonempty loop or a matching zero-trip seed; fixed-slot rotating generations require a seed, per-iteration wait/publication/read/release/refill recurrence and final drain. Bijective N-slot memref carries fully release each iteration; N-slot carries can retain one destination-matched pending token with seed, read/release/refill and final-drain proofs. Optional emit-apple-msl consumes a bounded typed dynamic arena and preserves the native sizing companion.",
         input_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf", "dlti", "nvgpu"),
         output_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf", "nvgpu"),
         required_attrs=("tile.buffer_group", "stage", "tile.barrier_id", "callee", "sym_visibility", "kernel", "gpu.kernel", "sym_name", "dlti.dl_spec", "dynamicSharedMemorySize", "numGroups", "unsignedCmp"),
@@ -865,7 +876,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-tile-buffer-reuse",
         cpp_class="TileBufferReuse",
-        summary="Assign memref reuse groups in func.func and gpu.func using all-path completion, kernel scalar and induction uniformity, uniform branch exclusivity, released loop-local lifetimes and body-derived private-call borrowing summaries; NVGPU copy/group/drain plus a GPU barrier proves native async completion through unanimous branches and identity loop carries; loop-external replacement is generation-sensitive and preserves zero-trip seeds; fresh loop-issued generations remain unknown; unknown ownership prevents reuse.",
+        summary="Assign memref reuse groups in func.func and gpu.func using all-path completion, kernel scalar and induction uniformity, uniform branch exclusivity, released loop-local lifetimes and body-derived private-call borrowing summaries; NVGPU copy/group/drain plus a GPU barrier proves native async completion through unanimous branches and identity loop carries; loop-external replacement is generation-sensitive and preserves zero-trip seeds; fixed-slot rotating generations require a complete seed/iteration/final-drain ownership recurrence; bijective N-slot memref carries require per-iteration completion/release; N-slot single-pending carries require a coupled token/slot recurrence and final drain; uniform enclosing loops and branches preserve the proof; unknown ownership prevents reuse.",
         input_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf", "nvgpu"),
         output_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf", "nvgpu"),
         required_attrs=("stage", "tile.barrier_id", "callee", "sym_visibility", "kernel", "gpu.kernel", "sym_name", "numGroups", "unsignedCmp"),

@@ -25,6 +25,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallVector.h"
+#include "AttentionADContract.h"
 
 // The interface impl mixin — generated from AdjointInterface.td.
 namespace tessera {
@@ -32,6 +33,18 @@ namespace tessera {
 }  // namespace tessera (re-opened below for the buildAdjoint defs)
 
 namespace tessera {
+
+llvm::SmallVector<mlir::Value> FlashAttnOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange cotangents) {
+  if (!denseAttentionAD(*this) || cotangents.size() != 1 || !cotangents[0]) return {};
+  auto saved = attentionCheckpoint(builder, *this, false, getOperands());
+  if (!saved) return {};
+  llvm::SmallVector<mlir::Value> args{cotangents[0], getOperand(0), getOperand(1), getOperand(2), saved->getResult(1)};
+  auto backward = attentionCheckpoint(builder, *this, true, args);
+  if (!backward) return {};
+  return llvm::SmallVector<mlir::Value>(backward->getResults());
+}
+
 
 llvm::SmallVector<mlir::Value> StopGradientOp::buildAdjoint(
     mlir::OpBuilder &, mlir::ValueRange) {

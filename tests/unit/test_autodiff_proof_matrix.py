@@ -158,3 +158,23 @@ def test_implicit_jvp_satisfies_residual_linearization():
     du = dx / (2.0 * u)
     linearized_residual = -dx + 2.0 * u * du
     np.testing.assert_allclose(linearized_residual, 0.0, atol=1.0e-14)
+
+
+def test_dense_attention_value_product_and_transpose_with_causal_alignment():
+    rng = np.random.default_rng(91)
+    for sq, sk in [(4, 6), (6, 4)]:
+        q, k = rng.normal(size=(sq, 8)), rng.normal(size=(sk, 8))
+        v, dv = rng.normal(size=(sk, 5)), rng.normal(size=(sk, 5))
+        scores = q @ k.T / np.sqrt(8)
+        mask = np.arange(sk)[None, :] <= np.arange(sq)[:, None] + sk - sq
+        scores = np.where(mask, scores, -np.inf)
+        maximum = np.max(scores, axis=1, keepdims=True)
+        maximum = np.where(np.isfinite(maximum), maximum, 0)
+        exps = np.exp(scores-maximum)
+        denominator = exps.sum(axis=1, keepdims=True)
+        weights = np.divide(exps, denominator, out=np.zeros_like(exps), where=denominator != 0)
+        tangent = weights @ dv
+        finite = central_directional_difference(lambda value: weights @ value, (v,), (dv,))
+        assert_directional_close(tangent, finite)
+        w = rng.normal(size=tangent.shape)
+        assert_forward_reverse_duality(tangent, w, (dv,), (weights.T @ w,))

@@ -809,7 +809,7 @@ def test_value_mode_output_has_no_husk_or_tile_leftover():
 
 # Same rule as `_find_opt` above: rank the build trees and skip any binary that
 # cannot start, so a tree left over from an earlier toolchain does not win.
-_REPO_BUILT_OPT = Path(_OPT) if _OPT else (
+_REPO_BUILT_OPT = (
     REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt")
 
 

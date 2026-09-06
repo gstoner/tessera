@@ -52,7 +52,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
             "k_l_divergence_loss", "j_s_divergence_loss",
             "momentum", "nesterov", "adam", "adam_w",
             "fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
-            "spectral_filter", "spectral_conv", "stop_gradient", "depth_attn",
+            "spectral_filter", "spectral_conv", "stop_gradient", "depth_attn", "flash_attn",
             # W4-EFFECTS-1 E2b: a KEYED dropout has a native pathwise adjoint.
             # Its Jacobian is diag(m/(1-p)) — diagonal, hence its own
             # transpose — so the adjoint is the same op applied to the
@@ -77,7 +77,7 @@ def test_native_tangents_are_compiler_grounded() -> None:
         "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",
         "rmsnorm", "stft", "istft", "spectral_filter", "spectral_conv",
         "es_low_rank_correction", "all_reduce", "reduce_scatter",
-        "all_gather", "all_to_all", "depth_attn",
+        "all_gather", "all_to_all", "depth_attn", "flash_attn",
     }
     assert autodiff_request.COMPILER_FORWARD_FAMILIES == native
 

@@ -307,3 +307,6 @@ ignore_missing_imports = true
 # `follow_imports` is ignored for .pyi files, which is exactly what numpy ships.
 follow_imports = "skip"
 follow_imports_for_stubs = true
+
+[tool.setuptools.package-data]
+"tessera.compiler" = ["apple_arena_bridge.mm"]

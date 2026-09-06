@@ -4,8 +4,26 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallVector.h"
+#include "AttentionADContract.h"
 
 namespace tessera {
+
+llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  if (!denseAttentionAD(*this) || tangents.size() != 3 || !tangents[2]) return {};
+  // Attention is linear in V. Q/K products require a score-product kernel,
+  // rather than pretending another ordinary attention invocation computes it.
+  for (auto value : tangents.take_front(2)) {
+    if (!value) continue;
+    auto constant = value.getDefiningOp<mlir::arith::ConstantOp>();
+    auto dense = constant ? mlir::dyn_cast<mlir::DenseFPElementsAttr>(constant.getValue()) : mlir::DenseFPElementsAttr();
+    if (!dense || !dense.isSplat() || !dense.getSplatValue<llvm::APFloat>().isZero()) return {};
+  }
+  llvm::SmallVector<mlir::Value> args{getOperand(0), getOperand(1), tangents[2]};
+  auto product = attentionCheckpoint(builder, *this, false, args);
+  return product ? llvm::SmallVector<mlir::Value>{product->getResult(0)} : llvm::SmallVector<mlir::Value>{};
+}
+
 
 static mlir::Value buildZeroLike(mlir::OpBuilder &builder, mlir::Location loc,
                                  mlir::Type type) {

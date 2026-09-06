@@ -32,6 +32,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "tessera/Dialect/Attn/AttnDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -61,6 +62,12 @@
 #include "Tessera/Transforms/LoopBodyYield.h"
 #include "Tessera/Transforms/RegionAdjointInterface.h"
 #include "Tessera/Transforms/SemanticEffects.h"
+
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "NativeStorageJVP.h"
 
 namespace tessera {
 
@@ -1445,6 +1452,10 @@ class AutodiffPairedPass
                                mlir::OperationPass<mlir::ModuleOp>> {
 public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffPairedPass)
+  AutodiffPairedPass() = default;
+  AutodiffPairedPass(const AutodiffPairedPass &other) : PassWrapper(other) {}
+  mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
+      llvm::cl::desc("Generate a bounded native primal/VJP child"), llvm::cl::init(false)};
 
   llvm::StringRef getArgument() const final {
     return "tessera-autodiff-paired";
@@ -1455,9 +1466,11 @@ public:
            "policy). Phase 2 of AUTODIFF_UNIFICATION_PLAN.md.";
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<tessera::attn::TesseraAttnDialect>();
     registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
                     mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
-                    mlir::scf::SCFDialect, mlir::tensor::TensorDialect>();
+                    mlir::scf::SCFDialect, mlir::tensor::TensorDialect, mlir::gpu::GPUDialect,
+                    mlir::LLVM::LLVMDialect, mlir::memref::MemRefDialect, mlir::math::MathDialect>();
   }
 
   void runOnOperation() override {
@@ -1497,9 +1510,14 @@ public:
           !fn->hasAttr("tessera.autodiff.role"))
         targets.push_back(fn);
     });
+    if (emitStorageChild && targets.size() != 1) {
+      module.emitError("native VJP requires exactly one fresh reverse request");
+      return signalPassFailure();
+    }
     for (auto fn : targets)
       if (failed(buildBackward(fn)))
         return signalPassFailure();
+    if (emitStorageChild && failed(emitNativeStorageJVP(module, true))) signalPassFailure();
   }
 
 private:

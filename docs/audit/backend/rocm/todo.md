@@ -6878,3 +6878,28 @@ See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
 **ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
 Parity validated on gfx1151 for four generated-descriptor/JIT/arbiter/two-stream cases. The matched immediate-wait ablation passes three exact workloads and is 2–4.5% slower in one seven-sample run; extra instructions and scheduling changes prevent a useful-overlap claim. Follow-up required: independent runs/profiling, real AD storage children and automatic Schedule producers.
 See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).
+
+
+**Generated children / rotating ownership / Apple materialization — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on gfx1151 for four compiler-generated AD child cases. Stronger wait evidence uses five independent processes and instruction-identical controls; larger cases favor deferred waits, while the small workload remains mixed. Follow-up required for supported PMC/device tracing and an AMD-native generic completion-token protocol. NVGPU ownership proof is not AMD async execution proof.
+See the [shared follow-up and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Expanded AD / dynamic aliases / resident Apple binding — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on gfx1151 for sixteen expanded AD cases including subtraction, stopped primals and reversed wrt order. Dynamic slot alias proofs are shared but their NVGPU copy fixture has no HIP execution proof: follow-up required for a native AMD producer. Structured rocprofiler 1.3.5/ROCm 10.0.0 discovery reports no PMC/SPM counters or PC-sampling agents on WSL; hardware-counter attribution remains blocked pending a supported owning-host profiler. Apple Metal binding is not applicable to HIP.
+See [expanded implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Nonlinear AD / pending swaps / typed Apple JIT — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on gfx1151 for nine nonlinear AD cases through target-specific GPU math conversion, with explicit numerical tolerances and no host fallback. Typed manifest validation is shared; Apple Metal handles are not HIP handles. NVGPU pending-token swaps have no AMD execution proof: generic AMD token production remains a follow-up. Hardware-counter attribution remains blocked by the installed WSL profiler; no CUDA ownership or timing evidence is transferred.
+See [implementation and owning-host evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**N-slot / reduction and reverse pairs / Metal queues — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on gfx1151: 15 compiler-produced reduction/nonlinear JVP and residual-free elementwise VJP cases. Follow-up required for general pending LDS ring protocols and cross-stream event ABI/device proof, attention/reduction VJP, tapes and measured overlap. The existing WSL profiler capability blocker still prevents hardware-counter attribution; neither CUDA rings nor Metal queues transfer proof.
+See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) and the integrated plan’s next ordered contracts.
+
+
+**Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on gfx1151 for 21 AD pair cases including sum/mean VJP. Attention interfaces and saved-residual forwarding have shared compiler evidence; follow-up required for native compound attention AD, AMD pending-ring execution, persistent tapes and measured HIP stream overlap. Existing WSL profiler counter limitations remain; CUDA NVGPU proofs and Metal command intervals do not transfer.
+See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

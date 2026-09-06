@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 import statistics
+import random
+import os
 import subprocess
 import sys
 import numpy as np
@@ -28,18 +30,31 @@ def main():
     parser.add_argument('--compiler', required=True, type=Path)
     parser.add_argument('--artifacts', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--trials', type=int, default=7)
+    parser.add_argument('--launches', type=int, default=20)
     args = parser.parse_args()
+    if args.trials < 1 or args.launches < 1:
+        parser.error('trials and launches must be positive')
+    rng = random.Random(args.seed)
     args.artifacts.mkdir(parents=True, exist_ok=True)
     source = (ROOT / 'tests/tessera-ir/phase3/tile_dynamic_gpu_rocm_prefetch_device.mlir').read_text()
     device = Device('rocm')
     packages = {}
-    for mode, text in [('prefetch', source), ('immediate_wait', immediate_wait(source))]:
+    for mode, text in [('prefetch', source), ('immediate_wait', immediate_wait(source)),
+                       ('nonblocking_wait', immediate_wait(source).replace('vmcnt(0)', 'vmcnt(63)'))]:
         package = build_native_gpu_storage(text, compiler=args.compiler, llvm_bin=Path('/usr/lib/llvm-23/bin'), backend='rocm', chip='gfx1151')
         packages[mode] = package
         path = args.artifacts / (mode + '.bin')
         path.write_bytes(package.image)
         (args.artifacts / (mode + '.mlir')).write_text(text)
         (args.artifacts / (mode + '.disasm')).write_text(subprocess.check_output(['/usr/lib/llvm-23/bin/llvm-objdump', '-d', '--mcpu=gfx1151', str(path)], text=True))
+    resources = {}
+    for mode in packages:
+        resources[mode] = subprocess.check_output([
+            "/usr/lib/llvm-23/bin/llvm-readobj", "--notes",
+            str(args.artifacts / (mode + ".bin"))], text=True)
+        (args.artifacts / (mode + ".resources.txt")).write_text(resources[mode])
     rows = []
     for blocks, width, rounds in [(32, 64, 7), (256, 256, 33), (256, 256, 65)]:
         inputs = (np.arange(rounds * blocks * width, dtype=np.float32) % 127).reshape(rounds, blocks, width)
@@ -66,18 +81,19 @@ def main():
             device.check(device.event_create(ct.byref(start), 0))
             device.check(device.event_create(ct.byref(end), 0))
             try:
-                for trial in range(7):
-                    names = list(bounds) if trial % 2 == 0 else list(reversed(bounds))
+                for trial in range(args.trials):
+                    names = list(bounds)
+                    rng.shuffle(names)
                     for name in names:
                         launch(bounds[name])
                         device.check(device.event_record(start, None))
-                        for _ in range(20):
+                        for _ in range(args.launches):
                             launch(bounds[name])
                         device.check(device.event_record(end, None))
                         device.check(device.event_sync(end))
                         elapsed = ct.c_float()
                         device.check(device.event_elapsed(ct.byref(elapsed), start, end))
-                        samples[name].append(elapsed.value / 20)
+                        samples[name].append(elapsed.value / args.launches)
             finally:
                 device.check(device.event_destroy(start))
                 device.check(device.event_destroy(end))
@@ -92,7 +108,8 @@ def main():
         source_sha256=hashlib.sha256(source.encode()).hexdigest(), recorder_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
         images={k: hashlib.sha256(p.image).hexdigest() for k, p in packages.items()},
-        timing='resident HIP events; seven alternating samples of twenty launches', selector_promotion=False, rows=rows)
+        timing='resident HIP events; randomized per-trial order', process_id=os.getpid(), seed=args.seed, trials=args.trials,
+        launches=args.launches, resources=resources, selector_promotion=False, rows=rows)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(rows, indent=2))
 

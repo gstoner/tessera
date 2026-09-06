@@ -6598,3 +6598,28 @@ See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
 **ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
 Parity validated on RTX 5070 for four generated-descriptor/JIT/arbiter/two-stream cases, including loop-external token replacement. Event completion retains allocation owners and orders conflicts. Follow-up required for rotating generations, Schedule-authored manifests/oracles, paired-AD producer/device proof and concurrency measurements; no new selector promotion.
 See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).
+
+
+**Generated children / rotating ownership / Apple materialization — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on RTX 5070: four compiler-generated AD primal/tangent cases and five fixed-slot rotating-generation cases, including zero trips and varying generation input. Follow-up required for dynamically selected/permuted slots, broader AD families and sanitizer validation. Apple MSL and ROCm wait timings are architecture-specific and do not change NVIDIA selection.
+See the [shared follow-up and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Expanded AD / dynamic aliases / resident Apple binding — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX 5070: sixteen expanded forward-AD cases, including subtraction, stop-gradient and reversed wrt order; seven dynamic two-slot alias cases include zero/odd/even trips. Each iteration fully drains and collectively releases before swapping; pending token generations across swaps and N-slot rings require follow-up. Apple raw package binding is a sibling-only ABI; ROCm counter availability does not constrain NVIDIA Nsight profiling.
+See [expanded implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Nonlinear AD / pending swaps / typed Apple JIT — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX 5070 for nine sigmoid/tanh/composed AD cases, including stable tails, small inputs, signed zero and nonfinite inputs. Seven two-slot pending-token cases validate generation/slot coupling, final drain and zero/odd/even trips. Prefetch can precede consumption; this proves correctness, not a speedup. General N-slot/nested recurrences and broader/reverse AD families require follow-up. Apple typed JIT is a sibling ABI, not a CUDA buffer adapter.
+See [implementation and owning-host evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**N-slot / reduction and reverse pairs / Metal queues — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX5070: 15 compiler-produced reduction/nonlinear JVP and elementwise VJP cases; 3/4/8 released-slot rings and uniformly nested pending two-slot recurrence, seven zero/odd/even cases each. Follow-up required for N-slot pending generation maps, attention/reduction VJP, general reverse tapes, event ABI parity and performance comparisons. Metal shared events are not CUDA execution proof.
+See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) and the integrated plan’s next ordered contracts.
+
+
+**Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on RTX5070: 21 AD pair cases including reduction VJP and seven exact cases each for uniformly nested 3/4/8-slot single-pending rings. Follow-up required for multiple outstanding generations, compound attention AD device products, persisted LSE/tapes and cross-stream overlap attribution. Metal GPU timestamps are not CUDA performance evidence.
+See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

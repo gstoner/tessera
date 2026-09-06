@@ -1,0 +1,64 @@
+{
+  "backend": "nvidia",
+  "slot_alias": true,
+  "slots": 8,
+  "nested": false,
+  "pending_swap": false,
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "source_sha256": "a1161a0027f8aa2ed930e671dea0a060438ec1991dacfd80f423a103145cfff6",
+  "compiler_sha256": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+  "package_digest": "791a9a2b762e0a8a24151b1dcb4fb16c05bf4478e27842ea190ee68826fbd6d2",
+  "recorder_sha256": "1b78ff2894a92637982d2f4d05b786c90ab338e105bf0436d180c75557eabb67",
+  "rows": [
+    {
+      "width": 32,
+      "rounds": 0,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 1,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 2,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 64,
+      "rounds": 7,
+      "oracle": "exact",
+      "native_bytes": 2048,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 16,
+      "oracle": "exact",
+      "native_bytes": 4096,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "oracle": "exact",
+      "native_bytes": 4096,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "oracle": "exact",
+      "native_bytes": 8192,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    }
+  ],
+  "selector_promotion": false
+}

@@ -1,0 +1,105 @@
+{
+  "backend": "nvidia",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "runtime_sources": {
+    "python/tessera/compiler/jit.py": "96ef30127b393deee9f65f286177655927876eaeb53609e65fc8139564144c85",
+    "python/tessera/compiler/native_storage_jvp.py": "e860b139281578d52e039542d4a3e1f8254a8a53ba0d156be89cb0c8baf1f410",
+    "python/tessera/compiler/native_gpu_storage.py": "b003c195761a287e60e54ca1c406b1c767c694dea32dacaeea4b76123104127c",
+    "python/tessera/compiler/native_gpu_tensor.py": "6416e26421b5822330164069acc02ee610d251fc78cf5ffec6154507d5950cbf"
+  },
+  "compiler_sha256": "5d1b5a3604004ebe564f10c1236a2b3072e507d3a34fa4f6d4de492731bbec89",
+  "recorder_sha256": "5fb37a2c890a8d1ced26e94e71f7d7075a0d83b3c68f16d45f4e5ec3b143d528",
+  "rows": [
+    {
+      "family": "sigmoid",
+      "width": 32,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "1975be94c682272400b5cf38c422752b27b38146b29dfd04c69228af61db8170",
+      "source_graph_ir_digest": "493b89953ade1d7be792ede00b79846e8beabedd8547a508ed475cb7b1e4b050",
+      "paired_jvp_ir_digest": "540bb82aba447842e46596f6700f96099cac63a94e6a10a0049b4515423c50b1",
+      "child_digest": "63ac07d4bb0034dcd5122dff9ad4a40993fc0d9659ef7ea04405db97ec86a1eb"
+    },
+    {
+      "family": "sigmoid",
+      "width": 64,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "6ef7d039d26adf2f323008caae75f8a5264c4d2d262841ee7cdc049b35e48d35",
+      "source_graph_ir_digest": "cab63781aca2680f0736a04c5835fdde34b217f18a3ea2b5d35d839affdcd163",
+      "paired_jvp_ir_digest": "73a83ba7fc67190b2131d3835a6b45270669fc95df56a7394b46e9e560f54323",
+      "child_digest": "de71062bb342fd0f240757bdb00fe350deb477c73c7eda8150058347df342a5e"
+    },
+    {
+      "family": "sigmoid",
+      "width": 256,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "0f57148bb46334d2c9289587ea0e431d4de6529f5d8dc61167b7727800df78fd",
+      "source_graph_ir_digest": "c68c076947329aaab74b4beb96497efdfc375160e8dce68330c9897fb5f9bb22",
+      "paired_jvp_ir_digest": "847447370f9e4742673f79e1c868f2a5dc6d0958417ab081d479cc57a68074d7",
+      "child_digest": "a6d301a6119b1665681440a4ea643ca786dd1cc3a3e9010107dde189d28ee8a9"
+    },
+    {
+      "family": "tanh",
+      "width": 32,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "e50c1795d75bb1d6060aa69d05256f14f433c51a3543d3160a8c20125da1052a",
+      "source_graph_ir_digest": "2f6a23b31e0488d80274b72cdaa5566b039977c549c55287e3994853155c2e36",
+      "paired_jvp_ir_digest": "c721e42baaed173c1e3737577281bb2c0d2eead7895e5d3bbd31c9f648c55cad",
+      "child_digest": "f176681f8df8876d437074e5b0d60f3222278afa816960d2f255cbe95c8fa0a8"
+    },
+    {
+      "family": "tanh",
+      "width": 64,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "eb3f8fe17540d9b430f8ccd3a4a435d6db7509d531da3c74ad412f133fc7e60c",
+      "source_graph_ir_digest": "c3b848ed035ce743d3d039bdc990dc18b16a6360ddd9f479b29d8d4dbf6c94e5",
+      "paired_jvp_ir_digest": "6c8efa6a8541bf46963e94f99afe81680afba29d4b4ff806fea26cb5e713fad9",
+      "child_digest": "58f59cdc14ac4cb84ad61a4d4c74350deeaba0e82b40f77816f50ceef7c44f18"
+    },
+    {
+      "family": "tanh",
+      "width": 256,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "c42f4459385fbf3054e909c1520da98d83b9014a4c1d435aea17284ae3b4a32c",
+      "source_graph_ir_digest": "ab5f951575eeaadb62a427e1addfa43c05d9b0b9f3f0ffc2b99c3da89f2a7329",
+      "paired_jvp_ir_digest": "c531b453a217952b32361eb3e56e51d7362bb12753590fd25bbe18090415946b",
+      "child_digest": "0492f4d1f4862375867e7cbfbb671b3e07182ccb9bb9f80b88ea77b7aa8147eb"
+    },
+    {
+      "family": "composed",
+      "width": 32,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "f2ec370967b37d8746f8552cfd6d622ad38fb9b888527009e63b4b808314cdda",
+      "source_graph_ir_digest": "f108f285103e6392e1f4aa97ef98129cb1b220af71ac856e82428bdffabb726d",
+      "paired_jvp_ir_digest": "305b62aaf238c42eaaf7bae69821472a08645f36452fb66354f8b70214b2c137",
+      "child_digest": "763227584771521fd26ac2d66a519d3c32c94b02be2de527bc82b800c16a6e88"
+    },
+    {
+      "family": "composed",
+      "width": 64,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "5bd8e8ce707fdf4b50efddba5b73554e5d5edb71ec58e328e7c6e9bc7296a535",
+      "source_graph_ir_digest": "c77084f3cf731a862a0b699a43abab01b601e11a5b6f5195699d1261cd555160",
+      "paired_jvp_ir_digest": "7d9445d6e15ab74ecb60440a842b8496e845796b43a6352d6b65420a456fbf44",
+      "child_digest": "443435787ccb552d3674bb0188bcca8a343d11d12f254f547e12c99e25d65ce3"
+    },
+    {
+      "family": "composed",
+      "width": 256,
+      "primal": "atol=rtol=2e-6",
+      "tangent": "atol=rtol=2e-6",
+      "artifact_hash": "fe75b74a266cb7c509112c2c4ee3b30d4e76108040ce8b38c7b9bbcd80de957b",
+      "source_graph_ir_digest": "f4f6adb1060b4da8db8505ae82205b34e0a1b8d3df428efcbe651de7bf4a1fab",
+      "paired_jvp_ir_digest": "65223ace09aa4d9f6d78e4da81631c6f707858cc21a3f65c0ec981100fd24e80",
+      "child_digest": "b29d1b8ead4570fe21f7c4e332306f28caf007a83db497041dc807871e15686a"
+    }
+  ],
+  "boundary": "rank-one f32 nonlinear forward products including tails, signed zero and NaN; no reverse AD or performance claim"
+}

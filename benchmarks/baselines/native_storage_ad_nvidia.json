@@ -1,0 +1,51 @@
+{
+  "backend": "nvidia",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "runtime_sources": {
+    "python/tessera/compiler/jit.py": "b70bce1410bcbc5fdb33972fd0a5406484d2b2a7219c6009ff67df1c133f05b3",
+    "python/tessera/compiler/native_storage_jvp.py": "e860b139281578d52e039542d4a3e1f8254a8a53ba0d156be89cb0c8baf1f410",
+    "python/tessera/compiler/native_gpu_storage.py": "6a85699c55075b68ba22eb84183b7fef30ccdef99035171ad23a8686002ea0c7",
+    "python/tessera/compiler/native_gpu_tensor.py": "32cf44fc3c266404ddb8fd7e7a3f84d2691b03fc84d6a8f52d53da19c2b09489"
+  },
+  "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+  "recorder_sha256": "2f02bd432622d5dfd0e7967c79bebb6aae19fa2f8e4b019ef06b32d39eed62bd",
+  "rows": [
+    {
+      "width": 32,
+      "primal": "exact",
+      "tangent": "exact",
+      "artifact_hash": "b7d41320fa6ae6d6be02fe88e7fcbd7d8352d29c8a73e088d3a5c7290696ee48",
+      "source_graph_ir_digest": "e6bb74f25f225c1b071628e1bf0c8e10a86881a6f4be5b794aa478b4a88ab344",
+      "paired_jvp_ir_digest": "8b10c97530c195c208e8f6725cc426e01b599fd5bada0da18c529697df03df90",
+      "child_digest": "e749fa3df899f2c105ffab174d05a0638fff959f40525c9574aab93ff75d55ca"
+    },
+    {
+      "width": 64,
+      "primal": "exact",
+      "tangent": "exact",
+      "artifact_hash": "ad4e7a2a1e4daf173669c5ef0477d1508ee979d4d0f7a9012b7d8d3e4e688bf1",
+      "source_graph_ir_digest": "e1211a0f9c1567feac81eb017fecc5a3bda07c0d6e4c493d1ed444550f14688d",
+      "paired_jvp_ir_digest": "2908ce3b7b51d3c5289d5547833c9d642734a387d6cd6d2792e65c3daa91a77c",
+      "child_digest": "cac1f55e7b93b2a308ac07ba26d5242b133dd9f0e4732f1751b1c87ef5ab8807"
+    },
+    {
+      "width": 128,
+      "primal": "exact",
+      "tangent": "exact",
+      "artifact_hash": "d7b887874438e20f7cec5e9f464728ec4cdde9d915f80c534daa460eee94962d",
+      "source_graph_ir_digest": "d5e9cfdcd883dd88b1ed11df67c1c9f01603c18ace5c299e5811b15b449e93ad",
+      "paired_jvp_ir_digest": "0dd6528bcef53a93442b7e3e3f498c6654e6dc15db6e8d572ab819589bb29291",
+      "child_digest": "df677f46141c453c2c39df81990dc1f2316beebeff77ac22f784a81e0e74a9c6"
+    },
+    {
+      "width": 256,
+      "primal": "exact",
+      "tangent": "exact",
+      "artifact_hash": "5245fd5795c0cb0a707861d88b4beb3931d1ff56a75be6796be54d9c9ed013ce",
+      "source_graph_ir_digest": "f8f238dd703d54ee2dde85dee91f7aa961de60d75765af1b64c6669e2644e066",
+      "paired_jvp_ir_digest": "a329b6ad99071a7d13a837e4d5e3825bbe40722d879c5c83f5a29f6418e61646",
+      "child_digest": "3c60ca66b0c0ae7b9a4380605cb6f85741b61a5a575f7b56e7a9c5019eeec182"
+    }
+  ],
+  "boundary": "static rank-one f32 add/mul forward products; no reverse AD or performance claim"
+}

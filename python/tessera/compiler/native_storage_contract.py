@@ -39,8 +39,7 @@ def read_tensor_contract(package):
     return data
 
 
-def generate_tensor_binding(package, signature) -> NativeTensorCall:
-    data = read_tensor_contract(package)
+def tensor_contract_specs(data):
     specs: list[TensorSpec | IndexSpec] = []
     for row in data['arguments']:
         row = dict(row)
@@ -54,4 +53,9 @@ def generate_tensor_binding(package, signature) -> NativeTensorCall:
             specs.append(IndexSpec(**row))
         else:
             raise ValueError('unknown tensor manifest argument')
-    return NativeTensorCall(package, signature, tuple(specs), grid=tuple(data['grid']), block=tuple(data['block']))
+    return tuple(specs)
+
+
+def generate_tensor_binding(package, signature) -> NativeTensorCall:
+    data = read_tensor_contract(package)
+    return NativeTensorCall(package, signature, tensor_contract_specs(data), grid=tuple(data['grid']), block=tuple(data['block']))

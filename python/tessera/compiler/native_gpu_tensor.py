@@ -29,6 +29,29 @@ class IndexSpec:
     maximum: int = (1 << 31) - 1
 
 
+def validate_tensor_signature(abi, signature, specs, grid, block):
+    if len(specs) != len(abi) or len({s.name for s in specs}) != len(specs):
+        raise ValueError('native tensor ABI argument count or names disagree')
+    if set(signature.parameters) != {s.name for s in specs}:
+        raise ValueError('native tensor ABI must cover the JIT signature exactly')
+    names = {s.name for s in specs if isinstance(s, IndexSpec)}
+    for kind, spec in zip(abi, specs, strict=True):
+        if (kind == 'pointer') != isinstance(spec, TensorSpec):
+            raise ValueError('native tensor ABI kind disagrees')
+        if isinstance(spec, TensorSpec):
+            canonicalize_dtype(spec.dtype)
+            for dim in spec.shape:
+                if not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
+                    raise ValueError('tensor shape must use positive constants or declared indices')
+        elif type(spec.minimum) is not int or type(spec.maximum) is not int or not 0 <= spec.minimum <= spec.maximum < (1 << 63):
+            raise ValueError('invalid native index bounds')
+    if len(grid) != 3 or len(block) != 3:
+        raise ValueError('native launch geometry requires three dimensions')
+    for dim in grid + block:
+        if not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
+            raise ValueError('launch geometry must use constants or declared indices')
+
+
 class NativeTensorCall:
     """Explicit ABI binding, never a claim that arbitrary Python math matches IR.
 
@@ -40,26 +63,7 @@ class NativeTensorCall:
                  grid: tuple[int | str, int | str, int | str],
                  block: tuple[int | str, int | str, int | str]):
         package.validate()
-        if len(specs) != len(package.abi) or len({s.name for s in specs}) != len(specs):
-            raise ValueError('native tensor ABI argument count or names disagree')
-        if set(signature.parameters) != {s.name for s in specs}:
-            raise ValueError('native tensor ABI must cover the JIT signature exactly')
-        names = {s.name for s in specs if isinstance(s, IndexSpec)}
-        for kind, spec in zip(package.abi, specs, strict=True):
-            if (kind == 'pointer') != isinstance(spec, TensorSpec):
-                raise ValueError('native tensor ABI kind disagrees')
-            if isinstance(spec, TensorSpec):
-                canonicalize_dtype(spec.dtype)
-                for dim in spec.shape:
-                    if not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
-                        raise ValueError('tensor shape must use positive constants or declared indices')
-            elif type(spec.minimum) is not int or type(spec.maximum) is not int or not 0 <= spec.minimum <= spec.maximum < (1 << 63):
-                raise ValueError('invalid native index bounds')
-        if len(grid) != 3 or len(block) != 3:
-            raise ValueError('native launch geometry requires three dimensions')
-        for dim in grid + block:
-            if not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
-                raise ValueError('launch geometry must use constants or declared indices')
+        validate_tensor_signature(package.abi, signature, specs, grid, block)
         self.package, self.signature, self.specs = package, signature, specs
         self.grid, self.block = grid, block
         data = {'package': package.binding_digest, 'specs': [asdict(s) for s in specs], 'grid': grid, 'block': block}

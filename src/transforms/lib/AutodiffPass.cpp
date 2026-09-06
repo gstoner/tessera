@@ -38,6 +38,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "tessera/Dialect/Attn/AttnDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -127,6 +128,7 @@ public:
   }
 
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<tessera::attn::TesseraAttnDialect>();
     registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect>();
   }
 

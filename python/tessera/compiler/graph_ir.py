@@ -399,6 +399,8 @@ class IRType:
 
     @property
     def rank(self) -> Optional[int]:
+        if self.mlir_str.startswith("tensor<") and "*" not in self.shape and not self.mlir_str.startswith("tensor<*"):
+            return len(self.shape)
         return len(self.shape) if self.shape and "*" not in self.shape else None
 
 
@@ -457,7 +459,8 @@ def tensor_ir_type(
     if normalized_shape and normalized_shape != ("*",):
         shape_text = "x".join(normalized_shape)
     dtype_text = _mlir_dtype(normalized_dtype) if normalized_dtype else "?"
-    return IRType(f"tensor<{shape_text}x{dtype_text}>", normalized_shape, normalized_dtype, layout)
+    spelling = f"tensor<{shape_text}x{dtype_text}>" if normalized_shape else f"tensor<{dtype_text}>"
+    return IRType(spelling, normalized_shape, normalized_dtype, layout)
 
 
 def handle_ir_type(mnemonic: str) -> IRType:
@@ -2415,6 +2418,8 @@ class _OpExtractor(ast.NodeVisitor):
             surface = name.rsplit(".", 1)[-1]
             if surface == "sum":
                 kwargs["kind"] = "sum"
+            elif surface == "reduce":
+                kwargs["kind"] = kwargs.pop("op", "sum")
 
         # Declared order first, so the operand list does not depend on the order
         # the caller happened to write the keywords. Anything undeclared is

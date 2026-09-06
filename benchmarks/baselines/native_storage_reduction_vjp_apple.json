@@ -1,0 +1,223 @@
+{
+  "backend": "apple",
+  "host": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "rows": [
+    {
+      "family": "mean",
+      "width": 256,
+      "package_digest": "5f706d1c49361f3fcc7eadcb43777329a534bfa082f93df42582d7588c1dca42",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean",
+      "width": 32,
+      "package_digest": "048405f428e1b2b5b5b6da405cfb244af2d32cf056e9088e3e10ebee0734ec3f",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean",
+      "width": 64,
+      "package_digest": "9c24e1d7495e283bcf8ae5313931594110a9c66745048f232aefc32b84d75652",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean_vjp",
+      "width": 256,
+      "package_digest": "d311130649f9c14339f020468500d52436debd80214552ec468564dd999d07f5",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean_vjp",
+      "width": 32,
+      "package_digest": "603eb99e65d691f85d476f64ce8afde55a41aa70b388750eab65a289bde2f5c7",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean_vjp",
+      "width": 64,
+      "package_digest": "a8c1481b4c46926d04f20754a0cf6d1e4b4873a2f0360692a476e836a9fa353b",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "package_digest": "5bd88cceef2c4b311acf0d0100d5dae852687a3cbc2d7e2572a9d145be2399c2",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "package_digest": "7c0fbd0266eb70ea98d4f19a384ff8ad09abd25aadf4de92c637b6420d46fd38",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "package_digest": "0c94baa3a278af857d3c74ddeb50bc6278e815d04c7739184d7a7bf94a6a0ac3",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum",
+      "width": 256,
+      "package_digest": "638ed12ebe5ea5b0e37460d2b8a07dd5cdf5be3765748deafddd98ebc79f8d04",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum",
+      "width": 32,
+      "package_digest": "b40d93d0007683a763207e80231c4a40645245b27c5df9a70e0e4ec0457bb972",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum",
+      "width": 64,
+      "package_digest": "70b2d8a24328e45bc95653283faaaf5d30575e62c7e6f5162e96e8913b4c9a15",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum_vjp",
+      "width": 256,
+      "package_digest": "7078d2d7258d124ea006a84822c9b196fdee1f672176b9b07b881e2a29e3670d",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum_vjp",
+      "width": 32,
+      "package_digest": "5e498b706e0f7521dbb223b2c164e6e869522898bece9355b3f465b241fe05d0",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum_vjp",
+      "width": 64,
+      "package_digest": "bd3581aa0a7778bccf929b2072a97db480b3d7437680a582d1cdec5689affbf6",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 256,
+      "package_digest": "88445e7b1fa89e9532765f37c9b215caa4820b84957e0b7d022ab0e0ddba749d",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 32,
+      "package_digest": "00b6f489ba4c47937382a64b63cc1439409bfc1478a0d6ab57edc293ce57612a",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 64,
+      "package_digest": "37756f0af26fc9a369d6a130f43128500450ec58e3f5481b7950135e2c7f7685",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "package_digest": "5af92e830e6714685c9ba69268113f89741b60dfd3553e3fee59041b79e44f58",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "package_digest": "042bba1f0b2f82f77d6113593a69122548db8d89b2743f0c36110ec5947f8f59",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "package_digest": "f06367ba892f2256ba58608920f16c266478d31acad19b11a58805597708bb5c",
+      "compiler_digest": "9da825f71c54e48d30d7c9cdaeb5790cf50495658329fddb30e83c609dd873f5",
+      "oracle": "atol=rtol=2e-6"
+    }
+  ],
+  "queue_rows": [
+    {
+      "width": 256,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 256,
+      "byte": 63,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 256,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 256,
+      "byte": 62,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 63,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 62,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 63,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 62,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    }
+  ],
+  "selector_promotion": false,
+  "performance_claim": false,
+  "source_sha256": {
+    "benchmarks/record_apple_storage_pair.py": "afa8d32ed7789dd9f40cabcc5f8879254448c6513cd11040764e53714ce6e38f",
+    "python/tessera/compiler/apple_arena_bridge.mm": "4b8c46cce88133cc199f3e44d19725d3790aa254ebcb9f54e528169268852335",
+    "python/tessera/compiler/apple_native_arena.py": "d23ccac97994b09b384a0f2eaa944943daed4e6059efea1baf25aa913fdac555",
+    "python/tessera/compiler/native_storage_pair.py": "648efa9d5dd84f83190784682de82a1c029b62c0b1c56a567ebb1398e4069fc6"
+  }
+}

@@ -323,8 +323,11 @@ class TraceBuilder:
             )
             dtypes = (tracer_args[0].dtype if tracer_args else "fp32",)
             values = (None,)
-        if graph_name == "tessera.reduce" and name in {"sum", "mean"}:
-            ir_kwargs.setdefault("kind", name)
+        if graph_name == "tessera.reduce":
+            if name in {"sum", "mean"}:
+                ir_kwargs.setdefault("kind", name)
+            elif name == "reduce":
+                ir_kwargs["kind"] = ir_kwargs.pop("op", "sum")
         from .graph_ir import _canonicalize_spectral_attrs, tensor_ir_type
         operand_ir_types = [
             tensor_ir_type(tuple(str(dim) for dim in item.shape), item.dtype)

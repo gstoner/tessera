@@ -1,0 +1,61 @@
+{
+  "backend": "nvidia",
+  "slot_alias": true,
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88\n",
+  "source_sha256": "4d340b0fffe2e268d380f2dbebc2545b8ab1c7078215cdfce17b4be3518384f6",
+  "compiler_sha256": "df81b4dc39e6344650748d243c27735c659ec0c6165cbf0549176593903185fe",
+  "package_digest": "8f6d83b16dcf0a492b6c0caca3ec747c202948962432b44f9ea28bad06c2b40f",
+  "recorder_sha256": "a456c77ada1192e74914028d6db33e2f55476b043654b2a03400fa7d06bc597c",
+  "rows": [
+    {
+      "width": 32,
+      "rounds": 0,
+      "oracle": "exact",
+      "native_bytes": 256,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 1,
+      "oracle": "exact",
+      "native_bytes": 256,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 32,
+      "rounds": 2,
+      "oracle": "exact",
+      "native_bytes": 256,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 64,
+      "rounds": 7,
+      "oracle": "exact",
+      "native_bytes": 512,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 16,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "oracle": "exact",
+      "native_bytes": 1024,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    },
+    {
+      "width": 256,
+      "rounds": 33,
+      "oracle": "exact",
+      "native_bytes": 2048,
+      "proof": "successive generations use different input values; post-loop scratch reuses released slot"
+    }
+  ],
+  "selector_promotion": false
+}

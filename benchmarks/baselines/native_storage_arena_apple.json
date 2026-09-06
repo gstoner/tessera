@@ -1,0 +1,52 @@
+{
+  "device": "Apple M1 Max",
+  "rows": [
+    {
+      "width": 1,
+      "rounds": 17,
+      "native_bytes": 16,
+      "oracle": "exact"
+    },
+    {
+      "width": 17,
+      "rounds": 17,
+      "native_bytes": 80,
+      "oracle": "exact"
+    },
+    {
+      "width": 32,
+      "rounds": 17,
+      "native_bytes": 128,
+      "oracle": "exact"
+    },
+    {
+      "width": 64,
+      "rounds": 17,
+      "native_bytes": 256,
+      "oracle": "exact"
+    },
+    {
+      "width": 128,
+      "rounds": 17,
+      "native_bytes": 512,
+      "oracle": "exact"
+    },
+    {
+      "width": 256,
+      "rounds": 17,
+      "native_bytes": 1024,
+      "oracle": "exact"
+    }
+  ],
+  "oversize_rejected": true,
+  "selector_promotion": false,
+  "artifact_digest": "06581d35362fada278d3e4f450d09477a0a2c9246e76d7ea49fec1985e27e867",
+  "compiler_sha256": "915f07a25d10f1a8a64ee1f35d209fe09065d5d68d9699d523dc224d83de7706",
+  "msl_sha256": "f582cb57ea1f3735d67b2d88f0cbb849083a9a0ada96966e439174b223920102",
+  "llvm_sizer_sha256": "79a8f5553166aad7604b8c2d3bb9ecb5b61ffae90c4a958659487a6d9f6bee6c",
+  "native_sizer_sha256": "056cdce3776d561d71476c87c45b95025b7eed05ad78833a510ac95ee54d01a3",
+  "runner_sha256": "f2597c233f7da0ddc3bf5c499c72adf44a5482518ee723a0bd852ab0ea4fca84",
+  "recorder_sha256": "3003df2e85e3df58fb9dda66d58484d2d0b7410f799fa9165822afcbdfdcb78f",
+  "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin\n",
+  "boundary": "owning-host materialization probe; no production selector or runtime dispatch integration"
+}

@@ -1,0 +1,4 @@
+W0905 22:17:01.308251 2749635 metadata.cpp:272] rocprofiler_iterate_agent_supported_counters failed for agent 0 (AMD Radeon(TM) 8060S Graphics) :: Agent HW architecture is not supported, no counter metrics found.
+GPU                           :	0
+Name                          :	AMD Radeon(TM) 8060S Graphics
+                               No pmc counters supported

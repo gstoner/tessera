@@ -1,0 +1,181 @@
+{
+  "backend": "apple",
+  "host": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "rows": [
+    {
+      "family": "mean",
+      "width": 256,
+      "package_digest": "e0543f82a6ecf2a664eeb645115680c1c87bc6655bb178a0d64a008c2d259916",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean",
+      "width": 32,
+      "package_digest": "3035bce187ec4e24457875b282f43cf815bf2c6ee97a808e6a6714f676c97259",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "mean",
+      "width": 64,
+      "package_digest": "198831c4df9f45daa5928c24ecbd8dce50ac866a274aea487a597d3370be4e4a",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "package_digest": "eba3b0e7f0308b33ab8dadbe1dd9e41e4d033a1ab36aae5602b142747aa7d25c",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "package_digest": "7b2c825c283b9446a4e1eae39910df60bad0fb3e2d1eef356e2f0e0a789a12f1",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "package_digest": "d819060fd057242767c05565b2f79af6f462aecb64fb0053af4c3ff3a7e83bce",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum",
+      "width": 256,
+      "package_digest": "dc70fc16b0b1d73500dffb3af8ce9c71f94577600de9d3b37b2af7e8a2e55164",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum",
+      "width": 32,
+      "package_digest": "d43692052d73a58a32be82696e0cbd378fe1cf172136217144a439e89bab250d",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "sum",
+      "width": 64,
+      "package_digest": "e45af18156cfa3785d656b82bb3894b63ffd6202b38076953dcc746fe394312f",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 256,
+      "package_digest": "e253a3bc65d28109938c737a8ed8f7852d1c084cb2bb6261e0b57b02930b4013",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 32,
+      "package_digest": "0f7bace9d1eb4e0496c858200ba586311dbc415dc838409496917e44299bdb90",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 64,
+      "package_digest": "080bcd5b5b3dd3b85b0802a95c889fd6260d1167fb45f83fe7e01c78f491b2fe",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "package_digest": "6088acf10c3b4b0729b38a0b202b03cacfe6e1f829a81fb3feec6cf4b1780503",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "package_digest": "ab5b9c7539dc5c859527c1eda77dd50345d15d1708693331e5adce63bd111903",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "package_digest": "017e6371f1a60f858d084517de475acc8d58e03cca6efafe8ae04cfbd374aa94",
+      "compiler_digest": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+      "oracle": "atol=rtol=2e-6"
+    }
+  ],
+  "queue_rows": [
+    {
+      "width": 256,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 256,
+      "byte": 63,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 256,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 256,
+      "byte": 62,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 63,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 32,
+      "byte": 62,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 63,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 0,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    },
+    {
+      "width": 64,
+      "byte": 62,
+      "protocol": "producer blit -> fresh shared event -> consumer wait -> VJP"
+    }
+  ],
+  "selector_promotion": false,
+  "performance_claim": false,
+  "source_sha256": {
+    "benchmarks/record_apple_storage_pair.py": "dfbcfc531acf8323ce74297adf1dd8faac10746312af0e9615b53e1997691272",
+    "python/tessera/compiler/apple_arena_bridge.mm": "c7a60265f16e3a02f05736d7874414edf187f51f685ff4e1d313d608d9aae0fd",
+    "python/tessera/compiler/apple_native_arena.py": "40b740ed26dbd677f7511798f2cf93ea67d2ea4e6d0def2c3120230d7aa4ae27",
+    "python/tessera/compiler/native_storage_pair.py": "4fff663e8b692e2a3d607693200fd6dc597a887648530ca73f5ed5583a82d804"
+  }
+}

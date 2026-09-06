@@ -2467,3 +2467,138 @@ records implementation separately from native and device proof.
 **Next producer work:** Schedule-authored manifests and operation-specific arbiter
 oracles; storage children from real compiler AD output; rotating-generation
 ownership; independent ROCm profiling; Apple generic dynamic-arena materialization.
+
+
+### Generated AD children, ownership recurrence and Apple arenas — 2026-09-06
+
+W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The
+[follow-up report](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) records the
+bounded implementation and owning-host evidence, superseding the corresponding
+blanket gaps in the preceding section.
+
+- The actual C++ forward-AD SSA product can generate a native storage child for
+  equal-shape rank-one f32 add/mul programs. Four exact primal/tangent cases pass
+  on each GPU owner. General family/Schedule integration and reverse AD remain open.
+- A fixed allocation's seed/iteration/final-drain token recurrence proves reuse
+  after changing generations. Native adversarial tests reject stale or missing
+  completion; five CUDA cases include zero trips and generation-varying input.
+  Dynamic slot selection, permuted aliases and general CFG ownership remain open.
+- The native arena pass emits bounded MSL with a dynamic threadgroup argument and
+  a checked, 16-byte-aligned native sizing companion. Six M1 Max cases pass using
+  native arm64 sizing. Production Metal package/JIT binding and broader operations
+  remain open; this is a materialization/device probe, not route promotion.
+- Five independent ROCm processes now compare an instruction-identical no-wait
+  control: 348 instructions, only five wait thresholds differ, matching resources.
+  Larger workloads favor deferred waits in 5/5 runs; the small case remains mixed.
+  The WSL profiler exposes no PMC metrics/device trace, so stall attribution remains
+  open. No selector threshold or incumbent policy changed.
+
+### Expanded AD and dynamic aliases / resident Apple packages — 2026-09-06
+
+W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The expanded section of the
+[follow-up report](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) supersedes the
+corresponding gaps above:
+
+- AD adds subtraction, stop-gradient and compiler-owned splat constants. Forward
+  tangent mapping now respects requested `wrt` order. Sixteen exact cases pass on
+  each CUDA/ROCm owner. Transcendental, reduction/attention and reverse families
+  still require family-owned lowering and validation.
+- Dynamic memref aliases support a bijective two-slot swap with full copy
+  completion/publication and collective release before every backedge. Seven
+  CUDA cases cover zero/odd/even trips. Pending tokens across swaps, N-slot rings,
+  nested permutations and general CFG ownership remain open.
+- Apple has an immutable shader/native-companion package and bounded synchronous
+  binding to resident Metal tensors; six M1 Max cases pass after serialization.
+  This is an explicit raw ABI with caller-owned extents and geometry. Typed JIT
+  descriptors, arbiter registration and cross-binding stream ownership remain open.
+- ROCm hardware-counter attribution is blocked by the installed gfx1151 WSL
+  profiler: no PMC/SPM counters or PC-sampling agents. Structured capability
+  evidence distinguishes unavailable counters from zero-valued observations.
+
+### Nonlinear forward products, pending swaps and typed Apple JIT — 2026-09-06
+
+W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The newest section of the
+[follow-up report](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) records:
+
+- Native sigmoid/tanh/composed forward children, using overflow-safe tails and
+  cancellation-safe small-input tanh. Nine numerical cases pass on each CUDA/ROCm
+  owner, including signed zero and nonfinite inputs. Derivatives stay in C++ AD.
+- Coupled pending-token/two-slot recurrences, with exact seed/backedge/final-drain
+  checks. Prefetch may precede current-slot consumption. Seven CUDA cases cover
+  zero/odd/even trips; no speedup is claimed from correctness evidence.
+- Shared manifest validation with an Apple-specific resident tensor adapter and
+  explicit JIT binding. Six M1 Max cases cover keyword calls, lazy rebinding and
+  invalid shapes/scalars. Requested AD fails closed until Apple has a paired ABI.
+
+Next: reduction/attention and reverse AD families; generalized N-slot/nested
+recurrences; Apple paired AD and cross-queue ownership; supported ROCm counter
+capture tied to actual dispatch images. Automatic family/arbiter selection still
+requires semantic oracles. x86 retains host-companion evidence only, without
+inherited GPU compute/AD proof.
+
+### N-slot ownership, reduction/reverse pairs and Metal queues — 2026-09-06
+
+W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. This section supersedes the
+bounded status in the preceding loop; [device packets and scope](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md)
+remain the evidence authority.
+
+- Released bijective N-slot rings and uniformly nested two-slot pending ownership
+  now participate in reuse and arena revalidation. CUDA proves 3/4/8-slot rings
+  and nested pending swaps, including zero/odd/even inner trips.
+- Compiler-generated sum/mean reduction JVPs and residual-free single-input
+  elementwise reverse pairs share a typed, serialized primal/derivative ABI.
+  CUDA, ROCm and Metal each pass 15 cases. Reverse inputs include an explicit
+  output cotangent; the compiler's backward SSA owns the derivative.
+- Apple explicit JIT binding accepts paired packages. Fresh retained shared-event
+  fences order producer blits before consumer AD on separate queues; 12 Metal
+  generations pass. This is correctness evidence, with no selector promotion or
+  overlap/performance claim.
+- Frontend scalar tensors retain rank zero; traced and AST reduce(op=...) emit
+  the canonical kind attribute. This closes actual native parse failures.
+
+Next ordered contracts:
+1. General N-slot *pending* ownership: a bijection alone is insufficient. Track
+   token-to-allocation generation mappings through every nested backedge, seed,
+   zero-trip path and final drain; reject incomplete or stale mappings.
+2. Reduction VJP: separate primal and cotangent shapes in the physical ABI,
+   implement scalar-to-vector broadcast from compiler backward SSA, and prove
+   both output extents. Current reverse native children require equal shapes.
+3. Attention AD: Tessera_FlashAttnOp lacks TangentInterface and AdjointInterface.
+   Start with dense deterministic Q/K/V and paired saved-LSE/mask contracts,
+   then causal/bias variants. Keep dropout RNG and cache effects explicit;
+   never infer support from the existing hand-written backward packages.
+   Use row/tile cooperative schedules rather than extending lane scalarization
+   into quadratic materialized score matrices. Validate primal, JVP and VJP
+   against independent oracles on each owning backend before arbiter enrollment.
+4. General reverse residual/tape ABI and automatic family/arbiter generation.
+5. Cross-queue resource ownership beyond explicit Metal fences, CUDA/HIP event
+   parity, and measured overlap with hardware attribution where available.
+   x86 remains the host companion; no GPU execution proof transfers to it.
+
+### Pending rings, mixed-shape reverse and attention products — 2026-09-06
+
+W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The
+[latest follow-up evidence](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md)
+supersedes the previous next-action list:
+
+1. N-slot pending ownership is implemented for a single outstanding copy and
+   a proven bijective slot/token destination mapping, including uniform nesting.
+   CUDA validates 3/4/8 slots. Multiple outstanding generations and general CFG
+   joins still need a set of generation-specific ownership facts.
+2. Sum/mean reduction VJP and independent primal/cotangent tensor widths are
+   implemented and measured for correctness on CUDA, ROCm and Metal.
+3. Dense-f32 attention reverse and V-only forward interfaces are implemented
+   using existing registered checkpoint operations; LSE is explicit and recomputed
+   under one causal/scale policy. This is compiler-IR evidence, not device AD
+   closure. Next: schedule compound products, persist forward LSE with generation
+   identity, then add Q/K forward products and bias/dropout/cache policies.
+4. Straight-line SAVE residuals now feed the fused native backward from forward
+   SSA; multiple public primal outputs cannot masquerade as saved residuals.
+   External persistent tapes and nested control-flow/state tapes remain open.
+5. Five-process Metal queue measurements establish overlapping command timestamp
+   intervals for matched independent work, with exact numerical results. They
+   do not establish simultaneous instruction issue or a selector-worthy speedup.
+   CUDA/HIP event parity and backend-specific counter attribution remain open.
+
+Keep compiler builds separate from tests: pin the validated executable before
+starting a suite, record its digest, and avoid re-linking under running tests.

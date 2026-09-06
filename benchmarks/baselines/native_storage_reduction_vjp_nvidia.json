@@ -1,0 +1,154 @@
+{
+  "backend": "nvidia",
+  "rows": [
+    {
+      "family": "sum",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "26d29a58009a0019fb51e0fe51284d6336710ff9b04ca65633af477219ceba8f"
+    },
+    {
+      "family": "sum",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "606031726e1e69e5eb9d4c58047012a7cb365ea4963920c1f20e236a79427082"
+    },
+    {
+      "family": "sum",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "8860f7c342e68dcb3447a2f6bd69953628dd73cea749ddd623bf014c1aaf5e86"
+    },
+    {
+      "family": "mean",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "faa4bb7ad2cfdf9a34c0097144b5a571a2ca58bcd63aaf748e7cac9e173e2cbc"
+    },
+    {
+      "family": "mean",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "bb7893da0212e515cc28c8a0342e8be97d2edc23fa9fec46effb132063f69acf"
+    },
+    {
+      "family": "mean",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "e2dfe3471dee38a78ff5bdf4eba0707583787f9784dd643653f5aedcd19e2f47"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "a11be03ceafe28083b3435fa6e8ec9be258d32c16e37f7c214be4d38be388820"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "662455ee02a8a4e940adfbc75b3fd0f0b22c1139431178a0d0936942666f715b"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "5695934c8943765ca977d57e321aa59799ebcea2816d2c1d64f40845ee19bf2f"
+    },
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "6c91c94e1d3891f8b557798cdb90205a25d006408814ba9d1494108ff27aa69c"
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "412a0ce102a77b0d8a59a67a60d751c0de1195c6d8281405df7bc46b7c5e24c0"
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "e788b1668e62282c9d6767457dcd674798c506479b316c81698d95093b38a1dd"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "575b525c57de696614a0ec1d506cbec0b53e9f180f6347d18726605c12e80e35"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "391350ac834473cee39a7320a50477d7db62a8b9ff17545a61088e61a15eaad2"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "e8291936239d792ce4ff85c7c0820a7aa479801cdd02a9542fe4eb0538b9c73c"
+    },
+    {
+      "family": "sum_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "eab5d48ed63fb4ef80f2abf652aa1c4ae6c717206e3b0bf2512acec9f71906d5"
+    },
+    {
+      "family": "sum_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "a26ed304a273a7f57368af6b8d59e07bbd80fc9c51c987fcd6098cc7a59b2664"
+    },
+    {
+      "family": "sum_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "14d0c89ebc859cdec9ba5cf25f976154808711cd40767aa15078f31f94155feb"
+    },
+    {
+      "family": "mean_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "0bd1ce1be55744344dbdea38616dfb33663f188a7202dfcfa0270060c1cc971d"
+    },
+    {
+      "family": "mean_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "ea3d8378ddd60eed708d833adb4552ef35da650c1f5bd17f76fa7bb2810ecba2"
+    },
+    {
+      "family": "mean_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "a4031a75016f6679a1734db1dca686cd14eb1879d44f02ee3be7eddfc26af0c8"
+    }
+  ],
+  "compiler_sha256": "a85490fdd206db00dcfb2725e3ae987da5f73d87a2adcfd56a82ded77caef71d",
+  "recorder_sha256": "922dd16a62984bced76e207bb74ffb99894aeda1e3bf6c919fed99a0e8e1af80"
+}

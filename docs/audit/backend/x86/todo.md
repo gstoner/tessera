@@ -4268,3 +4268,28 @@ See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
 **ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
 Native host sizing remains validated by the GPU package experiments on the WSL x86 hosts. Descriptor/paired-program/stream contracts have host-free regression coverage; GPU event timing and LDS/register scheduling are not applicable to x86 kernel performance. Follow-up required for CPU-native operation/AD producers; no transferred GPU compute evidence.
 See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).
+
+
+**Generated children / rotating ownership / Apple materialization — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Host-companion parity validated on WSL x86; the same LLVM sizing logic also compiles natively to arm64 for Apple. GPU ownership and AD child kernels do not establish x86 compute support. Follow-up required for CPU-native AD producers and CPU-specific ownership/compute evidence; GPU wait timing is not applicable.
+See the [shared follow-up and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Expanded AD / dynamic aliases / resident Apple binding — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared-contract assessment: ordered forward tangents and released two-slot alias analysis are compiler changes; Apple packaging is a separate arm64/Metal companion and is not an x86 GPU ABI. x86 retains checked LLVM host sizing evidence only. Native CPU execution for expanded AD/slot families requires its own lowering and tests; CUDA/HIP/Metal correctness and ROCm counter limitations do not establish x86 execution or performance.
+See [expanded implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Nonlinear AD / pending swaps / typed Apple JIT — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared compiler and ABI assessment: nonlinear GPU children and coupled NVGPU slot/token recurrences do not establish CPU-native execution. Manifest validation is backend-neutral, but Apple uses a separate Metal resident adapter. Host LLVM sizing remains the x86 companion role; native CPU AD/compute and CPU-specific lifetime performance require follow-up. GPU exponential accuracy and stream evidence do not transfer to x86.
+See [implementation and owning-host evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**N-slot / reduction and reverse pairs / Metal queues — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared scalar tensor rank, reduce-kind, AD lineage and package contracts assessed. Not applicable to GPU compute/event execution: x86 supplies the checked host sizing companion, not CUDA/HIP/Metal device proof. Follow-up required for CPU reduction/attention AD execution, residual ABI parity and native host conformance.
+See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) and the integrated plan’s next ordered contracts.
+
+
+**Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared compiler/ABI assessment: mixed primal/cotangent shapes, attention interfaces and fused saved-residual forwarding are implemented. Host LLVM sizing remains validated through device packages. Native CPU attention/AD compute and persistent tape execution require follow-up. GPU ring and queue interval performance are not applicable evidence for x86.
+See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

@@ -7882,3 +7882,28 @@ See the [integration report](../../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md).
 **ABI manifests / paired programs / streams — W2.4a / IR-NATIVE-FOUNDATION-1:**
 Follow-up required for generic GPU-arena-to-MSL lowering and an Apple-native sizing companion. The existing tiled MSL/runtime slot now shares a declaration/preflight contract; dynamic bytes include static reduction scratch and must satisfy the legacy alignment ABI. Host-free tests on WSL do not establish Metal execution or performance.
 See the [integration matrix and measurement](../../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md).
+
+
+**Generated children / rotating ownership / Apple materialization — W2.4a / IR-NATIVE-FOUNDATION-1:**
+Parity validated on M1 Max for the bounded native GPU-arena-to-MSL materializer, six widths and a checked native arm64 sizing companion with 16-byte rounding. Mac tests were explicitly authorized. Follow-up required for production Metal package/JIT binding, broader control flow/operations and Apple AD children. No Apple runtime source or seal changed.
+See the [shared follow-up and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Expanded AD / dynamic aliases / resident Apple binding — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on M1 Max: immutable native shader/companion package, resident DeviceTensor binding on the existing runtime device/queue, bounded completion and six exact cases. Raw ABI remains explicit; typed tensor/JIT and arbiter integration, Apple AD children and cross-binding stream ownership require follow-up. Non-owning views are rejected. CUDA slot/token execution and ROCm counter support are not applicable to Metal; shared compiler proofs do not transfer their device evidence.
+See [expanded implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**Nonlinear AD / pending swaps / typed Apple JIT — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on M1 Max for manifest-derived shapes/scalars/geometry and explicit JIT dispatch through resident buffers: six cases, keyword calls, lazy reopening, and negative ABI checks. Shared manifest validation is separated from CUDA/HIP addressing. Apple AD requests fail closed; paired AD, cross-queue ownership and automatic family/arbiter selection require follow-up. NVIDIA pending-token proof is not a Metal async protocol.
+See [implementation and owning-host evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**N-slot / reduction and reverse pairs / Metal queues — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on M1 Max: 15 compiler-produced reduction/nonlinear JVP and elementwise VJP cases through serialized packages and explicit typed JIT binding; 12 producer-blit/shared-event/consumer-AD generations on separate Metal queues. Fence lifetime and producer device are retained; closed fences fail. LLVM23 optimizer-only nocreateundeforpoison is conservatively omitted when compiling the host companion with Apple Clang. No main runtime source/seal change. Follow-up required for attention/reduction VJP, general tapes, automatic selection and measured queue overlap. CUDA pending-token ownership is not a Metal protocol.
+See [shared scope and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) and the integrated plan’s next ordered contracts.
+
+
+**Pending N-slot / reduction VJP / attention products / queue intervals — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Parity validated on M1 Max: 21 mixed-shape primal/derivative cases, including scalar-cotangent reduction VJP; 12 fenced producer/consumer generations remain passing. Five independent processes provide 270 matched queue interval measurements and exact outputs. Command interval overlap is observed, but spans include host submission gaps and do not prove instruction concurrency or kernel speedup. Native constant-index pointer lowering closes the scalar load. Follow-up required for attention device products, persistent/nested tapes and multi-pending Metal ownership; no runtime seal changed.
+See [shared implementation and evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).

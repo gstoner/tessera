@@ -533,6 +533,8 @@ class JitFn:
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
         self._cached_artifact: Optional["RuntimeArtifact"] = None
         self._native_storage_call: Optional["NativeTensorCall"] = None
+        self._apple_native_arena: Any = None
+        self._native_storage_pair: Any = None
         self._autodiff_specializations: Dict[Any, GraphIRModule] = {}
         # E2E-REAL-6: concrete tensor signatures are tracer-owned by default.
         # The decoration-time AST module remains a named candidate until a
@@ -762,6 +764,44 @@ class JitFn:
             return _PKG_FALLBACK
         return np.frombuffer(raw, dtype=np.float32).reshape(out_shape)
 
+    def bind_native_storage_pair(self, package):
+        """Bind a compiler-produced primal/JVP or primal/VJP physical ABI."""
+        from .native_storage_pair import NativeStoragePair
+        pair = NativeStoragePair(package)
+        if tuple(pair.signature.parameters) != tuple(inspect.signature(self._fn).parameters):
+            pair.close()
+            raise ValueError("native pair physical signature disagrees")
+        request = self.differentiation_request
+        if request is not None and request.mode != pair.contract['mode']:
+            pair.close()
+            raise ValueError("native pair differentiation mode disagrees")
+        self.close_native_storage()
+        self._native_storage_call = None
+        self._native_storage_jvp = None
+        self._native_storage_candidate = None
+        self._apple_native_arena = None
+        self._native_storage_pair = pair
+        self._cached_artifact = None
+        return self
+
+    def bind_apple_native_arena(self, package):
+        """Bind an explicit compiler-owned Apple tensor ABI, without Graph re-entry."""
+        from .apple_native_arena import AppleTensorCall
+        if self.differentiation_request is not None:
+            raise ValueError("Apple arena binding has no paired differentiation contract")
+        binding = AppleTensorCall(package, inspect.signature(self._fn))
+        self.close_native_storage()
+        self._native_storage_call = None
+        self._native_storage_jvp = None
+        self._native_storage_candidate = None
+        previous = getattr(self, "_apple_native_arena", None)
+        if previous is not None:
+            previous.close()
+        self._native_storage_pair = None
+        self._apple_native_arena = binding
+        self._cached_artifact = None
+        return self
+
     def bind_native_storage(self, package, specs=None, *, grid=None, block=None):
         """Explicitly bind a native kernel ABI; no Graph re-lowering or fallback.
 
@@ -790,6 +830,14 @@ class JitFn:
             candidate.close()
         self._native_storage_candidate = None
         self._native_storage_jvp = None
+        apple = getattr(self, "_apple_native_arena", None)
+        if apple is not None:
+            apple.close()
+        self._apple_native_arena = None
+        old_pair = getattr(self, "_native_storage_pair", None)
+        if old_pair is not None:
+            old_pair.close()
+        self._native_storage_pair = None
         self._native_storage_call = binding
         self._cached_artifact = None
         return self
@@ -822,6 +870,8 @@ class JitFn:
         self.close_native_storage()
         self._native_storage_call = None
         self._native_storage_candidate = None
+        self._apple_native_arena = None
+        self._native_storage_pair = None
         self._native_storage_jvp = pair
         self._cached_artifact = None
         return self
@@ -839,6 +889,12 @@ class JitFn:
 
     def close_native_storage(self) -> None:
         """Release the native module; keep the descriptor for lazy rebinding."""
+        native_pair = getattr(self, "_native_storage_pair", None)
+        if native_pair is not None:
+            native_pair.close()
+        apple = getattr(self, "_apple_native_arena", None)
+        if apple is not None:
+            apple.close()
         binding = getattr(self, "_native_storage_call", None)
         if binding is not None:
             binding.close()
@@ -864,6 +920,12 @@ class JitFn:
         """
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
+        native_pair = getattr(self, "_native_storage_pair", None)
+        if native_pair is not None:
+            return native_pair(*args, **kwargs)
+        apple_storage = getattr(self, "_apple_native_arena", None)
+        if apple_storage is not None:
+            return apple_storage(*args, **kwargs)
         paired_storage = getattr(self, "_native_storage_jvp", None)
         if paired_storage is not None:
             return paired_storage(*args, **kwargs)
@@ -1443,6 +1505,34 @@ class JitFn:
                 + transformed.stderr.strip()
             )
         return transformed.stdout
+
+    def compile_native_storage_pair(self, *args, compiler, llvm_bin, backend, chip=None, **kwargs):
+        """Compile the actual traced forward/reverse pair; Apple returns a host export."""
+        import re
+        from .native_storage_pair import materialize_storage_pair
+        request = self.differentiation_request
+        if request is None or request.mode not in ("forward", "reverse"):
+            raise TesseraJitError("native pair requires a forward or reverse request")
+        module = self._specialized_autodiff_module(args, kwargs)
+        graph_text = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
+        return materialize_storage_pair(graph_text, mode=request.mode, compiler=compiler,
+            llvm_bin=llvm_bin, backend=backend, chip=chip)
+
+    def compile_native_storage_jvp(self, *args, compiler, llvm_bin, backend, chip, **kwargs):
+        """Generate a native paired storage child from this traced forward program.
+
+        Compilation specializes on host example inputs; execution subsequently
+        consumes caller-owned resident tensors through NativeStorageJVP.
+        """
+        import re
+        from .native_storage_jvp import build_native_storage_jvp
+        request = self.differentiation_request
+        if request is None or request.mode != "forward":
+            raise TesseraJitError("native storage JVP requires forward autodiff")
+        module = self._specialized_autodiff_module(args, kwargs)
+        graph_text = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
+        return build_native_storage_jvp(graph_text, compiler=compiler, llvm_bin=llvm_bin,
+                                        backend=backend, chip=chip)
 
     def compiled_jvp_ir(self, *args: Any, **kwargs: Any) -> str:
         """Return the compiler-emitted paired JVP Graph IR for this signature.
@@ -2117,7 +2207,7 @@ class JitFn:
 
     @property
     def execution_kind(self) -> str:
-        if getattr(self, "_native_storage_call", None) is not None or getattr(self, "_native_storage_jvp", None) is not None:
+        if getattr(self, "_native_storage_pair", None) is not None or getattr(self, "_apple_native_arena", None) is not None or getattr(self, "_native_storage_call", None) is not None or getattr(self, "_native_storage_jvp", None) is not None:
             return "native_gpu"
         if self._uses_rocm_compiled_default():
             return "native_gpu"
@@ -2198,6 +2288,20 @@ class JitFn:
 
         from tessera.runtime import RuntimeArtifact
 
+        native_pair = getattr(self, "_native_storage_pair", None)
+        if native_pair is not None:
+            return RuntimeArtifact(tile_ir=native_pair.package.arena_ir,
+                metadata={"target": getattr(native_pair.package, "backend", "apple"), "execution_kind": "native_gpu",
+                    "executable": True, "compiler_path": "explicit_native_storage_pair",
+                    "package_digest": native_pair.package.binding_digest, "mode": native_pair.contract['mode'],
+                    "automatic_selection": False}, abi_signature="tessera.native_storage_pair.v1")
+        apple = getattr(self, "_apple_native_arena", None)
+        if apple is not None:
+            return RuntimeArtifact(tile_ir=apple.package.arena_ir,
+                metadata={"target": "apple", "execution_kind": "native_gpu", "executable": True,
+                    "compiler_path": "explicit_apple_native_arena", "runtime_status": "ready",
+                    "package_digest": apple.package.binding_digest, "python_equivalence": "caller_declared",
+                    "automatic_selection": False}, abi_signature="tessera.apple_native_arena.v1")
         pair = getattr(self, "_native_storage_jvp", None)
         if pair is not None:
             return RuntimeArtifact(metadata=pair.artifact.runtime_metadata())

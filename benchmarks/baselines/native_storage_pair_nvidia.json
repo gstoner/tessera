@@ -1,0 +1,112 @@
+{
+  "backend": "nvidia",
+  "rows": [
+    {
+      "family": "sum",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "898720f72f4bda335af943f4a12e9c0f0417204abba0579e964420c9c3c7aef3"
+    },
+    {
+      "family": "sum",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "4309fd5bc2d3e64b85c36bbf9c38cc5683d51bfd7301b61587283a54480961b4"
+    },
+    {
+      "family": "sum",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "42f3c9e84caad9c5567daee289cb0b74c2b0e4fe85bbd578e9e3d2764445e39a"
+    },
+    {
+      "family": "mean",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "5d9626270cf8a547fd1f12dfd8e37462394655c16264210f401afac507ff8ba0"
+    },
+    {
+      "family": "mean",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "b934e58ca41bc758f8886aa040d2f114df07455267bcc8468eefa2967b113910"
+    },
+    {
+      "family": "mean",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "879d668ca5c0ea12d7c0c9c7e3a0355b14407bfb0fee8a9f777577b1963786ab"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 32,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "5563e5ebedce1dc4af3ed3d3271902092fb7eb5e6cd9d3aa0488f661a54674eb"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 64,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "c251759add92d2d74704a8bc15acbd798897b40df0e9aafa218ea9ab18deb464"
+    },
+    {
+      "family": "tanh_jvp",
+      "width": 256,
+      "mode": "forward",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "d4ee3e45d7d080076403862393f0df7acd17036cdb056c412af9918d8809c817"
+    },
+    {
+      "family": "square_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "adbeab93c577348a990795d8df7b574fd93d62db75aba41d0740f8e1bbdfd6ba"
+    },
+    {
+      "family": "square_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "9f8e329b0286bc8a559cc79cd49c4d974b9deeeb7622352fb7b153ac54bfe663"
+    },
+    {
+      "family": "square_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "d86c88788c255c51bd2a6c3233bc8ff780a73193d07898ca128817020de0cf4a"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 32,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "d1ddabc80a366a31d8e4e8984d7cad86dabeecf72b54d941aed0d8141ad5a960"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 64,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "90fe9be80f9ae13c61c86c1facc86f549171126de15e34db314b816ddb5f7a24"
+    },
+    {
+      "family": "tanh_vjp",
+      "width": 256,
+      "mode": "reverse",
+      "oracle": "atol=rtol=2e-6",
+      "package_digest": "bae5e331ffae814f745abd0c26eea68ae9dec80eb9140d4a83c1191cccb3f91f"
+    }
+  ],
+  "compiler_sha256": "c483fe97ec74b94d5feefa056fe72163a519d511de9d24a93901468d4adaf7e5",
+  "recorder_sha256": "cd2648b5f79a532aec29ace9acff00d045193f8642ca6e8a34f52fee1b81970f"
+}

@@ -13,6 +13,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace tessera::memory {
@@ -235,7 +236,250 @@ public:
   explicit Lifetimes(mlir::Operation *fn) : function(fn) {
     fn->walk([&](mlir::Operation *op) { index[op] = end++; });
   }
+  // A changing token is a recurrence, not an invariant SSA origin. Prove a
+  // seed, per-iteration wait/publication/read/release/refill, and final drain
+  // for one fixed allocation slot. Different slots are proved independently.
+  std::optional<Interval> rotating(mlir::Operation *marker) const {
+    using namespace mlir;
+    Value buffer = marker->getOperand(0);
+    scf::ForOp loop;
+    nvgpu::DeviceAsyncCopyOp seed, refill;
+    llvm::SmallVector<Operation *> reads;
+    for (Operation *user : buffer.getUsers()) {
+      if (user == marker) continue;
+      if (auto copy = dyn_cast<nvgpu::DeviceAsyncCopyOp>(user)) {
+        if (copy.getDst() != buffer) return std::nullopt;
+        if (copy->getBlock() == marker->getBlock()) {
+          if (seed) return std::nullopt;
+          seed = copy;
+        } else {
+          auto owner = dyn_cast<scf::ForOp>(copy->getParentOp());
+          if (!owner || (loop && owner != loop) || refill) return std::nullopt;
+          loop = owner; refill = copy;
+        }
+      } else if (isa<memref::LoadOp>(user)) reads.push_back(user);
+      else return std::nullopt; // aliases/escapes/writers need separate proofs
+    }
+    if (!loop || !seed || !refill || reads.empty() ||
+        loop->getBlock() != marker->getBlock() ||
+        marker->getParentOp() != function ||
+        !marker->isBeforeInBlock(seed) || !seed->isBeforeInBlock(loop) ||
+        !workgroupUniform(loop.getLowerBound()) ||
+        !workgroupUniform(loop.getUpperBound()) || !workgroupUniform(loop.getStep())) return std::nullopt;
+    auto yield = cast<scf::YieldOp>(loop.getBody()->getTerminator());
+    for (unsigned i = 0; i < loop.getNumRegionIterArgs(); ++i) {
+      if (!committedCopy(loop.getInitArgs()[i], seed) ||
+          !committedCopy(yield.getOperand(i), refill)) continue;
+      Operation *wait = nullptr, *publish = nullptr, *release = nullptr;
+      for (auto &op : *loop.getBody()) {
+        if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op)) {
+          if (w.getAsyncDependencies() == loop.getRegionIterArgs()[i] &&
+              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) wait = &op;
+        }
+        if (wait && !publish && isa<gpu::BarrierOp>(op)) publish = &op;
+      }
+      if (!publish) continue;
+      bool valid = true;
+      for (auto *read : reads)
+        valid &= read->getBlock() == loop.getBody() &&
+                 publish->isBeforeInBlock(read) && read->isBeforeInBlock(refill);
+      if (!valid) continue;
+      for (auto *op = publish->getNextNode(); op && op != refill; op = op->getNextNode())
+        if (isa<gpu::BarrierOp>(op) && llvm::all_of(reads, [&](Operation *r) { return r->isBeforeInBlock(op); })) release = op;
+      if (!release) continue;
+      // Loop results select the seed on zero trips and the last refill on
+      // nonzero trips. Draining that exact result covers both paths.
+      Operation *finalWait = nullptr;
+      for (auto *op = loop->getNextNode(); op; op = op->getNextNode()) {
+        if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+          if (w.getAsyncDependencies() == loop.getResult(i) &&
+              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) finalWait = op;
+        if (finalWait && isa<gpu::BarrierOp>(op))
+          return Interval{index.lookup(marker), index.lookup(op), true};
+      }
+    }
+    return std::nullopt;
+  }
+  bool uniformNesting(mlir::Operation *marker) const {
+    using namespace mlir;
+    for (auto *parent = marker->getParentOp(); parent != function; parent = parent->getParentOp()) {
+      if (!parent) return false;
+      if (auto loop = dyn_cast<scf::ForOp>(parent)) {
+        if (!workgroupUniform(loop.getLowerBound()) || !workgroupUniform(loop.getUpperBound()) ||
+            !workgroupUniform(loop.getStep())) return false;
+      } else if (auto branch = dyn_cast<scf::IfOp>(parent)) {
+        if (!workgroupUniform(branch.getCondition())) return false;
+      } else return false;
+    }
+    return true;
+  }
+  // Bounded dynamic slot permutation. A bijective backedge keeps N
+  // allocations distinct on every trip (including zero trips). All operations
+  // finish and collectively release before the backedge; no async generation
+  // may cross it. This is deliberately separate from changing-token recurrence.
+  std::optional<Interval> permuted(mlir::Operation *marker) const {
+    using namespace mlir;
+    Value root = marker->getOperand(0);
+    scf::ForOp loop;
+    for (auto *user : root.getUsers())
+      if (auto candidate = dyn_cast<scf::ForOp>(user)) {
+        if (loop && candidate != loop) return std::nullopt;
+        loop = candidate;
+      }
+    if (!loop || !uniformNesting(marker) ||
+        loop->getBlock() != marker->getBlock() || !marker->isBeforeInBlock(loop) ||
+        !workgroupUniform(loop.getLowerBound()) || !workgroupUniform(loop.getUpperBound()) ||
+        !workgroupUniform(loop.getStep())) return std::nullopt;
+    llvm::SmallVector<unsigned> slots;
+    for (auto [i, value] : llvm::enumerate(loop.getInitArgs()))
+      if (isa<MemRefType>(value.getType())) slots.push_back(i);
+    if (slots.size() < 2) return std::nullopt;
+    llvm::SmallPtrSet<Value, 16> roots, backedges;
+    for (unsigned i : slots)
+      if (!roots.insert(loop.getInitArgs()[i]).second) return std::nullopt;
+    auto yield = cast<scf::YieldOp>(loop.getBody()->getTerminator());
+    for (unsigned i : slots) {
+      Value carried = yield.getOperand(i);
+      if (!backedges.insert(carried).second || !llvm::any_of(slots, [&](unsigned j) {
+        return carried == loop.getRegionIterArgs()[j];
+      })) return std::nullopt;
+    }
+    Operation *lastAccess = nullptr;
+    for (unsigned i : slots) {
+      Value init = loop.getInitArgs()[i], arg = loop.getRegionIterArgs()[i];
+      if (!init.getDefiningOp() || !isa<memref::AllocaOp, memref::AllocOp>(init.getDefiningOp()) ||
+          init.getType() != root.getType() || !loop.getResult(i).use_empty()) return std::nullopt;
+      // Each physical root must have its own dominating allocation marker.
+      Operation *ownerMarker = nullptr;
+      for (auto *user : init.getUsers()) if (isMarker(user)) {
+        if (ownerMarker) return std::nullopt;
+        ownerMarker = user;
+      }
+      if (!ownerMarker || ownerMarker->getBlock() != marker->getBlock() ||
+          !ownerMarker->isBeforeInBlock(loop) || (init.getDefiningOp() && viewSource(init.getDefiningOp()))) return std::nullopt;
+      for (auto *user : init.getUsers()) {
+        if (user == ownerMarker || user == loop) continue;
+        if (!isa<memref::StoreOp>(user) || user->getBlock() != loop->getBlock() ||
+            !ownerMarker->isBeforeInBlock(user) || !user->isBeforeInBlock(loop)) return std::nullopt;
+        bool published = false;
+        for (auto *next = user->getNextNode(); next != loop; next = next->getNextNode())
+          published |= isa<gpu::BarrierOp>(next);
+        if (!published) return std::nullopt;
+      }
+      for (auto *user : arg.getUsers()) {
+        if (user == yield) continue;
+        if (user->getBlock() != loop.getBody()) return std::nullopt;
+        if (auto copy = dyn_cast<nvgpu::DeviceAsyncCopyOp>(user)) {
+          if (copy.getDst() != arg) return std::nullopt;
+          Operation *wait = nullptr, *publication = nullptr;
+          for (auto *next = user->getNextNode(); next != yield; next = next->getNextNode()) {
+            if (completes(next, user)) wait = next;
+            if (wait && isa<gpu::BarrierOp>(next)) { publication = next; break; }
+            // No other access to either slot before completion/publication.
+            for (unsigned j : slots)
+              if (llvm::is_contained(next->getOperands(), loop.getRegionIterArgs()[j])) return std::nullopt;
+          }
+          if (!publication) return std::nullopt;
+          if (!lastAccess || lastAccess->isBeforeInBlock(publication)) lastAccess = publication;
+        } else if (!isa<memref::LoadOp, memref::StoreOp>(user)) return std::nullopt;
+        if (!lastAccess || lastAccess->isBeforeInBlock(user)) lastAccess = user;
+      }
+    }
+    if (!lastAccess) return std::nullopt;
+    for (auto *next = lastAccess->getNextNode(); next != yield; next = next->getNextNode())
+      if (isa<gpu::BarrierOp>(next))
+        return Interval{index.lookup(marker), index.lookup(loop.getBody()->getTerminator()), true};
+    return std::nullopt;
+  }
+  // A pending copy token and its destination slot cross the same backedge.
+  // Prove their coupled permutation inductively, instead of collapsing either
+  // SSA value to a static origin. The seed also covers the zero-trip path.
+  std::optional<Interval> pendingSwap(mlir::Operation *marker) const {
+    using namespace mlir;
+    Value root = marker->getOperand(0);
+    scf::ForOp loop;
+    for (auto *user : root.getUsers()) if (auto candidate = dyn_cast<scf::ForOp>(user)) {
+      if (loop && loop != candidate) return std::nullopt;
+      loop = candidate;
+    }
+    if (!loop || !uniformNesting(marker) || loop->getBlock() != marker->getBlock() ||
+        !marker->isBeforeInBlock(loop) || !workgroupUniform(loop.getLowerBound()) ||
+        !workgroupUniform(loop.getUpperBound()) || !workgroupUniform(loop.getStep())) return std::nullopt;
+    llvm::SmallVector<unsigned> slots;
+    for (auto [i, v] : llvm::enumerate(loop.getInitArgs())) if (isa<MemRefType>(v.getType())) slots.push_back(i);
+    if (slots.size() < 2) return std::nullopt;
+    auto yield = cast<scf::YieldOp>(loop.getBody()->getTerminator());
+    llvm::SmallPtrSet<void *, 8> roots, backedges;
+    for (unsigned i : slots) {
+      if (!roots.insert(loop.getInitArgs()[i].getAsOpaquePointer()).second ||
+          !backedges.insert(yield.getOperand(i).getAsOpaquePointer()).second ||
+          !llvm::any_of(slots, [&](unsigned j) {
+            return yield.getOperand(i) == loop.getRegionIterArgs()[j];
+          })) return std::nullopt;
+    }
+    nvgpu::DeviceAsyncCopyOp seed, refill;
+    unsigned readIndex = 0, writeIndex = 0;
+    llvm::SmallVector<Operation *> reads;
+    for (unsigned i : slots) {
+      Value init = loop.getInitArgs()[i], arg = loop.getRegionIterArgs()[i];
+      if (!init.getDefiningOp() || !isa<memref::AllocOp, memref::AllocaOp>(init.getDefiningOp()) ||
+          init.getType() != root.getType() || !loop.getResult(i).use_empty()) return std::nullopt;
+      Operation *ownerMarker = nullptr;
+      for (auto *user : init.getUsers()) if (isMarker(user)) {
+        if (ownerMarker) return std::nullopt;
+        ownerMarker = user;
+      }
+      if (!ownerMarker || ownerMarker->getBlock() != loop->getBlock() || !ownerMarker->isBeforeInBlock(loop)) return std::nullopt;
+      for (auto *user : init.getUsers()) {
+        if (user == ownerMarker || user == loop) continue;
+        auto copy = dyn_cast<nvgpu::DeviceAsyncCopyOp>(user);
+        if (!copy || seed || copy.getDst() != init || copy->getBlock() != loop->getBlock() ||
+            !ownerMarker->isBeforeInBlock(copy) || !copy->isBeforeInBlock(loop)) return std::nullopt;
+        seed = copy; readIndex = i;
+      }
+      for (auto *user : arg.getUsers()) {
+        if (user == yield) continue;
+        if (user->getBlock() != loop.getBody()) return std::nullopt;
+        if (auto copy = dyn_cast<nvgpu::DeviceAsyncCopyOp>(user)) {
+          if (refill || copy.getDst() != arg) return std::nullopt;
+          refill = copy; writeIndex = i;
+        } else if (isa<memref::LoadOp>(user)) reads.push_back(user);
+        else return std::nullopt;
+      }
+    }
+    if (!seed || !refill || reads.empty() || readIndex == writeIndex ||
+        yield.getOperand(readIndex) != loop.getRegionIterArgs()[writeIndex]) return std::nullopt;
+    for (auto *read : reads)
+      if (cast<memref::LoadOp>(read).getMemRef() != loop.getRegionIterArgs()[readIndex]) return std::nullopt;
+    for (unsigned i = 0; i < loop.getNumRegionIterArgs(); ++i) {
+      if (!committedCopy(loop.getInitArgs()[i], seed) || !committedCopy(yield.getOperand(i), refill)) continue;
+      Operation *wait = nullptr, *publish = nullptr, *release = nullptr;
+      for (auto &op : *loop.getBody()) {
+        if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+          if (w.getAsyncDependencies() == loop.getRegionIterArgs()[i] &&
+              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) wait = &op;
+        if (wait && !publish && isa<gpu::BarrierOp>(op)) publish = &op;
+      }
+      if (!publish || !publish->isBeforeInBlock(refill) || !llvm::all_of(reads, [&](Operation *r) {
+        return publish->isBeforeInBlock(r);
+      })) continue;
+      for (auto *op = publish->getNextNode(); op && op != yield; op = op->getNextNode())
+        if (isa<gpu::BarrierOp>(op) && llvm::all_of(reads, [&](Operation *r) { return r->isBeforeInBlock(op); })) release = op;
+      if (!release) continue;
+      Operation *finalWait = nullptr;
+      for (auto *op = loop->getNextNode(); op; op = op->getNextNode()) {
+        if (auto w = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op))
+          if (w.getAsyncDependencies() == loop.getResult(i) &&
+              (!w.getNumGroupsAttr() || w.getNumGroupsAttr().getInt() == 0)) finalWait = op;
+        if (finalWait && isa<gpu::BarrierOp>(op)) return Interval{index.lookup(marker), index.lookup(op), true};
+      }
+    }
+    return std::nullopt;
+  }
   Interval get(mlir::Operation *marker) const {
+    if (auto pending = pendingSwap(marker)) return *pending;
+    if (auto slots = permuted(marker)) return *slots;
+    if (auto recurrence = rotating(marker)) return *recurrence;
     Interval live{index.lookup(marker), index.lookup(marker), true};
     auto *block = marker->getBlock();
     auto *owner = block->getParentOp();

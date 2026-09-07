@@ -1,0 +1,57 @@
+{
+  "rows": [
+    {
+      "dtype": "f16",
+      "per_run_end_to_end_ms": [
+        {
+          "direct": 1.2687,
+          "package": 1.3642
+        },
+        {
+          "direct": 1.2938,
+          "package": 1.4406
+        },
+        {
+          "direct": 1.2884,
+          "package": 1.3881
+        },
+        {
+          "direct": 1.2649,
+          "package": 1.4399
+        },
+        {
+          "direct": 1.2721,
+          "package": 1.3891
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "per_run_end_to_end_ms": [
+        {
+          "direct": 2.6444,
+          "package": 2.6194
+        },
+        {
+          "direct": 3.533,
+          "package": 3.2381
+        },
+        {
+          "direct": 1.628,
+          "package": 1.8717
+        },
+        {
+          "direct": 1.3553,
+          "package": 1.5162
+        },
+        {
+          "direct": 3.2915,
+          "package": 3.1293
+        }
+      ]
+    }
+  ],
+  "package_promoted": false,
+  "scope": "native_image_launch_descriptor, not Metal ML package",
+  "device_timing_claim": false
+}

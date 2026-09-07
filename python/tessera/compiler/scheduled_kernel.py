@@ -175,7 +175,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("scheduled semantic kernel requires a non-empty positive shape")
     dtype = args[input_name].ir_type.dtype
     output_dtype = function.result_types[0].dtype
-    if target == "nvidia_sm120":
+    if target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax"):
         expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
         if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
             raise ValueError("NVIDIA scheduled unary storage contract is unsupported")

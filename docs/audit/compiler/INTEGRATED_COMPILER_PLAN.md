@@ -162,7 +162,7 @@ This section owns what to do with those counts.
 
 | Order | Work item | Deliverable | Acceptance gate | Depends on |
 |---:|---|---|---|---|
-| 1 | **E2E-REAL-6F — optimizer VJP authority complete; exact family/target certificates landing** (x86 + gfx1151 packets landed 2026-08-26) | Every successful family-plugin launch emits a content-addressed `tessera.native_vjp_execution.v1` certificate. Runtime-origin `tessera.runtime_physical_execution.v1` attestations distinguish actual silicon launches from test doubles; only the former count as `exact_device`. Target-owned packets execute all declared families in one process and compare the observed family/target set exactly with the live registry. The three former optimizer `JitFn` helpers remain deleted. | The AVX-512 packet covers all 10 x86 family rows and the gfx1151 packet covers all 13 ROCm rows, including SGD, Momentum, Nesterov, Adam, AdamW, Lion, full/factored Adafactor, sequence mixer, and selective SSM against independent oracles. Eight sibling rows remain blocking: seven SM120 families and Apple normalization. Runtime receives no source Graph or operation dictionary; sibling evidence never transfers. | E2E-REAL-6E state-lineage package. |
+| 1 | **E2E-REAL-6F — optimizer VJP authority complete; exact family/target certificates landing** (x86 + gfx1151 packets landed 2026-08-26) | Every successful family-plugin launch emits a content-addressed `tessera.native_vjp_execution.v1` certificate. Runtime-origin `tessera.runtime_physical_execution.v1` attestations distinguish actual silicon launches from test doubles; only the former count as `exact_device`. Target-owned packets execute all declared families in one process and compare the observed family/target set exactly with the live registry. The three former optimizer `JitFn` helpers remain deleted. | The AVX-512 packet covers all 10 x86 family rows and the gfx1151 packet covers all 13 ROCm rows, including SGD, Momentum, Nesterov, Adam, AdamW, Lion, full/factored Adafactor, sequence mixer, and selective SSM against independent oracles. The generated frontend-authority dashboard owns the current blocking family/target rows; do not infer deletion readiness from the declared certification paths. Runtime receives no source Graph or operation dictionary; sibling evidence never transfers. | E2E-REAL-6E state-lineage package. |
 | 2 | **W4-PRODUCT-1 — executable multi-block regions** | The bounded arbitrary-CFG compiler boundary, per-slot dynamic saved-value envelopes, companion logical-shape tapes, mixed-state SAVE/HYBRID tapes, and nested canonical bodies are landed. Exact polynomial specialization guards remain outside Presburger proofs and require complete witnesses. Compiler-generated replay-safe assertions are admitted; mutation, unkeyed RNG, I/O, alias-sensitive work, and ordered collectives remain fail closed pending operation-owned recorded-product ABIs. The gfx1151 irreducible-state-machine row landed 2026-08-21: `--generate-rocm-state-machine-kernel` lowers a paired `bounded_state_machine_v1` function (forward AND generated backward) to one per-thread device kernel — per-element program counter, structured-CFG digest stamped on the gpu.func, `cf.assert` bound check host-enforced through a STATUS buffer — with both entry paths of a two-entry SCC executing on gfx1151 against the analytic oracle (`test_rocm_state_machine_exec.py`). The sibling x86 row landed 2026-08-21 as well: the same paired functions compile through `tessera_jit` (tessera-to-linalg → elementwise-to-linalg → one-shot-bufferize → loops → LLVM → ORC JIT) and execute natively on the AVX-512 host — both entry paths, forward + backward, digest/residual-policy bound, native `cf.assert` bound trap, proof-of-execution counter (`test_x86_state_machine_exec.py`). One physical packet family with admissible effects landed 2026-08-25 (W4-EFFECTS-1 slices E1-E5, PR #630). **The bounded `tessera.control_scan` reverse landed 2026-08-26:** statically bounded symbol-body scans are normalized through the canonical SCF lowering inside the paired pass and use the proven reverse-loop/tensor-slice rules; payload, dynamic, malformed, and unlowerable forms retain `AUTODIFF_CONTROL_SCAN_UNSUPPORTED`. | Existing region verifier/paired VJP fixtures stay green; padded tape bounds must never replace logical extents; native x86/gfx1151 numerical rows must bind the exact CFG and residual digests before physical execution is claimed. | W2.1 dataflow, W2.2 effects, current bounded W4 carrier. |
 | 3 | **SO-3 + W5.2e-PRODUCER-1 — one schedule authority closed 2026-08-24.** The MegaMoE producer likewise consumes `infer_action_dag` with the hand-authored plan DAG demoted to a fail-closed coverage oracle (#31), and adopting it EXPOSED three over-conservatisms in the shared inference that made any pipeline containing transport infer a total chain — ordered collectives serialized against all local work, registered effectful producers discarded their declared `aliasing="none"`, and every effectful/pure pair was assumed memory-dependent — each corrected with the sound rule and pinned by tests (a 12-action MegaMoE plan went from all 66 edges of the complete order to 36, still oracle-covering, extras collective-ordering only). Its schedule digest binds the plan's own artifact digest. **Two follow-ups closed 2026-08-25:** the interleaved generator emitted backward passes in ASCENDING virtual-stage order (`bwd_clock = fwd_clock + p*v`, a constant offset), the opposite of gradient flow — the stage term is now mirrored, so gradients run from the last virtual stage back to the first with the makespan bit-identical (`2*p*v + m - 2`), the backward gradient edge is expressible again and is REQUIRED rather than excused, and the same work found that DECOUPLED schedules were carrying fabricated cross-stage edges despite being defined by having none. And the spectral policy is now bound by a hash CHAIN rather than a comparison: `sha256(tessera.schedule_payload)` must equal the module digest, and that payload must name `object_id "spectral:<sha256(tessera.spectral_semantic)>"`, so the consumed attributes and the declaration vouching for them can no longer be co-edited. | Pipeline lowering now requires the digest-bound `tessera.pipeline_schedule.v1` carrier, stamps its Schedule Object digest on functions and communication ops, and has no scalar-plan/options reconstruction path. The spectral producer represents fused stages as registered Graph actions, consumes `infer_action_dag`, binds roles/resources into the content-addressed Schedule Object, and requires that digest at Schedule→Tile. MegaMoE R3 likewise consumes inferred registered-semantics edges; its former handwritten DAG is only a fail-closed coverage oracle and additional conservative collective edges remain reported. | Inferred spectral and MegaMoE DAG tests preserve reasoned edges, roles, and resource vectors; stale/missing digest carriers fail closed; focused schedule/producer suite passes (225 tests plus dedicated carrier tests); compiled spectral numerics are unchanged across the complete Zen 5 AVX-512 and WSL gfx1151 suites (42 tests). | SO-1/SO-2 and W5.2e inference. |
 | 3b | **NUMPOL-CARRIER-1 — the S5 generalized `numeric_policy` carrier (owned 2026-08-24; steps 1–2 landed 2026-08-25 — schema + reduction-family carrier, see the status note under this table)** | One carrier design for storage/accumulator/math-mode that survives Schedule and Tile IR beyond MMA fragments (pointwise, reduction, and butterfly chains), plus the Decision #32 boundary verifier that FAILS on silent loss instead of recording it. Builds on the landed W1.1 `!tile.fragment<…, acc, …>` accumulator carrier (typed ROCm route) as the worked reference. Four mandating consumers: CAKE (#32's original derivation), game-theory §6 (fusion is a correctness feature — the zeta intermediate must not round through fp32), PDE §III.4 (interim `tessera.info_loss` records retire), and AD-JET-IR-1 (coefficient/cotangent policy, W6.3 §2.3). FORGE §1.3 supplies the measured acceptance target: the fused-epilogue fp32-accumulator realizability verdict (913× → 1.1× → 1.0× purely as a function of accum × state dtype) must be decided by the carried policy, not a special case. | Carrier attribute round-trips Schedule→Tile with a lit-verified boundary check per crossing; a lowering that drops the policy fails closed with a named diagnostic (#21a/#32); the W1.1 fragment path re-expressed as an instance of the general carrier without behavior change (bit-identical existing gfx1151/x86 outputs); the PDE `tessera.info_loss` interim records replaced by carrier facts; dashboard row tracks per-boundary coverage. May proceed in parallel with Orders 3 and 5 (orthogonal IR-carrier work; the schedule authority does not consume the policy). | W1.1 fragments (landed); Decision #32; #21a semantic-key discipline. |
@@ -2865,3 +2865,259 @@ registry/schema changes together with their first consumer and focused drift
 gates. CUDA, ROCm, Apple and x86 each require their own lowering-preservation
 and exact-device evidence before hardware promotion; this consolidation changes
 no backend support state or physical schedule.
+
+
+## F0 census correction and current next steps — 2026-09-06
+
+This update supersedes older summary counts, not their historical evidence.
+The frontend-authority dashboard currently has nine missing NVIDIA family rows
+and Apple normalization; older eight-row paragraphs are historical. Future
+status reports should read the generated rows rather than duplicate this total.
+A declared certification path is not an emitted exact-device certificate.
+
+The package census now includes Apple GPU alongside Apple CPU and the three
+other native package modules. Unannotated, `Any` and raw-IR inputs no longer
+count automatically as compiled artifact consumers. Computed classifier returns
+are exposed explicitly; Apple primitive membership remains unclassified rather
+than being inferred from incomplete literals. Typed artifact inputs still need
+semantic consumer/replay verification before migration closure. Missing source
+modules fail the census instead of shrinking its denominator.
+
+F0 remains landing: resolve computed Apple family membership from the live
+producer, make family-to-compiled admission target/envelope aware, then join
+actual driver/plugin call paths and artifact lineage. This bounded census fix
+adds no backend execution support. After the relevant family's census is sound,
+F2 migrates its remaining Graph constructor and F3 instantiates one optimized
+matmul recipe for two witnessed buckets. PR #721's pre-bucket optimization and
+narrow source-loop recognition are implemented foundations, not unstarted work.
+
+Preserve PR #732's bounded tapes, resident Q/K JVP and ANN extraction/native
+constant composition; their generalization and measured promotion remain open.
+The recomputed-tape scratch-retirement follow-up is implemented with repeated
+backward and failure-path allocation regressions. The active AD plan and FA-series
+consolidation own the remaining native product and numerical-legality work.
+
+
+### F0 Apple family domains and native unary ancestry — 2026-09-06
+
+The census resolves the known Apple CPU computed return from the producer's
+value/low-precision symbol tables and Apple GPU `value_*` returns from the
+ready-descriptor table minus dedicated-family exclusions. Unknown expressions
+remain unresolved. These are family-domain candidates, not proof that every
+shape/policy is admitted. Apple primitive-membership joins remain explicitly
+unverified; resolving names does not authorize coverage promotion.
+
+A family-to-scheduled mapping now requires the corresponding consumer to exist
+in that target's package module. In particular, Apple CPU matmul does not inherit
+Apple GPU or x86 scheduled coverage. This is a necessary structural gate;
+full driver/plugin control-flow and envelope joins remain F0 work.
+
+Apple scheduled softmax/reduction now replays the retained Schedule through
+native `--tessera-schedule-to-tile`, requires exact equality with the supplied
+Tile product, and checks the native module's apple7/apple_gpu identity before
+runtime lookup. A changed operand pair or relabelled x86 parent is refused even
+when the previous structural validator accepts it. Direct packaging therefore
+requires the production `tessera-opt`; synthetic descriptor tests explicitly
+stub replay and do not count as compiler proof. Native positive/negative replay
+runs on the WSL compiler host, not as new Metal execution evidence.
+
+Next: verify descriptor-field projection and extend the same ancestry obligation
+to remaining Apple matmul/attention consumers before retiring their Graph
+constructors. Reuse each native parent and preserve library-vs-generated-body
+provenance. No other backend's runtime, capability or promotion state changes.
+
+
+### Descriptor projection and seven-program continuation — 2026-09-06
+
+Owning key: **F0 / IR-NATIVE-FOUNDATION-1**. Apple GPU unary and plain
+rank-two matmul packages now check descriptor geometry, tensor types, supported
+layout/arithmetic policy and tile decisions against native-printed Schedule IR.
+Schedule-to-Tile replay now also gates matmul and forward/backward attention
+before runtime lookup. Unary buffer names remain explicit host binding aliases;
+they are not claimed as serialized SSA provenance. The projection reader accepts
+the current bounded native printer grammar and rejects unsupported forms.
+
+This closes a bounded package-boundary defect, not canonical ownership as a
+whole. Attention descriptor projection, dynamic/epilogue matmul projection,
+complete shape-policy route joins and remaining Graph constructors stay open.
+Compiler replay evidence is separate from Metal execution and performance.
+Princess-Luna's LLVM 23.1.1 reports assertion mode `OFF`; its passing tests do
+not satisfy the assertions-enabled MLIR gate.
+
+Continue in this dependency order, preserving each program's existing owner:
+
+1. **Canonical ownership / descriptor projection:** finish attention and dynamic
+   descriptor fields, then migrate the next Graph constructor with independent
+   target ancestry and owning-device comparison. Retain library/generated-body
+   provenance rather than equating a typed wrapper with compiled execution.
+2. **General AD execution:** dynamic/mixed/while persistent tapes and asynchronous
+   retirement, followed by composed attention, batching, sparse derivatives and
+   native higher-order products. Bounded PR #732 products remain bounded.
+3. **Optimization integration:** native optimized-recipe instantiation and native
+   ANN evaluation before selector-grade measured promotion.
+4. **Numerical legality:** carry FA-1–FA-7 error-budget composition into concrete
+   spectral/approximation consumers; metadata alone cannot establish legality.
+5. **Runtime resilience:** bounded CUDA/HIP waits must define context poisoning
+   and retain resources until completion is known, including timeout tests.
+6. **Evidence infrastructure:** obtain an assertions-enabled native compiler,
+   finish route/envelope inventories and reconcile authored summaries against
+   revision-bound generated evidence. Device proof remains architecture-owned.
+
+These remain active programs; this implementation does not close their broader
+execution or performance gates.
+
+
+### Attention projection and static softmax migration — 2026-09-07
+
+**F0/F2 / IR-NATIVE-FOUNDATION-1:** Apple forward/backward attention packaging
+now projects rank-four tensor signatures, dimensions, storage, numeric modifiers,
+bias presence, LSE policy and scheduling fields from native-printed Schedule IR
+after exact Schedule-to-Tile replay. Host buffer aliases remain explicit and
+must be distinct. Backward's public function name is a source alias; its native
+entry is synthesized and the library symbol is fixed by the verified storage ABI.
+Floating attributes are compared at the native f32 precision.
+
+Static f32 `package_softmax(GraphIRModule)` now acts as a compatibility frontend:
+it invokes the shared native lowering and artifact consumer instead of building
+a descriptor and placeholder Tile text from Graph fields. The f16/bf16 branch
+remains historical. This is a bounded constructor migration, not deletion of
+the Graph entry API or proof that every package is IR-owned. The scheduled
+consumer now owns f32 provenance even when reached through the legacy entry.
+Missing native compiler support fails rather than reconstructing a package.
+
+WSL native compiler and descriptor tests validate the boundary; no new Metal
+execution/performance evidence is claimed. A follow-up probe found that Apple
+f16/bf16 backward's forward companion is rejected by the current native
+Graph-to-Schedule pass despite the runtime variant table. That producer gap
+must close before claiming low-precision paired package support. Remaining:
+full operand/region semantic projection, low-precision softmax migration and
+owning-device differential proof before removing historical constructors.
+
+
+### Low-precision Apple native closure slice — 2026-09-07
+
+**F0/F2 / IR-NATIVE-FOUNDATION-1:** static f16/bf16 softmax now follows the same
+native Schedule/Tile consumer as f32, with storage-derived ABI, alignment and
+buffer types. The historical static softmax descriptor constructor is removed;
+the public Graph entry remains a compatibility frontend to native lowering.
+Apple low-precision attention's forward recompute companion is now admitted by
+Graph-to-Schedule when its function carries the recompute checkpoint contract.
+Standalone low-precision forward runtime packaging is still refused.
+
+The new native compiler passed WSL projection tests. Exact-device differential
+checks on the M1 Max passed for f16 and bf16 softmax and causal GQA backward,
+including all three gradients, using a freshly compiled runtime and requiring
+`native_gpu` for every launch. See
+[the bounded evidence packet](../../../benchmarks/apple_gpu/lowp_native_differential.json)
+and `tests/unit/test_apple_lowp_native_contract.py` for shapes, tolerances,
+source/compiler/runtime hashes and reproduction assertions. Native compilation
+ran on Princess-Luna over SSH; execution and numerical proof belong only to the
+Mac. This is correctness evidence, not timing or selector promotion.
+
+Remaining: biased/noncausal and broader-shape low-precision device coverage,
+full semantic operand projection, and subsequent Graph-owned families. The
+assertions-enabled LLVM gate remains open.
+
+
+### Broader Apple coverage and measured runtime promotion — 2026-09-07
+
+**F0/F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1:** six additional M1 Max
+package differential cases passed: MHA/GQA/MQA, B=1/2, Sq=7/9/17/19,
+Sk=7/19/33/65, D=16/32/64/128, causal/noncausal, fp16/bf16 unbiased and fp32
+biased. All dQ/dK/dV outputs were checked against a float64 analytic VJP and
+every launch required native GPU placement. Low-precision compiled bias remains
+explicitly refused: native IR specifies fp32 bias while the runtime variant
+requires storage-typed bias. Silently quantizing it would change the program.
+
+Five independent, paired/interleaved runtime benchmark processes (seven trials,
+ten repetitions) validated all three routes on the existing six-case closure
+matrix. The strict median-order-statistic gate promoted `split_reduced` over
+`serial_recompute` for six exact shape/dtype keys in both timing domains.
+Across the recorded per-run medians, device speedups were 5.25–22.55x and
+host-input/output end-to-end speedups were 4.26–16.72x; these ranges describe
+these fixtures only. Atomic was measured but was not the selected winner.
+
+[Raw reports and coverage](../../../benchmarks/baselines/apple_backward_20260907/)
+and the [strict family ledger](../../../benchmarks/baselines/apple7_attention_backward_strict_v2_route_ledger.json)
+retain distinct timing domains and exact context. The backward route-policy
+resolver now defaults to this dedicated ledger, preserving explicit global and
+per-call overrides. Live validation accepted 12 rows, refused a changed runtime
+fingerprint, and retained serial when the split workspace exceeded the cap.
+This promotes the measured **runtime-route policy**; compiled artifacts still
+bind their declared fixed two-way split and these reports do not establish
+package-subgraph performance. Biased BF16 direct-runtime evidence uses BF16
+bias and is not evidence for compiled fp32-bias inputs.
+
+Remaining: mixed-storage bias ABI/projection, package-level promotion evidence,
+unmeasured shape envelopes, and assertions-enabled compiler validation.
+
+
+## Math audit / foundation reconciliation — 2026-09-07
+
+This is a source-and-ownership review, not a fresh reproduction of the cited
+papers or every historical numerical result. Math semantics and reference laws
+feed one native compiler; they do not justify parallel Python lowering stacks.
+Keep four evidence tiers distinct: reference law, serialized native contract,
+executed target artifact, and measured candidate admission.
+
+| Document | Disposition | Current integration / remaining gate |
+|---|---|---|
+| MLIR_NATIVE_FOUNDATION_SURVEY | Keep as architectural reference; this section supersedes dated census/absence claims. | F0 inventory plus F2 descriptor/ancestry migration; static Apple softmax now delegates through native IR for f32/f16/bf16. General program-body compilation remains distinct from library delegation. |
+| MATH_SOURCE_WORKSTREAM | Archive the original proposal; live routing note retains MSW IDs. | MSW-1–8 bounded reference work stays landed. MSW-9 uses ANN/F3 for automatic native fragment discovery, executable identity and measured admission. Native higher-order products use the AD execution plan. |
+| MATRIX_CALCULUS_REVIEW | Keep mathematical reference, label its historical findings. | MC1/2/5/8 remediation is not a new backlog. MC3 metric/manifold descent uses geometry + native AD; MC4 native Kronecker/vec rewrite uses F3 and a no-materialization gate; MC6 native higher-order composition uses AD-CLOSEOUT-1 and AD-WEIL-1; MC7/9 counting/law fixes stay landed and are reused as gates. Recheck deferred matrix operations before adding new public ops. |
+| RIEMANNIAN_OT_PLAN | Keep scoped acceptance-workload plan. | Existing ga.manifold Euclidean/Sphere/SOn and metric reference methods contradict a blanket “whole layer missing” claim. R0/R1 require explicit native manifold/domain carriers and consumers; R2 reuses native AD/residual authority, R3–R5 are downstream workloads. No fresh OT numerical/backend proof is inferred. |
+| SEQUENCE_MIXER_ENGINEERING_PLAN | Keep scoped implementation plan. | W1/W2 reference/state interfaces precede W3/W4 native recurrence descent, then W5/W8 target forward/backward ownership. W6 precision and W7 admission use NUMPOL/F3/FA-4. The common tiled SSD program remains distinct from ReplaySSM's bounded ABI. |
+| SEQUENCE_MIXER_THEORY | Keep reference; dated capability table is not current status. | Transition/state/reassociation semantics constrain native IR. Check each transition family and current producer, not just the existence of scalar delta_rule or a runtime kernel. |
+| PDE_STENCIL_CAPABILITY_PLAN | Keep scoped contract/consumer plan. | Python pde_operator classification and diagonal-diffusion certificates, coordinate fields and stencil materialization are bounded. PDE-STENCIL-FOUNDATION-1 / FA-7 require explicit spacing, coefficients, boundary/domain and discretization assumptions consumed by native passes and target code. |
+| FORGE_ASSESSMENT | Archive proposal; preserve mathematical evidence and live routing note. | W1/W2 → LAYOUT-ALG-1/Schedule memory authority; W3/W4/W7/W8 → F3 stateful fusion; W5 → NUMPOL/FA-1; W6 → DIST-NATIVE-1. No new residency registry or unconditional “exact candidate” promotion. |
+
+### Dependency order and exit tests
+
+1. **F0/F2 native ownership:** every selected family serializes ABI, layout,
+   numeric policy, state and provenance; package fields are checked projections.
+   Wrong dtype, operand ancestry, alias or policy rejects before launch.
+2. **Native AD and numerical legality:** wire manifold/coordinate/recurrence
+   consumers into existing AD and NUMPOL/FA-1 authority. State norm, domain,
+   discretization and error-budget assumptions; unsupported cases refuse.
+3. **F3 math optimizations:** native Kronecker/vec, ANN and stateful epilogues
+   require original/transformed execution, alias/effect and no-materialization
+   checks, then candidate identity binding. Reference identities remain oracles.
+4. **Target workloads:** sequence mixers/SSD, PDE/OT and optimizer state updates
+   consume that foundation. Paired package-level performance evidence is owned
+   per architecture; direct-runtime measurements do not promote a compiled
+   package or transfer to a sibling target.
+
+The two archived proposals are consolidated, not completed programs. Remaining
+work above stays active under existing IDs; the archive is not a second queue.
+
+
+### Mixed-storage bias and native-package admission — 2026-09-07
+
+**F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1:** dedicated f16/bf16 + fp32-bias
+status ABIs now preserve the native bias tensor without narrowing. MSL bias
+loads and buffer allocation widths are independent of Q/K/V/dO storage; existing
+storage-typed ABI signatures are unchanged. Python binding registration, native
+launcher dispatch, descriptor types/alignment and non-Metal stubs agree.
+Eight broader M1 Max package VJP cases passed, including fp16/bf16 biased cases.
+This supersedes the earlier mixed-storage refusal as an implementation gap.
+
+Five independent paired reports compare complete native-package dispatch with
+the identical direct split-kernel ABI, excluding compilation from warm timings
+and reporting it separately. The strict `package_subgraph` ledger retains the
+direct incumbent: f16 package calls were slower; bf16 evidence was mixed and
+failed its lower-bound gate. No package promotion is made. These are native
+image/LaunchDescriptor packages, not `.mtlpackage` ML execution, and no device
+clock claim is derived from the complete-call timer. See
+[package reports and ledger](../../../benchmarks/baselines/apple_native_backward_package_20260907/).
+The instability reason no longer incorrectly says a mixed-win candidate won
+every run; the admission thresholds themselves are unchanged.
+
+Remaining: reduce measured package overhead with identity-preserving caching,
+then remeasure before admission; extend mixed-bias shape/policy coverage. The
+new runtime changes the exact fingerprint. Five fresh owning-device runtime
+reports admit split_reduced for six shapes in both timing domains; live loading,
+context mismatch refusal and workspace fallback passed. See
+[refreshed runtime evidence](../../../benchmarks/baselines/apple_backward_mixed_runtime_20260907/).
+The fleet recorder refused the modified runtime because its packet requires a
+committed source revision. Commit the runtime, then record a fresh fleet packet
+before publishing; no hash-only reseal is permitted.

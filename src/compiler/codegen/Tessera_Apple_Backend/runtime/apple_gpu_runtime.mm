@@ -5648,7 +5648,7 @@ inline int bwd_kv_batch(int query_batch, constant BwdParams &p) {
 
 inline float bwd_raw_score(device const bwd_storage_t *Q,
                            device const bwd_storage_t *K,
-                           device const bwd_storage_t *bias, int qoff, int koff,
+                           device const bwd_bias_t *bias, int qoff, int koff,
                            int query_batch, int q, int k,
                            constant BwdParams &p) {
   float s = 0.0f;
@@ -5656,7 +5656,7 @@ inline float bwd_raw_score(device const bwd_storage_t *Q,
     s += bwd_load(Q, qoff + i) * bwd_load(K, koff + i);
   s *= p.scale;
   if (p.has_bias != 0)
-    s += bwd_load(bias, (query_batch * p.Sq + q) * p.Sk + k);
+    s += bwd_bias_load(bias, (query_batch * p.Sq + q) * p.Sk + k);
   return s;
 }
 
@@ -5676,7 +5676,7 @@ kernel void flash_attn_bwd_dq_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device float *dQ [[buffer(5)]],
     constant BwdParams &p [[buffer(6)]],
     uint3 gid [[thread_position_in_grid]]) {
@@ -5726,7 +5726,7 @@ kernel void flash_attn_bwd_dkdv_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]], device float *dK [[buffer(5)]],
+    device const bwd_bias_t *bias [[buffer(4)]], device float *dK [[buffer(5)]],
     device float *dV [[buffer(6)]], constant BwdParams &p [[buffer(7)]],
     uint3 gid [[thread_position_in_grid]]) {
   int d = int(gid.x), k = int(gid.y), kvb = int(gid.z);
@@ -5792,7 +5792,7 @@ kernel void flash_attn_bwd_atomic_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device atomic_uint *dK [[buffer(5)]], device atomic_uint *dV [[buffer(6)]],
     constant BwdParams &p [[buffer(7)]],
     uint3 gid [[thread_position_in_grid]]) {
@@ -5838,7 +5838,7 @@ kernel void flash_attn_bwd_split_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device float *dK0 [[buffer(5)]], device float *dV0 [[buffer(6)]],
     device float *dK1 [[buffer(7)]], device float *dV1 [[buffer(8)]],
     constant BwdParams &p [[buffer(9)]],
@@ -5893,7 +5893,7 @@ kernel void flash_attn_bwd_split_f32(
 inline bool bwd_query_stats(
     device const bwd_storage_t *Q, device const bwd_storage_t *K,
     device const bwd_storage_t *V, device const bwd_storage_t *dO,
-    device const bwd_storage_t *bias, int b, int q, int kvb,
+    device const bwd_bias_t *bias, int b, int q, int kvb,
     constant BwdParams &p, thread float &m, thread float &l,
     thread float &dd) {
   int qoff = (b * p.Sq + q) * p.D;
@@ -5944,7 +5944,7 @@ kernel void flash_attn_bwd_row_prepass_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device float *row_lse [[buffer(5)]],
     device float *row_delta [[buffer(6)]],
     constant BwdParams &p [[buffer(7)]],
@@ -5968,7 +5968,7 @@ kernel void flash_attn_bwd_dq_stream_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device float *dQ [[buffer(5)]], constant BwdParams &p [[buffer(6)]],
     device const float *row_lse [[buffer(7)]],
     device const float *row_delta [[buffer(8)]],
@@ -6003,7 +6003,7 @@ kernel void flash_attn_bwd_atomic_stream_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device atomic_uint *dK [[buffer(5)]],
     device atomic_uint *dV [[buffer(6)]],
     constant BwdParams &p [[buffer(7)]],
@@ -6034,7 +6034,7 @@ kernel void flash_attn_bwd_atomic_stream_f32(
 inline void bwd_accumulate_query(
     device const bwd_storage_t *Q, device const bwd_storage_t *K,
     device const bwd_storage_t *V, device const bwd_storage_t *dO,
-    device const bwd_storage_t *bias, device float *dK, device float *dV,
+    device const bwd_bias_t *bias, device float *dK, device float *dV,
     int b, int q, int kvb, constant BwdParams &p) {
   int qoff = (b * p.Sq + q) * p.D, base = kvb * p.Sk * p.D;
   float m, l, dd;
@@ -6060,7 +6060,7 @@ kernel void flash_attn_bwd_serial_stream_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device float *dK [[buffer(5)]], device float *dV [[buffer(6)]],
     constant BwdParams &p [[buffer(7)]],
     uint gid [[thread_position_in_grid]]) {
@@ -6095,7 +6095,7 @@ kernel void flash_attn_bwd_split_stream_f32(
     device const bwd_storage_t *K [[buffer(1)]],
     device const bwd_storage_t *V [[buffer(2)]],
     device const bwd_storage_t *dO [[buffer(3)]],
-    device const bwd_storage_t *bias [[buffer(4)]],
+    device const bwd_bias_t *bias [[buffer(4)]],
     device float *dK0 [[buffer(5)]], device float *dV0 [[buffer(6)]],
     device float *dK1 [[buffer(7)]], device float *dV1 [[buffer(8)]],
     constant BwdParams &p [[buffer(9)]],
@@ -6158,7 +6158,7 @@ enum : int32_t {
   kFlashAttnBwdStorageBF16 = 2,
 };
 
-static NSString *flash_attn_bwd_source(int32_t storage_dtype) {
+static NSString *flash_attn_bwd_source(int32_t storage_dtype, bool bias_f32 = false) {
   NSString *declaration = nil;
   if (storage_dtype == kFlashAttnBwdStorageF32) {
     declaration = @"typedef float bwd_storage_t;\n"
@@ -6175,6 +6175,9 @@ static NSString *flash_attn_bwd_source(int32_t storage_dtype) {
   } else {
     return nil;
   }
+  declaration = [declaration stringByAppendingString:(bias_f32
+      ? @"\ntypedef float bwd_bias_t; inline float bwd_bias_load(device const bwd_bias_t *p, int i) { return p[i]; }"
+      : @"\ntypedef bwd_storage_t bwd_bias_t; inline float bwd_bias_load(device const bwd_bias_t *p, int i) { return bwd_load(p, i); }")];
   return [kFlashAttnBwdSourceTemplate
       stringByReplacingOccurrencesOfString:@"__TESSERA_BWD_STORAGE_DECL__"
                                 withString:declaration];
@@ -6202,7 +6205,7 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
     const void *bias, float *dQ, float *dK, float *dV, int32_t B,
     int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
     float scale, int32_t causal, int32_t causal_offset, int32_t window_size,
-    float logit_softcap, int32_t storage_dtype, int32_t route = 0) {
+    float logit_softcap, int32_t storage_dtype, int32_t route = 0, bool bias_f32 = false) {
   if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0 || D > 256 ||
       q_heads <= 0 || kv_heads <= 0 || B % q_heads != 0 ||
       q_heads % kv_heads != 0 || window_size < 0 || logit_softcap < 0.0f)
@@ -6211,7 +6214,7 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
   if (storage_dtype < kFlashAttnBwdStorageF32 ||
       storage_dtype > kFlashAttnBwdStorageBF16) return false;
   @autoreleasepool {
-    NSString *source = flash_attn_bwd_source(storage_dtype);
+    NSString *source = flash_attn_bwd_source(storage_dtype, bias_f32);
     if (!source) return false;
     id<MTLComputePipelineState> dq_pso = compile_msl_kernel(
         ctx, source, @"flash_attn_bwd_dq_stream_f32");
@@ -6233,7 +6236,7 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
     NSUInteger kv_bytes =
         sizeof(float) * static_cast<NSUInteger>(kv_outer) * Sk * D;
     NSUInteger bias_bytes = bias
-        ? input_element_bytes * static_cast<NSUInteger>(B) * Sq * Sk
+        ? (bias_f32 ? sizeof(float) : input_element_bytes) * static_cast<NSUInteger>(B) * Sq * Sk
         : input_element_bytes;
     const uint32_t zero_bias = 0;
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, q_input_bytes);
@@ -6571,6 +6574,32 @@ extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_bf16_status(
       Q, K, V, dO, bias, dQ, dK, dV, B, q_heads, kv_heads, Sq, Sk, D,
       scale, causal, window_size, logit_softcap, route,
       kFlashAttnBwdStorageBF16);
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_f16_bias_f32_status(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V, const uint16_t *dO,
+    const float *bias, float *dQ, float *dK, float *dV, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float softcap, int32_t route) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && Q && K && V && dO && bias && dQ && dK && dV &&
+          dispatch_flash_attn_bwd_msl(ctx, Q, K, V, dO, bias, dQ, dK, dV,
+              B, q_heads, kv_heads, Sq, Sk, D, scale, causal,
+              std::max(Sk - Sq, 0), window_size, softcap,
+              kFlashAttnBwdStorageF16, route, true)) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_bf16_bias_f32_status(
+    const uint16_t *Q, const uint16_t *K, const uint16_t *V, const uint16_t *dO,
+    const float *bias, float *dQ, float *dK, float *dV, int32_t B,
+    int32_t q_heads, int32_t kv_heads, int32_t Sq, int32_t Sk, int32_t D,
+    float scale, int32_t causal, int32_t window_size, float softcap, int32_t route) {
+  MetalDeviceContext &ctx = deviceContext();
+  return (ctx.ok && Q && K && V && dO && bias && dQ && dK && dV &&
+          dispatch_flash_attn_bwd_msl(ctx, Q, K, V, dO, bias, dQ, dK, dV,
+              B, q_heads, kv_heads, Sq, Sk, D, scale, causal,
+              std::max(Sk - Sq, 0), window_size, softcap,
+              kFlashAttnBwdStorageBF16, route, true)) ? 1 : 0;
 }
 
 //===---------------------------------------------------------------------===//

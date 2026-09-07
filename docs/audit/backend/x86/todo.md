@@ -4322,3 +4322,35 @@ Shared native Q/K product verification is implemented. Attention JVP host produc
 **Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 Shared native product readonly inputs and dense attention metadata apply. The CUDA/HIP tape consumer uses x86 only for its checked host sizing companion; this does not establish x86 tensor-tape execution. Follow-up required for an independently validated CPU product consumer and attention integration.
 See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**PR #732 scratch retirement — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Not applicable to this fix: the recomputed-tape consumer binds CUDA/HIP allocations. Host sizing companions do not execute this device tape.
+
+
+**F0 census correction — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared inventory now distinguishes Graph, typed artifact and unknown/raw inputs; missing modules fail closed. Apple GPU packaging is included, with computed Apple family returns explicitly unresolved. No support or device-proof state changes. Follow-up required for target/envelope-aware producer-to-consumer lineage before retiring remaining Graph constructors.
+
+
+**Apple domains / unary parent replay — F0 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared census now requires a scheduled consumer in the owning target module before reporting its declared family route. Apple replay/target checks do not establish x86 execution or performance. No runtime or support state changes; full target/envelope call-path joins remain follow-up required.
+
+
+**Descriptor projection / ancestry — F0 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Not applicable to this implementation: the changed package consumers are Apple-specific. Follow-up required for independent target descriptor/ancestry review; Apple native replay transfers no execution or performance evidence.
+
+
+**Attention projection / static softmax — F0/F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Not applicable to this implementation: Apple library package consumers changed; no x86 runtime or promotion state changes. Follow-up required for independent target descriptor projection and owning-device evidence.
+
+
+**Low-precision native slice — F0/F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared Graph-to-Schedule admission changes are Apple-conditional. No x86 ABI or scheduling changes; Apple device proof is not applicable to this target. Independent exact-device evidence remains required for promotion.
+
+
+**Broader coverage / route promotion — APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Not applicable to this target: Apple-only package guard, route-policy default and M1 Max evidence. No x86 schedule or performance promotion; independent exact-device promotion remains required.
+
+
+**Mixed bias / math ownership — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Apple-specific mixed-bias ABI has no x86 ABI or execution change. Shared audit sequencing and truthful instability wording updated; no sibling performance evidence transferred. Follow-up required: existing native AD/numeric-policy/math consumer work under the integrated plan.

@@ -89,3 +89,50 @@ def test_persistent_allocation_refuses_invalid_byte_extents(shape):
     from tessera.compiler.native_device_tape import _Buffer
     with pytest.raises(ValueError):
         _Buffer(SimpleNamespace(),shape)
+
+
+@pytest.mark.parametrize('fail_launch', [False, True])
+def test_backward_releases_temporary_primal_and_preserves_results(fail_launch):
+    import ctypes as ct
+    from tessera.compiler.native_device_tape import NativeDeviceTape
+    obj = NativeDeviceTape.__new__(NativeDeviceTape)
+    obj._lock = threading.RLock()
+    obj._ready = lambda: None
+    obj.closed = False
+    obj.width = 4
+    obj.primal = obj._input = SimpleNamespace(shape=(4,), pointer=ct.c_void_p(128))
+    obj.children = []
+    obj.buffers = [obj.primal]
+    obj.check = lambda code: None
+    obj.sync = lambda: 0
+    allocated, freed, temporaries, results = [], [], [], []
+
+    def alloc(pointer, size):
+        address = 256 * (len(allocated) + 1)
+        allocated.append(address)
+        ct.cast(pointer, ct.POINTER(ct.c_void_p))[0] = ct.c_void_p(address)
+        return 0
+
+    def pair(value, seed, primal, derivative, width):
+        temporaries.append(primal)
+        if fail_launch and seed == 7:
+            raise RuntimeError('injected launch failure')
+
+    obj.alloc = alloc
+    obj.free = lambda pointer: freed.append(pointer.value) or 0
+    obj.pair = pair
+    for seed in range(16):
+        if fail_launch and seed == 7:
+            with pytest.raises(RuntimeError, match='injected'):
+                obj.backward(seed)
+        else:
+            results.append(obj.backward(seed))
+        assert obj.buffers == [obj.primal, *results]
+        assert all(result.pointer.value not in freed for result in results)
+        assert all(not temporary.pointer.value for temporary in temporaries)
+    assert len(freed) == 16 + int(fail_launch)
+    assert len(set(freed)) == len(freed)
+    assert all(result.__cuda_array_interface__['data'][0] for result in results)
+    obj.close()
+    assert obj.closed and not obj.buffers
+    assert all(not result.pointer.value for result in results)

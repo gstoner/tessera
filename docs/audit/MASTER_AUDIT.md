@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-09-06
 audit_role: root
 ---
 
@@ -29,10 +29,18 @@ an exact-target representative suite. It is not the all-up compiler denominator.
 ## Current interpretation
 
 The public API, frontend-capture inventory, Graph registration, Schedule IR,
-Tile IR, runtime-readiness, verifier, batching, transpose, and lowering axes are
-closed in the generated rollup. Those surfaces remain regression gates.
+runtime-readiness, verifier, batching, transpose, and lowering contract axes are
+closed in the generated rollup. Tile IR still has partial rows. These are
+inventory/contract gates, not proof of general native lowering or composition.
+Read the route census and execution evidence alongside them.
 
-The compiler is not finished. Its active work is concentrated in the following
+The compiler is not finished. Backend-kernel counts represent conservative
+contract promotion states, not a count of missing implementations or a workload
+priority order. Device access blocks particular target proofs; semantic-authority
+migration, general AD, specialization and runtime safety also require engineering.
+The active AD scope is [AUTODIFF_EXECUTION_PLAN.md](compiler/AUTODIFF_EXECUTION_PLAN.md).
+
+Its active work is concentrated in the following
 programs.
 
 ### 1. E2E-REAL-6 — one compiler authority

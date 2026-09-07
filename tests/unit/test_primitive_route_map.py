@@ -211,7 +211,7 @@ def test_a_target_that_cannot_be_classified_says_so_rather_than_vanishing():
 def test_a_silently_unclassifiable_target_is_refused(monkeypatch):
     """Dropping a target from UNCLASSIFIABLE_TARGETS must fail, not hide it."""
     monkeypatch.setattr(prm, "UNCLASSIFIABLE_TARGETS", {})
-    with pytest.raises(ValueError, match="vanish from the map silently"):
+    with pytest.raises(ValueError, match="no membership declaration"):
         prm.verify_family_membership()
 
 
@@ -220,3 +220,11 @@ def test_a_stale_compiled_route_restriction_is_refused(monkeypatch):
                         {**prm.COMPILED_ROUTE_TARGETS, "softmax": ("x86",)})
     with pytest.raises(ValueError, match="stale restriction"):
         prm.verify_family_membership()
+
+
+def test_primitive_route_cannot_inherit_missing_target_consumer(monkeypatch):
+    from tessera.compiler import bootstrap_prune_audit
+    monkeypatch.setattr(bootstrap_prune_audit, '_target_family_route', lambda target, family: None)
+    routes = prm.primitive_routes()
+    assert routes
+    assert all(prm.ROUTE_COMPILED not in per.values() for per in routes.values())

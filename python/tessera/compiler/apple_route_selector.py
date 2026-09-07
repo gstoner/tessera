@@ -1142,7 +1142,7 @@ def aggregate_stable_route_reports(
                         status = "retain_incumbent_unstable_candidate"
                         reason = (
                             "candidate(s) " + ", ".join(unstable) +
-                            " won every run but missed the 95% lower bound on "
+                            " did not establish the required 95% lower bound on "
                             "cross-run speedup; not promotable without "
                             "measurement that reproduces")
             decisions.append({

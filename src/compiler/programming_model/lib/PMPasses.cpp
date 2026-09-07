@@ -617,7 +617,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
         (x86 && schedule.storage != "f32")
         || (nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
         (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
-        (apple_gpu && schedule.storage != "f32"))
+        (apple_gpu && schedule.storage != "f32" && schedule.storage != "f16" && schedule.storage != "bf16"))
       return failure();
     schedule.family = "softmax";
     schedule.rows = 1;
@@ -1434,6 +1434,11 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   if (k.getElementType() != qElement || v.getElementType() != qElement)
     return failure();
   schedule.storage = storageName(qElement);
+  // Low-precision forward IR is admitted only as the recompute companion of
+  // the paired VJP. The standalone Apple forward runtime remains f32-only.
+  auto owner = op->getParentOfType<func::FuncOp>();
+  auto checkpoint = owner ? owner->getAttrOfType<StringAttr>("tessera.lse_checkpoint") : StringAttr();
+  bool appleRecompute = checkpoint && checkpoint.getValue() == "recompute";
   if ((nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
       (x86 && schedule.storage != "f32") ||
       (rocm && (schedule.storage != "f16" && schedule.storage != "bf16")) ||
@@ -1441,7 +1446,8 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
                 schedule.headDim % 16 != 0)) ||
       // The Apple GQA MSL ABI is f32-only, shares one head/value dim, and
       // rejects D > 256 before submission.
-      (apple_gpu && (schedule.storage != "f32" ||
+      (apple_gpu && ((schedule.storage != "f32" &&
+                     !(appleRecompute && (schedule.storage == "f16" || schedule.storage == "bf16"))) ||
                      schedule.headDim != schedule.valueDim ||
                      schedule.headDim > 256)))
     return failure();

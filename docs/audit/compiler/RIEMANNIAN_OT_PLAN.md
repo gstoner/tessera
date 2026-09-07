@@ -1,10 +1,17 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-09-07
 audit_role: plan
 plan_state: open
 status: proposal — not started, no code landed
 source: arXiv:2602.03566v1 "Riemannian Neural Optimal Transport" (Micheli, Cao, Monod, Bhatt)
 ---
+
+> Current ownership review (2026-09-07): use the
+> [math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+> for live residuals and dependency order. Historical absence claims, timings,
+> fleet instructions and effort estimates below describe their dated review;
+> reference implementation is not native execution or promotion evidence.
+
 
 # Riemannian Optimal Transport — Paper Review and Operator Plan
 
@@ -146,7 +153,7 @@ Inventoried against `python/tessera/compiler/op_catalog.py` (the acceptor),
 Python surface. **"Exists" below means present in the catalog — not that its
 twelve contract axes are closed.**
 
-### 3.1 Geometric primitives — the whole layer is missing
+### 3.1 Geometric primitives — dated gap analysis
 
 | Paper concept | Signature | Today |
 |---|---|---|
@@ -216,7 +223,12 @@ five-seam pattern used for the EBM geometric ops (numpy reference → catalog +
 coverage registration → Graph/Target IR → backend kernel → manifest + tests +
 dashboards).
 
-### R0 — Manifold contract (spec only, no kernels)
+### R0 — Manifold contract (native consumer integration)
+
+Current source already includes `ga.manifold.Euclidean`, `Sphere` and `SOn`.
+Reuse their bounded reference semantics. The remaining task is an explicit
+native manifold/domain contract with consuming AD/lowering, not another
+reference hierarchy. The original proposal below is historical context.
 
 Write `docs/spec/MANIFOLD_SPEC.md` defining the manifold as a first-class IR
 attribute, lifting the enum out of the EBM dialect:

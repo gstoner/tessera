@@ -1,0 +1,16 @@
+{
+  "runtime_source_sha256": "ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19",
+  "context": {
+    "device": "apple7",
+    "physical_device": "Apple M1 Max",
+    "os_version": "26.6.2",
+    "sdk_version": "26.5",
+    "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+    "runtime_fingerprint": "sha256:ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19"
+  },
+  "test": "tests/unit/test_apple_lowp_native_contract.py::test_broader_metal_differential",
+  "passed": 8,
+  "evidence_log": "metal_differential.xml",
+  "scope": "bounded native package VJP including f16 and bf16 inputs with fp32 bias",
+  "promotion_scope": "runtime_route_only"
+}

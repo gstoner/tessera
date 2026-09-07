@@ -545,6 +545,7 @@ def test_apple_gpu_packages_the_exact_scheduled_tile_artifact(monkeypatch, tmp_p
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
     monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    monkeypatch.setattr(apple_native, "_verify_matmul_schedule_ancestry", lambda artifact: None)
 
     package = apple_native.package_scheduled_matmul(
         artifact,
@@ -570,6 +571,7 @@ def test_apple_gpu_packages_scheduled_simdgroup_f16(monkeypatch, tmp_path) -> No
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
     monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    monkeypatch.setattr(apple_native, "_verify_matmul_schedule_ancestry", lambda artifact: None)
 
     package = apple_native.package_scheduled_matmul(
         artifact, pipeline_name="tessera-lower-to-apple_gpu",
@@ -591,6 +593,7 @@ def test_apple_gpu_scheduled_matmul_rejects_non_apple_contract(monkeypatch, tmp_
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
     monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    monkeypatch.setattr(apple_native, "_verify_matmul_schedule_ancestry", lambda artifact: None)
     # An x86 f32 artifact is structurally valid but not the apple7 contract.
     with pytest.raises(ValueError, match="apple7 contract"):
         apple_native.package_scheduled_matmul(
@@ -699,6 +702,7 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(
         fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
         fake_dylib.write_bytes(b"apple-runtime-image")
         monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+        monkeypatch.setattr(apple_native, "_verify_matmul_schedule_ancestry", lambda artifact: None)
 
     bundle = compile_graph_module(
         module,

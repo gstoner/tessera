@@ -1,0 +1,695 @@
+{
+  "context": {
+    "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+    "device": "apple7",
+    "os_version": "26.6.2",
+    "physical_device": "Apple M1 Max",
+    "runtime_fingerprint": "sha256:ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19",
+    "sdk_version": "26.5"
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "direct",
+      "op": "compiled_attention_backward",
+      "reason": "candidate(s) package did not establish the required 95% lower bound on cross-run speedup; not promotable without measurement that reproduces",
+      "route_evidence": {
+        "direct": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              2658896,
+              2644375,
+              2817395,
+              2892125,
+              1809812,
+              1807416,
+              1411646
+            ],
+            [
+              2569917,
+              3868625,
+              3532958,
+              3899708,
+              4014937,
+              3312396,
+              3445812
+            ],
+            [
+              3075604,
+              2857437,
+              1628021,
+              1716312,
+              1311958,
+              1343333,
+              1295333
+            ],
+            [
+              2988812,
+              2447208,
+              1517396,
+              1321250,
+              1321666,
+              1355250,
+              1308750
+            ],
+            [
+              3115937,
+              3291479,
+              3325833,
+              3461937,
+              3619396,
+              3004396,
+              1759209
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            }
+          ],
+          "run_drift_fraction": 1.6068681055155876,
+          "times_ns": [
+            2644375,
+            3532958,
+            1628021,
+            1355250,
+            3291479
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call"
+          ]
+        },
+        "package": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.17722540050394694,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.09375540170973541,
+            0.08346999879421153,
+            -0.09054064762117843,
+            -0.0691289429994466,
+            -0.08648604472335993
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.014840369837707078,
+              -0.14037645946584731,
+              -0.09375540170973541,
+              -0.04108121191165665,
+              -0.005341438779276521,
+              -0.12880985893673622,
+              -0.20896102847314413
+            ],
+            [
+              -0.25345293252661466,
+              0.12241636240266245,
+              0.08346999879421153,
+              0.08895435247972412,
+              0.19669773149616046,
+              0.06193915220281633,
+              -0.12053298322717548
+            ],
+            [
+              -0.10680828871337142,
+              -0.07495808306534842,
+              -0.9493759601381063,
+              -0.09054064762117843,
+              -0.33032688546432126,
+              -0.024488343545494676,
+              -0.05693516647842678
+            ],
+            [
+              0.003694109900522348,
+              0.13525617765224696,
+              -0.11727854824976473,
+              -0.14752469252601702,
+              -0.06499145775105057,
+              -0.0691289429994466,
+              -0.11580744985673352
+            ],
+            [
+              0.0833081670136463,
+              -0.08648604472335993,
+              -0.22274509874668993,
+              -0.4009495262334352,
+              0.13539911079086123,
+              -0.04101623088301276,
+              -0.3002764310550935
+            ]
+          ],
+          "paired_trial_count": 35,
+          "paired_trial_times_ns": [
+            [
+              2619437,
+              3015583,
+              3081541,
+              3010937,
+              1819479,
+              2040229,
+              1706625
+            ],
+            [
+              3221270,
+              3395042,
+              3238062,
+              3552812,
+              3225208,
+              3107229,
+              3861146
+            ],
+            [
+              3404104,
+              3071625,
+              3173625,
+              1871708,
+              1745333,
+              1376229,
+              1369083
+            ],
+            [
+              2977771,
+              2116208,
+              1695354,
+              1516167,
+              1407563,
+              1448937,
+              1460313
+            ],
+            [
+              2856354,
+              3576146,
+              4066646,
+              4849999,
+              3129333,
+              3127625,
+              2287458
+            ]
+          ],
+          "paired_win_fractions": [
+            0.14285714285714285,
+            0.7142857142857143,
+            0.0,
+            0.2857142857142857,
+            0.2857142857142857
+          ],
+          "placement_and_numerical_proof": true,
+          "pooled_paired_win_fraction": 0.2857142857142857,
+          "present_in_all_runs": true,
+          "promotable": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            }
+          ],
+          "run_drift_fraction": 1.1356895381577359,
+          "speedup_confidence_interval": [
+            -0.09375540170973541,
+            0.08346999879421153
+          ],
+          "speedup_lower_confidence_bound": -0.09375540170973541,
+          "speedups_vs_incumbent": [
+            0.009430583786338927,
+            0.08346999879421153,
+            -0.14968295863505446,
+            -0.1187360265633647,
+            0.0492623528814858
+          ],
+          "stability_verdict": "unstable_evidence",
+          "times_ns": [
+            2619437,
+            3238062,
+            1871708,
+            1516167,
+            3129333
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "direct",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "status": "retain_incumbent_unstable_candidate",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "direct",
+      "op": "compiled_attention_backward",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "direct": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              1250250,
+              1257354,
+              1268666,
+              1273083,
+              1254667,
+              1282041,
+              1274916
+            ],
+            [
+              1478979,
+              1361583,
+              1280729,
+              1248333,
+              1324167,
+              1272125,
+              1293771
+            ],
+            [
+              1596500,
+              1487437,
+              1288396,
+              1302458,
+              1257999,
+              1280354,
+              1263166
+            ],
+            [
+              1734333,
+              1510791,
+              1241999,
+              1261770,
+              1264938,
+              1266083,
+              1260521
+            ],
+            [
+              1717125,
+              1535291,
+              1245624,
+              1284687,
+              1272124,
+              1248812,
+              1246625
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            }
+          ],
+          "run_drift_fraction": 0.02279400255190373,
+          "times_ns": [
+            1268666,
+            1293771,
+            1288396,
+            1264938,
+            1272124
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call"
+          ]
+        },
+        "package": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.06458664041554597,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.07157820817652895,
+            -0.10391191266848802,
+            -0.09710792977585457,
+            -0.13616484859207492,
+            -0.09709109651066454
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.09656388722255549,
+              -0.06634328916120678,
+              -0.08624571006080403,
+              -0.07157820817652895,
+              -0.07621464500142269,
+              -0.06448077713583263,
+              -0.05779831769308723
+            ],
+            [
+              -0.20644917879158528,
+              -0.05806697057762913,
+              -0.10391191266848802,
+              -0.15525745133710317,
+              -0.024307357002553303,
+              -0.16974511152598998,
+              -0.06064288038609615
+            ],
+            [
+              -0.2603870967741935,
+              0.054581807498401615,
+              -0.07499635205325071,
+              -0.09710792977585457,
+              -0.09774173111425367,
+              -0.05044151851753499,
+              -0.09890861533638493
+            ],
+            [
+              -0.16564984925040346,
+              0.02356646286614098,
+              -0.10881329212020299,
+              -0.09611260372334102,
+              -0.13829689676490073,
+              -0.13616484859207492,
+              -0.1571604122422395
+            ],
+            [
+              -0.18032758244158112,
+              0.008942278695048692,
+              -0.09709109651066454,
+              -0.08385622334467462,
+              -0.08365300866896623,
+              -0.11230673632220062,
+              -0.09831505063671914
+            ]
+          ],
+          "paired_trial_count": 35,
+          "paired_trial_times_ns": [
+            [
+              1370979,
+              1340771,
+              1378083,
+              1364208,
+              1350291,
+              1364708,
+              1348604
+            ],
+            [
+              1784313,
+              1440646,
+              1413812,
+              1442146,
+              1356354,
+              1488062,
+              1372229
+            ],
+            [
+              2012208,
+              1406250,
+              1385021,
+              1428937,
+              1380958,
+              1344937,
+              1388104
+            ],
+            [
+              2021625,
+              1475187,
+              1377145,
+              1383042,
+              1439875,
+              1438479,
+              1458625
+            ],
+            [
+              2026770,
+              1521562,
+              1366563,
+              1392416,
+              1378541,
+              1389062,
+              1369187
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0,
+            0.14285714285714285,
+            0.14285714285714285,
+            0.14285714285714285
+          ],
+          "placement_and_numerical_proof": true,
+          "pooled_paired_win_fraction": 0.08571428571428572,
+          "present_in_all_runs": true,
+          "promotable": false,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            },
+            {
+              "scope": "native_package_descriptor_or_direct_identical_ABI"
+            }
+          ],
+          "run_drift_fraction": 0.05603104511921936,
+          "speedup_confidence_interval": [
+            -0.13616484859207492,
+            -0.07157820817652895
+          ],
+          "speedup_lower_confidence_bound": -0.13616484859207492,
+          "speedups_vs_incumbent": [
+            -0.07530902538572012,
+            -0.11352472732809747,
+            -0.07738924988900928,
+            -0.13829689676490073,
+            -0.09192342884813115
+          ],
+          "stability_verdict": "not_a_stable_win",
+          "times_ns": [
+            1364208,
+            1440646,
+            1388104,
+            1439875,
+            1389062
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call",
+            "host_complete_native_call"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "direct",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    }
+  ],
+  "expires_at": "2026-10-07T14:11:14.514227Z",
+  "ineligible_decisions": [
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "direct",
+      "op": "compiled_attention_backward",
+      "reason": "incumbent paired evidence is incomplete",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "status": "ineligible",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "direct",
+      "op": "compiled_attention_backward",
+      "reason": "incumbent paired evidence is incomplete",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "status": "ineligible",
+      "timing_domain": "device"
+    }
+  ],
+  "measured_at": "2026-09-07T14:11:14.514227Z",
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "cross_run_estimator": "median_order_statistic",
+    "cross_run_speedup_spread_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.5,
+    "minimum_pooled_paired_win_fraction": 0.75,
+    "minimum_promotion_runs": 3,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "minimum_speedup_lower_confidence_bound": 0.05,
+    "paired_win_fraction_each_run_is_strict": true,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true,
+    "speedup_confidence_level": 0.95
+  },
+  "schema": "tessera.apple.route-ledger.v2",
+  "selection_scope": "package_subgraph",
+  "source_report_count": 5,
+  "source_report_digests": [
+    "sha256:c8ec6dd201cafc57cdb5170a985a5a4bde545dd622991a423afa922b653a8749",
+    "sha256:378e2a503a1f2561fddc3ef9a3618d157084574738086ebfaa90dbaa341f05f4",
+    "sha256:437239dd90f808a2871382dc295685cc0b6ce4d93a829ab735f0258e60e019b5",
+    "sha256:6df7b35827c815ca55fb6b7302eec616a63a2d879d3ec9c9c6e6d36c61d0ead7",
+    "sha256:fe7624471774b6d4af6209449c8018ebf224e48c657d92dfb76f80e2d0a40919"
+  ]
+}

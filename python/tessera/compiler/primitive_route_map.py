@@ -79,14 +79,14 @@ NON_PATTERN_FAMILIES: frozenset[str] = frozenset({"breadth", "cohort2"})
 #: `apple_cpu` is in `bootstrap_prune_audit._BACKEND_MODULES` but its
 #: `native_package_kind` returns a computed expression
 #: (`op.op_name.removeprefix(...)`) rather than string literals, so the AST
-#: walker yields nothing. `apple_gpu` is not in that audit at all, yet
-#: `driver.py` has a live scheduled dispatch for it. Both have real routes this
+#: walker yields nothing. `apple_gpu` has a partial literal inventory plus
+#: computed value-family returns. Both have real routes this
 #: map cannot yet see.
 UNCLASSIFIABLE_TARGETS: Mapping[str, str] = {
-    "apple_cpu": ("native_package_kind returns a computed expression, not "
-                  "string literals, so the AST walker derives no families"),
-    "apple_gpu": ("not in bootstrap_prune_audit._BACKEND_MODULES, though "
-                  "driver.py has a live scheduled dispatch for it"),
+    "apple_cpu": ("computed families are inventoried; primitive membership and "
+                  "shape-policy joins remain unverified"),
+    "apple_gpu": ("computed value families are inventoried; primitive membership "
+                  "and shape-policy joins remain unverified"),
 }
 
 #: Families whose compiled route is gated to specific targets in `driver.py`.
@@ -221,6 +221,8 @@ def discovered_families() -> "dict[str, tuple[str, ...]]":
     from .bootstrap_prune_audit import collect_inventories
     out: dict[str, list[str]] = {}
     for inventory in collect_inventories():
+        if inventory.target in UNCLASSIFIABLE_TARGETS:
+            continue  # A partial literal census cannot establish primitive membership.
         for family in inventory.families:
             out.setdefault(family, []).append(inventory.target)
     return {family: tuple(targets) for family, targets in sorted(out.items())}
@@ -390,7 +392,11 @@ def primitive_routes() -> "dict[str, dict[str, str]]":
         # which is what published `depth_attn` as compiled on NVIDIA and x86.
         compiled_targets: tuple[str, ...] = ()
         if family in compiled:
-            compiled_targets = COMPILED_ROUTE_TARGETS.get(family, family_targets)
+            from .bootstrap_prune_audit import _target_family_route
+            compiled_targets = tuple(
+                target for target in COMPILED_ROUTE_TARGETS.get(family, family_targets)
+                if _target_family_route(target, family) is not None
+            )
         for target in set(family_targets) | set(compiled_targets):
             if target in UNCLASSIFIABLE_TARGETS:
                 continue                      # no claim is possible there

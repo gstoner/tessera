@@ -551,6 +551,14 @@ TS_STUB_FLASH_ATTN_BWD_VARIANT_16(
     tessera_apple_gpu_flash_attn_bwd_variant_f16_status)
 TS_STUB_FLASH_ATTN_BWD_VARIANT_16(
     tessera_apple_gpu_flash_attn_bwd_variant_bf16_status)
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_f16_bias_f32_status(
+    const uint16_t*, const uint16_t*, const uint16_t*, const uint16_t*, const float*,
+    float*, float*, float*, int32_t, int32_t, int32_t, int32_t, int32_t,
+    int32_t, float, int32_t, int32_t, float, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_bf16_bias_f32_status(
+    const uint16_t*, const uint16_t*, const uint16_t*, const uint16_t*, const float*,
+    float*, float*, float*, int32_t, int32_t, int32_t, int32_t, int32_t,
+    int32_t, float, int32_t, int32_t, float, int32_t) { return 0; }
 #undef TS_STUB_FLASH_ATTN_BWD_VARIANT_16
 
 extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,

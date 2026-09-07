@@ -163,6 +163,10 @@ def test_rocm_packages_exact_scheduled_reduction(monkeypatch) -> None:
 
 def test_apple_gpu_packages_exact_scheduled_softmax(monkeypatch, tmp_path) -> None:
     from tessera.compiler import apple_native
+    # This fixture supplies synthetic IR to isolate descriptor rendering.
+    # Native replay and tamper rejection are exercised below with the compiler.
+    monkeypatch.setattr(apple_native, "_verify_kernel_schedule_ancestry", lambda artifact: None)
+
 
     artifact = _artifact(family="softmax", target="apple_gpu")
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
@@ -222,6 +226,10 @@ def test_apple_gpu_scheduled_reduce_is_compiler_synthesized(monkeypatch, tmp_pat
     by a recorded source digest.
     """
     from tessera.compiler import apple_native
+    # This fixture supplies synthetic IR to isolate descriptor rendering.
+    # Native replay and tamper rejection are exercised below with the compiler.
+    monkeypatch.setattr(apple_native, "_verify_kernel_schedule_ancestry", lambda artifact: None)
+
 
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
@@ -250,6 +258,8 @@ def test_apple_gpu_scheduled_reduce_rejects_unmappable_contracts(
     monkeypatch, tmp_path
 ) -> None:
     from tessera.compiler import apple_native
+    monkeypatch.setattr(apple_native, "_verify_kernel_schedule_ancestry", lambda artifact: None)
+
 
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
@@ -302,6 +312,8 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, tmp_path, 
         )
     else:
         from tessera.compiler import apple_native
+        monkeypatch.setattr(apple_native, "_verify_kernel_schedule_ancestry", lambda artifact: None)
+
 
         fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
         fake_dylib.write_bytes(b"apple-runtime-image")
@@ -387,33 +399,18 @@ def test_gfx1151_scheduled_semantic_kernel_executes_exact_artifact(family) -> No
     np.testing.assert_allclose(output, expected, rtol=2e-5, atol=2e-5)
 
 
-def test_apple_scheduled_boundary_falls_back_without_tessera_opt(monkeypatch, tmp_path) -> None:
-    """A runtime-only Apple install must not hard-fail.
-
-    The shared scheduled artifact is produced by running production
-    ``tessera-opt``. When that tool is absent the driver must leave Apple on its
-    independently proven descriptor route rather than entering a lane it cannot
-    produce — the regression this locks is a `RuntimeError: scheduled
-    softmax/reduction lowering requires production tessera-opt` raised from an
-    ordinary rank-2 f32 softmax compile.
-    """
-    from tessera.compiler import apple_native
+def test_apple_scheduled_boundary_requires_native_compiler(monkeypatch) -> None:
+    """Static softmax cannot re-enter a Graph-built descriptor fallback."""
+    from tessera.compiler import scheduled_kernel
     from tessera.compiler import driver as _driver
-
-    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
-    dylib.write_bytes(b"apple-runtime-image")
-    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: dylib)
     monkeypatch.setattr(_driver, "_apple_scheduled_boundary_available", lambda: False)
-
-    bundle = compile_graph_module(
-        _softmax_module((3, 17)), source_origin="no-tessera-opt",
-        target="apple_gpu", options={"package_native": True},
-        enable_tool_validation=False,
-    )
-    event = next(e for e in bundle.trace_events
-                 if e.pass_name == "apple-gpu-native-package")
-    assert event.metadata["op_family"] == "softmax"
-    assert event.metadata["work_item"] == "APPLE-E2E-1"
+    monkeypatch.setattr(scheduled_kernel, "find_tessera_opt", lambda: None)
+    with pytest.raises(RuntimeError, match="production tessera-opt"):
+        compile_graph_module(
+            _softmax_module((3, 17)), source_origin="no-tessera-opt",
+            target="apple_gpu", options={"package_native": True},
+            enable_tool_validation=False,
+        )
 
 
 def _softmax_module(shape: tuple[int, ...]) -> GraphIRModule:
@@ -583,3 +580,47 @@ def test_apple_gpu_scheduled_softmax_executes_exact_artifact(shape) -> None:
     shifted = x - np.max(x, axis=-1, keepdims=True)
     expected = np.exp(shifted) / np.sum(np.exp(shifted), axis=-1, keepdims=True)
     np.testing.assert_allclose(output, expected, rtol=3e-5, atol=3e-5)
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native tessera-opt")
+@pytest.mark.parametrize('family', ['softmax', 'reduce'])
+def test_apple_kernel_replays_native_parent_before_runtime_lookup(monkeypatch, family):
+    import re
+    from tessera.compiler import apple_native
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        _module(family=family, target='x86'), target='apple_gpu')
+    apple_native._verify_kernel_schedule_ancestry(artifact)
+    # Keep operation names, signature, metadata and schedule hash intact, but
+    # reverse the physical input/output operands. Structural validate accepts it.
+    changed, count = re.subn(r'(tile\.(?:softmax|reduce)_kernel) (%[\w]+), (%[\w]+)',
+                            r'\1 \3, \2', artifact.tile_ir)
+    assert count == 1
+    forged = dataclasses.replace(artifact, tile_ir=changed)
+    forged.validate()
+    monkeypatch.setattr(apple_native, '_runtime_library_path',
+                        lambda: pytest.fail('runtime lookup preceded ancestry rejection'))
+    with pytest.raises(ValueError, match='native Schedule replay'):
+        apple_native.package_scheduled_kernel(forged, pipeline_name='test')
+
+
+def test_apple_kernel_requires_replay_tool(monkeypatch):
+    from tessera.compiler import apple_native, scheduled_matmul
+    monkeypatch.setattr(scheduled_matmul, 'find_tessera_opt', lambda: None)
+    monkeypatch.setattr(apple_native, '_runtime_library_path',
+                        lambda: pytest.fail('runtime lookup preceded tool rejection'))
+    with pytest.raises(RuntimeError, match='requires native Schedule replay'):
+        apple_native.package_scheduled_kernel(
+            _artifact(family='softmax', target='apple_gpu'), pipeline_name='test')
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native tessera-opt")
+def test_apple_kernel_refuses_relabeled_foreign_native_parent(monkeypatch):
+    from tessera.compiler import apple_native
+    foreign = scheduled_kernel.lower_scheduled_kernel(
+        _module(family='softmax', target='x86'), target='x86')
+    forged = dataclasses.replace(foreign, target='apple_gpu', architecture='apple7')
+    forged.validate()
+    monkeypatch.setattr(apple_native, '_runtime_library_path',
+                        lambda: pytest.fail('runtime lookup preceded target rejection'))
+    with pytest.raises(ValueError, match='native parent target'):
+        apple_native.package_scheduled_kernel(forged, pipeline_name='test')

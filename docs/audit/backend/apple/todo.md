@@ -7936,3 +7936,35 @@ Shared native Q/K product verification is implemented. Metal product lowering, M
 **Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 Follow-up required: shared readonly product inputs and dense attention metadata apply, but Metal needs MSL lowering and completion-owned buffer allocations for split tensor tapes and resident Q/K products. CUDA/HIP pointer consumers are not applicable to Apple; no new Metal execution or runtime seal change.
 See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**PR #732 scratch retirement — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Not applicable to this fix: the recomputed-tape consumer binds CUDA/HIP allocations. Metal completion-owned buffers require their own implementation.
+
+
+**F0 census correction — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared inventory now distinguishes Graph, typed artifact and unknown/raw inputs; missing modules fail closed. Apple GPU packaging is included, with computed Apple family returns explicitly unresolved. No support or device-proof state changes. Follow-up required for target/envelope-aware producer-to-consumer lineage before retiring remaining Graph constructors.
+
+
+**Apple domains / unary parent replay — F0 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Apple CPU/GPU computed family domains are derived from existing producer tables; primitive membership remains unverified. Apple GPU scheduled softmax/reduction now requires native Schedule replay and native apple7 target identity before runtime access. WSL compiler replay/tamper tests are validation of the package boundary, not new Metal device evidence. Remaining matmul/attention ancestry and descriptor projection require follow-up.
+
+
+**Descriptor projection / ancestry — F0 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Implemented bounded unary/plain-matmul descriptor projection from native-printed Schedule IR and native parent replay for matmul and forward/backward attention. Follow-up required: attention descriptor projection and broader envelopes, then Graph-constructor migration with Metal numerical evidence. No new device timing or runtime seal.
+
+
+**Attention projection / static softmax — F0/F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Forward/backward attention descriptors now check native Schedule fields and signatures. Static f32 softmax legacy packaging delegates to native scheduled lowering; low-precision softmax remains historical. WSL contract validation only, no new Metal measurements. Follow-up required: low-precision backward companion producer (currently rejected by native Graph-to-Schedule), remaining semantic projection and exact-device differential proof.
+
+
+**Low-precision native slice — F0/F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Static softmax f16/bf16 now uses native scheduled packaging; low-precision backward recompute companion admission is implemented. M1 Max fresh-runtime native_gpu differential tests passed for both storage types: softmax and causal GQA dQ/dK/dV. Bounded correctness only; bias, broader shapes and performance promotion remain follow-up required. Evidence: `benchmarks/apple_gpu/lowp_native_differential.json`.
+
+
+**Broader coverage / route promotion — APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Six broader native package VJP cases passed on M1 Max, including fp32 bias. Five independent closure-matrix reports promoted split_reduced for six runtime keys in device and end-to-end domains. Dedicated strict ledger is now the backward policy default; context mismatch and workspace fallback verified. Compiled low-precision fp32 bias explicitly refuses the incompatible runtime ABI. Follow-up required: mixed-storage bias and package-subgraph performance evidence. See integrated plan and benchmarks/baselines/apple_backward_20260907/.
+
+
+**Mixed bias / math ownership — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Dedicated low-precision-input/fp32-bias ABI, MSL loads, bindings and descriptor projection implemented; eight broader Metal VJP cases passed. Five complete-package versus direct-ABI reports did not justify package promotion. Five fresh runtime reports retain split_reduced admission for six shapes in both timing domains, with exact-context rejection and workspace fallback verified (benchmarks/baselines/apple_backward_mixed_runtime_20260907/). Fleet recording remains pending: its recorder requires the runtime source to be committed first. Re-record before publishing; do not update only the fingerprint. Math residuals are consolidated in the integrated plan; FORGE and original MSW proposals are archived references, not closed native programs.

@@ -27,9 +27,9 @@ and consumers are reconciled. A successful archive move is not compiler closure.
 The [live compiler survey](MLIR_NATIVE_FOUNDATION_SURVEY.md) separates native
 execution from compilation through the canonical IR. The driver still reaches
 historical Graph-owned package constructors beside newer scheduled consumers;
-the NVIDIA scheduled matmul wrapper itself re-enters the Graph packager before
-compiling the shared Tile artifact. These are migration targets, not a permanent
-second authority. The [integrated foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
+the NVIDIA scheduled matmul wrapper has migrated to native artifact ownership.
+Remaining Graph-owned families are migration targets, not a permanent second
+authority. The [integrated foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
 owns the cuts and retirement gates. Python stays the interface/oracle; native
 MLIR/LLVM transformations and backend generators own program compilation.
 This is source inspection and plan reconciliation, not new device evidence.
@@ -2071,3 +2071,15 @@ consumer-gated low-rank legality open. Existing AD laws are reused, recurrence
 stability belongs to the sequence-mixer plan, and broad functional calculus
 and PDE coercivity remain deferred. This removes a competing execution queue;
 it does not close these features or change backend evidence states.
+
+
+## Math ownership reconciliation — 2026-09-07
+
+FORGE and the original math-source proposal moved to archived references after
+all residual IDs were mapped into existing owners in the
+[integrated plan](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07).
+Their live paths are routing notes. Matrix calculus and sequence theory retain
+unique mathematical contracts and stay references; PDE, Riemannian OT and the
+sequence engineering plan retain active native-consumer obligations. This
+supersedes earlier blanket “keep FORGE live” guidance without claiming its
+stateful fusion/distributed work complete.

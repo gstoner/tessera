@@ -1,0 +1,52 @@
+{
+  "accepted_rows": 12,
+  "context": {
+    "device": "apple7",
+    "physical_device": "Apple M1 Max",
+    "os_version": "26.6.2",
+    "sdk_version": "26.5",
+    "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+    "runtime_fingerprint": "sha256:ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19"
+  },
+  "context_mismatch_refused": true,
+  "workspace_fallback_verified": true,
+  "cases": [
+    {
+      "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
+      "dtype": "f32",
+      "selected": "split_reduced",
+      "workspace_bytes": 8192
+    },
+    {
+      "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
+      "dtype": "f32",
+      "selected": "split_reduced",
+      "workspace_bytes": 38912
+    },
+    {
+      "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
+      "dtype": "f32",
+      "selected": "split_reduced",
+      "workspace_bytes": 33792
+    },
+    {
+      "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
+      "dtype": "f16",
+      "selected": "split_reduced",
+      "workspace_bytes": 33280
+    },
+    {
+      "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
+      "dtype": "bf16",
+      "selected": "split_reduced",
+      "workspace_bytes": 67584
+    },
+    {
+      "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
+      "dtype": "f32",
+      "selected": "split_reduced",
+      "workspace_bytes": 1049600
+    }
+  ],
+  "fleet_packet_status": "requires_committed_runtime_revision"
+}

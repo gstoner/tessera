@@ -1,0 +1,61 @@
+{
+  "schema": "tessera.apple.lowp_differential.v1",
+  "date": "2026-09-07",
+  "device": "Apple M1 Max 32-core GPU",
+  "execution": "unsandboxed macOS; fresh runtime dylib; native_gpu required per launch",
+  "compiler_host": "Princess-Luna WSL; native compiler invoked over SSH with quoted arguments",
+  "compiler_sha256": "3c38d817249036409121f89a21f0c6e6a62a322a200a80cd66572469c7f0bc21",
+  "runtime_sha256": "b041bc74f3cf4faca7926c6ca0df4ed91712fbe11f296e76574902977c770312",
+  "source_sha256": {
+    "src/compiler/programming_model/lib/PMPasses.cpp": "3aaabc1763ba719363fcb47b9a93284ac165af7290d0797d6f416864ddc43aa8",
+    "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": "8b76813d50c55d0b647200df8200a877fcaf9363bff113908870e14fec102a85",
+    "tests/unit/test_apple_lowp_native_contract.py": "27c9321938fa1cb4e0da0c30ee0fdfac2902370f53870d30989e320976aac168"
+  },
+  "test_result": "2 passed, 2 deselected",
+  "seed": 791,
+  "storage": [
+    "fp16",
+    "bf16"
+  ],
+  "softmax": {
+    "shape": [
+      3,
+      17
+    ],
+    "oracle": "float64 stable softmax on quantized inputs",
+    "rtol": 0.01,
+    "atol": 0.001
+  },
+  "backward": {
+    "q_shape": [
+      1,
+      4,
+      8,
+      16
+    ],
+    "kv_shape": [
+      1,
+      2,
+      8,
+      16
+    ],
+    "causal": true,
+    "scale": 0.25,
+    "outputs": [
+      "dq",
+      "dk",
+      "dv"
+    ],
+    "oracle": "independent float64 analytic GQA VJP on quantized inputs",
+    "rtol": 0.005,
+    "atol": 0.001
+  },
+  "performance_claim": false,
+  "limits": [
+    "fixed shapes and seed",
+    "no bias",
+    "no noncausal device case",
+    "no selector promotion",
+    "LLVM assertions OFF"
+  ]
+}

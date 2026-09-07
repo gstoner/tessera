@@ -871,6 +871,11 @@ extern "C" void tessera_apple_gpu_rope_bf16(const uint16_t* X,
   for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_stub(Of[i]);
 }
 
+extern "C" int32_t tessera_apple_gpu_softmax_f16_status(
+    const uint16_t*, uint16_t*, int32_t, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_softmax_bf16_status(
+    const uint16_t*, uint16_t*, int32_t, int32_t) { return 0; }
+
 extern "C" void tessera_apple_gpu_softmax_f16(const uint16_t* X, uint16_t* Out,
                                               int32_t M, int32_t K) {
   std::vector<float> Xf(static_cast<std::size_t>(M) * K);

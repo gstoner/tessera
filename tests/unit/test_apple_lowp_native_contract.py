@@ -1,5 +1,4 @@
 """Native low-precision package contracts and owning-Metal differential proof."""
-import sys
 
 import numpy as np
 import pytest
@@ -32,7 +31,6 @@ def test_lowp_native_projection(dtype):
 
 
 @pytest.mark.hardware_apple_gpu
-@pytest.mark.skipif(sys.platform != 'darwin', reason='requires owning Metal host')
 @pytest.mark.parametrize('dtype', ['fp16', 'bf16'])
 def test_lowp_metal_differential(dtype):
     from tessera.runtime import RuntimeArtifact, launch
@@ -104,7 +102,6 @@ def test_broader_attention_projection(case):
 
 
 @pytest.mark.hardware_apple_gpu
-@pytest.mark.skipif(sys.platform != 'darwin', reason='requires owning Metal host')
 @pytest.mark.parametrize('case', BROAD_CASES)
 def test_broader_metal_differential(case):
     from ml_dtypes import bfloat16
@@ -143,3 +140,62 @@ def test_lowp_fp32_bias_projects_without_narrowing(dtype, monkeypatch, tmp_path)
     assert '_bias_f32.' in package.descriptor.abi_id
     assert package.descriptor.buffers[4].dtype == 'fp32'
     assert package.descriptor.buffers[4].alignment == 4
+
+
+@pytest.mark.parametrize('dtype', ['fp16', 'bf16'])
+@pytest.mark.parametrize('status', [0, -1, None, 'missing'])
+def test_lowp_softmax_non_native_status_refuses(dtype, status, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from ml_dtypes import bfloat16
+    from tessera import runtime
+    library = tmp_path / 'runtime.dylib'
+    library.write_bytes(b'contract fixture')
+    monkeypatch.setattr(apple_native, '_runtime_library_path', lambda: library)
+    package = apple_native.package_softmax(softmax_module(dtype), pipeline_name='tessera-lower-to-apple_gpu')
+    assert package.descriptor.entry_symbol.endswith('_status')
+    assert package.descriptor.abi_id.endswith('.v2')
+    fake = SimpleNamespace()
+    if status != 'missing':
+        setattr(fake, package.descriptor.entry_symbol, lambda *args: status)
+    monkeypatch.setattr(runtime, '_load_apple_gpu_runtime', lambda: fake)
+    storage = np.float16 if dtype == 'fp16' else bfloat16
+    buffers = {'x': np.zeros((3, 17), storage), 'out': np.zeros((3, 17), storage)}
+    with pytest.raises(RuntimeError, match='did not execute on Metal|runtime is missing'):
+        runtime._submit_apple_gpu_native(package.image, package.descriptor, buffers, {}, None)
+
+
+def apple_recompute_pair():
+    from tessera.compiler.rocm_native import emit_attention_backward_graph_ir
+    return emit_attention_backward_graph_ir(
+        forward_entry='primal', backward_entry='vjp', storage='f16',
+        dims=(1, 4, 2, 7, 19, 32, 32), scale=.25, causal=False, bias=False,
+        window_left=-1, window_right=-1, softcap=0., save_lse=False,
+    ).replace('module {', 'module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {', 1)
+
+
+@pytest.mark.parametrize('mutation', ['standalone', 'missing_link', 'wrong_primal', 'wrong_scale', 'wrong_bias'])
+def test_apple_lowp_recompute_requires_matching_vjp(mutation):
+    from tessera.compiler.scheduled_matmul import run_tessera_opt
+    graph = apple_recompute_pair()
+    if mutation == 'standalone':
+        graph = graph.split('  func.func @vjp(')[0] + '}\n'
+    elif mutation == 'missing_link':
+        graph = graph.replace('tessera.vjp = @vjp, ', '')
+    elif mutation == 'wrong_primal':
+        graph = graph.replace('tessera.primal = @primal', 'tessera.primal = @vjp')
+    elif mutation == 'wrong_scale':
+        forward, backward = graph.split('  func.func @vjp(', 1)
+        import re
+        backward, count = re.subn(r'scale = [^ ]+ : f32', 'scale = 5.000000e-01 : f32', backward)
+        assert count == 1
+        graph = forward + '  func.func @vjp(' + backward
+    else:
+        graph = graph.replace('dense<0.000000e+00>', 'dense<1.000000e+00>')
+    with pytest.raises(RuntimeError, match='scheduled compiler boundary'):
+        run_tessera_opt(find_tessera_opt(), graph, '--tessera-graph-to-schedule')
+
+
+def test_apple_lowp_recompute_accepts_verified_pair():
+    from tessera.compiler.scheduled_matmul import run_tessera_opt
+    result = run_tessera_opt(find_tessera_opt(), apple_recompute_pair(), '--tessera-graph-to-schedule')
+    assert 'schedule.attention_backward' in result

@@ -3125,3 +3125,17 @@ The initial 15-sample/50-iteration attempt failed the unchanged 4% stability
 gate; 21 samples with 200 amortized iterations passed. This is a fresh
 measurement, not a fingerprint-only update. See
 [the sealed fleet packet](../evidence/e2e_spine/apple_gpu/apple7/manifest.json).
+
+
+### PR #733 contract corrections — 2026-09-07
+
+F2 / APPLE-ATTN-BWD-1: the initial low-precision softmax placement claim used
+void ABIs and could not distinguish CPU fallback. Native packages now require
+v2 status ABIs that return success only for Metal; failed or missing status
+refuses. Ten fresh M1 Max differential cases passed using this boundary.
+Low-precision attention recompute is admitted only with reciprocal primal/VJP
+symbol links and verified matching types, zero/explicit bias and numerical
+policy. A checkpoint attribute alone is insufficient. Shared graph producers
+emit the relationship; standalone low-precision Apple forward remains refused.
+The Apple tests use the central hardware capability inventory. Fleet and route
+records are refreshed against the changed source before updating the PR.

@@ -8265,6 +8265,21 @@ bool dispatch_softmax_bf16_via_fp32(MetalDeviceContext &ctx, const uint16_t* X,
 
 } // namespace
 
+// Native-only status ABIs: a failed Metal dispatch never executes the reference.
+extern "C" int32_t tessera_apple_gpu_softmax_f16_status(
+    const uint16_t* X, uint16_t* Out, int32_t M, int32_t K) {
+  if (!X || !Out || M <= 0 || K <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok && dispatch_softmax_msl_f16(ctx, X, Out, M, K) ? 1 : 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_softmax_bf16_status(
+    const uint16_t* X, uint16_t* Out, int32_t M, int32_t K) {
+  if (!X || !Out || M <= 0 || K <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok && dispatch_softmax_bf16_via_fp32(ctx, X, Out, M, K) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_softmax_f16(const uint16_t* X, uint16_t* Out,
                                               int32_t M, int32_t K) {
   MetalDeviceContext &ctx = deviceContext();

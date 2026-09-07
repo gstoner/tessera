@@ -715,7 +715,7 @@ def emit_attention_backward_graph_ir(
       %key: tensor<{b}x{hkv}x{sk}x{head_dim}x{storage}>,
       %v: tensor<{b}x{hkv}x{sk}x{value_dim}x{storage}>{bias_argument}
   ) -> tensor<{b}x{hq}x{sq}x{value_dim}xf32>
-      attributes {{tessera.lse_checkpoint = "{"saved" if save_lse else "recompute"}"}} {{
+      attributes {{tessera.vjp = @{backward_entry}, tessera.lse_checkpoint = "{"saved" if save_lse else "recompute"}"}} {{
     %o = "tessera.flash_attn"(%q, %key, %v{forward_bias_operand})
         <{{operandSegmentSizes = array<i32: 1, 1, 1, {forward_bias_segment}>}}> {{
       causal = {str(causal).lower()},
@@ -743,7 +743,7 @@ def emit_attention_backward_graph_ir(
   ) -> (tensor<{b}x{hq}x{sq}x{head_dim}xf32>,
         tensor<{b}x{hkv}x{sk}x{head_dim}xf32>,
         tensor<{b}x{hkv}x{sk}x{value_dim}xf32>)
-      attributes {{tessera.lse_checkpoint = "{"saved" if save_lse else "recompute"}"}} {{
+      attributes {{tessera.primal = @{forward_entry}, tessera.lse_checkpoint = "{"saved" if save_lse else "recompute"}"}} {{
 {backward_bias_setup}    %dq, %dk, %dv_out = "tessera_attn.backward"(
         %do, %q, %key, %v, {backward_bias_value}) {{
       causal = {str(causal).lower()},

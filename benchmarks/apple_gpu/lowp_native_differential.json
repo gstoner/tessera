@@ -2,16 +2,16 @@
   "schema": "tessera.apple.lowp_differential.v1",
   "date": "2026-09-07",
   "device": "Apple M1 Max 32-core GPU",
-  "execution": "unsandboxed macOS; fresh runtime dylib; native_gpu required per launch",
+  "execution": "unsandboxed macOS; fresh runtime dylib; status-returning softmax ABI and native_gpu required per launch",
   "compiler_host": "Princess-Luna WSL; native compiler invoked over SSH with quoted arguments",
-  "compiler_sha256": "3c38d817249036409121f89a21f0c6e6a62a322a200a80cd66572469c7f0bc21",
-  "runtime_sha256": "b041bc74f3cf4faca7926c6ca0df4ed91712fbe11f296e76574902977c770312",
+  "compiler_sha256": "0d0fe525bdca49e5c643518d0953bab3ef72904b9ada4adc3b5f6ea474843073",
+  "runtime_sha256": "128dd083ac7dfb4f05ce71e27f88e538bac2a92ee8fc118f3d1322fb5f480e69",
   "source_sha256": {
-    "src/compiler/programming_model/lib/PMPasses.cpp": "3aaabc1763ba719363fcb47b9a93284ac165af7290d0797d6f416864ddc43aa8",
-    "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": "8b76813d50c55d0b647200df8200a877fcaf9363bff113908870e14fec102a85",
-    "tests/unit/test_apple_lowp_native_contract.py": "27c9321938fa1cb4e0da0c30ee0fdfac2902370f53870d30989e320976aac168"
+    "src/compiler/programming_model/lib/PMPasses.cpp": "21fbd3c68079c9f326bc7e7d74b85538f3803d79253117a00562b0d5422a5fd5",
+    "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": "7af5c4e3b7bbe660bd56b454ce736a4563a79a70b57ab93e5b8a26c50aa75754",
+    "tests/unit/test_apple_lowp_native_contract.py": "dda7f6759c19b0456e3086de1af78430a5e3974b49be05598150822a8ccaea22"
   },
-  "test_result": "2 passed, 2 deselected",
+  "test_result": "10 passed, 26 deselected",
   "seed": 791,
   "storage": [
     "fp16",
@@ -52,10 +52,11 @@
   },
   "performance_claim": false,
   "limits": [
-    "fixed shapes and seed",
-    "no bias",
-    "no noncausal device case",
-    "no selector promotion",
+    "bounded shapes and fixed seeds",
+    "no selector promotion from differential tests",
     "LLVM assertions OFF"
-  ]
+  ],
+  "supersedes": "Earlier void-ABI softmax measurement could not prove Metal placement",
+  "additional_coverage": "Eight broader backward cases including f16/bf16 fp32-bias inputs",
+  "test_report": "lowp_native_differential.xml"
 }

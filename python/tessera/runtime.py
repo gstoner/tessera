@@ -5930,7 +5930,8 @@ def _submit_apple_gpu_native(
             raise RuntimeError(f"Apple runtime is missing {softmax_symbol}")
         pointer = ctypes.POINTER(cast(Any, softmax_pointer_element))
         function.argtypes = [pointer, pointer, ctypes.c_int32, ctypes.c_int32]
-        function.restype = None
+        requires_status = descriptor.abi_id in (APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI)
+        function.restype = ctypes.c_int32 if requires_status else None
 
         def softmax_pointer(value: Any) -> Any:
             return (
@@ -5939,7 +5940,9 @@ def _submit_apple_gpu_native(
                 else value.view(np.uint16).ctypes.data_as(pointer)
             )
 
-        function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
+        status = function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
+        if requires_status and status != 1:
+            raise RuntimeError("Apple low-precision softmax did not execute on Metal")
         return out
 
     gelu_variants = {

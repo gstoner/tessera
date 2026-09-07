@@ -6964,3 +6964,7 @@ Not applicable to this target: Apple-only package guard, route-policy default an
 
 **Mixed bias / math ownership — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
 Apple-specific mixed-bias ABI has no rocm ABI or execution change. Shared audit sequencing and truthful instability wording updated; no sibling performance evidence transferred. Follow-up required: existing native AD/numeric-policy/math consumer work under the integrated plan.
+
+
+**PR #733 status/paired-companion correction — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared backward Graph emission carries reciprocal primal/VJP symbol references; the new admission restriction and status ABI are Apple-only. No rocm ABI, physical schedule or performance claim changes. Existing native compiler consumers are checked where available; exact-device rocm evidence is not inferred from Metal tests.

@@ -2,10 +2,10 @@
 //
 // Phase 8.4.2 — Apple GPU custom MSL gelu kernel.
 //
-// Replaces tessera.gelu ops (rank-2, f32) with calls to the Apple-GPU
-// runtime shim:
+// Replaces static/dynamic rank-2 f32/f16/bf16 GELU with the corresponding
+// native-only status ABI, after checking extents and element-count capacity:
 //
-//   tessera_apple_gpu_gelu_f32(X, Out, N)
+//   tessera_apple_gpu_gelu_{f32,f16,bf16}_status(X, Out, N) -> i32
 //
 // The kernel is rank-agnostic at the runtime layer (one thread per element);
 // the Phase 8.4.2 lowering pass restricts to rank-2 to keep the memref layout
@@ -19,7 +19,9 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -27,6 +29,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include <cstdint>
 
 using namespace ::mlir;
 
@@ -35,9 +38,9 @@ namespace apple {
 
 namespace {
 
-constexpr llvm::StringLiteral kGeluF32Symbol = "tessera_apple_gpu_gelu_f32";
-constexpr llvm::StringLiteral kGeluF16Symbol = "tessera_apple_gpu_gelu_f16";
-constexpr llvm::StringLiteral kGeluBF16Symbol = "tessera_apple_gpu_gelu_bf16";
+constexpr llvm::StringLiteral kGeluF32Symbol = "tessera_apple_gpu_gelu_f32_status";
+constexpr llvm::StringLiteral kGeluF16Symbol = "tessera_apple_gpu_gelu_f16_status";
+constexpr llvm::StringLiteral kGeluBF16Symbol = "tessera_apple_gpu_gelu_bf16_status";
 
 
 
@@ -66,13 +69,12 @@ struct LowerGeluToAppleGPU : public RewritePattern {
       return rewriter.notifyMatchFailure(
           op, "AppleGPU gelu MSL path supports f32, f16, and bf16 in Phase 8.4.4.1");
     }
-    if (xTy.isDynamicDim(0) || xTy.isDynamicDim(1))
-      return rewriter.notifyMatchFailure(
-          op, "AppleGPU gelu MSL path requires static shapes");
-
-    int64_t M = xTy.getDimSize(0);
-    int64_t K = xTy.getDimSize(1);
-    int64_t N = M * K;
+    if (op->getNumResults() != 1 || op->getResult(0).getType() != xTy)
+      return rewriter.notifyMatchFailure(op, "GELU input and output types must agree");
+    int64_t M = xTy.getDimSize(0), K = xTy.getDimSize(1);
+    for (int64_t extent : xTy.getShape())
+      if (!ShapedType::isDynamic(extent) && (extent <= 0 || extent > INT32_MAX))
+        return rewriter.notifyMatchFailure(op, "Apple runtime shape exceeds its positive i32 ABI");
 
     Location loc = op->getLoc();
     ModuleOp mod = op->getParentOfType<ModuleOp>();
@@ -81,24 +83,41 @@ struct LowerGeluToAppleGPU : public RewritePattern {
     Type i64Ty = rewriter.getI64Type();
     Type i32Ty = rewriter.getI32Type();
 
+    SmallVector<Value> extents, dynamicSizes;
+    Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+    Value max = rewriter.create<arith::ConstantIndexOp>(loc, INT32_MAX);
+    for (int64_t axis = 0; axis < 2; ++axis) {
+      Value extent = rewriter.create<tensor::DimOp>(loc, x, axis);
+      Value positive = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt, extent, zero);
+      Value bounded = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sle, extent, max);
+      Value valid = rewriter.create<arith::AndIOp>(loc, positive, bounded);
+      rewriter.create<cf::AssertOp>(loc, valid, "Apple GELU extent exceeds positive i32 ABI");
+      extents.push_back(extent);
+      if (xTy.isDynamicDim(axis)) dynamicSizes.push_back(extent);
+    }
+    // Each factor is at most INT32_MAX, so their index-width product fits i64.
+    Value count = rewriter.create<arith::MulIOp>(loc, extents[0], extents[1]);
+    Value fits = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sle, count, max);
+    rewriter.create<cf::AssertOp>(loc, fits, "Apple GELU element count exceeds i32 ABI");
+    Value Nv = rewriter.create<arith::IndexCastOp>(loc, i32Ty, count);
     auto memTy = MemRefType::get({M, K}, xElem);
     Value xPtr = extractPtr(rewriter, loc, x, memTy);
-    auto outAlloc = rewriter.create<memref::AllocOp>(loc, memTy);
-    Value outPtr;
-    {
-      auto pi =
-          rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outAlloc);
-      outPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
-    }
-
-    Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
+    auto outAlloc = rewriter.create<memref::AllocOp>(loc, memTy, dynamicSizes);
+    auto pi = rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outAlloc);
+    Value outPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
 
     FunctionType fnTy =
-        FunctionType::get(ctx, {i64Ty, i64Ty, i32Ty}, {});
+        FunctionType::get(ctx, {i64Ty, i64Ty, i32Ty}, {i32Ty});
     ensureExternalDecl(mod, symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
-        loc, symbol, TypeRange{}, ValueRange{xPtr, outPtr, Nv});
+    auto status = rewriter.create<func::CallOp>(
+        loc, symbol, TypeRange{i32Ty}, ValueRange{xPtr, outPtr, Nv});
+
+    Value one = rewriter.create<arith::ConstantIntOp>(loc, 1, 32);
+    Value succeeded = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, status.getResult(0), one);
+    rewriter.create<cf::AssertOp>(loc, succeeded,
+                                "Apple gelu did not execute on Metal");
 
     auto outTensorTy = RankedTensorType::get({M, K}, xElem);
     Value result =
@@ -122,7 +141,7 @@ struct LowerGeluToAppleGPUPass
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
-                    func::FuncDialect, memref::MemRefDialect>();
+                    func::FuncDialect, memref::MemRefDialect, tensor::TensorDialect, cf::ControlFlowDialect>();
   }
 
   void runOnOperation() override {

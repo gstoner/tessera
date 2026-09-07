@@ -1,8 +1,8 @@
 """Opt-in, rank/prune-only native optimization before shape elaboration.
 
-A recipe owns both the original parametric MLIR oracle and one native optimized
-program. Bucket reports share that program's digest. They are not executable
-specializations and cannot authorize a runtime/arbiter promotion.
+A recipe owns the original parametric oracle and one native optimized program.
+Ranking is prune-only. Explicit instantiation binds the optimized native parent;
+a concrete MLIR instance alone cannot authorize runtime/arbiter promotion.
 """
 from __future__ import annotations
 
@@ -45,6 +45,20 @@ class BucketRank:
 
 
 @dataclass(frozen=True)
+class BucketInstance:
+    bindings: tuple[tuple[str, int], ...]
+    recipe_digest: str
+    parent_digest: str
+    tool_digest: str
+    mlir: str
+
+    @property
+    def digest(self) -> str:
+        return _digest(json.dumps({'bindings': self.bindings, 'recipe': self.recipe_digest,
+            'parent': self.parent_digest, 'tool': self.tool_digest, 'mlir': _digest(self.mlir)}, sort_keys=True))
+
+
+@dataclass(frozen=True)
 class ParametricRecipe:
     oracle_mlir: str
     optimized_mlir: str
@@ -52,6 +66,35 @@ class ParametricRecipe:
     symbols: tuple[str, ...]
     tool_digest: str
     digest: str
+
+    def instantiate_buckets(self, buckets: Sequence[Mapping[str, int]], *,
+                            tessera_opt: str) -> tuple[BucketInstance, ...]:
+        """Bind retained matmul buckets in MLIR without Graph reconstruction.
+
+        Native ANN rewriting/evaluation and measured admission remain subsequent
+        consumers; these instances carry no execution or promotion claim.
+        """
+        executable = str(Path(tessera_opt).resolve(strict=True))
+        tool_digest = hashlib.sha256(Path(executable).read_bytes()).hexdigest()
+        if tool_digest != self.tool_digest:
+            raise ValueError('recipe instantiation requires the original compiler identity')
+        identity = json.dumps({'oracle': _digest(self.oracle_mlir), 'optimized': _digest(self.optimized_mlir),
+            'presburger': self.system.digest if self.system else None,
+            'tool': self.tool_digest, 'symbols': sorted(self.symbols)}, sort_keys=True)
+        if _digest(identity) != self.digest:
+            raise ValueError('recipe identity disagrees with its retained programs')
+        ranks = self.rank_buckets(buckets)
+        if any(not rank.retained for rank in ranks):
+            raise ValueError('cannot instantiate a rejected bucket')
+        instances = []
+        for rank in ranks:
+            witness = ';'.join(f'{name}:{value}' for name, value in rank.bindings)
+            result = subprocess.run([executable, '--tessera-symdim-equality=instantiate='+witness,
+                '--canonicalize', '--cse'], input=self.optimized_mlir, text=True,
+                capture_output=True, timeout=60, check=True)
+            instances.append(BucketInstance(rank.bindings, self.digest,
+                _digest(self.optimized_mlir), tool_digest, result.stdout))
+        return tuple(instances)
 
     def rank_buckets(self, buckets: Sequence[Mapping[str, int]]) -> tuple[BucketRank, ...]:
         """Prune only complete integer witnesses that violate shape constraints.

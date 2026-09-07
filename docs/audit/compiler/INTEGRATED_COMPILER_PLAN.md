@@ -3140,3 +3140,257 @@ emit the relationship; standalone low-precision Apple forward remains refused.
 The Apple tests use the central hardware capability inventory. Five fresh runtime reports retain the six-key admission in both timing domains.
 The fresh fleet packet is sealed against e73cdfcee39c8265cdc329b407b05c834c5a5a70;
 matmul and softmax passed placement and timing checks at the unchanged 4% gate.
+
+## Capability-plan reconciliation — 2026-09-07
+
+This source/evidence reconciliation retains existing IDs and creates no parallel
+compiler queue. It follows the F0–F4 foundation order above. Reference laws,
+serialized native contracts, exact-target execution and measured admission
+remain separate. The review's 111 passing focused reference/evidence tests
+(one skipped) do not renew device measurements or external-paper surveys.
+
+| Scoped document / residual | Existing owner | Required implementation and exit gate |
+|---|---|---|
+| CORE_SUBSTRATE_VIEW S1–S9 | W2.4a / W5.2 / F0–F4 / NUMPOL / LAYOUT-ALG-1 / AD | Keep one map to actual consumers. Retire the old blanket absence/unowned claims; derive alias/effect/lifetime facts and preserve serialized policy/provenance. The archived P0–P5 sequence is historical. |
+| DIFFERENTIABLE_PROGRAMMING C1–C6/T1–T3/R1–R2 | AUTODIFF_EXECUTION_PLAN / AD-CLOSEOUT-1 / AD-HIGHER / AD-WEIL / NUMPOL | Preserve linear-transpose, effect, reference-loss and bounded solver foundations. Extend native products, checkpoint-plan execution, constrained/matrix-free solves and named estimators with appropriate laws, certificates and target evidence. These labels are provenance aliases, not new work IDs. |
+| BLOCK-ATTNRES-1 phases 6–7 and broader envelopes | BLOCK-ATTNRES-ROCM-2026-08-12 / F2/F3 / W2.4a / AD / W5.2 | Consume the existing depth-statistics/merge contract. Prove native query hoisting and block-state retention/recompute legality; broaden storage/shapes with explicit numeric policy. Sibling packages need independent ancestry and device correctness; selector admission needs valid target clocks and matched baselines. TP uses DIST-NATIVE-1. |
+| EGGROLL W2 reverse/breadth | EGGROLL-ES-LOWRANK-2026-08-09 / F2/F4 / AD / NUMPOL | Use shared linear transposition for the fixed-key correction, preserving member/RNG identity. Rank>1, quantized accumulation and other targets need explicit contracts and native comparison; rank-1 fp32 x86/gfx1151 correctness is already recorded. |
+| EGGROLL W3/W4 | F3 / W5.2 / DIST-NATIVE-1 | Preserve optimizer-state order, aliases and numeric policy; prove no forbidden materialization, then measure the complete update. Mock scalar-gather reconstruction does not close native transport or multi-rank performance. |
+| GAME G1b/G5 | REF-TIER-PHYS-2026-08-16 / LAYOUT-ALG-1 / F2/F3 | Preserve the shared coalition carrier. Replace FFT-only tiling/sharding only after layout and FFT bit-identity gates pass; require per-target package evidence. Coalition kernels do not imply equilibrium-solver support. |
+| GAME G2–G4/G6 | AD execution / W4 / F4 / DIST-NATIVE-1 | Build a named certified solver or game workload using existing segmented reduction, scans and explicit RNG. Check constrained derivative assumptions, game-oracle correctness and real batching. Distributed/sampled variants require their own transport or estimator certificates. |
+
+Workload selection is downstream of the required foundation slice, not a reason
+to recreate it. Keep Block AttnRes, EGGROLL and game theory as scoped landing
+plans; keep substrate and differentiable-programming documents as references.
+Historical status/sequence excerpts live in `archive/` and carry no active queue.
+The four backend plans retain architecture-specific validation obligations.
+
+## Status, native GELU and recipe instantiation — 2026-09-07
+
+**F0/F2/F3 / IR-NATIVE-FOUNDATION-1:** this increment closes the native status
+boundary for descriptor f32 softmax and f32/f16/bf16 GELU, including their dynamic
+compatibility descriptors. ABI v2 uses native-only status symbols; missing or
+failed dispatch refuses. The native Apple softmax/GELU lowering also consumes
+status with `cf.assert`; it no longer drops the result of a fallible submission.
+The legacy void APIs retain their explicit compatibility fallback. Positive i32
+shape limits are checked before the runtime boundary.
+
+Static GELU packaging now accepts a retained native artifact, replays its parent,
+and projects its tensor contract from native-printed IR. Unsupported policies,
+extra operations, edited output IR and wrong target identity refuse before
+runtime access. This uses the existing Apple native library lowering rather
+than adding a duplicate Schedule dialect operation. Dynamic GELU now delegates through the same native parent/replay artifact path.
+Native dimension positivity and i32 element-count guards precede allocation.
+CUDA floating matmul (including bounded dynamic and fused epilogues) and ROCm
+plain/dynamic matmul now verify descriptor projections against native Schedule
+and replayed Tile IR. Static axes retain equality guards even in a partly
+dynamic CUDA package. Graph text remains historical provenance, not an input
+to these package verifiers.
+
+F3 now has explicit native instantiation of a straight-line matmul recipe using
+`tessera-symdim-equality`'s opt-in dimension witness. Two buckets preserve one
+optimized parent identity and produce distinct concrete IR identities. This
+has no execution/promotion bit: broader shape-transfer rules, native ANN pair
+execution and artifact-bound arbiter admission remain next consumers.
+
+Package profiling identified buffer-contract preparation overhead. Only immutable
+NumPy dtype spelling is cached. Mutable nested descriptor metadata invalidates
+the cached-identity premise, so descriptor digests are recomputed. Every launch
+still validates live buffers/scalars. Five new M1 Max complete-package/direct-ABI
+comparisons do **not** justify promotion; see the
+[reports](../../../benchmarks/baselines/apple_package_status_20260907/README.md).
+
+Remaining dependency order:
+
+1. Dynamic GELU and CUDA/ROCm floating matmul descriptor projection are implemented
+   for their existing envelopes, with native replay and metadata-corruption
+   regressions. Broader GELU shapes and ROCm fused matmul are not admitted;
+   neither package replay nor differential execution establishes promotion.
+2. Extend recipe shape transfers to the chosen ANN fragment; bind original and
+   transformed executable artifacts, numerical policy and measured admission to
+   each concrete instance. Matmul instantiation alone does not close ANN/F3.
+3. Static mixed f32/f64 slots and proven counted whiles now have a native
+   persistent consumer. Continue integer/predicate and dynamic slots, genuinely
+   data-dependent while termination and completion-owned asynchronous retirement.
+   Selected bounded SAVE/HYBRID/recompute-all plans execute on CUDA/HIP; automatic
+   checkpoint-plan selection and performance promotion remain open.
+4. FA-1 now has a bounded frozen-affine absolute-error consumer in native ANN
+   admission. Extend beyond this fixed f32/linf envelope: serialized numerical
+   carriers, general reductions, spectral/approximation consumers and justified
+   domain composition. Sampled agreement alone remains insufficient.
+
+Cross-cutting: all three current LLVM installations report assertions OFF.
+A separate assertions-enabled LLVM/MLIR build remains required. The generated
+route inventory must distinguish compatibility frontend adapters from
+Graph-owned packaging, and a native library call from general program-body
+compilation. The fleet packet
+must be resealed after committing the changed runtime source, before publishing.
+
+### Dynamic package projection validation — 2026-09-07
+
+F2 / IR-NATIVE-FOUNDATION-1: the dynamic GELU native producer handles dimensions
+in IR; its compatibility frontend no longer constructs a separate descriptor.
+Argument-local dimension names survive packaging. Matmul validation projects
+shape bounds, individual dynamic axes, storage, accumulation, epilogues and
+entry/tile identity. A modified Tile program refuses before compilation.
+
+Focused WSL compiler/registry checks: 371 passed, 26 skipped for capabilities;
+RTX 5070 scheduled-matmul device suite: 14 passed; M1 Max selected native
+softmax/GELU suite: 6 passed; gfx1151 scheduled matmul: 3 passed. These are correctness results, not performance
+promotion packets. Shared changes do not establish x86 or other GPU parity.
+
+The next implementation boundary is F3's native ANN program-pair executable
+adapter and artifact-bound admission. In parallel with that dependency chain,
+AD-RESIDUAL-EVAL-1 still requires typed saved slots and bounded while retirement
+before general checkpoint execution, and FA-1 still requires a real analytic
+consumer. None of those is closed by this F2 increment.
+
+### Native ANN admission and persistent checkpoint execution — 2026-09-07
+
+Owners: **F3 / FA-1 / AD-RESIDUAL-EVAL-1 / W2.4a / IR-NATIVE-FOUNDATION-1**.
+
+`native_ann.py` prepares one native two-affine-layer to one-layer rewrite and
+replays its native producer before admission. The evaluator uses the existing
+MLIR/LLVM JIT on x86, with no Graph reconstruction or reference fallback. Both
+programs are checked against an independent rational-arithmetic affine oracle;
+matching wrong native outputs refuse. `register_native_ann` registers original
+and rewritten programs in the existing arbiter under its internal `ann_affine`
+family. The field is bound to the program pair, input domain, budget and probe
+snapshots. An over-budget rewrite is excluded even before timing. Equal-tier
+selection retains the original; actual calls recheck the input domain.
+
+The analytic contract is deliberately bounded: static rank-two f32 tensors with
+dimensions at most 64, frozen normal-or-zero parameters, explicit reassociation
+permission, finite inputs with `||X||inf <= R`, and absolute output linf difference from the original program.
+Round-to-nearest is checked on the calling thread; other rounding modes refuse.
+Exact rational analysis includes folded parameter error, each matrix's induced
+column-sum norm, at most 2K arithmetic roundings per dot plus bias rounding, and
+additive minimum-normal allowances for underflow/flush-to-zero. `2Ku < 1` and a
+conservative intermediate-overflow exclusion are mandatory. Downstream domain
+bounds include preceding rounding errors. This is numerical eligibility, not a
+performance packet, automatic JIT routing, or GPU ANN proof. Broader recipe
+instantiation, nonlinear ANN fragments, numerical-carrier integration and
+measured promotion remain open.
+
+Persistent storage now projects f32/f64 widths through compiler private arrays,
+ABI manifests, owned allocations and backward outputs. Replay-loop capacity is
+derived from bounded SSA arithmetic/selects over enclosing induction variables;
+loaded bounds and unchecked maximum annotations do not constitute proofs. Every
+nested allocation reserves a distinct slot for its maximum iteration path.
+The optional paired-AD `normalize-counted-while` converts only pure zero-origin,
+unit-step, constant-bound whiles with sufficient declared capacity to native
+for loops, retaining SAVE/HYBRID policy. Other while forms remain refused by the
+physical tape consumer.
+
+The owning-device recorder exercises mixed storage, nested SAVE, HYBRID,
+recompute-all and counted-while SAVE, with repeated backward calls and unchanged
+residuals. See `benchmarks/baselines/tape_checkpoint_20260907/`. Physical retained
+bytes are recorded separately from private temporary capacity. These results
+do not establish latency, overlap, general mixed-state while execution, or
+checkpoint autotuning. Apple still needs MSL-owned typed tape materialization;
+x86 ANN execution does not supply CUDA/HIP ANN proof.
+
+### Data-dependent native tapes and nonlinear GPU ANN — 2026-09-07
+
+Owners: **F3 / FA-1 / AD-RESIDUAL-EVAL-1 / W2.4a / IR-NATIVE-FOUNDATION-1**.
+
+The next physical increment preserves MLIR ownership throughout:
+
+- `normalize-data-while` admits pure, single-block whiles with a zero-origin,
+  unit-step index counter and an actual signed `counter < constant` conjunct.
+  It freezes the complete carried state after a data-dependent exit, then uses
+  the existing generic counted-loop checkpoint machinery. A `max_iters`
+  annotation by itself is insufficient. Capacity remains at most 1024 steps;
+  physical temporary storage remains at most 4096 logical bytes.
+- `box-product-scalars` projects logical index/predicate residuals, including
+  checkpoint tensors, into i64/i8 tensor storage in the native export. It does
+  not change the differentiation domain: discrete region yields no longer
+  receive cotangent seeds. Rank-zero LLVM memref descriptors now omit empty
+  dimension/stride arrays. Dynamic tensor extents still refuse at this physical
+  boundary; static integer checkpoint storage is not dynamic allocation proof.
+- Persistent backward can submit distinct generations on caller-owned streams.
+  Completion polling retires event owners, while each result advertises its
+  producer stream. Explicit generation release waits for device completion and
+  frees only that generation. Fully asynchronous allocation retirement requires
+  tracking every downstream reader; no such general closure is claimed.
+- The native frozen-affine rewrite can retain a terminal ReLU. ReLU is
+  nonexpansive in the absolute infinity norm, so the existing analytic bound
+  remains valid. Internal nonlinear activations cannot be commuted through an
+  affine composition. CUDA/HIP original and transformed programs now consume
+  native bufferized IR, preserve nonsplat constants, and replay source-to-device
+  arena ancestry before binding. This is a bounded serial physical baseline,
+  not a tuned tensor-core/WMMA ANN schedule.
+- Nine independent processes compare each original/rewrite package, including
+  the host buffer bridge, using randomized paired samples. Raw measurements are
+  rechecked before applying the existing exact median order-statistic interval.
+  Nine runs give a second-order bound, so one extreme run cannot alone set
+  the lower endpoint. The lower bound must exceed a 2% margin. Package wall time is not a kernel
+  clock, and numerical eligibility does not register a production GPU winner.
+
+Six tape cases pass on each GPU. Nine independent ANN runs per target refuse
+promotion: CUDA median 1.00447× (lower 0.98833×), ROCm median 1.00243×
+(lower 0.99360×), against the 1.02× threshold. Evidence is in
+[the native tape/ANN packet](../../../benchmarks/baselines/native_tape_ann_20260907/README.md).
+The previous bounded checkpoint packet remains historical evidence for its own
+source fingerprints. Neither GPU transfers proof to Metal or x86 tape execution.
+
+Next concrete boundaries remain: shape-varying residual allocation with native
+extent guards; broader while/CFG recovery beyond the proven counter envelope;
+reader-complete asynchronous allocation retirement; GPU arbiter registration
+and tuned ANN schedules; reduction/spectral/approximation error-budget consumers;
+and measured promotion only where the independent bound passes. Assertions-enabled
+MLIR validation remains missing on the fleet.
+
+
+### Shape-varying host tapes and GPU ANN arbitration — 2026-09-07
+
+Owners: **F3 / FA-1 / AD-RESIDUAL-EVAL-1 / W2.4a / IR-NATIVE-FOUNDATION-1**.
+
+Native Tessera-to-Linalg binary lowering now derives dynamic output extents
+from the operand and checks unresolved operand/result equality before identity
+indexing. Dynamic `zeros_like` adjoints use logical primal extents. The host JIT
+accepts signature-checked i64/i8 residual buffers without widening its floating
+high-level math API. Three shrinking-loop cases (input widths 4, 8, 16) execute
+native x86 forward and repeated backward products with saved shape tapes and
+unchanged persistent payloads. The host JIT now runs upstream ownership-based
+deallocation after DPS result copies, including loop-carried temporary allocations.
+Native extent violations currently lower through `cf.assert` to process abort,
+not a recoverable Python exception. This is bounded shape-varying **host execution**;
+CUDA/HIP persistent slot allocation still rejects dynamic extents.
+
+Counter-bound recovery also recognizes the frontend's false-else short-circuit
+`scf.if`, and equivalent `arith.select`. An arbitrary else value cannot prove
+capacity. Arbitrary source CFG recovery, unbounded termination, dynamic device
+slot allocation and generalized checkpoint selection remain open.
+
+Terminal absolute value joins ReLU as a nonexpansive consumer of the affine
+absolute-error bound. GPU candidates bind the logical domain and numerical
+budget to both native artifact digests and the owning architecture. Scoped
+registration retains the original under a zero rewrite budget and unregisters
+its candidates only after successful binding close. Both GPUs execute all four
+ReLU/absolute-value budget cases. The optional upstream elementwise-fusion
+pipeline is serialized and replayed as part of artifact ancestry.
+
+Nine fresh independent processes per GPU still refuse performance promotion:
+CUDA median 0.99809x, lower bound 0.97773x; ROCm median 0.99728x, lower bound
+0.98430x. Neither clears the 1.02x threshold. These are warm package wall times,
+including transfers, for the small serial schedule; they neither measure kernel
+clocks nor establish a tuned tensor-core/WMMA schedule. See
+[raw reports and scope](../../../benchmarks/baselines/shape_tape_ann_20260907/README.md).
+
+Fully asynchronous reclamation remains open: producer-event completion cannot
+prove completion of readers of exported views. The next implementation needs
+reader leases that prevent new acquisitions after retirement, stream-ordered
+allocator/free support, and failure retention until all recorded readers finish.
+The existing context barrier is retained. Further numerical consumers need
+operator-specific induced-norm/error propagation; absolute value does not prove
+reduction, spectral or approximation legality. Assertions-enabled MLIR validation
+and Metal-owned tape storage remain required follow-ups.
+
+**PR #734 review closure (F3):** `register_native_ann` returns a
+`NativeANNRegistration`; use its `.region` inside a context manager or call
+`.close()` when retiring a model/bucket. Close removes exact candidate instances,
+invalidates retained candidates and releases owned probe references. Same-name
+replacement ownership and registration rollback are tested without native tools.
+Native-only tests now check compiler/JIT availability before preparing IR;
+clean CI does not claim native execution. No new physical promotion is made.

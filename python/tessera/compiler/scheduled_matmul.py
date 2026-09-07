@@ -534,3 +534,93 @@ def run_tessera_opt(tool: Path, source: str, option: str) -> str:
 
 def digest_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
+    """Project floating matmul ABI fields from its native Schedule parent.
+
+    The Graph text is historical provenance. Schedule replay proves the supplied
+    Tile program; host binding labels remain aliases, not semantic authorities.
+    """
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError('matmul projection requires native Schedule replay')
+    if run_tessera_opt(tool, artifact.schedule_ir, '--tessera-schedule-to-tile') != artifact.tile_ir:
+        raise ValueError('matmul Tile product disagrees with native Schedule replay')
+    parent = run_tessera_opt(tool, artifact.schedule_ir, '--canonicalize')
+    header = re.match(r'\s*module attributes \{([^{}]*)\}', parent)
+    if header is None:
+        raise ValueError('matmul native target header is missing')
+    for key, value in [('tessera.target', artifact.target), ('tessera.arch', artifact.architecture)]:
+        if not re.search(r'(?:^|, )'+re.escape(key)+' = "'+re.escape(value)+'"(?:,|$)', header[1]):
+            raise ValueError('matmul native target identity disagrees')
+    functions = re.findall(r'func.func @(\w+)\(([^\n]*)\) -> (tensor<[^>]+>) \{', parent)
+    records = re.findall(r' = schedule.matmul %\w+ \{([^{}]*)\}', parent)
+    keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
+    if len(functions) != 1 or len(records) != 1 or len(keys) != 1 or parent.count('func.func ') != 1:
+        raise ValueError('matmul projection requires one native scheduled product')
+    entry, args, output = functions[0]
+    attrs = records[0]
+    def string(key):
+        values = re.findall(r'(?:^|, )'+key+r' = "(\w+)"(?:,|$)', attrs)
+        if len(values) != 1:
+            raise ValueError('matmul native string field disagrees: '+key)
+        return values[0]
+    def boolean(key):
+        values = re.findall(r'(?:^|, )'+key+r' = (true|false)(?:,|$)', attrs)
+        if len(values) != 1:
+            raise ValueError('matmul native boolean field disagrees: '+key)
+        return values[0] == 'true'
+    def tensor(text):
+        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32)>', text)
+        if match is None:
+            raise ValueError('matmul native tensor contract is unsupported')
+        return tuple(None if d == '?' else int(d) for d in match[1].split('x')[:-1]), match[2]
+    inputs = [tensor(t) for t in re.findall(r'tensor<[^>]+>', args)]
+    out_shape, out_storage = tensor(output)
+    bias, residual = boolean('bias'), boolean('residual')
+    if len(inputs) != 2 + bias + residual or any(len(shape) != 2 for shape, _ in inputs[:2]) or len(out_shape) != 2:
+        raise ValueError('matmul native input arity/rank disagrees')
+    m, n, k = map(int, keys[0][:3])
+    storage = keys[0][3]
+    a, b = inputs[:2]
+    for actual, bound in zip((*a[0], *b[0], *out_shape), (m, k, k, n, m, n)):
+        if actual is not None and actual != bound:
+            raise ValueError('matmul native shape bound disagrees with its signature')
+    if artifact.target == "nvidia_sm120":
+        entries = re.findall(r'llvm.func @(\w+)\(', artifact.tile_ir)
+        if len(entries) != 1:
+            raise ValueError("matmul native Tile entry is ambiguous")
+        entry = entries[0]
+    expected = dict(function_name=entry, m=m, n=n, k=k, storage=storage,
+        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32'}[a[1]],
+        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32'}[b[1]],
+        output_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32'}[out_storage],
+        accum=string('accum'), activation=string('activation'),
+        dynamic_m=a[0][0] is None or out_shape[0] is None,
+        dynamic_n=b[0][1] is None or out_shape[1] is None,
+        dynamic_k=a[0][1] is None or b[0][0] is None)
+    if string('storage') != storage or string('output') != out_storage or string('a_layout') != 'row_major' or string('b_layout') != 'col_major':
+        raise ValueError('matmul native storage/layout disagrees')
+    for key in ('macro_tile_m', 'macro_tile_n'):
+        matches = re.findall(r'(?:^|, )'+key+r' = (\d+) : i64(?:,|$)', attrs)
+        if len(matches) != 1:
+            raise ValueError('matmul native tile decision is missing')
+        expected[key] = int(matches[0])
+    for key, value in expected.items():
+        actual = getattr(artifact, key)
+        if type(actual) is not type(value) or actual != value:
+            raise ValueError('matmul descriptor field disagrees with native IR: '+key)
+    if bias != (artifact.bias_name is not None) or residual != (artifact.residual_name is not None):
+        raise ValueError('matmul epilogue bindings disagree with native IR')
+    extra = 2
+    if bias:
+        if inputs[extra][1] != 'f32' or len(inputs[extra][0]) != 1 or inputs[extra][0][0] not in (None, n):
+            raise ValueError('matmul native bias shape/storage disagrees')
+        extra += 1
+    if residual and (inputs[extra][1] != 'f32' or len(inputs[extra][0]) != 2 or any(d not in (None, bound) for d, bound in zip(inputs[extra][0], (m, n)))):
+        raise ValueError('matmul native residual shape/storage disagrees')
+    names = [artifact.a_name, artifact.b_name, artifact.output_name]
+    names += [x for x in (artifact.bias_name, artifact.residual_name) if x is not None]
+    if any(type(x) is not str or not x.isidentifier() for x in names) or len(set(names)) != len(names):
+        raise ValueError('matmul host aliases must be distinct identifiers')

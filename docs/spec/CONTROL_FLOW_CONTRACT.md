@@ -263,3 +263,35 @@ When adding a form, update its frontend acceptance, ODS/effect contract, native
 lowering, backend package mapping, AD residual requirements and numerical
 reference tests. Unsupported forms must remain explicitly rejected on compiled
 paths. Reference execution must remain identified as reference execution.
+
+### Persistent counted-while normalization
+
+For physical split-tape materialization, paired AD optionally normalizes a
+provably counted `scf.while` into `scf.for`: the counter begins at zero, advances
+by one, and is compared with a constant positive bound (2–1024), with no other
+condition-region operations. The declared capacity must cover the actual bound.
+Checkpoint policy is retained; SAVE positions become the interior iteration
+ordinals. The resulting native tensor products execute through the bounded
+CUDA/HIP tape path. This does not admit data-dependent termination, unknown
+counter increments, scalar predicate residuals or unchecked maximum annotations.
+
+
+### Persistent data-dependent exits (2026-09-07)
+
+The optional native paired-AD `normalize-data-while` path accepts a pure
+single-block while only when its zero-origin, unit-increment counter has an
+actual signed constant upper-bound conjunct. A fixed-capacity for loop freezes
+all carried state after the first false predicate. The existing checkpoint
+machinery then records discrete and differentiable state separately. This
+supports data-dependent exit within a proven capacity; it does not infer a bound
+from `max_iters`, recover arbitrary source CFGs, or admit shape-varying device
+residuals. The physical export's `box-product-scalars` option stores index and
+predicate residuals as i64/i8 tensors without assigning them cotangents.
+
+
+The native counter proof also accepts a false-else short-circuit `scf.if` or
+`arith.select`; it rejects a true or unknown fallback. Native x86 exported tapes
+now execute bounded shape-varying slices with saved logical extents and dynamic
+adjoint zeros. This does not change the frontend's shape-preserving carry
+contract or enable dynamic CUDA/HIP persistent slots. See the integrated plan's
+2026-09-07 shape-tape increment for exact evidence and remaining CFG boundaries.

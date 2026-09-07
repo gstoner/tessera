@@ -10,12 +10,16 @@ import threading
 
 
 class _Buffer:
-    def __init__(self, frame, shape):
+    def __init__(self, frame, shape, dtype='fp32'):
+        if dtype not in ('fp32', 'fp64', 'int8', 'int64'):
+            raise ValueError('native tape allocation requires fp32, fp64, int8 or int64 storage')
+        self.dtype = dtype
+        self.typestr = {'fp32':'<f4', 'fp64':'<f8', 'int8':'|i1', 'int64':'<i8'}[dtype]
         self.frame, self.shape = frame, tuple(shape)
         if any(type(dim) is not int or dim <= 0 for dim in self.shape):
             raise ValueError('native tape requires positive static allocation extents')
         self.pointer = ct.c_void_p()
-        self.nbytes = 4
+        self.nbytes = {'fp32':4, 'fp64':8, 'int8':1, 'int64':8}[dtype]
         for dim in shape:
             if self.nbytes > ((1 << 63) - 1) // dim:
                 raise ValueError('native tape allocation byte extent overflows')
@@ -27,7 +31,7 @@ class _Buffer:
     def __cuda_array_interface__(self):
         if self.frame.closed or not self.pointer.value:
             raise ValueError('native tape allocation is closed')
-        return dict(version=3, shape=self.shape, typestr='<f4', strides=None,
+        return dict(version=3, shape=self.shape, typestr=self.typestr, strides=None,
                     data=(self.pointer.value, False))
 
 

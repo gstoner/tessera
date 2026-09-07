@@ -2058,12 +2058,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         severity="error",
         summary=(
             "A `tessera.dim_bindings` entry is not a string, or does not "
-            "parse as a binding equation."
+            "parse as a binding equation, or a requested native recipe instantiation "
+            "has invalid bindings or unsupported shape transfers."
         ),
         fix_hint=(
             "Fix the binding text. A dropped entry disables exactly the "
             "equation it was written to verify, so a malformed binding is an "
-            "error rather than a skip."
+            "error rather than a skip. Native instantiation requires complete positive "
+            "dimension witnesses and a supported straight-line matmul recipe."
         ),
         spec="docs/spec/SHAPE_SYSTEM.md",
         sprint="P2-REVIEW-2026-08-29",

@@ -54,22 +54,22 @@ APPLE_BMM_F16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.f16.v1"
 APPLE_BMM_F16_SYMBOL = "tessera_apple_gpu_bmm_f16"
 APPLE_BMM_BF16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.bf16.v1"
 APPLE_BMM_BF16_SYMBOL = "tessera_apple_gpu_bmm_bf16"
-APPLE_SOFTMAX_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.f32.v1"
-APPLE_SOFTMAX_F32_SYMBOL = "tessera_apple_gpu_softmax_f32"
-APPLE_SOFTMAX_DYNAMIC_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v1"
+APPLE_SOFTMAX_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.f32.v2"
+APPLE_SOFTMAX_F32_SYMBOL = "tessera_apple_gpu_softmax_f32_status"
+APPLE_SOFTMAX_DYNAMIC_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v2"
 APPLE_SOFTMAX_F16_ABI = "tessera.apple.softmax.x_o_rows_columns.f16.v2"
 APPLE_SOFTMAX_F16_SYMBOL = "tessera_apple_gpu_softmax_f16_status"
 APPLE_SOFTMAX_BF16_ABI = "tessera.apple.softmax.x_o_rows_columns.bf16.v2"
 APPLE_SOFTMAX_BF16_SYMBOL = "tessera_apple_gpu_softmax_bf16_status"
-APPLE_GELU_F32_ABI = "tessera.apple.gelu.x_o_elements.f32.v1"
-APPLE_GELU_F32_SYMBOL = "tessera_apple_gpu_gelu_f32"
-APPLE_GELU_DYNAMIC_F32_ABI = "tessera.apple.gelu.x_o_elements.dynamic.f32.v1"
-APPLE_GELU_F16_ABI = "tessera.apple.gelu.x_o_elements.f16.v1"
-APPLE_GELU_F16_SYMBOL = "tessera_apple_gpu_gelu_f16"
-APPLE_GELU_DYNAMIC_F16_ABI = "tessera.apple.gelu.x_o_elements.dynamic.f16.v1"
-APPLE_GELU_BF16_ABI = "tessera.apple.gelu.x_o_elements.bf16.v1"
-APPLE_GELU_BF16_SYMBOL = "tessera_apple_gpu_gelu_bf16"
-APPLE_GELU_DYNAMIC_BF16_ABI = "tessera.apple.gelu.x_o_elements.dynamic.bf16.v1"
+APPLE_GELU_F32_ABI = "tessera.apple.gelu.x_o_elements.f32.v2"
+APPLE_GELU_F32_SYMBOL = "tessera_apple_gpu_gelu_f32_status"
+APPLE_GELU_DYNAMIC_F32_ABI = "tessera.apple.gelu.x_o_elements.dynamic.f32.v2"
+APPLE_GELU_F16_ABI = "tessera.apple.gelu.x_o_elements.f16.v2"
+APPLE_GELU_F16_SYMBOL = "tessera_apple_gpu_gelu_f16_status"
+APPLE_GELU_DYNAMIC_F16_ABI = "tessera.apple.gelu.x_o_elements.dynamic.f16.v2"
+APPLE_GELU_BF16_ABI = "tessera.apple.gelu.x_o_elements.bf16.v2"
+APPLE_GELU_BF16_SYMBOL = "tessera_apple_gpu_gelu_bf16_status"
+APPLE_GELU_DYNAMIC_BF16_ABI = "tessera.apple.gelu.x_o_elements.dynamic.bf16.v2"
 APPLE_POPCOUNT_DYNAMIC_I32_ABI = "tessera.apple.popcount.x_o_elements.dynamic.i32.v1"
 APPLE_POPCOUNT_I32_SYMBOL = "tessera_apple_gpu_popcount_i32"
 APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI = (
@@ -1638,19 +1638,77 @@ def package_transpose(module: GraphIRModule, *, pipeline_name: str) -> AppleNati
     return AppleNativePackage("tile.transpose_kernel", target_ir, target_ir, image, descriptor)
 
 
-def package_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package one static rank-2 GELU MSL ABI."""
-    contract = _gelu_contract(module)
+@dataclass(frozen=True)
+class AppleGeluArtifact:
+    """Native-printed parent and checked runtime lowering, with host aliases."""
+    parent_ir: str
+    native_ir: str
+    input_name: str
+    output_name: str
+
+
+def lower_gelu_artifact(module: GraphIRModule) -> AppleGeluArtifact:
+    import copy
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+    contract = _gelu_contract(module) or _dynamic_gelu_contract(module)
     if contract is None:
-        raise ValueError("Apple GELU package requires one static non-empty rank-2 f32/f16/bf16 contract")
+        raise ValueError("Apple GELU requires a rank-two contract")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("Apple GELU requires native lowering")
+    targeted = copy.deepcopy(module)
+    targeted.module_attrs['tessera.target'] = '"apple_gpu"'
+    targeted.module_attrs['tessera.arch'] = '"apple7"'
+    parent = run_tessera_opt(tool, targeted.to_mlir(canonical=True), '--canonicalize')
+    native = run_tessera_opt(tool, parent, '--tessera-gelu-to-apple_gpu')
+    return AppleGeluArtifact(parent, native, contract[0], contract[1])
+
+
+def package_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
+    """Compatibility frontend; the native artifact owns GELU packaging."""
+    return package_gelu_artifact(lower_gelu_artifact(module), pipeline_name=pipeline_name)
+
+
+def package_gelu_artifact(artifact: AppleGeluArtifact, *, pipeline_name: str) -> AppleNativePackage:
+    import re
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("Apple GELU requires native replay")
+    parent = run_tessera_opt(tool, artifact.parent_ir, '--canonicalize')
+    native = run_tessera_opt(tool, parent, '--tessera-gelu-to-apple_gpu')
+    if native != artifact.native_ir:
+        raise ValueError("Apple GELU native product disagrees with parent replay")
+    # Match the entire bounded native parent, not attributes found somewhere in
+    # a larger program. Unsupported policies/operations remain explicit refusals.
+    tensor = r'tensor<(\?|[1-9][0-9]*)x(\?|[1-9][0-9]*)x(f32|f16|bf16)>'
+    match = re.fullmatch(
+        r'\s*module attributes \{tessera.arch = "apple7", (?:tessera.ir.version = "1.0", )?tessera.target = "apple_gpu"\} \{\s*'
+        r'func.func @\w+\(%(\w+): ' + tensor
+        + r'(?: \{tessera.dim_names = \["[A-Za-z_0-9]+", "[A-Za-z_0-9]+"\]\})?'
+        + r'\) -> (tensor<[^>]+>) \{\s*'
+        r'%(\w+) = tessera.gelu %(\w+)(?: \{tessera.effect_kind = "pure"\})? : \((tensor<[^>]+>)\) -> (tensor<[^>]+>)\s*'
+        r'return %(\w+) : (tensor<[^>]+>)\s*\}\s*\}\s*', parent)
+    if match is None:
+        raise ValueError("Apple GELU descriptor requires one native rank-two GELU parent")
+    arg, m, k, storage, result, value, operand, in_ty, out_ty, returned, ret_ty = match.groups()
+    expected_ty = f'tensor<{m}x{k}x{storage}>'
+    if operand != arg or returned != value or any(t != expected_ty for t in (result, in_ty, out_ty, ret_ty)):
+        raise ValueError("Apple GELU native tensor/SSA contract disagrees")
+    dtype = {'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage]
+    dynamic = m == "?" or k == "?"
+    shape = tuple(None if d == "?" else int(d) for d in (m, k))
+    x, out = artifact.input_name, artifact.output_name
+    if any(type(n) is not str or not n.isidentifier() for n in (x, out)) or x == out:
+        raise ValueError("Apple GELU host aliases must be distinct identifiers")
+    symbol, abi = (_GELU_DYNAMIC_VARIANTS if dynamic else _GELU_VARIANTS)[dtype]
+    if (f'call @{symbol}(' not in native or 'cf.assert ' not in native
+            or 'tessera.gelu ' in native):
+        raise ValueError("Apple GELU native producer did not lower its status boundary")
     library = _runtime_library_path()
     if library is None:
         raise RuntimeError("APPLE-NATIVE-E2E-2 requires a fresh Tessera Apple GPU runtime dylib")
-    x, out, shape, dtype = contract
-    symbol, abi = _GELU_VARIANTS[dtype]
-    target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
-                 f'{{abi = "{abi}", storage = "{dtype}", accumulation = "fp32", '
-                 'status = "executable"}}')
+    target_ir = native
     payload = library.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     image = NativeImageArtifact(
@@ -1668,52 +1726,26 @@ def package_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePac
         shape_guards=tuple(
             ShapeGuard(name, axis, "eq", extent)
             for name, guarded_shape in ((x, shape), (out, shape))
-            for axis, extent in enumerate(guarded_shape)
+            for axis, extent in enumerate(guarded_shape) if extent is not None
         ),
-        geometry=LaunchGeometry(policy="apple_msl_gelu"),
+        scalars=(ScalarArgument(2, "Elements", "int64"),) if dynamic else (),
+        geometry=LaunchGeometry(policy="apple_msl_gelu_dynamic" if dynamic else "apple_msl_gelu"),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
         provenance={"work_item": "APPLE-NATIVE-E2E-2", "route": "apple_gelu_native_library",
                     "op_kind": "gelu", "shape": list(shape), "storage": dtype,
-                    "accumulation": "fp32"},
+                    "dynamic_shape": dynamic, "scalar_contract": "Elements=x.size" if dynamic else None,
+                    "accumulation": "fp32",
+                    "parent_ir_digest": hashlib.sha256(parent.encode()).hexdigest(),
+                    "native_ir_digest": hashlib.sha256(native.encode()).hexdigest()},
     )
-    return AppleNativePackage("tile.gelu_kernel", target_ir, target_ir, image, descriptor)
+    return AppleNativePackage(native, target_ir, target_ir, image, descriptor)
 
 
 def package_dynamic_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package dynamic rank-2 GELU with an explicit ``Elements`` scalar."""
-    contract = _dynamic_gelu_contract(module)
-    if contract is None:
-        raise ValueError("Apple dynamic GELU package requires rank-2 ?x? f32/f16/bf16 input and output")
-    library = _runtime_library_path()
-    if library is None:
-        raise RuntimeError("APPLE-NATIVE-E2E-2 requires a fresh Tessera Apple GPU runtime dylib")
-    x, out, dtype = contract
-    symbol, abi = _GELU_DYNAMIC_VARIANTS[dtype]
-    target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
-                 f'{{abi = "{abi}", storage = "{dtype}", accumulation = "fp32", '
-                 'scalar = "Elements", status = "executable"}}')
-    payload = library.read_bytes()
-    digest = hashlib.sha256(payload).hexdigest()
-    image = NativeImageArtifact(
-        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
-        compiler_fingerprint="apple-runtime-abi-v1",
-        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
-        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
-        payload=payload, entry_points=(NativeEntryPoint(symbol, abi),),
-        compile_state="prepackaged",
-    )
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=(BufferBinding(0, x, "input", dtype, 2, "row_major", 4 if dtype == "fp32" else 2),
-                 BufferBinding(1, out, "output", dtype, 2, "row_major", 4 if dtype == "fp32" else 2)),
-        scalars=(ScalarArgument(2, "Elements", "int64"),),
-        geometry=LaunchGeometry(policy="apple_msl_gelu_dynamic"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
-        provenance={"work_item": "APPLE-NATIVE-E2E-2", "route": "apple_gelu_native_library",
-                    "op_kind": "gelu", "dynamic_shape": True, "scalar_contract": "Elements=x.size",
-                    "storage": dtype, "accumulation": "fp32"},
-    )
-    return AppleNativePackage("tile.gelu_kernel", target_ir, target_ir, image, descriptor)
+    """Compatibility frontend; native IR owns dynamic dimensions and shape checks."""
+    if _dynamic_gelu_contract(module) is None:
+        raise ValueError("Apple dynamic GELU requires matching rank-two dynamic tensors")
+    return package_gelu_artifact(lower_gelu_artifact(module), pipeline_name=pipeline_name)
 
 
 def package_dynamic_popcount(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:

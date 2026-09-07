@@ -1464,6 +1464,150 @@ void accumulateCotangent(mlir::OpBuilder &builder, CotangentMap &cotan,
   cotan[v] = sum;
 }
 
+// A pure counted while is exactly a for loop. Normalize only the proven
+// zero-origin/unit-step form for the physical tape consumer, retaining the
+// selected checkpoint policy. Data-dependent termination is not approximated.
+static void normalizeCountedTapeWhiles(mlir::func::FuncOp fn) {
+  using namespace mlir;
+  llvm::SmallVector<scf::WhileOp> loops;
+  fn.walk([&](scf::WhileOp loop) { loops.push_back(loop); });
+  for (auto loop : loops) {
+    if (!loop.getBefore().hasOneBlock() || !loop.getAfter().hasOneBlock() ||
+        loop.getInits().empty() || !loop.getInits()[0].getType().isIndex()) continue;
+    auto &before=loop.getBefore().front();
+    auto &after=loop.getAfter().front();
+    auto condition=dyn_cast<scf::ConditionOp>(before.getTerminator());
+    auto yield=dyn_cast<scf::YieldOp>(after.getTerminator());
+    if (!condition || !yield || before.getOperations().size()!=2 ||
+        condition.getArgs()!=before.getArguments() ||
+        yield.getNumOperands()!=loop.getInits().size()) continue;
+    auto cmp=condition.getCondition().getDefiningOp<arith::CmpIOp>();
+    auto inc=yield.getOperand(0).getDefiningOp<arith::AddIOp>();
+    if (!cmp || cmp.getPredicate()!=arith::CmpIPredicate::slt ||
+        cmp.getLhs()!=before.getArgument(0) || !inc || inc.getLhs()!=after.getArgument(0)) continue;
+    llvm::APInt lo,hi,step;
+    if (!matchPattern(loop.getInits()[0],m_ConstantInt(&lo)) ||
+        !matchPattern(cmp.getRhs(),m_ConstantInt(&hi)) ||
+        !matchPattern(inc.getRhs(),m_ConstantInt(&step)) ||
+        !lo.isZero() || !step.isOne() || !hi.isSignedIntN(64)) continue;
+    int64_t trip=hi.getSExtValue();
+    auto maximum=loop->getAttrOfType<IntegerAttr>("tessera.autodiff.max_iters");
+    if (trip<2 || trip>1024 || !maximum || !maximum.getValue().isSignedIntN(64) || maximum.getInt()<trip) continue;
+    // The upper bound and step must dominate the new for, not merely be
+    // constants constructed inside the old while regions.
+    OpBuilder builder(loop);
+    auto upper=arith::ConstantIndexOp::create(builder,loop.getLoc(),trip);
+    auto one=arith::ConstantIndexOp::create(builder,loop.getLoc(),1);
+    auto replacement=scf::ForOp::create(builder,loop.getLoc(),loop.getInits()[0],upper,one,
+                                        loop.getInits().drop_front());
+    replacement->setAttrs(loop->getAttrs());
+    auto policy=loop->getAttrOfType<StringAttr>("tessera.autodiff.checkpoint_policy");
+    if (policy && policy.getValue()=="save") {
+      llvm::SmallVector<int64_t> checkpoints;
+      for (int64_t i=1;i<trip;++i) checkpoints.push_back(i);
+      replacement->setAttr("tessera.autodiff.checkpoint_indices",builder.getDenseI64ArrayAttr(checkpoints));
+    }
+    IRMapping mapping;
+    mapping.map(after.getArgument(0),replacement.getInductionVar());
+    for (auto [oldArg,newArg] : llvm::zip(after.getArguments().drop_front(),replacement.getRegionIterArgs()))
+      mapping.map(oldArg,newArg);
+    builder.setInsertionPointToStart(replacement.getBody());
+    for (auto &op : after.without_terminator()) builder.clone(op,mapping);
+    llvm::SmallVector<Value> results;
+    for (auto value : yield.getOperands().drop_front()) results.push_back(mapping.lookupOrDefault(value));
+    // For loops with iter_args have no implicit terminator in this builder.
+    if (auto *term=replacement.getBody()->empty() ? nullptr : &replacement.getBody()->back();
+        term && isa<scf::YieldOp>(term)) term->erase();
+    builder.setInsertionPointToEnd(replacement.getBody());
+    scf::YieldOp::create(builder,loop.getLoc(),results);
+    loop.getResult(0).replaceAllUsesWith(upper);
+    for (auto [oldResult,newResult] : llvm::zip(loop.getResults().drop_front(),replacement.getResults()))
+      oldResult.replaceAllUsesWith(newResult);
+    loop.erase();
+  }
+}
+
+// Preserve a genuinely data-dependent exit by freezing the complete carried
+// state once the condition is false. A syntactic i<cap conjunct and a unit
+// increment prove termination; max_iters alone is never such a proof.
+static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
+  using namespace mlir;
+  fn.walk<WalkOrder::PostOrder>([&](scf::WhileOp loop) {
+    if (!loop.getBefore().hasOneBlock() || !loop.getAfter().hasOneBlock() ||
+        loop.getInits().empty() || !loop.getInits()[0].getType().isIndex()) return;
+    auto &before=loop.getBefore().front(); auto &after=loop.getAfter().front();
+    auto condition=dyn_cast<scf::ConditionOp>(before.getTerminator());
+    auto yield=dyn_cast<scf::YieldOp>(after.getTerminator());
+    if (!condition || !yield || condition.getArgs()!=before.getArguments() ||
+        yield.getNumOperands()!=loop.getInits().size()) return;
+    for (auto &op:before.without_terminator()) if (!isReplayableCFGBodyOperation(op)) return;
+    auto inc=yield.getOperand(0).getDefiningOp<arith::AddIOp>();
+    APInt initial,step;
+    if (!inc || inc.getLhs()!=after.getArgument(0) ||
+        !matchPattern(loop.getInits()[0],m_ConstantInt(&initial)) || !initial.isZero() ||
+        !matchPattern(inc.getRhs(),m_ConstantInt(&step)) || !step.isOne()) return;
+    std::function<std::optional<int64_t>(Value)> cap=[&](Value v)->std::optional<int64_t> {
+      if (auto andOp=v.getDefiningOp<arith::AndIOp>()) {
+        auto lhs=cap(andOp.getLhs()); return lhs ? lhs : cap(andOp.getRhs());
+      }
+      // The frontend short-circuits its bounded condition through scf.if.
+      // A false else arm proves that a true result implies the guard. Do
+      // not accept an arbitrary else value or infer a bound from metadata.
+      if (auto branch=v.getDefiningOp<scf::IfOp>()) {
+        if (branch.getNumResults()!=1 || !branch.getElseRegion().hasOneBlock()) return std::nullopt;
+        auto yield=dyn_cast<scf::YieldOp>(branch.getElseRegion().front().getTerminator());
+        APInt fallback;
+        if (!yield || yield.getNumOperands()!=1 ||
+            !matchPattern(yield.getOperand(0),m_ConstantInt(&fallback)) || !fallback.isZero()) return std::nullopt;
+        return cap(branch.getCondition());
+      }
+      if (auto select=v.getDefiningOp<arith::SelectOp>()) {
+        APInt fallback;
+        if (!matchPattern(select.getFalseValue(),m_ConstantInt(&fallback)) || !fallback.isZero()) return std::nullopt;
+        return cap(select.getCondition());
+      }
+      auto cmp=v.getDefiningOp<arith::CmpIOp>(); APInt bound;
+      if (!cmp || cmp.getPredicate()!=arith::CmpIPredicate::slt || cmp.getLhs()!=before.getArgument(0) ||
+          !matchPattern(cmp.getRhs(),m_ConstantInt(&bound)) || !bound.isSignedIntN(64)) return std::nullopt;
+      int64_t n=bound.getSExtValue();
+      return n>=2 && n<=1024 ? std::optional<int64_t>(n) : std::nullopt;
+    };
+    auto count=cap(condition.getCondition());
+    if (!count) return;
+    auto maximum=loop->getAttrOfType<IntegerAttr>("tessera.autodiff.max_iters");
+    if (!maximum || !maximum.getValue().isSignedIntN(64) || maximum.getInt()<*count) return;
+    OpBuilder b(loop); auto loc=loop.getLoc();
+    auto zero=arith::ConstantIndexOp::create(b,loc,0);
+    auto one=arith::ConstantIndexOp::create(b,loc,1);
+    auto upper=arith::ConstantIndexOp::create(b,loc,*count);
+    auto replacement=scf::ForOp::create(b,loc,zero,upper,one,loop.getInits());
+    replacement->setAttrs(loop->getAttrs());
+    auto policy=loop->getAttrOfType<StringAttr>("tessera.autodiff.checkpoint_policy");
+    if (policy && policy.getValue()=="save") {
+      SmallVector<int64_t> checkpoints;
+      for (int64_t i=1;i<*count;++i) checkpoints.push_back(i);
+      replacement->setAttr("tessera.autodiff.checkpoint_indices",b.getDenseI64ArrayAttr(checkpoints));
+    }
+    b.setInsertionPointToStart(replacement.getBody());
+    IRMapping mapping;
+    for (auto [a,v]:llvm::zip(before.getArguments(),replacement.getRegionIterArgs())) mapping.map(a,v);
+    for (auto &op:before.without_terminator()) b.clone(op,mapping);
+    auto branch=scf::IfOp::create(b,loc,loop.getResultTypes(),mapping.lookupOrDefault(condition.getCondition()),true);
+    b.setInsertionPointToStart(&branch.getThenRegion().front());
+    for (auto [a,v]:llvm::zip(after.getArguments(),replacement.getRegionIterArgs())) mapping.map(a,v);
+    for (auto &op:after.without_terminator()) b.clone(op,mapping);
+    SmallVector<Value> next;
+    for (Value v:yield.getOperands()) next.push_back(mapping.lookupOrDefault(v));
+    scf::YieldOp::create(b,loc,next);
+    b.setInsertionPointToStart(&branch.getElseRegion().front());
+    scf::YieldOp::create(b,loc,replacement.getRegionIterArgs());
+    b.setInsertionPointToEnd(replacement.getBody());
+    scf::YieldOp::create(b,loc,branch.getResults());
+    loop.replaceAllUsesWith(replacement.getResults());
+    loop.erase();
+  });
+}
+
 class AutodiffPairedPass
     : public mlir::PassWrapper<AutodiffPairedPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -1471,6 +1615,13 @@ public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffPairedPass)
   AutodiffPairedPass() = default;
   AutodiffPairedPass(const AutodiffPairedPass &other) : PassWrapper(other) {}
+  mlir::Pass::Option<bool> normalizeCountedWhile{*this, "normalize-counted-while",
+      llvm::cl::desc("Normalize proven counted whiles for persistent tensor products"), llvm::cl::init(false)};
+  mlir::Pass::Option<bool> normalizeDataWhile{*this, "normalize-data-while",
+      llvm::cl::desc("Normalize SSA-bounded pure data-dependent whiles to persistent state machines"), llvm::cl::init(false)};
+  mlir::Pass::Option<bool> boxProductScalars{*this, "box-product-scalars",
+      llvm::cl::desc("Store exported predicate and index residuals as rank-zero i8/i64 tensors"), llvm::cl::init(false)};
+
   mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
       llvm::cl::desc("Generate a bounded native primal/VJP child"), llvm::cl::init(false)};
 
@@ -1547,6 +1698,10 @@ public:
       module.emitError("native VJP requires exactly one fresh reverse request");
       return signalPassFailure();
     }
+    if (normalizeCountedWhile)
+      for (auto fn : targets) normalizeCountedTapeWhiles(fn);
+    if (normalizeDataWhile)
+      for (auto fn : targets) normalizeDataDependentTapeWhiles(fn);
     for (auto fn : targets)
       if (failed(buildBackward(fn)))
         return signalPassFailure();
@@ -1580,6 +1735,51 @@ private:
     for (unsigned i=0;i<residualCount;++i)
       if (forward.getResultTypes()[primalCount+i]!=backward.getArgumentTypes()[forward.getNumArguments()+primalCount+i])
         return module.emitError("typed product residual type disagrees");
+    // The paired differentiator owns logical scalar residuals. The physical
+    // export owns their lossless storage projection, never Python text surgery.
+    // Only residual positions are boxed; public differentiable inputs retain
+    // their original ABI. Both exports derive the same complete pair lineage.
+    if (boxProductScalars) {
+      using namespace mlir;
+      for (unsigned i=0;i<residualCount;++i) {
+        unsigned resultIndex=primalCount+i;
+        Type type=forward.getResultTypes()[resultIndex];
+        auto logicalTensor=dyn_cast<RankedTensorType>(type);
+        Type logicalElement=logicalTensor ? logicalTensor.getElementType() : type;
+        if (!logicalElement.isIndex() && !logicalElement.isInteger(1)) continue;
+        OpBuilder b(module.getContext());
+        auto element=logicalElement.isIndex() ? b.getI64Type() : b.getI8Type();
+        auto storage=RankedTensorType::get(logicalTensor ? logicalTensor.getShape() : ArrayRef<int64_t>{},element);
+        auto ret=cast<func::ReturnOp>(forward.getBody().front().getTerminator());
+        b.setInsertionPoint(ret);
+        Value value=ret.getOperand(resultIndex);
+        Type castType=logicalTensor ? Type(storage) : Type(element);
+        if (logicalElement.isIndex()) value=arith::IndexCastOp::create(b,ret.getLoc(),castType,value);
+        else value=arith::ExtUIOp::create(b,ret.getLoc(),castType,value);
+        if (!logicalTensor) value=tensor::FromElementsOp::create(b,ret.getLoc(),storage,ValueRange{value});
+        ret->setOperand(resultIndex,value);
+        SmallVector<Type> results(forward.getResultTypes());
+        results[resultIndex]=storage;
+        forward.setType(b.getFunctionType(forward.getArgumentTypes(),results));
+        unsigned argumentIndex=forward.getNumArguments()+resultIndex;
+        auto argument=backward.getArgument(argumentIndex);
+        argument.setType(storage);
+        b.setInsertionPointToStart(&backward.getBody().front());
+        Value scalar=argument;
+        Operation *first=nullptr;
+        if (!logicalTensor) {
+          scalar=tensor::ExtractOp::create(b,backward.getLoc(),argument,ValueRange{});
+          first=scalar.getDefiningOp();
+        }
+        if (logicalElement.isIndex()) scalar=arith::IndexCastOp::create(b,backward.getLoc(),type,scalar);
+        else scalar=arith::TruncIOp::create(b,backward.getLoc(),type,scalar);
+        if (!first) first=scalar.getDefiningOp();
+        argument.replaceAllUsesExcept(scalar,first);
+        SmallVector<Type> arguments(backward.getArgumentTypes());
+        arguments[argumentIndex]=storage;
+        backward.setType(b.getFunctionType(arguments,backward.getResultTypes()));
+      }
+    }
     std::string lineage; llvm::raw_string_ostream lineOS(lineage); module.print(lineOS); lineOS.flush();
     auto selected=role=="forward" ? forward : backward;
     llvm::json::Array args,results,sources;
@@ -2127,7 +2327,9 @@ private:
     CotangentMap cotangents;
     for (auto [yielded, seed] :
          llvm::zip_equal(yield.getOperands(), outputCotangents))
-      if (seed)
+      // Discrete loop/branch state needs replay storage, not a cotangent.
+      // Generic region ABIs use typed zero placeholders for these positions.
+      if (seed && mlir::isa<mlir::FloatType>(mlir::getElementTypeOrSelf(yielded.getType())))
         accumulateCotangent(builder, cotangents,
                             mapping.lookupOrDefault(yielded), seed);
 

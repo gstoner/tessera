@@ -1,6 +1,6 @@
 """Split compiler-produced AD products with persistent CUDA/HIP residual storage.
 
-The initial physical envelope is static f32 tensors and bounded for/if regions,
+The physical envelope is static floating/integer tensor storage and bounded for/if regions,
 executed serially on one GPU thread. Nested inner states may still be replayed
 by the compiler's backward program; exported residuals persist across calls.
 """
@@ -26,9 +26,9 @@ def _attribute(text,name):
 
 
 def _shape(type_name):
-    match=re.fullmatch(r'tensor<((?:[1-9][0-9]*x)*)f32>',type_name)
+    match=re.fullmatch(r'tensor<((?:[1-9][0-9]*x)*)(f32|f64|i8|i64)>',type_name)
     if not match:
-        raise ValueError('persistent GPU tape currently requires static f32 tensor slots')
+        raise ValueError('persistent GPU tape requires static f32/f64/i8/i64 tensor slots')
     shape=tuple(int(x) for x in match[1].split('x') if x)
     count=1
     for dim in shape:
@@ -36,6 +36,11 @@ def _shape(type_name):
             raise ValueError('persistent GPU tape slot exceeds 1024 elements')
         count*=dim
     return shape
+
+
+def _dtype(type_name):
+    _shape(type_name)
+    return {'f32':'fp32','f64':'fp64','i8':'int8','i64':'int64'}[type_name.split('x')[-1].removeprefix('tensor<').removesuffix('>')]
 
 
 def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip):
@@ -47,7 +52,7 @@ def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip):
     contracts=[]
     lineages=[]
     for role in ('forward','backward'):
-        exported=_run(compiler,'--tessera-autodiff-paired=export-product='+role,source=source)
+        exported=_run(compiler,'--tessera-autodiff-paired=normalize-counted-while=true normalize-data-while=true box-product-scalars=true export-product='+role,source=source)
         contract=json.loads(_attribute(exported,'tessera.autodiff.product_abi'))
         contracts.append(contract)
         lineages.append(_attribute(exported,'tessera.autodiff.product_pair'))
@@ -60,7 +65,8 @@ def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip):
             '--convert-linalg-to-loops','--canonicalize',source=native)
         gpu=_run(compiler,'--allow-unregistered-dialect','--tessera-native-tape-to-gpu=backend='+backend,source=buffered)
         inputs=len(contract['inputs'])
-        specs=tuple(TensorSpec(f'arg{i}','fp32',shape,i>=inputs) for i,shape in enumerate(shapes))+(IndexSpec('scratch',1,1),)
+        specs=tuple(TensorSpec(f'arg{i}',_dtype(t),shape,i>=inputs)
+                    for i,(t,shape) in enumerate(zip(contract['inputs']+contract['results'],shapes,strict=True)))+(IndexSpec('scratch',1,1),)
         first,rest=gpu.split('\n',1)
         prefix='module attributes {'
         if not first.startswith(prefix) or not first.endswith('} {'):
@@ -95,7 +101,7 @@ class PersistentTapePair:
                 raise ValueError('persistent tape product identity disagrees')
             manifest=read_tensor_contract(package)
             inputs=len(c['inputs'])
-            expected=tuple(TensorSpec(f'arg{i}','fp32',_shape(t),i>=inputs)
+            expected=tuple(TensorSpec(f'arg{i}',_dtype(t),_shape(t),i>=inputs)
                            for i,t in enumerate(c['inputs']+c['results']))+(IndexSpec('scratch',1,1),)
             if (tensor_contract_specs(manifest)!=expected or manifest['grid']!=[1,1,1]
                     or manifest['block']!=[1,1,1]):
@@ -131,6 +137,7 @@ class PersistentTapeFrame:
         self.pair=pair
         self.closed=False
         self.buffers=[]
+        self._submissions=[]
         self._lock=threading.RLock()
         self._identities=(pair.forward.binding_digest,pair.backward.binding_digest)
         self._bindings=[]
@@ -156,8 +163,8 @@ class PersistentTapeFrame:
         self.context=self.context_type()
         self.check(self.current(ct.byref(self.context)))
         try:
-            self._inputs=tuple(_Buffer(self,_shape(t)) for t in f['inputs'])
-            self._outputs=tuple(_Buffer(self,_shape(t)) for t in f['results'])
+            self._inputs=tuple(_Buffer(self,_shape(t),_dtype(t)) for t in f['inputs'])
+            self._outputs=tuple(_Buffer(self,_shape(t),_dtype(t)) for t in f['results'])
             self._bindings[0]._resident(*inputs,*self._outputs,1)
             self.check(self.sync())
             for source,target in zip(inputs,self._inputs,strict=True):
@@ -187,12 +194,48 @@ class PersistentTapeFrame:
                 raise ValueError('persistent tape cotangent arity disagrees')
             start=len(self.buffers)
             try:
-                outputs=tuple(_Buffer(self,v.shape) for v in self._inputs)
+                outputs=tuple(_Buffer(self,v.shape,v.dtype) for v in self._inputs)
                 self._bindings[1](*self._inputs,*cotangents,*self._outputs[self._primal_count:],*outputs,1)
                 return tuple(_ReadOnly(v) for v in outputs)
             except BaseException:
                 self._release(start)
                 raise
+
+    def backward_async(self, stream, *cotangents):
+        """Enqueue a distinct derivative generation on a caller-owned stream.
+
+        The event retains the frame and cotangents. Outputs advertise their
+        producer stream, so another native tensor binding can order consumers.
+        Close still synchronizes before freeing externally visible generations.
+        """
+        with self._lock:
+            self._ready()
+            if type(stream) is not int or not 0 < stream < (1 << 64):
+                raise ValueError('persistent tape requires a non-null stream')
+            if len(cotangents)!=self._primal_count:
+                raise ValueError('persistent tape cotangent arity disagrees')
+            start=len(self.buffers)
+            try:
+                outputs=tuple(_Buffer(self,v.shape,v.dtype) for v in self._inputs)
+                submission=self._bindings[1].submit(stream,*self._inputs,*cotangents,
+                    *self._outputs[self._primal_count:],*outputs,1)
+                result=PersistentDerivativeSubmission(self,submission,outputs,stream)
+                self._submissions.append(result)
+                return result
+            except BaseException:
+                # A launch may have succeeded before event recording failed.
+                # Do not release any allocation without a completion proof.
+                self._release(start)
+                raise
+
+    def poll(self):
+        """Retire completed event owners without a device-wide wait."""
+        with self._lock:
+            self._ready()
+            for submission in tuple(self._submissions):
+                if submission.poll():
+                    self._submissions.remove(submission)
+            return not self._submissions
 
     def _release(self,start):
         self.check(self.sync())
@@ -207,6 +250,9 @@ class PersistentTapeFrame:
             if self.closed:
                 return
             self._ready()
+            for submission in tuple(self._submissions):
+                submission.wait()
+            self._submissions.clear()
             self._release(0)
             for binding in self._bindings:
                 binding.close()
@@ -218,3 +264,57 @@ class PersistentTapeFrame:
 
     def __exit__(self,*exc):
         self.close()
+
+
+class _ProducedReadOnly(_ReadOnly):
+    def __init__(self, buffer, stream):
+        super().__init__(buffer)
+        self._stream=stream
+
+    @property
+    def __cuda_array_interface__(self):
+        return {**super().__cuda_array_interface__, 'stream': self._stream}
+
+
+class PersistentDerivativeSubmission:
+    """An asynchronous derivative generation owned by its persistent frame."""
+    def __init__(self, frame, submission, outputs, stream):
+        self.frame, self.submission=frame,submission
+        self._buffers=outputs
+        self._released=False
+        self.outputs=tuple(_ProducedReadOnly(v,stream) for v in outputs)
+
+    def wait(self):
+        with self.frame._lock:
+            self.frame._ready()
+            if self._released:
+                raise ValueError('persistent derivative generation is released')
+            self.submission.wait()
+            return self.outputs
+
+    def poll(self):
+        with self.frame._lock:
+            self.frame._ready()
+            return self.submission.ticket.poll()
+
+    def release(self):
+        """Release this generation after all device readers have completed.
+
+        Exported views can have downstream consumers outside this binding, so
+        allocation release keeps a context completion barrier. Event polling
+        alone retires submission owners, not arbitrary external readers.
+        """
+        with self.frame._lock:
+            if self._released:
+                return
+            self.frame._ready()
+            self.submission.wait()
+            self.frame.check(self.frame.sync())
+            for buffer in self._buffers:
+                if buffer.pointer.value:
+                    self.frame.check(self.frame.free(buffer.pointer))
+                    buffer.pointer=ct.c_void_p()
+                    self.frame.buffers.remove(buffer)
+            self._released=True
+            if self in self.frame._submissions:
+                self.frame._submissions.remove(self)

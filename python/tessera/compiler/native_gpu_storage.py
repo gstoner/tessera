@@ -178,6 +178,7 @@ class BoundNativeGPUStorage:
         self._event_create = bind('cuEventCreate', 'hipEventCreateWithFlags', [ct.POINTER(P), U])
         self._event_record = bind('cuEventRecord', 'hipEventRecord', [P, P])
         self._event_sync = bind('cuEventSynchronize', 'hipEventSynchronize', [P])
+        self._event_query = bind('cuEventQuery', 'hipEventQuery', [P])
         self._event_destroy = bind('cuEventDestroy_v2', 'hipEventDestroy', [P])
         self._stream_wait = bind('cuStreamWaitEvent', 'hipStreamWaitEvent', [P, P, U])
         self._pending: list[NativeSubmission] = []
@@ -304,6 +305,20 @@ class NativeSubmission:
                     self.wait()
                 else:
                     self._owner._check(self._owner._stream_wait(ct.c_void_p(stream), self._event, 0))
+
+    def poll(self) -> bool:
+        """Observe completion without blocking; errors retain all owners."""
+        with self._owner._lock:
+            if self.done:
+                return True
+            if self._event is None:
+                return False  # Failed event recording needs an explicit wait.
+            status = self._owner._event_query(self._event)
+            if status == 600:  # CUDA_ERROR_NOT_READY / hipErrorNotReady
+                return False
+            self._owner._check(status)
+            self.wait()  # The successful query proves this wait cannot stall.
+            return True
 
     def wait(self) -> int:
         with self._owner._lock:

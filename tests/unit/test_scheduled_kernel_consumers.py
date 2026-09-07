@@ -177,7 +177,7 @@ def test_apple_gpu_packages_exact_scheduled_softmax(monkeypatch, tmp_path) -> No
         artifact, pipeline_name="tessera-lower-to-apple_gpu"
     )
     assert package.tile_ir == artifact.tile_ir
-    assert package.descriptor.entry_symbol == "tessera_apple_gpu_softmax_f32"
+    assert package.descriptor.entry_symbol == "tessera_apple_gpu_softmax_f32_status"
     assert package.descriptor.provenance["work_item"] == "E2E-REAL-5"
     assert package.descriptor.provenance["route"] == "apple_softmax_native_library"
     assert package.descriptor.provenance["rows"] == 6

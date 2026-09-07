@@ -825,16 +825,12 @@ extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
   reference_softmax_f32(X, Out, M, K);
 }
 
-// Status twin. There is no Metal on this platform, so the honest answer is
-// always 0: the result is correct, and it was computed on the host. A caller
-// recording placement evidence (E2E-SPINE-3 packets, benchmark rows) must see
-// 0 here and refuse to seal the run as GPU execution.
-extern "C" int32_t tessera_apple_gpu_softmax_f32_status(const float* X,
-                                                        float* Out, int32_t M,
-                                                        int32_t K) {
-  reference_softmax_f32(X, Out, M, K);
-  return 0;
-}
+// Native-only status boundary: no Metal means failure without reference execution.
+extern "C" int32_t tessera_apple_gpu_softmax_f32_status(
+    const float*, float*, int32_t, int32_t) { return 0; }
+
+extern "C" int32_t tessera_apple_gpu_gelu_f32_status(
+    const float*, float*, int32_t) { return 0; }
 
 extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
                                            int32_t N) {
@@ -894,6 +890,9 @@ extern "C" void tessera_apple_gpu_softmax_bf16(const uint16_t* X, uint16_t* Out,
   for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_stub(Of[i]);
 }
 
+extern "C" int32_t tessera_apple_gpu_gelu_f16_status(
+    const uint16_t*, uint16_t*, int32_t) { return 0; }
+
 extern "C" void tessera_apple_gpu_gelu_f16(const uint16_t* X, uint16_t* Out,
                                            int32_t N) {
   std::vector<float> Xf(static_cast<std::size_t>(N));
@@ -902,6 +901,9 @@ extern "C" void tessera_apple_gpu_gelu_f16(const uint16_t* X, uint16_t* Out,
   reference_gelu_f32(Xf.data(), Of.data(), N);
   for (int32_t i = 0; i < N; ++i) Out[i] = float_to_half_stub(Of[i]);
 }
+
+extern "C" int32_t tessera_apple_gpu_gelu_bf16_status(
+    const uint16_t*, uint16_t*, int32_t) { return 0; }
 
 extern "C" void tessera_apple_gpu_gelu_bf16(const uint16_t* X, uint16_t* Out,
                                             int32_t N) {

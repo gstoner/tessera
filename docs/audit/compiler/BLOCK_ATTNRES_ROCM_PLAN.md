@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-13
+last_updated: 2026-09-07
 audit_role: plan
 plan_state: landing
 ---
@@ -11,18 +11,27 @@ plan_state: landing
 > sequencing remains owned by
 > [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
 
-**Status:** plan (2026-08-12). **Source paper:** Attention Residuals, arXiv 2603.15031
-(Kimi Team / MoonshotAI). Official repo ships no code; no faithful public
-implementation of Block AttnRes exists (survey in §5 of this doc's provenance
-review, summarized in Appendix B). Gaps the paper leaves open are filled here
-and marked **[GAP-n]** with the choice justified.
+**Current scope (2026-09-07):** phases 0–4 establish reference and typed native
+contracts; phase 5 has bounded gfx1151 execution with selector-ineligible WSL
+operation-total timing. The source paper is *Attention Residuals*, arXiv
+2603.15031. Appendix B is a dated August survey, not a renewed claim about
+public implementations. [The old introduction is archived](archive/CAPABILITY_PLAN_STATUS_2026_08.md).
 
-**Why ROCm first:** core compiler work is routed to the Strix Halo box
-(`INTEGRATED_COMPILER_PLAN.md` §6a), which is the only fleet machine with an
-executing non-Apple GPU lane (gfx1151 matmul + flash-attention family via
-`runtime.launch()`), and ROCm is a lead performance target whose ceiling shared
-infra must not cap (Decision #28). The mathematical contract lands host-free
-first (Phases 0–2 run anywhere); the first hardware proof lands on gfx1151.
+ROCm-first identifies this workload's first physical proof, not the only
+executing non-Apple backend. Each target owns its package, schedule and proof.
+Gaps filled by this contract remain labeled **[GAP-n]**.
+
+## Current status and remaining acceptance work
+
+| Slice | Current boundary | Remaining gate / owner |
+|---|---|---|
+| Phases 0–4 | Reference recurrence, typed AD, static all-f32 Schedule→Tile and replay exist. | Dynamic/bucketed/reduced-storage contracts need explicit policy and native replay; F2 / NUMPOL. |
+| Phase 5 | Three gfx1151 shapes have recorded HSACO/descriptor correctness. | Valid device timing and matched baselines before selector admission; BLOCK-ATTNRES-1 / W5.2. |
+| Phase 6 | Sibling packages do not inherit gfx1151 proof. | Independent package ancestry and owning-host numerical evidence; F2 and backend queues. |
+| Phase 7 | Query-hoisted reference algorithm exists. | Native query hoisting, block-state lifetime/checkpoint legality and real pipeline/TP transport; F3 / W2.4a / AD / DIST-NATIVE-1. |
+
+[Integrated ownership and exit gates](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+control sequencing. This plan retains the model and workload-specific oracles.
 
 **Verification:** every derived result below is numerically checked by
 `tests/unit/test_block_attnres_model.py` (pure numpy, no new deps): the VJP
@@ -332,7 +341,9 @@ sequence-mixer plan.
 
 ### III.2 Autodiff
 
-Register (11)–(13) as the `depth_attn` VJP in `autodiff.vjp._VJPS` (JVP the
+The phase-3 typed product interfaces and reference rules implement (11)–(13).
+The original registration contract below remains an acceptance requirement, not
+an unstarted task: register (11)–(13) as the `depth_attn` VJP in `autodiff.vjp._VJPS` (JVP the
 directional analog); `primitive_coverage` auto-flips the (V/J)VP axes
 (Decision #24). The decomposed path composes existing tape rules for free —
 giving a standing **differential test: analytic VJP vs traced-decomposition
@@ -428,9 +439,9 @@ verification reuses the same reference functions.
 
 | Phase | Deliverable | Where it runs |
 |---|---|---|
-| 0 *(this PR)* | Model doc + numpy contract tests (VJP, merge lemma, P2–P4) | any box |
+| 0 **(landed reference)** | Model doc + numpy contract tests (VJP, merge lemma, P2–P4) | any box |
 | 1 **(landed 2026-08-12)** | `softmax_merge` + numpy `ATTN_WITH_STATS` reference in `tessera.ops`; metamorphic tests | any box |
-| 2 **(landed 2026-08-12)** | `stdlib/attn_res.py` (A1/A2/A4), zero-init, GAP-2/3 semantics + fidelity tests → **first faithful public Block AttnRes** | any box |
+| 2 **(landed 2026-08-12)** | `stdlib/attn_res.py` (A1/A2/A4), zero-init, GAP-2/3 semantics + fidelity tests → the in-tree reference Block AttnRes contract | any box |
 | 3 **(landed 2026-08-13)** | Typed `attn_with_stats`/`softmax_merge`/`softmax_finalize`/`depth_attn` Graph IR contracts; compiler-owned typed VJP/JVP products; catalog/coverage rows; direct decomposition-versus-analytic product tests | any box |
 | 4 **(landed 2026-08-13)** | Content-addressed `schedule.depth_attention` → `tile.depth_attention_kernel`; retained Graph lineage; digest/policy tamper rejection; exact x86/gfx1151 profiles with gfx1200/gfx1250 fail-closed | any compiler host |
 | 5 **(landed 2026-08-13)** | Typed `tessera_rocm.depth_attention` record; gfx1151 statistics-attention plus associative merge/finalize kernel; content-addressed HSACO package/runtime consumption; exact-device correctness and WSL operation-total timing packet | **Strix Halo** |

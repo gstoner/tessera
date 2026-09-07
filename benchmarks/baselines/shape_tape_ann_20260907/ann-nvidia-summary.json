@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "pair": "e61d765199c9b96dc479f8410b14b9a3082fe53fa6fd8bdcbe349f380a620550",
+  "timing_domain": "warm_package_h2d_dispatch_d2h_host_wall",
+  "run_speedups": [
+    0.971729320129781,
+    0.9980887639438171,
+    0.9777307708661082,
+    0.99908489976961,
+    1.0427753561902284,
+    1.032405581435013,
+    0.9892405868385346,
+    1.016469913187619,
+    0.9950801980617038
+  ],
+  "median_speedup": 0.9980887639438171,
+  "median_bounds": [
+    0.9777307708661082,
+    1.032405581435013
+  ],
+  "threshold": 1.02,
+  "performance_eligible": false,
+  "production_promoted": false,
+  "reason": "lower bound does not clear 2 percent margin"
+}

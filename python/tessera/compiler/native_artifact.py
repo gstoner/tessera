@@ -860,11 +860,11 @@ class LaunchDescriptor:
             )
         return content
 
-    @cached_property
+    @property
     def descriptor_digest(self) -> str:
         return _sha256_json(self._content_dict())
 
-    @cached_property
+    @property
     def cache_fingerprint(self) -> str:
         return _sha256_json({
             "schema_version": self.schema_version,

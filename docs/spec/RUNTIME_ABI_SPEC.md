@@ -762,6 +762,17 @@ MLIR/runtime boundary uses **raw 16-bit** storage; mismatched producers/consumer
 **copy/convert at the boundary**. This is an ABI rule, not an implementation
 accident — no path may reinterpret bf16 bits as fp16 or vice versa.
 
+The native Python `invoke` descriptor boundary also accepts signed i64 and i8
+buffers for compiler-exported AD shape/predicate residuals, with exact signature
+checks and no implicit casts. Floating high-level math helpers retain their
+floating dtype envelope. This is host ABI evidence, not GPU dynamic storage
+support; the GPU persistent-tape packager still requires static slots.
+
+The host JIT runs upstream ownership-based buffer deallocation after copying
+results into caller-owned DPS outputs. Loop-carried temporary allocations are
+retired by that analysis; input and output buffers remain caller-owned. This
+synchronous host retirement is distinct from stream-ordered GPU reclamation.
+
 ### 12.6 Error and effect model
 
 **`void` return is Phase 0 only.** It is valid solely because Phase 0 admits a

@@ -492,6 +492,13 @@ struct SymbolicDimEquality
     : public PassWrapper<SymbolicDimEquality, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SymbolicDimEquality)
 
+  SymbolicDimEquality() = default;
+  SymbolicDimEquality(const SymbolicDimEquality &other) : PassWrapper(other) {}
+  Option<std::string> instantiate{
+      *this, "instantiate",
+      llvm::cl::desc("Bind a straight-line matmul recipe using name:size;name:size"),
+      llvm::cl::init("")};
+
   StringRef getArgument() const override {
     return "tessera-symdim-equality";
   }
@@ -1058,7 +1065,90 @@ struct SymbolicDimEquality
     return failed ? mlir::failure() : mlir::success();
   }
 
+  LogicalResult bindInstance() {
+    auto module = getOperation();
+    auto functions = module.getOps<func::FuncOp>();
+    if (!llvm::hasSingleElement(functions))
+      return module.emitError("SYMDIM_BINDING_MALFORMED: instantiation requires one function");
+    auto fn = *functions.begin();
+    if (fn.isExternal() || !llvm::hasSingleElement(fn.getBody()))
+      return fn.emitError("SYMDIM_BINDING_MALFORMED: instantiation requires one concrete block");
+    SmallVector<StringRef> entries;
+    StringRef(instantiate.getValue()).split(entries, ';');
+    NamedAttrList sizes;
+    for (StringRef entry : entries) {
+      auto [name, value] = entry.split(':');
+      int64_t extent;
+      if (name.empty() || value.getAsInteger(10, extent) || extent <= 0 || sizes.get(name))
+        return fn.emitError("SYMDIM_BINDING_MALFORMED: invalid or duplicate instantiation binding");
+      sizes.set(name, IntegerAttr::get(IntegerType::get(&getContext(), 64), extent));
+    }
+    if (auto existing = fn->getAttrOfType<DictionaryAttr>("tessera.dim_sizes"))
+      for (NamedAttribute item : existing)
+        if (sizes.get(item.getName()) != item.getValue())
+          return fn.emitError("SYMDIM_BINDING_MALFORMED: instantiation disagrees with retained witness");
+    fn->setAttr("tessera.dim_sizes", sizes.getDictionary(&getContext()));
+    return success();
+  }
+
+  LogicalResult specializeInstance() {
+    auto fn = *getOperation().getOps<func::FuncOp>().begin();
+    auto sizes = readDimSizes(fn);
+    ValueDimMap names;
+    for (unsigned i = 0; i < fn.getNumArguments(); ++i) {
+      auto dimNames = readArgDimNames(fn, i);
+      if (!dimNames)
+        return fn.emitError("SYMDIM_BINDING_MALFORMED: instantiation requires named argument dimensions");
+      names[fn.getArgument(i)] = *dimNames;
+    }
+    // This first native instantiator is deliberately bounded. Unknown shape
+    // transfers are refused rather than specializing only the signature.
+    for (Operation &op : fn.getBody().front()) {
+      if (isa<func::ReturnOp>(op)) continue;
+      if (op.getName().getStringRef() != "tessera.matmul" || op.getNumRegions())
+        return op.emitError("SYMDIM_BINDING_MALFORMED: instantiation supports straight-line matmul recipes only");
+      if (propagateThroughOp(&op, names, nullptr)) return failure();
+    }
+    SmallVector<std::pair<Value, RankedTensorType>> rewrites;
+    auto resolve = [&](Value value) -> LogicalResult {
+      auto type = dyn_cast<RankedTensorType>(value.getType());
+      auto found = names.find(value);
+      if (!type || type.getEncoding() || found == names.end() ||
+          found->second.size() != static_cast<size_t>(type.getRank()))
+        return fn.emitError("SYMDIM_BINDING_MALFORMED: incomplete instantiation shape transfer");
+      SmallVector<int64_t> shape;
+      for (auto [index, name] : llvm::enumerate(found->second)) {
+        int64_t extent;
+        if (StringRef(name).getAsInteger(10, extent)) {
+          auto it = sizes.find(name);
+          if (it == sizes.end())
+            return fn.emitError("SYMDIM_BINDING_MALFORMED: missing instantiation dimension");
+          extent = it->second;
+        }
+        if (extent <= 0 || (!type.isDynamicDim(index) && type.getDimSize(index) != extent))
+          return fn.emitError("SYMDIM_BINDING_MALFORMED: instantiation contradicts static dimension");
+        shape.push_back(extent);
+      }
+      rewrites.emplace_back(value, RankedTensorType::get(shape, type.getElementType()));
+      return success();
+    };
+    for (Value argument : fn.getArguments())
+      if (failed(resolve(argument))) return failure();
+    for (Operation &op : fn.getBody().front())
+      for (Value result : op.getResults())
+        if (failed(resolve(result))) return failure();
+    auto ret = dyn_cast<func::ReturnOp>(fn.getBody().front().getTerminator());
+    if (!ret) return fn.emitError("SYMDIM_BINDING_MALFORMED: instantiation needs a return");
+    for (auto [value, type] : rewrites) value.setType(type);
+    fn.setFunctionType(FunctionType::get(&getContext(), fn.getBody().front().getArgumentTypes(), ret.getOperandTypes()));
+    return success();
+  }
+
   void runOnOperation() override {
+    if (!instantiate.getValue().empty() && failed(bindInstance())) {
+      signalPassFailure();
+      return;
+    }
     bool anyFailure = false;
     // Sprint V3b — module-level symbol table for func.call resolution.
     SymbolTable symtab(getOperation());
@@ -1093,7 +1183,8 @@ struct SymbolicDimEquality
         }
       });
     });
-    if (anyFailure) signalPassFailure();
+    if (anyFailure || (!instantiate.getValue().empty() && failed(specializeInstance())))
+      signalPassFailure();
   }
 };
 

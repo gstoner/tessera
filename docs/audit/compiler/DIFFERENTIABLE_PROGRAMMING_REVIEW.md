@@ -1,8 +1,8 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-09-07
 audit_role: reference
 scope: python/tessera/autodiff, python/tessera/losses.py, python/tessera/rng.py, python/tessera/arch.py, python/tessera/custom.py, python/tessera/compiler/{primitive_coverage,op_catalog,evaluator,rematerialization_cost}.py, src/transforms/lib/{EffectAnnotationPass,ActivationRematerializationPass}.cpp
-companions: AUTODIFF_ARCHITECTURE_REVIEW.md (the primary autodiff review this extends) · SEQUENCE_MIXER_ENGINEERING_PLAN.md · RIEMANNIAN_OT_PLAN.md · ../../spec/AUTODIFF_SPEC.md
+companions: AUTODIFF_EXECUTION_PLAN.md (active AD owner); AUTODIFF_ARCHITECTURE_REVIEW.md (historical provenance) · SEQUENCE_MIXER_ENGINEERING_PLAN.md · RIEMANNIAN_OT_PLAN.md · ../../spec/AUTODIFF_SPEC.md
 source_text: Blondel & Roulet, "The Elements of Differentiable Programming" (arXiv:2403.14606v4, 2024)
 ---
 
@@ -19,14 +19,13 @@ first-principles treatment of AD, smoothing/relaxation, implicit
 differentiation, second-order structure, and stochastic-program gradients — the
 theory surface a standalone compiler must eventually implement.
 
-**This is a *delta* review.** It does **not** re-derive what
-[`AUTODIFF_ARCHITECTURE_REVIEW.md`](AUTODIFF_ARCHITECTURE_REVIEW.md) already owns
-— the book independently confirms every one of those findings, and where it
-does the confirmation is noted inline. Everything below is content the book
-covers that the existing autodiff plan does **not**.
+**Historical scope.** This review originally extended the August
+[`AUTODIFF_ARCHITECTURE_REVIEW.md`](AUTODIFF_ARCHITECTURE_REVIEW.md). The following
+comparison preserves those dated findings and their book references; it is not
+a current absence list. The active [AD execution plan](AUTODIFF_EXECUTION_PLAN.md)
+now owns the consolidated work, including the residuals in the current table below.
 
-Already owned by `AUTODIFF_ARCHITECTURE_REVIEW.md` (confirmed by the book, not
-repeated here):
+Historical findings from that review:
 
 | Existing finding | Book confirmation |
 |---|---|
@@ -45,51 +44,27 @@ labelled as such; they are evidence for *gaps*, not status claims.
 
 ---
 
-## Summary — the delta findings
+## Current implementation and residual ownership
 
-| ID | Finding | Book ref | Cost | Governance hook |
-|---|---|---|---|---|
-| **C1** | Automatic linear transposition — VJP/JVP hand-maintained twice; `transpose_rule` axis has no consumer | §4.5.4 | ~2 wk | #29, and *reduces* D2 |
-| **C2** | Nonsmooth (Clarke) selection is undeclared and inconsistent across ops | §2.7 | days | #21a |
-| **C3** | Stochastic computation graphs give the effect lattice a fail-closed structure | §11.5 | ~2 wk | #5, #30 |
-| **C4** | Semirings unify attention / scan / sequence-mixer; backward comes free | §10.9 | ~4 wk | #21a |
-| **C5** | Cost-weighted treeverse (better than uniform Revolve); online + reversible | §4.6–4.7 | folds into D5 | #28 |
-| **C6** | GGN / Fisher / IHVP / Hessian-diagonal — a 13th contract axis | Ch. 8 | folds into D6 | — |
-| **T1** | Smoothing/relaxation family absent (sparsemax, gumbel, soft-topk, perturbed) | Ch. 4, 12, 13 | ~3 wk | PB-3 shape |
-| **T2** | Fenchel-Young losses collapse a chunk of `losses.py` | Ch. 15 §4 | ~2 wk | — |
-| **T3** | Python `custom_root`/IHVP oracle plus value-producing compiler IFT IR landed; physical solver consumption remains open | Ch. 10 | landing | — |
-| **R1** | Baur–Strassen cost-ratio oracle | §4.4.3 | days | catches B1/B2 |
-| **R2** | Randomized forward-mode gradient (memory-free lane) | §4.8 | folds into D2 | #28 |
+This table supersedes the [historical status tables](archive/DIFFERENTIABLE_PROGRAMMING_STATUS_2026_08.md).
+The book-derived sections below retain dated observations and mathematical
+rationale; they are not an independent current backlog. Active AD implementation
+belongs to [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md); global order
+belongs to the [integrated reconciliation](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
 
----
-
-## Implementation status (built 2026-08-07)
-
-Seven of the eleven findings are **implemented and tested in the Python
-reference lane**. This is not native Graph/Schedule/Tile support. Each
-row below is code + a passing test file; counts and details live in the tests,
-not here.
-
-| ID | Status | Modules | Tests |
+| Findings | Existing boundary to preserve | Remaining consumer / acceptance gate | Owner |
 |---|---|---|---|
-| **C2** | ✅ Python oracle | `autodiff/nonsmooth.py`; refactored `autodiff/vjp.py` | `test_nonsmooth_selection.py` |
-| **R1** | ✅ forward-reexecution guard | `autodiff/tape.py` (`count_primitive_executions`), `compiler/evaluator.py` | `test_baur_strassen_oracle.py` |
-| **C1** | ✅ Python oracle | `autodiff/linear.py`; `custom.py` (`transpose_rule` consumer) | `test_linear_transposition.py` |
-| **T3** | ✅ Python oracle | `autodiff/implicit.py` (`cg_solve`/`ihvp`/`custom_root`/`adjoint_state_grad`) | `test_implicit_diff.py` |
-| **T1** | ✅ Python/reference catalog | `relaxation.py` (sparsemax/entmax15/soft_top_k/gumbel_softmax/perturbed_argmax); `rng.py` (`gumbel`) | `test_relaxation_ops.py` |
-| **T2** | ✅ Python helper | `losses.py` (`fenchel_young_loss`/`fy_loss_and_grad`/`sparsemax_loss`/`softmax_fy_loss`) | `test_fenchel_young_losses.py` |
-| **C3** | ✅ Python trace analysis | `compiler/stochastic_graph.py` (analysis + `certify_deterministic`) | `test_stochastic_graph.py` |
-| **C4** | ⏳ open | semirings — larger, rides the sequence-mixer track | — |
-| **C5** | landing | complete-backward/residual-memory measurement and measured-step treeverse candidate pruning landed; executable treeverse and exact family packets remain open | `compiler/residual_evaluator.py` |
-| **C6** | ⏳ open | GGN/Fisher/IHVP-optimizer/Hessian-diagonal — IHVP primitive landed in T3; the second-order *estimators* remain | — |
-| **R2** | ⏳ open | randomized forward-mode — folds into the planned D2 | — |
+| C1 linear transposition | Python transpose consumer, native linear interfaces and bounded paired proofs exist. | Broader families/composition must execute native products and reject unsupported effects. | AD-CLOSEOUT-1 / F2/F4 |
+| C2 nonsmooth selection | Declared Python policies exist. | Preserve kink and derivative-order semantics through each native consumer. | AD-LAW / NUMPOL |
+| C3 stochastic effects | Python analysis and bounded native activity/effect handling exist. | Carry explicit RNG/estimator identity and residual policy through supported structured programs. | W4 / AD execution |
+| C4 semirings | A proposed unification, not a completed general AD engine. | Name a recurrence consumer and prove its tangent/adjoint algebra before adding shared IR. | Sequence-mixer plan / F4 / AD |
+| C5/R1 residual cost | Forward-reexecution guards, complete-backward measurement and candidate pruning exist. | Execute selected SAVE/RECOMPUTE/HYBRID and treeverse schedules; measure the actual family. | AD execution / W5.2 |
+| C6/R2 higher-order/estimators | Bounded compiler HVP and algebra/jet infrastructure exist. | General GGN/Fisher/diagonal/randomized estimators require named consumers, explicit RNG, native composition and numerical evidence. | AD-HIGHER / AD-WEIL / F4 |
+| T1/T2 relaxation/losses | Python/reference relaxation and Fenchel–Young helpers exist. | Native family packaging and legal fusion remain consumer-specific; do not re-add the reference API. | F2/F3 / NUMPOL |
+| T3 implicit differentiation | Python oracle, value-producing solver IR and bounded x86/gfx1151 physical pilots exist. | General matrix-free residuals, conditioning/constraint certificates and target packages remain. | AD execution / F4 / FA-2 |
 
-**Scope of what landed.** These are correctness- and surface-level slices in the
-numpy reference lane: a declared nonsmooth policy, a cost oracle, a JVP-derivation
-consumer for `transpose_rule`, an implicit-diff surface, the relaxation operator
-family, the Fenchel-Young loss template, and a fail-closed stochastic-graph
-analysis. They do **not** by themselves rewire the C++ MLIR passes (the effect
-lattice, `AutodiffPass`), which is the W2 work C3's analysis is a substrate for.
+Reference/evidence tests were checked in the September repository review;
+that does not renew historical device timing or external-paper empirical claims.
 
 ---
 
@@ -110,20 +85,19 @@ independent of the primal point. The consequence the book states explicitly:
 thing — linearity plus the adjoint — and both modes are recoverable by
 transposition.
 
-**The consumer gap this closes.** `transpose_rule` is a declared
+**Historical consumer gap (resolved for the bounded linear substrate).** `transpose_rule` is a declared
 `primitive_coverage` axis and a field on `@custom_primitive`, set at
 [`custom.py:61`](../../../python/tessera/custom.py) and reported at
-[`custom.py:217`](../../../python/tessera/custom.py) — and **nothing consumes
-it.** That is a live Decision #29 violation (a declaration must have a
-consumer). An automatic-transposition engine is that consumer, so the fix and
-the payoff are the same work.
+[`custom.py:217`](../../../python/tessera/custom.py) — originally without a consumer. The Python linear-transposition engine and
+native linear interfaces now consume this contract. Broader execution closure
+is tracked in the current table rather than reopening the original defect.
 
 **Interaction with D2.** This makes the planned forward mode *cheaper* than the
 `AUTODIFF_ARCHITECTURE_REVIEW.md` §D2 estimate: `buildTangent` is only needed
 for genuinely nonlinear primitives; the linear families fall out of transposing
 `buildAdjoint`.
 
-### C2. Nonsmooth (Clarke) selection is a semantic choice, currently undeclared (§2.7)
+### C2. Nonsmooth (Clarke) selection is a semantic contract (§2.7)
 
 **Book result.** At a kink, any element of the Clarke subdifferential is a
 valid generalized gradient. Which one you pick is therefore a **semantic**
@@ -234,7 +208,7 @@ the preferred HVP) and adds three items D6 does not name:
 
 ## TSOL and helper libraries
 
-### T1. The smoothing / relaxation family is absent (Ch. 4, 12, 13)
+### T1. Smoothing / relaxation contracts (Ch. 4, 12, 13)
 
 **Observed (2026-08-06), repo-wide excluding `archive/`:** no `sparsemax`, no
 `entmax`, no `straight_through`, no soft-sort / soft-topk, no perturbed-optimizer
@@ -325,20 +299,9 @@ variance/dimension trade-off, so budget it as an arbiter candidate (Decision
 
 ## Current route
 
-| # | Item | State | Next compiler boundary |
-|---|---|---|---|
-| 1 | **C1** linear transposition | Compiler interface and paired CPU proof complete | `LinearTransposeInterface` owns the migrated Graph families; Python remains the oracle |
-| 2 | TSOL spectral adjoints | Compiler Graph/Schedule/Tile slice complete; native compound-backward packages open | FFT/IFFT/RFFT/IRFFT/DCT have numerical compiler proof; x86/gfx1151 native package work stays architecture-owned |
-| 3 | **C3** stochastic/effect typing plus `stop_gradient` | Compiler Graph/pass slice complete | C++ activity/effects and fail-closed regions are direct-tested; residual save policy remains separately owned |
-| 4 | **T3** implicit differentiation | Python oracle, value-producing shared solver IR, and a bounded diagonal-sqrt AVX-512/gfx1151 physical pilot with compiled packets landed | Extend the same artifact path to general residuals and iterative/Krylov matrix-free solves; add Apple/NVIDIA consumers |
-| 5 | **R1/C5** cost and residual policy | Measurement/selection boundary landed | Record exact family SAVE/RECOMPUTE/HYBRID packets; execute and measure region-adjoint treeverse schedules |
-| 6 | **C4/C6/R2/T1/T2** breadth | reference or open | Bind separate integrated IDs only after the spine above is executable |
-
-The global order and stop-the-line gates live in
-[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md); this table maps the
-book findings onto that route and does not create another queue.
-
----
+Use the table above and the [active AD plan](AUTODIFF_EXECUTION_PLAN.md).
+C1–C6/T1–T3/R1–R2 remain provenance labels for this review, not another schedule.
+The earlier route table is retained in the status archive.
 
 ## Sources
 

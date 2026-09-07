@@ -231,8 +231,8 @@ def test_apple_softmax_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path)
         _softmax_module(), pipeline_name="tessera-lower-to-apple_gpu-runtime",
     )
     assert package.image.payload_digest == hashlib.sha256(dylib.read_bytes()).hexdigest()
-    assert package.image.entry_points[0].symbol == "tessera_apple_gpu_softmax_f32"
-    assert package.descriptor.abi_id == "tessera.apple.softmax.x_o_rows_columns.f32.v1"
+    assert package.image.entry_points[0].symbol == "tessera_apple_gpu_softmax_f32_status"
+    assert package.descriptor.abi_id == "tessera.apple.softmax.x_o_rows_columns.f32.v2"
     assert package.descriptor.provenance["route"] == "apple_softmax_native_library"
 
 
@@ -333,7 +333,7 @@ def test_apple_gpu_gelu_descriptor_execute_compare():
         options={"package_native": True}, enable_tool_validation=False,
     )
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.f32.v1"
+    assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.f32.v2"
     assert bundle.launch_descriptor.provenance["work_item"] == "APPLE-NATIVE-E2E-2"
     artifact = RuntimeArtifact(
         metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
@@ -363,7 +363,7 @@ def test_apple_gpu_dynamic_gelu_descriptor_execute_compare_and_scalar_rejection(
         target="apple_gpu", options={"package_native": True}, enable_tool_validation=False,
     )
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.dynamic.f32.v1"
+    assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.dynamic.f32.v2"
     assert bundle.launch_descriptor.scalars[0].name == "Elements"
     artifact = RuntimeArtifact(
         metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
@@ -465,10 +465,10 @@ def test_apple_gpu_low_precision_gelu_rejects_malformed_graph_ir(module):
 @pytest.mark.parametrize(
     ("storage", "static_abi", "dynamic_abi", "rtol", "atol"),
     (
-        ("fp16", "tessera.apple.gelu.x_o_elements.f16.v1",
-         "tessera.apple.gelu.x_o_elements.dynamic.f16.v1", 4e-3, 4e-3),
-        ("bf16", "tessera.apple.gelu.x_o_elements.bf16.v1",
-         "tessera.apple.gelu.x_o_elements.dynamic.bf16.v1", 2e-2, 2e-2),
+        ("fp16", "tessera.apple.gelu.x_o_elements.f16.v2",
+         "tessera.apple.gelu.x_o_elements.dynamic.f16.v2", 4e-3, 4e-3),
+        ("bf16", "tessera.apple.gelu.x_o_elements.bf16.v2",
+         "tessera.apple.gelu.x_o_elements.dynamic.bf16.v2", 2e-2, 2e-2),
     ),
 )
 def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
@@ -497,7 +497,7 @@ def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
         assert bundle.launch_descriptor.abi_id == abi
         assert bundle.launch_descriptor.provenance["storage"] == storage
         assert bundle.launch_descriptor.provenance["accumulation"] == "fp32"
-        assert 'accumulation = "fp32"' in bundle.target_ir.text
+        assert 'cf.assert' in bundle.target_ir.text
         artifact = RuntimeArtifact(
             metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
             target_ir=bundle.target_ir.text, native_image=bundle.native_image,
@@ -709,7 +709,7 @@ def test_apple_gpu_dynamic_softmax_descriptor_execute_compare_replay_and_rejecti
     )
     descriptor = bundle.launch_descriptor
     assert descriptor is not None
-    assert descriptor.abi_id == "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v1"
+    assert descriptor.abi_id == "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v2"
     assert [scalar.name for scalar in descriptor.scalars] == ["Rows", "Columns"]
     artifact = RuntimeArtifact(
         metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},

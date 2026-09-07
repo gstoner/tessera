@@ -917,3 +917,9 @@ def ann_composition_equivalence(target, original, transformed, original_args, tr
     validate_affine_composition(before, after, allow_reassociation=allow_reassociation)
     return program_pair_equivalence(target, original, transformed, original_args,
                                     transformed_args, rtol=rtol, atol=atol)
+
+
+# F3/FA-1 native program admission shares the evaluator surface. This explicit
+# CPU entry preserves its analytic domain and artifact identities; it does not
+# register a dispatch winner or substitute the reference ANN interpreter.
+from .native_ann import evaluate_native_ann as evaluate_native_ann  # noqa: E402

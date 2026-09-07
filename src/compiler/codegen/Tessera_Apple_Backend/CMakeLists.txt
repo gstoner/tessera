@@ -93,6 +93,8 @@ target_link_libraries(TesseraApple
   PRIVATE
     MLIRArithDialect
     MLIRBufferizationDialect
+    MLIRControlFlowDialect
+    MLIRTensorDialect
     MLIRFuncDialect
     MLIRMemRefDialect
     MLIRUBDialect

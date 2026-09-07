@@ -2268,6 +2268,8 @@ def package_scheduled_matmul(
     if artifact.storage == "int4":
         return package_scheduled_int4_matmul(artifact, pipeline_name=pipeline_name)
     artifact.validate()
+    from .scheduled_matmul import verify_matmul_projection
+    verify_matmul_projection(artifact)
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
             or artifact.storage not in {"f16", "bf16"}
             or artifact.a_dtype != artifact.b_dtype
@@ -2357,6 +2359,15 @@ def package_scheduled_matmul(
         physical_route = f"macro_cta_masked_scalar_shared_ab_{artifact.storage}"
     else:
         physical_route = "typed_fragment_global"
+    dynamic_axes: dict[str, tuple[bool, ...]] = {
+        artifact.a_name: (artifact.dynamic_m, artifact.dynamic_k),
+        artifact.b_name: (artifact.dynamic_k, artifact.dynamic_n),
+        artifact.output_name: (artifact.dynamic_m, artifact.dynamic_n),
+    }
+    if bias:
+        dynamic_axes[bias] = (artifact.dynamic_n,)
+    if residual:
+        dynamic_axes[residual] = (artifact.dynamic_m, artifact.dynamic_n)
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -2373,7 +2384,7 @@ def package_scheduled_matmul(
             )
         ),
         shape_guards=tuple(
-            ShapeGuard(name, dim, "max" if dynamic else "eq", size)
+            ShapeGuard(name, dim, "max" if dynamic_axes[name][dim] else "eq", size)
             for name, _, _, shape, _, _ in rows
             for dim, size in enumerate(shape)
         ),

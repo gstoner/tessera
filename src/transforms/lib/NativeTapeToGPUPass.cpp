@@ -12,6 +12,8 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/raw_ostream.h"
+#include <optional>
+#include <algorithm>
 namespace tessera {
 namespace {
 struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::OperationPass<mlir::ModuleOp>> {
@@ -28,15 +30,17 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
   void runOnOperation() override {
     using namespace mlir;
     auto m=getOperation();
-    auto reject=[&]() { m.emitError("native tape GPU requires an isolated static f32 buffer product with bounded for/if control and at most 4096 temporary bytes"); signalPassFailure(); };
+    auto reject=[&]() { m.emitError("native tape GPU requires an isolated static f32/f64 buffer product with bounded for/if control and at most 4096 temporary bytes"); signalPassFailure(); };
     if (backend!="nvidia" && backend!="rocm") return reject();
     SmallVector<func::FuncOp> fs(m.getOps<func::FuncOp>());
-    if (fs.size()!=1 || !m->hasAttr("tessera.autodiff.product_abi") || !m->hasAttr("tessera.autodiff.product_pair")) return reject();
+    bool ad=m->hasAttr("tessera.autodiff.product_abi") && m->hasAttr("tessera.autodiff.product_pair");
+    bool ann=m->hasAttr("tessera.ann.source");
+    if (fs.size()!=1 || (!ad && !ann) || (ad && ann)) return reject();
     auto f=fs[0];
     if (!f.getBody().hasOneBlock() || f.getNumResults() || !isa<func::ReturnOp>(f.getBody().front().getTerminator())) return reject();
     auto admissible=[](Type t) {
       auto mt=dyn_cast<MemRefType>(t);
-      if (!mt || !mt.hasStaticShape() || !mt.getElementType().isF32() || !mt.getLayout().isIdentity() || mt.getMemorySpace()) return false;
+      if (!mt || !mt.hasStaticShape() || !(mt.getElementType().isF32() || mt.getElementType().isF64() || mt.getElementType().isInteger(8) || mt.getElementType().isInteger(64) || mt.getElementType().isInteger(1) || mt.getElementType().isIndex()) || !mt.getLayout().isIdentity() || mt.getMemorySpace()) return false;
       int64_t count=1;
       for (auto d:mt.getShape()) {
         if (d<=0 || d>1024 || count>1024/d) return false;
@@ -44,7 +48,61 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       }
       return true;
     };
+    auto elementBytes=[](Type t) -> int64_t { return t.isIndex() ? 8 : (t.getIntOrFloatBitWidth()+7)/8; };
     for (auto t:f.getArgumentTypes()) if (!admissible(t)) return reject();
+    // Derive replay-loop capacity from SSA arithmetic over enclosing bounded
+    // induction variables. Never trust a user-written max_iters attribute or
+    // a loaded counter. Intervals stay small so endpoint arithmetic cannot wrap.
+    using Interval = std::pair<int64_t,int64_t>;
+    std::function<std::optional<Interval>(Value,unsigned)> range;
+    range = [&](Value value,unsigned depth) -> std::optional<Interval> {
+      if (depth>64 || !value.getType().isIndex()) return std::nullopt;
+      APInt constant;
+      if (matchPattern(value,m_ConstantInt(&constant))) {
+        if (!constant.isSignedIntN(64)) return std::nullopt;
+        auto v=constant.getSExtValue();
+        if (v < -1024 || v > 1024) return std::nullopt;
+        return Interval{v,v};
+      }
+      if (auto arg=dyn_cast<BlockArgument>(value)) {
+        auto owner=dyn_cast_or_null<scf::ForOp>(arg.getOwner()->getParentOp());
+        if (!owner || owner->hasAttr("unsignedCmp") || value!=owner.getInductionVar()) return std::nullopt;
+        auto low=range(owner.getLowerBound(),depth+1);
+        auto high=range(owner.getUpperBound(),depth+1);
+        auto step=range(owner.getStep(),depth+1);
+        if (!low || !high || !step || step->first<=0 || step->first!=step->second)
+          return std::nullopt;
+        return Interval{low->first,std::max(low->first,high->second-1)};
+      }
+      auto *op=value.getDefiningOp();
+      if (!op) return std::nullopt;
+      if (auto select=dyn_cast<arith::SelectOp>(op)) {
+        auto a=range(select.getTrueValue(),depth+1), b=range(select.getFalseValue(),depth+1);
+        if (!a || !b) return std::nullopt;
+        return Interval{std::min(a->first,b->first),std::max(a->second,b->second)};
+      }
+      if (op->getNumOperands()!=2) return std::nullopt;
+      auto a=range(op->getOperand(0),depth+1), b=range(op->getOperand(1),depth+1);
+      if (!a || !b) return std::nullopt;
+      Interval result;
+      if (isa<arith::AddIOp>(op)) result={a->first+b->first,a->second+b->second};
+      else if (isa<arith::SubIOp>(op)) result={a->first-b->second,a->second-b->first};
+      else if (isa<arith::MulIOp>(op)) {
+        int64_t products[]={a->first*b->first,a->first*b->second,a->second*b->first,a->second*b->second};
+        result={*std::min_element(products,products+4),*std::max_element(products,products+4)};
+      } else return std::nullopt;
+      if (result.first < -1024 || result.second > 1024) return std::nullopt;
+      return result;
+    };
+    auto tripCapacity=[&](scf::ForOp loop) -> std::optional<int64_t> {
+      if (loop->hasAttr("unsignedCmp")) return std::nullopt;
+      auto low=range(loop.getLowerBound(),0), high=range(loop.getUpperBound(),0), step=range(loop.getStep(),0);
+      if (!low || !high || !step || low->first<0 ||
+          step->first!=step->second || step->first<=0) return std::nullopt;
+      auto count=std::max<int64_t>(1,(high->second-low->first+step->first-1)/step->first);
+      if (count>1024) return std::nullopt;
+      return count;
+    };
     bool bad=false;
     int64_t bytes=0;
     f.walk([&](Operation *op) {
@@ -59,28 +117,24 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         if (!source.hasStaticShape() || !target.hasStaticShape() || source.getShape()!=target.getShape()) bad=true;
       }
       if (op->getNumRegions() && op!=f.getOperation() && !isa<scf::ForOp,scf::IfOp>(op)) bad=true;
-      if (auto loop=dyn_cast<scf::ForOp>(op)) {
-        APInt lo,hi,step;
-        if (!matchPattern(loop.getLowerBound(),m_ConstantInt(&lo)) || !matchPattern(loop.getUpperBound(),m_ConstantInt(&hi)) ||
-            !matchPattern(loop.getStep(),m_ConstantInt(&step)) || step.getSExtValue()<=0 || step.getSExtValue()>1024 || lo.getSExtValue()<0 || lo.getSExtValue()>1024 || hi.getSExtValue()<0 || hi.getSExtValue()>1024) bad=true;
-      }
+      if (auto loop=dyn_cast<scf::ForOp>(op); loop && !tripCapacity(loop)) bad=true;
       if (!isa<memref::AllocOp,memref::AllocaOp,memref::GetGlobalOp>(op)) return;
       if (!admissible(op->getResult(0).getType())) { bad=true; return; }
-      int64_t n=cast<MemRefType>(op->getResult(0).getType()).getNumElements()*4;
+      int64_t n=cast<MemRefType>(op->getResult(0).getType()).getNumElements()*
+          elementBytes(cast<MemRefType>(op->getResult(0).getType()).getElementType());
       for (Operation *parent=op->getParentOp();parent && parent!=f.getOperation();parent=parent->getParentOp())
         if (auto loop=dyn_cast<scf::ForOp>(parent)) {
-          APInt lo,hi,step;
-          if (!matchPattern(loop.getLowerBound(),m_ConstantInt(&lo)) || !matchPattern(loop.getUpperBound(),m_ConstantInt(&hi)) || !matchPattern(loop.getStep(),m_ConstantInt(&step)) || step.getSExtValue()<=0 || step.getSExtValue()>1024 || lo.getSExtValue()<0 || lo.getSExtValue()>1024 || hi.getSExtValue()<0 || hi.getSExtValue()>1024) { bad=true; return; }
-          int64_t trip=std::max<int64_t>(1,(hi.getSExtValue()-lo.getSExtValue()+step.getSExtValue()-1)/step.getSExtValue());
-          if (trip>1024 || (trip && n>4096/trip)) { bad=true; return; }
+          auto capacity=tripCapacity(loop);
+          if (!capacity || n>4096 / *capacity) { bad=true; return; }
+          int64_t trip=*capacity;
           n*=trip;
         }
       bytes+=n;
       if (bytes>4096) bad=true;
       if (auto get=dyn_cast<memref::GetGlobalOp>(op)) {
         auto global=m.lookupSymbol<memref::GlobalOp>(get.getName());
-        auto value=global ? dyn_cast_or_null<DenseFPElementsAttr>(global.getInitialValueAttr()) : DenseFPElementsAttr();
-        if (!global || !global.getConstant() || !value || !value.isSplat()) bad=true;
+        auto value=global ? dyn_cast_or_null<DenseElementsAttr>(global.getInitialValueAttr()) : DenseElementsAttr();
+        if (!global || !global.getConstant() || !value) bad=true;
       }
     });
     if (bad) return reject();
@@ -91,7 +145,9 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
     for (auto [i,t]:llvm::enumerate(f.getArgumentTypes())) {
       auto mt=cast<MemRefType>(t); auto rank=mt.getRank();
       std::string desc; llvm::raw_string_ostream ds(desc);
-      ds<<"!llvm.struct<(ptr, ptr, i64, array<"<<rank<<" x i64>, array<"<<rank<<" x i64>)>"; ds.flush();
+      ds<<"!llvm.struct<(ptr, ptr, i64";
+      if (rank) ds<<", array<"<<rank<<" x i64>, array<"<<rank<<" x i64>";
+      ds<<")>"; ds.flush();
       os<<"%raw"<<i<<" = llvm.addrspacecast %p"<<i<<" : !llvm.ptr<1> to !llvm.ptr\n";
       os<<"%d"<<i<<"_0 = llvm.mlir.undef : "<<desc<<"\n";
       unsigned version=0;
@@ -149,18 +205,15 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         if (auto loop=dyn_cast<scf::ForOp>(parent)) loops.push_back(loop);
       Value slot=arith::ConstantIndexOp::create(at,loc,0);
       for (auto loop:llvm::reverse(loops)) {
-        APInt lo,hi,step;
-        matchPattern(loop.getLowerBound(),m_ConstantInt(&lo));
-        matchPattern(loop.getUpperBound(),m_ConstantInt(&hi));
-        matchPattern(loop.getStep(),m_ConstantInt(&step));
-        int64_t trip=std::max<int64_t>(1,(hi.getSExtValue()-lo.getSExtValue()+step.getSExtValue()-1)/step.getSExtValue());
+        // Cloning preserves the validated SSA range relationships.
+        int64_t trip=*tripCapacity(loop);
         slots*=trip;
         auto count=arith::ConstantIndexOp::create(at,loc,trip);
         auto delta=arith::SubIOp::create(at,loc,loop.getInductionVar(),loop.getLowerBound());
         auto ordinal=arith::DivUIOp::create(at,loc,delta,loop.getStep());
         slot=arith::AddIOp::create(at,loc,arith::MulIOp::create(at,loc,slot,count),ordinal);
       }
-      int64_t slotBytes=type.getNumElements()*4;
+      int64_t slotBytes=type.getNumElements()*elementBytes(type.getElementType());
       OpBuilder entry=OpBuilder::atBlockBegin(&kernel.getBody().front());
       // AMDGPU requires explicit private FrameIndex addressing. NVVM owns
       // conversion of generic allocas to its local address representation;
@@ -176,11 +229,20 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       if (space) local=memref::MemorySpaceCastOp::create(at,loc,type,view);
       if (auto get=dyn_cast<memref::GetGlobalOp>(op)) {
         auto global=m.lookupSymbol<memref::GlobalOp>(get.getName());
-        auto value=cast<DenseFPElementsAttr>(global.getInitialValueAttr()).getSplatValue<APFloat>();
-        loopNest(type,[&](OpBuilder &builder,ValueRange indices) {
-          auto v=arith::ConstantOp::create(builder,loc,builder.getF32Type(),builder.getFloatAttr(builder.getF32Type(),value));
-          memref::StoreOp::create(builder,loc,v,local,indices);
-        });
+        auto values=cast<DenseElementsAttr>(global.getInitialValueAttr());
+        // Constants are bounded by the same 4096-byte resource check. Preserve
+        // every element; ANN weights need not be splats.
+        int64_t ordinal=0;
+        for (auto value:values.getValues<Attribute>()) {
+          SmallVector<Value> indices(type.getRank());
+          int64_t remaining=ordinal++;
+          for (int d=type.getRank()-1;d>=0;--d) {
+            indices[d]=arith::ConstantIndexOp::create(at,loc,remaining%type.getDimSize(d));
+            remaining/=type.getDimSize(d);
+          }
+          auto v=arith::ConstantOp::create(at,loc,type.getElementType(),cast<TypedAttr>(value));
+          memref::StoreOp::create(at,loc,v,local,indices);
+        }
       }
       op->getResult(0).replaceAllUsesWith(local); op->erase();
     }

@@ -8140,20 +8140,12 @@ extern "C" void tessera_apple_gpu_softmax_f32(const float* X, float* Out,
   reference_softmax_f32(X, Out, M, K);
 }
 
-// Status-bearing twin of the void ABI above, following the TILE-1 pattern at
-// `tessera_apple_gpu_mps_matmul_f16_status`. The void ABI cannot distinguish a
-// Metal dispatch from the CPU reference, so a caller recording *placement*
-// evidence (an E2E-SPINE-3 release packet, a benchmark row) must use this one:
-// a fallback returns 0 and can therefore never be sealed as GPU execution.
-// Numerics are identical either way — that is exactly why the numerical oracle
-// alone cannot prove where the work ran.
-extern "C" int32_t tessera_apple_gpu_softmax_f32_status(const float* X,
-                                                        float* Out, int32_t M,
-                                                        int32_t K) {
+// Native-only placement boundary; compatibility fallback remains in the void ABI.
+extern "C" int32_t tessera_apple_gpu_softmax_f32_status(
+    const float* X, float* Out, int32_t M, int32_t K) {
+  if (!X || !Out || M <= 0 || K <= 0) return 0;
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_softmax_msl(ctx, X, Out, M, K)) return 1;
-  reference_softmax_f32(X, Out, M, K);
-  return 0;
+  return ctx.ok && dispatch_softmax_msl(ctx, X, Out, M, K) ? 1 : 0;
 }
 
 //===---------------------------------------------------------------------===//
@@ -8373,6 +8365,13 @@ inline void reference_gelu_f32(const float* X, float* Out, int32_t N) {
 
 } // namespace
 
+extern "C" int32_t tessera_apple_gpu_gelu_f32_status(
+    const float* X, float* Out, int32_t N) {
+  if (!X || !Out || N <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok && dispatch_gelu_msl(ctx, X, Out, N) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_gelu_f32(const float* X, float* Out,
                                            int32_t N) {
   MetalDeviceContext &ctx = deviceContext();
@@ -8472,11 +8471,25 @@ bool dispatch_gelu_bf16_via_fp32(MetalDeviceContext &ctx, const uint16_t* X,
 
 } // namespace
 
+extern "C" int32_t tessera_apple_gpu_gelu_f16_status(
+    const uint16_t* X, uint16_t* Out, int32_t N) {
+  if (!X || !Out || N <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok && dispatch_gelu_msl_f16(ctx, X, Out, N) ? 1 : 0;
+}
+
 extern "C" void tessera_apple_gpu_gelu_f16(const uint16_t* X, uint16_t* Out,
                                            int32_t N) {
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_gelu_msl_f16(ctx, X, Out, N)) return;
   reference_gelu_f16_via_fp32(X, Out, N);
+}
+
+extern "C" int32_t tessera_apple_gpu_gelu_bf16_status(
+    const uint16_t* X, uint16_t* Out, int32_t N) {
+  if (!X || !Out || N <= 0) return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  return ctx.ok && dispatch_gelu_bf16_via_fp32(ctx, X, Out, N) ? 1 : 0;
 }
 
 extern "C" void tessera_apple_gpu_gelu_bf16(const uint16_t* X, uint16_t* Out,

@@ -34,6 +34,7 @@
 #include "Tessera/Transforms/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -100,8 +101,8 @@ static Value buildElementwiseGeneric(
     Value lhs, Value rhs,
     function_ref<Value(OpBuilder &, Location, Value, Value)> combine) {
   int64_t rank = resultType.getRank();
-  Value init = tensor::EmptyOp::create(rewriter, loc, resultType.getShape(),
-                                       resultType.getElementType());
+  Value init = createEmptyFromSource(rewriter, loc, resultType, lhs,
+                                            identityDimensions(rank));
   AffineMap id = rewriter.getMultiDimIdentityMap(rank);
   SmallVector<AffineMap, 3> maps = {id, id, id};
   SmallVector<utils::IteratorType> iters(rank, utils::IteratorType::parallel);
@@ -125,13 +126,49 @@ struct BinaryEltwiseLowering : public RewritePattern {
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
       return failure();
     auto resultType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-    if (!resultType || !resultType.hasStaticShape())
-      return rewriter.notifyMatchFailure(
-          op, "static-shape ranked-tensor result required");
+    auto lhsType = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto rhsType = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    if (!resultType || !lhsType || !rhsType ||
+        lhsType.getRank() != resultType.getRank() ||
+        rhsType.getRank() != resultType.getRank() ||
+        lhsType.getElementType() != resultType.getElementType() ||
+        rhsType.getElementType() != resultType.getElementType())
+      return rewriter.notifyMatchFailure(op, "same-rank, same-element-type tensors required");
+    // Identity indexing maps cannot implement broadcasting. Reject known
+    // mismatches before creating IR; check unknown extents at runtime.
+    for (int64_t i = 0; i < resultType.getRank(); ++i) {
+      int64_t known = ShapedType::kDynamic;
+      for (auto ty : {lhsType, rhsType, resultType}) {
+        int64_t dim = ty.getDimSize(i);
+        if (ShapedType::isDynamic(dim))
+          continue;
+        if (!ShapedType::isDynamic(known) && dim != known)
+          return rewriter.notifyMatchFailure(op, "elementwise dimensions disagree");
+        known = dim;
+      }
+    }
     Type elem = resultType.getElementType();
+    if (!isa<FloatType, IntegerType>(elem))
+      return failure();
     Value lhs = op->getOperand(0);
     Value rhs = op->getOperand(1);
     Location loc = op->getLoc();
+    for (int64_t i = 0; i < resultType.getRank(); ++i) {
+      Value left;
+      if ((lhs != rhs && (lhsType.isDynamicDim(i) || rhsType.isDynamicDim(i))) ||
+          (lhsType.isDynamicDim(i) && !resultType.isDynamicDim(i)))
+        left = tensor::DimOp::create(rewriter, loc, lhs, i);
+      if (lhs != rhs && (lhsType.isDynamicDim(i) || rhsType.isDynamicDim(i))) {
+        Value right = tensor::DimOp::create(rewriter, loc, rhs, i);
+        Value equal = arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::eq, left, right);
+        cf::AssertOp::create(rewriter, loc, equal, "elementwise operand extents disagree");
+      }
+      if (lhsType.isDynamicDim(i) && !resultType.isDynamicDim(i)) {
+        Value expected = arith::ConstantIndexOp::create(rewriter, loc, resultType.getDimSize(i));
+        Value equal = arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::eq, left, expected);
+        cf::AssertOp::create(rewriter, loc, equal, "elementwise result extent disagrees");
+      }
+    }
     BinaryKind k = kind;
     Value out = buildElementwiseGeneric(
         rewriter, loc, resultType, lhs, rhs,
@@ -139,6 +176,31 @@ struct BinaryEltwiseLowering : public RewritePattern {
           return emitBinaryScalar(b, l, k, a, c, elem);
         });
     rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
+// Dynamic adjoint zeros must preserve the primal's logical extents, not a
+// padded checkpoint envelope. Other custom adjoints remain untouched.
+struct AdjointZerosLowering : public RewritePattern {
+  AdjointZerosLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.custom_adjoint_call", 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+    auto name = op->getAttrOfType<StringAttr>("name");
+    if (!name || name.getValue() != "zeros_like" ||
+        op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto ty = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!ty || op->getOperand(0).getType() != ty ||
+        !isa<FloatType, IntegerType>(ty.getElementType()))
+      return failure();
+    Value init = createEmptyFromSource(rewriter, op->getLoc(), ty,
+                                      op->getOperand(0), identityDimensions(ty.getRank()));
+    Value zero = arith::ConstantOp::create(rewriter, op->getLoc(),
+                                          rewriter.getZeroAttr(ty.getElementType()));
+    Value result = linalg::FillOp::create(rewriter, op->getLoc(),
+                                        ValueRange{zero}, ValueRange{init}).getResult(0);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -2978,13 +3040,14 @@ public:
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<linalg::LinalgDialect, arith::ArithDialect,
+    registry.insert<linalg::LinalgDialect, arith::ArithDialect, cf::ControlFlowDialect,
                     tensor::TensorDialect, math::MathDialect>();
   }
 
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
+    patterns.add<AdjointZerosLowering>(ctx);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.add", BinaryKind::Add);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);

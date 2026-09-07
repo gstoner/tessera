@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "pair": "a9d7bd25ee4655f66a93b56634f4f8d6dbb936d8ee2367e8c5c683c37a657ed1",
+  "timing_domain": "warm_package_h2d_dispatch_d2h_host_wall",
+  "run_speedups": [
+    0.958974401866853,
+    0.984303991531456,
+    0.9972753096285271,
+    1.032360358560763,
+    1.0015317998752173,
+    0.9938073455034222,
+    1.0082307512140927,
+    1.0048234106962664,
+    0.9896142826014795
+  ],
+  "median_speedup": 0.9972753096285271,
+  "median_bounds": [
+    0.984303991531456,
+    1.0082307512140927
+  ],
+  "threshold": 1.02,
+  "performance_eligible": false,
+  "production_promoted": false,
+  "reason": "lower bound does not clear 2 percent margin"
+}

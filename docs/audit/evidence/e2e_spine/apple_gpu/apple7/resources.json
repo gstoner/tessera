@@ -48,7 +48,7 @@
       },
       "source_fingerprint": {
         "state": "measured",
-        "value": "sha256:7af5c4e3b7bbe660bd56b454ce736a4563a79a70b57ab93e5b8a26c50aa75754"
+        "value": "sha256:224d13eca2ab1a69b6d8a1dc5b377cbe687e2fad954e04d84c015d70ea62b617"
       },
       "spill_count": {
         "state": "no_public_api",
@@ -76,7 +76,7 @@
           2
         ]
       ],
-      "image_digest": "bad7bdb68000f16ce3ffef6c338148204964b5096b647d1f047afdcf71749f21",
+      "image_digest": "b10055118a0ceea925e0a936da8bc5b8055f5208941eeeca6d9677029d9c49f1",
       "placement": {
         "fixture": {
           "gpu_placement_proven": true,
@@ -89,7 +89,7 @@
           "status_symbol": "tessera_apple_gpu_bmm_f32_status"
         }
       },
-      "resource_fingerprint": "33a4c5d959ebc20d21777c2e3dbd006edf688a8112d2af55ff1854cd3b3662ad",
+      "resource_fingerprint": "9139a9d6df3488da192ef1423d62b6a2b89f74e5d1e1e8f4e6d594dda5297ca9",
       "route": "apple_gpu_bmm_f32_batch1",
       "timing_shape": [
         1,
@@ -99,7 +99,7 @@
       ]
     },
     {
-      "entry": "tessera_apple_gpu_softmax_f32",
+      "entry": "tessera_apple_gpu_softmax_f32_status",
       "family": "softmax",
       "fixture_operand_shapes": [
         [
@@ -107,7 +107,7 @@
           2
         ]
       ],
-      "image_digest": "d9e180f0990a0af3d7133b703606210d68b45aacc4ff67dccffa8ec0ef86c5b9",
+      "image_digest": "2d32f509def0066b1901ec6e760d693b3cfd337fcb1e4ede19d372040c5f0cad",
       "placement": {
         "fixture": {
           "execution_width": 32,
@@ -136,7 +136,7 @@
           ]
         }
       },
-      "resource_fingerprint": "4854f313acb8084a8d01586aaf70ed30502683a77fec2cf19741acda16958dea",
+      "resource_fingerprint": "783421e5c69bbac5b82e3336b4c4543af913c2e677f1adb346f4f0253f87b1db",
       "route": "apple_gpu_msl_softmax_f32",
       "timing_shape": [
         64,

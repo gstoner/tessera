@@ -8012,7 +8012,7 @@ See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
 
 **Shape tapes / scoped GPU ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
 
-Follow-up required. Shared extent guards, logical shape residuals and numerical contracts apply to the compiler foundation. The host i64/i8 ABI and CUDA/HIP arbiter bindings do not establish MSL storage, Metal tape execution or Apple performance. No Apple runtime change in this increment; the earlier runtime edit still needs its committed-source fleet re-seal before PR.
+Follow-up required. Shared extent guards, logical shape residuals and numerical contracts apply to the compiler foundation. The host i64/i8 ABI and CUDA/HIP arbiter bindings do not establish MSL storage, Metal tape execution or Apple performance. No Apple runtime change in this increment; the earlier runtime edit is now re-sealed against commit `0ba34c26` on the M1 Max.
 
 Shared source, physical artifact replay, numerical-domain guards and evidence are
 recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
@@ -8022,3 +8022,11 @@ ownership-based buffer deallocation after DPS copies. Validation is x86 on
 Princess-Luna; this does not replace the GPU exported-reader completion barrier
 or establish asynchronous device freeing. Native extent guards currently abort
 on mismatch; recoverable JIT status propagation remains a follow-up.
+
+**PR fleet re-seal (2026-09-07):** rebuilt `TesseraAppleRuntimeShared` from
+committed runtime `0ba34c26`, then measured matmul and softmax on the M1 Max
+with 15 samples and 200 iterations per sample. The initial 50-iteration run
+was refused (softmax variability 5.946% exceeded 4%); the longer-amortized run
+passed the unchanged stability gate. The sealed packet binds the runtime
+source fingerprint and independently proves Metal placement at fixture and
+timing shapes. This does not promote the ANN or attention package experiments.

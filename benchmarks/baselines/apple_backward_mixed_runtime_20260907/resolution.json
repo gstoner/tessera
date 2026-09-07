@@ -6,7 +6,7 @@
     "os_version": "26.6.2",
     "sdk_version": "26.5",
     "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
-    "runtime_fingerprint": "sha256:ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19"
+    "runtime_fingerprint": "sha256:7af5c4e3b7bbe660bd56b454ce736a4563a79a70b57ab93e5b8a26c50aa75754"
   },
   "context_mismatch_refused": true,
   "workspace_fallback_verified": true,
@@ -49,5 +49,5 @@
     }
   ],
   "fleet_packet_status": "sealed_after_runtime_commit",
-  "fleet_tested_commit": "80504c8384e61f157a5fb7e772f3d6b2c22da56c"
+  "fleet_tested_commit": "e73cdfcee39c8265cdc329b407b05c834c5a5a70"
 }

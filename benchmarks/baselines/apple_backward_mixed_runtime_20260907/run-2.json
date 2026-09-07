@@ -4,7 +4,7 @@
     "device": "apple7",
     "os_version": "26.6.2",
     "physical_device": "Apple M1 Max",
-    "runtime_fingerprint": "sha256:ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19",
+    "runtime_fingerprint": "sha256:7af5c4e3b7bbe660bd56b454ce736a4563a79a70b57ab93e5b8a26c50aa75754",
     "sdk_version": "26.5"
   },
   "device": "apple7",
@@ -31,7 +31,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 4.518437,
+      "latency_ms": 4.045041,
       "logical_input_bytes": 16384,
       "logical_output_bytes": 12288,
       "max_abs_error": {
@@ -61,25 +61,25 @@
       "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 3779520,
-        "end_to_end_median_ns": 4518437,
+        "device_time_median_ns": 3458999,
+        "end_to_end_median_ns": 4045041,
         "paired_trial_device_medians_ns": [
-          3779520,
-          3641895,
-          3789520,
-          3889145,
-          3767728,
-          3821937,
-          3735624
+          3450583,
+          3458354,
+          3447125,
+          3458999,
+          3466312,
+          3474062,
+          3491582
         ],
         "paired_trial_end_to_end_medians_ns": [
-          4575833,
-          4488354,
-          4533125,
-          4669645,
-          4518437,
-          4504333,
-          4359416
+          4022937,
+          4091396,
+          4045041,
+          4045854,
+          4041021,
+          4038916,
+          4056499
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -108,7 +108,7 @@
       "deterministic": false,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 3.053729,
+      "latency_ms": 2.938563,
       "logical_input_bytes": 16384,
       "logical_output_bytes": 12288,
       "max_abs_error": {
@@ -138,25 +138,25 @@
       "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 2396875,
-        "end_to_end_median_ns": 3053729,
+        "device_time_median_ns": 2368812,
+        "end_to_end_median_ns": 2938563,
         "paired_trial_device_medians_ns": [
-          2432479,
-          2430562,
-          2406937,
-          2380874,
-          2374270,
-          2396875,
-          2382083
+          2364332,
+          2373145,
+          2391541,
+          2363791,
+          2370291,
+          2356791,
+          2368812
         ],
         "paired_trial_end_to_end_medians_ns": [
-          3053729,
-          3040646,
-          3163708,
-          3053521,
-          3092750,
-          3013624,
-          3099187
+          2915333,
+          2942271,
+          2960667,
+          2938563,
+          2946875,
+          2912062,
+          2932646
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -185,7 +185,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 1.008708,
+      "latency_ms": 0.958729,
       "logical_input_bytes": 16384,
       "logical_output_bytes": 12288,
       "max_abs_error": {
@@ -215,25 +215,25 @@
       "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 323416,
-        "end_to_end_median_ns": 1008708,
+        "device_time_median_ns": 334687,
+        "end_to_end_median_ns": 958729,
         "paired_trial_device_medians_ns": [
-          323416,
-          328062,
-          324832,
-          327062,
-          320083,
-          319270,
-          321374
+          334687,
+          337666,
+          326895,
+          338833,
+          338145,
+          331395,
+          333812
         ],
         "paired_trial_end_to_end_medians_ns": [
-          1000500,
-          986208,
-          1104000,
-          1022666,
-          977624,
-          1031124,
-          1008708
+          958729,
+          979395,
+          967500,
+          954292,
+          938604,
+          945083,
+          997604
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -262,7 +262,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 11.636062,
+      "latency_ms": 10.695312,
       "logical_input_bytes": 73728,
       "logical_output_bytes": 56320,
       "max_abs_error": {
@@ -292,25 +292,25 @@
       "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 10809062,
-        "end_to_end_median_ns": 11636062,
+        "device_time_median_ns": 10008124,
+        "end_to_end_median_ns": 10695312,
         "paired_trial_device_medians_ns": [
-          10929749,
-          10809062,
-          10937666,
-          10891791,
-          10783603,
-          10753937,
-          10719603
+          10001812,
+          10008124,
+          10002333,
+          9998020,
+          10055208,
+          10053249,
+          10029291
         ],
         "paired_trial_end_to_end_medians_ns": [
-          11588771,
-          11615146,
-          11786333,
-          12210021,
-          11636062,
-          11640250,
-          11484895
+          10753188,
+          10885521,
+          10663938,
+          10628229,
+          10683104,
+          10695312,
+          10708499
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -339,7 +339,7 @@
       "deterministic": false,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 8.15275,
+      "latency_ms": 7.746042,
       "logical_input_bytes": 73728,
       "logical_output_bytes": 56320,
       "max_abs_error": {
@@ -369,25 +369,25 @@
       "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 7418166,
-        "end_to_end_median_ns": 8152750,
+        "device_time_median_ns": 7140374,
+        "end_to_end_median_ns": 7746042,
         "paired_trial_device_medians_ns": [
-          7400686,
-          7451812,
-          7458957,
-          7418166,
-          7410062,
-          7357770,
-          7454437
+          7109895,
+          7140374,
+          7127708,
+          7137707,
+          7148603,
+          7144916,
+          7168270
         ],
         "paired_trial_end_to_end_medians_ns": [
-          8040000,
-          8156187,
-          8294854,
-          8330063,
-          8152750,
-          8070833,
-          8124916
+          7802229,
+          7735625,
+          7743062,
+          7736541,
+          7746042,
+          7762666,
+          7795896
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -416,7 +416,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 2.062771,
+      "latency_ms": 1.996229,
       "logical_input_bytes": 73728,
       "logical_output_bytes": 56320,
       "max_abs_error": {
@@ -446,25 +446,25 @@
       "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 1287437,
-        "end_to_end_median_ns": 2062771,
+        "device_time_median_ns": 1280208,
+        "end_to_end_median_ns": 1996229,
         "paired_trial_device_medians_ns": [
-          1305916,
-          1289311,
-          1338583,
-          1280478,
-          1287437,
-          1279333,
-          1276853
+          1279916,
+          1287104,
+          1280208,
+          1279416,
+          1282707,
+          1279833,
+          1284374
         ],
         "paired_trial_end_to_end_medians_ns": [
-          2031104,
-          2035771,
-          2062771,
-          2618271,
-          2146375,
-          2069916,
-          2047041
+          1985270,
+          2266104,
+          1978604,
+          1997541,
+          1951250,
+          2011083,
+          1996229
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -493,7 +493,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 33.8595,
+      "latency_ms": 30.60902,
       "logical_input_bytes": 80160,
       "logical_output_bytes": 52224,
       "max_abs_error": {
@@ -523,25 +523,25 @@
       "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 32665499,
-        "end_to_end_median_ns": 33859500,
+        "device_time_median_ns": 29893375,
+        "end_to_end_median_ns": 30609020,
         "paired_trial_device_medians_ns": [
-          32669520,
-          32665499,
-          32026749,
-          32870436,
-          32569062,
-          32631978,
-          32941624
+          29938520,
+          29849707,
+          29893375,
+          29902103,
+          29868770,
+          29846103,
+          30079604
         ],
         "paired_trial_end_to_end_medians_ns": [
-          33651792,
-          33629687,
-          33424917,
-          34187041,
-          34200416,
-          35095458,
-          33859500
+          30637083,
+          30602291,
+          30614396,
+          30609020,
+          30588542,
+          30597896,
+          30764479
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -570,7 +570,7 @@
       "deterministic": false,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 18.734625,
+      "latency_ms": 17.880917,
       "logical_input_bytes": 80160,
       "logical_output_bytes": 52224,
       "max_abs_error": {
@@ -600,25 +600,25 @@
       "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 17836729,
-        "end_to_end_median_ns": 18734625,
+        "device_time_median_ns": 17206061,
+        "end_to_end_median_ns": 17880917,
         "paired_trial_device_medians_ns": [
-          17836729,
-          17808249,
-          17804020,
-          17832687,
-          17866270,
-          18010291,
-          17926124
+          17151207,
+          17206061,
+          17210957,
+          17200978,
+          17202000,
+          17257582,
+          17256957
         ],
         "paired_trial_end_to_end_medians_ns": [
-          18734625,
-          18600604,
-          18559416,
-          18640771,
-          19692000,
-          20858083,
-          19631646
+          17819854,
+          17855270,
+          17880917,
+          17808979,
+          17913854,
+          17970729,
+          17899791
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -647,7 +647,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 2.905916,
+      "latency_ms": 2.546896,
       "logical_input_bytes": 80160,
       "logical_output_bytes": 52224,
       "max_abs_error": {
@@ -677,25 +677,25 @@
       "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 1907874,
-        "end_to_end_median_ns": 2905916,
+        "device_time_median_ns": 1845729,
+        "end_to_end_median_ns": 2546896,
         "paired_trial_device_medians_ns": [
-          1851770,
-          1858749,
-          1915479,
-          1931082,
-          1907874,
-          1988249,
-          1894229
+          1848270,
+          1840895,
+          1842583,
+          1844520,
+          1845729,
+          1853187,
+          1845770
         ],
         "paired_trial_end_to_end_medians_ns": [
-          2745500,
-          2792229,
-          2905916,
-          4122770,
-          3062000,
-          2889167,
-          4095645
+          2542792,
+          2561812,
+          2546896,
+          2536478,
+          2543812,
+          2558083,
+          2583916
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -724,7 +724,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f16",
-      "latency_ms": 41.949166,
+      "latency_ms": 38.838458,
       "logical_input_bytes": 33024,
       "logical_output_bytes": 49664,
       "max_abs_error": {
@@ -754,25 +754,25 @@
       "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 41026936,
-        "end_to_end_median_ns": 41949166,
+        "device_time_median_ns": 38148978,
+        "end_to_end_median_ns": 38838458,
         "paired_trial_device_medians_ns": [
-          40927353,
-          40951145,
-          41142208,
-          41026936,
-          41080062,
-          41334583,
-          40853645
+          38148978,
+          38138375,
+          38129062,
+          38187686,
+          38168916,
+          38258249,
+          38121499
         ],
         "paired_trial_end_to_end_medians_ns": [
-          41916479,
-          42423250,
-          42065666,
-          41749875,
-          41949166,
-          42163812,
-          41877937
+          38816312,
+          38790083,
+          38833291,
+          38846333,
+          38857708,
+          38981416,
+          38838458
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -801,7 +801,7 @@
       "deterministic": false,
       "device": "apple7",
       "dtype": "f16",
-      "latency_ms": 13.593229,
+      "latency_ms": 12.897771,
       "logical_input_bytes": 33024,
       "logical_output_bytes": 49664,
       "max_abs_error": {
@@ -831,25 +831,25 @@
       "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 12819062,
-        "end_to_end_median_ns": 13593229,
+        "device_time_median_ns": 12261187,
+        "end_to_end_median_ns": 12897771,
         "paired_trial_device_medians_ns": [
-          12811624,
-          12760312,
-          12766666,
-          12885250,
-          12819062,
-          12827374,
-          12824333
+          12263229,
+          12259750,
+          12252666,
+          12249083,
+          12263895,
+          12261187,
+          12263645
         ],
         "paired_trial_end_to_end_medians_ns": [
-          14759333,
-          15083604,
-          13713542,
-          13593229,
-          13535208,
-          13541750,
-          13521562
+          12897771,
+          12884791,
+          12904562,
+          12922312,
+          12911541,
+          12892708,
+          12894833
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -878,7 +878,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f16",
-      "latency_ms": 2.62825,
+      "latency_ms": 2.3545,
       "logical_input_bytes": 33024,
       "logical_output_bytes": 49664,
       "max_abs_error": {
@@ -908,25 +908,25 @@
       "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 1732770,
-        "end_to_end_median_ns": 2628250,
+        "device_time_median_ns": 1681791,
+        "end_to_end_median_ns": 2354500,
         "paired_trial_device_medians_ns": [
-          1809853,
-          1747750,
-          1728854,
-          1732770,
-          1716749,
-          1777833,
-          1705624
+          1680583,
+          1681666,
+          1694291,
+          1681791,
+          1669249,
+          1684729,
+          1681854
         ],
         "paired_trial_end_to_end_medians_ns": [
-          3061813,
-          2746646,
-          2592521,
-          2628250,
-          2515020,
-          2713729,
-          2421792
+          2330209,
+          2340812,
+          2334979,
+          2364729,
+          2396563,
+          2393020,
+          2354500
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -955,7 +955,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "bf16",
-      "latency_ms": 30.163249,
+      "latency_ms": 27.335458,
       "logical_input_bytes": 56976,
       "logical_output_bytes": 86016,
       "max_abs_error": {
@@ -985,25 +985,25 @@
       "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 29015500,
-        "end_to_end_median_ns": 30163249,
+        "device_time_median_ns": 26659333,
+        "end_to_end_median_ns": 27335458,
         "paired_trial_device_medians_ns": [
-          29111875,
-          29015500,
-          29506541,
-          29017103,
-          28762728,
-          28619811,
-          28696979
+          26654187,
+          26665728,
+          26658187,
+          26654874,
+          26661937,
+          26857312,
+          26659333
         ],
         "paired_trial_end_to_end_medians_ns": [
-          30337479,
-          30158937,
-          30332916,
-          30163249,
-          29798541,
-          30659625,
-          29632374
+          27322979,
+          27339937,
+          27351333,
+          27308479,
+          27331167,
+          27554125,
+          27335458
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -1032,7 +1032,7 @@
       "deterministic": false,
       "device": "apple7",
       "dtype": "bf16",
-      "latency_ms": 19.836521,
+      "latency_ms": 18.629625,
       "logical_input_bytes": 56976,
       "logical_output_bytes": 86016,
       "max_abs_error": {
@@ -1062,25 +1062,25 @@
       "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 18503062,
-        "end_to_end_median_ns": 19836521,
+        "device_time_median_ns": 17959333,
+        "end_to_end_median_ns": 18629625,
         "paired_trial_device_medians_ns": [
-          18640812,
-          18617687,
-          18503062,
-          18521041,
-          18405811,
-          18485791,
-          18497312
+          17959333,
+          17945186,
+          17957333,
+          17973041,
+          17950187,
+          17988291,
+          17962062
         ],
         "paired_trial_end_to_end_medians_ns": [
-          20289020,
-          19836521,
-          19667354,
-          19424354,
-          20041271,
-          20741812,
-          19737521
+          18627770,
+          18629625,
+          18626917,
+          18635833,
+          18597229,
+          18688645,
+          18672645
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -1109,7 +1109,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "bf16",
-      "latency_ms": 3.550604,
+      "latency_ms": 2.77425,
       "logical_input_bytes": 56976,
       "logical_output_bytes": 86016,
       "max_abs_error": {
@@ -1139,25 +1139,25 @@
       "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 2222457,
-        "end_to_end_median_ns": 3550604,
+        "device_time_median_ns": 2089207,
+        "end_to_end_median_ns": 2774250,
         "paired_trial_device_medians_ns": [
-          2222457,
-          2224853,
-          2306916,
-          2197082,
-          2174561,
-          2498916,
-          2164979
+          2089645,
+          2086687,
+          2082749,
+          2091208,
+          2087395,
+          2089207,
+          2090812
         ],
         "paired_trial_end_to_end_medians_ns": [
-          2995812,
-          3550604,
-          3268416,
-          3594250,
-          2931271,
-          4533812,
-          3734437
+          2752167,
+          2774250,
+          2788583,
+          2737083,
+          2803041,
+          2788520,
+          2755833
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -1186,7 +1186,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 277.925729,
+      "latency_ms": 272.112625,
       "logical_input_bytes": 1053696,
       "logical_output_bytes": 1051648,
       "max_abs_error": {
@@ -1216,25 +1216,25 @@
       "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 277115333,
-        "end_to_end_median_ns": 277925729,
+        "device_time_median_ns": 271376916,
+        "end_to_end_median_ns": 272112625,
         "paired_trial_device_medians_ns": [
-          290317832,
-          290118666,
-          291752604,
-          277050041,
-          277115333,
-          276919291,
-          276706041
+          271554437,
+          271920999,
+          270913312,
+          271376916,
+          271082624,
+          270845291,
+          272913041
         ],
         "paired_trial_end_to_end_medians_ns": [
-          292191125,
-          292024895,
-          293379625,
-          277874416,
-          277925729,
-          277724354,
-          277476604
+          272294937,
+          272743729,
+          271702812,
+          272112625,
+          271838437,
+          271701958,
+          273727021
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -1263,7 +1263,7 @@
       "deterministic": false,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 219.969687,
+      "latency_ms": 216.013313,
       "logical_input_bytes": 1053696,
       "logical_output_bytes": 1051648,
       "max_abs_error": {
@@ -1293,25 +1293,25 @@
       "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 219157187,
-        "end_to_end_median_ns": 219969687,
+        "device_time_median_ns": 215230561,
+        "end_to_end_median_ns": 216013313,
         "paired_trial_device_medians_ns": [
-          225007020,
-          225346249,
-          223226708,
-          219157187,
-          217353770,
-          217284291,
-          217177291
+          215152020,
+          215230561,
+          215000145,
+          216501083,
+          215633562,
+          215521520,
+          215210478
         ],
         "paired_trial_end_to_end_medians_ns": [
-          226055625,
-          226094083,
-          224110333,
-          219969687,
-          218111875,
-          218128396,
-          217949604
+          215861354,
+          215923833,
+          215856812,
+          217385917,
+          216383896,
+          216367479,
+          216013313
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,
@@ -1340,7 +1340,7 @@
       "deterministic": true,
       "device": "apple7",
       "dtype": "f32",
-      "latency_ms": 53.627062,
+      "latency_ms": 52.428291,
       "logical_input_bytes": 1053696,
       "logical_output_bytes": 1051648,
       "max_abs_error": {
@@ -1370,25 +1370,25 @@
       "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
       "telemetry": {
         "device_time_coverage": 1.0,
-        "device_time_median_ns": 52697874,
-        "end_to_end_median_ns": 53627062,
+        "device_time_median_ns": 51585582,
+        "end_to_end_median_ns": 52428291,
         "paired_trial_device_medians_ns": [
-          55397333,
-          55322624,
-          53338062,
-          52683541,
-          52697874,
-          52471249,
-          52624437
+          51295083,
+          51585582,
+          51649395,
+          51410354,
+          51850437,
+          51323041,
+          51626854
         ],
         "paired_trial_end_to_end_medians_ns": [
-          57204375,
-          57521083,
-          54304562,
-          53627062,
-          53549271,
-          53303583,
-          53562687
+          52193520,
+          52428291,
+          52523541,
+          52255437,
+          52651187,
+          52167604,
+          52450688
         ],
         "resources": {
           "max_total_threads_per_threadgroup": 1024,

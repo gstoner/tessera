@@ -3137,5 +3137,6 @@ Low-precision attention recompute is admitted only with reciprocal primal/VJP
 symbol links and verified matching types, zero/explicit bias and numerical
 policy. A checkpoint attribute alone is insufficient. Shared graph producers
 emit the relationship; standalone low-precision Apple forward remains refused.
-The Apple tests use the central hardware capability inventory. Fleet and route
-records are refreshed against the changed source before updating the PR.
+The Apple tests use the central hardware capability inventory. Five fresh runtime reports retain the six-key admission in both timing domains.
+The fresh fleet packet is sealed against e73cdfcee39c8265cdc329b407b05c834c5a5a70;
+matmul and softmax passed placement and timing checks at the unchanged 4% gate.

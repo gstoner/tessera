@@ -48,5 +48,6 @@
       "workspace_bytes": 1049600
     }
   ],
-  "fleet_packet_status": "requires_committed_runtime_revision"
+  "fleet_packet_status": "sealed_after_runtime_commit",
+  "fleet_tested_commit": "80504c8384e61f157a5fb7e772f3d6b2c22da56c"
 }

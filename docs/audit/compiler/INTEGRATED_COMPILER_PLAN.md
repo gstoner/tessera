@@ -3118,6 +3118,10 @@ new runtime changes the exact fingerprint. Five fresh owning-device runtime
 reports admit split_reduced for six shapes in both timing domains; live loading,
 context mismatch refusal and workspace fallback passed. See
 [refreshed runtime evidence](../../../benchmarks/baselines/apple_backward_mixed_runtime_20260907/).
-The fleet recorder refused the modified runtime because its packet requires a
-committed source revision. Commit the runtime, then record a fresh fleet packet
-before publishing; no hash-only reseal is permitted.
+Fresh M1 Max fleet measurement is now sealed against committed source
+`80504c8384e61f157a5fb7e772f3d6b2c22da56c`: matmul and softmax prove Metal
+placement at fixture and timing shapes, with device-event and end-to-end rows.
+The initial 15-sample/50-iteration attempt failed the unchanged 4% stability
+gate; 21 samples with 200 amortized iterations passed. This is a fresh
+measurement, not a fingerprint-only update. See
+[the sealed fleet packet](../evidence/e2e_spine/apple_gpu/apple7/manifest.json).

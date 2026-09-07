@@ -27,6 +27,11 @@ def compiler():
 
 
 def test_terminal_relu_native_analytic_admission():
+    compiler()
+    from tessera import _jit_boundary as jit
+    import platform
+    if platform.machine().lower() not in ("x86_64", "amd64") or jit._find_dylib() is None:
+        pytest.skip("owning x86 native JIT required")
     pair=prepare_native_ann(relu_source(),allow_reassociation=True)
     assert pair.original.count('tessera.relu')==pair.transformed.count('tessera.relu')==1
     linear=prepare_native_ann(source(),allow_reassociation=True)
@@ -84,8 +89,11 @@ def test_completion_poll_retains_owners_until_success(status):
 def test_gpu_ann_source_replay_rejects_modified_lowered_program():
     from dataclasses import replace
     from tessera.compiler.native_ann_gpu import materialize_native_ann_gpu
+    tool=compiler()
+    if not Path("/usr/lib/llvm-23/bin/mlir-opt").exists():
+        pytest.skip("LLVM 23 tools required")
     logical=prepare_native_ann(relu_source(),allow_reassociation=True)
-    pair=materialize_native_ann_gpu(logical,compiler=compiler(),llvm_bin=Path('/usr/lib/llvm-23/bin'),backend='rocm',chip='gfx1151')
+    pair=materialize_native_ann_gpu(logical,compiler=tool,llvm_bin=Path('/usr/lib/llvm-23/bin'),backend='rocm',chip='gfx1151')
     changed=replace(pair.original,arena_ir=pair.original.arena_ir+'\n')
     changed=replace(changed,binding_digest=changed._digest())
     with pytest.raises(ValueError,match='replay'):

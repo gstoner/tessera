@@ -8030,3 +8030,9 @@ was refused (softmax variability 5.946% exceeded 4%); the longer-amortized run
 passed the unchanged stability gate. The sealed packet binds the runtime
 source fingerprint and independently proves Metal placement at fixture and
 timing shapes. This does not promote the ANN or attention package experiments.
+
+**PR #734 lifecycle review — F3 / IR-NATIVE-FOUNDATION-1:** CPU ANN
+registration now returns a scoped owner. Explicit/context close unregisters
+only its own candidates, disables retained candidate handles and releases
+probe references; failed registration rolls back. This is host registry ownership; no apple runtime ABI or device promotion changes.
+CUDA/HIP registration continues to use its separate device binding owner.

@@ -3386,3 +3386,11 @@ The existing context barrier is retained. Further numerical consumers need
 operator-specific induced-norm/error propagation; absolute value does not prove
 reduction, spectral or approximation legality. Assertions-enabled MLIR validation
 and Metal-owned tape storage remain required follow-ups.
+
+**PR #734 review closure (F3):** `register_native_ann` returns a
+`NativeANNRegistration`; use its `.region` inside a context manager or call
+`.close()` when retiring a model/bucket. Close removes exact candidate instances,
+invalidates retained candidates and releases owned probe references. Same-name
+replacement ownership and registration rollback are tested without native tools.
+Native-only tests now check compiler/JIT availability before preparing IR;
+clean CI does not claim native execution. No new physical promotion is made.

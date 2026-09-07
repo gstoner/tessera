@@ -6741,3 +6741,9 @@ ownership-based buffer deallocation after DPS copies. Validation is x86 on
 Princess-Luna; this does not replace the GPU exported-reader completion barrier
 or establish asynchronous device freeing. Native extent guards currently abort
 on mismatch; recoverable JIT status propagation remains a follow-up.
+
+**PR #734 lifecycle review — F3 / IR-NATIVE-FOUNDATION-1:** CPU ANN
+registration now returns a scoped owner. Explicit/context close unregisters
+only its own candidates, disables retained candidate handles and releases
+probe references; failed registration rolls back. This is host registry ownership; no nvidia runtime ABI or device promotion changes.
+CUDA/HIP registration continues to use its separate device binding owner.

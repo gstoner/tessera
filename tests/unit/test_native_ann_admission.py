@@ -93,15 +93,19 @@ def test_existing_arbiter_filters_over_budget_ann_and_retains_incumbent():
     import platform
     if platform.machine().lower() not in ('x86_64', 'amd64') or jit._find_dylib() is None:
         pytest.skip('owning x86 native JIT required')
+    registration = None
     saved = {key: list(values) for key, values in arbiter._CANDIDATES.items()}
     verifiers = dict(arbiter._OP_KIND_VERIFY)
     try:
         value = np.ones((3, 2), np.float32)
-        region = register_native_ann(pair(), [value], input_bound=1.0, absolute_budget=0.0)
+        registration = register_native_ann(pair(), [value], input_bound=1.0, absolute_budget=0.0)
+        region = registration.region
         field = arbiter.live_candidates(region, ANN_AFFINE, 'x86', (value,))
         assert len(field) == 1
         assert not next(iter(field.values())).transformed
-        region = register_native_ann(pair(), [value], input_bound=1.0, absolute_budget=0.001)
+        registration.close()
+        registration = register_native_ann(pair(), [value], input_bound=1.0, absolute_budget=0.001)
+        region = registration.region
         winner = arbiter.arbitrate(region, ANN_AFFINE, 'x86', inputs=(value,))
         assert not winner.transformed
         # An explicitly measured eligible rewrite uses the existing selection
@@ -115,6 +119,8 @@ def test_existing_arbiter_filters_over_budget_ann_and_retains_incumbent():
         with pytest.raises(ValueError, match='domain'):
             winner.run(region, value*2)
     finally:
+        if registration is not None:
+            registration.close()
         arbiter._CANDIDATES.clear()
         arbiter._CANDIDATES.update(saved)
         arbiter._OP_KIND_VERIFY.clear()

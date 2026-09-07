@@ -346,10 +346,11 @@ class NativeANNCandidate(Candidate):
 
     def available(self):
         from tessera import _jit_boundary as jit
-        return platform.machine().lower() in ('x86_64', 'amd64') and jit._find_dylib() is not None
+        return self.region is not None and platform.machine().lower() in ('x86_64', 'amd64') and jit._find_dylib() is not None
 
     def applies_to(self, region):
-        if not isinstance(region, ANNRegion) or region.digest != self.region.digest:
+        registered_region = self.region
+        if registered_region is None or not isinstance(region, ANNRegion) or region.digest != registered_region.digest:
             return False
         try:
             bound = affine_error_bound(region.pair, region.input_bound)
@@ -403,14 +404,61 @@ def _verify_ann_candidate(candidate, region, *, atol, seed):
     return True
 
 
+class NativeANNRegistration:
+    """Own a CPU arbiter registration; close retires its exact candidate instances.
+
+    In-flight calls retain their own immutable region and synchronous JIT handle.
+    Retiring a registration prevents new candidate use and releases probe bytes
+    even if a caller keeps the closed owner or a previously selected candidate.
+    """
+    def __init__(self, region):
+        from .emit.candidate import register_candidate, register_op_kind
+        self._region = region
+        self.closed = False
+        self.candidates = (NativeANNCandidate(region, False), NativeANNCandidate(region, True))
+        try:
+            register_op_kind(ANN_AFFINE, _verify_ann_candidate)
+            for candidate in self.candidates:
+                register_candidate(candidate)
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def region(self):
+        if self.closed:
+            raise ValueError('ANN registration is closed')
+        return self._region
+
+    def close(self):
+        from .emit.candidate import unregister_candidate
+        if self.closed:
+            return
+        for candidate in self.candidates:
+            unregister_candidate(candidate)
+            candidate.region = None
+        self._region = None
+        self.closed = True
+
+    def __enter__(self):
+        if self.closed:
+            raise ValueError('ANN registration is closed')
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
+
+
 def register_native_ann(pair, samples, *, input_bound, absolute_budget):
-    """Register original and rewritten programs in the existing candidate arbiter.
+    """Return a scoped owner for original/rewrite CPU arbiter candidates.
+
+    Use ``with register_native_ann(...) as registration`` and pass
+    ``registration.region`` to the arbiter; otherwise call ``close()`` explicitly.
 
     Default equal-tier selection retains the original. The caller may measure
     eligible candidates using the existing arbiter; no winner is persisted here.
     Each actual invocation still checks the declared input domain.
     """
-    from .emit.candidate import register_candidate, register_op_kind
     if type(absolute_budget) not in (float, int) or not np.isfinite(absolute_budget) or absolute_budget < 0:
         raise ValueError('ANN absolute budget must be finite and nonnegative')
     affine_error_bound(pair, input_bound)
@@ -420,7 +468,4 @@ def register_native_ann(pair, samples, *, input_bound, absolute_budget):
                          np.any(np.abs(v.astype(np.float64)) > input_bound) for v in arrays):
         raise ValueError('ANN registration requires finite fp32 samples inside the domain')
     region = ANNRegion(pair, input_bound, absolute_budget, tuple(v.tobytes() for v in arrays))
-    register_op_kind(ANN_AFFINE, _verify_ann_candidate)
-    register_candidate(NativeANNCandidate(region, False))
-    register_candidate(NativeANNCandidate(region, True))
-    return region
+    return NativeANNRegistration(region)

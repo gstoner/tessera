@@ -1,0 +1,17 @@
+{
+  "date": "2026-09-07",
+  "device": "Apple M1 Max",
+  "runtime_sha256": "b041bc74f3cf4faca7926c6ca0df4ed91712fbe11f296e76574902977c770312",
+  "test_source_sha256": "053e8ea7cf1074723271c89bf124b0579649f35bf3b8463fef7d4341cefb1c1c",
+  "test_command": "pytest -q tests/unit/test_apple_lowp_native_contract.py -k broader_metal",
+  "result": "6 passed, 12 deselected",
+  "oracle": "float64 analytic GQA VJP with fp32 bias where present",
+  "rtol": 0.005,
+  "atol": 0.001,
+  "native_gpu_required": true,
+  "limitations": [
+    "fp32 biased packages only",
+    "fp16/bf16 packages tested without bias",
+    "runtime timing evidence has storage-typed bias and is a separate contract"
+  ]
+}

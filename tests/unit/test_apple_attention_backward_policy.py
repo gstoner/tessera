@@ -188,3 +188,18 @@ def test_atomic_candidate_is_implemented_and_nondeterministic():
 def test_unknown_route_rejects_stably(route):
     with pytest.raises(AppleAttentionBackwardPolicyError, match="unknown"):
         resolve_route((7, 8), (7, 8), route=route)
+
+
+def test_family_ledger_default_preserves_global_override(monkeypatch):
+    from tessera.compiler import apple_attention_backward as policy
+    seen = []
+    monkeypatch.setattr(policy, 'production_route_for',
+                        lambda **kw: seen.append(kw['ledger_path']) or SERIAL_RECOMPUTE)
+    monkeypatch.delenv('TESSERA_APPLE_ROUTE_LEDGER', raising=False)
+    resolve_route((1, 4, 16), (1, 4, 16), selector_key='example')
+    assert seen[-1].name == 'apple7_attention_backward_strict_v2_route_ledger.json'
+    monkeypatch.setenv('TESSERA_APPLE_ROUTE_LEDGER', '/explicit/global.json')
+    resolve_route((1, 4, 16), (1, 4, 16), selector_key='example')
+    assert seen[-1] is None  # production_route_for resolves the global override
+    resolve_route((1, 4, 16), (1, 4, 16), selector_key='example', ledger_path='/explicit/call.json')
+    assert seen[-1] == '/explicit/call.json'

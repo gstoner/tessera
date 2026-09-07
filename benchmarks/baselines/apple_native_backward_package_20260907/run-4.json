@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "selection_scope": "package_subgraph",
+  "package_kind": "native_image_launch_descriptor",
+  "context": {
+    "device": "apple7",
+    "physical_device": "Apple M1 Max",
+    "os_version": "26.6.2",
+    "sdk_version": "26.5",
+    "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+    "runtime_fingerprint": "sha256:ca1d06543d8c2d628cdb91945931f03b2badbf4e3586fdaaec2b6f0ec1529f19"
+  },
+  "runs": [
+    {
+      "backend": "apple_gpu",
+      "op": "compiled_attention_backward",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "dtype": "f16",
+      "device": "apple7",
+      "route": "direct",
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "cold_compile_ns": 1393816333,
+      "package_image_digest": "0196ac2e7d6fa53e93c6b7ab1561f4ed9c933f514c9a755e286f1ba150da8602",
+      "schedule_digest": "bc0491d56e8e915176c602f71eff694c44f9c363d86a6d4095dd627cd15d16c7",
+      "tile_digest": "fccfce43a9847f83a6345b26febd5295ba8effdbee854034dc8b9b7013b21e12",
+      "max_abs_error": 4.470348358154297e-08,
+      "reps": 70,
+      "trials": 7,
+      "latency_ms": 1.264938,
+      "telemetry": {
+        "paired_trial_end_to_end_medians_ns": [
+          1734333,
+          1510791,
+          1241999,
+          1261770,
+          1264938,
+          1266083,
+          1260521
+        ],
+        "end_to_end_median_ns": 1264938,
+        "device_time_median_ns": null,
+        "paired_trial_device_medians_ns": null,
+        "device_time_coverage": 0.0,
+        "timing_source": "host_complete_native_call",
+        "resources": {
+          "scope": "native_package_descriptor_or_direct_identical_ABI"
+        }
+      }
+    },
+    {
+      "backend": "apple_gpu",
+      "op": "compiled_attention_backward",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "dtype": "f16",
+      "device": "apple7",
+      "route": "package",
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "cold_compile_ns": 1393816333,
+      "package_image_digest": "0196ac2e7d6fa53e93c6b7ab1561f4ed9c933f514c9a755e286f1ba150da8602",
+      "schedule_digest": "bc0491d56e8e915176c602f71eff694c44f9c363d86a6d4095dd627cd15d16c7",
+      "tile_digest": "fccfce43a9847f83a6345b26febd5295ba8effdbee854034dc8b9b7013b21e12",
+      "max_abs_error": 4.470348358154297e-08,
+      "reps": 70,
+      "trials": 7,
+      "latency_ms": 1.439875,
+      "telemetry": {
+        "paired_trial_end_to_end_medians_ns": [
+          2021625,
+          1475187,
+          1377145,
+          1383042,
+          1439875,
+          1438479,
+          1458625
+        ],
+        "end_to_end_median_ns": 1439875,
+        "device_time_median_ns": null,
+        "paired_trial_device_medians_ns": null,
+        "device_time_coverage": 0.0,
+        "timing_source": "host_complete_native_call",
+        "resources": {
+          "scope": "native_package_descriptor_or_direct_identical_ABI"
+        }
+      }
+    },
+    {
+      "backend": "apple_gpu",
+      "op": "compiled_attention_backward",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "dtype": "bf16",
+      "device": "apple7",
+      "route": "direct",
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "cold_compile_ns": 1458155875,
+      "package_image_digest": "04b1895a020d0e3c6ed330d1ae1fbccd98e4ffda8f2b766efbf43c9e3f0ede1d",
+      "schedule_digest": "21cdbaa232b66b88ef3b24f4b80a13e5c1559eca89b2f74c9ab2a809a00856d9",
+      "tile_digest": "952b5f6d21e557c86f3d5b5aac57b34c8214d5638e579aaba1fbc505e36a5dd0",
+      "max_abs_error": 4.470348358154297e-08,
+      "reps": 70,
+      "trials": 7,
+      "latency_ms": 1.35525,
+      "telemetry": {
+        "paired_trial_end_to_end_medians_ns": [
+          2988812,
+          2447208,
+          1517396,
+          1321250,
+          1321666,
+          1355250,
+          1308750
+        ],
+        "end_to_end_median_ns": 1355250,
+        "device_time_median_ns": null,
+        "paired_trial_device_medians_ns": null,
+        "device_time_coverage": 0.0,
+        "timing_source": "host_complete_native_call",
+        "resources": {
+          "scope": "native_package_descriptor_or_direct_identical_ABI"
+        }
+      }
+    },
+    {
+      "backend": "apple_gpu",
+      "op": "compiled_attention_backward",
+      "shape": "b1_hq4_hkv2_sq9_sk19_d32_c1_bias_fp32",
+      "dtype": "bf16",
+      "device": "apple7",
+      "route": "package",
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "cold_compile_ns": 1458155875,
+      "package_image_digest": "04b1895a020d0e3c6ed330d1ae1fbccd98e4ffda8f2b766efbf43c9e3f0ede1d",
+      "schedule_digest": "21cdbaa232b66b88ef3b24f4b80a13e5c1559eca89b2f74c9ab2a809a00856d9",
+      "tile_digest": "952b5f6d21e557c86f3d5b5aac57b34c8214d5638e579aaba1fbc505e36a5dd0",
+      "max_abs_error": 4.470348358154297e-08,
+      "reps": 70,
+      "trials": 7,
+      "latency_ms": 1.516167,
+      "telemetry": {
+        "paired_trial_end_to_end_medians_ns": [
+          2977771,
+          2116208,
+          1695354,
+          1516167,
+          1407563,
+          1448937,
+          1460313
+        ],
+        "end_to_end_median_ns": 1516167,
+        "device_time_median_ns": null,
+        "paired_trial_device_medians_ns": null,
+        "device_time_coverage": 0.0,
+        "timing_source": "host_complete_native_call",
+        "resources": {
+          "scope": "native_package_descriptor_or_direct_identical_ABI"
+        }
+      }
+    }
+  ]
+}

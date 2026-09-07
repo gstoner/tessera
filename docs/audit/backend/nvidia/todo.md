@@ -6652,3 +6652,39 @@ Parity validated for the isolated native automatic Q/K/V attention export bound 
 **Split tensor tapes / JIT-owned Q/K — W4 / W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
 The bounded split f32 tape consumer and JIT-owned isolated Q/K program are implemented for owning-device validation on RTX 5070. NVVM retains generic alloca lowering; AMDGPU private descriptor addressing is not transferred. Follow-up required for dynamic/mixed-type tapes, parallel scheduling, asynchronous retirement and composed attention AD. No latency/overlap or arbiter promotion claim.
 See [loop11 implementation and device evidence](../../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+
+
+**PR #732 scratch retirement — W2.4a / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared CUDA/HIP recomputed-tape backward now releases its temporary primal after synchronous completion; persistent captured primals and returned derivative generations remain owned. Repeated-call and launch-failure allocation tests cover host ownership; no new exact-device or performance claim.
+
+
+**F0 census correction — IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared inventory now distinguishes Graph, typed artifact and unknown/raw inputs; missing modules fail closed. Apple GPU packaging is included, with computed Apple family returns explicitly unresolved. No support or device-proof state changes. Follow-up required for target/envelope-aware producer-to-consumer lineage before retiring remaining Graph constructors.
+
+
+**Apple domains / unary parent replay — F0 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Shared census now requires a scheduled consumer in the owning target module before reporting its declared family route. Apple replay/target checks do not establish nvidia execution or performance. No runtime or support state changes; full target/envelope call-path joins remain follow-up required.
+
+
+**Descriptor projection / ancestry — F0 / IR-NATIVE-FOUNDATION-1 (2026-09-06):**
+Not applicable to this implementation: the changed package consumers are Apple-specific. Follow-up required for independent target descriptor/ancestry review; Apple native replay transfers no execution or performance evidence.
+
+
+**Attention projection / static softmax — F0/F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Not applicable to this implementation: Apple library package consumers changed; no nvidia runtime or promotion state changes. Follow-up required for independent target descriptor projection and owning-device evidence.
+
+
+**Low-precision native slice — F0/F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared Graph-to-Schedule admission changes are Apple-conditional. No nvidia ABI or scheduling changes; Apple device proof is not applicable to this target. Independent exact-device evidence remains required for promotion.
+
+
+**Broader coverage / route promotion — APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Not applicable to this target: Apple-only package guard, route-policy default and M1 Max evidence. No nvidia schedule or performance promotion; independent exact-device promotion remains required.
+
+
+**Mixed bias / math ownership — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Apple-specific mixed-bias ABI has no nvidia ABI or execution change. Shared audit sequencing and truthful instability wording updated; no sibling performance evidence transferred. Follow-up required: existing native AD/numeric-policy/math consumer work under the integrated plan.
+
+
+**PR #733 status/paired-companion correction — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared backward Graph emission carries reciprocal primal/VJP symbol references; the new admission restriction and status ABI are Apple-only. No nvidia ABI, physical schedule or performance claim changes. Existing native compiler consumers are checked where available; exact-device nvidia evidence is not inferred from Metal tests.

@@ -248,6 +248,7 @@ def test_apple_gpu_packages_exact_attention_tile(monkeypatch, tmp_path) -> None:
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
     monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    monkeypatch.setattr(apple_native, "_verify_attention_schedule_ancestry", lambda artifact: "")
 
     package = apple_native.package_scheduled_attention(
         artifact, pipeline_name="tessera-lower-to-apple_gpu"
@@ -272,6 +273,7 @@ def test_apple_gpu_attention_rejects_foreign_lse_policy(monkeypatch, tmp_path) -
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
     monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    monkeypatch.setattr(apple_native, "_verify_attention_schedule_ancestry", lambda artifact: "")
     # An x86 artifact is structurally valid but carries save_lse/saved.
     with pytest.raises(ValueError, match="apple7 f32 recompute policy"):
         apple_native.package_scheduled_attention(

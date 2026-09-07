@@ -101,6 +101,11 @@ class NativeDeviceTape:
                 primal = _Buffer(self, self.primal.shape)
                 derivative = _Buffer(self, self._input.shape)
                 self.pair(self._input, cotangent, primal, derivative, self.width)
+                # The pair completes synchronously. Only the derivative escapes;
+                # keep the captured primal, not this recomputed scratch result.
+                self.check(self.free(primal.pointer))
+                primal.pointer = ct.c_void_p()
+                self.buffers.remove(primal)
             except BaseException:
                 self.check(self.sync())
                 while len(self.buffers) > start:

@@ -49,6 +49,8 @@ NATIVE_RESIDENCY_TESTS = (
 # callable.  The shared collection boundary proves the Metal device exists;
 # each test then checks a native runtime capability, cache, or stress behavior.
 NATIVE_RUNTIME_TESTS = (
+    "tests/unit/test_apple_lowp_native_contract.py::test_lowp_metal_differential",
+    "tests/unit/test_apple_lowp_native_contract.py::test_broader_metal_differential",
     "tests/unit/test_apple_gpu_mpsgraph_lane.py::test_runtime_reports_metal_available",
     "tests/unit/test_apple_gpu_mpsgraph_lane.py::test_mpsgraph_graph_cache_reuses_across_calls",
     "tests/unit/test_apple_gpu_control_flow_stress.py::test_cf_while_generate_after_bulk_bmm_dispatches",

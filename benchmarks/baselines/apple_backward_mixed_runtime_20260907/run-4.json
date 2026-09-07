@@ -1,0 +1,1417 @@
+{
+  "context": {
+    "compiler_fingerprint": "sha256:a27c50660f01ac4d5dd9e84a96fbee710f2f554b24f272071eabc46fd3ee03f4",
+    "device": "apple7",
+    "os_version": "26.6.2",
+    "physical_device": "Apple M1 Max",
+    "runtime_fingerprint": "sha256:7af5c4e3b7bbe660bd56b454ce736a4563a79a70b57ab93e5b8a26c50aa75754",
+    "sdk_version": "26.5"
+  },
+  "device": "apple7",
+  "paired_route_order_rotated": true,
+  "profiling_capabilities": {
+    "capabilities": {
+      "dispatch_boundary_sampling": false,
+      "metal4_timestamp_heap": true,
+      "occupancy": false,
+      "pipeline_limits": true,
+      "register_count": false,
+      "scratch_bytes": false,
+      "spill_count": false,
+      "stage_boundary_sampling": true,
+      "stage_utilization_counter_set": false,
+      "statistic_counter_set": false,
+      "timestamp_counter_set": true
+    },
+    "raw": 99
+  },
+  "runs": [
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 4.005229,
+      "logical_input_bytes": 16384,
+      "logical_output_bytes": 12288,
+      "max_abs_error": {
+        "dK": 1.3969838619232178e-09,
+        "dQ": 2.3283064365386963e-09,
+        "dV": 2.9802322387695312e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "serial_recompute",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": false,
+        "dim": 16,
+        "kv_heads": 4,
+        "outer": 1,
+        "q_heads": 4,
+        "sk": 16,
+        "softcap": 0.0,
+        "sq": 16,
+        "window": 0
+      },
+      "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 3461187,
+        "end_to_end_median_ns": 4005229,
+        "paired_trial_device_medians_ns": [
+          3444707,
+          3456125,
+          3461187,
+          3455583,
+          3467062,
+          3468645,
+          3488812
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          3960062,
+          4001979,
+          4037291,
+          3990541,
+          4005229,
+          4031166,
+          4087958
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            4,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.00390625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": false,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 2.954521,
+      "logical_input_bytes": 16384,
+      "logical_output_bytes": 12288,
+      "max_abs_error": {
+        "dK": 1.3969838619232178e-09,
+        "dQ": 2.3283064365386963e-09,
+        "dV": 2.9802322387695312e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "atomic",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": false,
+        "dim": 16,
+        "kv_heads": 4,
+        "outer": 1,
+        "q_heads": 4,
+        "sk": 16,
+        "softcap": 0.0,
+        "sq": 16,
+        "window": 0
+      },
+      "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 2398228,
+        "end_to_end_median_ns": 2954521,
+        "paired_trial_device_medians_ns": [
+          2380457,
+          2398228,
+          2398332,
+          2402083,
+          2395416,
+          2381166,
+          2403749
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          2915666,
+          2932812,
+          2969645,
+          2999625,
+          2942167,
+          2958249,
+          2954521
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 0.953063,
+      "logical_input_bytes": 16384,
+      "logical_output_bytes": 12288,
+      "max_abs_error": {
+        "dK": 1.862645149230957e-09,
+        "dQ": 2.3283064365386963e-09,
+        "dV": 4.470348358154297e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "split_reduced",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": false,
+        "dim": 16,
+        "kv_heads": 4,
+        "outer": 1,
+        "q_heads": 4,
+        "sk": 16,
+        "softcap": 0.0,
+        "sq": 16,
+        "window": 0
+      },
+      "shape": "b1_hq4_hkv4_sq16_sk16_d16_c0_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 340395,
+        "end_to_end_median_ns": 953063,
+        "paired_trial_device_medians_ns": [
+          333791,
+          338436,
+          343916,
+          325374,
+          340395,
+          346770,
+          348187
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          946479,
+          935041,
+          963271,
+          958021,
+          941687,
+          953063,
+          953521
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 8192
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 10.592604,
+      "logical_input_bytes": 73728,
+      "logical_output_bytes": 56320,
+      "max_abs_error": {
+        "dK": 3.725290298461914e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 8.940696716308594e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "serial_recompute",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 4,
+        "outer": 1,
+        "q_heads": 4,
+        "sk": 19,
+        "softcap": 0.0,
+        "sq": 17,
+        "window": 0
+      },
+      "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 9939978,
+        "end_to_end_median_ns": 10592604,
+        "paired_trial_device_medians_ns": [
+          9942833,
+          9933291,
+          9946874,
+          9954936,
+          9938062,
+          9933624,
+          9939978
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          10563770,
+          10619083,
+          10592604,
+          10582917,
+          10646312,
+          10727667,
+          10574979
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            4,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.00390625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": false,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 7.759729,
+      "logical_input_bytes": 73728,
+      "logical_output_bytes": 56320,
+      "max_abs_error": {
+        "dK": 3.725290298461914e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 8.940696716308594e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "atomic",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 4,
+        "outer": 1,
+        "q_heads": 4,
+        "sk": 19,
+        "softcap": 0.0,
+        "sq": 17,
+        "window": 0
+      },
+      "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 7186499,
+        "end_to_end_median_ns": 7759729,
+        "paired_trial_device_medians_ns": [
+          7187978,
+          7186562,
+          7186499,
+          7170749,
+          7116083,
+          7120582,
+          7197874
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          7750749,
+          7759729,
+          7784729,
+          7829729,
+          7750708,
+          7708875,
+          7780041
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 1.948145,
+      "logical_input_bytes": 73728,
+      "logical_output_bytes": 56320,
+      "max_abs_error": {
+        "dK": 3.725290298461914e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 8.940696716308594e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "split_reduced",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 4,
+        "outer": 1,
+        "q_heads": 4,
+        "sk": 19,
+        "softcap": 0.0,
+        "sq": 17,
+        "window": 0
+      },
+      "shape": "b1_hq4_hkv4_sq17_sk19_d64_c1_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 1289478,
+        "end_to_end_median_ns": 1948145,
+        "paired_trial_device_medians_ns": [
+          1289479,
+          1285791,
+          1290395,
+          1289478,
+          1275249,
+          1288562,
+          1291395
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          1941271,
+          1974291,
+          1948145,
+          1959291,
+          2025354,
+          1946667,
+          1929563
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 38912
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 30.291604,
+      "logical_input_bytes": 80160,
+      "logical_output_bytes": 52224,
+      "max_abs_error": {
+        "dK": 2.7939677238464355e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 7.450580596923828e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "serial_recompute",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": true,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 1,
+        "q_heads": 8,
+        "sk": 33,
+        "softcap": 2.5,
+        "sq": 9,
+        "window": 17
+      },
+      "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 29570228,
+        "end_to_end_median_ns": 30291604,
+        "paired_trial_device_medians_ns": [
+          29646562,
+          29563750,
+          29565583,
+          29567124,
+          29577687,
+          29570228,
+          29626083
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          30291604,
+          30318041,
+          30290625,
+          30358645,
+          30272624,
+          30233104,
+          30328666
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            2,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.001953125,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": false,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 17.86152,
+      "logical_input_bytes": 80160,
+      "logical_output_bytes": 52224,
+      "max_abs_error": {
+        "dK": 2.7939677238464355e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 5.960464477539063e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "atomic",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": true,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 1,
+        "q_heads": 8,
+        "sk": 33,
+        "softcap": 2.5,
+        "sq": 9,
+        "window": 17
+      },
+      "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 17183895,
+        "end_to_end_median_ns": 17861520,
+        "paired_trial_device_medians_ns": [
+          17154729,
+          17116749,
+          17183895,
+          17135000,
+          17265062,
+          17246124,
+          17221395
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          17819833,
+          17765521,
+          17870375,
+          17806646,
+          17936729,
+          17912374,
+          17861520
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 2.536229,
+      "logical_input_bytes": 80160,
+      "logical_output_bytes": 52224,
+      "max_abs_error": {
+        "dK": 3.259629011154175e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 5.960464477539063e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "split_reduced",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": true,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 1,
+        "q_heads": 8,
+        "sk": 33,
+        "softcap": 2.5,
+        "sq": 9,
+        "window": 17
+      },
+      "shape": "b1_hq8_hkv2_sq9_sk33_d64_c1_w17_bias1_sc2p5",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 1851499,
+        "end_to_end_median_ns": 2536229,
+        "paired_trial_device_medians_ns": [
+          1849062,
+          1831645,
+          1851499,
+          1834104,
+          1858625,
+          1858749,
+          1858750
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          2469354,
+          2517749,
+          2625875,
+          2536229,
+          2567146,
+          2520187,
+          2541354
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 33792
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 38.606979,
+      "logical_input_bytes": 33024,
+      "logical_output_bytes": 49664,
+      "max_abs_error": {
+        "dK": 9.313225746154785e-09,
+        "dQ": 2.3283064365386963e-09,
+        "dV": 1.4901161193847656e-07
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "serial_recompute",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": false,
+        "dim": 64,
+        "kv_heads": 1,
+        "outer": 1,
+        "q_heads": 8,
+        "sk": 65,
+        "softcap": 0.0,
+        "sq": 8,
+        "window": 17
+      },
+      "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 37918687,
+        "end_to_end_median_ns": 38606979,
+        "paired_trial_device_medians_ns": [
+          37898479,
+          37917812,
+          37918353,
+          37970228,
+          37918687,
+          37995895,
+          37931916
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          38545478,
+          38561000,
+          38554313,
+          38606979,
+          38639208,
+          38773750,
+          38654854
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            1,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0009765625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": false,
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 12.913166,
+      "logical_input_bytes": 33024,
+      "logical_output_bytes": 49664,
+      "max_abs_error": {
+        "dK": 9.313225746154785e-09,
+        "dQ": 2.3283064365386963e-09,
+        "dV": 1.4901161193847656e-07
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "atomic",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": false,
+        "dim": 64,
+        "kv_heads": 1,
+        "outer": 1,
+        "q_heads": 8,
+        "sk": 65,
+        "softcap": 0.0,
+        "sq": 8,
+        "window": 17
+      },
+      "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 12240562,
+        "end_to_end_median_ns": 12913166,
+        "paired_trial_device_medians_ns": [
+          12231728,
+          12231666,
+          12250457,
+          12240562,
+          12259583,
+          12264374,
+          12231270
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          12913166,
+          12844958,
+          12915437,
+          12868396,
+          12938833,
+          12971583,
+          12882979
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f16",
+      "latency_ms": 2.331875,
+      "logical_input_bytes": 33024,
+      "logical_output_bytes": 49664,
+      "max_abs_error": {
+        "dK": 4.6566128730773926e-09,
+        "dQ": 2.3283064365386963e-09,
+        "dV": 1.1920928955078125e-07
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "split_reduced",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": false,
+        "dim": 64,
+        "kv_heads": 1,
+        "outer": 1,
+        "q_heads": 8,
+        "sk": 65,
+        "softcap": 0.0,
+        "sq": 8,
+        "window": 17
+      },
+      "shape": "b1_hq8_hkv1_sq8_sk65_d64_c0_w17_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 1687562,
+        "end_to_end_median_ns": 2331875,
+        "paired_trial_device_medians_ns": [
+          1693249,
+          1690082,
+          1689437,
+          1679541,
+          1687562,
+          1668291,
+          1682541
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          2340063,
+          2327250,
+          2327583,
+          2304333,
+          2331875,
+          2344187,
+          2353479
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 33280
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "bf16",
+      "latency_ms": 27.014812,
+      "logical_input_bytes": 56976,
+      "logical_output_bytes": 86016,
+      "max_abs_error": {
+        "dK": 1.0477378964424133e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 2.9802322387695312e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "serial_recompute",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": true,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 2,
+        "q_heads": 4,
+        "sk": 33,
+        "softcap": 1.5,
+        "sq": 9,
+        "window": 0
+      },
+      "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 26348853,
+        "end_to_end_median_ns": 27014812,
+        "paired_trial_device_medians_ns": [
+          26346916,
+          26351270,
+          26350478,
+          26348853,
+          26350208,
+          26336645,
+          26340416
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          27076000,
+          27069292,
+          27007416,
+          27021250,
+          27014812,
+          26998583,
+          26986208
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            4,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.00390625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": false,
+      "device": "apple7",
+      "dtype": "bf16",
+      "latency_ms": 18.660292,
+      "logical_input_bytes": 56976,
+      "logical_output_bytes": 86016,
+      "max_abs_error": {
+        "dK": 1.0477378964424133e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 2.9802322387695312e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "atomic",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": true,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 2,
+        "q_heads": 4,
+        "sk": 33,
+        "softcap": 1.5,
+        "sq": 9,
+        "window": 0
+      },
+      "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 17994458,
+        "end_to_end_median_ns": 18660292,
+        "paired_trial_device_medians_ns": [
+          17994374,
+          17943645,
+          18013187,
+          17994458,
+          18011791,
+          17988624,
+          18007520
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          18629000,
+          18635500,
+          18712833,
+          18659229,
+          18672937,
+          18669125,
+          18660292
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "bf16",
+      "latency_ms": 2.739604,
+      "logical_input_bytes": 56976,
+      "logical_output_bytes": 86016,
+      "max_abs_error": {
+        "dK": 1.862645149230957e-09,
+        "dQ": 3.725290298461914e-09,
+        "dV": 3.3527612686157227e-08
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "split_reduced",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": true,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 2,
+        "q_heads": 4,
+        "sk": 33,
+        "softcap": 1.5,
+        "sq": 9,
+        "window": 0
+      },
+      "shape": "b2_hq4_hkv2_sq9_sk33_d64_c1_w0_bias1_sc1p5",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 2090437,
+        "end_to_end_median_ns": 2739604,
+        "paired_trial_device_medians_ns": [
+          2089541,
+          2080645,
+          2089354,
+          2090437,
+          2090957,
+          2094353,
+          2096728
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          2724563,
+          2743812,
+          2739604,
+          2736458,
+          2746125,
+          2738250,
+          2776812
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 67584
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 271.090416,
+      "logical_input_bytes": 1053696,
+      "logical_output_bytes": 1051648,
+      "max_abs_error": {
+        "dK": 4.3655745685100555e-11,
+        "dQ": 9.313225746154785e-10,
+        "dV": 4.3655745685100555e-10
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "serial_recompute",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 1,
+        "q_heads": 2,
+        "sk": 1025,
+        "softcap": 0.0,
+        "sq": 4,
+        "window": 0
+      },
+      "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 270288895,
+        "end_to_end_median_ns": 271090416,
+        "paired_trial_device_medians_ns": [
+          270288895,
+          270831562,
+          269351458,
+          269070583,
+          270814353,
+          269192291,
+          270909707
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          271090416,
+          271672437,
+          270162792,
+          269868146,
+          271583542,
+          270002104,
+          271812354
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            2,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.001953125,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": false,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 215.724792,
+      "logical_input_bytes": 1053696,
+      "logical_output_bytes": 1051648,
+      "max_abs_error": {
+        "dK": 4.3655745685100555e-11,
+        "dQ": 9.313225746154785e-10,
+        "dV": 4.3655745685100555e-10
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "atomic",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 1,
+        "q_heads": 2,
+        "sk": 1025,
+        "softcap": 0.0,
+        "sq": 4,
+        "window": 0
+      },
+      "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 214861541,
+        "end_to_end_median_ns": 215724792,
+        "paired_trial_device_medians_ns": [
+          215062603,
+          214863083,
+          214942916,
+          214861541,
+          214778333,
+          214844708,
+          214641916
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          215926999,
+          215755125,
+          215791021,
+          215724792,
+          215672750,
+          215708854,
+          215410854
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 1,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            8,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0078125,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 0
+    },
+    {
+      "backend": "apple_gpu",
+      "deterministic": true,
+      "device": "apple7",
+      "dtype": "f32",
+      "latency_ms": 51.925562,
+      "logical_input_bytes": 1053696,
+      "logical_output_bytes": 1051648,
+      "max_abs_error": {
+        "dK": 9.458744898438454e-11,
+        "dQ": 9.313225746154785e-10,
+        "dV": 9.313225746154785e-10
+      },
+      "native_dispatched": true,
+      "numerically_validated": true,
+      "op": "flash_attn_bwd",
+      "reps": 70,
+      "residency": "host_input_host_output_single_command_buffer",
+      "route": "split_reduced",
+      "selector_eligible": false,
+      "semantics": {
+        "bias": false,
+        "causal": true,
+        "dim": 64,
+        "kv_heads": 2,
+        "outer": 1,
+        "q_heads": 2,
+        "sk": 1025,
+        "softcap": 0.0,
+        "sq": 4,
+        "window": 0
+      },
+      "shape": "b1_hq2_hkv2_sq4_sk1025_d64_c1_w0_bias0_sc0p0",
+      "telemetry": {
+        "device_time_coverage": 1.0,
+        "device_time_median_ns": 51069541,
+        "end_to_end_median_ns": 51925562,
+        "paired_trial_device_medians_ns": [
+          51175666,
+          51069541,
+          50979312,
+          50989395,
+          51337436,
+          50951145,
+          51070937
+        ],
+        "paired_trial_end_to_end_medians_ns": [
+          52080979,
+          51925562,
+          51838187,
+          51852708,
+          52243937,
+          51734916,
+          51972646
+        ],
+        "resources": {
+          "max_total_threads_per_threadgroup": 1024,
+          "occupancy": null,
+          "register_count": null,
+          "scratch_bytes": null,
+          "simdgroups_per_threadgroup": 2,
+          "spill_count": null,
+          "static_threadgroup_memory_bytes": 0,
+          "thread_execution_width": 32,
+          "threadgroup": [
+            64,
+            1,
+            1
+          ],
+          "threadgroup_capacity_fraction": 0.0625,
+          "threadgroup_memory_bytes": 0
+        },
+        "timing_source": "metal_command_buffer_interval"
+      },
+      "trials": 7,
+      "workspace_bytes": 1049600
+    }
+  ],
+  "schema_version": 1
+}

@@ -3,8 +3,8 @@
 **Generated. Do not hand-edit.** Regenerate with
 `python -m tessera.compiler.generated_docs --write`.
 
-The Python per-backend `package_*` families are the **bootstrap
-compiler**; the architecture is core MLIR/LLVM (Graph → Schedule →
+The Python per-backend `package_*` inventory includes bootstrap and
+artifact packagers; the architecture is core MLIR/LLVM (Graph → Schedule →
 Tile → Target via `tessera-opt`). This dashboard answers what must be
 settled before any of it is deleted: **which families does the
 mainline compiler already cover, and which would lose their only
@@ -21,33 +21,47 @@ the bootstrap row can go.
 
 | Metric | Count |
 |---|---|
-| Backends with a bootstrap module | 4 |
-| `package_*` functions total | 56 |
-| — **bootstrap** (re-enter Graph IR; prune target) | 34 |
+| Backends with a bootstrap module | 5 |
+| `package_*` functions total | 71 |
+| — **bootstrap** (re-enter Graph IR; prune target) | 45 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 15 |
-|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 1 |
+|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 2 |
 |   ·  of the bootstrap, both | 1 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 17 |
-| — compiled-route packagers (consume a lowered artifact) | 22 |
-| Lines in those modules | 8766 |
-| Classified families | 24 |
-| — covered by a compiled route | 6 |
-| — **gap (no compiled route)** | 18 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 27 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 14 |
+| — unclassified/raw inputs (not assumed compiled) | 12 |
+| Lines in those modules | 10674 |
+| Classified family/target candidates (shape admission not implied) | 53 |
+| — covered by a compiled route | 5 |
+| — **gap (no declared family route)** | 48 |
 | Packagers matching no family | 9 |
 
 ## Per-backend bootstrap surface
 
-| Target | Module | bootstrap | compiled-route | Families | Lines |
-|---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 12 | 12 | 3811 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 5 | 2894 |
-| `x86` | `x86_native.py` | 7 | 5 | 7 | 1846 |
-| `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 215 |
+| Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
+|---|---|---|---|---|---|---|
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 11 | 12 | 3811 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 0 | 5 | 2894 |
+| `x86` | `x86_native.py` | 7 | 4 | 1 | 7 | 1846 |
+| `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
+| `apple_gpu` | `apple_native.py` | 11 | 4 | 0 | 19 | 1908 |
+
+## Census limits
+
+Input annotations are inventory evidence, not proof of semantic authority.
+Any, unannotated and raw-IR inputs remain unclassified; inspect their producers and consumers.
+Known Apple computed returns are derived from their producer tables; other computed returns remain unresolved.
+A missing family mapping is not proof that no generic scheduled route accepts it.
+
+| Target | Unresolved classifier return |
+|---|---|
 
 ## Family coverage
 
-`compiled` means a compiled-route admission predicate serves that
-family. It does **not** assert the compiled route reaches parity on
+`compiled` means a family has a declared admission-predicate mapping.
+The target module must also define the corresponding package consumer.
+Actual driver paths, shapes and policies require separate checks.
+It does **not** assert the compiled route reaches parity on
 every shape and dtype — that is per-family evidence the backend
 queues own.
 
@@ -55,7 +69,7 @@ queues own.
 |---|---|---|---|
 | `nvidia_sm120` | `attention_backward_lse` | — | 🔴 **gap** |
 | `nvidia_sm120` | `attention_lse` | — | 🔴 **gap** |
-| `nvidia_sm120` | `attention_backward` | `scheduled_attention_backward.supports_scheduled_attention_backward` | ✅ compiled |
+| `nvidia_sm120` | `attention_backward` | — | 🔴 **gap** |
 | `nvidia_sm120` | `paged_kv` | — | 🔴 **gap** |
 | `nvidia_sm120` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
 | `nvidia_sm120` | `softmax` | — | 🔴 **gap** |
@@ -77,6 +91,35 @@ queues own.
 | `x86` | `cohort2` | — | 🔴 **gap** |
 | `x86` | `breadth` | — | 🔴 **gap** |
 | `x86` | `elementwise` | — | 🔴 **gap** |
+| `apple_cpu` | `batched_gemm` | — | 🔴 **gap** |
+| `apple_cpu` | `cholesky` | — | 🔴 **gap** |
+| `apple_cpu` | `cholesky_solve` | — | 🔴 **gap** |
+| `apple_cpu` | `gemm` | — | 🔴 **gap** |
+| `apple_cpu` | `lu` | — | 🔴 **gap** |
+| `apple_cpu` | `matmul` | — | 🔴 **gap** |
+| `apple_cpu` | `qr` | — | 🔴 **gap** |
+| `apple_cpu` | `softmax` | — | 🔴 **gap** |
+| `apple_cpu` | `svd` | — | 🔴 **gap** |
+| `apple_cpu` | `tri_solve` | — | 🔴 **gap** |
+| `apple_gpu` | `batched_gemm` | — | 🔴 **gap** |
+| `apple_gpu` | `softmax` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_softmax` | — | 🔴 **gap** |
+| `apple_gpu` | `transpose` | — | 🔴 **gap** |
+| `apple_gpu` | `gelu` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_gelu` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_popcount` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_count_nonzero` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_topk` | — | 🔴 **gap** |
+| `apple_gpu` | `svd` | — | 🔴 **gap** |
+| `apple_gpu` | `value_cholesky` | — | 🔴 **gap** |
+| `apple_gpu` | `value_cholesky_solve` | — | 🔴 **gap** |
+| `apple_gpu` | `value_clifford_geometric_product` | — | 🔴 **gap** |
+| `apple_gpu` | `value_ebm_energy_quadratic` | — | 🔴 **gap** |
+| `apple_gpu` | `value_ebm_langevin_step` | — | 🔴 **gap** |
+| `apple_gpu` | `value_ebm_partition_exact` | — | 🔴 **gap** |
+| `apple_gpu` | `value_ebm_refinement` | — | 🔴 **gap** |
+| `apple_gpu` | `value_rl_ppo_policy_loss` | — | 🔴 **gap** |
+| `apple_gpu` | `value_tri_solve` | — | 🔴 **gap** |
 
 ## Packagers matching no classified family
 

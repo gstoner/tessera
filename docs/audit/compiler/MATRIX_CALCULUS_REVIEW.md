@@ -1,11 +1,18 @@
 ---
-last_updated: 2026-08-20
+last_updated: 2026-09-07
 audit_role: reference
 scope: python/tessera/ops (linalg family), python/tessera/autodiff/{vjp,jvp,grad,transforms,tape}.py, python/tessera/debug.py, python/tessera/compiler/primitive_coverage.py, python/tessera/ga/manifold.py, python/tessera/ebm/geo_sampling.py
 companions: DIFFERENTIABLE_PROGRAMMING_REVIEW.md (the sibling book review this is a delta against) · AUTODIFF_NEXTGEN_PLAN.md · AUTODIFF_ARCHITECTURE_REVIEW.md · RIEMANNIAN_OT_PLAN.md · ../../spec/AUTODIFF_SPEC.md
 source_text: Bright, Edelman & Johnson, "Matrix Calculus (for Machine Learning and Beyond)" (arXiv:2501.14787v1, MIT 18.S096/18.063)
 example: ../../../examples/matrix_calculus/
 ---
+
+> Current ownership review (2026-09-07): use the
+> [math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+> for live residuals and dependency order. Historical absence claims, timings,
+> fleet instructions and effort estimates below describe their dated review;
+> reference implementation is not native execution or promotion evidence.
+
 
 # Matrix Calculus — Book Review Against the Tessera Surface
 

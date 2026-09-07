@@ -35,8 +35,8 @@ whole backend reads as unserved.
 
 | Target | Why unclassified |
 |---|---|
-| `apple_cpu` | native_package_kind returns a computed expression, not string literals, so the AST walker derives no families |
-| `apple_gpu` | not in bootstrap_prune_audit._BACKEND_MODULES, though driver.py has a live scheduled dispatch for it |
+| `apple_cpu` | computed families are inventoried; primitive membership and shape-policy joins remain unverified |
+| `apple_gpu` | computed value families are inventoried; primitive membership and shape-policy joins remain unverified |
 
 ## Per primitive
 

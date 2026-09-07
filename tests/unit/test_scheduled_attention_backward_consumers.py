@@ -119,7 +119,7 @@ def _apple_module(
     )])
 
 
-def _apple_backward_reference(do, q, key, value, *, scale, causal):
+def _apple_backward_reference(do, q, key, value, *, scale, causal, bias=None):
     """Analytic VJP in float64, derived from the softmax Jacobian.
 
     Independent of the kernel under test: comparing a kernel to itself proves
@@ -133,6 +133,8 @@ def _apple_backward_reference(do, q, key, value, *, scale, causal):
     v_x = np.repeat(value, group, axis=1).astype(np.float64)
     q_d, do_d = q.astype(np.float64), do.astype(np.float64)
     scores = np.einsum("bhqd,bhkd->bhqk", q_d, k_x) * scale
+    if bias is not None:
+        scores += bias.astype(np.float64)
     if causal:
         offset = max(sk - sq, 0)
         rows = np.arange(sq)[:, None] + offset

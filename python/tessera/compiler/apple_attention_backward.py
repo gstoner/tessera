@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from math import prod
+import os
 from pathlib import Path
 from typing import Sequence
 
@@ -116,6 +117,11 @@ def resolve_route(k_shape: Sequence[int], v_shape: Sequence[int], *,
         raise AppleAttentionBackwardPolicyError(
             "workspace_limit_bytes must be non-negative")
     automatic = route == "auto"
+    if automatic and ledger_path is None and not os.environ.get("TESSERA_APPLE_ROUTE_LEDGER"):
+        # Dedicated evidence must retain its own measured runtime/SDK context;
+        # merging it into another family's ledger would misattribute evidence.
+        ledger_path = (Path(__file__).resolve().parents[3] / "benchmarks/baselines/"
+                       "apple7_attention_backward_strict_v2_route_ledger.json")
     if automatic:
         route = (production_route_for(
             op="flash_attn_bwd", shape=selector_key, dtype=dtype,

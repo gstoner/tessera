@@ -617,7 +617,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
         (x86 && schedule.storage != "f32")
         || (nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
         (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
-        (apple_gpu && schedule.storage != "f32"))
+        (apple_gpu && schedule.storage != "f32" && schedule.storage != "f16" && schedule.storage != "bf16"))
       return failure();
     schedule.family = "softmax";
     schedule.rows = 1;
@@ -1379,6 +1379,8 @@ depthAttentionScheduleDigest(const DepthAttentionSchedule &schedule) {
                      /*LowerCase=*/true);
 }
 
+static bool hasAppleRecomputeVJP(Operation *op);
+
 static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
   if (!module || op->getName().getStringRef() != "tessera.flash_attn" ||
@@ -1434,6 +1436,12 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   if (k.getElementType() != qElement || v.getElementType() != qElement)
     return failure();
   schedule.storage = storageName(qElement);
+  // Low-precision forward IR is admitted only as the recompute companion of
+  // the paired VJP. The standalone Apple forward runtime remains f32-only.
+  auto owner = op->getParentOfType<func::FuncOp>();
+  auto checkpoint = owner ? owner->getAttrOfType<StringAttr>("tessera.lse_checkpoint") : StringAttr();
+  bool appleRecompute = checkpoint && checkpoint.getValue() == "recompute" &&
+                        hasAppleRecomputeVJP(op);
   if ((nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
       (x86 && schedule.storage != "f32") ||
       (rocm && (schedule.storage != "f16" && schedule.storage != "bf16")) ||
@@ -1441,7 +1449,8 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
                 schedule.headDim % 16 != 0)) ||
       // The Apple GQA MSL ABI is f32-only, shares one head/value dim, and
       // rejects D > 256 before submission.
-      (apple_gpu && (schedule.storage != "f32" ||
+      (apple_gpu && ((schedule.storage != "f32" &&
+                     !(appleRecompute && (schedule.storage == "f16" || schedule.storage == "bf16"))) ||
                      schedule.headDim != schedule.valueDim ||
                      schedule.headDim > 256)))
     return failure();
@@ -1740,6 +1749,58 @@ getAttentionBackwardSchedule(Operation *op) {
     return failure();
   schedule.workspaceBytes = attentionBackwardWorkspaceBytes(schedule);
   return schedule;
+}
+
+// A checkpoint attribute is not a proof of an executable companion. Require
+// reciprocal symbol references and validate the actual backward envelope and
+// semantic operands before admitting a low-precision Apple forward recipe.
+static bool hasAppleRecomputeVJP(Operation *op) {
+  auto forward = op->getParentOfType<func::FuncOp>();
+  auto module = op->getParentOfType<ModuleOp>();
+  if (!forward || !module) return false;
+  auto ref = forward->getAttrOfType<FlatSymbolRefAttr>("tessera.vjp");
+  auto backward = ref ? module.lookupSymbol<func::FuncOp>(ref.getValue())
+                      : func::FuncOp();
+  if (!backward || backward == forward) return false;
+  auto primal = backward->getAttrOfType<FlatSymbolRefAttr>("tessera.primal");
+  if (!primal || primal.getValue() != forward.getSymName()) return false;
+  SmallVector<Operation *> candidates;
+  backward.walk([&](Operation *candidate) {
+    if (candidate->getName().getStringRef() == "tessera_attn.backward")
+      candidates.push_back(candidate);
+  });
+  if (candidates.size() != 1) return false;
+  Operation *vjp = candidates.front();
+  if (failed(getAttentionBackwardSchedule(vjp)) ||
+      forward.getNumArguments() != op->getNumOperands() ||
+      backward.getNumArguments() != op->getNumOperands() + 1)
+    return false;
+  for (unsigned i = 0; i < op->getNumOperands(); ++i) {
+    if (op->getOperand(i) != forward.getArgument(i) ||
+        vjp->getOperand(i + 1) != backward.getArgument(i + 1) ||
+        op->getOperand(i).getType() != vjp->getOperand(i + 1).getType())
+      return false;
+  }
+  if (vjp->getOperand(0) != backward.getArgument(0)) return false;
+  // A bias-free forward must pair with the canonical zero-bias VJP form.
+  if (op->getNumOperands() == 3) {
+    auto zero = vjp->getOperand(4).getDefiningOp<arith::ConstantOp>();
+    auto values = zero ? dyn_cast<DenseFPElementsAttr>(zero.getValue())
+                       : DenseFPElementsAttr();
+    if (!values || !values.isSplat() ||
+        !values.getSplatValue<llvm::APFloat>().isZero()) return false;
+  }
+  for (StringRef name : {"causal", "window_left", "window_right", "dropout_seed"})
+    if (!op->getAttr(name) || op->getAttr(name) != vjp->getAttr(name))
+      return false;
+  for (StringRef name : {"scale", "softcap", "dropout_p"}) {
+    auto a = op->getAttrOfType<FloatAttr>(name);
+    auto b = vjp->getAttrOfType<FloatAttr>(name);
+    if (!a || !b || !a.getValue().isFinite() || !b.getValue().isFinite() ||
+        static_cast<float>(a.getValueAsDouble()) !=
+            static_cast<float>(b.getValueAsDouble())) return false;
+  }
+  return true;
 }
 
 static std::string

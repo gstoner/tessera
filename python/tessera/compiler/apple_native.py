@@ -39,6 +39,13 @@ APPLE_FLASH_ATTN_BWD_VARIANT_ABIS = {
         "tessera.apple.flash_attn_bwd.q_k_v_do_bias_dq_dk_dv.bf16.v1",
     ),
 }
+APPLE_FLASH_ATTN_BWD_BIAS_F32_ABIS = {
+    storage: (f"tessera_apple_gpu_flash_attn_bwd_variant_{storage}_bias_f32_status",
+              f"tessera.apple.flash_attn_bwd.q_k_v_do_bias_dq_dk_dv.{storage}_bias_f32.v1")
+    for storage in ("f16", "bf16")
+}
+APPLE_FLASH_ATTN_BWD_ALL_ABIS = {**APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
+    **{f"{k}_bias_f32": v for k, v in APPLE_FLASH_ATTN_BWD_BIAS_F32_ABIS.items()}}
 # MSL dK/dV route selector: 0 serial, 1 atomic (nondeterministic), 2 split.
 # The shared contract declares a two-way split with ascending fixed-order
 # reduction, so the split route is the only faithful mapping.
@@ -50,10 +57,10 @@ APPLE_BMM_BF16_SYMBOL = "tessera_apple_gpu_bmm_bf16"
 APPLE_SOFTMAX_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.f32.v1"
 APPLE_SOFTMAX_F32_SYMBOL = "tessera_apple_gpu_softmax_f32"
 APPLE_SOFTMAX_DYNAMIC_F32_ABI = "tessera.apple.softmax.x_o_rows_columns.dynamic.f32.v1"
-APPLE_SOFTMAX_F16_ABI = "tessera.apple.softmax.x_o_rows_columns.f16.v1"
-APPLE_SOFTMAX_F16_SYMBOL = "tessera_apple_gpu_softmax_f16"
-APPLE_SOFTMAX_BF16_ABI = "tessera.apple.softmax.x_o_rows_columns.bf16.v1"
-APPLE_SOFTMAX_BF16_SYMBOL = "tessera_apple_gpu_softmax_bf16"
+APPLE_SOFTMAX_F16_ABI = "tessera.apple.softmax.x_o_rows_columns.f16.v2"
+APPLE_SOFTMAX_F16_SYMBOL = "tessera_apple_gpu_softmax_f16_status"
+APPLE_SOFTMAX_BF16_ABI = "tessera.apple.softmax.x_o_rows_columns.bf16.v2"
+APPLE_SOFTMAX_BF16_SYMBOL = "tessera_apple_gpu_softmax_bf16_status"
 APPLE_GELU_F32_ABI = "tessera.apple.gelu.x_o_elements.f32.v1"
 APPLE_GELU_F32_SYMBOL = "tessera_apple_gpu_gelu_f32"
 APPLE_GELU_DYNAMIC_F32_ABI = "tessera.apple.gelu.x_o_elements.dynamic.f32.v1"
@@ -613,6 +620,7 @@ def package_scheduled_matmul(
     artifact.validate()
     if artifact.target != "apple_gpu" or artifact.architecture != "apple7":
         raise ValueError("Apple GPU scheduled matmul requires the apple7 contract")
+    _verify_matmul_schedule_ancestry(artifact)
     if (
         (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
         == ("fp16", "fp16", "fp32")
@@ -977,6 +985,201 @@ def _package_scheduled_reduce(
     return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
+def _verify_schedule_ancestry(artifact) -> str:
+    """Verify the retained native parent before packaging its Tile product."""
+    import re
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError('Apple scheduled kernel requires native Schedule replay')
+    replayed = run_tessera_opt(tool, artifact.schedule_ir, '--tessera-schedule-to-tile')
+    if replayed != artifact.tile_ir:
+        raise ValueError('Apple kernel Tile IR disagrees with native Schedule replay')
+    # Read the native printer's module header, not Python descriptor fields or
+    # matching strings inside a nested operation. This bounded producer has a
+    # flat module attribute dictionary; unfamiliar headers fail closed.
+    header = re.match(r'\s*module attributes \{([^{}]*)\}', replayed)
+    if header is None or any(
+        re.search(r'(?:^|,)\s*' + re.escape(key) + r' = "' + value + r'"(?:,|$)',
+                  header.group(1)) is None
+        for key, value in [('tessera.target', 'apple_gpu'), ('tessera.arch', 'apple7')]
+    ):
+        raise ValueError('Apple kernel native parent target requires apple7/apple_gpu')
+    return run_tessera_opt(tool, artifact.schedule_ir, '--canonicalize')
+
+
+def _verify_attention_schedule_ancestry(artifact) -> None:
+    """Project the supported attention ABI from the native printed parent."""
+    import re
+    import struct
+    parent = _verify_schedule_ancestry(artifact)
+    backward = isinstance(artifact, ScheduledAttentionBackwardArtifact)
+    opname = 'attention_backward' if backward else 'attention'
+    functions = re.findall(r'func.func @(\w+)\(([^\n]*)\) -> ([^\n]+)\n((?:(?!  func.func)[\s\S])*?)(?=\n  \})', parent)
+    selected = [(name, args, results, body) for name, args, results, body in functions
+                if re.search(r' = schedule\.' + opname + r' ', body)]
+    if len(selected) != 1:
+        raise ValueError('Apple attention projection requires one native function')
+    name, args, results, body = selected[0]
+    attrs_list = re.findall(r' = schedule\.' + opname + r' [^{]+\{([^{}]*)\}', body)
+    if len(attrs_list) != 1:
+        raise ValueError('Apple attention projection requires one native schedule')
+    attrs = attrs_list[0]
+    tensor = r'tensor<([1-9][0-9]*)x([1-9][0-9]*)x([1-9][0-9]*)x([1-9][0-9]*)x(f32|f16|bf16)>'
+    inputs = re.findall(tensor, args)
+    outputs = re.findall(tensor, results)
+    bias = artifact.bias_name is not None
+    if len(inputs) != (4 if backward else 3) + int(bias):
+        raise ValueError('Apple attention descriptor bias/input count disagrees with native IR')
+    q, k, v = inputs[1:4] if backward else inputs[:3]
+    b, hq, sq, d, storage = q
+    bk, hkv, sk, dk, ks = k
+    bv, hv, sv, dv, vs = v
+    out = (b, hq, sq, dv, storage)
+    expected_outputs = [q[:-1] + ('f32',), k[:-1] + ('f32',), v[:-1] + ('f32',)] if backward else [out]
+    if (b != bk or b != bv or hkv != hv or sk != sv or d != dk
+            or storage != ks or storage != vs or outputs != expected_outputs
+            or (backward and inputs[0] != out)
+            or (bias and inputs[-1] != (b, hq, sq, sk, 'f32'))):
+        raise ValueError('Apple attention native tensor ABI is unsupported')
+    expected = dict(function_name=name, dims=tuple(map(int, (b, hq, hkv, sq, sk, d, dv))),
+                    storage=storage, dtype={'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage])
+    if backward:
+        # The backward producer synthesizes a native entry; function_name is
+        # the public source alias and is not used to bind the runtime symbol.
+        expected.pop('function_name')
+    for field, value in expected.items():
+        if type(getattr(artifact, field)) is not type(value) or getattr(artifact, field) != value:
+            raise ValueError(f'Apple attention descriptor {field} disagrees with native IR')
+    fields = ['scale', 'causal', 'window_left', 'window_right', 'softcap', 'dropout_p',
+              'dropout_seed', 'workgroup_size', 'recurrence']
+    fields += (['query_block', 'key_block', 'split_count', 'workspace_bytes',
+                'lse_checkpoint_policy', 'lse_checkpoint_selection'] if backward else
+               ['tile_q', 'tile_kv', 'accum', 'backward_lse_policy', 'backward_lse_selection'])
+    for field in fields:
+        value = getattr(artifact, field)
+        match = re.search(r'(?:^|, )' + field + r' = ("[^"]*"|true|false|[-+0-9.eE]+)(?: : (f32|i64))?(?:,|$)', attrs)
+        if match is None:
+            raise ValueError(f'Apple attention native field {field} is missing')
+        raw, typ = match.groups()
+        if raw.startswith('"'):
+            projected = raw[1:-1]
+        elif raw in ('true', 'false'):
+            projected = raw == 'true'
+        elif typ == 'i64':
+            projected = int(raw)
+        elif typ == 'f32':
+            projected = struct.unpack('f', struct.pack('f', float(raw)))[0]
+            if type(value) is float:
+                value = struct.unpack('f', struct.pack('f', value))[0]
+        else:
+            raise ValueError('Apple attention native attribute type is unsupported')
+        if type(value) is not type(projected) or value != projected:
+            raise ValueError(f'Apple attention descriptor {field} disagrees with native IR')
+    if f'bias = {str(bias).lower()}' not in attrs or 'accum = "f32"' not in attrs:
+        raise ValueError('Apple attention bias/accumulation disagrees with native IR')
+    if backward and (artifact.reduction_order != (0, 1) or
+                     'reduction_order = array<i64: 0, 1>' not in attrs):
+        raise ValueError('Apple attention reduction order disagrees with native IR')
+    aliases = (list(artifact.input_names) + list(artifact.output_names) if backward else
+               [artifact.q_name, artifact.k_name, artifact.v_name, artifact.output_name])
+    if bias:
+        aliases.append(artifact.bias_name)
+    if any(type(n) is not str or not n.isidentifier() for n in aliases) or len(set(aliases)) != len(aliases):
+        raise ValueError('Apple attention host binding aliases must be distinct identifiers')
+
+
+def _verify_matmul_schedule_ancestry(artifact: ScheduledMatmulArtifact) -> None:
+    import re
+    parent = _verify_schedule_ancestry(artifact)
+    tensor = r'tensor<([1-9][0-9]*)x([1-9][0-9]*)x(f16|f32)>'
+    functions = re.findall(r'func.func @(\w+)\(%\w+: ' + tensor
+                           + r', %\w+: ' + tensor + r'\) -> ' + tensor + r' \{', parent)
+    ops = re.findall(r' = schedule.matmul %\w+ \{([^{}]*)\}', parent)
+    if len(functions) != 1 or len(ops) != 1 or parent.count('func.func ') != 1:
+        raise ValueError('Apple matmul descriptor requires one native rank-two plain product')
+    name, m, k, a, kb, n, b, mo, no, output = functions[0]
+    if k != kb or m != mo or n != no or a != b or output != 'f32':
+        raise ValueError('Apple native matmul tensor contract is unsupported')
+    attrs = ops[0]
+    for value in ['accum = "f32"', 'activation = "none"', 'bias = false',
+                  'residual = false', 'a_layout = "row_major"', 'b_layout = "col_major"',
+                  'output = "f32"', f'storage = "{a}"']:
+        if re.search(r'(?:^|, )' + re.escape(value) + r'(?:,|$)', attrs) is None:
+            raise ValueError('Apple native matmul layout/arithmetic policy is unsupported')
+    expected = dict(function_name=name, m=int(m), n=int(n), k=int(k),
+                    a_dtype={'f16':'fp16', 'f32':'fp32'}[a],
+                    b_dtype={'f16':'fp16', 'f32':'fp32'}[b], output_dtype='fp32',
+                    storage=a, accum='f32', activation='none', bias_name=None,
+                    residual_name=None, dynamic_m=False, dynamic_n=False, dynamic_k=False)
+    for key in ('macro_tile_m', 'macro_tile_n'):
+        tile_match = re.search(r'(?:^|, )' + key + r' = ([1-9][0-9]*) : i64(?:,|$)', attrs)
+        if tile_match is None:
+            raise ValueError('Apple native matmul lacks its tile decision')
+        expected[key] = int(tile_match[1])
+    for field, value in expected.items():
+        actual = getattr(artifact, field)
+        if type(actual) is not type(value) or actual != value:
+            raise ValueError(f'Apple matmul descriptor field {field} disagrees with native IR')
+
+
+def _verify_kernel_schedule_ancestry(artifact: ScheduledKernelArtifact) -> None:
+    """Project the bounded unary ABI from native-printed IR, not Graph objects."""
+    import math
+    import re
+    parent = _verify_schedule_ancestry(artifact)
+    tensor = r'tensor<((?:[1-9][0-9]*x)*)(f32|f16|bf16)>'
+    functions = re.findall(r'func.func @([\w]+)\(%[\w]+: ' + tensor
+                           + r'\) -> ' + tensor + r' \{', parent)
+    if len(functions) != 1 or parent.count('func.func ') != 1:
+        raise ValueError('Apple unary descriptor requires one static f32 native function')
+    name, input_dims, storage, output_dims, output_storage = functions[0]
+    if storage != output_storage:
+        raise ValueError('Apple unary input/output storage disagrees')
+    input_shape = tuple(int(d) for d in input_dims.split('x') if d)
+    output_shape = tuple(int(d) for d in output_dims.split('x') if d)
+    ops = re.findall(r' = schedule\.(softmax|reduce) %\w+ \{([^{}]*)\}', parent)
+    if len(ops) != 1 or not input_shape:
+        raise ValueError('Apple unary descriptor requires one native unary schedule')
+    family, attrs = ops[0]
+    required = ['accum = "f32"', f'storage = "{storage}"', 'workgroup_size = 1 : i64']
+    if family == 'softmax':
+        required += ['exp_mode = "accurate"', 'ftz = false']
+    if any(re.search(r'(?:^|, )' + re.escape(value) + r'(?:,|$)', attrs) is None
+           for value in required):
+        raise ValueError('Apple unary native arithmetic policy is unsupported')
+    axis_match = re.search(r'(?:^|, )axis = (-?[0-9]+) : i64(?:,|$)', attrs)
+    if axis_match is None:
+        raise ValueError('Apple unary descriptor lacks native axis')
+    axis = int(axis_match[1])
+    expected = dict(function_name=name, input_shape=input_shape,
+                    output_shape=output_shape, family=family, dtype={'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage],
+                    storage=storage, accum='f32', keepdims=False,
+                    workgroup_size=1, schedule='serial', epsilon=0.0)
+    if family == 'softmax':
+        if axis != -1 or output_shape != input_shape:
+            raise ValueError('Apple native softmax shape/axis is unsupported')
+        expected.update(kind='softmax', axis=-1, rows=math.prod(input_shape[:-1]),
+                        columns=input_shape[-1], outer=1, axis_extent=1, inner=1)
+    else:
+        axis = axis + len(input_shape) if axis < 0 else axis
+        kind = re.search(r'(?:^|, )kind = "(sum|mean|max)"(?:,|$)', attrs)
+        if axis != len(input_shape)-1 or output_shape != input_shape[:-1] or kind is None:
+            raise ValueError('Apple native reduction shape/axis/kind is unsupported')
+        expected.update(kind=kind[1], axis=axis, rows=1, columns=1,
+                        outer=math.prod(input_shape[:-1]), axis_extent=input_shape[-1], inner=1)
+    for field, value in expected.items():
+        actual = getattr(artifact, field)
+        if type(actual) is not type(value) or actual != value:
+            raise ValueError(f'Apple unary descriptor field {field} disagrees with native IR')
+    # Names remain explicit host binding aliases; physical order and shapes
+    # above come from IR. Do not relabel aliases as native SSA provenance.
+    if (type(artifact.input_name) is not str or type(artifact.output_name) is not str
+            or not artifact.input_name.isidentifier() or not artifact.output_name.isidentifier()
+            or artifact.input_name == artifact.output_name):
+        raise ValueError('Apple unary buffer aliases must be distinct identifiers')
+
+
 def package_scheduled_kernel(
     artifact: ScheduledKernelArtifact,
     *,
@@ -1001,11 +1204,14 @@ def package_scheduled_kernel(
     if (
         artifact.target != "apple_gpu"
         or artifact.architecture != "apple7"
-        or (artifact.dtype, artifact.storage, artifact.accum) != ("fp32", "f32", "f32")
+        or artifact.accum != "f32"
+        or (artifact.dtype, artifact.storage) not in (("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16"))
+        or (artifact.family != "softmax" and artifact.storage != "f32")
     ):
         raise ValueError(
             "Apple GPU scheduled kernel requires the f32 apple7 contract"
         )
+    _verify_kernel_schedule_ancestry(artifact)
     if artifact.family == "reduce":
         return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
     if artifact.family != "softmax":
@@ -1018,11 +1224,12 @@ def package_scheduled_kernel(
             "E2E-REAL-5 Apple GPU scheduled softmax requires a fresh Tessera "
             "Apple GPU runtime dylib"
         )
-    symbol, abi = APPLE_SOFTMAX_F32_SYMBOL, APPLE_SOFTMAX_F32_ABI
+    symbol, abi = _SOFTMAX_VARIANTS[artifact.dtype]
+    alignment = 4 if artifact.storage == "f32" else 2
     rows, columns = artifact.rows, artifact.columns
     target_ir = (
         f'tessera_apple.gpu.kernel_call @{symbol} '
-        f'{{abi = "{abi}", storage = "f32", status = "executable"}}'
+        f'{{abi = "{abi}", storage = "{artifact.storage}", status = "executable"}}'
     )
     payload = library.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
@@ -1043,10 +1250,10 @@ def package_scheduled_kernel(
         # (rows, columns) happens at submission, where it is exact because
         # softmax rows are independent.
         buffers=(
-            BufferBinding(0, artifact.input_name, "input", "fp32",
-                          len(artifact.input_shape), "row_major", 4),
-            BufferBinding(1, artifact.output_name, "output", "fp32",
-                          len(artifact.output_shape), "row_major", 4),
+            BufferBinding(0, artifact.input_name, "input", artifact.dtype,
+                          len(artifact.input_shape), "row_major", alignment),
+            BufferBinding(1, artifact.output_name, "output", artifact.dtype,
+                          len(artifact.output_shape), "row_major", alignment),
         ),
         shape_guards=tuple(
             [ShapeGuard(artifact.input_name, axis, "eq", extent)
@@ -1066,7 +1273,7 @@ def package_scheduled_kernel(
             "logical_input_shape": list(artifact.input_shape),
             "rows": rows,
             "columns": columns,
-            "storage": "f32",
+            "storage": artifact.storage,
             "accum": "f32",
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
@@ -1091,7 +1298,7 @@ def package_scheduled_attention(
     Scope is deliberately the ABI's own envelope: f32 storage, MHA/GQA/MQA,
     shared head/value dim, ``D <= 256``, one symmetric window, no dropout.
     Anything outside it never reaches here — the shared contract fails closed.
-    Attention **backward** has no Apple scheduled consumer in this slice.
+    Backward uses the separate paired scheduled consumer below.
     """
     artifact.validate()
     if (
@@ -1114,6 +1321,7 @@ def package_scheduled_attention(
             "Apple GPU scheduled attention requires shared head/value dim <= 256 "
             "and a whole GQA group size"
         )
+    _verify_attention_schedule_ancestry(artifact)
     library = _runtime_library_path()
     if library is None:
         raise RuntimeError(
@@ -1243,13 +1451,16 @@ def package_scheduled_attention_backward(
         raise ValueError(
             "Apple GPU attention backward requires the two-way ascending split"
         )
+    _verify_attention_schedule_ancestry(artifact)
     library = _runtime_library_path()
     if library is None:
         raise RuntimeError(
             "E2E-REAL-5B Apple GPU scheduled attention backward requires a "
             "fresh Tessera Apple GPU runtime dylib"
         )
-    symbol, abi = APPLE_FLASH_ATTN_BWD_VARIANT_ABIS[artifact.storage]
+    symbol, abi = (APPLE_FLASH_ATTN_BWD_BIAS_F32_ABIS[artifact.storage]
+                   if artifact.bias_name is not None and artifact.storage != "f32"
+                   else APPLE_FLASH_ATTN_BWD_VARIANT_ABIS[artifact.storage])
     storage_dtype = {"f32": "fp32", "f16": "fp16", "bf16": "bf16"}[artifact.storage]
     alignment = 4 if artifact.storage == "f32" else 2
     target_ir = (
@@ -1286,8 +1497,8 @@ def package_scheduled_attention_backward(
     ]
     if artifact.bias_name is not None:
         inputs.append(
-            BufferBinding(4, artifact.bias_name, "input", storage_dtype, 4,
-                          "row_major", alignment)
+            BufferBinding(4, artifact.bias_name, "input", "fp32", 4,
+                          "row_major", 4)
         )
         guards.extend([
             ShapeGuard(artifact.bias_name, 0, "eq", batch),
@@ -1336,45 +1547,12 @@ def package_scheduled_attention_backward(
 
 
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package one static rank-2 f32 softmax through its named Apple ABI."""
-    contract = _softmax_contract(module)
-    if contract is None:
-        raise ValueError("Apple softmax package requires one static f32 rank-2 last-axis softmax")
-    library = _runtime_library_path()
-    if library is None:
-        raise RuntimeError("APPLE-E2E-1 requires a fresh Tessera Apple GPU runtime dylib")
-    x, out, (rows, columns) = contract
-    dtype = str(module.functions[0].args[0].ir_type.dtype or "")
-    if dtype not in _SOFTMAX_VARIANTS:
-        raise ValueError("Apple softmax package requires f32, f16, or bf16 storage")
-    symbol, abi = _SOFTMAX_VARIANTS[dtype]
-    target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
-                 f'{{abi = "{abi}", storage = "{dtype}", status = "executable"}}')
-    payload = library.read_bytes()
-    digest = hashlib.sha256(payload).hexdigest()
-    image = NativeImageArtifact(
-        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
-        compiler_fingerprint="apple-runtime-abi-v1",
-        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
-        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
-        payload=payload, entry_points=(NativeEntryPoint(symbol, abi),),
-        compile_state="prepackaged",
-    )
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=(BufferBinding(0, x, "input", dtype, 2, "row_major", 4 if dtype == "fp32" else 2),
-                 BufferBinding(1, out, "output", dtype, 2, "row_major", 4 if dtype == "fp32" else 2)),
-        shape_guards=tuple(
-            ShapeGuard(name, axis, "eq", extent)
-            for name, shape in ((x, (rows, columns)), (out, (rows, columns)))
-            for axis, extent in enumerate(shape)
-        ),
-        geometry=LaunchGeometry(policy="apple_msl_softmax"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
-        provenance={"work_item": "APPLE-E2E-1", "route": "apple_softmax_native_library",
-                    "op_kind": "softmax", "shape": [rows, columns], "storage": dtype},
-    )
-    return AppleNativePackage("tile.softmax_kernel", target_ir, target_ir, image, descriptor)
+    """Compatibility frontend; the native artifact owns static softmax packaging."""
+    if _softmax_contract(module) is None:
+        raise ValueError("Apple softmax requires static rank-2 last-axis semantics")
+    from .scheduled_kernel import lower_scheduled_kernel
+    return package_scheduled_kernel(
+        lower_scheduled_kernel(module, target='apple_gpu'), pipeline_name=pipeline_name)
 
 
 def package_dynamic_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:

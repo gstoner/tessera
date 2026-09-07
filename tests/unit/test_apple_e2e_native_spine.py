@@ -9,6 +9,7 @@ import numpy as np
 from tessera.compiler.apple_native import APPLE_BMM_F32_ABI, APPLE_BMM_F32_SYMBOL
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.pipeline_registry import target_pipeline_lookup
+from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
 def _module(dtype: str = "fp32") -> GraphIRModule:
@@ -219,6 +220,7 @@ def test_apple_native_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path, 
     assert package.descriptor.provenance["work_item"] == "APPLE-E2E-1"
 
 
+@pytest.mark.skipif(find_tessera_opt() is None, reason='requires native softmax lowering')
 def test_apple_softmax_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path) -> None:
     from tessera.compiler import apple_native
 
@@ -235,6 +237,7 @@ def test_apple_softmax_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path)
 
 
 @pytest.mark.parametrize("scheduled_available", [False, True])
+@pytest.mark.skipif(find_tessera_opt() is None, reason='requires native softmax lowering')
 def test_apple_gpu_package_trace_uses_descriptor_provenance(
     monkeypatch, tmp_path, scheduled_available: bool
 ) -> None:
@@ -274,9 +277,7 @@ def test_apple_gpu_package_trace_uses_descriptor_provenance(
                  if event.pass_name == "apple-gpu-native-package")
     assert event.metadata["dtype"] == "fp32"
     assert event.metadata["op_family"] == "softmax"
-    assert event.metadata["work_item"] == (
-        "E2E-REAL-5" if scheduled_available else "APPLE-E2E-1"
-    )
+    assert event.metadata["work_item"] == "E2E-REAL-5"
 
 
 def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None, dtype="fp32"):

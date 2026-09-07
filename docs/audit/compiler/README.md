@@ -160,10 +160,8 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`EGGROLL_SUPPORT_PLAN.md`](EGGROLL_SUPPORT_PLAN.md) | Gradient-free / Evolution-Strategies track: low-rank ES op contract, reference tier, and operator-improvement catalog. |
 | [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) | Correctness/evidence rung and promotion contract. |
 | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | W4-EFFECTS-1: operation-owned recorded products that let keyed RNG, recorded-state mutation, and ordered collectives enter a differentiated region without weakening the fail-closed gate. States the admissibility criterion (reproducibility + confinement), the per-class verdicts including why I/O stays closed, and five delivery slices. Global order defers to `INTEGRATED_COMPILER_PLAN.md` queue order 2. |
-| [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | FORGE (arXiv:2606.22932) assessment and the residency-aware epilogue-fusion track it opens: locality lattice, static materialization proof, `matmul → optimizer` fusion, fail-closed clipping/routing keys, and the precision-realizability oracle. Numeric contract in `tests/unit/test_fused_wgrad_optimizer_contract.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | Coalition-lattice / equilibrium operator family: subset zeta/Möbius butterfly, semivalues, differentiable equilibria, regret/CFR dynamics, and the numerically verified oracle set (`research/game_theory/`). Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`INTRA_KERNEL_FEEDBACK_PLAN.md`](INTRA_KERNEL_FEEDBACK_PLAN.md) | IKF-1: intra-kernel measurement as compiler training data (assessment of CUTLASS IKET, 2026-08-27). Per-instance indexed-slot records keyed by schedule coordinates, constant-clock contract with fail-closed validity rules, offline stall classification + realized critical path, cost-model coefficient fitting with roofline prior bands and paired-instance statistics, the explain-vs-decide (`instr_level`) arbiter guard, and delivery phases IKF-P0..P6 (ROCm gfx1151 first). Global order defers to `INTEGRATED_COMPILER_PLAN.md`; not yet bound to a queue entry (plan §13). |
-| [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md) | MSW-1..MSW-9: a host-free reference-lane workstream derived from two tensor-calculus texts (Sochi) and a deep-learning theory book (Jentzen/Kuckuck/von Wurstemberger, arXiv:2310.20360v3). Higher-order autodiff fail-closed guard (landed) and exact jet path, optimizer breadth, a vector-identity law family, coordinate-aware field calculus, contraction normal form, two samples, and ANN-calculus fusion laws. Orthogonal to the integrated queue's physical-execution items rather than competing with them; global order still defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis and backend-lift details. |
 | [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) | PDE-operator semantics, symbol classification, discrete-stability certificates, and the stencil/halo contract queue. |
 | [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md) | Geometry/implicit-differentiation consumer and acceptance workload. |
@@ -176,6 +174,8 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 
 | Document | Use |
 |---|---|
+| [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | Historical proposal now archived; live ownership note. Original FORGE (arXiv:2606.22932) assessment and the residency-aware epilogue-fusion track it opens: locality lattice, static materialization proof, `matmul → optimizer` fusion, fail-closed clipping/routing keys, and the precision-realizability oracle. Numeric contract in `tests/unit/test_fused_wgrad_optimizer_contract.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
+| [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md) | Consolidated routing note (original proposal archived). MSW-1..MSW-9: a host-free reference-lane workstream derived from two tensor-calculus texts (Sochi) and a deep-learning theory book (Jentzen/Kuckuck/von Wurstemberger, arXiv:2310.20360v3). Higher-order autodiff fail-closed guard (landed) and exact jet path, optimizer breadth, a vector-identity law family, coordinate-aware field calculus, contraction normal form, two samples, and ANN-calculus fusion laws. Orthogonal to the integrated queue's physical-execution items rather than competing with them; global order still defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | Historical AD routing: [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md), [`AUTODIFF_UNIFICATION_PLAN.md`](AUTODIFF_UNIFICATION_PLAN.md), [`AUTODIFF_ARCHITECTURE_REVIEW.md`](AUTODIFF_ARCHITECTURE_REVIEW.md) | Redirects to archived designs and the active AD plan; no independent queues. |
 | [`DIFFERENTIABLE_PROGRAMMING_REVIEW.md`](DIFFERENTIABLE_PROGRAMMING_REVIEW.md) | Book-derived delta; distinguishes Python reference work from compiled support. |
 | [`MATRIX_CALCULUS_REVIEW.md`](MATRIX_CALCULUS_REVIEW.md) | Book-derived delta against Edelman & Johnson's matrix-calculus notes (arXiv:2501.14787): the missing matrix-function/factorization derivative family, a verified `svd` VJP NaN at repeated singular values, the metric-parameterized gradient as the `manifold` key's consumer, and the Kronecker/`vec` cost identity. Companion runnable tutorial at `examples/matrix_calculus/`. |
@@ -225,3 +225,13 @@ Functional-analysis FA-1–FA-7 tasks are consolidated in the
 with AD and recurrence follow-ups in their scoped plans. The former
 [`FUNCTIONAL_ANALYSIS_TSOL_PLAN.md`](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) is a reference redirect to the
 preserved mathematical design, not an independent execution queue.
+
+
+## Math audit consolidation — 2026-09-07
+
+The [foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+assigns the math plans to native ownership, AD, numerical legality and measured
+admission. FORGE and the original math-source proposal are archived references
+with live routing notes; their remaining tasks are not closed. Matrix calculus
+and sequence-mixer theory remain mathematical references. Geometry, PDE and
+sequence-mixer implementation plans remain live scoped consumer plans.

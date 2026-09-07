@@ -212,6 +212,7 @@ def test_stable_aggregation_retains_incumbent_for_mixed_or_unstable_wins():
     ledger = aggregate_stable_route_reports(reports)
     decisions = {row["timing_domain"]: row for row in ledger["decisions"]}
     assert decisions["end_to_end"]["selected_route"] == "mps"
+    assert "won every run" not in decisions["end_to_end"]["reason"]
     # A candidate that is 10% faster in one run and 9% slower in the next is
     # not merely "not promoted" -- it is unmeasured, and the ledger now says
     # so rather than recording the same bare `retain_incumbent` it would use

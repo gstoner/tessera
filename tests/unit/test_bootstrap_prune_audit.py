@@ -50,7 +50,7 @@ def test_bootstrap_is_classified_by_graph_ir_re_entry_not_by_name():
 def test_every_packager_lands_in_exactly_one_population():
     """No packager may be silently dropped from the accounting."""
     for inv in audit.collect_inventories():
-        assert len(inv.bootstrap) + len(inv.compiled_packagers) == len(inv.packagers)
+        assert len(inv.bootstrap) + len(inv.compiled_packagers) + len(inv.unclassified_packagers) == len(inv.packagers)
         assert not set(inv.bootstrap) & set(inv.compiled_packagers)
 
 
@@ -58,7 +58,7 @@ def test_gap_rows_are_only_ever_families_with_no_declared_route():
     """`gap` must mean exactly one thing, or the table cannot be acted on."""
     for _target, family, route, status in audit.family_rows():
         if status == "gap":
-            assert family not in audit._FAMILY_TO_COMPILED
+            assert audit._target_family_route(_target, family) is None
             assert route == "—"
         else:
             assert status == "compiled"
@@ -127,3 +127,58 @@ def test_the_surface_is_mostly_ir_constructing_not_delegating():
         f"{constructing} IR-constructing vs {s['delegates']} delegating — the "
         "bootstrap surface's character changed; re-scope the prune"
     )
+
+
+def test_unknown_inputs_do_not_claim_compiled_artifact_consumption():
+    for annotation in ('', 'Any', 'str', 'UnrelatedArtifact'):
+        assert not audit._is_artifact(annotation)
+    assert audit._is_artifact('ScheduledMatmulArtifact')
+    inventory = audit.BackendInventory('test', 'fixture.py',
+        (('package_a', ''), ('package_b', 'Any'), ('package_c', 'GraphIRModule'),
+         ('package_d', 'ScheduledKernelArtifact')), (), 1)
+    assert inventory.unclassified_packagers == ('package_a', 'package_b')
+    assert inventory.compiled_packagers == ('package_d',)
+
+
+def test_apple_inventory_exposes_computed_classifier_limits():
+    inventories = {i.target: i for i in audit.collect_inventories()}
+    gpu = inventories['apple_gpu']
+    assert 'package_scheduled_kernel' in gpu.compiled_packagers
+    assert 'package_native' in gpu.bootstrap
+    assert 'softmax' in gpu.families
+    assert not gpu.unresolved_returns
+    assert not inventories['apple_cpu'].unresolved_returns
+    assert 'cholesky' in inventories['apple_cpu'].families
+    assert 'value_ebm_energy_quadratic' in gpu.families
+    text = audit.render_markdown()
+    assert 'Unresolved classifier return' in text
+    assert 'unclassified/raw inputs' in text
+
+
+def test_missing_backend_source_cannot_silently_shrink_census(monkeypatch):
+    monkeypatch.setattr(audit, '_BACKEND_MODULES', (('missing', 'missing_module.py'),))
+    with pytest.raises(ValueError, match='cannot inventory'):
+        audit.collect_inventories()
+
+
+def test_computed_classifier_domain_comes_from_live_producer_tables():
+    import ast
+    tree = ast.parse("""
+_VALUE_SYMBOLS = {'tessera.new_solver': ('entry', 'symbol')}
+_LOW_PRECISION_MATMUL_SYMBOLS = {}
+def native_package_kind(module):
+    if _entry_for(op.op_name, dtype) is None:
+        return None
+    return op.op_name.removeprefix('tessera.')
+""")
+    assert audit._classified_families(tree) == ('new_solver',)
+    tree.body[-1].body[-1].value = ast.parse('unknown_classifier(module)', mode='eval').body
+    assert audit._classified_families(tree) == ()
+    assert audit._unresolved_classifier_returns(tree) == ('unknown_classifier(module)',)
+
+
+def test_family_route_requires_consumer_on_that_target():
+    assert audit._target_family_route('apple_cpu', 'matmul') is None
+    assert audit._target_family_route('apple_gpu', 'matmul') is not None
+    assert audit._target_family_route('nvidia_sm120', 'depth_attention') is None
+    assert audit._target_family_route('rocm_gfx1151', 'depth_attention') is not None

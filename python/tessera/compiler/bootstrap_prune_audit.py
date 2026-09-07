@@ -42,6 +42,7 @@ _BACKEND_MODULES: tuple[tuple[str, str], ...] = (
     ("rocm_gfx1151", "rocm_native.py"),
     ("x86", "x86_native.py"),
     ("apple_cpu", "apple_cpu_native.py"),
+    ("apple_gpu", "apple_native.py"),
 )
 
 #: family name -> (scheduled module stem, admission predicate).
@@ -77,6 +78,7 @@ class BackendInventory:
     packagers: tuple[tuple[str, str], ...]
     families: tuple[str, ...]
     lines: int
+    unresolved_returns: tuple[str, ...] = ()
     #: bootstrap packager name -> what it actually does.
     kinds: dict[str, str] = field(default_factory=dict)
 
@@ -87,8 +89,14 @@ class BackendInventory:
 
     @property
     def compiled_packagers(self) -> tuple[str, ...]:
-        """Packagers that consume an already-lowered artifact — not a target."""
-        return tuple(n for n, t in self.packagers if not _is_bootstrap(t))
+        """Packagers declaring scheduled artifact inputs; body replay still needs proof."""
+        return tuple(n for n, t in self.packagers if _is_artifact(t))
+
+    @property
+    def unclassified_packagers(self) -> tuple[str, ...]:
+        """Unknown/raw inputs are not proof of artifact consumption."""
+        return tuple(n for n, t in self.packagers
+                     if not _is_bootstrap(t) and not _is_artifact(t))
 
 
 def _parse(path: Path) -> ast.Module | None:
@@ -112,8 +120,8 @@ def _first_param_type(node: ast.FunctionDef) -> str:
 def _packagers(tree: ast.Module, source: str = "") -> tuple[tuple[str, str], ...]:
     """(name, first-parameter type) for every ``package_*`` function.
 
-    The first parameter is what separates the two populations, and it is a
-    real data-flow fact rather than a naming convention:
+    The first parameter partitions the declared input types; it does not prove
+    what the body consumes. Unknown types remain a separate population:
 
     * ``GraphIRModule`` -- the function reads Graph IR and emits target code
       itself, bypassing Schedule and Tile. That is the bootstrap compiler.
@@ -145,6 +153,76 @@ def _packager_kinds(tree: ast.Module, source: str) -> dict[str, str]:
         body = "\n".join(lines[node.lineno - 1:node.end_lineno])
         out[node.name] = _packager_kind(body)
     return out
+
+
+def _is_artifact(param_type: str) -> bool:
+    # Inventory of typed inputs only, not a semantic data-flow proof.
+    return bool(re.fullmatch(r"Scheduled[A-Za-z0-9_]*Artifact", param_type.strip("'\"")))
+
+
+def _computed_classifier_families(tree: ast.Module) -> dict[str, str]:
+    """Resolve only the two known, table-bounded Apple classifier expressions.
+
+    Read literal producer tables; never execute backend modules or guess the
+    domain of an arbitrary computed return. Unknown syntax remains unresolved.
+    """
+    tables = {}
+    for node in tree.body:
+        name = (node.targets[0].id if isinstance(node, ast.Assign)
+                and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                else node.target.id if isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name) else None)
+        value = getattr(node, "value", None)
+        if name and isinstance(value, ast.Dict):
+            try:
+                tables[name] = ast.literal_eval(value)
+            except (ValueError, TypeError):
+                pass
+    classifier = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+                       and n.name == 'native_package_kind'), None)
+    if classifier is None:
+        return {}
+    expressions = {ast.unparse(n.value) for n in ast.walk(classifier)
+                   if isinstance(n, ast.Return) and n.value is not None}
+    source = ast.unparse(classifier)
+    symbols = tables.get('_VALUE_SYMBOLS')
+    if not isinstance(symbols, dict):
+        return {}
+    cpu = "op.op_name.removeprefix('tessera.')"
+    gpu = "'value_' + op.op_name.removeprefix('tessera.').replace('.', '_')"
+    if cpu in expressions and '_entry_for(op.op_name, dtype)' in source:
+        lowp = tables.get('_LOW_PRECISION_MATMUL_SYMBOLS', {})
+        names = set(symbols) | {key[0] for key in lowp if isinstance(key, tuple)}
+        return {name.removeprefix('tessera.'): name for name in sorted(names)}
+    if gpu in expressions and 'value_descriptor_state(op.op_name)' in source:
+        states = tables.get('APPLE_VALUE_DESCRIPTOR_STATES', {})
+        excluded = set()
+        for branch in ast.walk(classifier):
+            if (isinstance(branch, ast.If) and isinstance(branch.test, ast.Compare)
+                    and ast.unparse(branch.test.left) == 'op.op_name'
+                    and len(branch.test.ops) == 1 and isinstance(branch.test.ops[0], ast.In)
+                    and isinstance(branch.test.comparators[0], ast.Set)
+                    and len(branch.body) == 1 and isinstance(branch.body[0], ast.Return)
+                    and isinstance(branch.body[0].value, ast.Constant)
+                    and branch.body[0].value.value is None):
+                excluded.update(ast.literal_eval(branch.test.comparators[0]))
+        names = {name for name, state in states.items() if state == 'descriptor_ready'} - excluded
+        return {'value_' + name.removeprefix('tessera.').replace('.', '_'): name
+                for name in sorted(names)}
+    return {}
+
+
+def _unresolved_classifier_returns(tree: ast.Module) -> tuple[str, ...]:
+    known = _computed_classifier_families(tree)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "native_package_kind":
+            expressions = tuple(ast.unparse(sub.value) for sub in ast.walk(node)
+                                if isinstance(sub, ast.Return) and sub.value is not None
+                                and not isinstance(sub.value, ast.Constant))
+            bounded = {"op.op_name.removeprefix('tessera.')",
+                       "'value_' + op.op_name.removeprefix('tessera.').replace('.', '_')"}
+            return tuple(e for e in expressions if not known or e not in bounded)
+    return ()
 
 
 def _is_bootstrap(param_type: str) -> bool:
@@ -213,7 +291,7 @@ def _packager_kind(body: str) -> str:
     return "other"
 
 def _classified_families(tree: ast.Module) -> tuple[str, ...]:
-    """String literals returned by ``native_package_kind``.
+    """Literal and known table-bounded families from ``native_package_kind``.
 
     These are the families the backend's own classifier recognises, which is
     the set the driver dispatches on.
@@ -228,7 +306,7 @@ def _classified_families(tree: ast.Module) -> tuple[str, ...]:
             and isinstance(sub.value, ast.Constant)
             and isinstance(sub.value.value, str)
         ]
-        return tuple(dict.fromkeys(names))
+        return tuple(dict.fromkeys([*names, *_computed_classifier_families(tree)]))
     return ()
 
 
@@ -249,7 +327,7 @@ def collect_inventories() -> tuple[BackendInventory, ...]:
         path = _COMPILER / filename
         tree = _parse(path)
         if tree is None:
-            continue
+            raise ValueError(f"cannot inventory backend source: {path}")
         text = path.read_text(encoding="utf-8")
         out.append(
             BackendInventory(
@@ -259,6 +337,7 @@ def collect_inventories() -> tuple[BackendInventory, ...]:
                 families=_classified_families(tree),
                 lines=text.count("\n") + 1,
                 kinds=_packager_kinds(tree, text),
+                unresolved_returns=_unresolved_classifier_returns(tree),
             )
         )
     return tuple(out)
@@ -288,13 +367,27 @@ def verify_declared_mapping() -> None:
         )
 
 
+def _target_family_route(target: str, family: str) -> tuple[str, str] | None:
+    """A family mapping alone cannot establish a consumer on another target."""
+    route = _FAMILY_TO_COMPILED.get(family)
+    filename = dict(_BACKEND_MODULES).get(target)
+    if route is None or filename is None:
+        return None
+    tree = _parse(_COMPILER / filename)
+    consumer = 'package_' + route[0]
+    if tree is None or not any(isinstance(n, ast.FunctionDef) and n.name == consumer
+                               for n in tree.body):
+        return None
+    return route
+
+
 def family_rows() -> tuple[tuple[str, str, str, str], ...]:
     """(target, family, compiled_route, status) for every classified family."""
     verify_declared_mapping()
     rows: list[tuple[str, str, str, str]] = []
     for inv in collect_inventories():
         for family in inv.families:
-            route = _FAMILY_TO_COMPILED.get(family)
+            route = _target_family_route(inv.target, family)
             if route is None:
                 rows.append((inv.target, family, "—", "gap"))
             else:
@@ -331,6 +424,7 @@ def summary() -> dict[str, int]:
         "packagers": sum(len(i.packagers) for i in inventories),
         "bootstrap": sum(len(i.bootstrap) for i in inventories),
         "compiled_packagers": sum(len(i.compiled_packagers) for i in inventories),
+        "unclassified_packagers": sum(len(i.unclassified_packagers) for i in inventories),
         "lines": sum(i.lines for i in inventories),
         "families": len(rows),
         "compiled": sum(1 for r in rows if r[3] == "compiled"),
@@ -361,8 +455,8 @@ def render_markdown() -> str:
         "**Generated. Do not hand-edit.** Regenerate with",
         "`python -m tessera.compiler.generated_docs --write`.",
         "",
-        "The Python per-backend `package_*` families are the **bootstrap",
-        "compiler**; the architecture is core MLIR/LLVM (Graph → Schedule →",
+        "The Python per-backend `package_*` inventory includes bootstrap and",
+        "artifact packagers; the architecture is core MLIR/LLVM (Graph → Schedule →",
         "Tile → Target via `tessera-opt`). This dashboard answers what must be",
         "settled before any of it is deleted: **which families does the",
         "mainline compiler already cover, and which would lose their only",
@@ -386,30 +480,42 @@ def render_markdown() -> str:
         f"|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | {s['delegates']} |",
         f"|   ·  of the bootstrap, both | {s['both']} |",
         f"|   ·  of the bootstrap, other (wrapper / dispatcher) | {s['other_kind']} |",
-        f"| — compiled-route packagers (consume a lowered artifact) | {s['compiled_packagers']} |",
+        f"| — typed scheduled-artifact inputs (consumption needs verification) | {s['compiled_packagers']} |",
+        f"| — unclassified/raw inputs (not assumed compiled) | {s['unclassified_packagers']} |",
         f"| Lines in those modules | {s['lines']} |",
-        f"| Classified families | {s['families']} |",
+        f"| Classified family/target candidates (shape admission not implied) | {s['families']} |",
         f"| — covered by a compiled route | {s['compiled']} |",
-        f"| — **gap (no compiled route)** | {s['gap']} |",
+        f"| — **gap (no declared family route)** | {s['gap']} |",
         f"| Packagers matching no family | {s['orphan_packagers']} |",
         "",
         "## Per-backend bootstrap surface",
         "",
-        "| Target | Module | bootstrap | compiled-route | Families | Lines |",
-        "|---|---|---|---|---|---|",
+        "| Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |",
+        "|---|---|---|---|---|---|---|",
     ]
     for inv in inventories:
         out.append(
             f"| `{inv.target}` | `{inv.module}` | {len(inv.bootstrap)} "
-            f"| {len(inv.compiled_packagers)} | {len(inv.families)} | {inv.lines} |"
+            f"| {len(inv.compiled_packagers)} | {len(inv.unclassified_packagers)} | {len(inv.families)} | {inv.lines} |"
         )
 
+    out += ["", "## Census limits", "",
+            "Input annotations are inventory evidence, not proof of semantic authority.",
+            "Any, unannotated and raw-IR inputs remain unclassified; inspect their producers and consumers.",
+            "Known Apple computed returns are derived from their producer tables; other computed returns remain unresolved.",
+            "A missing family mapping is not proof that no generic scheduled route accepts it.",
+            "", "| Target | Unresolved classifier return |", "|---|---|"]
+    for inv in inventories:
+        for expression in inv.unresolved_returns:
+            out.append(f"| `{inv.target}` | `{expression}` |")
     out += [
         "",
         "## Family coverage",
         "",
-        "`compiled` means a compiled-route admission predicate serves that",
-        "family. It does **not** assert the compiled route reaches parity on",
+        "`compiled` means a family has a declared admission-predicate mapping.",
+        "The target module must also define the corresponding package consumer.",
+        "Actual driver paths, shapes and policies require separate checks.",
+        "It does **not** assert the compiled route reaches parity on",
         "every shape and dtype — that is per-family evidence the backend",
         "queues own.",
         "",

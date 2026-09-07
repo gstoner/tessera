@@ -5065,7 +5065,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SOFTMAX_F32_ABI,
         APPLE_SIMDGROUP_GEMM_F16_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
-        APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
+        APPLE_FLASH_ATTN_BWD_ALL_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
@@ -5110,7 +5110,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_TRANSPOSE_F16_ABI,
                 APPLE_TRANSPOSE_BF16_ABI,
             }
-            or abi_id in {abi for _, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
+            or abi_id in {abi for _, abi in APPLE_FLASH_ATTN_BWD_ALL_ABIS.values()}
             or abi_id.startswith("tessera.apple.value.")
         )
         and target not in _native_launchers
@@ -5441,7 +5441,7 @@ def _submit_apple_gpu_native(
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
         APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
-        APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
+        APPLE_FLASH_ATTN_BWD_ALL_ABIS,
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_SYNTH_REDUCE_F32_SYMBOL,
         APPLE_SYNTH_REDUCE_KINDS,
@@ -5493,7 +5493,7 @@ def _submit_apple_gpu_native(
         np.copyto(out, np.asarray(result, dtype=np.float32).reshape(out.shape))
         return out
 
-    _bwd_by_abi = {abi: symbol for symbol, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
+    _bwd_by_abi = {abi: symbol for symbol, abi in APPLE_FLASH_ATTN_BWD_ALL_ABIS.values()}
     if descriptor.abi_id in _bwd_by_abi:
         # E2E-REAL-5B rank-4 backward VJP.  Same ABI conventions as the forward
         # route: `B` is the FLATTENED batch*q_heads extent and `window_size` is
@@ -5559,7 +5559,9 @@ def _submit_apple_gpu_native(
         window = int(cast(int, provenance["window"]))
         status = int(function(
             feed_ptr(q), feed_ptr(k), feed_ptr(v), feed_ptr(d_out),
-            feed_ptr(bias) if bias is not None else feed_pointer(),
+            (bias.ctypes.data_as(float_pointer)
+             if bias is not None and "_bias_f32." in descriptor.abi_id
+             else feed_ptr(bias) if bias is not None else feed_pointer()),
             d_q.ctypes.data_as(float_pointer),
             d_k.ctypes.data_as(float_pointer),
             d_v.ctypes.data_as(float_pointer),
@@ -5928,7 +5930,8 @@ def _submit_apple_gpu_native(
             raise RuntimeError(f"Apple runtime is missing {softmax_symbol}")
         pointer = ctypes.POINTER(cast(Any, softmax_pointer_element))
         function.argtypes = [pointer, pointer, ctypes.c_int32, ctypes.c_int32]
-        function.restype = None
+        requires_status = descriptor.abi_id in (APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI)
+        function.restype = ctypes.c_int32 if requires_status else None
 
         def softmax_pointer(value: Any) -> Any:
             return (
@@ -5937,7 +5940,9 @@ def _submit_apple_gpu_native(
                 else value.view(np.uint16).ctypes.data_as(pointer)
             )
 
-        function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
+        status = function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
+        if requires_status and status != 1:
+            raise RuntimeError("Apple low-precision softmax did not execute on Metal")
         return out
 
     gelu_variants = {

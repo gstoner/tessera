@@ -551,6 +551,14 @@ TS_STUB_FLASH_ATTN_BWD_VARIANT_16(
     tessera_apple_gpu_flash_attn_bwd_variant_f16_status)
 TS_STUB_FLASH_ATTN_BWD_VARIANT_16(
     tessera_apple_gpu_flash_attn_bwd_variant_bf16_status)
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_f16_bias_f32_status(
+    const uint16_t*, const uint16_t*, const uint16_t*, const uint16_t*, const float*,
+    float*, float*, float*, int32_t, int32_t, int32_t, int32_t, int32_t,
+    int32_t, float, int32_t, int32_t, float, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_flash_attn_bwd_variant_bf16_bias_f32_status(
+    const uint16_t*, const uint16_t*, const uint16_t*, const uint16_t*, const float*,
+    float*, float*, float*, int32_t, int32_t, int32_t, int32_t, int32_t,
+    int32_t, float, int32_t, int32_t, float, int32_t) { return 0; }
 #undef TS_STUB_FLASH_ATTN_BWD_VARIANT_16
 
 extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
@@ -862,6 +870,11 @@ extern "C" void tessera_apple_gpu_rope_bf16(const uint16_t* X,
   reference_rope_f32(Xf.data(), Tf.data(), Of.data(), M, K);
   for (std::size_t i = 0; i < Of.size(); ++i) Out[i] = float_to_bfloat16_stub(Of[i]);
 }
+
+extern "C" int32_t tessera_apple_gpu_softmax_f16_status(
+    const uint16_t*, uint16_t*, int32_t, int32_t) { return 0; }
+extern "C" int32_t tessera_apple_gpu_softmax_bf16_status(
+    const uint16_t*, uint16_t*, int32_t, int32_t) { return 0; }
 
 extern "C" void tessera_apple_gpu_softmax_f16(const uint16_t* X, uint16_t* Out,
                                               int32_t M, int32_t K) {

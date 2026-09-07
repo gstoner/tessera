@@ -1,0 +1,51 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "rows": [
+    {
+      "activation": "relu",
+      "budget": 0.0,
+      "region": "e1bb4283f2ed761857b29df407c494e30248975b984903889d8492e7f1fee8b0",
+      "original": "b6513faa7bffae2ce277410f9a0ecc59a4294e8f2b842b37a0046a0e5021a555",
+      "transformed": "9d4244c70180cfa3c5ece8f725c30ff005b0eb841659dcb59b0f595e3b4efee4",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "relu",
+      "budget": 0.001,
+      "region": "8330da8c024b0bc9793433a2064b931c7fe51f2d5e348eca5052bf5fe9a47442",
+      "original": "b6513faa7bffae2ce277410f9a0ecc59a4294e8f2b842b37a0046a0e5021a555",
+      "transformed": "9d4244c70180cfa3c5ece8f725c30ff005b0eb841659dcb59b0f595e3b4efee4",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    },
+    {
+      "activation": "abs",
+      "budget": 0.0,
+      "region": "63616a44ee717a7691e943e7b0f6f151b5f84205a181959141aa8796214f320f",
+      "original": "2aedffcfca1cfa2cd8851bad9e5a568cd80ab441d37684a929170c738935c225",
+      "transformed": "29746df3e38445477637ce85db8f1a0c980ca20b6652293aaee3297c14d71476",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "abs",
+      "budget": 0.001,
+      "region": "06205d104535de49daf69cc4fcf670e810eafc8e789860175704d04805624702",
+      "original": "2aedffcfca1cfa2cd8851bad9e5a568cd80ab441d37684a929170c738935c225",
+      "transformed": "29746df3e38445477637ce85db8f1a0c980ca20b6652293aaee3297c14d71476",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    }
+  ],
+  "compiler_sha256": "18ddda44f6f5399a8b09bb117db830c179087d88155df626cd9aa38b3565dc51",
+  "sources": {
+    "python/tessera/compiler/native_ann.py": "d3b65e513eea89b18f643093f50b9d1b1608fd5505614db6de3015bd8f4f1969",
+    "python/tessera/compiler/native_ann_gpu.py": "5cf13b4d21f942e6aef626da68887190894b192e2169a389438993565feeacbf",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "5ddc620e9aa580d4e90ba611e62442cea2921ccc2b85ebc95732345153693ea4",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "0d39d73f753b717126537498cc510bcb2e5c829673e30497749f0c35f373027f"
+  },
+  "recorder_sha256": "fab4264dc95a3cd9213fcbd227b19b8c2beb48081a3a3c0f6faadc9221b23820",
+  "promotion_eligible": false
+}

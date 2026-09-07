@@ -1,0 +1,47 @@
+{
+  "execution_kind": "native_cpu",
+  "rows": [
+    {
+      "input_width": 4,
+      "output_width": 1,
+      "saved_widths": [
+        3,
+        2
+      ],
+      "repeated_backward": true
+    },
+    {
+      "input_width": 8,
+      "output_width": 5,
+      "saved_widths": [
+        7,
+        6
+      ],
+      "repeated_backward": true
+    },
+    {
+      "input_width": 16,
+      "output_width": 13,
+      "saved_widths": [
+        15,
+        14
+      ],
+      "repeated_backward": true
+    }
+  ],
+  "source_sha256": "8cfcfadfc5a405091210bd2f97e5393a059ff082003ca3c1f47d11d23ac1afea",
+  "compiler_sha256": "402ce52aa56641fa711e3b94c9f76459ea3700d355903c1833a7f7627ebde212",
+  "jit_sha256": "51384992825e69303cb98c3959c3e2118deab39d7488871278f1aa9ee39b929a",
+  "product_sha256": [
+    "022d519b1f3dc93b6a839d9c7121ef886f4e8256902b085ad686115fbcd0e9de",
+    "8f4e5630f41988bad50c56a3a710983654b1233d8a6856cdd24bc81be64312b2"
+  ],
+  "sources": {
+    "tools/tessera-jit/tessera_jit.cpp": "deee4b874a259b3e91c4615ba2e3b6d25b61725ce93e60650a194f579cbfd2fc",
+    "python/tessera/_jit_boundary.py": "79ec69df815340aba66171aecb01f66a949775903de4d34af8d7196a6878b8db",
+    "src/transforms/lib/TesseraToLinalgPass.cpp": "8aec359691e5405fad5f793640bd1dc328fa0d4579eb19d1d512e08e68b65a6f",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "5ddc620e9aa580d4e90ba611e62442cea2921ccc2b85ebc95732345153693ea4"
+  },
+  "recorder_sha256": "130ff2da380630341c3a8a157cf38e8c25da9ce7c86b479c67104ee24fa3275e",
+  "promotion_eligible": false
+}

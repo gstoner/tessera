@@ -136,3 +136,20 @@ def test_backward_releases_temporary_primal_and_preserves_results(fail_launch):
     obj.close()
     assert obj.closed and not obj.buffers
     assert all(not result.pointer.value for result in results)
+
+
+@pytest.mark.parametrize('dtype,size,typestr', [('fp32', 16, '<f4'), ('fp64', 32, '<f8')])
+def test_owned_tape_buffer_uses_declared_storage_width(dtype, size, typestr):
+    import ctypes as ct
+    from types import SimpleNamespace
+    from tessera.compiler.native_device_tape import _Buffer
+    allocations = []
+    def allocate(pointer, nbytes):
+        allocations.append(nbytes)
+        ct.cast(pointer, ct.POINTER(ct.c_void_p))[0] = ct.c_void_p(4096)
+        return 0
+    frame = SimpleNamespace(closed=False, buffers=[], alloc=allocate, check=lambda status: None)
+    buffer = _Buffer(frame, (4,), dtype)
+    assert allocations == [size]
+    assert buffer.nbytes == size
+    assert buffer.__cuda_array_interface__['typestr'] == typestr

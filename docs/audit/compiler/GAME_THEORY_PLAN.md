@@ -1,7 +1,7 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-09-07
 audit_role: plan
-plan_state: open
+plan_state: landing
 status: G1 COMPLETE (2026-08-15, two slices) — python/tessera/game/ ships the
         four zeta/Möbius butterflies, coalition_marginal, weight-parameterized
         semivalue, boltzmann_value (closed-form VJP, FD-checked; T<0 legal,
@@ -12,8 +12,8 @@ status: G1 COMPLETE (2026-08-15, two slices) — python/tessera/game/ ships the
         spec rows + regenerated dashboards (Decision #24/#26); oracles 1–7 +
         11 green (tests/unit/test_game_lattice.py, 26 tests; mypy clean).
         Open question 3 RESOLVED: segment_reduce/cum*/control.scan already
-        existed — G3 consumes them, no new ops (#31). Every algebraic claim
-        numerically verified (27 checks, research/game_theory/)
+        existed — G3 consumes them, no new ops (#31). The historical algebra harness
+        records 27 checks (research/game_theory/); not universal native proof
 source: U. Faigle, "Mathematical Game Theory: A New Approach" (lecture-note draft,
         `Mathematical_Game_Theory_new.tex`) + a maintainer-supplied list of refined
         equilibrium concepts (SPE, Bayesian, k-resilient, correlated, bounded
@@ -35,9 +35,9 @@ reassessment: 2026-08-15 — full mathematical verification pass
 > global ordering lives only in
 > [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
 >
-> **Status vocabulary warning (Decision #25/#26):** everything below is
-> *direction*. No row here is proof of anything. `docs/audit/MASTER_AUDIT.md`
-> and `docs/audit/generated/` stay status truth.
+> **Evidence scope:** current status is summarized below. Dated derivations and
+> proposals retain their mathematical/acceptance role; reference, native
+> contract, device execution and measured admission are separate evidence.
 >
 > **Guardrail overrides (maintainer, 2026-08-15):** Decision #23 and the "no new
 > IR" non-goal are guides that may be overridden when the system's health calls
@@ -51,6 +51,21 @@ reassessment: 2026-08-15 — full mathematical verification pass
 > does not fit.
 
 ---
+
+## Current status and remaining acceptance work
+
+| Phase | Current boundary | Remaining gate / owner |
+|---|---|---|
+| G0/G1 | Public lattice contracts, reference operations and oracles exist. | Preserve lattice indexing, fp64 requirements, kink/temperature semantics and registered transforms. |
+| G1b | One coalition-butterfly Schedule/Tile carrier and x86/gfx1151 consumers exist. | FFT tiling/sharding replacement, layout compatibility and bit-identity gate remain; REF-TIER-PHYS-1 / LAYOUT-ALG-1. |
+| G2 | General equilibrium/saddle workload remains open; shared IFT pilots are bounded. | Certified residual/duality-gap and constrained derivative semantics, then native composition; AD / F4. |
+| G3/G4 | Regret, extensive-form and Bayesian workloads remain open. | Consume existing segmented reduction, scans, RNG and batching; external game oracles remain required; W4 / AD / F4. |
+| G5 | Coalition physical slices are not a general game backend. | Family-specific packages, dtype support and exact-host evidence before admission; F2/F3. |
+| G6 | Distributed/sampled lattice acceptance remains open. | Real transport or explicitly scoped mock proof; estimators retain stderr/sample count and RNG identity; DIST-NATIVE-1. |
+
+[Integrated ownership](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+controls global order. G1 is not an unstarted prerequisite; generic FFT
+consolidation must still earn its replacement gate.
 
 ## 1. What the source actually is
 
@@ -562,7 +577,8 @@ before the surviving path can carry what the deleted one carried.
 
 * `regret_matching(kind="external"|"swap")`, CFR⁺-style `[·]⁺` accumulation.
 * `cfr_update`: segment scatter-add over information sets with reach weights.
-  **Adds `segment_sum` to the catalog** — a broadly useful op we currently lack.
+  Consumes existing `segment_reduce(..., op="sum")`; verify ragged reach-weight
+  semantics instead of adding a duplicate `segment_sum` op.
 * **Preference-CFR**: regularized regret matching with a preference/entropy prior
   — i.e. mirror descent with a non-uniform reference measure. This is a
   temperature parameter on the same softmax, so it composes with `boltzmann_value`
@@ -883,24 +899,16 @@ become its first two instances.
 
 ---
 
-## 10. What to build first
+## 10. Remaining workload selection
 
-If only one thing lands: **G1's `subset_zeta`/`subset_mobius` +
-`semivalue`**, with oracles 1–6. It is self-contained, needs no hardware, is
-exactly testable, gives `transpose_rule` a real consumer, and produces the
-butterfly region class that G5's arbiter lane and G6's sharding both build on.
-`boltzmann_value` is the natural second, because it is the one that reuses the
-online-softmax emitter and therefore reaches an executing GPU lane soonest.
-
-**G1b is the highest-value item that outlives game theory**, and it is the one
-piece here that would still be worth building if the game-theory surface were
-cancelled tomorrow: it consolidates butterfly tiling for the spectral FFT lane
-too. But it is deliberately *second*, not first — the Decision #31 ordering
-caveat says do not collapse a duplication before the surviving path can carry
-what the deleted one carried, and until G1 exists there is only one butterfly
-consumer and therefore nothing to consolidate.
-
----
+The [original first-build advice](archive/CAPABILITY_PLAN_STATUS_2026_08.md)
+preceded G1 and is historical. Preserve its reference and native coalition
+foundation. Select a remaining workload through the integrated F2/F3/F4 and AD
+owners: G1b compatibility for actual FFT consolidation, G2 certified solver
+composition, or G3/G4 game-specific validation. None requires reimplementing G1.
+G5/G6 require their own target/transport evidence. G1b remains conditional on
+replacing a real duplicate and preserving the FFT contract, not merely on
+introducing another generic operation.
 
 ## 11. Open questions for the maintainer
 
@@ -911,8 +919,9 @@ consumer and therefore nothing to consolidate.
    priority and G6 optional. §9 suggests the explainability population is the
    larger one.
 2. **Is differentiable equilibrium the actual goal?** If the intent is learned
-   mechanisms / differentiable economics, G2 outranks G1 and should go first.
-   If the intent is cooperative-value analysis, G1 first as written.
+   mechanisms / differentiable economics, prioritize the remaining G2 work through the integrated plan.
+   G1 is already implemented; cooperative-value work extends it rather than
+   scheduling it again.
 3. **Do `segment_sum` and `scan` want to land independently?**
    **RESOLVED by measurement (2026-08-15): the premise was stale.** The
    catalog already carries `segment_reduce(x, seg_ids, op=...)` (CFR's

@@ -439,6 +439,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(
+            "Optional normalize-counted-while converts proven counted whiles; normalize-data-while freezes data-dependent state after exit when an SSA counter guard proves the capacity, including false-else short-circuit scf.if/arith.select guards. box-product-scalars projects index/predicate residuals into i64/i8 tensor storage. "
             "Optional export-product preserves full typed nested residual forward/backward ABIs and paired lineage without scalarization. "
             "Emits paired forward and backward functions under the explicit "
             "residual ABI: recompute-all by default, SAVE state tapes for "
@@ -662,11 +663,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-native-tape-to-gpu",
         cpp_class="NativeTapeToGPUPass",
-        summary="Lowers isolated static f32 bufferized AD products to serial GPU entries, preserving full residual shapes. Bounded for/if temporaries are limited to 4096 logical bytes, with distinct slots per iteration path. The backend option selects NVVM generic or AMDGPU private allocation addressing; dynamic extents and while loops refuse.",
+        summary="Lowers isolated static floating/integer bufferized AD or source-bound ANN products to serial GPU entries, preserving full residual shapes. Bounded for/if temporaries use dtype-sized slots and are limited to 4096 logical bytes, with distinct slots per iteration path. The backend option selects NVVM generic or AMDGPU private allocation addressing; replay bounds derived from enclosing induction variables are supported, while loaded bounds, dynamic extents and while loops refuse.",
         input_dialects=("func", "arith", "math", "scf", "memref"),
         output_dialects=("gpu", "llvm", "arith", "math", "scf", "memref", "tile"),
-        required_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair"),
-        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.temporary_bytes"),
+        required_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.ann.source"),
+        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.ann.source", "tessera.autodiff.temporary_bytes"),
         diagnostic_codes=(), pass_kind="lowering", sprint="W2.4a",
     ),
     PassMetadata(
@@ -822,7 +823,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "with SSA-value propagation seeded by frontend argument-local "
             "tessera.dim_names or legacy tessera.arg_dim_names, concrete sum-of-products witness "
             "checking, interprocedural cross-checks via func.call, and "
-            "scf.for/scf.if/scf.while region recursion."
+            "scf.for/scf.if/scf.while region recursion. Optional instantiate bindings "
+            "specialize straight-line matmul recipes only after complete shape "
+            "transfer and concrete Presburger witness checks."
         ),
         input_dialects=("tessera", "func", "scf"),
         output_dialects=("tessera", "func", "scf"),
@@ -862,7 +865,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         # V6b: inserted after DistributionLowering in the named
         # pipelines because the latter injects tessera.dim_sizes.
         must_run_after=("tessera-distribution-lower",),
-        pass_kind="verifier",
+        pass_kind="transform",
         sprint="V5 + V2-flow + V3a + V3b + V3c",
     ),
     PassMetadata(
@@ -951,6 +954,22 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         pass_kind="verifier",
         sprint="C3 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-to-linalg",
+        cpp_class="TesseraToLinalgPass",
+        summary=(
+            "Lowers supported Tessera tensor math to upstream DPS Linalg. "
+            "Dynamic same-rank binary operations guard operand/result extents; "
+            "zeros_like adjoints allocate from logical primal dimensions. "
+            "Matmul remains within its independently checked physical envelope."
+        ),
+        input_dialects=("tessera", "func", "tensor", "arith"),
+        output_dialects=("linalg", "tensor", "arith", "math", "cf"),
+        required_attrs=("numeric_policy",),
+        diagnostic_codes=("NUMERIC_POLICY_ACCUM_UNREALIZABLE",),
+        pass_kind="lowering",
+        sprint="IR-NATIVE-FOUNDATION-1",
     ),
     PassMetadata(
         name="tessera-warpspec-legality",

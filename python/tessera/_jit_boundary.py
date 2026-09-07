@@ -228,8 +228,16 @@ except ImportError:  # pragma: no cover - exercised only on minimal envs
     _BF16 = None
 
 
+# Exported AD products carry boxed shape/predicate residuals. These are raw
+# descriptor storage types, not an extension of floating high-level math APIs.
+_RESIDUAL_DTYPE_TABLE = {
+    "i64": (np.int64, ctypes.c_int64, "i64"),
+    "i8": (np.int8, ctypes.c_int8, "i8"),
+}
+
+
 def _dtype_entry(arr: np.ndarray):
-    for tag, (np_dt, ct_dt, mlir) in _DTYPE_TABLE.items():
+    for tag, (np_dt, ct_dt, mlir) in (_DTYPE_TABLE | _RESIDUAL_DTYPE_TABLE).items():
         if arr.dtype == np_dt:
             return tag, ct_dt, mlir
     raise TesseraJitError(f"Phase 1 boundary supports {sorted(_DTYPE_TABLE)} only (got {arr.dtype})")

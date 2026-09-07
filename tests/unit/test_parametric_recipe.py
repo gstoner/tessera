@@ -112,3 +112,44 @@ def test_jit_rank_recovers_unmaterialized_ast_recipe(empty_module):
     assert len(kernel._legacy_graph_ir.functions) == 1
     assert ranks[0].retained
     assert not ranks[0].promotion_eligible
+
+
+def test_native_instances_share_one_optimized_parent():
+    recipe = recognize_matmul_loop(product).prepare(tessera_opt=tool())
+    instances = recipe.instantiate_buckets(
+        [{'M': 2, 'K': 4, 'N': 3}, {'M': 5, 'K': 4, 'N': 7}], tessera_opt=tool())
+    assert len({x.parent_digest for x in instances}) == 1
+    assert len({x.recipe_digest for x in instances}) == 1
+    assert len({x.digest for x in instances}) == 2
+    for instance, result in zip(instances, ('tensor<2x3xf32>', 'tensor<5x7xf32>')):
+        assert result in instance.mlir
+        assert 'tensor<?' not in instance.mlir
+        assert 'tessera.dim_sizes' in instance.mlir
+
+
+def test_native_instantiation_rejects_modified_recipe():
+    from dataclasses import replace
+    recipe = recognize_matmul_loop(product).prepare(tessera_opt=tool())
+    with pytest.raises(ValueError, match='identity'):
+        replace(recipe, optimized_mlir=recipe.optimized_mlir + '\n').instantiate_buckets(
+            [{'M': 2, 'K': 4, 'N': 3}], tessera_opt=tool())
+
+
+def test_native_instantiation_refuses_unknown_shape_transfer():
+    def duplicate(a: tessera.Tensor['M', 'K', 'f32'], b: tessera.Tensor['K', 'N', 'f32']):
+        x = tessera.matmul(a, b)
+        return tessera.add(x, x)
+    builder = GraphIRBuilder()
+    builder.lower(duplicate, prefer_abstract_trace=False)
+    recipe = prepare_recipe(builder.module(), tessera_opt=tool())
+    import subprocess
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        recipe.instantiate_buckets([{'M': 2, 'K': 4, 'N': 3}], tessera_opt=tool())
+    assert 'straight-line matmul recipes only' in error.value.stderr
+
+
+def test_native_instantiation_refuses_constraint_violation():
+    system = PresburgerSystem(('K',), (PresburgerConstraint('mod', (1,), modulus=2),))
+    recipe = recognize_matmul_loop(product).prepare(tessera_opt=tool(), system=system)
+    with pytest.raises(ValueError, match='rejected bucket'):
+        recipe.instantiate_buckets([{'M': 2, 'K': 3, 'N': 4}], tessera_opt=tool())

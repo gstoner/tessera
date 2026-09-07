@@ -1,0 +1,65 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "rows": [
+    {
+      "policy": "mixed",
+      "source_sha256": "6498eaa68598347092abc5b3ce82496707fa7031d818a7125d0ee46837e508f9",
+      "lineage": "e1c34124e6a0e252dbb1dbc14851fefb41ada14b2a8ecb9d4dfe4b2dc0f70e31",
+      "forward": "128b828142f334c2ca14a5f61f6c27f64ea18e0bd5ce0d6a2e629ea49ea3ef2a",
+      "backward": "c58253ae742af8b57a57153e0502191e117898833364ca1150d2d2396c313f6f",
+      "retained_bytes": 96,
+      "residual_bytes": 0,
+      "repeated_backward": true
+    },
+    {
+      "policy": "save",
+      "source_sha256": "5736ab1ffe225d5f507d9e4415e6e4c54d7b9f312dcd06b9896c2ad84c839ad2",
+      "lineage": "2f055fd1bcf33524a456ae9bb24557c27166d0f0da10f84a3480285fd2564173",
+      "forward": "bab400d7dca6d2a456df95e53b580bb5392e9475db862ac9173c2d7dd75a7e08",
+      "backward": "90a6e9df77c9857c13a2bee0c7d8bec496749f31d07e660f251d475ee613624b",
+      "retained_bytes": 80,
+      "residual_bytes": 32,
+      "repeated_backward": true
+    },
+    {
+      "policy": "hybrid",
+      "source_sha256": "4528557b4b47de3885831cc9cab10ea23e858a8ea8f01aab7c6cb4860d7ee9e6",
+      "lineage": "99e58283186003604ca0cc1c31868938c783b84a7005d1fdd74d4dde8d6eb708",
+      "forward": "48a343b175817ff95d7b1cb8fea5257ce6d139180a7ff4d582c143fb0cd894f3",
+      "backward": "bd88e99a0c38a8d79dc0b72a169616db50c4f1304c677395b07eb26865eff4ae",
+      "retained_bytes": 64,
+      "residual_bytes": 16,
+      "repeated_backward": true
+    },
+    {
+      "policy": "recompute_all",
+      "source_sha256": "277f061ab6270ce83488cf58781eab17d680b01d7c44b3e053700f133537dd78",
+      "lineage": "6ff34ac99c81f64274247789518ff6c81592d9f4db31d7cbebe2996cdedc3f5f",
+      "forward": "ee25e9065b9a7d929ad7df0d06a693311f027e0f7cedc3c9b205ec06b2ea6107",
+      "backward": "1e869ca0569aa5d482d425a6ba406704f9632e818adfbc53740f38cdc8f65c39",
+      "retained_bytes": 48,
+      "residual_bytes": 0,
+      "repeated_backward": true
+    },
+    {
+      "policy": "counted_while",
+      "source_sha256": "13ccf1d1c5681b97a5ed16d05242b994669760e4eb77b902c57369006a5baaf9",
+      "lineage": "3f09166c985ebd0e116371142cd4dcdfb78e1ecc9680f21f367037f7ff196fef",
+      "forward": "bd20da8797cd74c812493822f7197dacea2f854b3643b2a9fb3a64b815bee84f",
+      "backward": "f7be098c2cd5faaa26a459c6239ae83bde5c2a6aac1813cd0d8af2bfb1725e86",
+      "retained_bytes": 80,
+      "residual_bytes": 32,
+      "repeated_backward": true
+    }
+  ],
+  "compiler_sha256": "5ae4ca6b5964fbb8078de37887d7d531f29e2178f48e68681cfb1e9b2722c11d",
+  "source_sha256": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "da1e12c6b1e264262b00f4343646075fa77a0c4b640493247d8e4e0aa72d047a",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "2534cb07e9877bae9c3a8b9516e4ac5e0d1f4caa9f18e0d526bee18a44ce8cb8",
+    "python/tessera/compiler/native_persistent_tape.py": "f0a12eefc6feb09d3aa322b3e2199508aea974e7cd8ca2c85fcd5ea9aec030d9",
+    "python/tessera/compiler/native_device_tape.py": "8eb5907d34b84d54702a947d6c8bca8616ffdd7ef611b90e55064f8c1dc9be10"
+  },
+  "recorder_sha256": "26b20551dc222fc57ddb52eddc51cea47c4b52d5738be6167c160ced10bd683b",
+  "promotion_eligible": false
+}

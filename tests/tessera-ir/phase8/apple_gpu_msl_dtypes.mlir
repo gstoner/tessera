@@ -14,37 +14,41 @@
 
 // Runtime declarations: one per (kernel, dtype) pair. Order between
 // declarations is implementation-defined, so use CHECK-DAG.
-// CHECK-DAG: func.func private @tessera_apple_gpu_softmax_f32(i64, i64, i32, i32)
-// CHECK-DAG: func.func private @tessera_apple_gpu_softmax_f16(i64, i64, i32, i32)
-// CHECK-DAG: func.func private @tessera_apple_gpu_softmax_bf16(i64, i64, i32, i32)
-// CHECK-DAG: func.func private @tessera_apple_gpu_gelu_f32(i64, i64, i32)
-// CHECK-DAG: func.func private @tessera_apple_gpu_gelu_f16(i64, i64, i32)
-// CHECK-DAG: func.func private @tessera_apple_gpu_gelu_bf16(i64, i64, i32)
+// CHECK-DAG: func.func private @tessera_apple_gpu_softmax_f32_status(i64, i64, i32, i32) -> i32
+// CHECK-DAG: func.func private @tessera_apple_gpu_softmax_f16_status(i64, i64, i32, i32) -> i32
+// CHECK-DAG: func.func private @tessera_apple_gpu_softmax_bf16_status(i64, i64, i32, i32) -> i32
+// CHECK-DAG: func.func private @tessera_apple_gpu_gelu_f32_status(i64, i64, i32) -> i32
+// CHECK-DAG: func.func private @tessera_apple_gpu_gelu_f16_status(i64, i64, i32) -> i32
+// CHECK-DAG: func.func private @tessera_apple_gpu_gelu_bf16_status(i64, i64, i32) -> i32
 
 func.func @softmax_f16(%X: tensor<8x16xf16>) -> tensor<8x16xf16> {
   // CHECK-LABEL: func.func @softmax_f16
-  // CHECK:       call @tessera_apple_gpu_softmax_f16
+  // CHECK:       call @tessera_apple_gpu_softmax_f16_status
+  // CHECK:       cf.assert
   %Out = "tessera.softmax"(%X) : (tensor<8x16xf16>) -> tensor<8x16xf16>
   return %Out : tensor<8x16xf16>
 }
 
 func.func @softmax_bf16(%X: tensor<8x16xbf16>) -> tensor<8x16xbf16> {
   // CHECK-LABEL: func.func @softmax_bf16
-  // CHECK:       call @tessera_apple_gpu_softmax_bf16
+  // CHECK:       call @tessera_apple_gpu_softmax_bf16_status
+  // CHECK:       cf.assert
   %Out = "tessera.softmax"(%X) : (tensor<8x16xbf16>) -> tensor<8x16xbf16>
   return %Out : tensor<8x16xbf16>
 }
 
 func.func @gelu_f16(%X: tensor<8x16xf16>) -> tensor<8x16xf16> {
   // CHECK-LABEL: func.func @gelu_f16
-  // CHECK:       call @tessera_apple_gpu_gelu_f16
+  // CHECK:       call @tessera_apple_gpu_gelu_f16_status
+  // CHECK:       cf.assert
   %Out = "tessera.gelu"(%X) : (tensor<8x16xf16>) -> tensor<8x16xf16>
   return %Out : tensor<8x16xf16>
 }
 
 func.func @gelu_bf16(%X: tensor<8x16xbf16>) -> tensor<8x16xbf16> {
   // CHECK-LABEL: func.func @gelu_bf16
-  // CHECK:       call @tessera_apple_gpu_gelu_bf16
+  // CHECK:       call @tessera_apple_gpu_gelu_bf16_status
+  // CHECK:       cf.assert
   %Out = "tessera.gelu"(%X) : (tensor<8x16xbf16>) -> tensor<8x16xbf16>
   return %Out : tensor<8x16xbf16>
 }
@@ -53,14 +57,16 @@ func.func @gelu_bf16(%X: tensor<8x16xbf16>) -> tensor<8x16xbf16> {
 
 func.func @softmax_f32(%X: tensor<8x16xf32>) -> tensor<8x16xf32> {
   // CHECK-LABEL: func.func @softmax_f32
-  // CHECK:       call @tessera_apple_gpu_softmax_f32
+  // CHECK:       call @tessera_apple_gpu_softmax_f32_status
+  // CHECK:       cf.assert
   %Out = "tessera.softmax"(%X) : (tensor<8x16xf32>) -> tensor<8x16xf32>
   return %Out : tensor<8x16xf32>
 }
 
 func.func @gelu_f32(%X: tensor<8x16xf32>) -> tensor<8x16xf32> {
   // CHECK-LABEL: func.func @gelu_f32
-  // CHECK:       call @tessera_apple_gpu_gelu_f32
+  // CHECK:       call @tessera_apple_gpu_gelu_f32_status
+  // CHECK:       cf.assert
   %Out = "tessera.gelu"(%X) : (tensor<8x16xf32>) -> tensor<8x16xf32>
   return %Out : tensor<8x16xf32>
 }

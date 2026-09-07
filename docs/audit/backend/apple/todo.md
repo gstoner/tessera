@@ -7972,3 +7972,53 @@ Dedicated low-precision-input/fp32-bias ABI, MSL loads, bindings and descriptor 
 
 **PR #733 status/paired-companion correction — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
 Scheduled fp16/bf16 softmax uses native-only status ABIs (v2); missing or failed dispatch refuses instead of reporting CPU fallback as native_gpu. Low-precision recompute admission requires reciprocal primal/VJP symbol links and matching verified backward types, bias and numerical policy. The centralized hardware inventory owns both test cohorts; ten fresh M1 Max differential cases pass. This supersedes the earlier void-ABI softmax placement claim. Five fresh runtime reports again admit all six keys in both timing domains, with context/workspace fallbacks verified. The fleet was remeasured and sealed against e73cdfcee39c8265cdc329b407b05c834c5a5a70 using 21 samples and 200 iterations at the unchanged 4% stability threshold.
+
+
+**Capability-document reconciliation — IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Documentation-only ownership/lifecycle cleanup: Block AttnRes, EGGROLL and game
+theory remain scoped landing plans; AD residuals use the active AD plan and
+shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
+Apple workload consumers still need their own MSL/runtime packages and device proof; ROCm and x86 reference/physical results do not promote them.
+No runtime, ABI or support status changes. Follow-up requirements are mapped in
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+
+
+**Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+M1 Max passed six selected softmax/GELU device tests with the fresh shared runtime. Static GELU uses native parent replay; dynamic compatibility ownership remains. Five package/direct-ABI reports refuse promotion. Runtime source changed: commit and remeasure the fleet packet before publication.
+All three fleet LLVM builds currently report assertions OFF. No assertions-enabled
+validation or broader route/envelope closure is claimed. See the integrated
+plan’s status, native GELU and recipe instantiation section.
+
+
+**Dynamic native package projection — F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Dynamic rank-two GELU now lowers through a native parent/replay artifact, including dimension-name attributes and allocation-dominating shape/count guards. Six selected M1 Max softmax/GELU device tests pass. Existing dtype/shape envelopes remain bounded; no new performance promotion. The changed runtime still needs a committed-source fleet re-seal before publication.
+ANN executable admission, mixed/while tapes and analytic error-budget consumers
+remain follow-ups under F3, AD-RESIDUAL-EVAL-1 and FA-1 respectively.
+
+
+**ANN admission / mixed checkpoint products — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Follow-up required: shared normalization and ANN math contracts do not implement Metal tape storage. MSL-owned mixed slots, checkpoint execution and retirement still need an Apple producer and exact-device proof. No runtime or fleet seal changes in this increment.
+General data-dependent while, integer/predicate and dynamic slots, asynchronous
+retirement and automatic policy selection remain open. See the integrated plan
+and benchmarks/baselines/tape_checkpoint_20260907/.
+
+
+**Data-dependent tape / nonlinear native ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Follow-up required: Metal needs its own MSL typed residual storage, completion ownership and nonlinear ANN consumer. CUDA/HIP serial pointer packages and timings are not Apple evidence. No Apple runtime or fleet seal changed in this increment.
+Shape-varying residuals, reader-complete asynchronous reclamation, broader
+nonlinear/error-budget consumers and measured production promotion remain open.
+See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
+
+
+**Shape tapes / scoped GPU ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+
+Follow-up required. Shared extent guards, logical shape residuals and numerical contracts apply to the compiler foundation. The host i64/i8 ABI and CUDA/HIP arbiter bindings do not establish MSL storage, Metal tape execution or Apple performance. No Apple runtime change in this increment; the earlier runtime edit still needs its committed-source fleet re-seal before PR.
+
+Shared source, physical artifact replay, numerical-domain guards and evidence are
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+
+The shared host JIT now retires compiler-owned temporaries through upstream
+ownership-based buffer deallocation after DPS copies. Validation is x86 on
+Princess-Luna; this does not replace the GPU exported-reader completion barrier
+or establish asynchronous device freeing. Native extent guards currently abort
+on mismatch; recoverable JIT status propagation remains a follow-up.

@@ -6688,3 +6688,56 @@ Apple-specific mixed-bias ABI has no nvidia ABI or execution change. Shared audi
 
 **PR #733 status/paired-companion correction — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
 Shared backward Graph emission carries reciprocal primal/VJP symbol references; the new admission restriction and status ABI are Apple-only. No nvidia ABI, physical schedule or performance claim changes. Existing native compiler consumers are checked where available; exact-device nvidia evidence is not inferred from Metal tests.
+
+
+**Capability-document reconciliation — IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Documentation-only ownership/lifecycle cleanup: Block AttnRes, EGGROLL and game
+theory remain scoped landing plans; AD residuals use the active AD plan and
+shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
+NVIDIA workload consumers still need independent native package and exact-SM evidence; no physical schedule is copied from gfx1151.
+No runtime, ABI or support status changes. Follow-up requirements are mapped in
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+
+
+**Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared recipe specialization and descriptor identity changes apply. CUDA schedules/runtime ABIs are unchanged; Metal execution and package timings do not establish SM120 parity. RTX 5070 is reachable. Native ANN execution and heterogeneous/while tape work require owning-host follow-up.
+All three fleet LLVM builds currently report assertions OFF. No assertions-enabled
+validation or broader route/envelope closure is claimed. See the integrated
+plan’s status, native GELU and recipe instantiation section.
+
+
+**Dynamic native package projection — F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Floating scheduled matmul packages now verify native Schedule-to-Tile replay and project dynamic axes, epilogues and entry identity before compilation. Partly dynamic descriptors preserve equality guards on static axes. Fourteen RTX 5070 scheduled-matmul device tests pass. No performance promotion follows from these correctness tests.
+ANN executable admission, mixed/while tapes and analytic error-budget consumers
+remain follow-ups under F3, AD-RESIDUAL-EVAL-1 and FA-1 respectively.
+
+
+**ANN admission / mixed checkpoint products — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Five RTX 5070 cases execute mixed f32/f64, nested SAVE/HYBRID/recompute-all and proven counted-while SAVE products with repeated backward calls. NVVM private allocation handling remains architecture-owned. This is correctness/retained-byte evidence, not latency or overlap promotion. GPU ANN admission remains follow-up required.
+General data-dependent while, integer/predicate and dynamic slots, asynchronous
+retirement and automatic policy selection remain open. See the integrated plan
+and benchmarks/baselines/tape_checkpoint_20260907/.
+
+
+**Data-dependent tape / nonlinear native ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Owning RTX 5070 validation covers bounded data-dependent exits, stored predicate branches and asynchronous derivative generations. Native frozen-affine plus terminal ReLU original/rewrite packages have independent numerical and host-bridge timing evidence. Production GPU arbiter registration and tuned schedules remain follow-ups.
+Shape-varying residuals, reader-complete asynchronous reclamation, broader
+nonlinear/error-budget consumers and measured production promotion remain open.
+See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
+
+The nine-run native ANN package comparison refuses performance promotion; the
+original remains the incumbent. See the packet README for target-local bounds.
+
+
+**Shape tapes / scoped GPU ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+
+Parity validated for the bounded GPU ANN slice on Super-Bear RTX 5070 (sm_120): four native arbiter cases pass. Nine fused-package runs refuse promotion (median 0.99809x, lower 0.97773x against 1.02x). Shape-varying x86 execution does not transfer to CUDA; dynamic GPU residual storage, reader-complete asynchronous frees and tuned parallel ANN remain follow-ups.
+
+Shared source, physical artifact replay, numerical-domain guards and evidence are
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+
+The shared host JIT now retires compiler-owned temporaries through upstream
+ownership-based buffer deallocation after DPS copies. Validation is x86 on
+Princess-Luna; this does not replace the GPU exported-reader completion barrier
+or establish asynchronous device freeing. Native extent guards currently abort
+on mismatch; recoverable JIT status propagation remains a follow-up.

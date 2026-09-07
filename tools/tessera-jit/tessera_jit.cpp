@@ -46,6 +46,7 @@
 #include "mlir/Transforms/Passes.h"  // createCanonicalizerPass / CSE
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/SCF/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/Transforms/SubsetInsertionOpInterfaceImpl.h"
@@ -746,6 +747,17 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   if (failed(rewriteResultsToOutParams(module)))
     return failure();
 
+  // DPS outputs belong to the caller; compiler temporaries must be retired
+  // after the final copy, including allocations carried through loop regions.
+  // Use upstream ownership analysis rather than guessing roots from aliases.
+  PassManager retirement(module->getContext());
+  maybeTrace(retirement);
+  retirement.addPass(bufferization::createOwnershipBasedBufferDeallocationPass());
+  retirement.addPass(bufferization::createBufferDeallocationSimplificationPass());
+  retirement.addPass(bufferization::createLowerDeallocationsPass());
+  if (failed(retirement.run(module)))
+    return failure();
+
   // Stage 1.6 (opt-in lane): lower vector.contract/transfer now that bufferize
   // has made the transfers memref-based. Only when the lane actually engaged.
   if (vectorized) {
@@ -860,6 +872,7 @@ void *tessera_jit_compile(const char *mlir_text) {
   linalg::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
   scf::registerBufferizableOpInterfaceExternalModels(registry);
+  scf::registerBufferDeallocationOpInterfaceExternalModels(registry);
   vector::registerBufferizableOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);

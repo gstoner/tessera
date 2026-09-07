@@ -157,7 +157,8 @@ def test_frozen_native_identity_digests_are_cached_after_first_use() -> None:
         "image_digest",
         "cache_key",
     } <= image.__dict__.keys()
-    assert {"descriptor_digest", "cache_fingerprint"} <= descriptor.__dict__.keys()
+    # Nested descriptor provenance/expressions are mutable JSON values.
+    assert not {"descriptor_digest", "cache_fingerprint"} & descriptor.__dict__.keys()
 
 
 def test_workspace_lifecycle_is_round_tripped_and_rejects_invalid_combinations() -> None:
@@ -355,3 +356,26 @@ def test_malformed_json_roots_fail_with_registered_codes() -> None:
         NativeImageArtifact.from_json("[]")
     with pytest.raises(ArtifactContractError, match="E_LAUNCH_DESCRIPTOR_SCHEMA"):
         LaunchDescriptor.from_json("not-json")
+
+
+def test_descriptor_identity_tracks_nested_semantic_mutation():
+    descriptor = _descriptor(_image(), provenance={'policy': {'budget': [0.1]}})
+    before = descriptor.descriptor_digest, descriptor.cache_fingerprint
+    descriptor.provenance['policy']['budget'][0] = 0.01
+    assert descriptor.descriptor_digest != before[0]
+    assert descriptor.cache_fingerprint != before[1]
+    assert LaunchDescriptor.from_json(descriptor.to_json()).descriptor_digest == descriptor.descriptor_digest
+
+
+def test_cached_dtype_spelling_does_not_cache_invocation_shape_or_layout():
+    import numpy as np
+    from tessera.runtime import _native_buffer_value, _numpy_native_dtype_name
+    value = np.zeros((2, 3), dtype=np.float32)
+    _numpy_native_dtype_name.cache_clear()
+    _, before = _native_buffer_value(value)
+    value.shape = (3, 2)
+    _, after = _native_buffer_value(value)
+    assert before.shape == (2, 3) and after.shape == (3, 2)
+    assert _numpy_native_dtype_name.cache_info().hits == 1
+    _, transposed = _native_buffer_value(value.T)
+    assert transposed.layout == 'col_major'

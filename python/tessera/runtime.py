@@ -5924,14 +5924,15 @@ def _submit_apple_gpu_native(
         # writes through `out`.
         x = x.reshape(-1, x.shape[-1])
         out = out.reshape(-1, out.shape[-1])
+        if any(int(d) <= 0 or int(d) > 2147483647 for d in x.shape):
+            raise RuntimeError("Apple softmax shape exceeds its positive i32 ABI")
         runtime = _load_apple_gpu_runtime()
         function = getattr(runtime, softmax_symbol, None)
         if function is None:
             raise RuntimeError(f"Apple runtime is missing {softmax_symbol}")
         pointer = ctypes.POINTER(cast(Any, softmax_pointer_element))
         function.argtypes = [pointer, pointer, ctypes.c_int32, ctypes.c_int32]
-        requires_status = descriptor.abi_id in (APPLE_SOFTMAX_F16_ABI, APPLE_SOFTMAX_BF16_ABI)
-        function.restype = ctypes.c_int32 if requires_status else None
+        function.restype = ctypes.c_int32
 
         def softmax_pointer(value: Any) -> Any:
             return (
@@ -5941,8 +5942,8 @@ def _submit_apple_gpu_native(
             )
 
         status = function(softmax_pointer(x), softmax_pointer(out), *map(int, x.shape))
-        if requires_status and status != 1:
-            raise RuntimeError("Apple low-precision softmax did not execute on Metal")
+        if status != 1:
+            raise RuntimeError("Apple softmax did not execute on Metal")
         return out
 
     gelu_variants = {
@@ -5973,13 +5974,15 @@ def _submit_apple_gpu_native(
         }:
             if int(cast(int, scalars["Elements"])) != int(x.size):
                 raise RuntimeError("Apple dynamic GELU Elements scalar disagrees with input buffer")
+        if x.size > 2147483647:
+            raise RuntimeError("Apple GELU shape exceeds its positive i32 ABI")
         runtime = _load_apple_gpu_runtime()
         function = getattr(runtime, gelu_symbol, None)
         if function is None:
             raise RuntimeError(f"Apple runtime is missing {gelu_symbol}")
         pointer = ctypes.POINTER(cast(Any, gelu_pointer_element))
         function.argtypes = [pointer, pointer, ctypes.c_int32]
-        function.restype = None
+        function.restype = ctypes.c_int32
 
         def gelu_pointer(value: Any) -> Any:
             return (
@@ -5988,7 +5991,9 @@ def _submit_apple_gpu_native(
                 else value.view(np.uint16).ctypes.data_as(pointer)
             )
 
-        function(gelu_pointer(x), gelu_pointer(out), ctypes.c_int32(int(x.size)))
+        status = function(gelu_pointer(x), gelu_pointer(out), ctypes.c_int32(int(x.size)))
+        if status != 1:
+            raise RuntimeError("Apple GELU did not execute on Metal")
         return out
 
     transpose_variants = {
@@ -32988,6 +32993,12 @@ def _first_failing_gate_for_metadata(metadata: dict, target: str):
         return None
 
 
+@functools.lru_cache(maxsize=64)
+def _numpy_native_dtype_name(dtype: Any) -> str:
+    """Cache only immutable NumPy dtype spelling, never invocation metadata."""
+    return str(dtype)
+
+
 def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
     if isinstance(value, NativeBufferValue):
         return value.value, value.argument
@@ -33022,8 +33033,10 @@ def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
         if callable(data_ptr):
             address = int(data_ptr())
     alignment = address & -address if address > 0 else 1
+    import numpy as np
+    dtype_name = _numpy_native_dtype_name(dtype) if isinstance(dtype, np.dtype) else str(dtype)
     return value, BufferArgument(
-        dtype=str(dtype),
+        dtype=dtype_name,
         shape=tuple(int(dim) for dim in shape),
         layout=layout,
         address_alignment=alignment,

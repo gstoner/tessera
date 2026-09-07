@@ -1,0 +1,91 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "rows": [
+    {
+      "released_derivative_bytes": 64,
+      "exit_steps": 0,
+      "predicate_path": null,
+      "residual_dtypes": [
+        "<i8",
+        "<f4"
+      ],
+      "residual_bytes": 48,
+      "async_generations": 2,
+      "completion_owners_retired": true
+    },
+    {
+      "released_derivative_bytes": 64,
+      "exit_steps": 1,
+      "predicate_path": null,
+      "residual_dtypes": [
+        "<i8",
+        "<f4"
+      ],
+      "residual_bytes": 48,
+      "async_generations": 2,
+      "completion_owners_retired": true
+    },
+    {
+      "released_derivative_bytes": 64,
+      "exit_steps": 2,
+      "predicate_path": null,
+      "residual_dtypes": [
+        "<i8",
+        "<f4"
+      ],
+      "residual_bytes": 48,
+      "async_generations": 2,
+      "completion_owners_retired": true
+    },
+    {
+      "released_derivative_bytes": 64,
+      "exit_steps": 3,
+      "predicate_path": null,
+      "residual_dtypes": [
+        "<i8",
+        "<f4"
+      ],
+      "residual_bytes": 48,
+      "async_generations": 2,
+      "completion_owners_retired": true
+    },
+    {
+      "released_derivative_bytes": 32,
+      "exit_steps": null,
+      "predicate_path": true,
+      "residual_dtypes": [
+        "|i1"
+      ],
+      "residual_bytes": 1,
+      "async_generations": 2,
+      "completion_owners_retired": true
+    },
+    {
+      "released_derivative_bytes": 32,
+      "exit_steps": null,
+      "predicate_path": false,
+      "residual_dtypes": [
+        "|i1"
+      ],
+      "residual_bytes": 1,
+      "async_generations": 2,
+      "completion_owners_retired": true
+    }
+  ],
+  "forward": "e9f4c0ab8ad43f66d173dd1d4fbebc3087d44f24ebd1fbba08befa6e2c02258e",
+  "backward": "a8960b0e9f589f6e8fa2ff803ac25040c4867cc42cfc2baa23d6f38977f2467e",
+  "predicate_forward": "035abc3a84c572a444aa87f73749b7a9558a663e2588e57d57be36d6591bfcf9",
+  "predicate_backward": "346ad839622b52dee44466a663e478af7973e13cd67e0a9008edd92aefacdc7f",
+  "compiler_sha256": "59273820d54374c96fd1aac6214faf85839f0e01913544d752cd36bfc3cf74d6",
+  "sources": {
+    "src/transforms/lib/AutodiffPairedPass.cpp": "1d9f31128e26da1ba1961ab7c0a33b45905b8b71d8cf61099fc2552b62fda1d8",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "0d39d73f753b717126537498cc510bcb2e5c829673e30497749f0c35f373027f",
+    "python/tessera/compiler/native_persistent_tape.py": "8bd574b805e0ca5bcea5ed84211bd6177885cd03aed396e6420924495b33ac68",
+    "python/tessera/compiler/native_device_tape.py": "7a9edc19e3968414711226bda6e10e4a3347ab1a370724280840c9b6bc8d306a",
+    "python/tessera/compiler/native_gpu_storage.py": "afa3cfda7db34c134ea13ad34389f47b40bfbc501551eaef3e0a397238683d69"
+  },
+  "recorder_sha256": "e2dc3afa35fcdb0c3ad98d53bc27a5aa32bf94dfb7b5c4cbea51115fc8c91825",
+  "promotion_eligible": false,
+  "overlap_proven": false
+}

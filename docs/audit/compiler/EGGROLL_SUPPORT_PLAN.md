@@ -1,7 +1,7 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-09-07
 audit_role: plan
-plan_state: open
+plan_state: landing
 ---
 
 # EGGROLL / Evolution-Strategies Support Plan
@@ -20,12 +20,29 @@ plan_state: open
 > **Provenance.** Derived from EGGROLL (*Evolution Strategies at the Hyperscale*,
 > arXiv:2511.16652v2) + the reference implementations `ESHyperscale/HyperscaleES`
 > and `ESHyperscale/nano-egg` (read as reference vocabulary only, Decision #23).
-> Every algebraic and statistical claim below is **verified numerically** — see
-> §Oracles. The verification harness and drop-in pytest fixture live at
+> The bounded numerical checks in §Oracles support the reference formulas;
+> they do not establish universal statistical or native-performance claims.
+> The historical verification harness and drop-in pytest fixture live at
 > `scratchpad/eggroll_oracle.py` and `scratchpad/test_es_low_rank_correction.py`
 > (target: `tests/unit/test_es_low_rank_correction.py`).
 
 ---
+
+## Current status and remaining acceptance work
+
+| Slice | Current boundary | Remaining gate / owner |
+|---|---|---|
+| W1 | Reference population/update/RNG contracts exist. | Preserve member identity and distribution contracts as physical variants expand. |
+| W2 | Rank-1 fp32 native x86/gfx1151 consumers and fixed-key JVP exist. | Reverse linear transpose through shared AD; rank>1 and new storage through explicit native contracts; F2/F4 / AD / NUMPOL. |
+| W2 performance | Recorded correctness does not establish general selector eligibility. | Matched scalar/direct/cooperative comparisons on valid owning-device clocks; W5.2 / F3. |
+| W3 | Adam and moment-free host oracles exist. | Fuse native updates only with state-order, alias, numerical and no-materialization proof; F3. |
+| W4 | Four-rank mock reconstruction matches the centralized reference. | Native transport and rank-owned execution/performance packets; DIST-NATIVE-1. |
+
+Apple/NVIDIA consumers and integer quantization semantics remain separate
+acceptance work. The existing synchronization key **EGGROLL-ES-LOWRANK-2026-08-09**
+is retained in the [integrated mapping](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+This plan defines workload scope; the operator-improvement catalog is not a
+parallel compiler backlog.
 
 ## 1. What EGGROLL is, and why it is a *compiler* problem
 
@@ -232,10 +249,8 @@ attr has a named consumer (Decision #29): `score`→sampler+emitter,
 
 ---
 
-## 8. Suggested `MASTER_AUDIT.md` queue row
+## 8. Integrated ownership
 
-> **[P1] Gradient-free / Evolution-Strategies track (EGGROLL).** New primitive
-> `es_low_rank_correction` + reference tier + moment-free optimizer. Op contract
-> proof-backed (`EGGROLL_SUPPORT_PLAN.md`); oracles green. Drives P0 operator
-> wins O1 (numeric_policy carrier), O2 (saturating requantize), O3 (shared-operand
-> batched GEMM). W1 host-free first; W4 distributed is Phase G/H.
+Use the current-status table and the integrated plan's F2/F3/F4, AD, NUMPOL
+and DIST-NATIVE-1 owners. The [original suggested master-queue row](archive/CAPABILITY_PLAN_STATUS_2026_08.md)
+is historical; do not schedule W1 or the rank-1 fp32 native primitive again.

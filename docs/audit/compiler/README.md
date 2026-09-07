@@ -124,7 +124,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 |---|---|---|
 | What works now? | [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) | generated dashboards and the applicable backend plan |
 | What should land next? | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) | the scoped plan named by the owning item |
-| What core substrate do the capability papers share? | [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) | the six source docs it maps, then the owning integrated-plan rows |
+| What core substrate do the capability papers share? | [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) | the seven source documents it maps, then the owning integrated-plan rows |
 | How should Graph/Schedule/Tile/Target fit? | [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) | [`IR_STACK_INTEGRATION_REVIEW.md`](IR_STACK_INTEGRATION_REVIEW.md), [`TARGET_IR_REVIEW.md`](TARGET_IR_REVIEW.md) |
 | How should the frontend and Graph IR change? | [`FRONTEND_GRAPH_SCHEDULE_REVIEW.md`](FRONTEND_GRAPH_SCHEDULE_REVIEW.md) | [active AD plan](AUTODIFF_EXECUTION_PLAN.md) |
 | Should the IR be the single medium of record (vs the Python object graph)? | [`FRONT_END_LOWERING_ASSESSMENT.md`](FRONT_END_LOWERING_ASSESSMENT.md) | [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) for the arbiter, `FRONTEND-IR-MEDIUM-1` in [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) |
@@ -157,7 +157,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`BLOCK_ATTNRES_ROCM_PLAN.md`](BLOCK_ATTNRES_ROCM_PLAN.md) | Block AttnRes mathematical contract, portable oracle, and ROCm-first physical acceptance criteria. |
 | [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) | Shared spine, plugin, packaging, and backend reconciliation details. |
 | [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md) | CuTe IR (NVIDIA/cutlass#3426) review and verified layout algebra: the four-primitive scoping result, the mechanisms worth importing (partially-static value-in-type, fold-static, dynamic-leaf-only lowering, negative-scoped driver), and the `LAYOUT-ALG-1` sequence (integrated plan) serving the S9 `⊑` operator, SparDA's GQA-fold, TileSight's rasterization knob, and the G1b butterfly consolidation. Numeric contract in `tests/unit/test_layout_algebra_contracts.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
-| [`EGGROLL_SUPPORT_PLAN.md`](EGGROLL_SUPPORT_PLAN.md) | Gradient-free / Evolution-Strategies track: low-rank ES op contract, reference tier, and operator-improvement catalog. |
+| [`EGGROLL_SUPPORT_PLAN.md`](EGGROLL_SUPPORT_PLAN.md) | Landing ES workload: native rank-1 fp32 foundation, with reverse/breadth, fusion and transport residuals mapped to integrated owners. |
 | [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) | Correctness/evidence rung and promotion contract. |
 | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | W4-EFFECTS-1: operation-owned recorded products that let keyed RNG, recorded-state mutation, and ordered collectives enter a differentiated region without weakening the fail-closed gate. States the admissibility criterion (reproducibility + confinement), the per-class verdicts including why I/O stays closed, and five delivery slices. Global order defers to `INTEGRATED_COMPILER_PLAN.md` queue order 2. |
 | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | Coalition-lattice / equilibrium operator family: subset zeta/Möbius butterfly, semivalues, differentiable equilibria, regret/CFR dynamics, and the numerically verified oracle set (`research/game_theory/`). Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
@@ -177,10 +177,10 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | Historical proposal now archived; live ownership note. Original FORGE (arXiv:2606.22932) assessment and the residency-aware epilogue-fusion track it opens: locality lattice, static materialization proof, `matmul → optimizer` fusion, fail-closed clipping/routing keys, and the precision-realizability oracle. Numeric contract in `tests/unit/test_fused_wgrad_optimizer_contract.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md) | Consolidated routing note (original proposal archived). MSW-1..MSW-9: a host-free reference-lane workstream derived from two tensor-calculus texts (Sochi) and a deep-learning theory book (Jentzen/Kuckuck/von Wurstemberger, arXiv:2310.20360v3). Higher-order autodiff fail-closed guard (landed) and exact jet path, optimizer breadth, a vector-identity law family, coordinate-aware field calculus, contraction normal form, two samples, and ANN-calculus fusion laws. Orthogonal to the integrated queue's physical-execution items rather than competing with them; global order still defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | Historical AD routing: [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md), [`AUTODIFF_UNIFICATION_PLAN.md`](AUTODIFF_UNIFICATION_PLAN.md), [`AUTODIFF_ARCHITECTURE_REVIEW.md`](AUTODIFF_ARCHITECTURE_REVIEW.md) | Redirects to archived designs and the active AD plan; no independent queues. |
-| [`DIFFERENTIABLE_PROGRAMMING_REVIEW.md`](DIFFERENTIABLE_PROGRAMMING_REVIEW.md) | Book-derived delta; distinguishes Python reference work from compiled support. |
+| [`DIFFERENTIABLE_PROGRAMMING_REVIEW.md`](DIFFERENTIABLE_PROGRAMMING_REVIEW.md) | Book-derived reference with one current status/owner table; remaining AD work is consolidated into AUTODIFF_EXECUTION_PLAN.md. |
 | [`MATRIX_CALCULUS_REVIEW.md`](MATRIX_CALCULUS_REVIEW.md) | Book-derived delta against Edelman & Johnson's matrix-calculus notes (arXiv:2501.14787): the missing matrix-function/factorization derivative family, a verified `svd` VJP NaN at repeated singular values, the metric-parameterized gradient as the `manifold` key's consumer, and the Kronecker/`vec` cost identity. Companion runnable tutorial at `examples/matrix_calculus/`. |
 | [`COMPILER_ARCHITECTURE_SWEEP.md`](COMPILER_ARCHITECTURE_SWEEP.md) | Cross-layer findings feeding the integrated plan. |
-| [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) | Nine-substrate synthesis across seven sources. Reviewed September 6 without editing; consult the compiler audit for stale status/ownership claims. |
+| [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) | Current nine-substrate ownership map across seven sources; historical status and build sequence archived. |
 | [`FRONTEND_GRAPH_SCHEDULE_REVIEW.md`](FRONTEND_GRAPH_SCHEDULE_REVIEW.md) | Frontend, Graph, and Schedule ownership findings. |
 | [`FRONT_END_LOWERING_ASSESSMENT.md`](FRONT_END_LOWERING_ASSESSMENT.md) | KGEN-as-yardstick assessment of the Python→MLIR front half: the two-memories finding (IR as lossy projection of the Python object graph), the pre-elaboration parametric-optimization gap on the existing Presburger substrate, raising as the arbiter on-ramp for user math, and the fail-closed-dtype / `loc` / elaboration-boundary down-payment. Global order defers to `INTEGRATED_COMPILER_PLAN.md` (`FRONTEND-IR-MEDIUM-1`). |
 | [`IR_STACK_INTEGRATION_REVIEW.md`](IR_STACK_INTEGRATION_REVIEW.md) | IR adjacency and lowering-boundary findings. |
@@ -235,3 +235,12 @@ admission. FORGE and the original math-source proposal are archived references
 with live routing notes; their remaining tasks are not closed. Matrix calculus
 and sequence-mixer theory remain mathematical references. Geometry, PDE and
 sequence-mixer implementation plans remain live scoped consumer plans.
+
+
+### September capability-plan reconciliation
+
+[The integrated mapping](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+consolidates the five reviewed documents under existing F0–F4, AD, NUMPOL,
+layout and transport owners. All five live paths remain useful: three scoped
+landing plans and two references. The August substrate snapshot and superseded
+AD/workload status excerpts are archived; they are not additional queues.

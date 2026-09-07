@@ -1,0 +1,51 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "rows": [
+    {
+      "activation": "relu",
+      "budget": 0.0,
+      "region": "e8fd4339bce7280280727c1f24607137b0461b6ff1454735e939e21dfcb2c104",
+      "original": "8c0bb9a797cc273b94c074dce30a2d515525336fd4a880ffa4aa8aee76d53eb9",
+      "transformed": "ab2356ad5f0ec1d8c81eeb373763c1e3cd27e5de55060891aec0a3bfb4056106",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "relu",
+      "budget": 0.001,
+      "region": "c363f865d57246c021387932c50920e6a8e6f3ef43a3a0edcf6586dccf390383",
+      "original": "8c0bb9a797cc273b94c074dce30a2d515525336fd4a880ffa4aa8aee76d53eb9",
+      "transformed": "ab2356ad5f0ec1d8c81eeb373763c1e3cd27e5de55060891aec0a3bfb4056106",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    },
+    {
+      "activation": "abs",
+      "budget": 0.0,
+      "region": "889aad62801a55e9c719b7849195f72e116568e4a2cbf20bd96509a9cf29dbd8",
+      "original": "dcdb7bb77ffa2ae44ab68c0a0ce4ce666efc2dd1f037386cc1c32471760d3675",
+      "transformed": "4ddbf8caaac5d19317dfa83dd734093ad5e09ab75fa614c1ca7e8390bb53e6b1",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "abs",
+      "budget": 0.001,
+      "region": "f1931918e2cf301685131eeb94bfc861f60e1965a628d041de63daa8ec24c052",
+      "original": "dcdb7bb77ffa2ae44ab68c0a0ce4ce666efc2dd1f037386cc1c32471760d3675",
+      "transformed": "4ddbf8caaac5d19317dfa83dd734093ad5e09ab75fa614c1ca7e8390bb53e6b1",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    }
+  ],
+  "compiler_sha256": "402ce52aa56641fa711e3b94c9f76459ea3700d355903c1833a7f7627ebde212",
+  "sources": {
+    "python/tessera/compiler/native_ann.py": "d3b65e513eea89b18f643093f50b9d1b1608fd5505614db6de3015bd8f4f1969",
+    "python/tessera/compiler/native_ann_gpu.py": "5cf13b4d21f942e6aef626da68887190894b192e2169a389438993565feeacbf",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "5ddc620e9aa580d4e90ba611e62442cea2921ccc2b85ebc95732345153693ea4",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "0d39d73f753b717126537498cc510bcb2e5c829673e30497749f0c35f373027f"
+  },
+  "recorder_sha256": "fab4264dc95a3cd9213fcbd227b19b8c2beb48081a3a3c0f6faadc9221b23820",
+  "promotion_eligible": false
+}

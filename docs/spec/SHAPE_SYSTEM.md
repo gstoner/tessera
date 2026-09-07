@@ -598,3 +598,16 @@ following are the canonical evidence files:
 A primitive that claims a contract not in §11.1 above must add a row
 here with the file path that owns the check, or downgrade the claim to
 `planned`.
+
+
+### Native parametric instantiation (bounded matmul recipe)
+
+`tessera-symdim-equality` remains verification-only by default. Its optional
+`instantiate=M:2;K:4;N:3` argument records concrete `tessera.dim_sizes`, verifies
+retained constraints, and specializes every argument/result type in a single
+straight-line matmul function. Missing shape transfers, conflicting static
+extents, unsupported operations and incomplete witnesses refuse. This is a
+native type transformation of the already optimized recipe, not a second Graph
+construction. `ParametricRecipe.instantiate_buckets` binds each instance to its
+optimized parent and compiler digest. Concrete IR does not itself establish
+native execution, ANN equivalence or measured arbiter admission.

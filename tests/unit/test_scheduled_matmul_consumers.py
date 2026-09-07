@@ -510,6 +510,8 @@ def test_x86_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
 
 def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     artifact = _artifact(target="rocm")
+    # This test isolates final image consumption; native replay is tested below.
+    monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda _: None)
 
     def fake_compile(tile_ir: str):
         assert tile_ir == artifact.tile_ir
@@ -665,6 +667,7 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(
         "lower_scheduled_matmul",
         lambda module, *, target: artifact,
     )
+    monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda _: None)
     # This lineage proof is host-free: the lowering is stubbed above, so pin the
     # Apple scheduled-boundary availability too. Otherwise the assertion would
     # silently depend on whether the runner happens to have a built tessera-opt.
@@ -1203,6 +1206,7 @@ def test_nvidia_scheduled_package_compiles_once_without_graph(monkeypatch, dtype
     artifact = replace(
         artifact, a_dtype=dtype, b_dtype=dtype,
         storage="f16" if dtype == "fp16" else "bf16", dynamic_m=dynamic,
+        dynamic_n=dynamic, dynamic_k=dynamic,
         tile_ir=artifact.tile_ir.replace('storage = "f16"', f'storage = "{"f16" if dtype == "fp16" else "bf16"}"'),
     )
     fields = (
@@ -1228,6 +1232,9 @@ def test_nvidia_scheduled_package_compiles_once_without_graph(monkeypatch, dtype
     def forbidden(*args, **kwargs):
         raise AssertionError("scheduled package re-entered Graph packaging")
 
+    # Isolate compilation and descriptor ABI with a synthetic Tile fixture.
+    # Native projection and corruption rejection have separate compiler tests.
+    monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda _: None)
     monkeypatch.setattr(nvidia_native, "_compile_tile_ir", compile_tile)
     monkeypatch.setattr(nvidia_native, "package_matmul", forbidden)
     package = nvidia_native.package_scheduled_matmul(artifact, pipeline_name="tessera-nvidia-pipeline-sm120")
@@ -1249,7 +1256,7 @@ def test_nvidia_scheduled_package_compiles_once_without_graph(monkeypatch, dtype
     assert nvidia_native.package_scheduled_matmul(changed, pipeline_name="tessera-nvidia-pipeline-sm120").image.image_digest != package.image.image_digest
 
     for changed in (replace(artifact, m=99), replace(artifact, output_dtype="fp16"),
-                    replace(artifact, dynamic_m=not dynamic),
+                    replace(artifact, dynamic_m=not dynamic, dynamic_n=not dynamic, dynamic_k=not dynamic),
                     replace(artifact, function_name="missing_entry")):
         before = len(calls)
         with pytest.raises(ValueError, match="disagrees"):
@@ -1257,3 +1264,49 @@ def test_nvidia_scheduled_package_compiles_once_without_graph(monkeypatch, dtype
                 changed, pipeline_name="tessera-nvidia-pipeline-sm120"
             )
         assert len(calls) == before
+
+
+@requires_tessera_opt
+@pytest.mark.parametrize("dynamic", [False, True])
+@pytest.mark.parametrize("target,epilogue", [
+    ("rocm", False),
+    pytest.param("nvidia_sm120", False, marks=requires_nvidia_target_ir),
+    pytest.param("nvidia_sm120", True, marks=requires_nvidia_target_ir),
+])
+def test_native_matmul_projection_rejects_descriptor_and_tile_edits(dynamic, target, epilogue):
+    from dataclasses import replace
+
+    module = (_dynamic_module(target=target, bounds=(64, 64, 48),
+                              bias=epilogue, residual=epilogue, activation="relu" if epilogue else "none")
+              if dynamic else _module(target=target, bias=epilogue, residual=epilogue,
+                                      activation="relu" if epilogue else "none"))
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target="rocm_gfx1151" if target == "rocm" else target)
+    scheduled_matmul.verify_matmul_projection(artifact)
+    scheduled_matmul.verify_matmul_projection(replace(artifact, graph_ir="discarded frontend"))
+    for changed in (replace(artifact, m=artifact.m+1),
+                    replace(artifact, dynamic_m=not artifact.dynamic_m),
+                    replace(artifact, dynamic_n=not artifact.dynamic_n),
+                    replace(artifact, dynamic_k=not artifact.dynamic_k),
+                    replace(artifact, activation="gelu"),
+                    replace(artifact, function_name="different_entry"),
+                    replace(artifact, tile_ir=artifact.tile_ir+"\n// corrupted"),
+                    replace(artifact, bias_name=None if epilogue else "bias")):
+        with pytest.raises(ValueError, match="disagree"):
+            scheduled_matmul.verify_matmul_projection(changed)
+
+
+@requires_nvidia_target_ir
+def test_partial_dynamic_native_matmul_preserves_static_axis_guards(monkeypatch):
+    module = _module(target='nvidia_sm120', shape=(32, 32, 24))
+    fn = module.functions[0]
+    fn.args[0].ir_type = IRType('tensor<32x?xf16>', ('32', '?'), 'fp16')
+    fn.args[1].ir_type = IRType('tensor<?x24xf16>', ('?', '24'), 'fp16')
+    fn.body[0].operand_types = [str(a.ir_type) for a in fn.args]
+    fn.body[0].kwargs['shape_bounds'] = [32, 24, 32]
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target='nvidia_sm120')
+    monkeypatch.setattr(nvidia_native, '_compile_tile_ir',
+                        lambda text, entry: (text, '// PTX fixture', {}, 'compiler', 'toolchain', (), 'cold'))
+    package = nvidia_native.package_scheduled_matmul(artifact, pipeline_name='tessera-nvidia-pipeline-sm120')
+    guards = {(g.binding, g.dimension): g.predicate for g in package.descriptor.shape_guards}
+    assert guards == {('a', 0): 'eq', ('a', 1): 'max', ('b', 0): 'max',
+                      ('b', 1): 'eq', ('o', 0): 'eq', ('o', 1): 'eq'}

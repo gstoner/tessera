@@ -4358,3 +4358,53 @@ Apple-specific mixed-bias ABI has no x86 ABI or execution change. Shared audit s
 
 **PR #733 status/paired-companion correction — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
 Shared backward Graph emission carries reciprocal primal/VJP symbol references; the new admission restriction and status ABI are Apple-only. No x86 ABI, physical schedule or performance claim changes. Existing native compiler consumers are checked where available; exact-device x86 evidence is not inferred from Metal tests.
+
+
+**Capability-document reconciliation — IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Documentation-only ownership/lifecycle cleanup: Block AttnRes, EGGROLL and game
+theory remain scoped landing plans; AD residuals use the active AD plan and
+shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
+Existing bounded AVX-512 ES, solver and coalition consumers remain scoped; Block AttnRes and broader solver/workload packages need their own execution and measurement.
+No runtime, ABI or support status changes. Follow-up requirements are mapped in
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+
+
+**Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared recipe specialization and descriptor identity changes apply. No x86 runtime ABI or solver/AD support expansion is claimed. Host tape allocation, ANN execution and numerical-budget consumers remain explicit follow-ups.
+All three fleet LLVM builds currently report assertions OFF. No assertions-enabled
+validation or broader route/envelope closure is claimed. See the integrated
+plan’s status, native GELU and recipe instantiation section.
+
+
+**Dynamic native package projection — F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+The new CUDA/ROCm matmul projection checks and Metal GELU runtime lowering do not change x86 packaging or its ABI. Not applicable to x86 execution; shared compiler and registry checks run in WSL, without borrowing GPU physical proof.
+ANN executable admission, mixed/while tapes and analytic error-budget consumers
+remain follow-ups under F3, AD-RESIDUAL-EVAL-1 and FA-1 respectively.
+
+
+**ANN admission / mixed checkpoint products — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Native frozen-affine original/rewrite programs execute through the existing MLIR/LLVM JIT and enter the existing arbiter under an artifact/domain/budget-bound internal family. Rational error bounds and an independent exact oracle gate eligibility; equal-tier default retains the original. No timing-based promotion or CPU persistent-tape proof is inferred.
+General data-dependent while, integer/predicate and dynamic slots, asynchronous
+retirement and automatic policy selection remain open. See the integrated plan
+and benchmarks/baselines/tape_checkpoint_20260907/.
+
+
+**Data-dependent tape / nonlinear native ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared native scalar boxing, discrete cotangent exclusion and nonexpansive ReLU error analysis have WSL compiler/JIT tests. CUDA/HIP physical tape and ANN proof is not CPU tape execution. Existing x86 ANN arbiter eligibility remains separate from GPU measurements.
+Shape-varying residuals, reader-complete asynchronous reclamation, broader
+nonlinear/error-budget consumers and measured production promotion remain open.
+See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
+
+
+**Shape tapes / scoped GPU ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+
+Parity validated for native host shape-varying tapes on Princess-Luna x86: widths 4/8/16, two saved logical extents and repeated backward calls. Dynamic binary extent guards and dynamic adjoint zeros lower to native LLVM; signature-checked i64/i8 residual buffers execute through the JIT. CUDA/HIP GPU arbitration and timing are not x86 promotion evidence. General CFG recovery remains open.
+
+Shared source, physical artifact replay, numerical-domain guards and evidence are
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+
+The shared host JIT now retires compiler-owned temporaries through upstream
+ownership-based buffer deallocation after DPS copies. Validation is x86 on
+Princess-Luna; this does not replace the GPU exported-reader completion barrier
+or establish asynchronous device freeing. Native extent guards currently abort
+on mismatch; recoverable JIT status propagation remains a follow-up.

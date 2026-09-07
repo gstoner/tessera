@@ -12,7 +12,7 @@ pytestmark = pytest.mark.skipif(find_tessera_opt() is None, reason='native compi
 
 
 def softmax_module(dtype):
-    element = {'fp16': 'f16', 'bf16': 'bf16'}[dtype]
+    element = {'fp32': 'f32', 'fp16': 'f16', 'bf16': 'bf16'}[dtype]
     ty = IRType(f'tensor<3x17x{element}>', ('3', '17'), dtype)
     return GraphIRModule(functions=[GraphIRFunction(
         name='softmax_lowp', args=[IRArg('x', ty)], result_types=[ty],
@@ -35,7 +35,7 @@ def test_lowp_native_projection(dtype):
 def test_lowp_metal_differential(dtype):
     from tessera.runtime import RuntimeArtifact, launch
     from ml_dtypes import bfloat16
-    storage = np.float16 if dtype == 'fp16' else bfloat16
+    storage = {'fp32': np.float32, 'fp16': np.float16, 'bf16': bfloat16}[dtype]
     rng = np.random.default_rng(791)
 
     def run(package, buffers):
@@ -142,7 +142,7 @@ def test_lowp_fp32_bias_projects_without_narrowing(dtype, monkeypatch, tmp_path)
     assert package.descriptor.buffers[4].alignment == 4
 
 
-@pytest.mark.parametrize('dtype', ['fp16', 'bf16'])
+@pytest.mark.parametrize('dtype', ['fp32', 'fp16', 'bf16'])
 @pytest.mark.parametrize('status', [0, -1, None, 'missing'])
 def test_lowp_softmax_non_native_status_refuses(dtype, status, monkeypatch, tmp_path):
     from types import SimpleNamespace
@@ -158,7 +158,7 @@ def test_lowp_softmax_non_native_status_refuses(dtype, status, monkeypatch, tmp_
     if status != 'missing':
         setattr(fake, package.descriptor.entry_symbol, lambda *args: status)
     monkeypatch.setattr(runtime, '_load_apple_gpu_runtime', lambda: fake)
-    storage = np.float16 if dtype == 'fp16' else bfloat16
+    storage = {'fp32': np.float32, 'fp16': np.float16, 'bf16': bfloat16}[dtype]
     buffers = {'x': np.zeros((3, 17), storage), 'out': np.zeros((3, 17), storage)}
     with pytest.raises(RuntimeError, match='did not execute on Metal|runtime is missing'):
         runtime._submit_apple_gpu_native(package.image, package.descriptor, buffers, {}, None)
@@ -199,3 +199,77 @@ def test_apple_lowp_recompute_accepts_verified_pair():
     from tessera.compiler.scheduled_matmul import run_tessera_opt
     result = run_tessera_opt(find_tessera_opt(), apple_recompute_pair(), '--tessera-graph-to-schedule')
     assert 'schedule.attention_backward' in result
+
+
+@pytest.mark.parametrize('dtype', ['fp32', 'fp16', 'bf16'])
+@pytest.mark.parametrize('dynamic', [False, True])
+@pytest.mark.parametrize('status', [0, -1, None, 'missing', 1])
+def test_gelu_native_status_boundary(dtype, dynamic, status, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from ml_dtypes import bfloat16
+    from tessera import runtime
+    from tests.unit.test_apple_e2e_native_spine import _gelu_contract_module
+    library = tmp_path / 'runtime.dylib'
+    library.write_bytes(b'contract fixture')
+    monkeypatch.setattr(apple_native, '_runtime_library_path', lambda: library)
+    shape = ('?', '?') if dynamic else ('3', '17')
+    module = _gelu_contract_module(dtype, dtype, shape, shape)
+    package_fn = apple_native.package_dynamic_gelu if dynamic else apple_native.package_gelu
+    package = package_fn(module, pipeline_name='tessera-lower-to-apple_gpu')
+    assert package.descriptor.entry_symbol.endswith('_status')
+    assert package.descriptor.abi_id.endswith('.v2')
+    fake = SimpleNamespace()
+    if status != 'missing':
+        setattr(fake, package.descriptor.entry_symbol, lambda *args: status)
+    monkeypatch.setattr(runtime, '_load_apple_gpu_runtime', lambda: fake)
+    storage = {'fp32': np.float32, 'fp16': np.float16, 'bf16': bfloat16}[dtype]
+    buffers = {'a0': np.zeros((3, 17), storage), 'out': np.zeros((3, 17), storage)}
+    scalars = {'Elements': 51} if dynamic else {}
+    if status == 1:
+        assert runtime._submit_apple_gpu_native(package.image, package.descriptor, buffers, scalars, None) is buffers['out']
+    else:
+        with pytest.raises(RuntimeError, match='did not execute on Metal|runtime is missing'):
+            runtime._submit_apple_gpu_native(package.image, package.descriptor, buffers, scalars, None)
+
+
+@pytest.mark.parametrize('dynamic', [False, True])
+@pytest.mark.parametrize('mutation', ['status', 'operand', 'target', 'shape'])
+def test_gelu_artifact_replays_native_parent(mutation, dynamic, monkeypatch, tmp_path):
+    from dataclasses import replace
+    from tests.unit.test_apple_e2e_native_spine import _gelu_contract_module
+    shape = ('?', '?') if dynamic else ('3', '17')
+    module = _gelu_contract_module('fp32', 'fp32', shape, shape)
+    artifact = apple_native.lower_gelu_artifact(module)
+    if mutation == 'status':
+        artifact = replace(artifact, native_ir=artifact.native_ir.replace('arith.cmpi eq', 'arith.cmpi ne'))
+    elif mutation == 'operand':
+        import re
+        swapped = re.sub(r'(call @tessera_apple_gpu_gelu\w*\()(%[^,]+), (%[^,]+)', r'\1\3, \2', artifact.native_ir)
+        assert swapped != artifact.native_ir
+        artifact = replace(artifact, native_ir=swapped)
+    elif mutation == 'target':
+        artifact = replace(artifact, parent_ir=artifact.parent_ir.replace('apple7', 'apple8'))
+    else:
+        artifact = replace(artifact, parent_ir=artifact.parent_ir.replace('?x?', '?x19') if dynamic else artifact.parent_ir.replace('3x17', '3x19'))
+    monkeypatch.setattr(apple_native, '_runtime_library_path', lambda: pytest.fail('runtime touched before replay rejection'))
+    with pytest.raises(ValueError, match='parent|replay'):
+        apple_native.package_gelu_artifact(artifact, pipeline_name='tessera-lower-to-apple_gpu')
+
+
+def test_dynamic_gelu_native_dimensions_and_named_argument(monkeypatch, tmp_path):
+    from tests.unit.test_apple_e2e_native_spine import _gelu_contract_module
+    module = _gelu_contract_module('fp32', 'fp32', ('?', '?'), ('?', '?'))
+    module.functions[0].args[0].dim_names = ('M', 'K')
+    artifact = apple_native.lower_gelu_artifact(module)
+    assert 'tensor.dim' in artifact.native_ir
+    assert 'memref.alloc(' in artifact.native_ir
+    # Capacity and positivity checks dominate the output allocation.
+    prefix = artifact.native_ir.split('memref.alloc(', 1)[0]
+    assert prefix.count('cf.assert') >= 3
+    library = tmp_path / 'runtime.dylib'
+    library.write_bytes(b'contract fixture')
+    monkeypatch.setattr(apple_native, '_runtime_library_path', lambda: library)
+    package = apple_native.package_gelu_artifact(artifact, pipeline_name='tessera-lower-to-apple_gpu')
+    assert package.descriptor.provenance['dynamic_shape'] is True
+    assert package.descriptor.provenance['shape'] == [None, None]
+    assert package.descriptor.scalars[0].name == 'Elements'

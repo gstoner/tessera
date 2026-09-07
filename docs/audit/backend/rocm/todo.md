@@ -6968,3 +6968,56 @@ Apple-specific mixed-bias ABI has no rocm ABI or execution change. Shared audit 
 
 **PR #733 status/paired-companion correction — F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
 Shared backward Graph emission carries reciprocal primal/VJP symbol references; the new admission restriction and status ABI are Apple-only. No rocm ABI, physical schedule or performance claim changes. Existing native compiler consumers are checked where available; exact-device rocm evidence is not inferred from Metal tests.
+
+
+**Capability-document reconciliation — IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Documentation-only ownership/lifecycle cleanup: Block AttnRes, EGGROLL and game
+theory remain scoped landing plans; AD residuals use the active AD plan and
+shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
+Existing bounded gfx1151 Block AttnRes, ES and coalition proofs remain scoped; host-wall/pruning records do not become selector-grade evidence or apply to other gfx targets.
+No runtime, ABI or support status changes. Follow-up requirements are mapped in
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+
+
+**Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Shared recipe specialization and descriptor identity changes apply. Princess-Luna supplies WSL compiler/contract validation, including the Apple compiler backend, not Metal execution. gfx1151 is reachable; HIP tape extensions and ANN measurements require separate device proof.
+All three fleet LLVM builds currently report assertions OFF. No assertions-enabled
+validation or broader route/envelope closure is claimed. See the integrated
+plan’s status, native GELU and recipe instantiation section.
+
+
+**Dynamic native package projection — F2 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Plain and bounded-dynamic gfx1151 matmul packages now verify native Schedule-to-Tile replay and descriptor projection. Fused epilogues remain NVIDIA-owned and are not admitted on ROCm. Shared compiler regressions pass on Princess-Luna; three gfx1151 device regressions pass (static/ragged and bounded dynamic). This is correctness evidence, not overlap or counter attribution.
+ANN executable admission, mixed/while tapes and analytic error-budget consumers
+remain follow-ups under F3, AD-RESIDUAL-EVAL-1 and FA-1 respectively.
+
+
+**ANN admission / mixed checkpoint products — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Five gfx1151 cases execute mixed f32/f64, nested SAVE/HYBRID/recompute-all and proven counted-while SAVE products with repeated backward calls. AMDGPU address-space-5 slots use dtype-sized capacity. Hardware-counter attribution, GPU ANN admission and performance selection remain follow-up required.
+General data-dependent while, integer/predicate and dynamic slots, asynchronous
+retirement and automatic policy selection remain open. See the integrated plan
+and benchmarks/baselines/tape_checkpoint_20260907/.
+
+
+**Data-dependent tape / nonlinear native ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+Owning gfx1151 validation covers bounded data-dependent exits, stored predicate branches and asynchronous derivative generations. Native frozen-affine plus terminal ReLU original/rewrite packages have independent numerical and host-bridge timing evidence. These wall-clock measurements are not hardware-counter or overlap attribution; gfx1201 evidence remains separate.
+Shape-varying residuals, reader-complete asynchronous reclamation, broader
+nonlinear/error-budget consumers and measured production promotion remain open.
+See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
+
+The nine-run native ANN package comparison refuses performance promotion; the
+original remains the incumbent. See the packet README for target-local bounds.
+
+
+**Shape tapes / scoped GPU ANN — F3 / FA-1 / AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
+
+Parity validated for the bounded GPU ANN slice on Princess-Luna gfx1151: four native arbiter cases pass. Nine fused-package runs refuse promotion (median 0.99728x, lower 0.98430x against 1.02x). Dynamic GPU residual storage, reader-complete asynchronous frees and tuned parallel ANN remain follow-ups. No evidence transfers to RDNA4 or CDNA devices.
+
+Shared source, physical artifact replay, numerical-domain guards and evidence are
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+
+The shared host JIT now retires compiler-owned temporaries through upstream
+ownership-based buffer deallocation after DPS copies. Validation is x86 on
+Princess-Luna; this does not replace the GPU exported-reader completion barrier
+or establish asynchronous device freeing. Native extent guards currently abort
+on mismatch; recoverable JIT status propagation remains a follow-up.

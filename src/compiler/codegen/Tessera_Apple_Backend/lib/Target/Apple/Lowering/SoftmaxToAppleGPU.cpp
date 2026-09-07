@@ -20,6 +20,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -28,6 +29,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include <cstdint>
 
 using namespace ::mlir;
 
@@ -37,11 +39,11 @@ namespace apple {
 namespace {
 
 constexpr llvm::StringLiteral kSoftmaxF32Symbol =
-    "tessera_apple_gpu_softmax_f32";
+    "tessera_apple_gpu_softmax_f32_status";
 constexpr llvm::StringLiteral kSoftmaxF16Symbol =
-    "tessera_apple_gpu_softmax_f16";
+    "tessera_apple_gpu_softmax_f16_status";
 constexpr llvm::StringLiteral kSoftmaxBF16Symbol =
-    "tessera_apple_gpu_softmax_bf16";
+    "tessera_apple_gpu_softmax_bf16_status";
 
 
 
@@ -86,6 +88,9 @@ struct LowerSoftmaxToAppleGPU : public RewritePattern {
     int64_t M = xTy.getDimSize(0);
     int64_t K = xTy.getDimSize(1);
 
+    if (M <= 0 || K <= 0 || M > INT32_MAX || K > INT32_MAX)
+      return rewriter.notifyMatchFailure(op, "Apple runtime shape exceeds its positive i32 ABI");
+
     Location loc = op->getLoc();
     ModuleOp mod = op->getParentOfType<ModuleOp>();
     MLIRContext *ctx = op->getContext();
@@ -107,12 +112,18 @@ struct LowerSoftmaxToAppleGPU : public RewritePattern {
     Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
 
     FunctionType fnTy =
-        FunctionType::get(ctx, {i64Ty, i64Ty, i32Ty, i32Ty}, {});
+        FunctionType::get(ctx, {i64Ty, i64Ty, i32Ty, i32Ty}, {i32Ty});
     ensureExternalDecl(mod, symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
-        loc, symbol, TypeRange{},
+    auto status = rewriter.create<func::CallOp>(
+        loc, symbol, TypeRange{i32Ty},
         ValueRange{xPtr, outPtr, Mv, Kv});
+
+    Value one = rewriter.create<arith::ConstantIntOp>(loc, 1, 32);
+    Value succeeded = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, status.getResult(0), one);
+    rewriter.create<cf::AssertOp>(loc, succeeded,
+                                "Apple softmax did not execute on Metal");
 
     auto outTensorTy = RankedTensorType::get({M, K}, xElem);
     Value result =
@@ -137,7 +148,7 @@ struct LowerSoftmaxToAppleGPUPass
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
-                    func::FuncDialect, memref::MemRefDialect>();
+                    func::FuncDialect, memref::MemRefDialect, cf::ControlFlowDialect>();
   }
 
   void runOnOperation() override {

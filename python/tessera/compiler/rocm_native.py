@@ -1426,6 +1426,8 @@ def package_scheduled_matmul(
     """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
 
     artifact.validate()
+    from .scheduled_matmul import verify_matmul_projection
+    verify_matmul_projection(artifact)
     if (
         artifact.target != "rocm"
         or artifact.architecture != "gfx1151"

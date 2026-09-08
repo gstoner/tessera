@@ -1,3396 +1,511 @@
 ---
-last_updated: 2026-09-06
+last_updated: 2026-09-07
 audit_role: plan
 plan_state: open
-supersedes_queues_in:
-  - COMPILER_ARCHITECTURE_SWEEP.md §4
-  - FRONTEND_GRAPH_SCHEDULE_REVIEW.md §5
-  - IR_STACK_INTEGRATION_REVIEW.md §5
-  - archive/AUTODIFF_ARCHITECTURE_REVIEW.md §5
-  - archive/TARGET_IR_REVIEW_2026-08-02.md §5
-  - archive/AUTODIFF_UNIFICATION_PLAN.md §7
-  - COMPILER_REFACTOR_PLAN.md §9
-  - EVALUATOR_PLAN.md §10
-  - OPTIMIZING_COMPILER_PLAN.md §5
-  - SEQUENCE_MIXER_ENGINEERING_PLAN.md §7
-  - ../domain/archive/GA_EBM_ARCHITECTURE_REVIEW_2026-08-02.md §4
-  - RIEMANNIAN_OT_PLAN.md §4
 ---
 
 # Integrated Compiler Plan
 
-Start at [`README.md`](README.md) for the folder authority map. This is the sole
-cross-domain compiler sequencing authority. Backend execution queues and evidence
-are mapped in [`../backend/README.md`](../backend/README.md); the scoped E2E
-compilation plan supplies closure gates under this sequencing.
+Start at [`README.md`](README.md). This document alone owns cross-domain compiler
+sequencing. [MASTER_AUDIT](../MASTER_AUDIT.md#proof-vocabulary) and generated
+inventories supply evidence; scoped plans own detailed acceptance contracts;
+backend queues own target-specific proof. Reconcile contradictory evidence with
+source and tests rather than inventing a second status registry here.
 
-One plan across the compiler reviews and scoped plans. Each document's ranked queue stays as *evidence
-and rationale*; **this document owns sequencing and de-duplication.** Where a
-review's queue and this document disagree on ordering or cost, this document
-wins — the reviews were written independently and double-counted overlapping
-work.
+`last_updated` means last substantive review of current-priority content, not a
+formatting change. The [engineering log](INTEGRATED_COMPILER_LOG.md) preserves
+revision-bound outcomes. The [archived queues and waves](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md)
+are provenance, including superseded priority statements and estimates.
 
-Status truth remains `MASTER_AUDIT.md` and `docs/audit/generated/`
-(Decision #26). Nothing here reclassifies a row. Effort figures are engineering
-estimates for a single track with no hardware gates, not commitments.
+## Foundation program
 
-## MLIR/LLVM native foundation program — 2026-09-04
+One MLIR-owned semantic program must descend through verified native compiler
+passes. Python remains the public API, capture/orchestration layer and oracle.
+After canonical IR exists, code generators must not reconstruct semantics from
+GraphIRModule, operation names or Python descriptor/fusion objects. Shapes,
+layouts, effects, derivative products, numeric policy and schedule choices must
+survive in verified IR. Deployment facts and measurements remain identity-bound
+inputs; runtime loads images and executes their ABI.
 
-**Current sequencing authority.** The goal is one MLIR-owned semantic program
-lowered by native compiler passes into backend code. This section orders the
-remaining architectural migration. The older central queue, W0–W6 tables and
-engineering follow-through below retain their evidence and owning IDs; when
-they conflict on *next foundation work*, this section wins. Completed bounded
-slices stay completed. The [broad audit survey](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-records all 42 prior live documents and the source-verified migration seams.
-
-Python remains the public API, capture/orchestration layer and independent
-oracle. After canonical MLIR is produced, backend generation must not
-reconstruct semantics from `GraphIRModule`, Python fusion objects, operation
-names or ad hoc descriptor dictionaries. Shapes, layouts, effects, derivative
-products, numeric policy and schedule choices needed by the compiler must
-survive as verified IR. Deployment facts and measurements remain explicit,
-identity-bound inputs. Runtime code loads images and executes their ABI.
-
-### Backend destination and proof boundaries
-
-| Backend | Native destination | Migration boundary and owning proof |
+| Cut | Architectural purpose | Sequencing rule |
 |---|---|---|
-| x86 / Apple CPU | MLIR→linalg/vector/SCF as applicable→LLVM dialect/LLVM IR→native object or ORC JIT; explicit external-library calls remain legitimate IR operations. | Reuse `tools/tessera-jit`; distinguish compiled bodies from prebuilt AVX/Accelerate calls. Zen 5 validates AVX-512; M1 Max validates Apple CPU. AMX remains separately gated. |
-| NVIDIA | Verified Tile/Target IR→NVVM/LLVM→PTX and device assembly/image→CUDA launch descriptor. | Reuse the existing native packaging/compiler pipeline. Super-Bear RTX 5070 owns its exact architecture proof; Hopper/Blackwell-specific instructions require their matching envelope and device. |
-| ROCm | Verified Tile/Target IR→GPU/ROCDL/LLVM→AMDGPU code object/HSACO→HIP launch descriptor. | Reuse current architecture generators and serialization. Princess-Luna owns gfx1151 correctness; WSL timing retains its recorded limitations. No RDNA4/CDNA proof transfers. |
-| Apple GPU | Verified Tile/Apple Target IR→compiler-owned MSL/materialization→supported Metal compiler/metallib→Metal launch descriptor; explicit MPS calls are separate candidates. | M1 Max owns compile/launch/oracle proof. Do not assume an available direct LLVM-IR→Metal backend or confuse prepackaged runtime calls with generated kernel bodies. |
-
-Native code generation does not require discarding hand-tuned implementations.
-Their *selection and ABI* must be explicit in IR and measured against generated
-candidates. Existing source emitters and Graph-owned package constructors are
-migration baselines with deletion gates, not permanent alternative semantic
-foundations. Do not erase their performance or dtype coverage to simplify an API.
-
-### Ordered foundation cuts
-
-`IR-NATIVE-FOUNDATION-1` is the coordination key for these cuts, not a new
-operation, pass, status enum or registry. Each cut extends the listed existing
-owner and ships independently; each backend can advance after its own gates.
-
-| Cut | Existing owner / concrete deliverable | Depends on | Acceptance and retirement gate |
-|---|---|---|---|
-| F0 — live route census and executable migration baseline | E2E-REAL-3/5/6 + COMPILER-DEVEX-1. Derive a family/target/shape-policy map from current driver/package/plugin entry points, joining existing execution/lineage evidence. Include Apple CPU and the mixed NVIDIA scheduled wrapper. | Existing compiled slices; no new hardware prerequisite for census. | Route fixtures distinguish canonical IR input, Graph reconstruction, source-emitted bodies, explicit library calls and reference execution as separate facts. Name constructor, replacement, missing carrier, test and owning host. Establish an assertions-enabled MLIR lane for negative contract claims; release-build results remain separately labeled. |
-| F1 — remove the first live Graph re-entry | E2E-REAL-3 / NVIDIA-E2E-1. Landed in PR #725: refactored `nvidia_native.package_scheduled_matmul(artifact)` to build its descriptor from the validated scheduled IR/ABI, without `package_matmul(module)` or a second compilation. Correct driver ancestry only after the real consumer changes. | F0 fixture for this route; existing scheduled matmul artifact. | Static and bounded-dynamic f16/bf16 cases retain ABI/layout/shape guards; compile invocation count is one; mutating/discarding the original Graph cannot affect the artifact; altered IR is rejected or changes identity. Exact RTX 5070 numerical proof before retiring the old dependency. |
-| F2 — migrate historical package families | E2E-REAL-5/6, W3.7, backend E2E owners. Extend scheduled softmax/reduction to NVIDIA; close uncovered ROCm movement, x86 cohort/breadth, and Apple value/CPU call contracts one family at a time. | F0 route census; per-family IR carrier and backend lowering. | Old/new numerical and ABI comparison, unsupported-policy rejection, independent IR replay and target-owned execution. Delete each Graph constructor only after all driver, direct-client and family-plugin callers migrate. No newly added Graph reconstruction path. |
-| F3 — make optimization and specialization native IR consumers | FRONTEND-IR-MEDIUM-1, W5.1/W5.2, MSW-9. Instantiate one optimized parametric recipe for valid buckets; migrate fusion/region and candidate inputs to canonical IR; connect one ANN rewrite to native pair evaluation. | F1 working boundary; F2 for the selected family, not every backend. | Two buckets share recipe/compiler identity and complete witnesses; illegal witnesses fail before lowering; original and rewritten native programs satisfy numeric policy; candidate admission binds emitted image/resources to that IR. Broader attention raising follows this path. |
-| F4 — extend structured semantics through the same path | W4-PRODUCT-1/W4-EFFECTS-1, NUMPOL-CARRIER-1, LAYOUT-ALG-1, SO-2/3/4, AD-*/DIST-NATIVE-1. Expand control/effects/residuals, batching, memory, state and distributed products only through verified carriers. | F2/F3 on the workload's families and existing legality interfaces. | IR-only forward/backward execution, complete shape/effect/layout/policy preservation, unknown cases fail closed, actual transport for multi-rank claims. Preserve closed shared work; implement only missing producer/consumer or envelope rows. |
-| F5 — retire redundant semantic generators and expand workloads | COMPILER_REFACTOR_PLAN A–E, OPTIMIZING_COMPILER_PLAN, TSOL-* and domain owners. Replace Python semantic source synthesis per measured family; exercise spectral, PDE, mixer, sparse/ES and optimizer workloads as consumers. | A replacement has passed F2–F4 as required; evaluator/device gates below. | No surviving production caller depends on the retired semantic constructor; native-required requests cannot fall back to Python. Compare numerical envelope, compile cost, warm/cold latency and resources against the retained baseline before promotion. Explicit tuned/library candidates remain supported through IR. |
-
-F1 is the first code migration because it already has a canonical Tile artifact
-and a concrete redundant Graph dependency. F2 is not a giant all-backend rewrite:
-select the next family from measured usage and available IR support, retain its
-current envelope, and publish a small backend-owned change. F3 may start after
-one such family is complete. There is no blanket calendar estimate until the
-route census separates wrappers from missing semantics and missing codegen.
-
-### Cross-cutting evidence and operational work
-
-Telemetry attribution, CUDA/HIP bounded waits and artifact integrity are urgent
-support work; they must not disappear behind the foundation program. They do
-not serialize all host-free IR work. Performance promotion on an affected lane
-waits for valid telemetry and safe completion. Native wait timeouts must poison
-ownership and retain in-flight resources rather than free live buffers.
-
-Reuse EVIDENCE-PACKET-1, TPROF-NATIVE-1, the evaluator, existing artifact types,
-execution matrix and provenance fields. A derived route view may expose gaps;
-it must not become a second hand-maintained capability registry. Keep these
-questions independent: does it parse/verify, does lowering consume the incoming
-IR, does the runtime bind the resulting artifact, does the owning device execute
-it correctly, and is its performance evidence eligible? Neither hashes nor
-presence of native bytes answer all five.
-
-IKF-P1 schema/math may proceed independently. P0 clock validation gates P2/P3
-instrumentation and dispatch admission keeps L2/L3 evidence out. The Apple
-cross-run cohort in #724 supports retaining the mean default; it does not block
-this migration. The generated-coverage artifact change in #723 is complete and
-must not be reintroduced as an open implementation task.
-
-### Required PR evidence for a migrated route
-
-Each PR names the old constructor/callers, canonical IR replacement, preserved
-shape/dtype/layout/numeric-policy envelope, native compiler pipeline, runtime
-ABI and source→IR→image identities. It includes independent oracle comparisons,
-malformed-carrier tests and the exact owning-host command/result. Report missing
-hardware explicitly. Add a test that prevents the retired Graph entry from being
-called; test a real replacement, not an exception that simply disables the route.
-
-Core compiler tests and Git/GitHub operations use host WSL under AGENTS.md.
-Apple-only measurements require the applicable explicit Mac authorization.
-Assertions-enabled compiler testing remains a required evidence improvement;
-no assertion-related claim is closed by a release-only test. Broader compiler
-feature work must name which foundation boundary it improves or consumes.
-
-## Central development plan — 2026-08-17
-
-This retained delivery ledger records the compiler, TSOL and compiler-tools
-commitments and their bounded landings. The MLIR/LLVM foundation program above
-now orders the remaining architectural work; neither this older ordering nor
-the wave tables creates a competing queue. Generated gap counts are inventories:
-a backend-kernel, direct-test, ABI or benchmark count is not a list of equally
-urgent implementations.
-
-### Current baseline
-
-- The public API, frontend disposition, Graph registration, Schedule lowering,
-  runtime dispatch, batching, transpose, and lowering-rule axes are closed in
-  the generated dashboards. Tile, Target, sharding, direct proof, ABI, and
-  benchmark evidence remain mixed.
-- All 51 canonical TSOL operations have registered math, shape, dtype/layout,
-  lowering, and explicit VJP/JVP dispositions. TSOL work therefore starts at
-  physical consumption, sharding, policy breadth, and evidence—not at another
-  semantic inventory.
-- `ScheduleObject` SO-1 is complete and SO-2 is bounded/landing. The inferred
-  action DAG and scalable list scheduler exist, but most physical producers do
-  not consume them yet.
-- The profiler has provider, timing, packet, and reporting contracts. Native
-  ROCprofiler/CUPTI/Metal/perf evidence and the C++ `tprof` surface are not all
-  release-grade runnable surfaces yet.
-
-Use
-[`generated/compiler_progress.md`](../generated/compiler_progress.md),
-[`generated/tsol_coverage.md`](../generated/tsol_coverage.md), and
-[`generated/surface_status.md`](../generated/surface_status.md) for live counts.
-This section owns what to do with those counts.
-
-### Ordered queue
-
-| Order | Work item | Deliverable | Acceptance gate | Depends on |
-|---:|---|---|---|---|
-| 1 | **E2E-REAL-6F — optimizer VJP authority complete; exact family/target certificates landing** (x86 + gfx1151 packets landed 2026-08-26) | Every successful family-plugin launch emits a content-addressed `tessera.native_vjp_execution.v1` certificate. Runtime-origin `tessera.runtime_physical_execution.v1` attestations distinguish actual silicon launches from test doubles; only the former count as `exact_device`. Target-owned packets execute all declared families in one process and compare the observed family/target set exactly with the live registry. The three former optimizer `JitFn` helpers remain deleted. | The AVX-512 packet covers all 10 x86 family rows and the gfx1151 packet covers all 13 ROCm rows, including SGD, Momentum, Nesterov, Adam, AdamW, Lion, full/factored Adafactor, sequence mixer, and selective SSM against independent oracles. The generated frontend-authority dashboard owns the current blocking family/target rows; do not infer deletion readiness from the declared certification paths. Runtime receives no source Graph or operation dictionary; sibling evidence never transfers. | E2E-REAL-6E state-lineage package. |
-| 2 | **W4-PRODUCT-1 — executable multi-block regions** | The bounded arbitrary-CFG compiler boundary, per-slot dynamic saved-value envelopes, companion logical-shape tapes, mixed-state SAVE/HYBRID tapes, and nested canonical bodies are landed. Exact polynomial specialization guards remain outside Presburger proofs and require complete witnesses. Compiler-generated replay-safe assertions are admitted; mutation, unkeyed RNG, I/O, alias-sensitive work, and ordered collectives remain fail closed pending operation-owned recorded-product ABIs. The gfx1151 irreducible-state-machine row landed 2026-08-21: `--generate-rocm-state-machine-kernel` lowers a paired `bounded_state_machine_v1` function (forward AND generated backward) to one per-thread device kernel — per-element program counter, structured-CFG digest stamped on the gpu.func, `cf.assert` bound check host-enforced through a STATUS buffer — with both entry paths of a two-entry SCC executing on gfx1151 against the analytic oracle (`test_rocm_state_machine_exec.py`). The sibling x86 row landed 2026-08-21 as well: the same paired functions compile through `tessera_jit` (tessera-to-linalg → elementwise-to-linalg → one-shot-bufferize → loops → LLVM → ORC JIT) and execute natively on the AVX-512 host — both entry paths, forward + backward, digest/residual-policy bound, native `cf.assert` bound trap, proof-of-execution counter (`test_x86_state_machine_exec.py`). One physical packet family with admissible effects landed 2026-08-25 (W4-EFFECTS-1 slices E1-E5, PR #630). **The bounded `tessera.control_scan` reverse landed 2026-08-26:** statically bounded symbol-body scans are normalized through the canonical SCF lowering inside the paired pass and use the proven reverse-loop/tensor-slice rules; payload, dynamic, malformed, and unlowerable forms retain `AUTODIFF_CONTROL_SCAN_UNSUPPORTED`. | Existing region verifier/paired VJP fixtures stay green; padded tape bounds must never replace logical extents; native x86/gfx1151 numerical rows must bind the exact CFG and residual digests before physical execution is claimed. | W2.1 dataflow, W2.2 effects, current bounded W4 carrier. |
-| 3 | **SO-3 + W5.2e-PRODUCER-1 — one schedule authority closed 2026-08-24.** The MegaMoE producer likewise consumes `infer_action_dag` with the hand-authored plan DAG demoted to a fail-closed coverage oracle (#31), and adopting it EXPOSED three over-conservatisms in the shared inference that made any pipeline containing transport infer a total chain — ordered collectives serialized against all local work, registered effectful producers discarded their declared `aliasing="none"`, and every effectful/pure pair was assumed memory-dependent — each corrected with the sound rule and pinned by tests (a 12-action MegaMoE plan went from all 66 edges of the complete order to 36, still oracle-covering, extras collective-ordering only). Its schedule digest binds the plan's own artifact digest. **Two follow-ups closed 2026-08-25:** the interleaved generator emitted backward passes in ASCENDING virtual-stage order (`bwd_clock = fwd_clock + p*v`, a constant offset), the opposite of gradient flow — the stage term is now mirrored, so gradients run from the last virtual stage back to the first with the makespan bit-identical (`2*p*v + m - 2`), the backward gradient edge is expressible again and is REQUIRED rather than excused, and the same work found that DECOUPLED schedules were carrying fabricated cross-stage edges despite being defined by having none. And the spectral policy is now bound by a hash CHAIN rather than a comparison: `sha256(tessera.schedule_payload)` must equal the module digest, and that payload must name `object_id "spectral:<sha256(tessera.spectral_semantic)>"`, so the consumed attributes and the declaration vouching for them can no longer be co-edited. | Pipeline lowering now requires the digest-bound `tessera.pipeline_schedule.v1` carrier, stamps its Schedule Object digest on functions and communication ops, and has no scalar-plan/options reconstruction path. The spectral producer represents fused stages as registered Graph actions, consumes `infer_action_dag`, binds roles/resources into the content-addressed Schedule Object, and requires that digest at Schedule→Tile. MegaMoE R3 likewise consumes inferred registered-semantics edges; its former handwritten DAG is only a fail-closed coverage oracle and additional conservative collective edges remain reported. | Inferred spectral and MegaMoE DAG tests preserve reasoned edges, roles, and resource vectors; stale/missing digest carriers fail closed; focused schedule/producer suite passes (225 tests plus dedicated carrier tests); compiled spectral numerics are unchanged across the complete Zen 5 AVX-512 and WSL gfx1151 suites (42 tests). | SO-1/SO-2 and W5.2e inference. |
-| 3b | **NUMPOL-CARRIER-1 — the S5 generalized `numeric_policy` carrier (owned 2026-08-24; steps 1–2 landed 2026-08-25 — schema + reduction-family carrier, see the status note under this table)** | One carrier design for storage/accumulator/math-mode that survives Schedule and Tile IR beyond MMA fragments (pointwise, reduction, and butterfly chains), plus the Decision #32 boundary verifier that FAILS on silent loss instead of recording it. Builds on the landed W1.1 `!tile.fragment<…, acc, …>` accumulator carrier (typed ROCm route) as the worked reference. Four mandating consumers: CAKE (#32's original derivation), game-theory §6 (fusion is a correctness feature — the zeta intermediate must not round through fp32), PDE §III.4 (interim `tessera.info_loss` records retire), and AD-JET-IR-1 (coefficient/cotangent policy, W6.3 §2.3). FORGE §1.3 supplies the measured acceptance target: the fused-epilogue fp32-accumulator realizability verdict (913× → 1.1× → 1.0× purely as a function of accum × state dtype) must be decided by the carried policy, not a special case. | Carrier attribute round-trips Schedule→Tile with a lit-verified boundary check per crossing; a lowering that drops the policy fails closed with a named diagnostic (#21a/#32); the W1.1 fragment path re-expressed as an instance of the general carrier without behavior change (bit-identical existing gfx1151/x86 outputs); the PDE `tessera.info_loss` interim records replaced by carrier facts; dashboard row tracks per-boundary coverage. May proceed in parallel with Orders 3 and 5 (orthogonal IR-carrier work; the schedule authority does not consume the policy). | W1.1 fragments (landed); Decision #32; #21a semantic-key discipline. |
-| 4 | **LAYOUT-ALG-1 L4 — physical layout decisions closed 2026-08-24** | L3 factorization/residency and SO-4 proof attachment are implemented. Mixed-radix/static tuple products, SM120 dynamic strided typed+macro routes, gfx1151 bounded-dynamic execution, the four x86 core GEMM index families, and every reachable Apple MSL rank-2 template consume shared authority. Dynamic non-separable tuple codomains remain fail closed. | Existing raster/index outputs remain bit-identical; unresolved layouts fail closed; materialization proof covers alias, capacity, and lifetime; Apple7 canonical and fused-cooperative cohorts pass exact-device; no architecture's schedule is promoted by another architecture's evidence. | Current L1/L3/L5 authority and architecture-owned device proofs. |
-| 5 | **W5.4-RESHARD-1 — executable placement closed 2026-08-24.** | Fixed-point placement now derives exact mesh-sized local result types and inserts explicit reshard SSA at the consumer boundary, including registered `tessera.slice` local shards rather than fake same-shaped collectives. Plan digest, subgroup, matching rounds, and nested region path survive Graph→Schedule→Tile. A deterministic mock-mesh executor consumes that SSA directly. | 13 focused placement tests plus 76 shared Schedule/Tile/collective tests pass. Nondivisible shapes, mesh/subgroup mismatch, unknown placement, and sibling-region escape fail closed. `local_shard`, `all_reduce`, `reduce_scatter`, `all_gather`, `all_to_all`, and `collective_permute` execute numerically with an explicit movement trace. Native transport remains a separate evidence gate. | Orders 2–4. |
-| 6 | **DIST-NATIVE-1 — real multi-rank execution** (bounded MPI slice landed 2026-08-26) | Schedule→Tile now preserves communicator/subgroup identity and Schedule artifact hashes; the content-addressed Target package dispatches explicit all-reduce, all-gather, reduce-scatter, all-to-all, and collective-permute SSA to one process-owned MPI rank. The f32/SUM/axis-zero envelope binds world/rank ownership, ordered subgroup communicators, collective ordinals, reshard identity, tensor dtype/shape, topology, and artifact digest without a mock fallback. Next extend the packet beyond two ranks and nonparticipant subgroups, then separately add NCCL/RCCL process-rank ownership and OFI/SHMEM. Keep ROCm LSA, GIN/RMA, Copy Engine, and gfx1250 DDA as independent advanced gates. | The checked-in packet executed under bundled MPICH 4.1.2/`mpi4py` with two real processes: all five compiled SSA numerics and reordered subgroup communication pass. Cross-rank order, subgroup, artifact/topology digest, dtype, and shape mismatches fail during shared admission before data transport. Required remaining gate is a multi-rank packet with proper-subgroup nonparticipants; no NCCL/RCCL or mock result is promoted by this slice. | Order 5. |
-| 7 | **AD-TSOL-STFT-BWD-1 — bounded native spectral products closed 2026-08-26** | Independent content-addressed AVX-512 and gfx1151 STFT/ISTFT packages accept contiguous batched final-axis aligned n=16 and ragged mixed-radix n=18 f32, f16, and bf16 storage through explicit two-byte ABIs with f32 accumulation; spectra remain complex64. The gfx1151 stored-bin adjoint is a direct DFT kernel independent of both the x86 packed-C2R implementation and the ROCm forward FFT. Uncentered, onesided, explicit-hop, `n_fft == window`, and uncropped ISTFT are the complete bounded policy. | Both architectures match the independent Python VJP. gfx1151 additionally executes the native forward/adjoint inner-product identity and emits runtime-origin exact-device certificates. Unsupported length, policy, contiguity, dtype, shape, numeric policy, or artifact digest fails before launch. No evidence transfers to Apple/NVIDIA. Centering/cropping, arbitrary axes/strides, and broader lengths move to Order 8. | Order 1 plugin boundary and existing spectral VJP carriers. |
-| 8 | **TSOL-POLICY-PHYS-1 — complete the spectral policy envelope (8a/8b landed; 8c/8d/8e x86 landing 2026-08-26)** | 8a/8b physically adopt centered/cropped policy and arbitrary logical axes on x86/gfx1151. The landing x86 v7 package consumes true runtime stride descriptors and implements explicit `n_fft >= window`, odd lengths, and one-sided/full-complex forward and reverse; the reverse artifact binds the stride ABI. Streaming state has digest-chained policy/window/tail/counter/parent lineage. Remaining: the corresponding gfx1151 physical package and exact-device proof, per-batch broadcasting, and physical streaming/chunk execution. | The x86 packet passes independent NumPy/Python-VJP oracles for non-contiguous axis-1/axis-2 n=20/window=15 full spectra plus existing low-precision and bounded rows. The lineage oracle rejects tail, counter, parent, policy, and window drift. These results transfer no gfx1151/CUDA/Metal evidence and do not promote 8f/8g physical rows. | Order 7. |
-| 9 | **TSOL-SCALE-1 — ND and large transforms** | Add 2D/ND, batched nontrivial-stride, large-transform six-step/Bailey, and large-prime execution behind selector-visible algorithm identities. | Correctness across prime/composite/ragged shapes; plan/twiddle/workspace cache identity; packed-vs-full and library comparisons; retain/promote/reject per architecture. | Order 8 and evidence tooling below. |
-| 10 | **TSOL-SHARD-1 — distributed TSOL contracts** | Close the 18 partial TSOL sharding rows by routing spectral, solver, sparse/segment, and layout families through W5.4 placement and explicit reshard operations. | Registry totality, mock-mesh numerical tests, and no claim of native transport before exact multi-rank proof. | Orders 5–6. |
-| 11 | **TSOL-PHYS-TAIL-1 — high-value physical families** | Use per-target maps—not the all-target aggregate—to promote the remaining high-use solver, sparse/segment, and layout rows. Start with `tri_solve` and PDE/solver consumers, then sparse/segment families; compose coalition-lattice operations through the shared butterfly rather than creating one-off emitters. | Independent x86 and gfx1151 correctness/performance verdicts; dtype/shape envelopes; no reference execution relabeled as native; Apple/NVIDIA remain separate consumers. | Orders 3–5 and the relevant scoped family plan. |
-| 12 | **TPROF-NATIVE-1 — trustworthy clocks and sampling** | Graduate ROCm dispatch/activity/counter/PC-sampling capture and x86 perf/IBS symbol correlation; retain independent host, device/event, and profiler clocks with validity/provenance. | Fresh-process collection; no clock substitution; clean-image/instrumented-image overhead comparison; bare-metal gfx1151 and Zen 5 calibration packets. WSL packets remain regression-only. | Can run in parallel with Orders 1–8; blocks selector promotion. |
-| 13 | **EVIDENCE-PACKET-1 — one selector packet contract** | Make every physical benchmark emit the same schema for semantic/artifact/image digests, dtype/shape/policy envelope, resources, clocks, warm/cold state, samples, source cleanliness, and eligibility. | Schema validator and replay test; packets with missing native clocks, dirty sources, mismatched digests, or unsupported architectures are promotion-ineligible rather than silently downgraded. | Order 12. |
-| 14 | **COMPILER-DEVEX-1 — runnable compiler tools** | Promote `tprof` and `tessera-opt` from `compile_only` only after installed-driver smoke, dialect/pass inventory, negative target-load tests, and reproducible integration/numerical entry points exist. | Clean-build host smoke, `--version`/build provenance, positive and fail-closed fixtures, and generated surface-status promotion through its owning registry. | Orders 1–4 and 12. |
-
-**NUMPOL-CARRIER-1 status (updated 2026-08-26) — the generalized carrier
-ceiling is closed; architecture-specific arithmetic remains evidence-gated.**
-
-*Step 1 — the policy gets a schema.* The row assumed a payload that could be
-carried. Measured first, and it could not be: `numeric_policy` was a bare
-`DictionaryAttrBase` whose ODS predicate checked only "is a dictionary". Five
-malformed policies were all ACCEPTED (exit 0) while the documented
-TF32-as-storage violation correctly failed — so the pass was running and simply
-had nothing to say about a typo'd key, a non-string value, a nonexistent dtype,
-a `math_mode` that reduces nothing, or an accumulator narrower than its
-storage. The typo is the sharpest: `getAs<StringAttr>` returns null for a
-misspelled key exactly as for an absent one, so the op carried a policy that
-looked like it stated an accumulator contract and stated none — Decision #21a's
-scar in a fresh place. Seven diagnostics now refuse each case, registered and
-cross-checked.
-
-The narrowing rule is refused rather than warned, on measurement: at a fixed
-dtype-bit budget the narrowing policy is strictly dominated by the one that
-swaps storage and accumulator (25.8x for the fp16/fp32 pair, K=4096 dot product
-vs an fp64 reference), and with a narrower accumulator the wider storage is
-BIT-IDENTICALLY unobservable. There is no program for which it is the right
-answer. Comparison is on significand bits, not width, so fp16-storage
-accumulating into bf16 is caught.
-
-*Step 2 — the reduction family carries its accumulator.* The gap was worse than
-"metadata is lost". `{storage="bf16", accum="fp32"}` on rmsnorm / softmax /
-layer_norm lowered to `arith.addf … : bf16`: the emitted code CONTRADICTED the
-declared contract on the very op that performs the accumulation. Executed on
-this box through `--tessera-to-linalg` → LLVM → native object, a 4096-wide
-softmax row summed to **1.466** — a 47% violation of the function's defining
-property — versus **1.000169** once the accumulator is honoured. The residual
-is bf16 storage rounding of the output, which is what the policy asked for.
-Cast placement was a measured fork: truncating the REDUCED value back to
-storage leaves 5.6e-04 where truncating only the RESULT reaches 1.7e-06 (326x),
-and the latter is the faithful reading of #15a, where storage is the dtype of
-the tensor and the tensor is the result. With no policy the emitted IR is
-byte-identical — a carrier that widens unasked is a global dtype promotion, not
-a carrier.
-
-The Graph→Linalg crossing is now bracketed by the Decision #32 record/verify
-pair and declares `represented_in_type` / `re_expressed`. It was NOT bracketed
-before: the pair straddles only Graph→Tile in the production pipelines, which
-is why this drop was silent. The verifier then caught a defect in the
-declaration logic itself (a function lowering one of two policy-carrying ops
-loses a value while the name survives — `re_expressed`, not
-`represented_in_type`), which is the mechanism working.
-
-*Open, and item (a) is not what the row assumed.* Measured 2026-08-25 while
-scoping it: for the MMA path the policy **already survives to the bottom**.
-`TileIRLoweringPass` forwards it onto `tile.mma`, and `TileToROCM.cpp` carries
-it onto the `tessera_rocm.*` ops — but all three of its uses are
-`copyAttrIfPresent`. It is **forwarded, never read**. The accumulator that
-actually reaches the hardware is inferred independently in
-`GenerateWMMAGemmKernel.cpp` as `fragmentAcc = T.isInt ? "i32" : "f32"`, in a
-file that does not mention `numeric_policy` at all.
-
-So there are two sources of truth for one fact, and the declared one loses.
-They agree today only because every real program uses fp32. A policy of
-`{storage="bf16", accum="fp16"}` — legal, and now schema-checked — silently
-gets f32 on gfx1151, and `accumulatorProbeDtypes` returns an EMPTY candidate
-set for any accumulator that is not `i32`/`f32`, so nothing downstream could
-honour it either. This is not hypothetical hardware: the in-repo ISA archive
-records `V_WMMA_F16_16X16X16_F16` on RDNA 3.5 alongside the f32-accumulate
-forms, so an f16 accumulator is a real gfx1151 capability the compiler cannot
-currently be asked for.
-
-That makes (a) a **Decision #29** item rather than a plumbing one — the
-carrier is built and the consumer is missing, which is the case #29 calls
-worse than a missing declaration because it reads as a closed contract in
-review.
-
-**(a) is now closed for the consumer half, and the codegen half is deferred on
-measurement (2026-08-25).** `GenerateWMMAGemmKernel` reads
-`numeric_policy.accum` and refuses with `ROCM_WMMA_ACCUM_UNSUPPORTED` when it
-names an accumulator this path does not provide, rather than substituting f32
-and reporting success for a different computation. Every existing program is
-untouched: a real before/after control — capture, revert the file, rebuild,
-recapture — showed the generated output **byte-identical across all 65 ROCm
-fixtures**, and the gfx1151 device lanes come back at the recorded baseline.
-
-Wiring the f16-accumulate WMMA itself is deferred, and the reason is a
-measurement rather than effort. Its ROCDL form is `(v16f16, v16f16, v16f16) ->
-v16f16` with an `opsel` bit — a different accumulator ABI, not a parameter
-swap. What it buys is half the accumulator VGPR footprint; what it costs,
-measured on 16x16x16-tiled GEMMs against an fp64 reference, is 5212x (K=64)
-rising to 7856x (K=4096) relative error. That is a real choice for short-K
-inference shapes and a bad one for training — which is precisely the kind of
-decision a declared policy should make and a storage-dtype inference cannot,
-so the interface is the deliverable and the codegen follows a measured need.
-Revisit when an occupancy-limited kernel shows the accumulator is the binding
-constraint, the same basis on which Decision #26a deferred the AIR emitter —
-not on the grounds that the instruction exists. (b) `math_mode` still has NO
-MLIR consumer: measured, it appears in C++ only inside a rejection message,
-while `mma_selector.py` / `nvidia_dtype_contract.py` consume it on the Python
-side. A semantic key with no consumer below the frontend is Decision #29's
-case, and it is the NVIDIA half of this row. (c) **Closed.** The FORGE §1.3
-realizability verdict lives in `compiler/precision_realizability.py`, decided
-from the carried policy plus the state dtypes. Reproducing §1.3 first caught a
-modelling error of my own: rounding the gradient to the MASTER dtype is a
-no-op for fp32 masters, so all three rows came back 1.0x. The gradient's
-storage write is bf16 in mixed precision, and that write is what the fusion
-removes. Corrected, the structure reproduces — 208x / 1.2x / 1.0x against the
-assessment's 913x / 1.1x / 1.0x: the masked rows match closely, the unmasked
-row agrees in kind but not magnitude. **That asymmetry set the interface.**
-The oracle puts a number on the question it can answer soundly — is the
-benefit masked? — and refuses to number the unmasked case, whose size depends
-on gradient distribution and step count a compiler does not know. A diagnostic
-promising 913x and delivering 208x would be worse than one saying "large;
-measure it". Its tests re-derive the table by RUNNING the training loop, so a
-wrong oracle fails even when it agrees with the write-up.
-
-(d) **Not what the row assumed.** No pointwise op and no spectral/butterfly op
-declares `numeric_policy` at all, so there was nothing to carry. For pointwise
-that is correct: there is no accumulation, so `accum` is meaningless. For the
-butterfly chain it was hiding something. The spectral scheduler emitted
-`numeric_policy = "f32;ortho"` — a **StringAttr** holding a private
-semicolon-delimited encoding, under the name of a well-defined DictionaryAttr.
-Since `getAttrOfType<DictionaryAttr>` returns null for a wrongly typed
-attribute exactly as for an absent one, that contract was invisible to the
-schema validator and to every accumulator consumer — and it is not a #15a
-policy in the first place: its value can be
-`"deterministic_f32_ascending_frames"`, a reduction-ORDER contract rather than
-a dtype. Renamed to `tessera.spectral_accumulation` /
-`tessera.spectral_normalization` (349 spectral tests unchanged; the schedule
-digest is computed separately, so identities are stable), and
-`NUMERIC_POLICY_NOT_A_DICTIONARY` now refuses the wrongly typed case so the
-collision cannot recur. Ops declaring the attribute in ODS were already
-covered by its constraint; the gap was the discardable case, which is exactly
-where the spectral contract lived.
-
-**Row 3b carrier ceiling closed 2026-08-26.** Scheduled compound spectral and
-butterfly programs now carry a real digest-bound
-`numeric_policy={storage,accum}` dictionary through Schedule→Tile. The child
-FFT schedule already declares `accum="f32"`; the parent now binds the same
-choice in its semantic preimage, validates storage spelling, requires fp32
-accumulation, and copies the dictionary onto the Tile kernel. The separate
-`tessera.spectral_accumulation` field remains the deterministic reduction-order
-contract. A missing, narrowed, wrongly typed, or digest-inconsistent policy
-fails closed with the registered numeric-policy diagnostic. This closes the
-general carrier ceiling, not every architecture's arithmetic implementation:
-SM120 `math_mode` consumption and exact-device proof remain NVIDIA-owned, and
-the measured/deferred gfx1151 f16-accumulate WMMA choice remains a separate
-codegen policy row.
-
-
-**E2E-REAL-6F: the deletion gate had no measurement (2026-08-25).** Order 1
-ends "the three former `JitFn` compatibility helpers are deleted", and
-MASTER_AUDIT §1 permits that only after differential execution covers each
-migrated family. Measured: **nothing enumerated that coverage.** The
-certificates live in per-`JitFn` dicts
-(`_frontend_differential_certificates`, `_frontend_nonreexecuting_certificates`)
-and die with the instance; no generated doc, registry, or test listed the
-families. The gate could not be evaluated at all — not because the work was
-missing, but because the evidence had nowhere to live, and a condition nobody
-can evaluate is not a gate.
-
-`generated/frontend_authority_coverage.md` is now that evidence, derived from
-the `register_native_vjp_plugin` declarations rather than asserted, so a family
-added without one does not silently appear covered — it does not appear.
-**13 families**, 37 owned Graph ops: 7 `pure_only`, 5
-`non_reexecuting_state_lineage`, 1 `zero_dropout_attention`, and **0 with no
-certification path**. The policy split is load-bearing rather than
-bookkeeping: `certify_frontends` proves equality by RE-EXECUTING the source, so
-for a state-mutating family the second run is a different program and such a
-certificate would compare two things never meant to be equal — and would pass.
-A drift test pins that the five stateful families use
-`certify_frontends_non_reexecuting`, that every named certifier exists (a
-certifier named but absent would make every row citing it read as proven), and
-that a family with an unhandled policy is reported as blocking — that last one
-a control, since without it the whole gate passes vacuously on a registry that
-happens to be clean.
-
-Scope, so the row is not over-read: this proves the gate is **evaluable** for
-all 13 families and that each declares a whole Graph→Schedule→Tile→target
-spine. Successful plugin launches now record concrete evidence as
-content-addressed `tessera.native_vjp_execution.v1` certificates in a
-process-level family registry rather than only in a `JitFn`. The first newly
-closed optimizer gap is factored Adafactor on AVX-512, whose certificate binds
-`topology=factored` and the frontend/state/Schedule/Tile/Target identity.
-The exact-target gate now enumerates 31 family/target rows. Target-owned
-all-family packets cover all 10 x86 rows and all 13 ROCm rows using
-runtime-origin physical attestations; mocked launch results remain
-`runtime_unattested`. The remaining eight blocking rows are seven SM120
-families and Apple normalization, each requiring its own hardware packet.
-
-**W4-PRODUCT-1: `tessera.control_scan` is the one control primitive with no
-reverse rule (measured 2026-08-25).** Bounded `if`, counted `for`, and
-canonical bounded `while` all differentiate through the scf region machinery.
-Scan did not, and said only that some interface was missing —
-`AUTODIFF_OP_NOT_DIFFERENTIABLE`, true and unhelpful. All four
-`tessera.control_*` ops carry `[Pure]` and nothing else; the reverse machinery
-lives on the scf ops, and scan has no path there.
-
-**The mathematics is settled, not open, and is now recorded executably**
-(`tests/unit/test_control_scan_vjp_contract.py`). For
-`(c_{t+1}, y_t) = body(c_t, x_t)` the reverse recurrence is
-`(cbar_t, xbar_t) = body_vjp(c_t, x_t; cbar_{t+1}, ybar_t)` for `t = T-1..0`,
-so **the adjoint of a scan is a scan** over reversed t, carrying the carry
-cotangent and consuming `(c_t, x_t, ybar_t)`. Checked against central
-differences on a nonlinear body: max absolute error 4.7e-10 on both the init
-and the `xs` cotangents. The rows include a control that must fail (a rule
-that forgets the per-step `ybar` — the likeliest slip, since the stacked
-output is the operand a for-loop rule does not have), a row proving the
-per-step carries are a CORRECTNESS requirement rather than a memory
-optimisation (evaluating `body_vjp` at the final carry throughout is wrong by
->1e-3), and a row proving RECOMPUTE reproduces SAVE bit-identically.
-
-**What blocks it is structural.** The reverse scan needs the BODY's paired
-backward — a companion function this pass generates — and a residual tape of
-the intermediate carries, which the forward scan does not stack.
-`AdjointInterface::buildAdjoint` receives only an OpBuilder positioned at the
-forward site and is contractually limited to emitting ops there, so it can
-create neither. The rule therefore belongs beside the scf region handling in
-`AutodiffPairedPass`, where companion functions and residual policies already
-live. `AUTODIFF_CONTROL_SCAN_UNSUPPORTED` now says exactly that, with the
-recurrence and the SAVE/RECOMPUTE/HYBRID connection in its notes, so the next
-implementation starts from the contract instead of re-deriving it — and does
-not put the rule in the wrong place.
-
-Not claimed: the compiler rule itself. This slice makes the gap named,
-bounded, fail-closed, and oracle-backed; the paired-pass implementation and
-its device rows are the next block.
-
-**AD-TSOL-STFT-BWD-1: the bounded AVX-512 and independent gfx1151 packages
-landed (updated 2026-08-26).** The starting measurement was:
-
-| | forward | tangent (JVP) | adjoint (VJP) |
-|---|---|---|---|
-| x86 AVX-512 | native (`tessera_x86_stft_f32` / `istft_f32`) | native (`tessera_x86_istft_jvp_f32`) | **none** |
-| gfx1151 | native bounded STFT/ISTFT | none | native direct stored-bin package |
-
-The initial asymmetry was forward-yes / tangent-yes / adjoint-no on x86, and
-nothing at all on ROCm. The x86 native VJP plugin now owns content-addressed
-STFT/ISTFT packages for contiguous last-axis, uncentered, onesided
-f32/complex64, explicit positive hop, `n_fft == window`, and uncropped ISTFT
-length. It returns both signal/spectrum and window cotangents and supports
-backward, forward, and ortho normalization. Odd packed-R2C ISTFT, altered
-lineage, unsupported dtype/shape/policy, non-x86 targets, and the unwired
-generic `TileToX86Pass` STFT kind remain explicitly fail-closed. gfx1151 still
-owns a separate direct stored-bin DFT reverse kernel and the existing native
-forward package. It does not reuse x86 output or the ROCm forward FFT.
-
-Both operators are LINEAR, so the VJP is the adjoint and the contract is
-checkable exactly rather than approximately. Recorded in
-`tests/unit/test_stft_adjoint_contract.py`: the reference VJPs satisfy
-`<STFT(x), Xbar> == <x, STFT^H(Xbar)>` to 0.0 and 4e-16, the COLA overlap-add
-identity holds to 4.4e-16, and the adjoint from first principles reproduces
-the reference to 1.4e-15 —
-
-    STFT^H(Xbar)[n + tH] += w[n] * Re( sum_f Xbar[t,f] * exp(+2i*pi*f*n/N) )
-
-each STORED bin counted once.
-
-**Implementation strategy, decided by measurement:** the STFT backward uses
-the stored-bin adjoint directly, avoiding accidental Hermitian doubling. The
-ISTFT backward is the exact transpose of normalized overlap-add and reuses
-the packed R2C primitive for the frame cotangent, with DC/Nyquist counted once
-and interior bins twice. The equivalent compositional oracle remains pinned:
-`irfft` reconstructs the Hermitian pair, so halving interior bins makes
-`N * irfft` reproduce the per-frame STFT adjoint to 1.4e-15; omitting that
-correction is wrong by 127%.
-
-**Two shortcuts refuted, so the next implementer does not spend a day on
-them.** Reusing the existing forward ISTFT kernel would have made the package
-nearly free, and it cannot: ISTFT is not `STFT^H` up to any global scale
-(best-fit residual 0.968 for backward/forward/ortho), nor after undoing the
-COLA window-sum division (0.887). The division is pointwise and the windowing
-differs; the adjoint is a different program.
-
-Claimed now: bounded independent AVX-512 and gfx1151 implementations,
-content-addressed Schedule→Tile lineage, exact host/device numerical proofs,
-and explicit low-precision storage ABIs. On gfx1151, aligned n=16 and
-ragged/batched n=18 match the independent Python VJP for f32/f16/bf16 and the
-native forward/reverse pair satisfies the inner-product identity. Not claimed:
-full-spectrum policy, true non-contiguous strides, lengths outside {16,18},
-generic `TileToX86Pass` emission, Apple/CUDA packages, or selector-grade
-performance. Order 8a adds native centered constant/reflect padding and
-centered/explicitly cropped ISTFT for n=16/n=18 on both proven architectures,
-with policy identity, low-precision storage, independent VJP, and exact-device
-checks. Order 8b carries arbitrary normalized logical axes through
-Schedule→Tile as `outer`/`inner` indexing and proves nontrivial `(2,3)` native
-forward/adjoint packets independently on AVX-512 and gfx1151 for C-contiguous
-storage. The x86 v7 package now consumes true runtime stride descriptors and
-proves full spectra plus explicit n=20/window=15 forward/reverse against
-independent oracles; its reverse Schedule→Tile hash binds the stride ABI.
-gfx1151 still needs the equivalent architecture-owned implementation and
-exact-device packet. Per-batch broadcasting and physical streaming remain
-open. Streaming state lineage itself now binds policy, window, tail, counters,
-and parent state, with tamper tests. No sibling-backend evidence is inferred.
-### Architecture expansion after the shared gates
-
-- **ROCm:** gfx1151 owns the first exact-device correctness and calibrated
-  performance packets. gfx1200, gfx1250/MI455X, and gfx1251/MI430X remain
-  fail-closed until their own Target operations, dtype paths, packages, and
-  device packets exist. FP8/BF8, IU8, sparse SWMMAC, FP4/MX scaling, and
-  gfx1251 FP64 WMMA remain separate typed-execution work, not capability-table
-  promotion.
-- **x86:** AVX-512 owns the no-async Schedule Object proof and clean Zen 5
-  packets. AMX remains a separately access-gated lane.
-- **Apple and NVIDIA:** consume the same shared Graph/Schedule/Tile contracts
-  through architecture-owned plugins. NVIDIA's remaining typed-fragment and
-  barrier-at-birth work precedes its SO-2/SO-4 and TSOL promotion; Apple keeps
-  independent Metal policy and evidence decisions.
-
-### PR and promotion rules
-
-1. A PR changes one shared boundary or one architecture's physical evidence,
-   not both unless the exact hardware is available in that same validation
-   environment.
-2. Every migrated family declares its Graph, Schedule, Tile, and Target owner;
-   package construction cannot move back into `JitFn` or runtime dispatch.
-3. Every schedule/layout optimization lands first as rank/prune-only and keeps
-   the old path as an oracle. Selector authority requires clean exact-device
-   packets from `EVIDENCE-PACKET-1`.
-4. Shared IR, ABI, dtype, numerical policy, benchmark-schema, or runtime changes
-   update all four backend queues with parity, follow-up, or not-applicable
-   outcomes.
-5. Generated dashboards are regenerated by their owning generator. Plans link
-   to them and do not hand-maintain competing totals.
-
-**E2E-REAL-6F optimizer migration is complete; the fleet certificate gate is
-landing:** the remaining physically owned optimizer VJPs share the
-non-reexecuting state-lineage plugin boundary, and x86/gfx1151 now have total
-family packets. Seven NVIDIA rows and one Apple row remain independent,
-blocking exact-device follow-ups. Orders 12 and 13 may
-proceed independently because they are evidence infrastructure; they do not
-authorize promotion until the corresponding architecture packet exists.
-
-## How to execute this plan now
-
-Earlier E2E-REAL slices established content-addressed Graph→Schedule→Tile
-lineage and bounded x86/gfx1151 physical consumers. The next route is no longer
-E2E-REAL-0:
-
-1. **Completed — AD-CORE-LINEAR-1:** `LinearTransposeInterface` is the Graph-IR
-   authority for transpose/reshape, broadcast/expand, the structural view
-   family, and operand-wise multilinear matmul. Both autodiff passes consume
-   it; paired CPU execution covers inverse shape transport, every matmul
-   transpose-flag combination, and fail-closed unsupported operations. The
-   Python linear registry remains an oracle, not the production authority.
-2. **Compiler slice complete — AD-TSOL-SPECTRAL-1:** Graph IR now owns explicit
-   normalization, logical length, spectrum layout/Hermitian identity, and DCT
-   type. FFT/IFFT/RFFT/IRFFT/DCT transposes have paired CPU numerical proof;
-   STFT/ISTFT/filter/convolution emit a content-addressed multi-output
-   Schedule→Tile carrier. Real-input full FFT autodiff fails closed and directs
-   callers to the explicit packed-real `rfft` contract. The first native
-   compound-backward slice now consumes complex-f32 spectral filter and
-   unbroadcast full-f32 spectral convolution on AVX-512 and gfx1151 without
-   returning to Graph IR. STFT/ISTFT backward, broader axes/dtypes/broadcasting,
-   and performance promotion remain architecture-owned and fail closed.
-3. **Completed foundation audit — GRAPH-VERIFY-SIGNED-1:** registered Graph and
-   canonical-attention integer legality now reads the signed `IntegerAttr`
-   spelling rather than MLIR 23's unsigned native value accessor. Negative
-   extents, block counts, seeds, cache windows, control bounds, and indices fail
-   closed, with direct negative IR proof. Registration and `hasVerifier`
-   coverage are not treated as semantic-verifier proof.
-4. **Completed — AD-CORE-EFFECT-CONTROL-1:** canonical `stop_gradient` is a
-   Graph operation and compiler barrier; both autodiff passes compute backward
-   SSA activity, carry registered Graph effects, reject active stochastic work,
-   permit inactive regions, and fail closed for active regions or stopped
-   residuals that cannot be replayed safely. Direct lit and paired CPU proof
-   cover the legal and negative paths.
-5. **AD-SOLVER-IFT-1 — bounded physical pilot landed:** the registered solver
-   dialect owns the general IFT semantics. The first content-addressed physical
-   contract carries `R(theta,x)=x²-theta` through Schedule and Tile into native
-   AVX-512 and compiler-generated gfx1151 packages. Both packages execute the
-   residual, transposed matrix-free solve, and residual adjoint and have
-   compiled numerical packets. A general physical parent now binds immutable
-   residual and solution/parameter JVP/VJP children and executes restarted
-   GMRES on AVX-512 and gfx1151. The compiler now generates the five physical
-   children from verified Graphs. The typed child-program envelope now includes
-   pointwise operations, sum/mean with broadcast-correct cotangent reduction,
-   rank-2 matmul/transpose, distinct parameter and solution spaces, bounded
-   dynamic dimensions, explicit f16/bf16-to-f32 package-boundary widening, and
-   statically bounded `control_for` expansion. The nonlinear
-   `R=x*x+sin(x)-theta` packets remain the architecture-owned proof baseline.
-   Pure scalar data-dependent `if` and bounded `while` now lower to explicit
-   compare/select SSA with digest-bound recomputation in every child. Expanded
-   30-sample AVX-512 and gfx1151 WSL packets cover reduction, reduced-storage
-   matmul, bounded-dynamic mixed storage, both predicate regions, and ISTFT
-   window products. Clean selector-grade timing remains open.
-6. **AD-RESIDUAL-EVAL-1 — bounded execution bridge landed:** complete backward
-   samples and unique retained residual bytes stamp Graph rematerialization
-   only from eligible evidence. Counted-region treeverse now executes exact
-   checkpoint capture, primal replay, and backward callbacks, converting an
-   estimated candidate into an eligible row only after complete execution.
-   General MLIR region adjoints and broader exact-family packets remain open.
-7. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
-   families satisfy lineage, correctness, and architecture-owned evidence.
-   **Gate ACTIVE (2026-08-20):** a migrated differentiable family also
-   clears the Law-3 adjoint sweep (`⟨Jv,u⟩ = ⟨v,Jᵀu⟩` at dimension-scaled
-   probe counts) before its duplicate authority is deleted. The oracle
-   exists and is swept: AD-LAW-1's spec growth closed
-   ([archived AD-LAW-1 record](archive/AUTODIFF_NEXTGEN_PLAN.md) §7) — 300
-   tensor pairs + the full geometric registry pass, the `vjp_only` class
-   is empty, and the only unswept rows are eight rule-capability gaps
-   pinned with named reasons (`_OPEN_UNSWEEPABLE_RULES` in
-   `tests/unit/test_autodiff_laws.py`); a family touching one of those
-   ops fixes the rule first. The check completes the existing pointwise
-   numeric identity on the transpose axis; it does **not** replace
-   per-family derivative oracles, since a matched-wrong JVP/VJP pair
-   satisfies the adjoint identity on every probe.
-8. **COLLECTIVE-NATIVE-FOUNDATION-1 — landing:** the C++ NCCL/RCCL adapters
-   issue real NCCL-compatible calls, query initialized communicator properties,
-   and own symmetric registrations through move-only RAII windows. Target
-   artifacts bind initiation, registration, ordering, capture policy,
-   backend/source identity, and the exact communicator-capability digest;
-   device initiation rejects a mismatched runtime topology. The two-gfx1151
-   LSA harness is compiled and registered as an opt-in hardware CTest. Current
-   WSL communicator discovery passes but reports device API false, zero LSA
-   teams, no GIN, host RMA true, and one visible GPU; symmetric registration
-   and peer correctness therefore remain blocked. Zero-CU Copy Engine,
-   GIN/RMA, and gfx1250 DDA now have independent typed artifact lanes and
-   legality gates. Copy Engine binds zero-CTA communicator initialization;
-   GIN/RMA binds strict registered windows and public one-sided operations;
-   gfx1250 DDA binds architecture plus selector-evidence identity without
-   importing an RCCL-internal selector. Exact-device correctness, route proof,
-   and performance packets remain separate open slices under sync
-   `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09`.
-   GIN now has registered Target operations for window lifetime and ordered
-   put/signal/wait, a content-addressed lifetime verifier, and rank-local
-   runtime dispatch. Its native executable binds explicit Tessera, OpenMPI,
-   PMI, or Slurm ranks to `ncclCommInitRank`, shared rendezvous, symmetric
-   windows, exact ring readback, and independent HIP-event/host-wall clocks.
-   Exact multi-node gfx1151 proof remains open; ordinary collective records
-   cannot opt into the one-sided lane.
-9. **AMD-ISA-DTYPE-1 — cross-generation foundation landing:** gfx1151,
-   gfx1200, and CDNA5 gfx1250/gfx1251 now have a dtype-total architecture
-   contract separating scalar/vector storage, dense WMMA, sparse SWMMAC,
-   accumulator, scale-operand, compiler-state, and exact mnemonic identity.
-   CDNA5 is modeled as wave32 XDL-WMMA rather than inherited wave64 MFMA;
-   MI455X maps to gfx1250 and MI430X to gfx1251 with distinct cost identities.
-   The C++ fragment boundary recognizes a distinct CDNA5 ABI and lowers the
-   already-proven f16/bf16 K32 forms. FP8/BF8, IU8, F8F6F4/FP4/MX scaling,
-   sparse materialization, and gfx1251 FP64 WMMA remain fail-closed until typed
-   Target operations, LLVM serialization, and exact-product packets land.
-
-Scoped plans own the design and acceptance details for these items. Backend
-plans own exact-device promotion. Neither creates a competing global order.
-
-Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` normalizes the
-codegen dashboard to one `BackendKernelEntry` op×target grain. Runtime paths
-are now independent evidence rather than a second additive denominator;
-exact-device verification is split from `fused`/`packaged` implementation
-presence; explicit no-kernel terminals close Tile/Target phases; and closed
-rows no longer appear as open work. This changes reporting and drift gates,
-not physical packages, selectors, or device evidence.
-
-The standalone primitive dashboard now generates its live registry totals,
-compiler-layer summary, exact-target manifest rollup, and open queues. Its
-aggregate compiler row is explicitly best-available evidence, not a universal
-backend claim. The 2026-08-08 reconciliation removed the stale Adafactor
-single-GPU terminal override and registered existing physical TSOL/Adafactor
-benchmark harnesses; it changed audit truth, not implementation or selector
-state. The four collective Tile contracts are now first-class ODS operations
-with exact Schedule→Tile lowering and shared shape/reduction verification.
-They lower into a registered asynchronous `tessera_collective` Target dialect
-and a content-addressed runtime-adapter package; deterministic two-rank tests
-execute all four operations without returning to Graph IR. The functional
-portable Target/runtime axis is complete. As of
-`COLLECTIVE-ASYNC-UNIFY-2026-08-09`, the older forward/autodiff transform
-producers also emit this registered future/await contract and rewire SSA users;
-no active compiler producer emits an unregistered collective pseudo-dialect.
-Native architecture transport,
-exact multi-rank execution, and performance proof stay open and
-architecture-owned. `DIST-SHARD-ALIAS-1` also removes the misleading "nine
-backend contracts" framing: `named_sharding` and `partition_spec` are
-compile-time metadata, `shard_map` is a compile-time region contract,
-`psum`/`pmean`/`pmax`/`pmin` map to registered all-reduce records, and
-`broadcast_to_axis` maps to all-gather. Those five aliases now execute through
-the portable two-rank runtime. `collective_permute` is now a distinct typed
-Tile/Target operation carrying an immutable source/destination peer map. The
-portable runtime and the one-process/multi-device NCCL/RCCL launcher execute
-it with grouped send/receive calls, zero-fill unmatched destinations, and
-reject duplicate or out-of-range peers. The remaining foundation queues are
-frontend capture of these aliases, MPI/OFI/SHMEM process launch, subgroup
-communicator construction, exact NCCL/RCCL multi-rank evidence, broader
-compiler autodiff/sharding,
-target-specific benchmark packets, and duplicate-authority deletion in
-E2E-REAL-6.
-
-Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` also closes
-the actionable direct-test bucket: the five differentiable relaxations now
-have public-forward/oracle coverage and the two fused training rows have exact
-x86/gfx1151 fused-versus-unfused proof. The raw thin-reference count remains a
-scanner metric; its 87 structural rows are explicitly non-numerical contracts,
-not hidden primitive test debt.
-
-The x86 production tool/image boundary also follows the common fail-closed
-build selection as of 2026-08-08: `TESSERA_BUILD_DIR` selects both
-`tessera-opt` and `libtessera_x86_elementwise.so`. This prevents a current
-Python contract from pairing with a stale compiler or image in another CMake
-tree. The exact-host FFT suite passes against the selected clean LLVM/MLIR 23
-tree, and the standalone comparison now measures normalized forward and
-inverse C2C execution independently.
-
-**Source reviews:**
-[GA/EBM](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) ·
-[Autodiff](AUTODIFF_EXECUTION_PLAN.md) ·
-[Sweep](COMPILER_ARCHITECTURE_SWEEP.md) ·
-[Frontend→Graph→Schedule](FRONTEND_GRAPH_SCHEDULE_REVIEW.md) ·
-[IR Stack Integration](IR_STACK_INTEGRATION_REVIEW.md) ·
-[Target IR](TARGET_IR_REVIEW.md) ·
-[Riemannian OT](RIEMANNIAN_OT_PLAN.md)
-
----
-
-## 0. End-to-end reset — one artifact must cross every boundary
-
-The original waves are useful root-cause groupings, but they are not by
-themselves an executable compiler program. A source review on 2026-08-04 found
-that Tessera can report all of Graph, Schedule, Tile, Target, native-image, and
-launch-descriptor stages without proving that stage N+1 consumed stage N. This
-section is therefore the **delivery order** for the plan. The thematic W0-W6
-queues remain the owning backlog; when their ordering conflicts with this
-vertical program, this section wins.
-
-### 0.1 Rechecked current truth
-
-The repository has substantially more real machinery than the seven source
-reviews originally credited:
-
-- `canonical_compile()` is the common orchestration entry and
-  `CompileArtifactBundle` carries typed stage artifacts, native images, launch
-  descriptors, content hashes, and runtime state.
-- The Python `lower_graph_to_schedule_ir` → `lower_schedule_to_tile_ir` →
-  `lower_tile_to_target_ir` ladder is a real object-model lowering and is useful
-  as an oracle.
-- NVIDIA SM120, ROCm gfx1151, x86, Apple GPU, and Apple CPU all have bounded
-  native package producers and descriptor launch paths. Existing E2E-SPINE work
-  made the image/descriptor/cache/runtime contracts real.
-- Schedule runtime steps are consumed. Pipeline-step execution, supported
-  collective overlap, and optimizer-shard state transitions are no longer a
-  missing-runtime item.
-- W1.1's current ROCm work proves a typed
-  `view → fragment_pack → mma → fragment_unpack → store` chain on gfx1151,
-  including ragged shapes. That is a valid backend-lowering proof.
-
-Those facts do **not** yet make one compiler spine:
-
-| Boundary | What exists | Why it is not yet canonical end to end |
-|---|---|---|
-| Python source → Graph | The tracer now promotes directly into verified `GraphIRModule` and is the production authority for the native-forward-product cohort; `@jit` AST extraction, textual parsing, and constrained adapters remain for unmigrated families | More than one producer remains globally, but migrated JVP packages bind tracer Graph identity and no longer consult decoration-time AST Graph IR. |
-| Graph → Schedule | Python lowering is substantive; C++ `GraphToSchedulePass` only stamps `schedule.artifact_hash = "__pending__"` | The C++ pass rewrites no operation. The Schedule ODS is tablegen input but has no built dialect library/registration in production `tessera-opt`. |
-| Schedule → Tile | Python lowering is substantive; C++ `ScheduleToTilePass` only stamps `tile.staged` | The Python schedule model drops value types in its textual form, while C++ `schedule.tile` is metadata-only and has no SSA inputs/results. Neither is a production value-carrying boundary. |
-| Shared Tile → backend package | Typed value and launch-level Tile contracts exist | Native packagers accept the original `GraphIRModule`, classify it again, and synthesize backend-owned Tile text. They do not consume the shared ladder's Tile artifact. |
-| Target → image → runtime | Image/descriptor validation and launch are real | This validates the package-internal Target digest, not continuity from the earlier shared Schedule/Tile artifacts. |
-
-The concrete discontinuity is in `driver.compile_graph_module`: it builds a
-`cpu_plan`, then a native branch calls `*_native.package_native(module, ...)`
-with the **original Graph module** and replaces `bundle.tile` and
-`bundle.target_ir` with the package's artifacts. `spine_stages()` records that
-all stages exist, but carries no parent digest and cannot detect the fork. The
-existing E2E-SPINE claims are therefore correctly interpreted as
-**package/runtime E2E**, not yet **compiler-boundary E2E**.
-
-Backend recheck:
-
-| Target | Proven today | Remaining lineage break |
-|---|---|---|
-| x86 / AVX-512 | Broad typed native packages, runtime descriptors, exact Zen 5 execution, and one canonical scheduled f32 matmul consumer | Matmul now preserves adjacent Graph→Schedule→Tile→Target/image lineage. Other admitted families still re-derive a family-specific `tile.*_kernel` from Graph IR. |
-| ROCm / gfx1151 | Exact-device package families, the typed WMMA GEMM differential path, and one canonical scheduled f16/f32 matmul consumer | Matmul now preserves adjacent Graph→Schedule→Tile→Target/HSACO lineage. Other admitted families still synthesize their own Graph/Tile envelopes. |
-| NVIDIA / SM120 | Typed PTX/native packages for bounded families | `nvidia_native` classifies Graph IR and emits NVIDIA-owned launch Tile programs; shared Schedule/Tile is bypassed. |
-| Apple GPU/CPU | Descriptor launch and exact-host packets for bounded families | Packaging largely binds a prebuilt runtime image to a synthesized Target call. It does not compile the preceding shared Tile artifact, and Apple execution must be re-proven on the Mac. |
-
-### 0.2 Definition of a real E2E compiler path
-
-A lane is **compiler-boundary E2E** only when one compile request satisfies all
-of the following:
-
-1. Each artifact records `producer`, `input_digest`, `output_digest`, target,
-   and contract version. For every adjacent pair,
-   `next.input_digest == previous.output_digest`.
-2. Graph semantics are never reconstructed from op names after Graph lowering.
-   A backend may select among candidates, but the selected compiler candidate
-   consumes the canonical Tile or Target artifact rather than the original
-   `GraphIRModule`.
-3. Schedule IR preserves the SSA computation it schedules. The initial design
-   is mixed-level: Graph ops remain the semantic payload while `schedule.*`
-   records decisions; Schedule→Tile atomically replaces the payload with typed
-   Tile values/launch envelopes. A metadata-only `schedule.tile` is not a
-   substitute for the computation.
-4. Every boundary parses and verifies in production `tessera-opt`; Python
-   models may be differential oracles but cannot be the only executable
-   lowering behind a C++ capability claim.
-5. Selected tile sizes, warps, stages, raster policy, numeric policy, layouts,
-   and dynamic-memory expressions survive into the physical package or carry a
-   named, verified drop reason.
-6. The native image is derived from that Target artifact, the descriptor is
-   validated against that image, and the runtime launches the descriptor with
-   fallback disabled.
-7. A hardware lane compares against the numerical oracle and records the
-   correct timing domain. Promotion remains separate: a correct compiler lane
-   does not replace a faster production candidate until its architecture-owned
-   performance ratchet passes.
-
-### 0.3 Delivery program — vertical slices, not horizontal completion
-
-The first capability is deliberately narrow: one static rank-2 matmul semantic
-fixture with two typed instances — x86 f32 and ROCm f16 storage with f32
-accumulation/output. This is the smallest workload with existing Graph
-semantics, schedule knobs, logical and launch Tile contracts, two locally
-available physical backends, numerical oracles, and performance baselines. A
-future shared bf16 instance can compare both architectures under one storage
-contract; the initial proof does not pretend target-specific Graph digests are
-identical.
-
-| Order | Work item | Deliverable | Stop-the-line gate |
-|---|---|---|---|
-| 0 | **E2E-REAL-0 — lineage truth** — **implemented 2026-08-05.** | `LoweringArtifact`/`CompileArtifactBundle` carry parent/output digests, producer identity, representation, contract version, and `lineage_complete`. Existing Graph-owned native packages now report their Tile fork instead of inheriting boundary-E2E from stage presence; no package was deleted or demoted. | `test_compiler_artifact_lineage.py` proves digest adjacency, substituted-Tile detection, stage-presence independence, tamper rejection, and JSON/runtime-metadata round trips. |
-| 1 | **E2E-REAL-1 — make Schedule IR real** — **bounded matmul slice implemented 2026-08-05.** | The generated Schedule ODS library is compiled, linked into, and registered by both full and lean production `tessera-opt`. `schedule.matmul` now preserves the Graph result as an SSA subject and carries a lowercase SHA-256 decision contract; the matching `schedule.artifact` and Graph attribute use the same digest. The prior `__pending__` annotation skeleton is gone. | Production builds list `schedule`; the intermediate fixture proves Graph semantics remain live behind the scheduled SSA edge, all three digest copies agree, and malformed/tampered decisions fail closed. |
-| 2 | **E2E-REAL-2 — Graph/Schedule → launch Tile matmul** — **implemented 2026-08-05.** | The C++ Schedule→Tile pass atomically consumes `schedule.matmul`, its matching durable artifact, and the retained Graph producer for bounded static rank-2 x86-f32 and ROCm-f16/f32. It materializes A/B/D/M/N/K and emits one verified `tile.matmul_kernel` with numeric, layout, tile, pipeline, raster, and schedule-digest attributes. | `e2e_matmul_graph_schedule_tile.mlir` proves no Graph/Schedule op survives and exactly one six-operand launch op is produced for both targets. Dynamic shapes, ROCm f32 storage, forged hashes, altered knobs, and missing/duplicate artifacts fail closed. |
-| 3 | **E2E-REAL-3 — two physical consumers on this host** — **implemented for the bounded matmul slice 2026-08-05.** | `ScheduledMatmulArtifact` is the typed package boundary. The canonical x86 and ROCm matmul routes consume its exact launch Tile text; x86 runs `TileToX86Pass`, while ROCm runs `GenerateWMMAGemmKernel` before `TileToROCM`/ROCDL/HSACO. Their retained Graph-owned matmul emitters remain separately callable candidates. | Per-request lineage is adjacent through Graph/Schedule/Tile/Target/backend; lit proves both physical consumers remove Graph/Schedule/launch Tile; descriptor launches agree numerically without fallback on the established three-shape Zen 5 corpus and aligned plus ragged gfx1151 cases. Performance and selector promotion remain E2E-REAL-4. |
-| 4 | **E2E-REAL-4 — performance and promotion decision** — **completed for Zen 5; gfx1151 retained pending selector-grade timing, 2026-08-05.** | The shared contract now distinguishes the 16x16 instruction tile from an architecture-selected macro tile. Zen 5 preserves 16x16 and promotes: aligned/ragged outputs are bit-identical and scheduled/production medians are 1.031x/0.988x. gfx1151 preserves its committed 32x64 (2x4 WMMA) choice and recovers direct performance: 18.29 versus 18.34 TFLOP/s, 2.281x the 8.02 floor, with zero route difference on aligned/ragged cases. | The committed reports name device, toolchain, artifact digests, warm/cold state, resources, numerical error, and timing domain. x86 promotes its already-canonical selection without another selector mutation. ROCm retains because WSL host-wall timing is not selector-grade device-event evidence; the initial 16x16 result (4.14 TFLOP/s) was rejected and triggered the macro-tile contract. gfx1200/gfx1250 fail closed until their own profiles and device packets exist. |
-| 5 | **E2E-REAL-5 — migrate breadth one family at a time** — **bounded f32 softmax/reduction slice implemented for x86 and gfx1151, 2026-08-05; broader families remain landing.** | `schedule.softmax` and `schedule.reduce` now bind Graph semantics, architecture-owned numeric/launch policy, and one SHA-256 identity before Schedule→Tile emits the exact launch artifact. `ScheduledKernelArtifact` carries that artifact into x86 and ROCm packaging without Graph re-entry. The first truthful envelope is static f32 last-axis softmax plus rank-reducing sum/mean/max; x86 reduction is last-axis, while gfx1151 also consumes arbitrary static axes. ROCm f16/bf16→f32 and `keepdims=true` remain on the explicit Graph-owned route because canonical `tessera.reduce` currently requires same-element-type, rank-reduced output. Attention forward/backward is next, followed by stateful/training families. | Structural and tamper lit gates pass; exact Zen 5 softmax/reduction and exact gfx1151 softmax/reduction descriptor launches agree with NumPy. Per-request Graph→Schedule→Tile→Target→backend lineage is adjacent and both packages prove exact Tile-text consumption. No selector or performance promotion is inferred. NVIDIA follows on SM120; Apple follows on the Mac; no evidence transfers between targets. |
-| 5A | **E2E-REAL-5A — canonical attention forward** — **bounded x86/Zen 5 and ROCm/gfx1151 slice implemented 2026-08-05.** | `schedule.attention` content-addresses the static rank-4 recurrence, modifiers, launch dimensions, physical dtype, and architecture-owned backward-LSE policy. `ScheduledAttentionArtifact` retains the shared batch/query-head/KV online-softmax recurrence as semantic proof and carries exactly one launch-level `tile.attention_kernel` into TileToX86 or TileToROCm/ROCDL without Graph re-entry. x86 preserves `save_lse/saved`; gfx1151 preserves `gfx1151_auto_128` and its per-shape saved/recompute selection. | Production `tessera-opt` proves Graph→Schedule→Tile adjacency and rejects stale policy. Exact Zen 5 execution agrees with NumPy; exact WSL-visible Radeon 8060S/gfx1151 execution agrees with the shared streaming-attention oracle for GQA, causal windowing, ragged `Sq=17/Sk=19`, and f16→f32. gfx1200/gfx1250 fail closed until architecture-owned profiles and device packets exist. Attention backward remains the next family boundary; NVIDIA/Apple require owning-host follow-ups. |
-| 5B | **E2E-REAL-5B — canonical attention backward** — **bounded physical carriers implemented 2026-08-05; public x86/gfx1151 plugin authority landed under E2E-REAL-6C on 2026-08-17.** | `schedule.attention_backward` is one content-addressed three-result dQ/dK/dV edge. Its digest binds the tensor-valued dQ loop, two-way dK/dV split, ascending reduction, launch-owned workspace, modifiers, and architecture-owned LSE checkpoint identity. `ScheduledAttentionBackwardArtifact` carries the exact program Tile text into the x86 saved-LSE ABI or the gfx1151 five-entry package without Graph re-entry. The native-VJP plugin now binds the tracer parent, Schedule, Tile, native image, and aggregate artifact identities before runtime. | Production Graph→Schedule→Tile and both physical lowerings pass. Public rank-4 exact x86 and WSL-visible gfx1151 tests cover ragged GQA causal gradients, and the 67-test affected ROCm cohort proves bottom-right ragged causal/window alignment across generated forward/backward kernels and the shipped ABI. The rank-3 `multi_head_attention` wrapper remains explicit compatibility work; gfx1200/gfx1250 fail closed; NVIDIA and Apple need independent plugin consumption and owning-host evidence. |
-| 5C | **E2E-REAL-5C — stateful/training families** — **bounded Lion VJP, factored/full Adafactor VJP, and sequence-mixer backward slices implemented for x86/Zen 5 and ROCm/gfx1151, 2026-08-05.** | `tessera.state_buffer_lineage.v1` content-addresses logical buffer name, role, static shape, dtype, version, access, parent identities, and mutation policy independently of host object or device address. Typed `schedule.lion_vjp`, `schedule.adafactor_vjp`, and `schedule.sequence_mixer_backward` operations each lower to exactly one `tile.training_kernel`; the runtime consumes that exact artifact and does not retain or reconstruct Graph-op metadata. Adafactor binds factored row/column and full-state topologies. Sequence-mixer identity includes checkpoint, chunk-summary/prefix/fill, reverse phases, workspace, and fresh dQ/dK/dV/dgate/dbeta/ddecay outputs. | Schedule/Tile tamper and structural tests pass; exact Zen 5 and WSL-visible gfx1151 Lion, Adafactor, and gated/modified DeltaNet backward cohorts pass without fallback. gfx1200/gfx1250 remain fail-closed pending profiles and exact-device evidence. NVIDIA and Apple require architecture-owned consumers and owning-host validation. Broader stateful/training families remain under this row; these three bounded migrations are no longer open work. |
-| 5D | **E2E-REAL-FFT — canonical spectral FFT** — **typed artifact boundary, persistent ROCm package, and the second x86/gfx1151 performance slice implemented; hardware follow-ups remain landing, 2026-08-05.** | `schedule.fft` content-addresses mode, shape/axis, direction, normalization, storage/accumulation, algorithm, radix policy/sequence through radix 17, Bluestein size, workspace policy, residency, twiddle policy, kernel family, and launch size. x86 caches Bluestein plans and owns native AVX-512 mixed-radix Stockham codelets. gfx1151 loads a prebuilt versioned shared image whose bounded persistent plan is keyed by the exact Tile digest; Bluestein owns four M buffers including an immutable transformed chirp. Rader remains candidate-only, Bailey is rejected, and gfx1151 fused LDS remains a separate candidate. | Production `tessera-opt`, native x86 images, and `libtessera_spectral_rocm.so` rebuild. ROCm persistent plans are 1.24x--1.45x faster than legacy per-call allocation at N=257/509/1009 in synchronized WSL host-wall timing. x86 cached Bluestein is 1.57x--1.76x faster and mixed radix wins 12/13 shapes. HIP events still return zero and rocprofv3 emits no WSL timestamps, so fused LDS remains experimental pending bare-metal evidence. gfx1200/gfx1250 fail closed. |
-| 5E | **TSOL-ROCM-E2E-1 — compound spectral programs** — **typed Schedule→Tile carriers plus expanded x86/Zen 5 and ROCm/gfx1151 consumers implemented 2026-08-06.** | `schedule.spectral_program` content-addresses child FFT digests, bounded specialization template and exact shape, arbitrary axis, storage, normalization, layout, pad/crop, window/hop/frames, workspace, accumulation, native entry, and mutation lineage for all five compound spectral ops. Both runtimes consume one exact Tile artifact without Graph re-entry. Native package ABI v4 owns forward/ortho scaling, f16/bf16 conversion around f32 accumulation, and host-side arbitrary-axis pack/unpack. The HIP image exports one compiled architecture and stale cross-architecture images fail closed. | 36 combined Zen 5 contract/package/evidence tests and 15 exact gfx1151 package tests pass. Each architecture owns a 30-row full-family packet covering all five operations, seven digest-changing bounded specializations, every physical policy, and combined dynamic-axis-reduced-storage-ortho execution. x86 timing is selector-eligible; gfx1151 timing is synchronized WSL host wall and remains selector-ineligible. Separately stamped gfx1200/gfx1250 ABI-v4 packages cross-build, but their profiles remain `build_only`/fail-closed pending architecture-owned schedules and exact-device evidence. Bare-metal gfx1151 device events and Apple/NVIDIA physical consumers remain follow-ups. |
-| 5F | **ROCM-MATH-EVIDENCE + MATH-PHYSICAL-2 — stable statistics, boundary semantics, and physical math efficiency** — **gfx1151 and Zen 5 bounded slices implemented 2026-08-06.** | ROCm var/std use centered parallel Welford; unary/binary codegen preserves difficult IEEE/NumPy domains; generated HIP math modules are process-cached by family/chip/op/dtype; and x86 arithmetic scans use an evidence-selected AVX-512 Hillis--Steele prefix while extrema retain their faster scalar recurrence. Binary physical packages reject mixed input storage. | Exact gfx1151 math passes 579 tests across fp32/fp16/bf16 storage; exact Zen 5 math passes 167 tests. The gfx1151 module cache improves seven f32 host-wall medians by 1.46x--3.58x. Paired Zen 5 `cumsum`/`cumprod` improve 1.48x/1.47x. ROCm timing remains selector-ineligible under WSL; sibling GPU backends require owning-device validation. |
-| 5G | **TSOL-CONTRACT-GENERALIZE + X86-WELFORD-PARITY** — **shared contract, x86 Welford parity, and x86/gfx1151 TSOL policy expansion implemented 2026-08-06; packed fusion and DCT-I/III/IV landed 2026-08-08.** | `tessera.scheduled_spectral.v5` separates bounded template identity from exact physical specialization and carries dynamic bounds, arbitrary axes, fp32/fp16/bf16 storage, backward/forward/ortho normalization, explicit DCT-I/II/III/IV identity, and hashed fusion topology through verified Schedule→Tile lowering. Even-length compound paths bind packed N/2 children; gfx1151 v6 folds Hermitian work into fused LDS. The causal streaming-STFT policy content-addresses overlap state and fails closed for centred streaming without lookahead lineage. | Native x86 and gfx1151 correctness suites pass. Historical v5 packets remain historical; v6 promotion requires fresh clean Zen 5 and bare-metal gfx1151 evidence. Physical adoption of centred/n-FFT/full-spectrum/output-length STFT policies remains open. gfx1200/gfx1250 execution stays fail-closed; CUDA/SM120 and Apple/Metal physical consumers remain architecture-owned follow-ups. |
-| 6 | **E2E-REAL-6 — delete duplicate authorities — active family-migration cohort (updated 2026-08-17).** | Ordinary pure straight-line tensor calls cache tracer-owned canonical Graph IR; native forward and reverse products consume that module rather than decoration-time AST Graph. Pure families use a cached content-addressed topology/numerical differential. Stateful Lion, factored/full Adafactor, and causal sequence-mixer backward use the complementary structural non-reexecuting certificate: the tracer executes once, the legacy candidate is never replayed, and physical numerical authority is bound into the package with versioned state/workspace lineage. Native-product plugins now own normalization, bounded compound spectral products, canonical rank-4 attention reverse, and those bounded x86/gfx1151 stateful reverse families. `JitFn` has no x86/ROCm package construction for them. The rank-3 MHA wrapper, sibling-architecture stateful packages, and other unmigrated families remain explicit compatibility work. `_OpExtractor` remains only as the named candidate/CPU-oracle substrate until those migrations close. | Fresh LLVM/MLIR 23 x86 and combined ROCm+x86 builds remain the host-free gate. Exact WSL-visible gfx1151 tests cover the migrated numerical families. E2E-REAL-6E adds one-execution, frontend-certificate, source/state/Schedule/Tile lineage, flat Adafactor topology, and runtime-no-Graph proof for Adafactor and sequence mixers on x86/gfx1151. Clean selector evidence and sibling architecture packages remain independent. Global Decision #31 remains open for remaining effectful families and backward-helper extraction. |
-
-**Historical delivery note.** E2E-REAL-0 through the bounded E2E-REAL-5 family
-slices landed using small, attributable PRs. Preserve that vertical-slice
-discipline for the current autodiff route above; do not restart the already
-completed Schedule-dialect bootstrap.
-
-### 0.4 Relationship to W0-W6
-
-- W1.1 supplies the typed Tile contract E2E-REAL-2/3 consume; finish its two
-  NVIDIA producers and permissive-verifier removal without treating that as a
-  full spine.
-- W2 analyses should attach to the real mixed-level Graph/Schedule program after
-  E2E-REAL-1, not to the Python shadow alone.
-- W3.1 and W3.2 are delivered by E2E-REAL-0 through E2E-REAL-6. Their old
-  three- and four-week estimates are retired; they omitted Schedule dialect
-  construction, SSA preservation, bufferization, backend API migration, and
-  exact-device gates.
-- W4 control flow starts only after the matmul slice proves adjacency. Its
-  acceptance test remains valuable, but it must traverse the same lineage gate.
-- W5 schedule and residual decisions are admitted only when the chosen values
-  appear in the physical artifact and descriptor provenance. Stamping an
-  attribute into an unused Python artifact does not close W5.
-
----
-
-## 1. The thesis
-
-Across seven independent reviews, roughly forty findings reduce to **two root
-causes and one consequence.**
-
-### Root cause A — Declared but not consumed
-
-The compiler computes, validates, and attaches the information a pass needs, and
-then no pass reads it.
-
-| Declaration | Consumer that ignores it | Review |
-|---|---|---|
-| `manifold` attribute on `ebm.langevin_step` | every backend codegen (6 grep hits, all comments) | GA/EBM §1.1 |
-| `MultivectorSpec.grades`, `IsRotor`, `Even`/`Odd` | `geometric_product` — iterates all `dim²` pairs | GA/EBM §2.1 |
-| `batching_rule` axis, closed across 487 primitives | `vmap` — a Python `for` loop | Autodiff §B3 |
-| `shape_rule` axis, reported closed | `_infer_result_type` — a five-case if-chain | Frontend §G2 |
-| `!tile.fragment`, `!tile.buffer`, `!tile.tmem`, … (9 types) | partially consumed; core `tile.mma`/`tile.async_copy` and compatibility envelopes remain open | IR Stack §T1 |
-| `numeric_policy` (Decision #15a) | no carrier below Graph IR at all | IR Stack §T6 |
-| `TilingInterface` on Matmul/Conv/FlashAttn | `fusion_core.py` — 7 hand-enumerated regions | Sweep §F3 |
-
-### Root cause B — Told, not derived
-
-Passes are *given* facts syntactically instead of *computing* them, so they are
-wrong at the edges and fail open.
-
-| Missing analysis | What happens instead | Review |
-|---|---|---|
-| Effect/purity on the IR | `ast.NodeVisitor` name-matching; aliased RNG ⇒ inferred pure ⇒ `deterministic=True` passes | Sweep §F1 |
-| Differentiation activity | `AutodiffPass` builds adjoints for everything | Autodiff §A5 |
-| Gradient demand / trajectory liveness | `CheckpointInnerLoop` marks every EBM step in a containing loop, but no downstream pass consumes those marks | GA/EBM §1.5 |
-| Symbolic shape constraints | `dims_compatible` is `str(lhs) == str(rhs)` | Sweep §F2 |
-| Fusion legality | region shapes enumerated by hand | Sweep §F3 |
-| Sharding propagation | every layer annotated by hand; `validate()` contains `pass` | Sweep §F4 |
-| Tile-level invariants | six `*LegalityPass` re-deriving what types would give free | IR Stack §T2 |
-
-### The consequence — C: duplication
-
-**A + B ⇒ C.** When the declared contract doesn't carry the information, and no
-analysis derives it, the only way to ship is to write a second implementation
-that does. Every duplication in the tree traces to this:
-
-| Duplication | Why it exists |
+| F0 | Route census, proof integrity and usable compiler tooling | Cross-cutting; no hardware prerequisite for inventory or contract fixes. |
+| F1 | First canonical-artifact package migration | Historical NVIDIA scheduled-matmul slice; remaining families belong to F2. |
+| F2 | Migrate surviving Graph-owned packaging and callers | Select a family from the census; retain its ABI, dtype and policy envelope. |
+| F3 | Native recipe instantiation, fusion, ANN and measured scheduling | Requires the selected family's IR boundary, not completion of every F2 route. |
+| F4 | Structured AD/effects/memory, numerical and distributed semantics | Extend the same compiler foundation through verified carriers. |
+| F5 | Retire redundant generators and broaden mathematical workloads | Delete only after differential and owning-target proof covers surviving callers. |
+
+The cuts are an architecture map, not a waterfall. Priority is local to each
+cut below. Dependencies identify the specific prerequisite portion; they do not
+require the entire referenced program to close. Tuned/library candidates remain
+legitimate when their selection and ABI are explicit in IR.
+
+Native destinations: x86 uses MLIR/linalg/vector/SCF to LLVM/object or ORC;
+NVIDIA uses Tile/Target to NVVM/PTX/image; ROCm uses GPU/ROCDL/LLVM to HSACO;
+Apple GPU uses compiler-owned MSL and the supported Metal compiler/metallib path.
+Do not imply a general LLVM-IR-to-Metal backend or transfer schedules/proof
+between targets. The [foundation survey](MLIR_NATIVE_FOUNDATION_SURVEY.md) owns
+migration seams; the [backend map](../backend/README.md) owns device queues.
+
+## Start here
+
+This is a derived navigation view, not another queue. The first `host-free`
+action in each cut is the entry point below; each linked record names its gate
+and prerequisite portion. Host-free means its next engineering step can start
+without device access, not that its eventual promotion needs no device proof.
+`device` actions require an owning-host availability check at execution time.
+Dependencies and required evidence must be checked before starting dependent work.
+
+<!-- ready-view:start -->
+- F0: [E2E-REAL-6F](#e2e-real-6f).
+- F2: [E2E-REAL-6](#e2e-real-6).
+- F3: [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1).
+- F4: [W4-PRODUCT-1](#w4-product-1).
+- F5: [W5.2f](#w52f).
+<!-- ready-view:end -->
+
+## Live queue
+
+Records below are remaining obligations, not support/promotion statuses.
+`Gate` is the next missing deliverable and acceptance boundary. `Latest` points
+to historical context, which must be read at its recorded scope. `Start` names
+the next action's host requirement; it is not a live fleet-availability claim.
+
+## F0
+
+### E2E-REAL-6F
+
+**Route census and exact-device certificates**
+
+- Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
+- Gate: Reconcile every route/envelope with native ancestry and exact-device certificates; audit current inventories before any constructor deletion.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--f0-apple-family-domains-and-native-unary-ancestry)
+
+### COMPILER-DEVEX-1
+
+**Assertions-enabled validation and usable tools**
+
+- Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
+- Gate: Establish assertions-enabled MLIR negative tests, installed-driver smoke and reproducible tool provenance; retain release-build evidence separately.
+- Depends on: —
+- Start: host-free
+- Latest: [migration record](INTEGRATED_COMPILER_LOG.md#2026-09-07--compiler-plan-role-migration)
+
+### EVIDENCE-PACKET-1
+
+**Evidence packet consumers**
+
+- Owner: [EVALUATOR_PLAN.md](EVALUATOR_PLAN.md)
+- Gate: Unify missing packet consumers around artifact/image identity, clock validity and promotion eligibility; malformed or incomplete evidence must refuse.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--status-native-gelu-and-recipe-instantiation)
+
+### TPROF-NATIVE-1
+
+**Native clocks and counter attribution**
+
+- Owner: [INTRA_KERNEL_FEEDBACK_PLAN.md](INTRA_KERNEL_FEEDBACK_PLAN.md)
+- Gate: Validate native clocks, counter attribution and clean-image overhead on each owning host; WSL regression evidence is not clean timing.
+- Depends on: —
+- Start: device
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-05--real-asynchronous-gemm-comparison)
+
+### DISPATCH-BREAKER
+
+**Safe waits and checked-output ownership**
+
+- Owner: [../backend/README.md](../backend/README.md)
+- Gate: Audit remaining bridge waits and checked-output readers; bounded failure must retain live resources and poison unsafe ownership before wider adoption.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--checked-persistent-products-and-composed-readers)
+
+## F2
+
+### E2E-REAL-6
+
+**Remaining Graph-owned packaging and frontend retirement**
+
+- Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
+- Gate: Migrate surviving Graph-owned forward/direct/plugin callers and JitFn decomposition per family; delete _OpExtractor only after symbolic tracing, nonexecuting effect discovery and differential certificates cover its users.
+- Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--dynamic-package-projection-validation)
+
+### W1.1
+
+**NVIDIA typed-fragment closure**
+
+- Owner: [../backend/nvidia/todo.md](../backend/nvidia/todo.md)
+- Gate: Reconcile remaining NVIDIA fragment producers and Target proof against current typed routes; retain uncovered dtype/architecture obligations and exact-device gates.
+- Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
+
+### W3.3
+
+**Tile dialect ownership review**
+
+- Owner: [IR_STACK_INTEGRATION_REVIEW.md](IR_STACK_INTEGRATION_REVIEW.md)
+- Gate: Reassess surviving Tile primitive/kernel/domain/solver ownership before any dialect split; move only consumed semantics with parse/lower/execute regression gates.
+- Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
+
+## F3
+
+### FRONTEND-IR-MEDIUM-1
+
+**Native recipes and broader raising**
+
+- Owner: [FRONT_END_LOWERING_ASSESSMENT.md](FRONT_END_LOWERING_ASSESSMENT.md)
+- Gate: Extend landed two-bucket recipe instantiation and native ANN evaluation to broader raising/attention and fused candidates; preserve complete witnesses and IR/image-bound admission.
+- Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+
+### MSW-9
+
+**Broader ANN admission and tuned candidates**
+
+- Owner: [ANN_CALCULUS_DESIGN_SPIKE.md](ANN_CALCULUS_DESIGN_SPIKE.md)
+- Gate: Extend bounded native ANN admission to composed nonlinear families and tuned GPU candidates; scoped registration lifetime and domain/error guards remain mandatory.
+- Depends on: [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1): recipe/native identity for the candidate; broader raising is independent.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+
+### W5.2
+
+**Measured schedule selection**
+
+- Owner: [OPTIMIZING_COMPILER_PLAN.md](OPTIMIZING_COMPILER_PLAN.md)
+- Gate: Connect remaining producers and target calibration to measured schedule selection; preserve inferred dependencies and select only with eligible exact-device evidence.
+- Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+
+### W5.5
+
+**Consumer-driven canonicalization**
+
+- Owner: [OPTIMIZING_COMPILER_PLAN.md](OPTIMIZING_COMPILER_PLAN.md)
+- Gate: Inventory live canonicalization consumers and implement needed rule-table rewrites with legality tests; equality saturation requires a demonstrated ordering problem.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-04--foundation-f1-implementation)
+
+## F4
+
+### W4-PRODUCT-1
+
+**Source CFG and effect-aware recovery**
+
+- Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
+- Gate: Extend imported bounded native CFG recovery to frontend-produced typed edges, merge values, break/continue/early return and effect-aware replay; bounded native support is not arbitrary Python capture.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--dynamic-temporary-capacity-and-tracked-reader-retirement)
+
+### AD-RESIDUAL-EVAL-1
+
+**Logical-shape ABI and persistent checkpoint execution**
+
+- Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
+- Gate: Return logical shapes alongside capacity-backed GPU results; validate loaded extents before view/slice replay. Extend selected checkpoint execution, nested guards and asynchronous checked-result exposure without publishing failed outputs.
+- Depends on: [W4-PRODUCT-1](#w4-product-1): existing bounded product carrier; arbitrary source CFG closure is not a prerequisite.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--checked-persistent-products-and-composed-readers)
+
+### W2.4a
+
+**Generation ownership and scoped readers**
+
+- Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
+- Gate: Broaden scoped readers and generation ownership; verify barrier-at-birth obligations on current SM120 producers. Keep failure quarantine and unrestricted-export barriers until all readers are tracked.
+- Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--checked-persistent-products-and-composed-readers)
+
+### NUMPOL-CARRIER-1
+
+**Numerical policy and analytic budget consumers**
+
+- Owner: [FUNCTIONAL_ANALYSIS_TSOL_PLAN.md](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md)
+- Gate: Extend policy preservation and analytic budget consumers across missing boundaries, with induced norms, intermediate-overflow checks and explicit approximation/spectral contracts.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+
+### LAYOUT-ALG-1
+
+**Remaining physical layout envelopes**
+
+- Owner: [CORE_SUBSTRATE_VIEW.md](CORE_SUBSTRATE_VIEW.md)
+- Gate: Preserve proved static/dynamic layout consumers; extend only unresolved nonseparable tuple/layout envelopes with capacity, alias and lifetime proof.
+- Depends on: —
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--descriptor-projection-and-seven-program-continuation)
+
+### AD-SOLVER-IFT-1
+
+**Native implicit-solver consumers**
+
+- Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
+- Gate: Extend residual/predicate/solver envelopes and Apple/NVIDIA consumers through compiler-owned children; require convergence/conditioning certificates and owning-device proof.
+- Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
+
+### AD-HIGHER-1
+
+**Broader AD, batching, sparsity and jets**
+
+- Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
+- Gate: Extend composed attention and broader native AD families, higher-order products, real batching, structural sparse derivatives and native jets through the existing AD owners; retain oracle, structural-zero and conditioning gates.
+- Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--domain-and-autodiff-documentation-consolidation)
+
+### DIST-NATIVE-1
+
+**Real multi-rank transport**
+
+- Owner: [SCHEDULE_OBJECT_DESIGN.md](SCHEDULE_OBJECT_DESIGN.md)
+- Gate: Extend bounded MPI proof beyond two ranks and proper-subgroup participants; add native NCCL/RCCL and other transports with process ownership and real multi-rank packets.
+- Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
+- Start: device
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--status-native-gelu-and-recipe-instantiation)
+
+## F5
+
+### W5.2f
+
+**Shared tiled-SSD compiler family**
+
+- Owner: [SEQUENCE_MIXER_ENGINEERING_PLAN.md](SEQUENCE_MIXER_ENGINEERING_PLAN.md)
+- Gate: Build the first shared tiled-SSD Schedule-to-Tile family with carry/checkpoint/mutation lineage; ReplaySSM remains a candidate/oracle, not the shared semantic owner.
+- Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+
+### TSOL-POLICY-PHYS-1
+
+**Spectral policy breadth**
+
+- Owner: [TARGET_IR_REVIEW.md](TARGET_IR_REVIEW.md)
+- Gate: Reconcile current spectral policy envelopes, then close remaining target-specific strides/full-spectrum/window, broadcasting and streaming execution gaps with independent adjoint proof.
+- Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
+- Start: device
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+
+### TSOL-SCALE-1
+
+**ND and large-transform execution**
+
+- Owner: [TARGET_IR_REVIEW.md](TARGET_IR_REVIEW.md)
+- Gate: Add missing ND/large/prime transforms with explicit algorithm, plan/twiddle/workspace identity and per-target retain/promote/reject comparisons.
+- Depends on: [TSOL-POLICY-PHYS-1](#tsol-policy-phys-1)
+- Start: device
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+
+### TSOL-SHARD-1
+
+**TSOL placement and sharding**
+
+- Owner: [SCHEDULE_OBJECT_DESIGN.md](SCHEDULE_OBJECT_DESIGN.md)
+- Gate: Reconcile spectral/solver/sparse placement rules and reshard consumers; separate mock-mesh correctness from actual multi-rank execution.
+- Depends on: [DIST-NATIVE-1](#dist-native-1)
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+
+### TSOL-PHYS-TAIL-1
+
+**High-value physical math families**
+
+- Owner: [PDE_STENCIL_CAPABILITY_PLAN.md](PDE_STENCIL_CAPABILITY_PLAN.md)
+- Gate: Advance high-use solver, sparse/segment and layout families from target-specific gaps; preserve PDE discretization/halo and coalition-lattice obligations.
+- Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+
+### W6.4
+
+**Native batched finite algebra**
+
+- Owner: [../domain/GA_EBM_ARCHITECTURE_REVIEW.md](../domain/GA_EBM_ARCHITECTURE_REVIEW.md)
+- Gate: Carry W3.6 batching and grade-aware algebra through native consumers; packed grades/PGA/CGA/exp/log require independent semantic, AD and device proof.
+- Depends on: [AD-HIGHER-1](#ad-higher-1)
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
+
+### RIEMANNIAN-OT
+
+**Geometric primitives and OT validation**
+
+- Owner: [RIEMANNIAN_OT_PLAN.md](RIEMANNIAN_OT_PLAN.md)
+- Gate: Retain missing geometric primitives and constrained/KKT hypotheses under shared solver/AD owners; validate the OT workload without creating another solver stack.
+- Depends on: [AD-SOLVER-IFT-1](#ad-solver-ift-1)
+- Start: host-free
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
+
+## Reconciliation before archival
+
+The move preserves every old queue/wave paragraph and historical “Next” list.
+These are the disposition rules applied to the review inventory; an uncertain
+remainder stays with its owner and is not silently declared complete.
+
+| Earlier obligation | Current destination and reconciliation |
 |---|---|
-| Two frontends (AST `_OpExtractor` / tracer), opposite failure policies | the AST path can't produce SSA through control flow |
-| Two Graph→Schedule, two Schedule→Tile lowerings; Python canonical — **but see the correction below** | the MLIR types don't carry what codegen needs |
-| Python AD tape + `AutodiffPass` | the tape can't be a transform (global monkey-patching) |
-| GA Python fast paths + `RotorSandwichFold` marker | `ExpandProductTable` rejects batched operands |
-| Two `Queue.td`, two `Attn.td` defining the same dialect | accretion, uncaught |
-| Two remat passes with opposite rigor | no shared liveness analysis |
+| W1.1; W2.4; W2.4a NVIDIA producers/Target/barriers | W1.1 and W2.4a retain architecture closure and wrapper/ownership review. Shared legality and recent bounded reader proofs are not all-route closure. |
+| W3.1, W3.2, W3.4, W3.7 | E2E-REAL-6 owns remaining frontend, JitFn and forward/direct constructor work. W3.2's old estimate is retired; estimate each census-selected route. |
+| W3.3 | Retains a consumed-semantics inventory gate before a dialect split. |
+| W3.5; OT geometric primitives | AD-SOLVER-IFT-1 and RIEMANNIAN-OT retain broader consumers/hypotheses; shared solver slices are not universal device support. |
+| W3.6; W6.4 | W6.4 retains batched grade-aware algebra and actual fold-marker consumers. |
+| W4.1–W4.3 | W4-PRODUCT-1 and AD-RESIDUAL-EVAL-1 retain frontend CFG/effects, exported logical shapes and checked asynchronous products. Recent native function CFG/status work is bounded. |
+| W5.1 | AD-RESIDUAL-EVAL-1 retains selected production checkpoint policies and complete exact-device comparisons; bounded native SAVE/HYBRID/recompute execution already exists. |
+| W5.2; W5.2e; W5.2f; W5.5 | W5.2 retains producer/calibration/selector work; W5.2f owns tiled SSD; W5.5 owns consumer-justified canonicalization. Existing inferred DAGs and prune-only search are not promotion proof. |
+| W5.4 | DIST-NATIVE-1 retains transport beyond the bounded MPI slice; TSOL-SHARD-1 retains spectral/solver placement. |
+| W6.1–W6.3 | AD-HIGHER-1 routes to the active AD plan's higher-order, batching, sparse and native-jet obligations; do not rebuild landed reference algebra. |
+| Ordered queue 8–11 | TSOL-POLICY-PHYS-1, TSOL-SCALE-1, TSOL-SHARD-1 and TSOL-PHYS-TAIL-1 preserve policy, scale, placement and physical-tail gates. |
+| Ordered queue 12–14 | TPROF-NATIVE-1, EVIDENCE-PACKET-1 and COMPILER-DEVEX-1 retain clocks, packet consumers and installed/assertions-enabled tooling. |
+| Six non-wave scoped notes | PDE, math-source, AttnRes, reference-tier, layout and frontend retain their scoped owners in the routing index. They are workload contracts, not new waves. |
+| Later numerical and ANN “Next” lists | NUMPOL-CARRIER-1 and MSW-9 retain broader analytic consumers and tuned native admission; recent bounded admission/row schedules are not performance promotion. |
 
-**This is why the plan is ordered A → B → C.** Collapsing a duplication before
-the surviving path can carry the information just deletes a working system. Every
-attempt to start at C fails.
+## Maintenance and proof rules
 
-> **Correction (2026-08-02, from W0.6 execution) — the Graph→Schedule and
-> Schedule→Tile row above overstates the C++ side, and this makes W3.2 *larger*,
-> not smaller.** There are not two competing lowerings at those boundaries. On
-> the C++ side there is one **annotation-only skeleton**: `GraphToSchedulePass`
-> stamps `schedule.artifact_hash = "__pending__"` on three op-name prefixes and
-> `ScheduleToTilePass` stamps `tile.staged` on `schedule.async_copy`. Neither
-> matches, replaces, or rewrites any op — the original source comment says so
-> outright ("a real pass would pattern-match and replace ops"). Worse, the
-> library holding them (`TesseraPM`) is linked **only into the test binary**;
-> `tessera-opt --help` in the production driver does not list
-> `-tessera-graph-to-schedule` at all.
->
-> So W3.2 is not "converge two implementations onto MLIR" — the MLIR
-> implementation does not exist yet, and the Python spine is not a duplicate of
-> it but the only implementation. Re-scope W3.2 accordingly before funding it.
-> The passes now carry `[annotation-only skeleton]` in their registered
-> descriptions and a maturity contract in `PMPasses.h`, so nothing can cite them
-> as evidence of a working boundary again.
+- A substantive delivery PR updates its active task record and appends a log
+  entry naming that ID. Completion removes the record only after the routing
+  index points to a scoped owner, successor or archived disposition.
+- CI checks structured IDs, destinations, dependencies, latest-log links and
+  the derived start view. A merge-base check requires an owner-record change
+  when a new log entry is added; it does not infer ownership from arbitrary code.
+- Keep five proof questions independent: parse/verify; lowering consumes the
+  incoming IR; runtime binds that artifact; owning device executes correctly;
+  performance evidence is eligible. Use existing proof vocabulary and F0-derived
+  inventories, not hand-maintained five-column status copies.
+- Preserve ABI/layout/policy/provenance through serialized IR and replay;
+  migrated routes need differential tests and exact-target execution before
+  retiring their old constructor. Presence of bytes or hashes is insufficient.
+- Shared changes assess all four [backend queues](../backend/README.md). Runtime
+  timeouts must retain in-flight resources and reject unsafe reuse. Reference
+  execution and WSL regression timing never silently become native promotion.
+- Follow [AGENTS.md](../../../AGENTS.md), [governance and fleet facts](../../../CLAUDE.md),
+  and the [compiler test plan](../../../tests/COMPILER_TEST_PLAN.md). Do not copy
+  OS versions, command pins, budgets or governance decisions into this queue.
+- Scoped acceptance remains in its owner document; the global queue chooses
+  sequencing, not duplicate domain designs. The log has no current next-order.
 
----
+## Routing index
 
-## 2. Governance — the rules that stop regrowth
+Fixed columns are a navigation contract. `owner`, `successor` and `archive`
+describe routing, not readiness. Historical mentions need not be active tasks.
 
-A cleanup without rules regrows. Six standing decisions, each derived from a
-specific finding, each drift-gateable:
-
-| # | Rule | Prevents | From |
-|---|---|---|---|
-| **#21a** | **Semantic keys never default.** An attribute selecting *semantics* fails closed on absence; one selecting *performance* may fall back with a diagnostic. Semantic: `manifold`, `algebra`, `math_mode`, `rounding_mode`, `distribution`, `dtype`. Performance: tile sizes, stage depth, `auto_batch`, checkpoint budget. | silent Euclidean fallback; `operand_types[0]`; unvalidated `StrAttr` | OT §H1 |
-| **#10a** | **An eligibility-marking pass ships a negative fixture.** Any pass annotating work as rematerializable / fusable / pipelineable gates on demand analysis and ships ≥1 fixture where the correct output is *no annotation*. | 2500 dead steps marked rematerializable | OT §H2 |
-| **#29** | **A declaration must have a consumer.** If the compiler declares metadata — an ODS type, a coverage axis, an attribute — a named pass must consume it, or the declaration is deleted. Drift-gated: a test asserting every `primitive_coverage` axis names its consumer. | root cause A, all seven instances | this doc |
-| **#30** | **Derive, don't ask.** A pass needing a program fact queries the analysis layer. New bespoke walkers are rejected in review. | root cause B; the eighth hand-rolled analysis | Sweep §5 |
-| **#31** | **One implementation per boundary.** Each level boundary has exactly one production lowering. A second implementation is either a declared oracle with a differential test, or deleted. | root cause C | IR Stack §T3 |
-| **#32** | **Information loss across a level boundary must be declared.** A lowering carries each Decision #15a attribute forward or records a named reason it dropped it; a boundary verifier fails on silent loss. | `numeric_policy` vanishing above the MMA | IR Stack §U5 |
-
-Adopt these **before** Wave 1, not after. #29 and #31 in particular change what
-gets accepted in review, and they are what make Waves 1–3 stick.
-
----
-
-## 3. De-duplication ledger
-
-The seven reviews costed overlapping work independently. Corrections applied here:
-
-| Double-counted work | Costed as | Merged into | Saved |
-|---|---|---|---|
-| Symbolic shapes (Sweep #10, 3w) + control-flow adjoints (AD D4, 6w) + frontend regions (E7) | 3 separate items | **W4** — one program, one gate | ~4w and 2 items that would each have "landed" with zero capability |
-| Differential harness: trace-vs-AST (E2) + Python-spine-vs-MLIR (I5) | 2 harnesses | **W3.1** — one harness, ~~two uses~~ **one use today** (see below) | ~2w *(saving no longer holds as stated)* |
-| Schedule-decision work (Frontend U3/E6) + (IR Stack U6/I6) | 2 items | **W5.2** | ~5w |
-| Effects re-homing (Sweep #9) vs derive-from-traced-IR (Frontend E3) | 2 approaches | **W2.2** — E3 strictly supersedes | ~2w |
-| Implicit diff: OT R2 `custom_root` + AD "finish NewtonAutodiff" | 2 items | **W3.5** — same pass | ~2w |
-| Legality collapse (IR Stack I2) as independent work | standalone | **W2.4** — client of the dataflow layer | ~1w |
-| Remat unification: ~~delete `EBMCheckpointInnerLoop`~~ **(done in W0.2)** + AD D5 | 2 items | **W5.1** — now AD D5 only | ~1w *(already banked)* |
-
-**Two rows corrected after W0 execution (2026-08-02).** The ledger is accounting,
-not a work queue — every row's work already lives in a wave item — but two rows
-no longer describe reality:
-
-- **Remat unification.** Removing `EBMCheckpointInnerLoop` from the default pipeline is **done**: W0.2
-  removed it from the default EBM pipeline (its three attributes had zero
-  consumers tree-wide), kept it as an explicitly experimental standalone pass,
-  and shipped the Decision #10a `CHECK-NOT` fixture proving the default pipeline
-  emits no checkpoint annotations. W5.1 therefore owns **only** AD D5 — the
-  demand-aware residual policy as an arbiter axis. Do not re-scope W5.1 as if
-  the deletion were still ahead of it.
-
-- **Differential harness — this merge's saving does not hold.** It assumed two
-  implementations to compare at the Graph→Schedule / Schedule→Tile boundaries.
-  W0.6 established there are not: the C++ side is an **annotation-only skeleton
-  in a test-only library** (`GraphToSchedulePass` stamps
-  `schedule.artifact_hash = "__pending__"` and returns; `TesseraPM` is linked
-  only into the test binary, so production `tessera-opt` never exposed
-  `-tessera-graph-to-schedule`). The trace-vs-AST use is real and unaffected;
-  the Python-spine-vs-MLIR use has no MLIR side to differ against until W3.2
-  builds one. **Net effect: W3.1 keeps one use, and W3.2 grows** — see the
-  correction under §1.
-
-**~17 weeks of double-counting identified**, minus the corrections above.
-Queue estimates are directional:
-the source documents used different scopes, and the Target-IR corrections below
-replace a blanket ROCm migration with an ownership-and-evidence gate.
-
----
-
-## 4. The waves
-
-Each wave has **one observable exit criterion**. A wave is not done when its
-items are merged; it is done when the criterion holds.
-
-### W0 — Stop the bleeding *(4 weeks · no dependencies · start immediately)*
-
-Live defects, fail-open paths, inert machinery, and false documentation. Every item is
-independent; run them in parallel.
-
-> **W1.1 step 3 status (landing):** `GenerateWMMAGemmKernel{via-tile=true}`
-> emits the complete
-> view/pack/mma/unpack/store chain at production `mt=2, nt=4`; the gfx1151
-> aligned and ragged differential gates are zero-difference. Flash and linear
-> attention now attach typed fragments at their register-owned computed-value
-> boundary and lower identically to their direct ROCDL lanes. Dynamic N/K are SSA leading dimensions
-> (`#tile.memory_layout<leading_dim = 0>`), not a 64x64 specialization. The
-> default direct lane remains unchanged. Two NVIDIA-owned tensor producers in
-> `TileIRLoweringPass` remain; Python has no direct `tile.mma` producer.
-
-| # | Item | Source | Effort |
-|---|---|---|---|
-| W0.1 | **Landed 2026-08-02.** `manifold` is now `EBM_ManifoldAttr` (a `StringBasedAttr` pinning `euclidean`/`sphere`/`bivector`), and `Canonicalize`'s Euclidean fallback is replaced with `emitError`+interrupt+`signalPassFailure`. Verified: unknown value and missing value are both rejected before any pass runs; negative fixture `canonicalize_rejects_bad_manifold.mlir`. The typed-`EnumAttr` upgrade stays with W1.1b. Two side findings, both fixed: the `.td` comment claiming ODS "doesn't support" a constrained string alias was false (`StringBasedAttr` is already used by the ROCm dialect in this tree), and `ts-ebm-opt` never registered `arith`, so **6 of its 12 lit fixtures could not parse** — invisible because `TESSERA_BUILD_EBM_BACKEND` is OFF by default. EBM lit is now 12/12. | GA/EBM §1.1 | 3d |
-| W0.2 | **Landed 2026-08-02.** `checkpoint-inner-loop` is out of `tessera-ebm-pipeline`; verified that `tessera.ebm.{checkpoint_loop,checkpoint_budget,recompute_step}` have **zero consumers tree-wide**, which is why an unconsumed declaration must not ship in a default path (#29) and why an eligibility pass must gate on demand analysis (#10a). The pass remains registered and explicitly labelled experimental so its own fixtures keep running. The Decision #10a negative fixture lives in `full_pipeline_chain.mlir` (`CHECK-NOT` on all three attributes). Demand-aware loop rematerialization stays W5.1 — and per the de-duplication ledger correction, W5.1 now owns *only* that, not the deletion. | GA/EBM §1.5 | 1d |
-| W0.3 | **Landed 2026-08-02.** A traceable EBM energy is now defined as one whose scalar result flows through `tessera.ops.*` on the state it was handed; `_tape_grad`/`_tape_grad_mv` return a reverse-mode gradient when a cotangent path is actually recorded and `None` otherwise, so raw-NumPy callbacks keep the central-difference path. Both `bivector_langevin_step` and `sphere_langevin_step` try the tape first. Measured on Cl(3,0) (D = 2³ = 8): **1 energy evaluation instead of 16**, and exact instead of first-order. **Root cause was tape identity, not the samplers** — `Multivector.coefficients` returns a fresh read-only *whole-array view* on every access, so the tape's `id()`-keyed identity could never match the state buffer and manifold energies were untraceable in principle. **Recorded negative result:** fixing this inside `Tape._describe` (resolving a whole view to its base) is the obvious move and is **wrong** — `Tape.record` keys an op's *output* on `id(output)`, so rewriting only the *input* side severs producer→consumer links and silently drops gradients. Measured: 12 Clifford/MoE autodiff failures, all numerically silent. Identity is therefore recovered *after* `backward` in `_cotangent_for_buffer`, local to the EBM helper, leaving global tape semantics untouched; a comment in `_describe` records why the tempting fix is rejected. Six regression tests cover both paths plus their agreement on a full Langevin step. | GA/EBM §2.6 | 1w |
-| W0.4 | **Landed 2026-08-02.** `jacrev` records the forward pass once and re-runs `backward` with `retain_graph=True` per output element — measured 1 evaluation instead of 4 on a 4-element output, and the `retain_graph` machinery whose own docstring named `jacrev` as its motivating caller is finally wired to it. **`jacfwd` was evaluated and needs no fix:** one `jvp` per *input* dim is the definition of forward mode, not a forward-pass-per-element defect, and its docstring already says exactly that. Reviewed again in PR #490 — the single-tape rewrite removed an accidental shield (the old code wrapped `fn` in `sum(out*cotangent)` through `ops.*`, making the target tape-produced regardless), so `jacrev` of an identity or constant now resolves structurally. | Autodiff §B1–B2 | 3d |
-| W0.5 | **Completed 2026-08-02:** Decision #5 in `CLAUDE.md` now states that the effect lattice walks the AST, not the IR | Sweep §F1 | done |
-| W0.6 | **Landed 2026-08-02.** Deleted the dead `dialects/tessera_{queue,attn}/*.td` (no CMake referenced them, yet **six docs cited them as the authoritative source** — all repointed). The new Decision #31 drift gate then found a **third duplicate the reviews missed**: `src/compiler/programming_model/ir/tile/TileMemoryOps.td` declared the same `tile` dialect name as the production `Tessera/Dialect/Tile/TileOps.td`, with *contradictory* mnemonics (`mma.tcgen05` vs the live `tcgen05.mma`); it was tablegen'd but never `#include`d by any source and never registered. Deleted, and `CLAUDE.md`'s GPU-only tier corrected to the real mnemonic. PM passes moved to `lib/PMPasses.cpp` + `include/tessera/ProgrammingModel/PMPasses.h`. | IR Stack §T5, §T3 | 3d |
-| W0.7 | **Landed 2026-08-02.** All three GA8 pass summaries now read `[annotation-only]` with an explicit "rewrites no IR" rather than the ambiguous `[GA8 stub]`, which conflated "does nothing" with "does something partial". The false claim that GA8 passes "gate on `canonical` and refuse to proceed on out-of-allow-list signatures" is removed from **both** `CliffordPasses.td` and `AnnotateAlgebra.cpp` — verified the GA8 passes reference `canonical` nowhere, making it a live #29 declaration-without-consumer, now recorded as such. (The one remaining "GA8 stubs" mention is a descriptive file-header line about where the passes live, not a capability claim.) | GA/EBM §1.4 | 1d |
-| W0.8 | **Landed 2026-08-02.** All six decisions are in `CLAUDE.md`'s do-not-revisit list with their originating defect. #29 and #31 are drift-gated by `tests/unit/test_governance_declarations.py`: every `primitive_coverage` axis must name an existing consumer file, and no two ODS files may declare the same dialect name. The two genuinely-unconsumed axes (`batching_rule`, `shape_rule`) are explicit ratchet waivers naming their owning wave item, so they read as open rather than closed. The #31 half found a duplicate dialect on its first run (see W0.6). | §2 | 1d |
-| W0.9 | **Landed 2026-08-02, and it found more than expected.** Substring assertions retained as smoke; a real parse + dialect-load + verifier harness now runs each emitter's text through `tessera-opt`. **Result: every Python-emitted "Target IR" fails a real MLIR parse.** Two stacked defects, both invisible to `in`-assertions: (1) module attributes are not dialect-prefixed (`arch`, `target`, `target_features`), which `builtin.module` rejects outright; (2) underneath that, the ops violate their own ODS — `tessera_rocm.mfma` is emitted as `() -> ()` carrying its result as a **string attribute** (`result = "v0"`) while the dialect requires one SSA result. So the Python lane emits text that *resembles* the dialect without being it, and Decision #19's contract was validated by a test that could never have caught this. NVIDIA targets **skip** rather than fail — `tessera_nvidia` is not compiled into the default build, and failing them would measure the build config rather than the emitter.
-
-**The ratchet is now EMPTY — all of it was fixed, not just recorded.** Four distinct defects, each invisible to `in`-assertions: (1) module attributes are dialect-prefixed at MLIR-render time (`_mlir_module_attrs`), keeping the short Python-facing keys callers index; (2) the function container is `func.func`, replacing a hardcoded map of `tessera_apple.cpu.func` / `tessera_rocm.func` / `tessera_nvidia.func` / `tessera_x86.func` — **none of which any dialect defined**; (3) `mfma` / `async_copy` / `wait` emit their real ODS signatures with the async-copy token threaded into the wait; (4) five emitted-but-undeclared ops (`tessera_rocm.{elementwise,kv_cache_read,msa_block_sparse}`, `tessera_apple.cpu.{kv_cache_read,moe_solver}`) were added to their dialects. A second, duplicate emitter family in `matmul_pipeline.py` had the same defects and was fixed with it. The gate now also parses **every committed golden**, which is what caught defect (4): the single-matmul test passed while the multi-op `matmul_softmax` goldens did not.
-
-**The `cpu` reference lane is now closed too (2026-08-02) — no exclusions remain.** It emitted `tessera.cpu.<source-op>`, one op name per Graph IR op, so its vocabulary grew with the op set and could never be enumerated in ODS. That name was pure redundancy: the CPU verifier already *requires* a `source` attribute naming the originating op. It now emits the single declared `tessera.cpu.reference` node (plus `cpu.profiler_probe` and `cpu.msa_block_sparse`, kept separate because they carry distinct contracts), and parses and verifies like every other lane. Every target the build compiles a dialect for — `cpu`, `x86`, `rocm`, `apple_cpu`, `apple_gpu` — now passes a real parse + dialect-load + verifier run; only NVIDIA skips, and only because its dialect is off in the default build. | Target §X4 | 1w |
-| W0.10 | **Decided 2026-08-02: build `tessera_x86`.** No carve-out — Decision #19 stays universal. Evidence that settled it: `TileToX86Pass` lowers Tile IR to **21 `func::CallOp`s** into a hand-written C shim plus arith/memref glue, using neither a `tessera_x86` dialect nor MLIR's upstream `amx`/`x86vector` dialects — structurally the same `func.call`-to-a-C-symbol shape `CLAUDE.md` already flags for Apple GPU. The build is cheaper than the other backends' equivalents because the abstract ops largely exist upstream: the hardware-free layer (`tessera_x86.amx_tile_load`, `.amx_dpbf16ps`, `.avx512_gemm_microkernel`, pack/unpack) can lower into `amx.*`/`x86vector.*` rather than terminating in `func.call`. **Built 2026-08-02.** `tessera_x86` is defined, tablegen'd, linked into `tessera-opt`, and registered (`--show-dialects` lists it). It separates **value-carrying** ops — `amx_tile_load` / `amx_tile_zero` / `amx_dpbf16ps` / `amx_dpbusd` / `amx_tile_store` over a real `!tessera_x86.tile` type — from **directives** (`avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`, plus the emitter's `kernel` / `kv_cache_read` / `unsupported`). `abi_call` models the C-shim boundary rather than hiding it, so Decision #28's arbiter can distinguish compiler-generated from delegated work. Positive **and negative** lit fixtures ship (`x86_target_ir{,_invalid}.mlir`); the negative one proves the typed layer rejects an AMX dot-product whose operands never came from a tile — exactly the property a substring test cannot check. The Python x86 emitter's output now parses, loads the dialect, and verifies. **Remaining, and re-scoped 2026-08-02:** lowering into upstream `x86vector.*` (AVX-512) instead of terminating in `func.call` is the live follow-on — it changes generated code and needs AVX-512 execute-and-compare on this box. **The AMX half is deprioritized to optional:** per the project owner, AMX is expected to be superseded by the ACE matrix instructions jointly agreed by Intel and AMD for future CPUs, so an AMX → `amx.*` lowering is not worth building now. (Recorded as owner direction; ACE specifics are not independently verified in this plan.) The AMX ops stay in the ODS as the IR-level contract — they cost nothing, they pin the tile/accumulator shape, and they give the eventual ACE ops a structure to follow. This also removes the fleet's only hardware blocker here: AVX-512 execution is available on this box, whereas no machine in the fleet has AMX. | Target §X1 | 1h to decide (done); dialect + fixtures done |
-
-**Exit:** the open-string manifold key is verified, the EBM default pipeline
-emits no unconsumed checkpoint policy, `CLAUDE.md` Decision #5 is accurate, and
-every dialect has exactly one ODS.
-
-### W1 — Make declarations binding *(8 weeks · depends on W0.8)*
-
-Root cause A. Most items enforce existing declarations; fragment/buffer
-parameterization and target matrix contracts require bounded, variant-aware type
-design before migration.
-
-> **W1 status — 2026-08-18. Target-specific closure remains.** Verified against
-> the changed tree.
->
-> | item | state |
-> |---|---|
-> | W1.2 shape-rule registry | ✅ complete |
-> | W1.3 metadata boundary verifier | ✅ complete |
-> | W1.4 GA grade threading | ✅ complete |
-> | W1.1b semantic `$kind` | ✅ closed sets are declaration-owned across Graph, Neighbors, Apple, NVIDIA, and ROCm; open symbol names remain deliberately open |
-> | W1.1 Tile IR typing | 🟡 typed shared fragment contract closed, including bare-fragment rejection and CAKE TCGen05 row 8; NVIDIA producer/Target proof remains |
->
-> **Landed but NOT numbered steps** — real work, and deliberately not counted
-> as step completions: the 2b **guard** (NVWGMMA fails closed on an accumulator
-> it would drop, #506) and **3a** (ragged masking in `materializeFragmentPack`
-> plus the shared bounded-`tile.view` arity contract, #510). 3a is a
-> prerequisite invented for option (a), not an entry in the design doc's step
-> table. Counting either as a numbered step overstates progress — an earlier
-> version of this block said "4 of 6" by doing exactly that.
->
-> **Stack context — read before sizing any of this.**
-> [`ROCM_LANE_MAP.md`](../backend/rocm/ROCM_LANE_MAP.md) measures the lane
-> W1.1 is supposed to improve. The executing ROCm GEMM lane begins at a
-> **Target-IR directive** built as a string in Python: no Graph IR, no
-> Schedule IR, no Tile IR. `lower-tile-to-rocm` runs but is a verified
-> no-op there. A Graph-IR lane exists and is compiled, but its only caller
-> in the tree is a benchmark. Consequences: W1.1 changes no executing
-> kernel until step 3. Two costs, kept apart: closing the Tile fragment
-> contract (steps 3-5) spans **5 C++ `tile.mma` creation sites + the Python
-> emitters** — step 5 is NOT behind the expander population; making the ROCm
-> backend traverse Tile IR is a separate, unpriced **58**-expander question.
-> The 5w estimate covers building the contract, not adopting it.
->
-> **What is really open, in dependency order:**
->
-> 0. ✅ **LANDED 2026-08-04 — the typed lowering COMPOSES (§4.6.1).**
->    `convertTypedFragments()` in `TileToROCM.cpp`: `TileFragmentTypeConverter`
->    + four conversion patterns + `applyPartialConversion`, running ahead of the
->    legacy walk, which still owns the bare `!tile.fragment` spelling. The
->    K-loop, an mma feeding an mma, and a non-`fragment_zero` accumulator all
->    lower — `rocm_typed_fragment_composition.mlir`, verified to fail when the
->    synthesized-zero defect is re-injected. `scf.for` was one library call, as
->    predicted. **Not yet on an executing lane: no producer emits typed
->    fragments until step 3, so this is proven by fixture only.** Two defects it
->    exposed, both with green positive tests, are in §4.6.1 and the paired
->    `_invalid` fixture. Original scoping below.
->
->    <details><summary>Original scoping (2026-08-04)</summary>
->
->    `TileToROCM`'s typed path is
->    a single-shot whole-chain pattern match (`view → pack → zero → mma → unpack
->    → store`, then erase), so an accumulator that is not a `fragment_zero`, an
->    mma feeding another mma, and a chain crossing a loop boundary are all
->    inexpressible *by construction*. Replace it with a `TypeConverter`
->    (`!tile.fragment` → `vector<N × T>`) + conversion patterns. `scf.for`
->    iter_args come free from
->    `populateSCFStructuralTypeConversionsAndLegality`, which this LLVM 23 ships
->    — the hand-rolled region conversion §4.2 sized as the largest step is a
->    library call. Cost is that **no pass in this tree uses a `TypeConverter`
->    yet**; this is the first.
->
->    </details>
->
-> 1. **step 3 — restructure producers onto `tile.view` + `fragment_pack`.**
->    `fragment_pack` requires a `!tile.tile`; zero producers supply one
->    (`TileIRLoweringPass` passes tensors, the three `GenerateWMMA*Kernel` passes
->    pass lane-level vectors). Option (a) chosen 2026-08-04; 3a landed. **Made
->    materially smaller by (0)** — the producer then emits well-typed ops rather
->    than a pattern one matcher must recognise whole.
-> 2. ✅ **step 2b — CLOSED by (0) as a capability.** A non-zero accumulator is a
->    converted operand, and "synthesise a zero" is now the lowering of
->    `fragment_zero`. Closed on the **ROCm** side only, and closed as a
->    capability rather than as shipped codegen — nothing emits it until step 3.
->    The NVIDIA fail-closed guard (#506) stays: `NVWGMMALoweringPass` has had no
->    equivalent conversion built, and step 6's NVIDIA half remains unverifiable
->    on this box (needs `-DTESSERA_ENABLE_CUDA=ON`).
-> 3. **step 4** — the five Python text emitters.
-> 4. **step 5** — delete `MMAOp::verify`'s permissive branch. Unreachable until
->    (1) and (3) complete; deleting it earlier breaks every producer.
-> 5. **step 6 — Target IR dialects.** Remove unexplained `AnyType` from
->    `tessera_nvidia` (3/3) and `tessera_apple` (12/12), with `tessera_x86`
->    (0/0) as the reference shape. Independent of the producer chain, and it
->    was omitted from an earlier version of this list — which is how still-
->    required Target IR work disappears from the owning queue.
-> 6. **W1.1b** — close/hoist the semantic `$kind` sets.
->    **Re-measured 2026-08-05: 11 `StrAttr:$kind` sites across FIVE
->    dialects** — Graph IR `TesseraOps.td` (6), Apple (2), NVIDIA (1),
->    ROCm (1), Neighbors (1) — not one backend's ODS. That makes it a
->    shared-contract change under AGENTS.md (same PR assesses every backend).
->
->    **The "already fail closed" label does not hold, and was inherited rather
->    than measured** (found by #521 review). Verified both directions:
->    `ROCM_Int4PackKernelOp` DOES fail closed — its generator validates against
->    an explicit set and errors naming
->    `kind=pack|unpack|relu|sparse_gather|cache_append`. But
->    **`tessera.neighbors.topology.create` fails OPEN**, and it is a
->    **Decision #21a violation**, not a layering nit: `CreateTopologyOp::verify()`
->    checks only that `kind` EXISTS, and `DynamicTopologyPass::isMutableKind`
->    dispatches by **substring** —
->    `contains("dynamic")||contains("adaptive")||contains("fault")||contains("custom_graph")`.
->    So a typo (`2d_mseh`) silently becomes a STATIC topology, and the substring
->    test is wrong in the other direction too — `not_dynamic` classifies as
->    MUTABLE. `kind` there drives `topology.dynamic`/`topology.replan`/
->    `topology.replan_hook`, so this is the same unnamed-semantic-default class
->    #505 closed for `predicate`/`optimizer`/`clifford`.
->
->    So the item is **per-site triage first** (fail-open ⇒ correctness fix with a
->    negative fixture; fail-closed ⇒ ODS hoist), and its remaining size is not
->    yet known. Each site's legal set must be derived from its actual consumer
->    dispatch: deriving one from a partial read is how
->    #499 shipped an optimizer enum missing `adafactor` and broke six
->    tests including one that executes on gfx1151, so budget per-site
->    derivation plus a run of the existing tests, not a bulk edit.
->    Independent of everything above; no longer purely a layering
->    improvement, since at least one site is a live fail-open defect.
->
-> Items 1–4 are one chain. Items 5 and 6 can proceed in parallel with it.
-
-
-
-| # | Item | Source | Effort |
-|---|---|---|---|
-| W1.1 | **Shared fragment permissiveness removed; architecture closure remains.** `MMAOp::verify()` no longer chases producers or admits bare `!tile.fragment`; the historical spelling only parses to produce a named migration diagnostic. The explicitly retained tensor value lane is rank/arity/accumulator checked and belongs to migration into `tile.matmul`, not to the fragment ABI. CAKE row 8 now requires typed role-a/role-b `family="tcgen05"` fragments and descriptor agreement. ROCm's typed route and performance closure remain as previously recorded. **Open:** migrate NVIDIA's final tensor producers and prove its Target lowering on SM120; remove the temporary tensor value lane after those producers move. gfx1200/gfx1250 remain fail closed pending architecture-owned profiles and evidence. | IR Stack §U1 + Target §X2 | landing |
-| W1.1b | **Closed for semantic selectors on 2026-08-18.** The measured scope was broader than the old “14 ROCm kinds” wording: closed operation-specific constraints now own Graph reduction/loss/spectral selectors; ROCm spectral, math, pack, reduction, scan and related selectors; Apple KV-cache kinds; NVIDIA CUDA-math kinds; and the canonical Neighbors topology kind. The topology constraint was placed on the core registered op as well as the standalone component after validation exposed that the standalone `.td` is not the registered authority. Unknown kinds now fail at IR verification. Open caller-chosen symbol names remain deliberately free strings. | Target §X3 | closed |
-| W1.2 | **Landed 2026-08-03.** Both halves now hold. (a) Unknown op ⇒ diagnostic: `_infer_result_type` raises when a catalog-declared rule has no implementation, instead of the old five-case if-chain ending in `return operand_types[0]` — correct for the ~60 elementwise ops and silently wrong for everything else. (b) **Auto-flip wired** — `primitive_coverage.shape_rule` is derived from `op_catalog` via `_catalog_shape_rule_status`, the mechanism `op_catalog`'s own source predicted and nobody had connected. It found a live defect: the dashboard promoted `shape_rule` off the LOWERING KIND and never consulted the catalog, so **all six ops whose rule the catalog had explicitly withdrawn reported `complete`** — the same bug `shape_rule_for` had already fixed one layer down. 456 complete → 450 + 6 partial, with no other entry moving, which is the proof the derivation agrees with the rest. 16 now-inert override lines deleted (Decision #29); the surviving 39 are gated by `test_shape_rule_autoflip.py` so a contradicting override fails the build rather than quietly winning. Ops the catalog does not own (~169 Python-reference/host-API) are deliberately untouched. | Frontend §U2 | 2w |
-| W1.3 | **Landed 2026-08-03.** `--tessera-record-metadata` + `--tessera-verify-metadata-obligation`: the snapshot rides in the IR as a module attribute, so record → lower → verify is ONE `tessera-opt` invocation and is lit-testable (a `PassInstrumentation`, the more obvious idiom, is registered in the driver and could not be fixtured — an unfixturable verifier is what Decision #29 rejects). Comparison is per function and normalized to the attribute's last dot-component, so `tessera.layout` → `tile.layout` is not a drop; `shape`/`dtype` are untracked because they live in types. **Found a live bug on its first real program:** `TileIRLoweringPass` has two `tile.mma` producers and only the fused K-step forwarded `numeric_policy`, so the main matmul path stated the accumulator contract at Graph IR and lost it one level down — fixed. Five fail-closed refusals incl. STALE_DECLARATION (a declared drop that did not happen) and NO_SNAPSHOT (an unrun check must not look like a passed one); `not_yet_carried:<item>` keeps declared debt attributable. | IR Stack §U5 | 2w |
-| W1.4 | **Landed (PB stack, 2026-08-03) — row was stale.** `python/tessera/ga/ops.py` derives grades before backend dispatch via `_blade_mask_for_grades` + `_product_grade_contract`, closing the Decision #29 violation the plan itself cites (`MultivectorSpec.grades` reaching no consumer). `GradeFusion.cpp` gained `InputGradeFusionPattern`, attaching `tessera.clifford.input_grades_lhs/rhs` — the MLIR half: `output_grades` prunes the Cayley table by which RESULTS are wanted, `input_grades` by which INPUTS can be non-zero. Fixtures `input_grade_fusion{,_prunes}.mlir`, including the Decision #10a negative case where the correct output is NO annotation. | GA/EBM §2.1 | 1w |
-
-**Exit:** no true Tile primitive has an unexplained `AnyType`; a mismatched
-`tile.mma` fails verification; every compatibility exception names its owning
-level-migration item; no op reaches the `operand_types[0]` fallback; no Decision
-#15a attribute drops across a boundary without a recorded reason.
-
-> **W1.1 is a high-leverage contract project, not a mechanical ODS edit.** It is
-> the precondition for W2.4, W3.2, W3.3, and every backend having a real contract
-> to lower against, but it must land incrementally with producer/consumer and
-> per-architecture variant coverage.
-
-### W2 — Build the analysis layer *(8 weeks · depends on W0)*
-
-Root cause B. One framework, then each analysis is a transfer function rather
-than a subsystem.
-
-| # | Item | Source | Effort |
-|---|---|---|---|
-| W2.1 | **Closed 2026-08-11 — shared Graph IR dataflow framework.** `GraphDataflowAnalysis` runs shape and alias product lattices plus liveness on MLIR `DataFlowSolver`, derives value-scoped memory dependence from registered effects/resources, and exposes reverse activity. Unknown producers, unranked shape, unknown effects, aliased memref arguments, nested regions, stale snapshots, and absent analysis state resolve conservatively to ⊤/unsafe. The analysis owns explicit `invalidate`/`recompute`; await sinking recomputes after every mutation. Reverse AD and await sinking are production C++ clients. `--tessera-graph-dataflow` exposes schema-v1 facts for inspection, while `python/tessera/compiler/graph_dataflow.py` provides a structural-digest-invalidated Python query mirror. Direct tests cover shape, alias lineage, dead values, activity/`stop_gradient`, unknown producers, stale mutation, ordered collectives, and the x86 no-async path. Wiring automatically inferred dependence edges into new Tile action DAGs remains a scheduling-client task, not missing analysis substrate. | Sweep §3 | closed |
-| W2.2 | **Closed 2026-08-10 — effects from registered traced IR.** The canonical op catalog now emits explicit `tessera.effect_kind` for pure and effectful Graph operations plus alias and stochastic-identity contracts. Python `EffectLattice` consumes Graph records and `_EffectVisitor` is deleted. The C++ semantic analysis consumes those contracts, falls back to MLIR memory/cast/view interfaces, treats unknown behavior as `top`, rejects an attribute that erases a registered side effect, and reaches a fixed point across internal calls. Await sinking uses the same query. Direct tests cover indirect RNG, aliases, mutation, ordered collectives, regions, unknown operations, and x86/no-async. | Frontend §U7 | closed |
-| W2.3 | **Region-aware and whole-program memory activity landed.** Reverse AD consumes W2.1 activity and `stop_gradient` semantics instead of its private walker. Active structured operations propagate to explicit operands and implicit captures. A backward whole-function memory fixed point now retains preceding writes that may feed an active read, including result-less writes and conservative cross-block dependencies; the inspection pass annotates result-less operations too. `RegionAdjointInterface` owns admitted internal block activity. | Autodiff D3 | closed |
-| W2.4 | **Production relational legality authority consolidated 2026-08-18.** Fragment/TCGen05 and semantic-kind local invariants are binding ODS/type constraints, and WarpSpec divergence derives only from registered `schedule.warp` ancestry. `TileDataflowLegalityPass` now owns the shared pipeline, WarpSpec, barrier-reuse, and derived token/dataflow implementations in explicit pre-lowering and final stages. The old CLI pass names are compatibility wrappers over those same implementations and are not production authorities. `IRContractLegality` and Graph/layout checks remain separate level authorities. Remaining cleanup is deletion of the wrappers after downstream users migrate, not another legality algorithm. The [deleted-verifier invariant audit](#deleted-functionality-reassessment--2026-09-05) maps historical checks into these existing authorities. | IR Stack §U2 | shared objective closed; wrapper retirement open |
-| W2.4a | **CAKE typed Tile sync/memory + SO-2 role surface.** Phase 1 §5.1–§5.4 is closed: typed waits/tokens, loop-carry provenance, registered sync vocabulary, hatch deletion, and production NVIDIA legality wiring. On 2026-08-16 the Phase 2 role carrier added loop-carry-safe `!tile.role`, role-bearing pipeline/mbarrier ownership, a ROCm role-producing and role-consuming wave/LDS path, and explicit x86 `no_async_noop`. The plan-named gfx1151 §5.5 cohort passed **8/8**. On 2026-08-18 WarpSpec stopped recognizing arbitrary `tile.warp_role`/`tile.warp_guard`/`tile.wg_id` ancestor markers, and CAKE row 8 became a typed TCGen05 fragment contract with positive and negative host-free tests. **Open:** NVIDIA barrier-at-birth emission and SM120 exact-device proof; no CUDA performance claim is implied by the host-free row-8 verifier. | CAKE §5–§6 | gfx1151 gate closed; shared row 8 closed; NVIDIA producer proof open |
-
-**Exit:** an aliased/indirect RNG call is detected by effect inference; an
-inactive branch's adjoint is provably **not emitted** (`CHECK-NOT` fixture per
-#10a); six legality passes are one.
-
-> W2.2 is closed against the canonical Graph emitter and concrete trace
-> certificate. W3.1 still owns making one tracer the only frontend; unresolved
-> source calls fail closed until that promotion can trace them.
-
-### W3 — Collapse the duplications *(10 weeks · depends on W1, W2)*
-
-Root cause C. Now possible, because the surviving path can carry what the deleted
-path was carrying.
-
-| # | Item | Source | Effort |
-|---|---|---|---|
-| W3.1 | **Delayed/symbolic tracing foundation landed.** Pure programs with fully static tensor annotations now abstract-trace directly into canonical Graph IR during JIT emission, preserving Python argument names and bypassing `_OpExtractor`. Their AST module is materialized lazily only when an explicit differential/non-reexecuting certificate requests the compatibility oracle. Concrete tensor signatures remain tracer-owned. `_OpExtractor` is still required by the non-executing effect classifier and by dynamic/untraceable compatibility families; deletion therefore depends on symbolic-dimension tracing plus registered-effect discovery that does not execute user code. | Frontend §U1 + IR Stack §U3 | landing |
-| W3.2 | **Superseded in delivery shape by E2E-REAL-0 through E2E-REAL-5.** Build and register a real Schedule dialect, preserve Graph SSA under schedule decisions, lower one scheduled matmul to the launch-level Tile ABI, make x86/ROCm packages consume that artifact, then migrate families. The Python spine is the differential oracle. This is three boundaries plus bufferization/package API work, not a 3-week convergence edit. | IR Stack §U3 + Target §X5 | re-estimate after the matmul vertical slice |
-| W3.3 | Split the Tile dialect by level: primitives stay `tile.*`; whole-kernel ops → Graph IR / `tessera.kernel.*`; domain ops → `tessera_ebm`; `svd`/`qr`/`cholesky`/`lu` → linalg solver | IR Stack §U4 | 2w |
-| W3.4 | **Native reverse dispatch decomposition landing.** Loss VJPs use explicit Graph/Schedule/Tile/Target plugins on their proven x86/gfx1151/SM120 pairs; KL/JS remains gfx1151-only. ROCm matmul composition and selective-SSM backward resolve through plugins. The verified SM120 Lion and causal DeltaNet packages are now selected by those family plugins, so unmatched NVIDIA and ROCm operations fail closed instead of entering target-wide dispatch. The six unreachable loss/ROCm/NVIDIA compatibility helper bodies have been deleted. The CUDA executors remain architecture-owned and do not inherit x86/gfx1151 lineage or performance evidence. JitFn/public-module decomposition and general forward-package ownership remain open architectural cleanup. | Frontend §U5–U6 | landing |
-| W3.5 | **General shared IFT execution plus typed physical child-composite landed.** `NewtonAutodiff` accepts arbitrary typed residual bodies and emits value-producing IFT VJP/JVP functions with explicit matrix-free GMRES/CG convergence policy. The execution oracle and physical parent use restarted GMRES with true-residual checks; the parent hashes residual, solution JVP/VJP, and parameter JVP/VJP children and executes them on AVX-512/gfx1151 without materializing a Jacobian. The compiler generates all five children for pointwise, sum/mean, rank-2 reduced-storage matmul/transpose, distinct parameter/solution spaces, bounded-dynamic dimensions, explicit mixed-storage widening, statically bounded `control_for`, and pure scalar `if`/bounded-`while` predicate replay. Expanded 30-sample WSL correctness packets are committed for AVX-512 and gfx1151. Remaining: Apple/NVIDIA consumers, broader Krylov packets, non-pure/vector predicates, and clean selector-grade timing. | Autodiff §B8 + OT R2 | landing |
-| W3.6 | Batched operands in `ExpandProductTable`; connect `RotorSandwichFold`'s marker to a consumer | GA/EBM §1.3 | 2w |
-| W3.7 | **ROCm reverse-package ownership closed for the current single-op registry; forward ownership remains.** Every currently admitted ROCm native VJP resolves through an explicit family plugin, including losses, matmul composition, and selective SSM; unmatched families fail closed. Registered C++ MLIR→ROCDL/HSACO remains the canonical native spine. Forward package construction and dead compatibility-method deletion remain part of E2E-REAL-6, not a reason to retain a general ROCm backward dispatcher. | Target §X6 | landing |
-
-**Exit:** one frontend, one lowering per boundary, no target string in `jit.py`,
-every `tile.*` op is a tile primitive.
-
-### W4 — The control-flow program *(10 weeks · depends on W1.2, W2.1, W3.1)*
-
-**This is the plan's most important structural correction.** Dynamic control flow
-was blocked at three independent layers — structured tracing, symbolic shape
-proof, and region differentiation. The first executable single-block SCF slice
-now spans all three; the remaining work is the production execution/evidence
-gate rather than three disconnected substrates.
-
-| # | Item | Effort |
+| ID | Canonical destination | Relationship |
 |---|---|---|
-| W4.1 | **Tracer-owned multi-block carrier and bounded arbitrary-CFG consumer landed.** `for`/`if`, bounded `while_loop`, and `control_scan` retain nested bodies and recover a content-addressed basic-block graph with explicit branch/yield/backedge values, merge arguments, entry, and exit. A deterministic Tarjan analysis classifies source carriers as acyclic, reducible, or irreducible. The paired pass keeps the compact canonical `scf.if` form for four-block diamonds and lowers every other bounded pure native `cf.br`/`cf.cond_br` graph—including true two-entry irreducible SCCs—to a typed program-counter state machine. Each block argument owns a distinct state slot; CFG and Presburger identity survive. Unbounded graphs, effects, unsupported nested regions, malformed edge ABIs, and absent execution bounds fail closed. | landing |
-| W4.2 | **Typed Presburger and nonlinear-witness boundaries landed.** Python emits a versioned, content-addressed coefficient-vector carrier (`eq`/`ge`/`mod`) before compilation. `SymbolicDimEqualityPass` consumes it with MLIR `IntegerPolyhedron`; modular rows introduce existential quotient locals. Attaching a system re-digests the structured CFG and stamps the same typed-system identity on every nested block. Polynomial relations use a separate content-addressed carrier, require complete concrete dimension witnesses, use checked exact integer evaluation, and never become affine scheduling facts. Remaining: richer automatic source-CFG capture and native Presburger queries over general multi-block transformations. | landing |
-| W4.3 | **Explicit residual SSA execution and bounded physical products landed.** `RegionAdjointInterface` differentiates `scf.if`, positive-step counted `scf.for`, canonical bounded `scf.while`, lowered `control_scan`, and the bounded arbitrary-CFG state machine. Dynamic saved state now has a total per-slot maximum envelope, bounded data tape, runtime bound assertion, and companion shape tape; backward slices by recorded logical extents rather than padded bounds. SAVE/HYBRID carry exact checkpoint state. Compiler-generated extent assertions are the first replay-safe observational effect; user-marked mutation/RNG/I/O/collective work cannot bypass registered effects. The tracer-owned CFG carrier also recovers variadic branch merge state. Existing x86/gfx1151 packets remain correctness-only. Remaining: operation-owned products for admissible effects, broader automatic Python CFG recovery, and clean Zen 5/bare-metal gfx1151 timing (BOTH exact-device irreducible-state-machine rows landed 2026-08-21 — gfx1151 per-thread device kernels via the canonical executable pipeline, and native x86 execution via tessera_jit; each binds the CFG digest and enforces the step bound). | landing |
-
-**Exit (single gate):** *a `@jit` function containing a data-dependent loop
-compiles, differentiates, and executes, with numerical agreement against the
-Python oracle.*
-
-### PDE-STENCIL-FOUNDATION-1 — truthful discretization contracts
-
-The first correctness slice landed 2026-08-12. Neighbors stencil definitions
-carry one finite floating-point coefficient per tap, and loop materialization
-performs the explicit multiply. TPP stencil operations require a scheme,
-positive even order, and positive per-axis spacing; none is manufactured by
-legalization. The CPU gradient ABI consumes the selected-axis spacing. Target
-lowering now distinguishes `executable` from `artifact_only` and emits a
-callable symbol only for a linkable implementation.
-
-The two stencil stacks are declared differential oracles. Their shared
-periodic central-gradient subset is tested against the compiled TPP CPU kernel
-using the typed physical-coefficient contract, including non-unit spacing and
-`h^-derivative_order` scaling. Temporal halos, general kernels, boundary modes,
-and physical target consumers remain open. The first compiler-owned typed
-constant-coefficient `pde.operator` semantic carrier, exact-rational
-principal-symbol classifier, and fail-closed diagonal-diffusion FTCS bound are
-now landed. Next ordered work is Graph ODS/pass materialization and a general
-root-condition certificate, followed by physical consumers. ROCm owns the first
-gfx1151 stencil+halo packet; x86 owns the CPU/AVX-512 packet. Apple and NVIDIA
-remain independent follow-ups. Acceptance criteria live in
-[`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md).
-
-### MATH-SOURCE-WORKSTREAM-1 — host-free reference-lane completeness
-
-Owned by [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md), derived from
-two tensor-calculus texts and a deep-learning theory book supplied 2026-09-01.
-**It is recorded here rather than given an Order row because it does not compete
-with the ordered queue**: every item is host-free reference-lane or contract
-work, while Orders 1-14 are physical-execution evidence. It contends for no
-queue position, no box, and no architecture proof.
-
-MSW-1 landed 2026-09-01 and is the reason the rest is queued: `grad(grad(f))`
-and `jacrev(grad(f))` were returning a **silent zero gradient** for functions
-with a nonzero second derivative. `_ACTIVE_TAPE` is a single contextvar, so an
-inner `tape()` shadows the outer completely; the outer then walks a tape the
-differentiated input never reached, and `grad`'s zero branch read "no
-cotangent" as "constant in this argument". Every existing guard checked the
-OUTPUT side; nothing checked the input side. The forward-mode twin was already
-caught via `active_jvp_trace()`, so the fix restores symmetry rather than
-inventing a rule. This is a fail-open path of exactly the class W0.5/W0.8 are
-listed as "what never to cut".
-
-Two boundaries this workstream must respect, both already owned elsewhere:
-MSW-5 (coordinate-aware field calculus) routes through
-**PDE-STENCIL-FOUNDATION-1**, whose "none is manufactured by legalization" rule
-is the precedent it applies to `ga/calculus.py`; and MSW-2's exact higher-order
-path reaches for the capability **W6.3 / AD-WEIL-1** owns, without claiming it.
-MSW-7 may not add a `tessera.einsum` ODS op ahead of a consuming pass (#29) or
-as a second lowering authority (#31).
-
-### BLOCK-ATTNRES-1 — ROCm-first depth-attention residuals
-
-Synchronization key `BLOCK-ATTNRES-ROCM-2026-08-12` owns this project. The
-delivery order is intentionally split by evidence domain:
-
-1. **Host-free semantic phases 0–4.** Phase 0 established the balanced block
-   partition, epsilon-qualified key normalization, forward/VJP equations, and
-   merge lemma. Phase 1 now exposes fp32 `attn_with_stats`, `softmax_merge`,
-   and `softmax_finalize` reference operations with associative/commutative,
-   partition-invariance, dtype, shape, and fail-closed tests. These references
-   remain `artifact_only` at the lowering registry. Phase 2 is also landed: the
-   faithful stdlib recurrence and query-hoisted two-phase algorithm preserve
-   zero-init, balanced nonempty blocks, absent-partial identity, fp32 statistics,
-   storage dtype, and attention-based final aggregation. Phase 3 landed
-   2026-08-13: typed statistics/finalize/depth-attention Graph operations carry
-   required epsilon and numeric-policy attributes; `depth_attn` implements the
-   compiler Adjoint and Tangent interfaces through typed product operations;
-   direct numerical tests compare both analytic products with the canonical
-   decomposition. Phase 4 carries the exact static all-f32 contract through one
-   content-addressed `schedule.depth_attention` operation and one launch-level
-   `tile.depth_attention_kernel`; its digest binds source count, rows, width,
-   epsilon, numeric policy, source tile, workgroup, statistics recurrence,
-   associative merge recurrence, and target architecture. Schedule→Tile
-   rejects changed policy and gfx1200/gfx1250 remain fail-closed. This shared
-   closure grants no Target execution claim.
-2. **Exact-device phase 5 (landed 2026-08-13).** ROCm/gfx1151 now owns the
-   typed Target record, fused statistics-attention plus associative
-   merge/finalize kernel, exact content-addressed HSACO package, and runtime
-   descriptor consumer. Three exact-device shapes pass the independent fp32
-   oracle (maximum absolute error `1.96e-5`). The committed WSL packet records
-   operation-total host-wall samples and is explicitly selector-ineligible;
-   bare-metal HIP-event/ROCprofiler calibration remains open. gfx1200/gfx1250
-   remain fail-closed.
-3. **Architecture phase 6.** x86/AVX-512 owns an independent vectorized
-   package and clean Zen 5 packet after the shared contract is stable. Apple
-   and NVIDIA own separate packages and evidence; no schedule or result
-   transfers between targets.
-
-The scoped mathematical and acceptance authority is
-[`BLOCK_ATTNRES_ROCM_PLAN.md`](BLOCK_ATTNRES_ROCM_PLAN.md). Global ordering and
-promotion authority remain here.
-
-### REF-TIER-PHYS-1 — solver-first physical lanes and shared lattice butterfly
-
-Cross-backend sync `REF-TIER-PHYS-2026-08-16`. The PR #568 reference tier now
-has its first compiler-owned physical boundary:
-
-1. `tridiagonal_solve` lowers through one content-addressed Schedule→Tile
-   contract. x86 owns a batch-blocked Thomas recurrence vectorized across
-   independent systems; gfx1151 owns cooperative LDS parallel cyclic reduction.
-   Both preserve the reference's fp64 accumulation and fp32 storage contract.
-2. The four subset/superset zeta/Mobius operations lower through one
-   `schedule.coalition_butterfly`/`tile.coalition_butterfly_kernel` carrier.
-   `(half, sign, ascending_bit_yates_v1)` selects the recurrence, avoiding four
-   target emitters. x86 and gfx1151 have independent physical consumers.
-3. Host-free C++/MLIR and direct x86 numerical proof are required in the owning
-   change. Exact-device gfx1151 and clean Zen 5 performance packets remain
-   architecture gates; gfx1200/gfx1250 fail closed.
-4. The other five coalition operations remain compositions over butterfly,
-   reduction, softmax, bit-permutation, and segmented primitives until fusion
-   evidence justifies a family-level package. This slice does not call the
-   broader FFT/coalition G1b consolidation complete.
-
-### LAYOUT-ALG-1 — one layout algebra under five asking consumers
-
-Bound 2026-08-16 from [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md), which
-owns the mathematical verification and the acceptance criteria. Global ordering
-and promotion authority remain here.
-
-The finding that justifies an ID rather than a reference: **five independent
-in-tree items already ask for a piece of layout reasoning, and each proposes a
-different, weaker mechanism.** FORGE W1's read-locality lattice is a six-point
-chain approximating a question that layout composition plus divisibility decides
-exactly; FORGE W2's residency contract is `cosize`; SparDA §III.3's GQA-fold is
-`group_modes`/`logical_divide` and is **not expressible today** — `rearrange`
-fails closed on precisely that spec; TileSight §3.2's rasterization is
-`composition(grid, raster_layout)`; and the G1b butterfly/FFT consolidation
-needs a shared representation in order to be shared at all. This is root cause B
-("told, not derived") about to recur five times, and Decision #30's "no eighth
-bespoke walker" rule applied before the walkers exist. Against
-[`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md), layout algebra is not a tenth
-substrate investment — it is the missing implementation under **S9**, whose `⊑`
-operator that document already flags unowned.
-
-Ordered delivery, host-free throughout except where noted:
-
-1. **L1 — the algebra and its binding.** Eleven operations over nested
-   `(shape, stride)` with static-or-dynamic leaves; four types. **One C++
-   implementation** in the support library with a ctypes binding, per the
-   2026-08-16 home decision — not a Python/C++ pair, so Decision #31 is
-   satisfied by construction rather than by declared-oracle exemption. The
-   binding fails closed with a named diagnostic and ships **no layout-evaluation
-   fallback path**, because a fallback is a second implementation in disguise.
-   The fixed rank-2 source-text template used by host-free MSL emission is an
-   explicitly bounded exception: it does not evaluate a layout, has only the
-   two ABI orders, and is checked against the native plan. Exhaustive proof
-   over all layouts to size 64 runs on **both sides of the ABI**. Every operation
-   is accepted on **two independent axes — function and result structure**;
-   `test_layout_algebra_contracts.py` already enforces the pair, and an
-   implementation that returns the right elements under the wrong mode grouping
-   must fail, since grouping is what downstream slicing and partitioning read.
-2. **L2 — first consumer, `rearrange`/GQA-fold.** Smallest real consumer;
-   converts a documented `ValueError` into a working op without regressing its
-   Decision #21a fail-closed behaviour. **L1 does not land without L2 committed**
-   — otherwise it is a Decision #29 violation by construction.
-
-**2026-08-16 checkpoint:** the versioned C++ dylib, no-fallback ctypes binding,
-compact coordinate algebra, exhaustive size-64 ABI corpus, and executable
-forward/inverse GQA-fold consumer have landed in the working slice. General
-nested composition/complement/coalesce/inverse and product/divide/slice remain
-inside L1; LAYOUT-ALG-1 is therefore landing, not closed. SO-1 is complete and
-re-bases R3 action DAGs onto `ScheduleObject`; SO-2 has its first typed
-role-to-barrier carrier and target-neutral ping-pong/Hopper verifier fixtures.
-The gfx1151 numerical gate is closed: the earlier 1,569-test device sweep gives
-broad parity evidence and the narrower plan-named SO-2 cohort passed 8/8 on the
-role-carrying path. NVIDIA barrier-at-birth remains the missing physical role
-producer; it does not reopen AMD numerics. L3/L4 and all raster promotion
-decisions remain unchanged and evidence-gated.
-
-**2026-08-24 L1/L3/L4/L5 checkpoint:** the C++ authority transports nested
-layout trees, implements scalar composition, complement/inverses, coalescing,
-product/divide variants, slice-with-offset, bounded dynamic residues, exact
-layout factorization, and `cosize`-based residency. Schedule Object v2 binds
-the resulting layout digest, factorization, capacity, residency, alias set,
-and lifetime proof. Tile IR materializes mixed-radix basis maps and represents
-a static tuple codomain as a product of independently proven scalar composed
-layouts; dynamic/non-separable tuple codomains remain fail closed. NVIDIA,
-ROCm, and x86 re-run the proof before target address emission. The x86 consumer
-handles static, bounded-dynamic, nested mixed-radix, and static tuple-product
-scalar maps with runtime guards and exact LLVM execution on AVX2 and AVX-512.
-SM120 has both the narrow
-typed and alignment-safe dynamic macro-CTA strided routes exact-device proven;
-gfx1151 has a bounded-dynamic compact package proven on Radeon 8060S. The
-shared rank-2 authority now serves CUDA, ROCm, the x86 f32/f64/bf16/u8s8 core
-GEMMs, and the reachable Apple MSL families, while the shared raster generator retains
-its exhaustive equivalence gates. x86 odd-shape and vector-tail cases pass on
-the AVX-512 Ryzen AI Max+ 395 host, and incompatible AVX2 hosts reject the image
-before loading. Apple consumes the plan through the versioned no-fallback
-native ABI: all reachable steel, fused matmul, normalization, attention, and
-gated-matmul MSL templates preserve their established arithmetic. All 20
-raster choices pass host-free, canonical GEMM passes 3/3 including a ragged
-edge, and fused cooperative-matrix pointwise/reduction passes 38/38 on M1 Max.
-This closes the physical-consumer tail and LAYOUT-ALG-1; unsupported dynamic
-non-separable tuple codomains remain fail closed rather than becoming an Apple
-schedule claim.
-3. **L3 — the `⊑` decision procedure — implemented.** FORGE W1/W2's legality query and
-   residency check implemented as layout factorization and `cosize`. The lattice
-   stays the declared interface; the algebra makes `block` precise instead of a
-   promise. Closes the S9 implementation gap.
-4. **L4 — emitter index math — landed on CUDA/ROCm/x86/Apple.** Consolidates the four hand-written block-index
-   emitters and the hardcoded `A[row*K+k]`/`B[k*N+n]` templates onto the shared
-   algebra. Acceptance is **bit-identical output** for every currently reachable
-   `(raster_order, raster_group)` — a pure-refactor proof. Choosing a measured
-   non-default raster is explicitly **not** in this item: per ROCM-CALIB-1 that
-   is architecture-owned and blocked on a correlation/retain verdict, and it
-   does not transfer between targets.
-5. **L5 — MLIR carrier.** The bounded seed is implemented as
-   `#tile.composed_layout` plus `tile.materialize_composed_layout`, preserving
-   nested static/dynamic scalar-affine residue while delegating proof to L1.
-   Mixed-radix basis maps and static separable tuple codomains are physical on
-   SM120/gfx1151; dynamic/non-separable tuple codomains remain carrier-only. Folding the proven
-   static subset and any future integration into `#tile.layout` must still use
-   a `MaybeStaticTypeInterface`/fold-static boundary rather than duplicate the
-   algebra. The Decision #31 ordering caveat in
-   [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) continues to apply to
-   `#tile.mma_desc`.
-
-Independent of the above and not blocking it: a negative-scoped
-`tessera-target-opt` driver that registers the Target IR dialects without
-`tessera`/`tile`, making Tile IR leakage a parse error. `test_target_ir_contract.py`
-parses and verifies every emitter and golden, but registers everything, so it
-cannot falsify a *leakage* claim — the same argument as Decision #19's standing
-lesson that a host with the ISA cannot falsify a host-portability claim.
-
-### FRONTEND-IR-MEDIUM-1 — the IR as the single medium of record
-
-Bound 2026-09-03 from
-[`FRONT_END_LOWERING_ASSESSMENT.md`](FRONT_END_LOWERING_ASSESSMENT.md), which
-owns the finding and the KGEN-comparison rationale. Global ordering and
-promotion authority remain here.
-
-The original 2026-09-03 finding that justified this ID was: **Tessera's system of
-record is the Python object graph, and the MLIR text is a lossy projection of
-it.** Measured on the checked-in `tessera-opt` (host-independent): symbolic
-shapes do not survive to the parser (`Tensor['M','K']` → malformed
-`tensor<?x?x?>` → parse error), `loc` is absent from the emitted text entirely,
-`numeric_policy` is opt-in rather than universal, and `provenance`/route/arbiter
-decisions live in Python descriptor objects (46 modules) rather than as IR
-attributes. `tessera-opt` optimizes the projection; the Python spine reasons
-over the record; the two do not share a memory. This subsumes the Apple
-"two compilers" and Python-packager seams as symptoms. It also reads
-E2E-REAL-6's "one compiler authority" one level stronger — from *one frontend*
-to **one medium**: every fact a pass reads is an attribute on the IR the C++
-passes see (Decision #29's consumer rule, run in reverse).
-
-Three sub-tracks, sequenced smallest-blast-radius first:
-
-1. **Down-payment (independently landable now).** (i) **Landed 2026-09-03 — scope
-   corrected on implementation:** the front door already recorded the
-   value-lane failure (`apple_value_target_ir_error`, S4); what was missing was
-   a *named* reason. `graph_ir.unresolved_element_type_diagnostics` now emits
-   `GRAPH_IR_UNRESOLVED_ELEMENT_TYPE` (Decision #21a) per unresolved
-   argument / result / op type and the driver's value lane consults it before
-   rendering, so the recorded reason names the argument and the missing
-   semantic key instead of the parser's symptom; renders are byte-unchanged and
-   `index` / `i1` / `!tessera.*` handles are never flagged. (ii) **Landed
-   2026-09-03:** the tracer records the user's call-site span on every op
-   (`trace._user_source_span`, first frame outside the package) and the
-   canonical render emits a repo-relative `loc("file":line:col)` — relative so
-   the content-addressed canonical text stays host-independent — verified
-   through `tessera-opt -mlir-print-debuginfo`. PR #721 also connected AST
-   `_OpExtractor` source spans to canonical locations, including file-backed
-   `source_path`; both frontend paths now retain diagnostic locations.
-   (iii) **Landed 2026-09-03.** The symbolic→concrete elaboration boundary,
-   the region-privilege (Decision #2) and the `ConstraintSolver` (Decision #4)
-   drops are declared through the **existing** W1.3 metadata-obligation pass
-   (`--tessera-verify-metadata-obligation`), not a new verifier (Decisions
-   #29/#31), using `not_yet_carried:FRONTEND-IR-MEDIUM-1`. The C++ verifier is
-   **unchanged**.
-
-   *One correction to how this was specified, recorded because it is the whole
-   trick.* The instruction "declare them through the existing pass" is not
-   directly executable: that pass takes its `before` from
-   `--tessera-record-metadata`, which walks MLIR, and these three facts never
-   enter MLIR at all — so the pass can never record them, and a bare
-   declaration is refused as `METADATA_OBLIGATION_STALE_DECLARATION` (measured
-   first, on all three names). What makes it work is that the verifier decodes
-   the snapshot **unfiltered**: it is not restricted to the four attributes
-   `isTrackedName` collects. So the **frontend writes the snapshot itself** —
-   the frontier is the one boundary whose `before` lives in Python —
-   and the verifier then behaves exactly as it does for `numeric_policy` at the
-   Tile boundary. `graph_ir.declare_frontier_debt` stamps both halves from
-   `JitFn`'s decoration-time `IRArg`s and solver; `tests/unit/
-   test_frontier_metadata_obligation.py` (11) covers it, plus a positive and a
-   negative lit fixture. Verified end to end on real `@tessera.jit` output: the
-   emitted module passes `--tessera-verify-metadata-obligation`, and deleting
-   any one declaration fails it with `METADATA_OBLIGATION_SILENT_DROP`.
-
-   Deliberately narrow: nothing is stamped when the frontend held none of these
-   facts, and a fact the IR still carries is never declared — both would be the
-   unconsumed declaration of Decision #29, and the second silently licenses a
-   real future drop.
-
-2. **Pre-elaboration parametric optimization (perf + rigor).** The rank/prune
-   tier landed in PR #721: native optimization now sees the parametric recipe
-   once before bucket analysis. Next instantiate the optimized recipe through
-   a native, witness-checked boundary, preserving the existing `PresburgerSystem`
-   substrate carried through `structured_cfg.py`. Arbiter payoff (Decision #28):
-   buckets compared as instances of one optimized recipe, not N independently
-   lowered programs, so a bucket-to-bucket regression is a real difference. Also
-   connects the now-parseable frontend `tessera.dim_names` carrier to
-   `SymbolicDimEqualityPass`; that producer/consumer gap is already fixed.
-
-3. **Raising / idiom recognition (algorithmic).** No pass lifts a hand-written
-   loop nest back to `tessera.matmul` / `tessera.flash_attn`, so user-written
-   math cannot reach the arbiter's Tier-3 hand-tuned candidates. Add a raising
-   path so arbitrary user code has an on-ramp into the high-performance tier —
-   the inverse of `TesseraToLinalgPass`, composing with sub-track 2 (a raised
-   parametric idiom is optimized once and elaborated per bucket).
-
-**2026-09-04 implementation update — first rank/prune stage only.**
-`parametric_recipe.prepare_recipe` now runs the existing native symbolic
-verifier, canonicalizer and CSE on a typed, dynamic-shape Graph IR recipe before
-bucket analysis. It retains the input MLIR oracle and content-addresses the
-optimized program, Presburger system and compiler binary. Complete positive
-integer witnesses may be pruned by the typed constraints; all survivors remain
-promotion-ineligible. `JitFn.rank_parametric_buckets` is the explicit opt-in
-consumer. A duplicate-matmul fixture proves native CSE occurs before buckets.
-The SymbolicDimEquality consumer now reads the frontend's argument-local
-`tessera.dim_names` as well as the legacy function array; positive and negative
-parser-backed fixtures cover the connection.
-
-`loop_idioms.recognize_matmul_loop` provides the first raising analysis:
-two matching f32/f64 rank-2 arguments, fresh NumPy zero output, and an exact
-complete i/j/k multiply-accumulate nest. The source loop is retained as the
-oracle; the candidate contains the existing `tessera.matmul` operation and
-feeds `prepare_recipe`. Unsupported source is refused. This is an explicit
-compatibility analysis, not a second execution authority. Reassociation and
-native numerical validation remain promotion requirements.
-
-**Still open:** instantiate the optimized native program per bucket, wire its
-identity and measured candidates into the arbiter, recognize tracer/MLIR loop
-regions beyond this narrow source form, and add a separately proved attention
-recognizer. No Tier-3 selection or backend execution support is claimed.
-
-The retained AST frontend now emits file/line/column locations (virtual source
-identity for explicit source that differs from the file); cache keys include
-source location. `validation_tree.py` binds external expected file hashes and
-rejects changes during a gate. The validation spine uses it, and generated
-coverage has a resolve-authored-inputs-then-regenerate workflow documented in
-[`VALIDATION_SPINE.md`](../../spec/VALIDATION_SPINE.md).
-
-Acceptance is staged: sub-track 1 lands under existing frontend/driver fixtures
-plus a fail-closed dtype fixture and a `loc`-round-trip check; sub-tracks 2 and
-3 are rank/prune-only first and keep the current path as an oracle per the PR
-rules above. No device evidence is implied — every probe in the assessment is
-host-independent.
-
-### W5 — Decisions become measured *(9 weeks · depends on W1, W3)*
-
-Root cause: L5, "a constant where a measured decision belongs." Every item routes
-an existing hardcoded choice through the arbiter Decision #28 already built.
-
-| # | Item | Source | Effort |
-|---|---|---|---|
-| W5.1 | **Executable policy cohort landed; architecture packets remain open.** Complete-backward samples and unique retained residual allocations produce exact evidence; only exact-device rows stamp compiler selection attributes. Counted regions execute candidate plans and report the policy actually implemented (`SAVE`, `RECOMPUTE`, or `HYBRID`) plus forward, replay, and backward work. Model-only candidates remain ineligible. Remaining: lower chosen plans into the C++ region adjoint and collect exact-family x86/gfx1151 packets. The [deleted-functionality reassessment](#deleted-functionality-reassessment--2026-09-05) specifies the native policy-consumption gate; restoring inert EBM annotations is not completion. | Autodiff D5 + GA/EBM §1.5 | landing |
-| W5.2 | Scheduling decisions at Schedule IR — tile sizes, stage counts, raster order, warp roles chosen from `fusion_core` cost models via the measured arbiter, not from `--tile-q=64` | Frontend §U3 + IR Stack §U6 | 5w |
-| W5.2a | **COMP-SCHED-OVERLAP-1/R1 — closed 2026-08-10.** Python Schedule→Tile async carriers now produce explicit token results and token-consuming waits; internal `tessera.queue.*` markers are rejected instead of filtered. The registered `--tessera-await-sinking` pass moves collective awaits to the first true SSA use through the W2.2 registered semantic query. Mutation, RNG/sample identity, aliases/casts/views, regions, unknown operations, and ordered collectives are fail-closed barriers. x86/no-async is a recorded no-op; the existing gfx1151 global→LDS/LDS-WMMA cohort remains 16/16. | TileRT R1 + async reconciliation | closed |
-| W5.2b | **COMP-SCHED-OVERLAP-1/R2 — closed 2026-08-10.** Successful measured autotune rows now carry a validated `tessera.measured_resource_vector.v1` in canonical `hot_path_metadata`: compute time, dtype-correct bytes moved, communication bytes, queue/resource identity, timing provenance, and a content digest for the measured schedule candidate. Timing provenance survives SQLite warm-starts. Analytical rows cannot claim this vector, and the contract stamps `usage = composition_analysis_only` plus `selector_authority = latency_ms`; scalar measured latency remains the sole selector score. R3 is the first permitted composition consumer. | TileRT R2 + Evaluator | closed |
-| W5.2c | **COMP-SCHED-OVERLAP-1/R3 — v2 scalable search landed 2026-08-14.** The compiler-owned `composition_cost` boundary consumes R2 vectors as explicit Tile actions, validates DAGs with deterministic Kahn traversal, and models compute/memory/communication lanes plus queue serialization. Production search is critical-path/list scheduling. The admissible bound is `max(dependency critical path, per-resource-lane work, queue work)`; an inexact candidate is pruned only when that lower bound already loses to another candidate's feasible upper bound. Results remain promotion-ineligible with scalar `latency_ms` as selector authority. W2.1/W2.2 supply registered effect, alias, liveness, and memory-dependence facts. | TileRT R3 + TileSight T3 | closed |
-| W5.2d | **COMP-SCHED-OVERLAP-1/R4 — bounded functional consumer closed 2026-08-10.** MegaMoE now executes a content-addressed chunk/action plan rather than reconstructing an implicit loop policy. The plan owns contiguous chunk slices, per-chunk expert capacity, a two-live-frame workspace bound, dispatch→compute and compute→combine true-use dependencies, ordered collective dependencies, and deterministic chunk-combine order. R3 requires total measured evidence for every action and may only prune plans; exact-device scalar latency selects among retained plans before the chosen digest is passed to the runtime. Runtime telemetry records the digest, issued action order, true-use waits, combine order, and maximum live workspace. Mock multi-rank numerical and repeated bit-identity proofs pass. Native NCCL/RCCL/MPI/OFI/SHMEM transport plus architecture-owned correctness/performance packets remain open and do not transfer across targets. | TileRT R4 + TileSight T4 | closed |
-| W5.2e | **Automatic dependence-edge generation — conservative parity gate landed; selector proof remains open.** `infer_action_dag` consumes a fresh W2.1 Graph snapshot and total R2 resource vectors. It emits explicit edges for SSA producers, overlapping or unknown alias sets, value-scoped memory dependence, mutation/state/I/O, registered stochastic identity, ordered collectives, unknown effects, and region boundaries. Unknown alias facts now carry an explicit reason rather than relying on a side effect of `may_alias`. `compare_inferred_action_dag` requires generated edges to cover every edge in an existing hand-authored R3 fixture; additional conservative edges are reported separately. Pure SSA matches the current fixture exactly, and opaque dataflow is serialized. `CompositionCandidate.from_graph` remains the physical-family entry point. **Open (MegaMoE adopted 2026-08-24 — inferred edges with the hand DAG as fail-closed coverage oracle):** adopt it in the remaining non-JVP physical producers (spectral next) and collect clean calibrated Zen 5/bare-metal gfx1151 packets before scalar measured latency may select a retained schedule. WSL and analytical vectors remain prune/rank-only. | W2.1 + TileRT R3/R4 | landing |
-| W5.2f | **Tiled SSD family.** Define one content-addressed Schedule→Tile program for chunked SSD GEMM, reduction, recurrent carry, checkpoint/residency, and mutation lineage. Existing ReplaySSM and backend-specific sequence kernels are candidates/oracles, not semantic authorities. Physical lowering and promotion remain architecture-owned. | Roadmap tiled-SSD design + E2E-REAL-6 | open |
-| W5.2g | **Scalable action-DAG search closed 2026-08-14.** Wide DAGs use deterministic critical-path/list scheduling and never enter factorial enumeration. DAGs through eight actions retain exhaustive enumeration as the declared oracle; tests compare feasibility, modeled makespan bounds, and deterministic identity. A lower bound combines dependency critical path, per-resource-lane work, and queue work. Proven lower-bound losers may be pruned; every inexact survivor remains rank/prune-only and scalar exact-device latency retains selection authority. Remaining producer wiring stays W5.2e, not a second scheduler. | PDE plan §IV.3/IV.4 routed into TileRT R3 | closed |
-| W5.3 | Generic fusion region discovery over a legality oracle (a W2.1 client); keep the measured cost models | Sweep §F3 | *(folded into W5.2)* |
-| W5.4 | **Typed placement lattice plus bounded reshard SSA landed; native execution remains open.** The compiler represents replicated, tiled, partial-reduction, and unknown placements and propagates registered pure rules to a content-digested fixed point. Consumer mismatches now produce digest-bound actions with exact consumer/operand identity; `all_gather`, `all_reduce`, `reduce_scatter`, and `all_to_all` are inserted as real Graph SSA, retain their def-use chain through `schedule.collective` and Tile IR, and carry plan digest, subgroup, and region path. Region values may flow only to the same or a nested region; sibling/escaping movement fails closed. The conflict-free collective scheduler gives all-to-all subgroups a deterministic cyclic 1-factorization whose rounds have unique senders and receivers and cover every directed peer pair exactly once. The later W5.4-RESHARD-1 landing above adds exact mesh-sized local slices and mock-mesh execution; these are no longer missing prerequisites. Remaining: domain-specific/axis-changing contract coverage, general nested-region placement joins, broader family proofs, and native NCCL/RCCL/MPI/OFI/SHMEM packets. Evaluate native sharding/Shardy integration independently of TPU under the [reassessment](#deleted-functionality-reassessment--2026-09-05); existing placement and reshard evidence remains the baseline. | Sweep §F4 + PDE plan §IV.1 | landing |
-| W5.5 | Rule-table-driven canonicalization (PDL/PDLL). **Defer equality saturation** until the rule table is large enough that ordering demonstrably costs something | Sweep §F5 | 3w |
-
-**Exit:** no tile size, residual policy, or fusion boundary is chosen by a
-constant; sharding a model requires O(few) annotations, not O(layers).
-
-### W6 — Exceed the state of the art *(14 weeks · depends on W2, W4)*
-
-| # | Item | Source | Effort |
-|---|---|---|---|
-| W6.1 | **Bounded native products plus exact compiler HVP composition landed (`AD-FWD-CORE-1` / `AD-FWD-PRODUCT-2` / `AD-FWD-NATIVE-1` / `AD-FWD-DIST-3` / `AD-HIGHER-1`).** `TangentInterface`, paired functions, public request/provenance, stable `wrt_indices`, and direct tangent families are live. `--tessera-autodiff-hvp-pipeline` now emits the paired reverse program, marks only original differentiable primals tangent-active, and applies the exact forward transform to produce `@f__bwd__jvp`; the emitted product is numerically executed against an independent quadratic oracle. `JitFn.compiled_hvp_ir` exposes that fail-closed compiler product without finite-difference substitution. The eager `tessera.autodiff.hvp` compatibility helper still uses finite differences and is not this compiler proof. Remaining: broaden second-order TangentInterface coverage, broader ISTFT layouts/dtypes, MPI/OFI/SHMEM and subgroup transport, native multi-rank packets, clean performance packets, and Apple/NVIDIA packages. | Autodiff D2 | landing |
-| W6.2 | **AD-SPARSE-1:** propagate structural sparsity, color seeds and reconstruct Jacobian/Hessian products through the shared transform and scheduling path. Require dense-oracle equivalence, structural-zero safety and measured scaling with colors. | [Active AD plan](AUTODIFF_EXECUTION_PLAN.md), D7 | open |
-| W6.3 | **Law/algebra/operator reference foundations implemented; native jets remain open.** [Active AD plan](AUTODIFF_EXECUTION_PLAN.md) consolidates the remaining AD-JET-STRUCT-1 breadth, safe retirement/geometric absorption, derivative-registry integration, and AD-JET-IR-1 physical descent. Dual/TruncatedJet, derivative contracts, laws and OperatorTangent already exist; do not rebuild them. Native jets require W4 product ownership, real batching, LAYOUT-ALG-1 and NUMPOL-CARRIER-1, plus conditioning/footprint and exact-device scaling evidence. AD-CERT-1 remains consumer-gated. Archived mathematical design is retained as reference, not a competing queue. | Autodiff D6 / AD-JET-IR-1 | landing |
-| W6.4 | **Native finite-algebra lowering shared by GA and jets.** Extend W3.6 batched/grade-aware products through MLIR/linalg/vector/LLVM with explicit algebra, layout and numeric policy. Existing Python table/jet code is the oracle; `emit/` is not the new production owner. Packed grades, PGA/CGA and exp/log policies require separate semantic, derivative and device proof before promotion. | [GA/EBM review](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) / W6.3 | open |
-
-**Exit:** a measured improvement under a fixed correctness budget — sparse
-Jacobian scaling `O(colors)` not `O(rows)`; order-`k` derivatives sharing the
-tuned GA kernels. W6.3's half of that exit is sharpened by its plan to a
-measured curve: order-`k` directional derivatives of a real workload via fused
-jets versus nested forward-over-forward on the same hardware and numerics
-budget. If the curve does not separate by `k = 3`, the IR descent is not worth
-its cost and the program stops at the reference + law infrastructure — a
-falsifiable stop condition, not an open-ended track.
-
-> The shared finite-algebra representation is implemented and reference-tested
-> against the Clifford oracle. What remains unproved is a shared **native**
-> lowering and its physical scaling/performance benefit. The
-> [active AD plan](AUTODIFF_EXECUTION_PLAN.md) owns the native jet gates;
-> W6.4 supplies the corresponding batched GA consumer. Do not repeat
-> AD-WEIL-1 or infer native equivalence from its Python proof.
-
-### Riemannian OT — re-scoped as validation, not a track
-
-The [OT plan](RIEMANNIAN_OT_PLAN.md) proposed R0–R5 at ~14 weeks. Integrated, most
-of it is **already funded by W1–W5**:
-
-| OT need | Provided by |
-|---|---|
-| manifold as a hard dispatch key (H1) | W0.1 |
-| remove inert EBM checkpoint policy from the default pipeline (H2) | W0.2; demand-aware loop rematerialization remains W5.1 |
-| geometric primitive layer (R1) | new — 1.5w, first consumers are `ebm/geo_sampling.py` and `hyperbolic.py` |
-| `stop_gradient` + implicit diff (R2) | W3.5 + W2.3 |
-| `c_transform` fused loop (R3) | W4 (control flow) + W5.1 (residual policy) |
-| backend lanes (R4) | W5.2 (schedule decisions) + existing EBM Langevin kernel precedent |
-| oracles (R5) | W2.1 (fail-closed analyses) + the existing Evaluator |
-
-**Net new OT scope: ~4 weeks** (the geometric primitive layer plus the RNOT
-composite ops), down from 14. And RNOT becomes the plan's **acceptance test**: a
-2500-step manifold inner loop with a stop-gradient boundary exercises W1 (typed
-tiles), W2 (activity + liveness), W4 (control flow), and W5 (residual policy) in
-one workload. If RNOT runs at wall-clock parity with RCPM, the plan worked.
-
----
-
-## 5. Dependency graph
-
-```
-W0 ─────────────────────────────────────────────────────────────►  (start now)
- │
- ├─► W1 (declarations binding) ─────────┬──────────────────────────┐
- │      W1.1 type Tile IR ──────────────┤                          │
- │      W1.2 shape-rule registry ───────┼──► W4 (control flow) ────┤
- │                                      │      W4.2 needs W1.2     │
- └─► W2 (analysis layer) ───────────────┤                          │
-        W2.1 dataflow framework ────────┼──► W4.3 needs W2.1       │
-        W2.2 effects ───────────────────┤                          ├─► W6
-        W2.3 activity ──────────────────┘                          │   (SOTA)
-                │                                                  │
-                └─► W3 (collapse duplication) ──► W5 (measured) ───┘
-                       W3.1 one frontend ──► W4.1
-```
-
-Delivery-critical chain: **E2E-REAL-0 → E2E-REAL-1 → E2E-REAL-2 →
-E2E-REAL-3 → E2E-REAL-4**. W1.1 is an input to E2E-REAL-2/3; W2.1 can proceed
-once E2E-REAL-1 supplies a real program to analyze. W4 and W5 then extend a
-proven spine instead of building capability beside it. The earlier
-40-week/63-week totals are not retained as commitments: the old W3.2 estimate
-omitted an entire registered Schedule dialect, SSA-preserving boundary design,
-bufferization, package API migration, and hardware gates; W6.3 still needs
-research scoping.
-
----
-
-## 6. Three budget levels
-
-**Minimum — W0 only.** Closes verified fail-open and invalid-value paths,
-preserves the correct numerical fallback for untraceable EBM callbacks, removes
-inert checkpoint policy from the default pipeline, corrects architecture
-documentation, removes a duplicate-dialect trap, and upgrades the generic
-Target-IR contract test. Adopts the six governance rules so nothing regrows.
-
-**Recommended scope — finish the live W1.1 contract, then E2E-REAL-0 through
-E2E-REAL-4, with W2.1 starting after E2E-REAL-1.** This produces one measured,
-lineage-complete matmul on the two locally available architectures rather than
-funding several horizontal subsystems before any one request traverses them.
-Re-estimate frontend deletion and family breadth from that measured slice.
-
-**Full — W0…W6, re-estimate after W1.1 and W6.3 design spikes.** ROCm ownership/inventory work is host-free;
-subsequent kernel-producing migrations are hardware-routed individually (§6a).
-Adds the control-flow capability, measured decisions, and two defensible
-exceeds-SOTA claims.
-
-## 6a. Fleet routing — what must run on which box
-
-**Core compiler work is driven on the Strix Halo box (decided 2026-08-02).**
-`AMD RYZEN AI MAX+ 395 w/ Radeon 8060S`, Ubuntu 24.04 under WSL2, 32 threads,
-62 GB RAM, LLVM/MLIR 23 at `/usr/lib/llvm-23`, `gfx1151` visible to `rocminfo`.
-It is both faster and larger-memory than the Mac M1 Max for `tessera-opt`
-rebuilds, so ROCm compile-time work and its hardware gate live on the same
-machine. It is not the fleet's only GPU lane: Super-Bear exposes an RTX 5070
-through CUDA, and the Mac M1 Max owns Metal validation. CUDA and gfx1151
-visibility were rechecked on 2026-09-04; visibility alone is not kernel proof.
-
-Most of this plan is compile-time contract work and runs anywhere. Two items are
-hardware-bound, and one of them is the highest-risk item in the plan.
-
-| Work | Box | Why |
-|---|---|---|
-| W0, W1 (typing, enums, shape rules), W2 (analyses), W3.1–W3.4 | **Strix Halo (primary)** | ODS, `tessera-opt`, lit, unit tests. No device needed; tightening a type is a compile-time change. Runs on the Mac too, but the primary is where the gates are expected to be green. |
-| Any item touching the Apple backend or Apple lit fixtures | **Mac M1 Max** | Metal/Accelerate toolchain is Mac-only; this is the one thing that cannot be retargeted. |
-| W0.10 build branch — `tessera_x86` dialect | **Strix Halo** for ODS/lit; **AVX-512 execution proof also here**; AMX execution proof has **no box in the fleet** | Zen 5 has AVX-512 (`avx512f` confirmed on this host) but **AMX is Intel-only** — the earlier routing to a "Zen5 box for AMX" was wrong. The NR2 Pro's Core Ultra 7 has neither. Anything AMX-gated is currently unexercised (see the note below). |
-| **W3.7 — ROCm producer ownership + differential gate** | **Strix Halo** — inventory/IR equivalence is host-free, and gfx1151 for each later producer change is on the same box | The initial slice does not change kernels. Any retirement or migration that changes generated code requires execute-and-compare on the owning device. |
-| W4 (control flow) end-to-end gate | **Strix Halo / gfx1151** | It has the broadest compiler-generated + hardware-verified op coverage. |
-| ROCm arch breadth (gfx950 / gfx1201 / gfx1250) | deferred — no silicon | MASTER_AUDIT P2, unchanged. |
-
-**AMX has no hardware behind it.** `tests/device/x86/test_amx_int8_gemm.py` and
-`scripts/run_x86_amx_release_gate.sh` (merged in #489) gate on AMX capability,
-which no current fleet box reports. The gating is honest, but the lane is
-unexercised; do not let W0.10 lean on an AMX execution proof it cannot obtain.
-Native x86 proof on this box means AVX-512.
-
-**Two sequencing consequences.** First, W3.7 reuses the differential-harness
-design from W3.1/W3.2 and records one owner per package family before anything
-is deleted. Second, W1.1's ROCm typing may expose invalid assumptions in
-registered generators; fix those compile-time contracts host-free, and require
-gfx1151 evidence only when a generated kernel or selected producer changes —
-both halves now on the same machine.
-
-**What to cut first if squeezed:** W6.4 (GA synthesis / PGA) and W5.5
-(canonicalization rule tables) are the most deferrable — genuine value, no
-downstream dependents. **What never to cut:** W0.5 and W0.8 (an hour and a day)
-— a wrong architecture decision and absent governance are what let all of this
-accumulate.
-
----
-
-## 7. Risks
-
-| Risk | Wave | Mitigation |
-|---|---|---|
-| **W3.1 is a broad behavior change** — the AST frontend is the default on every non-Apple target | W3 | The differential harness ships *before* the switch, not after; promote per-target with the harness green |
-| **W4 will exceed its estimate.** Region adjoints are the hardest item here and structured reverse mode is genuinely difficult | W4 | Land W4.1+W4.2 with a forward-only gate first, so partial progress is observable before W4.3 |
-| **W1.1 touches every Tile-consuming backend** | W1 | Parameterized types and verifier contracts can invalidate producers and consumers; land per primitive/variant with parser, verifier, lowering, and backend fixtures |
-| **Stage presence is mistaken for stage lineage.** A bundle can contain Graph/Schedule/Tile/Target/image/descriptor while its backend package was re-synthesized from Graph | E2E | E2E-REAL-0 records parent digests and a separate `lineage_complete` answer; no capability or dashboard may infer it from non-null stages |
-| **Schedule IR cannot currently carry the computation it claims to schedule.** Its C++ `schedule.tile` is metadata-only and the Python textual model emits `() -> ()` | E2E | E2E-REAL-1 chooses and gates the mixed-level SSA contract before implementing a broad lowering |
-| **Waves 1–3 produce no user-visible feature.** Fifteen weeks of "the compiler now enforces what it already said" is hard to fund | all | RNOT (§4) is the visible acceptance workload; state the intermediate gates as capability claims, not cleanup |
-| **The governance rules are ignored under delivery pressure** | all | #29 and #31 are drift-gateable; make them tests, not conventions |
-| **Someone starts at W3** (deleting duplications first, because they are the most visible waste) | — | It fails: the surviving path cannot yet carry what the deleted one carried. Ordering A→B→C is the plan's core claim |
-
----
-
-## 8. Delegated detail and scope boundaries
-
-The integrated queue owns sequence, not every implementation detail. The
-following subjects remain delegated and must return here only when they change
-global order or a shared contract:
-
-- ~~Target IR dialects~~ — **reviewed 2026-08-02**
-  ([TARGET_IR_REVIEW.md](TARGET_IR_REVIEW.md)). The `AnyType` finding **does**
-  repeat, in `ROCM_{MFMA,WMMA}` and the NVIDIA mma ops; W1.1 grew 3w → 5w
-  accordingly, and four new items landed (W0.9, W0.10, W1.1b, W3.7).
-- The bodies of the 67 `GenerateROCM*Kernel` passes — these need review on the
-  host for ownership classification, with gfx1151 required before any
-  kernel-producing migration is accepted.
-- `emit/nvidia_cuda.py` (4722 lines) internals. `emit/rocm_hip.py` was inspected
-  far enough to establish that it is an arbiter candidate/runner surface, not a
-  drop-in replacement for the canonical MLIR→ROCDL package spine.
-- Spectral implementation details are owned by E2E-REAL-5D/5E/5G and the TSOL
-  physical packages; spectral autodiff is now AD-TSOL-SPECTRAL-1. TPP solver
-  families, collectives/neighbors, and RubinCPX still require separately bound
-  work items before they enter this sequence.
-- Quantization numerics; the KV-cache and memory model.
-- The Evaluator implementation is owned by
-  [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md). It supplies proof and promotion
-  decisions to every slice here; it does not independently set their order.
-- `WarpSpecializationPass` and `AsyncCopyLoweringPass` bodies.
-
-Absence from this plan is not a clean bill of health or authorization to start
-an unbound queue. Add an owning integrated ID when delegated work becomes a
-cross-compiler priority.
-
-### Engineering follow-through — 2026-09-04
-
-Merged snapshots: [PR #721](https://github.com/gstoner/tessera/pull/721),
-[PR #722](https://github.com/gstoner/tessera/pull/722), and
-[PR #723](https://github.com/gstoner/tessera/pull/723).
-The following work remains independently gated; publishing the snapshot does
-not close native/compiler evidence gaps.
-
-| Owner | Current action and acceptance |
-|---|---|
-| APPLE-DISPATCH-WEDGE-1 / telemetry | Scoped telemetry capture restores prior process state, including nested/error paths; two device-clock tests adopted it. An opt-in pytest order tracer records transitions after teardown without resetting them. The original process latch and downstream MoE failures still require the triggering order and exact Metal reproduction. |
-| MSW-9 | Program-pair native evaluator adapter and separate reference composition/identity law family implemented. Graph IR fragment inventory and the actual fusion consumer remain open. |
-| FRONTEND-IR-MEDIUM-1 | PR #721 contains native pre-bucket CSE and narrow source-loop recognition in rank/prune mode. Native instantiation, arbiter consumption, tracer/MLIR raising and attention remain open. |
-| APPLE-DISPATCH-WEDGE-1 | Metal 4 direct wait now stamps timeout kind/message. Branch-specific M1 Max E2E re-seals were recorded in commits `3e0ccb21` (#721) and `9773db8f` (#722); this is separate from timeout fault injection and telemetry-order reproduction. Lowp MoE remains opt-in without a measured ledger row; cooperative rewrite remains open. |
-| DISPATCH-BREAKER cross-backend | CUDA and HIP waits remain unbounded. A replacement must poison the owning context on timeout and retain every outstanding buffer/module/event; adding a polling deadline followed by current synchronous cleanup would still hang or free live storage. First slices should target one owning bridge each, with injected not-ready/error cases before GPU proof. |
-| IKF-1 | Bind `INTRA_KERNEL_FEEDBACK_PLAN.md` here. P0 extends the existing D2 gfx1151 timing probe; P2 waits for green clocks and consumes Schedule-Object region identity. P1 host schema/math is independent. Shared D2 cache insertion/loading and dispatch admission now reject L2/L3 or malformed instrumentation levels. No IR instrumentation is authorized by a scalar clock sample alone. |
-| Toolchain evidence | Assertion-enabled LLVM remains an explicit fleet proof gap. Do not interpret release-build negative tests as assertion-enabled contract falsification. The sandbox/Metal mechanism remains unproven; no claim of its root cause is made. |
-| Apple cross-run decision | Default remains mean ± t·sd/√n. The eight-process M1 Max cohort and predeclared synthetic 1.5x/3.0x slowdowns produced no policy disagreements across 24 decisions. Retain the mean default; the median remains opt-in. See `benchmarks/baselines/apple7_cross_run_policy_20260904/summary.json`. This comparison installs no ledger and does not establish robustness across workloads or physical stalls. |
-| Generated coverage | Decision #26 now assigns coverage evidence to revision-bound CI artifacts: source commit/tree digest, output hashes, run and attempt. The owning generator and semantic tests remain required; missing/expired evidence must be regenerated from the cited revision. |
-
-All numerical/backend promotion remains architecture-owned. The immediate
-reproduction priority is telemetry attribution; a scoped cleanup proves a
-state leak is fixed but does not establish the root cause of the reported
-order-dependent failure.
-
-#### Next acceptance steps after #723
-
-This sequence refines the engineering follow-through above; it does not replace
-the broader central queue or reopen its completed rows.
-
-| Order | Owner and next bounded deliverable | Acceptance before expanding scope |
-|---:|---|---|
-| 1 | APPLE-DISPATCH-WEDGE-1: capture the ordered failing session with `scripts.trace_apple_telemetry`, then minimize the prefix that changes capture state or breaks downstream MoE. | Fresh-runtime reproduction, first transition attributed after teardown, and the minimized order passes after a cause-specific fix. A test passing alone or another scoped state cleanup is not closure. |
-| 2 | FRONTEND-IR-MEDIUM-1: instantiate one optimized matmul recipe for two valid shape buckets through the native compiler. `ParametricRecipe.rank_buckets` currently emits only `BucketRank`. | Both instances bind the same recipe/compiler digest and complete shape witnesses; invalid witnesses fail before lowering; execute against the original oracle on the owning backend. Then connect the resulting native artifacts to arbiter admission. Broader attention recognition follows that working path. |
-| 3 | MSW-9: enumerate the Graph IR envelope for affine composition and ReLU identity extension, then wire one eligible program pair into a fusion candidate's evaluator gate. | `program_pair_equivalence` must see native provenance on both sides; wrong-shape, unsupported-policy and reference-only cases refuse admission. Reference `ann_identity_checks` is the oracle, not production proof. |
-| 4 | DISPATCH-BREAKER: implement one CUDA or HIP bridge's bounded wait with an explicit poisoned-context/resource-retention state. | Inject not-ready, error and timeout before exact-device tests; prove cleanup cannot free live storage or enter another unbounded wait. Migrate sibling bridges only after the owning state machine is sound. |
-| 5 | IKF-P1 host schema/math can proceed independently; IKF-P0 continues cross-CU, monotonicity and read-cost checks on gfx1151. | Validate synthetic slot/clock edge cases for P1; retain WSL regression-only limits on P0. P2/P3 instrumentation waits for the specified clock evidence and Schedule-Object identity. |
-
-The Apple policy experiment is complete for its declared cohort: retain the
-existing default. Lowp MoE ledger admission/cooperative kernel work and an
-assertions-enabled LLVM remain separately owned follow-ups; neither is closed
-by a policy comparison or a fleet visibility probe.
-
-### Archive follow-through — 2026-09-04
-
-The superseded code-review snapshot and typing inventory are archived with
-[owning-audit summaries](COMPILER_AUDIT.md#archive-reconciliation--2026-09-04).
-No new implementation queue is created. Surviving actions remain:
-
-- **W1.1 / foundation F2:** migrate the two tensor-valued MMA constructors in
-  `TileIRLoweringPass` and obtain NVIDIA Target/device proof before deleting
-  the checked tensor-value lane. The old bare-fragment permissive branch is
-  already gone; do not recreate that closed task.
-- **DISPATCH-BREAKER / NVIDIA `P3-SOURCE-ONLY-2026-08-30`:** inject allocation
-  failure in flash-backward cleanup and prove exactly-once release of acquired
-  resources. Recorded normal-path device tests do not establish this case.
-- **`P2-REVIEW-SHARED-PASSES-2026-08-29`:** preserve the existing backend
-  queue obligations and their exact-host acceptance. Reconcile later receipts
-  per row before claiming closure; the P3 closure note is not blanket P2 proof.
-
-Older architecture reviews and overlapping scoped plans remain live during
-reconciliation. Foundation F1 (NVIDIA scheduled matmul Graph re-entry) remains
-the first code migration; archiving neither replaces nor completes it.
-
-
-### Foundation F1 implementation — 2026-09-04
-
-`nvidia_native.package_scheduled_matmul(artifact)` now constructs the descriptor
-from the scheduled launch contract and compiles only its Tile IR. The Graph
-argument, dynamic Graph clone and discarded base-image build are removed.
-Schedule fields and Tile entry ABI must agree with descriptor metadata before
-compilation. The driver records the real adjacent scheduled ancestry.
-
-This is the first bounded migration, not closure of E2E-REAL-3 or all native
-packaging: F2 still owns the remaining Graph package roots and typed producers.
-Validation and exact-device scope are recorded in the NVIDIA queue under
-`IR-NATIVE-FOUNDATION-1`. Physical kernel optimization is outside this cut.
-
-
-### Foundation F2 unary driver migration — 2026-09-05
-
-The first E2E-REAL-5 NVIDIA subset now traverses native Graph → Schedule → Tile
-before packaging: static f32 last-axis softmax and serial rank-reducing
-sum/mean/max on arbitrary axes. The native passes own the launch wrapper;
-Python validates/binds the artifact and does not synthesize a replacement body.
-The established SM120 approximate-exp policy and runtime scalar ABI are retained.
-
-Exact-device old/new numerical and ABI tests, independent Schedule replay,
-policy tampering, and extra-work rejection cover this subset. A discovered
-legacy canonical-reduce kind bug is fixed alongside the differential tests.
-This closes the default-driver migration for that envelope, not F2: direct
-Graph clients, narrow dtypes, min/keepdims/cooperative reductions and other
-backends' remaining package families retain explicit retirement obligations.
-See all four backend queues under `IR-NATIVE-FOUNDATION-1` for evidence boundaries.
-
-
-### F2 direct unary entry points — 2026-09-05
-
-The migrated NVIDIA static f32 envelope now shares one native scheduling path
-between driver and direct package clients. Supported requests require the
-native scheduling compiler; they do not silently reconstruct Tile IR when it
-is absent. Narrow dtypes and min/keepdims/cooperative reductions remain explicit
-unmigrated envelopes, with the old implementation retained privately until their
-own comparisons pass. Direct-client migration is closed for f32 softmax and
-serial sum/mean/max; full constructor retirement remains open.
-
-
-### Next ten unary foundation actions — 2026-09-05
-
-These are bounded cuts under F2 / E2E-REAL-5, in dependency order. Completion
-requires native replay, correct ABI and owning RTX numerical evidence; constructor
-retirement also requires all production callers to migrate.
-
-| Action | Deliverable | State |
-|---|---|---|
-| F2-U1 | f16 scheduled softmax | implemented; RTX parity passed |
-| F2-U2 | bf16 scheduled softmax | implemented; RTX parity passed |
-| F2-U3 | scheduled min reduction | implemented; validated |
-| F2-U4 | keepdims reduction carrier and scheduling | implemented; validated |
-| F2-U5 | f16 input / f32 output reduction | implemented; validated |
-| F2-U6 | bf16 input / f32 output reduction | implemented; validated |
-| F2-U7 | explicit cooperative_128 reduction scheduling | implemented; validated |
-| F2-U8 | retire production Graph softmax constructor | implemented; validated |
-| F2-U9 | retire production Graph reduction constructor | implemented; validated |
-| F2-U10 | close caller inventory, native replay and negative-policy gates | implemented; validated |
-
-F2-U1–U10 implementation evidence: 184 RTX 5070 execute-and-compare cases
-cover f32/f16/bf16 softmax and all 144 combinations of reduction storage, kind,
-axis, keepdims and serial/cooperative policy. New packages match the retained
-test-only baseline and NumPy. Another 24 cooperative cases cover 257-element
-contiguous/strided axes; no performance promotion is inferred. The old
-production unary constructors are removed. Native Schedule replay, policy
-mutation refusal, missing-compiler refusal, one Tile compilation and explicit
-unsupported-adjoint failure are regression gated. This closes the ten bounded
-unary actions, not all of F2: norm, attention, packed matmul and sibling direct
-package migrations remain open in the survey inventory.
-
-
-### F2 norm and forward-attention contracts — 2026-09-05
-
-Owning item: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
-Implemented native SM120 unweighted RMSNorm/RMSNormSafe/LayerNorm scheduling and
-forward attention packaging for f16/bf16/f32 storage. Native replay validates
-the Tile artifact before one target compilation; the driver records real adjacent
-Graph/Schedule/Tile lineage. The two Graph constructors are now test-only baselines.
-
-Attention forward hashes now preserve exact f32 policy bits on all architectures.
-The initial cut refused NVIDIA short-query causal/window masks; F2-A2 below
-removes that restriction after aligning both physical kernels.
-No new backward or saved-LSE support is implied. Numerical parity, not performance
-promotion, is the acceptance criterion for this migration.
-
-Next actions, in dependency order:
-
-1. F2-A2: align NVIDIA ragged forward/backward masks and audit backward float hashes.
-2. F2-A3: native paired saved-LSE migration implemented in the bounded f32 SM120 lane; integrate residual-policy selection separately.
-3. F2-P1: signed INT4 migration implemented; extend scale-layout projections for NVFP4/MX.
-4. F2-S1: bounded paged read migration implemented; replay-SSM and MoE state/workspace contracts remain.
-5. F2-C1: retire sibling direct package constructors using their existing scheduled
-   consumers only where storage, policy and ABI envelopes agree.
-
-The updated survey lists every remaining NVIDIA constructor family and retains
-all five backend package entry points in the broader census.
-
-
-### F2 aligned masks and package contracts — 2026-09-05
-
-Owning item: E2E-REAL-5; synchronization key `IR-NATIVE-FOUNDATION-1`.
-
-- **F2-A2 implemented:** NVIDIA forward/backward Tile kernels use
-  `q + max(Sk - Sq, 0)` for causal and window masks, including saved-LSE variants.
-  Short-query native scheduling is admitted. Backward Schedule identity now
-  encodes exact f32 scale/softcap/dropout bits; regenerate older serialized
-  backward artifacts. This changes no pointer ABI or physical schedule.
-- **F2-A3 contract step implemented; native migration open:** explicit paired
-  packaging checks shape, physical f32 policy, Q/K/V and saved-LSE bindings before
-  compiling either half. Both descriptors carry a checkpoint digest. Unsupported
-  score-modifier aliases and reordered gradient returns are refused. The current
-  Graph forward op has a single native result; the historical Python saved-LSE
-  API has two. Next add a native multi-result checkpoint producer and a consuming
-  Schedule contract, then retire both Python Tile constructors together. A digest
-  does not establish that a runtime LSE buffer came from the specified inputs.
-- **F2-P1 reviewed, native migration open:** packed physical fields now reject
-  lossy/noninteger values and negative offsets before target compilation. Next
-  start with unscaled signed INT4 A/B/i32 output: make native storage packing,
-  packing axis, container strides and output roles part of the Schedule identity;
-  replay the serialized artifact and compare odd-K output on SM120. NVFP4/MX
-  require scale-layout projections before admission. No packed route was promoted.
-- **F2-S1 reviewed, native migration open:** paged-KV bounds no longer coerce
-  strings/floats/bools, and unrelated function returns are refused. Shared replay
-  geometry/span validation rejects noninteger values and overflowing allocation
-  sizes. Next native paged read must retain table bounds and logical start/end;
-  replay decode/flush must share an effects/lifetime contract; MoE must retain
-  multi-entry capacities and workspace ownership. These are separate bounded
-  producer migrations, not another Python wrapper around Graph reconstruction.
-
-Validation includes 18 RTX 5070 attention cases, three forward-save/backward-load
-pairs (both rectangular directions and unmasked), and 13 packed/paged/replay
-regressions on the rebuilt NVIDIA compiler. This is correctness evidence, not
-latency evidence. Princess-Luna runs shared contracts and the existing ROCm
-backward lane (three gfx1151 device cases passed). The focused contract, registry
-and dtype suite passed 510 tests with seven explicit skips; 11 audit tests, three
-native IR fixtures, Ruff, the zero-error mypy ratchet and all 30 generated-doc
-gates passed. Apple owning-host evidence is still separate.
-
-
-### Deleted functionality reassessment — 2026-09-05
-
-Owner: `IR-NATIVE-FOUNDATION-1`; this section routes reassessment into existing
-work items rather than creating a parallel implementation queue. Status: open
-architecture review, not authorization to restore deleted implementations or
-claim new backend support.
-
-Decisions #29/#31 remove unsupported production declarations and competing
-implementations. They do not establish that the underlying semantics are
-unhelpful. A bounded experiment may be retained with an owner, producer,
-consumer and exit criteria, explicitly outside production capability claims.
-The queue stays-deleted gate continues to prevent accidental restoration; change
-it only with an accepted replacement contract and executable positive/negative
-fixtures. No gate is weakened by this planning update.
-
-| Reassessment | Existing owner and priority | Producer, consumer and native boundary | Acceptance evidence |
-|---|---|---|---|
-| Queue/pipeline ownership semantics | W2.4a / CAKE / SO-2, with W5.2 scheduling; next bounded spike | One native staged GEMM or attention producer; existing Tile pipeline/token, role and barrier legality consumers; architecture-owned NVVM/ROCDL lowering. First determine whether current operations already express capacity, acquire/publish/consume/release, slot generation and safe buffer reuse. A separate dialect requires a demonstrated representational gap. | Parse/serialize/replay; reject premature reuse, wrong slot/phase, missing release and illegal effects; execute against the current baseline. Measure device latency, barrier count, shared memory, registers and occupancy on NVIDIA and ROCm separately. No gain is presumed from adding vocabulary. |
-| Native residual-policy consumption | W5.1 / AD D5 / foundation F3; existing high-priority work | Existing demand/retained-residual analysis and selected SAVE/RECOMPUTE/HYBRID plan feed the C++ region adjoint and native package. Do not re-enable the annotation-only EBM pass as a substitute. | Same forward/gradient results and stochastic identity; effectful replay refused; selected policy matches executed save/replay operations. Measure peak retained memory, complete forward/replay/backward work and device latency for each owning family. |
-| Deleted-verifier invariant inventory | W2.4 legality consolidation; bounded correctness audit | Extract useful invariants from deleted ScheduleOps.cpp/Target helpers; map each to current registered ODS/type verification, IRContractLegality or TileDataflowLegality. Canonical producers and their actual lowered output are the inputs. Restore only a missing, still-valid invariant in its current authority. | Disposition for every reviewed invariant: covered, obsolete, intentionally extensible or missing. Missing checks require minimal malformed-IR rejection and valid-production acceptance fixtures. Check compiler cost if an analysis becomes nonlocal; no runtime speedup claim is required. |
-| Native sharding / Shardy integration | W5.4 / W5.4-RESHARD-1 / foundation F3; architecture evaluation | Current typed placement lattice, mesh and explicit reshard SSA feed either native Tessera analysis or an evaluated typed Shardy bridge, then existing Schedule/Tile collectives and backend transport. Assess independently of TPU support. | Preserve partial reductions, local shapes, subgroup identity and nested-region constraints through round trips. Reject unknown metadata rather than silently treating it as replicated. Compare against existing mock-mesh semantics; require owning-host multi-rank packets before native transport or performance claims. Account for compile cost, communication bytes and device latency. |
-| Neighbors/halo pipeline composition | Existing PDE/distributed work, W5.4 and COMP-SCHED-OVERLAP-1 | Existing halo inference, stencil materialization and transport passes produce native dataflow; overlap and target/runtime consumers must carry true-use dependencies through pack/exchange/unpack/compute. Deleted plugin pipeline names are not the deliverable. | One serialized end-to-end stencil workload, correct boundaries and deterministic exchanges; negative dependency/lifetime tests. Compare sequential and overlapped device/transport timelines on the actual multi-rank backend before claiming hidden communication. |
-| StableHLO interoperability | Foundation F1/F3; deferred until a concrete external consumer is named | A bounded canonical Graph export/import boundary, with an identified framework/compiler or differential oracle as consumer. It is not a replacement for the native backend spine and does not reactivate TPU. | Preserve shapes, dtype, numerical policy and effects; explicitly refuse unsupported operations; round-trip and numerical checks with that consumer. Evaluate maintenance/compile cost; no performance benefit is assumed. |
-
-Disposition ledger from the source/history survey:
-
-- Queue MLIR implementation: remains deleted; evaluate ownership semantics above.
-- EBM checkpoint pass: remains experimental and registered, removed only from
-  the default pipeline. Its useful demand-aware behavior belongs to W5.1.
-- Duplicate attention ODS: remains deleted. Canonical `tessera_attn.lse.save`
-  and `lse.load` still exist; F2-A3 must evaluate those before defining another
-  checkpoint vocabulary. Their existence alone does not close native producer
-  or packaging gaps.
-- Duplicate Tile/Schedule dialects, private registration scaffolds, permissive
-  bare fragments and synchronization attribute escape hatches: keep removed.
-  Preserve useful invariants through current typed authorities.
-- Old TPP and scaling/resilience directories: implementations remain under
-  `src/solvers/tpp` and `src/solvers/scaling_resilience`; these are relocation/
-  consolidation cases, not lost capabilities. Likewise, deleting the collective
-  generated-type implementation file is not deletion of async collective semantics.
-- TPU, Metalium, Cerebras and Rubin CPX retirement remains a target-scope decision.
-  Reuse portable ideas only through a named consumer; backend reactivation needs
-  its own requirement, implementation owner and exact-device validation.
-
-Backend assessment: NVIDIA and ROCm own separate physical pipeline/transport
-experiments. Apple needs its own Metal synchronization and residency mapping;
-x86 needs CPU ownership/effect validation, with explicit no-async behavior where
-appropriate. Shared IR proofs do not transfer physical schedules or measurements.
-All four backend queues link this reassessment; implementation remains ordered
-by the existing owners above and the active F2 saved-LSE/packed/stateful sequence.
-
-
-### F2 unary artifact replay correction — 2026-09-05
-
-E2E-REAL-5 / `IR-NATIVE-FOUNDATION-1`, review follow-up to PR #726: native
-Schedule-to-Tile replay is now mandatory in the shared NVIDIA unary package
-consumer, covering softmax, serial/cooperative reductions and norm. Matching
-attributes, entry ABI and a retained schedule hash cannot prove that serialized
-Tile operands still implement the recorded schedule. Regressions mutate source/
-destination operands without changing those markers and require rejection before
-target compilation; missing production `tessera-opt` also fails closed. This
-corrects the earlier F2-U10 replay-coverage claim rather than opening a new queue.
-
-
-### Five-action native ownership loop — 2026-09-05
-
-Owner: E2E-REAL-5 / W2.4 / W2.4a; synchronization key `IR-NATIVE-FOUNDATION-1`.
-This increment supersedes the F2-A3/P1/S1 migration status above for the bounded
-families listed here. It does not close all packed or stateful execution.
-
-1. **F2-A3 implemented:** registered `tessera_attn.checkpoint_forward` yields
-   output and row LSE; `checkpoint_backward` consumes dO/Q/K/V/LSE and yields
-   dQ/dK/dV. Existing `lse.save/load` only transfer an already computed value, so
-   they cannot substitute for the fused multi-result producer. Native
-   `schedule.attention_checkpoint` retains shapes, binding roles, exact f32 scale,
-   causal alignment and hash. Packaging replays Schedule-to-Tile and never
-   reconstructs Graph. The old forward and saved-backward constructors are
-   retired from production. Recompute backward remains a separate migration.
-2. **W2.4 audit:** the deleted file's useful prefetch memory-space allowlist was
-   missing in registered verification; restored with seven valid spaces and
-   three invalid-input tests. Dispositions of the reviewed checks are below.
-3. **W2.4a spike:** existing pipeline depth/stage/phase, roles, allocation roots
-   and completion tokens express the bounded ownership vocabulary. A decorated
-   `mbarrier.try_wait` falsely cleared reuse hazards; a native negative fixture
-   reproduced it before the fix. Only registered completing operations now
-   release that local hazard. No queue dialect is restored. **Still open:** the
-   checker clears pending hazards broadly at waits and walks regions in order;
-   allocation-specific release, control-flow joins and consumer-completion
-   lifetimes need relational analysis. Do not call this full queue ownership.
-4. **F2-P1 signed INT4 implemented:** builtin i4 Graph tensors enter the existing
-   native matmul Schedule. C++ derives signed low-nibble-first byte packing,
-   A-axis 1/B-axis 0, physical shapes, container strides, zero offsets and absent
-   scales in typed packed views. Serialized Schedule replay rejects edited Tile
-   operands before compilation. The fixed runtime entry ABI is preserved.
-   NVFP4/MX scale layouts remain open; no performance promotion occurred.
-5. **F2-S1 bounded paged read implemented:** registered physical `tessera.paged_kv_read`
-   verifies static f32 pages, i32 table, logical interval and output shape.
-   Native Schedule binds read-only borrowing, runtime physical-index validation,
-   layout and names; the package consumes the replayed artifact. Runtime still
-   validates actual table contents. Stateful mutation, replay decode/flush and
-   MoE workspace/lifetime contracts remain separate open cuts.
-
-The canonical driver retains adjacent native Graph/Schedule/Tile lineage for all
-three package migrations. Descriptor identity is not proof that an external LSE
-buffer contains values from the paired forward input. Python remains the
-frontend, descriptor validation and oracle; native C++ owns these Tile programs.
-
-#### Deleted-verifier disposition inventory
-
-History inspected: `e34a59de^` ScheduleOps.cpp and Target/TesseraTargetIR.cpp.
-The old files were unbuilt; comments claiming invariants were not enforcement.
-
-| Historical checks | Disposition and current authority |
-|---|---|
-| Mesh dimensions, axis strings/count; mesh body/symbol; pipeline schedule/microbatches; stage devices | Covered by registered Schedule ODS and ScheduleDialect.cpp. Current checks additionally enforce result/yield roles. |
-| Prefetch destination and overlap | Missing destination allowlist restored in ScheduleDialect.cpp; overlap/type preservation already covered. |
-| Schedule async-copy spaces differ, nonnegative stage; await arity | Covered by Schedule ODS/verifiers. Historical prose claimed known-space validation but the implementation only checked presence/difference. Extending the space vocabulary is a separate contract decision. |
-| Artifact hash/arch; knob name/choices/logit cardinality | Covered by registered Schedule verification; not a second verifier implementation. |
-| Cache kv/pt/ring construction and page-lookup arity | Historical cache scaffold has no active native package producer. Its handle API is obsolete for these tensor package boundaries; do not resurrect it solely for arity checks. New paged-read ODS binds its actual tensor interface. |
-| Tile alloc-shared memref operand; required async-copy/wait stage and two memrefs | Obsolete historical signature. Native tile.alloc returns an SSA buffer; copy/wait use typed tokens. Optional stage nonnegativity already lives in TileOps.cpp. Requiring historical operands would reject real producers. |
-| Mbarrier count/scope, positive arrive bytes, try-wait arity | Active init/arrive/wait ODS and TileOps.cpp cover slots/phase bits/bytes/token shapes; TileDataflowLegality owns pairing and slot agreement. Historical alloc/scope spelling is not the current API. PMV11 compatibility checks must not become a competing native authority. |
-| Atomic order/scope and divergent barrier | Old generic spellings retain PMV11 compatibility checks; current target effects and relational WarpSpec legality own executable semantics. No new atomic support implied. |
-| Reduction op/order strings and unknown-op warning | Obsolete generic reduction helper. Registered reduction kernels have closed operation/storage contracts; the old advisory unknown-op warning is not a useful correctness gate. |
-| Target warp_config positive count/power-of-two warning; smem_layout attr presence | Obsolete standalone target helper spellings. Current typed schedule, layout and backend launch/resource contracts are authoritative; a power-of-two warning cannot replace architecture limits. |
-| Target TMA cp_size positive | Historical descriptor signature obsolete; current descriptor expected-byte and arrival agreement is checked by Tile types/ops and TileDataflowLegality. The old comment about global source memory was never enforced there. |
-
-Validation in this loop: RTX 5070 passed nine native package device cases
-(three checkpoint pairs, two INT4 cases and four paged intervals/invalid tables).
-Princess-Luna gfx1151 passed 39 existing WMMA compiler/runtime tests, including
-native SSA/LDS structure. These are correctness checks. There is no new
-cross-backend latency/occupancy comparison, and the ownership spike's performance
-exit criterion remains open. Apple/x86 physical migrations and owning-host proof
-remain separate. Focused registry, native fixture, lint and generated-doc results
-are recorded with the implementation rather than inferred from these device runs.
-
-Final focused validation passed **438 tests**, including registry, dtype, artifact
-replay, driver lineage and audit lifecycle checks. The separate canonical/consumer
-cohort passed 90 tests with 12 explicit host/tool skips. Both native dataflow/reuse
-fixtures passed, including strict registered parsing for the changed reuse
-fixture. Ruff and the zero-error mypy ratchet passed. The ROCm SSA/LDS compiler
-probe preserved allocation/token ownership through target lowering at one, two
-and four stages; it measures host compiler cost only, not device latency.
-
-### Allocation lifetime analysis and device regression comparison — 2026-09-05
-
-Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`.
-This increment supersedes the blanket-release and preorder-walk limitations in
-the five-action loop for the bounded registered `!tile.buffer` vocabulary.
-
-- Track all pending storage footprints and async accesses per allocation. A
-  typed wait retires only its direct SSA copy producer; a keyed legacy wait
-  retires matching copies. An arrival-only mbarrier wait does not prove buffer
-  completion. Preserve the declared keyless legacy wait-all envelope.
-- Thread barriers retire synchronous write hazards, not outstanding DMA.
-  Check explicit copy destinations, source borrows, premature deallocation,
-  use-after-free, and overlapping writes, including earlier disjoint writes.
-- Merge `scf.if` branches and CFG predecessors by union of may-live facts.
-  Iterate `scf.for` and CFG backedges to a finite fixed point; statically empty
-  and single-trip loops do not invent backedge accesses. Follow supported
-  allocation aliases across structured results and loop carries without
-  recursive cycles. Preserve signed-stride footprint bounds.
-- Unknown allocation origins, unsupported buffer-access operations and region
-  forms fail closed. Loop-carried async tokens cannot release by static producer
-  identity alone: dynamic slot/generation correlation remains open. Function/CFG
-  buffer arguments need an alias/ownership contract before admission. This is
-  not a universal interprocedural lifetime proof or a new queue dialect.
-
-`benchmarks/record_allocation_lifetime_comparison.py` compares baseline and
-candidate compilers on each owning GPU, preserves timing domains, validates
-outputs and requires identical native images. It measures existing native attention/GEMM
-routes, not a new queue schedule. This verifier does not optimize physical
-schedules; selector promotion and occupancy gains are not implied. The older
-memref reuse-group planner and backend consumption of its allocation groups
-remain a separate integration task.
-
-ROCm exact-host results remain in `benchmarks/baselines/allocation_lifetime_rocm.json`.
-The NVIDIA allocation-lifetime comparison is withdrawn: the harness set the core
-compiler variable while native lowering consumed a different compiler variable.
-Its recorded binary hashes did not identify the native lowerers actually used.
-The NVIDIA JSON is now an explicit withdrawal record; new measurements are required.
-
-| Host / workload | Before → after median | Domain / proof |
-|---|---|---|
-| Princess-Luna gfx1151, 512³ f16 direct GEMM | 0.02278 → 0.02217 ms | Synchronized host wall time, not HIP events; relative error 2.28e-6. |
-| Princess-Luna, same GEMM via Tile route | 0.02265 → 0.02234 ms | Same clock/oracle and identical HSACO. |
-
-The ROCm comparison is regression evidence for existing executable paths, not
-device proof of a new queue protocol. No CUDA timing or resource comparison from
-the withdrawn packets is retained as compiler-change evidence.
-
-Validation: 161 native fixtures passed (four feature-gated exclusions), including
-real WarpSpecialization buffer markers and 22 positive/negative lifetime cases.
-The inherited-access rule prevents role-local waits from clearing other roles.
-
-
-### Dynamic completion generations and memref arena proof — 2026-09-05
-
-Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
-This section supersedes the preceding increment's open direct-token, CFG-alias
-and memref-planner boundaries within the following native envelope.
-
-1. **Dynamic completion:** pending accesses carry SSA completion names. Structured
-   branch results, loop initial/carry/backedge/exit edges and CFG forwarding rename
-   those names. Backedges discard expired local names before a new dynamic copy
-   executes; an unforwarded outstanding generation remains pending. Static
-   producer reachability never releases an access. `tile.wait_async` and
-   `tile.dealloc` share a declared-origin resolver with the lifetime verifier.
-2. **Alias contracts:** allocation roots flow through supported structured and CFG
-   identity edges. The memref planner follows cast and view interfaces transitively,
-   retaining the entire backing allocation for unknown/subview offsets. Unknown
-   users and non-linear control flow prevent reuse. Unannotated external Tile
-   buffer ownership remains unproven; this does not add interprocedural noalias.
-3. **Physical consumer:** `TileBufferReusePass` and `TileBufferArenaPass` use one
-   native memref lifetime service. Missing/wrong waits retain in-flight copies
-   through exit; stage and barrier keys both match. Synchronous loads/stores
-   require a thread rendezvous before storage reassignment. The arena consumer
-   rejects forged overlapping groups and pre-existing/escaping/nonidentity aliases,
-   then propagates workgroup address space through supported view/cast chains.
-   Static byte-size and arena-offset arithmetic are checked before materialization.
-
-Native fixtures cover a legal rolling token pipeline, dropped generations,
-branch-result and CFG token forwarding, opaque origins, transitive alias uses,
-missing/wrong/conditional waits, physical arena alias types and forged reuse.
-The real arena consumer is exercised; parser acceptance alone is not the evidence.
-
-**Remaining:** path-sensitive memref group coalescing across branches/loops;
-interprocedural ownership/escape summaries; offset-disjoint subview optimization;
-physical ring slot/phase protocols and architecture-owned performance promotion.
-The existing native GEMM/attention comparison remains a regression workload, not
-measurement of a new ring schedule. Each backend's queue records its own device
-boundary and follow-up; no cross-architecture performance transfer.
-
-
-Validation for this increment: **167 native fixtures passed** (four feature-gated
-exclusions), **252 focused unit/registry/audit tests passed**, Ruff passed and
-mypy remained at zero errors. The ROCm owning-host packet
-`benchmarks/baselines/token_memref_rocm.json` remains valid.
-`benchmarks/baselines/token_memref_nvidia.json` is withdrawn for the same native
-compiler-selection defect as the earlier NVIDIA comparison. No CUDA before/after
-image or timing claim survives from those two records. The separate synchronous
-ring and asynchronous GEMM experiments below are unaffected.
-
-
-
-### Structured-path coalescing, private borrowing and device ring experiment — 2026-09-05
-
-Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
-
-**Native compiler increment.** The shared memref lifetime service now proves
-completion on every `scf.if` path, coalesces opposite arms only with a derived
-workgroup-uniform predicate, and permits loop-local reuse only when accesses
-complete before the backedge. Uniformity follows registered constants, GPU
-block/grid dimensions and deterministic arithmetic; thread IDs and opaque
-arguments do not establish it. The planner checks every member of a reuse group,
-and the physical arena consumer independently uses the same proof.
-
-Private direct calls can borrow memrefs when their bodies and transitive callees
-prove no escape, free, returned alias or outstanding asynchronous access. External
-symbols, recursion and opaque consumers remain unproven. The arena admits these
-calls only with an existing workgroup-space ABI; it does not change a helper's
-signature behind other callers. Native positive and negative fixtures exercise
-both planning and physical `memref.view` materialization.
-
-**Measured ring protocol.** `benchmarks/record_device_ring_protocol.py` emits a
-native MLIR GPU kernel and lowers it through LLVM to NVPTX or AMDGPU. Direct
-streaming and depths 1/2/4 implement identical neighbor-lane math. Shared slots
-carry full generation tags, a publish barrier and a release barrier. Fill/drain
-and wrap tests cover short and uneven trip counts through 257 rounds; an
-intentionally stale generation must fail the output oracle. This is a standalone
-cooperative protocol experiment, not a product Tile ring producer or proof of
-asynchronous transfer/compute overlap.
-
-Five unprofiled trials, 20 repetitions, 64 workgroups of 128 threads and 257
-rounds produced the following medians. The fixed small grid is not an occupancy
-saturation study. Each backend was compiled and measured on its own host.
-
-| Backend / clock | Direct | Depth 1 | Depth 2 | Depth 4 |
-|---|---:|---:|---:|---:|
-| RTX 5070 / CUDA events | 0.037504 ms | 0.048861 ms | 0.049038 ms | 0.049131 ms |
-| gfx1151 / HIP events | 0.078530 ms | 0.132742 ms | 0.120325 ms | 0.129554 ms |
-
-Packets: `benchmarks/baselines/ring_protocol_{nvidia,rocm}.json`. Both numerical
-and stale-generation negative controls passed. CUDA registers were 26 for direct
-and 16 for the rings; API-reported active-block capacity stayed at 12 per SM.
-ROCm reported 11/10/13/11 registers and capacity 16 blocks per compute unit.
-Shared storage was 0/520/1040/2080 bytes; no local-memory allocation was reported.
-API capacity is theoretical, not measured active occupancy.
-
-**CUDA profiler evidence.** Isolated Nsight Compute direct and depth-2 captures
-are exported as `ring_protocol_nvidia_ncu_{direct,depth2}.csv` in the same baseline
-directory. The ring adds barrier stalls (2.017 stalled-barrier warps per issue
-active versus zero); achieved active occupancy stays about 11.1% on this grid.
-Profiler replay times are not the unprofiled event medians above. Nsight Systems
-exports `ring_protocol_nvidia_nsys_{kernels,api}.csv`: the ring kernel median is
-48.048 microseconds across four launches; context creation dominates the short
-process API trace and must not be attributed to kernel execution. Reproduce
-isolated profiling with `--profile-depth 0` or `2` after the normal run has emitted
-its binaries under `--artifacts`; profile-only runs never write timing packets.
-
-**Disposition.** Rings are correct but slower for this streaming experiment on
-both devices. Do not promote a selector candidate or restore a queue dialect on
-these results. Next: connect a real asynchronous producer/consumer to the proven
-release protocol, then measure representative compute intensity and saturated
-grids. General CFG coalescing, symbolic kernel-argument uniformity, recursive or
-external ownership summaries and private-helper ABI specialization remain open.
-
-### Real asynchronous GEMM comparison — 2026-09-05
-
-W2.4a / CAKE / SO-2, `IR-NATIVE-FOUNDATION-1`: the next experiment now uses the
-production SM120 macro-CTA F16 GEMM producer. Its next-panel `cp.async` overlaps
-current-panel MMA; a benchmark-only immediate-wait control preserves the native
-instruction body, two slots and launch geometry. See
-[method, reproduction and evidence](../../../benchmarks/nvidia/ASYNC_PRODUCER_CONSUMER.md).
-
-On RTX 5070, unprofiled resident CUDA-event medians improve 6.1% / 2.9% / 2.3%
-for 512 / 1024 / 2048 square GEMMs. Six shapes pass the numerical oracle. Both
-images have 56 registers/thread, 4 KiB static shared memory and zero spills.
-Native SASS confirms MMA before the deferred wait; Nsight Compute reports fewer
-long-scoreboard stalls. These are single-process observations, not promotion or
-cross-run confidence evidence. Compute Sanitizer cannot initialize the WSL WDDM
-debugger interface; synchronization sanitizer proof remains open.
-
-This closes the useful-compute asynchronous benchmark gap on NVIDIA, but does
-not connect the generic allocation/release-token pass to the macro kernel.
-That integration, sanitizer validation and independent timing repetitions remain
-open. ROCm needs a target-specific async producer; Apple and x86 have no physical
-schedule parity claim. The previous synchronous ring remains a distinct negative
-experiment and must not be relabeled as asynchronous.
-
-### Symbolic kernel uniformity for memref reuse — 2026-09-05
-
-Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
-Reuse assignment and static arena materialization now also visit registered
-`gpu.func` bodies. Scalar entry arguments of actual GPU kernels provide a launch
-uniformity proof; induction values are uniform when all three `scf.for` controls
-are uniform. Arithmetic may propagate that proof. Ordinary function arguments,
-GPU helper arguments, thread IDs and unproven loop-carried values remain unknown.
-A `gpu.kernel` attribute on `func.func` does not override this boundary.
-
-Native `gpu.barrier` releases synchronous memref accesses but never pending DMA.
-The static arena consumer creates the shared global inside the owning GPU module
-and replaces descriptors with address-space-3 views. The dynamic GPU extension
-below supplies the native launch-size consumer; the existing dynamic `func.func`
-path keeps its region-local allocation behavior.
-
-The native fixture checks symbolic loops, induction-dependent exclusive arms,
-real memref loads/stores and GPU barriers, divergent controls, missing release,
-helper and forged-kernel annotations, and dynamic storage. These uniformity
-fixtures establish compiler legality/materialization; the device experiment below
-separately establishes its bounded dynamic-storage workload.
-The remaining symbolic boundary is loop-carried scalar and general CFG uniformity.
-Generic release-token integration with the production async macro kernel,
-external ownership summaries and architecture-owned execution remain open.
-
-
-### Native dynamic GPU storage and owning-device proof — 2026-09-05
-
-Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
-`TileBufferArena` now materializes entry-block runtime-sized GPU scratch through
-`gpu.dynamic_shared_memory`, with workgroup-address-space memref views. Its exact
-layout expression also produces a native `func.func` sizing companion, referenced
-by `tile.dynamic_shared_size`. Local `gpu.launch_func` sites call that companion
-and use its i32 byte count; an explicit count must agree. No Python or generated
-CUDA/HIP expression is the authority for those launch sizes.
-
-Admission is deliberately bounded: actual registered GPU kernels, identity-layout
-scalar-element memrefs, and a size expression derived from kernel arguments or
-their memref dimensions using constants/add/multiply/max/positive-constant divide.
-Every host intermediate must lie in `[0, INT32_MAX]`; the host index must be
-64-bit so the checked arithmetic itself cannot overflow. The driver registers
-upstream DLTI so a supplied data layout is interpreted. Existing independent
-dynamic shared allocation, nested markers, GPU helpers and device-local size
-provenance fail closed. This does not infer a device's physical shared-memory
-capacity; the native runtime still rejects launches exceeding that capacity.
-
-The [recorder](../../../benchmarks/record_dynamic_gpu_storage.py) compiles the
-emitted host companion through LLVM into a native shared library, obtains the
-launch count from that function, and separately lowers the emitted GPU module
-to NVPTX or ROCDL. Negative and oversized extents must abort in fresh native
-processes. Both owning-device packets cover four runtime widths, cross-lane
-scratch reads, publish/release barriers, 17 iterations and 256 blocks, against
-exact output oracles and independently compiled static arenas. Device-event
-samples remain experiment evidence, with no selector promotion or speedup claim.
-
-**Follow-on scope (bounded implementation below):** bind the companion and kernel
-fingerprints together in a production native package; admit path-dependent/nested dynamic storage only with
-a host-evaluable lifetime/size envelope; establish dynamic-size reuse equivalence
-before coalescing unknown-size buffers; extend symbolic loop-carried/CFG uniformity;
-and integrate release tokens with an actual asynchronous producer. Apple MSL
-threadgroup arguments need their own materializer/ABI, and x86 retains its host
-allocation route. See the [experiment report](../../../benchmarks/DYNAMIC_GPU_STORAGE.md)
-for owning-host evidence and timing limits.
-
-
-### Bound native packages, nested dynamic lifetimes and NVGPU completion — 2026-09-05
-
-Owner W2.4a / CAKE / SO-2; sync `IR-NATIVE-FOUNDATION-1`; **landing**.
-The [native storage package API](../../../python/tessera/compiler/native_gpu_storage.py)
-now builds a single immutable pair from compiler-emitted IR. The binding digest
-covers the GPU image, host sizing library, entry symbols, argument ABI, target,
-compiler fingerprints and arena IR. Serialization requires the caller's pinned
-digest on reload; mutations are rejected before native loading. Synchronous
-launches use the loaded companion and the same argument tuple as the loaded
-kernel. Invalid extents return `-1` from native sizing and raise before dispatch;
-`gpu.launch_func` retains a checked assertion for this failure. This supersedes
-the earlier companion's process-abort behavior.
-
-The implemented runtime boundary is a raw device-pointer/index ABI on the
-caller's current CUDA/HIP context. It does not allocate tensors, infer logical
-shape guards, own scheduling, select a route, or regenerate lower-level IR from
-Graph. Callers retain responsibility for pointer sizes and kernel launch geometry.
-The loader owns target-image compatibility; this first build envelope is sm_120
-and gfx1151, with x86 native host companions. It is not automatic JIT/arbiter
-integration or a new general tensor operation.
-
-Uniform `scf.if`/`scf.for` regions now admit dynamic markers when every nested
-lifetime completes before region exit/backedge. Launch-derived size arithmetic
-is hoisted without hoisting payload operations. Disjoint same-type dynamic GPU
-buffers can share a group whose capacity is the maximum member size; unrelated
-groups retain separate offsets. The envelope reserves even untaken branch sizes
-conservatively. Iteration-dependent sizes, divergent control and escaping or
-incomplete lifetimes remain rejected.
-
-Native `nvgpu.device_async_copy` tokens now participate in the allocation proof.
-Only the copy's direct commit-group token, a full drain (absent/zero numGroups),
-and a following GPU barrier establish completion/publication. Missing, partial
-and unrelated-group waits fail closed for nested arena reuse. This admits a real
-NVGPU producer through NVVM `cp.async` into runtime-sized shared storage; it does
-not claim overlap with useful compute or migration of the separate macro-GEMM
-schedule. Loop-carried async token forwarding remains outside this direct-group
-proof.
-
-Owning-device evidence is in the [package report](../../../benchmarks/NATIVE_GPU_STORAGE_PACKAGE.md):
-serialized/reloaded nested packages pass four exact cases on gfx1151 and RTX 5070;
-RTX 5070 additionally passes four async-copy cases and native protocol-negative
-checks. Native sizing rejects oversized requests before GPU dispatch. No timing
-or sanitizer claim is made by this increment.
-
-**Next:** typed tensor/package descriptors and JIT/arbiter consumer wiring;
-path-dependent size selection and iteration-varying bounded envelopes; async
-token forwarding and integration into the production macro-GEMM schedule; and
-ROCm's own physical asynchronous producer. Apple MSL dynamic threadgroup argument
-binding remains separate. Keep existing compiler-comparison tombstones withdrawn.
-
-### Explicit tensor/JIT and native producer integration — 2026-09-05
-
-W2.4a / CAKE / SO-2, synchronization `IR-NATIVE-FOUNDATION-1`.
-The [native tensor/producer report](../../../benchmarks/NATIVE_TENSOR_PRODUCERS.md)
-supersedes the preceding increment's tensor and direct-token limitations:
-explicit tensor/index descriptors now bind native storage packages directly to
-`JitFn`, preserving frontend checks while bypassing Graph regeneration. Native
-allocation extent/device checks precede dispatch; Python equivalence is explicitly
-caller-declared. Automatic lowering/arbiter selection and paired AD remain open.
-
-NVGPU completion follows unanimous branch forwarding and identity loop carries;
-changing backedges remain rejected by generic lifetime analysis. SM120 production
-macro-GEMM emits typed copy/group/wait tokens and lowers through NVGPU-to-NVVM;
-its static two-panel ownership is not inferred by the dynamic arena proof.
-
-Exact-device validation: four tensor/JIT cases each on RTX 5070 and gfx1151;
-six macro-GEMM shapes in both deferred/immediate-wait variants on RTX 5070.
-ROCm uses an ISA-supported register-prefetch producer. Immediate VMEM drains at
-several emitted barriers prevent an overlap claim; direct async global-to-LDS
-is gfx1250-only. Next: ROCm barrier/scheduling ablation, automatic descriptor and
-arbiter production, and changing-generation lifetime proofs. No performance
-policy promotion or Apple runtime parity is implied.
-
-### ABI manifests, paired-program consumption and streams — 2026-09-05
-
-W2.4a / CAKE / SO-2; `IR-NATIVE-FOUNDATION-1`.
-The [integration matrix](../../../benchmarks/NATIVE_STORAGE_INTEGRATION.md)
-records implementation separately from native and device proof.
-
-- Compiler-preserved ABI manifests now generate tensor descriptors and optional
-  Tier-2 arbiter candidates. The existing numerical oracle still gates selection;
-  general Schedule producers must supply their ABI manifests and operation oracle.
-- An existing compiler `NativeJVPArtifact` can bind pinned storage children with
-  full ABI preflight. This is a host-tested consumer, not automatic derivative
-  production or device-proven AD. The production AD planner remains the next
-  producer integration; reverse mode stays unsupported by this adapter.
-- Caller-owned CUDA/HIP streams use event dependencies and retained allocation
-  owners; four exact generated/JIT/arbiter/stream cases pass on each owning GPU.
-  Conflicting submissions through one binding are ordered. External writes still
-  require published producer streams; no concurrency performance claim.
-- Generic token provenance now handles loop-external generation replacement
-  without dropping zero-trip seeds. Fresh loop-issued and rotating generations
-  remain rejected; inter-iteration coalescing is not inferred from static origins.
-- ROCm has a measured immediate-wait ablation: three exact workloads, seven
-  alternating HIP-event samples. The control is 2–4.5% slower in this run, but
-  added instructions and scheduling changes prevent an overlap/promotion claim.
-- Apple MSL uses a shared slot declaration/preflight contract for its existing
-  tiled runtime ABI, including static scratch. Generic dynamic-arena materialization,
-  an Apple-native companion and exact Metal validation remain open. x86 continues
-  to supply host sizing; GPU results do not establish CPU kernel performance.
-
-**Next producer work:** Schedule-authored manifests and operation-specific arbiter
-oracles; storage children from real compiler AD output; rotating-generation
-ownership; independent ROCm profiling; Apple generic dynamic-arena materialization.
-
-
-### Generated AD children, ownership recurrence and Apple arenas — 2026-09-06
-
-W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The
-[follow-up report](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) records the
-bounded implementation and owning-host evidence, superseding the corresponding
-blanket gaps in the preceding section.
-
-- The actual C++ forward-AD SSA product can generate a native storage child for
-  equal-shape rank-one f32 add/mul programs. Four exact primal/tangent cases pass
-  on each GPU owner. General family/Schedule integration and reverse AD remain open.
-- A fixed allocation's seed/iteration/final-drain token recurrence proves reuse
-  after changing generations. Native adversarial tests reject stale or missing
-  completion; five CUDA cases include zero trips and generation-varying input.
-  Dynamic slot selection, permuted aliases and general CFG ownership remain open.
-- The native arena pass emits bounded MSL with a dynamic threadgroup argument and
-  a checked, 16-byte-aligned native sizing companion. Six M1 Max cases pass using
-  native arm64 sizing. Production Metal package/JIT binding and broader operations
-  remain open; this is a materialization/device probe, not route promotion.
-- Five independent ROCm processes now compare an instruction-identical no-wait
-  control: 348 instructions, only five wait thresholds differ, matching resources.
-  Larger workloads favor deferred waits in 5/5 runs; the small case remains mixed.
-  The WSL profiler exposes no PMC metrics/device trace, so stall attribution remains
-  open. No selector threshold or incumbent policy changed.
-
-### Expanded AD and dynamic aliases / resident Apple packages — 2026-09-06
-
-W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The expanded section of the
-[follow-up report](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) supersedes the
-corresponding gaps above:
-
-- AD adds subtraction, stop-gradient and compiler-owned splat constants. Forward
-  tangent mapping now respects requested `wrt` order. Sixteen exact cases pass on
-  each CUDA/ROCm owner. Transcendental, reduction/attention and reverse families
-  still require family-owned lowering and validation.
-- Dynamic memref aliases support a bijective two-slot swap with full copy
-  completion/publication and collective release before every backedge. Seven
-  CUDA cases cover zero/odd/even trips. Pending tokens across swaps, N-slot rings,
-  nested permutations and general CFG ownership remain open.
-- Apple has an immutable shader/native-companion package and bounded synchronous
-  binding to resident Metal tensors; six M1 Max cases pass after serialization.
-  This is an explicit raw ABI with caller-owned extents and geometry. Typed JIT
-  descriptors, arbiter registration and cross-binding stream ownership remain open.
-- ROCm hardware-counter attribution is blocked by the installed gfx1151 WSL
-  profiler: no PMC/SPM counters or PC-sampling agents. Structured capability
-  evidence distinguishes unavailable counters from zero-valued observations.
-
-### Nonlinear forward products, pending swaps and typed Apple JIT — 2026-09-06
-
-W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The newest section of the
-[follow-up report](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md) records:
-
-- Native sigmoid/tanh/composed forward children, using overflow-safe tails and
-  cancellation-safe small-input tanh. Nine numerical cases pass on each CUDA/ROCm
-  owner, including signed zero and nonfinite inputs. Derivatives stay in C++ AD.
-- Coupled pending-token/two-slot recurrences, with exact seed/backedge/final-drain
-  checks. Prefetch may precede current-slot consumption. Seven CUDA cases cover
-  zero/odd/even trips; no speedup is claimed from correctness evidence.
-- Shared manifest validation with an Apple-specific resident tensor adapter and
-  explicit JIT binding. Six M1 Max cases cover keyword calls, lazy rebinding and
-  invalid shapes/scalars. Requested AD fails closed until Apple has a paired ABI.
-
-Next: reduction/attention and reverse AD families; generalized N-slot/nested
-recurrences; Apple paired AD and cross-queue ownership; supported ROCm counter
-capture tied to actual dispatch images. Automatic family/arbiter selection still
-requires semantic oracles. x86 retains host-companion evidence only, without
-inherited GPU compute/AD proof.
-
-### N-slot ownership, reduction/reverse pairs and Metal queues — 2026-09-06
-
-W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. This section supersedes the
-bounded status in the preceding loop; [device packets and scope](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md)
-remain the evidence authority.
-
-- Released bijective N-slot rings and uniformly nested two-slot pending ownership
-  now participate in reuse and arena revalidation. CUDA proves 3/4/8-slot rings
-  and nested pending swaps, including zero/odd/even inner trips.
-- Compiler-generated sum/mean reduction JVPs and residual-free single-input
-  elementwise reverse pairs share a typed, serialized primal/derivative ABI.
-  CUDA, ROCm and Metal each pass 15 cases. Reverse inputs include an explicit
-  output cotangent; the compiler's backward SSA owns the derivative.
-- Apple explicit JIT binding accepts paired packages. Fresh retained shared-event
-  fences order producer blits before consumer AD on separate queues; 12 Metal
-  generations pass. This is correctness evidence, with no selector promotion or
-  overlap/performance claim.
-- Frontend scalar tensors retain rank zero; traced and AST reduce(op=...) emit
-  the canonical kind attribute. This closes actual native parse failures.
-
-Next ordered contracts:
-1. General N-slot *pending* ownership: a bijection alone is insufficient. Track
-   token-to-allocation generation mappings through every nested backedge, seed,
-   zero-trip path and final drain; reject incomplete or stale mappings.
-2. Reduction VJP: separate primal and cotangent shapes in the physical ABI,
-   implement scalar-to-vector broadcast from compiler backward SSA, and prove
-   both output extents. Current reverse native children require equal shapes.
-3. Attention AD: Tessera_FlashAttnOp lacks TangentInterface and AdjointInterface.
-   Start with dense deterministic Q/K/V and paired saved-LSE/mask contracts,
-   then causal/bias variants. Keep dropout RNG and cache effects explicit;
-   never infer support from the existing hand-written backward packages.
-   Use row/tile cooperative schedules rather than extending lane scalarization
-   into quadratic materialized score matrices. Validate primal, JVP and VJP
-   against independent oracles on each owning backend before arbiter enrollment.
-4. General reverse residual/tape ABI and automatic family/arbiter generation.
-5. Cross-queue resource ownership beyond explicit Metal fences, CUDA/HIP event
-   parity, and measured overlap with hardware attribution where available.
-   x86 remains the host companion; no GPU execution proof transfers to it.
-
-### Pending rings, mixed-shape reverse and attention products — 2026-09-06
-
-W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. The
-[latest follow-up evidence](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md)
-supersedes the previous next-action list:
-
-1. N-slot pending ownership is implemented for a single outstanding copy and
-   a proven bijective slot/token destination mapping, including uniform nesting.
-   CUDA validates 3/4/8 slots. Multiple outstanding generations and general CFG
-   joins still need a set of generation-specific ownership facts.
-2. Sum/mean reduction VJP and independent primal/cotangent tensor widths are
-   implemented and measured for correctness on CUDA, ROCm and Metal.
-3. Dense-f32 attention reverse and V-only forward interfaces are implemented
-   using existing registered checkpoint operations; LSE is explicit and recomputed
-   under one causal/scale policy. This is compiler-IR evidence, not device AD
-   closure. Next: schedule compound products, persist forward LSE with generation
-   identity, then add Q/K forward products and bias/dropout/cache policies.
-4. Straight-line SAVE residuals now feed the fused native backward from forward
-   SSA; multiple public primal outputs cannot masquerade as saved residuals.
-   External persistent tapes and nested control-flow/state tapes remain open.
-5. Five-process Metal queue measurements establish overlapping command timestamp
-   intervals for matched independent work, with exact numerical results. They
-   do not establish simultaneous instruction issue or a selector-worthy speedup.
-   CUDA/HIP event parity and backend-specific counter attribution remain open.
-
-Keep compiler builds separate from tests: pin the validated executable before
-starting a suite, record its digest, and avoid re-linking under running tests.
-
-
-### Outstanding cohorts and saved attention LSE — 2026-09-06
-
-W2.4a / CAKE / SO-2; **IR-NATIVE-FOUNDATION-1**. This supersedes the
-single-pending and recomputed-LSE boundaries above. See the
-[implementation, measurements and next architecture boundaries](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
-
-- Multiple matched pending cohorts now carry distinct generation ownership
-  facts. RTX5070 validates 2/3/4 outstanding copies under uniform nesting;
-  arbitrary CFG joins and head-only FIFO waits remain open.
-- Paired attention forward now returns LSE and backward consumes that explicit
-  residual. This closes compiler SSA persistence, not device-owned tape storage.
-- CUDA/HIP matched queue experiments have exact numerical and event evidence;
-  CUDA additionally has Nsight kernel intervals and an isolated counter sample.
-  ROCm hardware attribution remains open, and no selection policy changes.
-- Next ordered work: owned persistent tape frames and split native products;
-  nested invocation/state ownership; cooperative Q/K JVP lowering with its native
-  consumer; attention package/LSE generation binding; production queue and
-  fresh-process hardware attribution. Do not register an unsupported attention
-  product merely to advertise an interface.
-
-MSW status rechecked: MSW-5/6/7/8 are implemented in the reference lane;
-36 focused tests, both tutorials and all 15 ANN reference-spike checks pass.
-MSW-9's design spike and native program-pair evaluator adapter are implemented;
-fragment/parameter extraction and the fusion candidate consumer remain open.
-These statuses do not imply native backend closure for the math examples.
-
-
-### Persistent snapshots and generated checkpoint packages — 2026-09-06
-
-W2.4a / CAKE / SO-2 / MSW-9; **IR-NATIVE-FOUNDATION-1**.
-
-- CUDA/HIP reverse packages now expose `NativeStoragePair.capture`: owned
-  snapshots survive source mutation, repeated backward results have distinct
-  allocations, and nested invocation frames release with their parent. Twelve
-  cases per GPU validate square/tanh/sum/mean. This is synchronous recomputation
-  from snapshots, not higher-order AD or a lowering of nested control-flow tapes.
-- Paired AD can export an isolated forward/backward attention checkpoint with
-  canonical physical argument order and full paired-IR provenance. It feeds the
-  existing native Schedule/Tile and NVIDIA package paths without Graph rebuilding.
-  Six RTX5070 cases validate forward, LSE and Q/K/V VJP for causal/noncausal and
-  unequal-length inputs. The host-buffer bridge persists LSE between calls;
-  resident attention tape ownership and Q/K JVP remain open.
-- MSW-9 has bounded immutable fragment extraction and an explicit composition
-  candidate gate. Automatic fusion discovery, executable-to-fragment identity
-  and backend promotion remain open; reference evidence never supplies native
-  provenance.
-- Incoming native Ubuntu26.04 RX9070XT profiling uses **gfx1201**, not gfx1200.
-  The [commissioning plan](../backend/rocm/NATIVE_RDNA4_COMMISSIONING.md) includes
-  a read-only probe, assertions-enabled compiler build, rocprofv3 and Systems
-  Profiler capture. Hardware/counter validation awaits the actual host.
-
-Next: split native forward/backward packages to avoid recomputation; integrate
-saved-state control-flow frames; implement cooperative attention Q/K JVP with a
-registered native consumer; bind resident LSE generation ownership; connect ANN
-inventories to automatic fusion candidates; commission gfx1201 counters.
-
-Q/K JVP algorithm spike: `tools/attention_jvp_spike.py` maintains rescaled
-normalization/value/directional-score moments per row. Seventeen reference
-cases cover Q-only, K-only, combined directions, block-size variation, extreme
-logits and empty masks. It avoids full score materialization. Native tangent
-registration is deliberately unchanged until the cooperative consumer exists.
-The saved-LSE variant should consume the same generation's output and LSE,
-compute `sum(P*dS*V + P*dV) - O*sum(P*dS)`, and share the canonical mask policy.
-
-
-## 2026-09-06 native ANN composition and resident attention generation
-
-Owner: W2.4a / CAKE / SO-2; MSW-9. Sync: **IR-NATIVE-FOUNDATION-1**.
-
-Implemented this increment:
-
-- `AttentionCheckpointPair.capture(q,k,v)` binds the existing native forward and
-  backward images directly to CUDA allocations. The frame copies Q/K/V into
-  private device storage and retains the exact forward-produced natural-log LSE.
-  Repeated backward calls use that generation and return independently owned
-  results. Dtype, strides, full allocation bounds, CUDA context, image/descriptor
-  ABI, shape guards and pair policy are checked. Close invalidates views and
-  unloads images; failed backward allocations do not reclaim earlier results.
-  Six RTX 5070 cases cover both causal modes, unequal sequence lengths, caller
-  input mutation and repeated backward. This is synchronous correctness evidence,
-  not stream overlap, kernel speedup, or sibling-backend execution proof.
-- `tessera-canonicalize=ann-reassociate=true` now automatically recognizes a
-  single-use two-affine chain in native MLIR and folds constant weights and
-  constant matrix biases with deterministic fp32 arithmetic. No replacement
-  GraphIRModule or hand-written backend source is generated. Runtime parameters,
-  intervening activations, transposition, policy overrides, nonfinite folding and
-  excessive folding work refuse. The option defaults off because association
-  changes rounding. This establishes a native MSW-9 fusion consumer for frozen
-  inference constants, not automatic JIT/arbiter promotion or trainable fusion.
-
-The next architecture work remains open, with these concrete boundaries:
-
-1. **General nested control-flow tapes:** replace NativeStorageJVP's hard-coded
-   two-output scalarizer with a split forward/backward product ABI. The ABI must
-   carry every residual's dtype, full shape, ownership and indexing; nested loop
-   state requires an iteration path, valid extent and branch selection, not just
-   a stack of invocation frames. Preserve zero-trip and untaken-region behavior.
-   Lower compiler-produced tensor tape reads/writes before accepting a new family;
-   never infer a backward from an independently replayed control path. Establish
-   allocation-size overflow checks and fail-before-launch capacity checks.
-2. **Native Q/K JVP:** retain the paired O/LSE generation and lower
-   `sum(P*dS*V + P*dV) - O*sum(P*dS)`, with
-   `dS = scale*(dQ*K + Q*dK)` and `P = exp(S-LSE)`. The row consumer must use the
-   exact `end_aligned_v1` mask and grouped-head mapping of forward. A registered
-   tangent producer must ship with a real bounded-storage native consumer and
-   exact-device finite-difference cases. The streaming Python spike remains a
-   numerical oracle; V-only is still the public native tangent interface.
-3. **Resident concurrency and siblings:** use completion-owned allocation
-   generations before adding stream submission; private allocations alone do
-   not establish concurrent lifetime safety. Add HIP/Metal ownership on those
-   hosts independently. x86 needs its own host tape execution path.
-4. **ANN promotion:** connect frozen parameter materialization and explicit
-   reassociation policy to pipeline selection, then require native original/fused
-   program-pair comparison and performance evidence before arbiter promotion.
-   The earlier Python fragment view is an inventory, not executable identity.
-
-Evidence: [loop8 implementation and validation](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
-
-## 2026-09-06 typed nested exports and resident score tangents
-
-Owners **W2.4a / CAKE / SO-2**, **MSW-9**; synchronization key
-**IR-NATIVE-FOUNDATION-1**. This section supersedes the loop8 next-step status.
-
-- `tessera-autodiff-paired=export-product=forward|backward` exports native
-  products with a compiler-produced, full-type residual ABI and common paired
-  lineage. Saved if/while products and nested SAVE loops retain native regions.
-  Nested pullbacks now receive their cloned region residuals; statically empty
-  positive-step loops are removed before tape sizing. This closes the export
-  boundary, not general device tape lowering: nested inner residuals may be
-  reconstructed from the saved outer state. General persistent device tapes
-  still need allocation ownership, tensor tape lowering, dynamic iteration-path
-  indexing, capacity checks and backend execution proof.
-- Explicit CUDA resident `prepare_jvp`/`jvp` products now implement Q, K and V
-  directions through native GPU MLIR, shared-memory reduction and the saved
-  forward O/LSE generation. The bounded consumer uses grouped heads and the
-  same end-aligned causal mask. The automatic FlashAttnOp TangentInterface is
-  still V-only; wiring this consumer into automatic AD remains open. This
-  consumer recomputes scores for each output column; it is correctness evidence,
-  not a hand-tuned performance candidate.
-- Resident backward launch sizing now covers the concatenated dQ/dK/dV range.
-  The 129-key case exposed the old maximum-of-ranges grid under-launch.
-- Arbiter exact-cache reuse and incumbent retention now require admissible
-  selection evidence, including explicit eligibility and timing separation.
-  Malformed or ineligible cached records trigger a fresh comparison. This is a
-  shared admission prerequisite; no ANN candidate was promoted. MSW-9 still
-  needs frozen-parameter native candidate registration, policy-bound identity,
-  original/fused backend comparison and measured selection evidence.
-
-See [loop9 evidence and backend boundaries](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
-
-
-## 2026-09-06 control-flow contract correction and automatic score JVP
-
-Owners W4 / W2.4a / CAKE / SO-2; sync **IR-NATIVE-FOUNDATION-1**.
-`docs/spec/CONTROL_FLOW_CONTRACT.md` now distinguishes frontend acceptance,
-portable control-to-SCF lowering, native packaging and owning-device proof.
-The previous Apple-only sentence contradicted ROCm support; the table also
-omitted cooperative ROCm paths, bounded native x86 state-machine proof and narrow handwritten CUDA control helpers, and confused incomplete direct CUDA graph packaging
-with absence of native CUDA control flow. Historical CF0–CF4 narrative is
-replaced by the active ownership links; this changes no backend execution state.
-
-The FlashAttnOp TangentInterface now emits a registered internal
-`checkpoint_jvp` for Q/K directions, with a same-producer O/LSE verifier and
-explicit inactive tangent slots. `export-attention-jvp` accepts one isolated
-attention function with direct argument/return mapping. The resident CUDA
-consumer lowers this native contract and binds its product digest into package
-identity. Eight CUDA cases / 32 directions pass analytic and finite-difference
-oracles. Generic JIT compositions and sibling backend consumers remain open.
-
-Persistent snapshot allocations now check byte overflow before allocation;
-partial backward allocation failure rolls back only the attempted outputs.
-This closes a lifetime defect, not general persistent nested tensor tapes.
-The next tape implementation must replace NativeStorageJVP's combined
-forward/recomputed-backward scalarizer with two independently callable native
-products: bufferize full typed residual outputs, preserve iteration-path and
-valid-extent indexing, then retain those allocations until all backward users
-complete. Start with static nested SAVE loops; reject dynamic capacities until
-native size derivation and fail-before-launch checks exist. A host-only arena
-or another residual inventory would not close this item.
-
-Evidence: [loop10](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
-
-
-## 2026-09-06 split persistent tensor tapes and JIT-owned Q/K programs
-
-Owners **W4 / W2.4a / CAKE / SO-2**; sync **IR-NATIVE-FOUNDATION-1**.
-The first physical split-tape consumer now runs fresh native forward and backward
-products independently. Upstream one-shot bufferization preserves full f32 tensor
-residual shapes; readonly product inputs prevent in-place mutation of retained
-snapshots. The new `tessera-native-tape-to-gpu` pass materializes bounded static
-for/if bodies with per-iteration-path temporary slots. Backend-owned allocation
-addressing is explicit: generic allocas for NVVM and private address space 5 for
-AMDGPU. Repeated backward calls consume retained forward residuals and produce
-independent outputs. The owning frame retains all allocations until explicit
-close. These synchronous, serial GPU entries establish correctness, not a
-parallel schedule or performance improvement.
-
-The public JIT object now exposes `compile_persistent_device_tape` for reverse
-requests and `compile_native_attention_jvp` for isolated SM120 forward attention
-requests. The latter traces the function, runs native AD, binds the same resident
-forward O/LSE generation and accepts tangent arguments in `wrt` order. Dense
-three-tensor, dropout-free attention now emits its required head dimension and
-precise pure effect; cache, dropout and unrecognized forms remain conservative.
-
-Remaining: dynamic/mixed-type residual capacities (including saved predicates),
-persistent while/general control tapes, concurrent backward retirement, parallel
-physical tape schedules, composed automatic attention AD and sibling native
-attention consumers. Static f32 slots are limited to 1024 elements each and
-logical temporary storage to 4096 bytes. Native for/if acceptance does not imply
-that every frontend control-flow or saved-state form fits this envelope.
-See [loop11 evidence](../../../benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
-
-
-## 2026-09-06 domain and autodiff documentation consolidation
-
-The scoped [AD execution plan](AUTODIFF_EXECUTION_PLAN.md) now owns remaining
-P0–P6/A–B/D/AD-NEXTGEN acceptance gates. The three prior documents are archived
-as superseded designs, with small routing files preserving source links. Their
-uncompleted work is transferred, not marked complete. W4/W5.1/W6 sequencing and
-IR-NATIVE-FOUNDATION-1 remain the active owners.
-
-The [domain audit](../domain/DOMAIN_AUDIT.md) and
-[GA/EBM review](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) correct stale manifold,
-grade-consumer and CPU-performance claims. The next domain sequence is W3.6
-batched GA/native rotor consumption; W3.5/W4 typed energy/gradient programs;
-W5.1/W2.4a resident state and measured policy; W6.4 native finite-algebra lowering.
-No independent domain emitter or rematerialization stack is commissioned.
-
-[Target IR review](TARGET_IR_REVIEW.md) now recognizes the x86 dialect, semantic
-string constraints and mixed native/compatibility ownership. Standalone loose
-matrix contracts and spelling-only smoke tests remain real scoped gaps.
-`CORE_SUBSTRATE_VIEW.md` was reviewed without modification; the
-[compiler audit](COMPILER_AUDIT.md#2026-09-06-substrate-review-and-ad-consolidation)
-records its outdated status/ownership passages. This update changes no target
-execution status and adds no new device/performance claim.
-
-
-## Functional-analysis contracts — consolidated ownership
-
-Updated 2026-09-06. This section replaces the independent FA-1–FA-7 execution
-sequence. The [archived design](archive/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md)
-retains the mathematics and original IDs. These are remaining tasks, not new
-support claims. Numerical-policy transport is an existing foundation;
-composable error bounds are an additional analysis obligation.
-
-| Item and owner | Remaining work and dependencies | Acceptance gate |
-|---|---|---|
-| **FA-1 — numerical legality / evaluator and arbiter** | First deliver one bounded reduction or fused-epilogue consumer. Extend NUMPOL-CARRIER-1 semantics with explicit norm, admissible domain, shape/reduction length and absolute error budget; preserve analysis facts across native MLIR boundaries. No independent Python production lowering stack or unused coverage axis. | A real candidate is accepted/refused using the budget. Composition checks perturbed intermediate-domain containment and uses justified downstream Lipschitz constants. Reduction bounds enforce their accumulation-algorithm, Ku < 1 and under/overflow assumptions. Unknown bounds fail closed for budget-based promotion. Oracle evidence, analytic bounds and device measurements stay distinct; norm-to-tolerance conversions are explicit. |
-| **FA-2 — AD-LAW / AD-CLOSEOUT-1** | Reuse the implemented adjoint and canonical-forward laws; carry only public debug adapter, norm-aware tolerance and derivative-coverage evidence integration into AUTODIFF_EXECUTION_PLAN.md. Does not wait on invention of FA-1 or a new harness. | Planted incorrect and matched-incorrect derivative pairs remain detected; coverage changes cite the actual law result and evidence tier. Public adapter tests exercise the existing engine. Amend the coverage contract explicitly before tightening automatic status transitions. |
-| **FA-3 — spectral family / numerical legality** | Audit existing spectral laws, then fill normalization, window/domain and multiplier-bound gaps. Error-budget consumption depends on FA-1; independent oracle coverage does not. | FFT normalization and adjoints agree; STFT/ISTFT round trips declare window/overlap assumptions. A spectral transformation consumes a justified multiplier bound, with negative legality cases and native-boundary preservation. Existing adjoint tests alone do not close this consumer. |
-| **FA-4 — sequence-mixer stability** | Sequence-mixer plan owns recurrence/discretization-specific certificates and eventual op wiring. No new generic certificate registry without a recurrence consumer. | Domain and timestep assumptions are checked; nonnormal transient amplification and discretization-specific stability are covered. Reference oracle and native-device execution remain separate evidence. |
-| **FA-5 — functional-calculus admission, deferred** | Require a named workload and a specific missing operation before reopening broad admission. Reuse spectral/solver owners; not a prerequisite for FA-1/2/3/6. | An admission proposal names semantics, domain, derivative rules, native producer/consumer and measurable benefit. An abstract common interface is insufficient. |
-| **FA-6 — approximation legality / arbiter, consumer-gated** | After FA-1, attach norm-specific truncation bounds to an actual low-rank substitution candidate. Preserve the distinction between exact factorization and approximation. | Candidate selection respects the caller's budget and composition domain; over-budget substitutions reject. Sampled estimates cannot masquerade as certified upper bounds, and no automatic tolerance relaxation is allowed. |
-| **FA-7 — PDE/forms, deferred** | Reopen under PDE_STENCIL_CAPABILITY_PLAN.md only when a solver or rewrite needs coercivity. | Concrete discrete operator, boundary/domain hypotheses and a certificate-consuming solver or transformation. |
-
-Order: FA-1's bounded consumer first; FA-3/FA-6 numerical promotion builds on
-it. Existing AD and spectral law improvements proceed independently. FA-4 is
-sequenced by its domain owner; FA-5/FA-7 are explicitly deferred. Introduce
-registry/schema changes together with their first consumer and focused drift
-gates. CUDA, ROCm, Apple and x86 each require their own lowering-preservation
-and exact-device evidence before hardware promotion; this consolidation changes
-no backend support state or physical schedule.
-
-
-## F0 census correction and current next steps — 2026-09-06
-
-This update supersedes older summary counts, not their historical evidence.
-The frontend-authority dashboard currently has nine missing NVIDIA family rows
-and Apple normalization; older eight-row paragraphs are historical. Future
-status reports should read the generated rows rather than duplicate this total.
-A declared certification path is not an emitted exact-device certificate.
-
-The package census now includes Apple GPU alongside Apple CPU and the three
-other native package modules. Unannotated, `Any` and raw-IR inputs no longer
-count automatically as compiled artifact consumers. Computed classifier returns
-are exposed explicitly; Apple primitive membership remains unclassified rather
-than being inferred from incomplete literals. Typed artifact inputs still need
-semantic consumer/replay verification before migration closure. Missing source
-modules fail the census instead of shrinking its denominator.
-
-F0 remains landing: resolve computed Apple family membership from the live
-producer, make family-to-compiled admission target/envelope aware, then join
-actual driver/plugin call paths and artifact lineage. This bounded census fix
-adds no backend execution support. After the relevant family's census is sound,
-F2 migrates its remaining Graph constructor and F3 instantiates one optimized
-matmul recipe for two witnessed buckets. PR #721's pre-bucket optimization and
-narrow source-loop recognition are implemented foundations, not unstarted work.
-
-Preserve PR #732's bounded tapes, resident Q/K JVP and ANN extraction/native
-constant composition; their generalization and measured promotion remain open.
-The recomputed-tape scratch-retirement follow-up is implemented with repeated
-backward and failure-path allocation regressions. The active AD plan and FA-series
-consolidation own the remaining native product and numerical-legality work.
-
-
-### F0 Apple family domains and native unary ancestry — 2026-09-06
-
-The census resolves the known Apple CPU computed return from the producer's
-value/low-precision symbol tables and Apple GPU `value_*` returns from the
-ready-descriptor table minus dedicated-family exclusions. Unknown expressions
-remain unresolved. These are family-domain candidates, not proof that every
-shape/policy is admitted. Apple primitive-membership joins remain explicitly
-unverified; resolving names does not authorize coverage promotion.
-
-A family-to-scheduled mapping now requires the corresponding consumer to exist
-in that target's package module. In particular, Apple CPU matmul does not inherit
-Apple GPU or x86 scheduled coverage. This is a necessary structural gate;
-full driver/plugin control-flow and envelope joins remain F0 work.
-
-Apple scheduled softmax/reduction now replays the retained Schedule through
-native `--tessera-schedule-to-tile`, requires exact equality with the supplied
-Tile product, and checks the native module's apple7/apple_gpu identity before
-runtime lookup. A changed operand pair or relabelled x86 parent is refused even
-when the previous structural validator accepts it. Direct packaging therefore
-requires the production `tessera-opt`; synthetic descriptor tests explicitly
-stub replay and do not count as compiler proof. Native positive/negative replay
-runs on the WSL compiler host, not as new Metal execution evidence.
-
-Next: verify descriptor-field projection and extend the same ancestry obligation
-to remaining Apple matmul/attention consumers before retiring their Graph
-constructors. Reuse each native parent and preserve library-vs-generated-body
-provenance. No other backend's runtime, capability or promotion state changes.
-
-
-### Descriptor projection and seven-program continuation — 2026-09-06
-
-Owning key: **F0 / IR-NATIVE-FOUNDATION-1**. Apple GPU unary and plain
-rank-two matmul packages now check descriptor geometry, tensor types, supported
-layout/arithmetic policy and tile decisions against native-printed Schedule IR.
-Schedule-to-Tile replay now also gates matmul and forward/backward attention
-before runtime lookup. Unary buffer names remain explicit host binding aliases;
-they are not claimed as serialized SSA provenance. The projection reader accepts
-the current bounded native printer grammar and rejects unsupported forms.
-
-This closes a bounded package-boundary defect, not canonical ownership as a
-whole. Attention descriptor projection, dynamic/epilogue matmul projection,
-complete shape-policy route joins and remaining Graph constructors stay open.
-Compiler replay evidence is separate from Metal execution and performance.
-Princess-Luna's LLVM 23.1.1 reports assertion mode `OFF`; its passing tests do
-not satisfy the assertions-enabled MLIR gate.
-
-Continue in this dependency order, preserving each program's existing owner:
-
-1. **Canonical ownership / descriptor projection:** finish attention and dynamic
-   descriptor fields, then migrate the next Graph constructor with independent
-   target ancestry and owning-device comparison. Retain library/generated-body
-   provenance rather than equating a typed wrapper with compiled execution.
-2. **General AD execution:** dynamic/mixed/while persistent tapes and asynchronous
-   retirement, followed by composed attention, batching, sparse derivatives and
-   native higher-order products. Bounded PR #732 products remain bounded.
-3. **Optimization integration:** native optimized-recipe instantiation and native
-   ANN evaluation before selector-grade measured promotion.
-4. **Numerical legality:** carry FA-1–FA-7 error-budget composition into concrete
-   spectral/approximation consumers; metadata alone cannot establish legality.
-5. **Runtime resilience:** bounded CUDA/HIP waits must define context poisoning
-   and retain resources until completion is known, including timeout tests.
-6. **Evidence infrastructure:** obtain an assertions-enabled native compiler,
-   finish route/envelope inventories and reconcile authored summaries against
-   revision-bound generated evidence. Device proof remains architecture-owned.
-
-These remain active programs; this implementation does not close their broader
-execution or performance gates.
-
-
-### Attention projection and static softmax migration — 2026-09-07
-
-**F0/F2 / IR-NATIVE-FOUNDATION-1:** Apple forward/backward attention packaging
-now projects rank-four tensor signatures, dimensions, storage, numeric modifiers,
-bias presence, LSE policy and scheduling fields from native-printed Schedule IR
-after exact Schedule-to-Tile replay. Host buffer aliases remain explicit and
-must be distinct. Backward's public function name is a source alias; its native
-entry is synthesized and the library symbol is fixed by the verified storage ABI.
-Floating attributes are compared at the native f32 precision.
-
-Static f32 `package_softmax(GraphIRModule)` now acts as a compatibility frontend:
-it invokes the shared native lowering and artifact consumer instead of building
-a descriptor and placeholder Tile text from Graph fields. The f16/bf16 branch
-remains historical. This is a bounded constructor migration, not deletion of
-the Graph entry API or proof that every package is IR-owned. The scheduled
-consumer now owns f32 provenance even when reached through the legacy entry.
-Missing native compiler support fails rather than reconstructing a package.
-
-WSL native compiler and descriptor tests validate the boundary; no new Metal
-execution/performance evidence is claimed. A follow-up probe found that Apple
-f16/bf16 backward's forward companion is rejected by the current native
-Graph-to-Schedule pass despite the runtime variant table. That producer gap
-must close before claiming low-precision paired package support. Remaining:
-full operand/region semantic projection, low-precision softmax migration and
-owning-device differential proof before removing historical constructors.
-
-
-### Low-precision Apple native closure slice — 2026-09-07
-
-**F0/F2 / IR-NATIVE-FOUNDATION-1:** static f16/bf16 softmax now follows the same
-native Schedule/Tile consumer as f32, with storage-derived ABI, alignment and
-buffer types. The historical static softmax descriptor constructor is removed;
-the public Graph entry remains a compatibility frontend to native lowering.
-Apple low-precision attention's forward recompute companion is now admitted by
-Graph-to-Schedule when its function carries the recompute checkpoint contract.
-Standalone low-precision forward runtime packaging is still refused.
-
-The new native compiler passed WSL projection tests. Exact-device differential
-checks on the M1 Max passed for f16 and bf16 softmax and causal GQA backward,
-including all three gradients, using a freshly compiled runtime and requiring
-`native_gpu` for every launch. See
-[the bounded evidence packet](../../../benchmarks/apple_gpu/lowp_native_differential.json)
-and `tests/unit/test_apple_lowp_native_contract.py` for shapes, tolerances,
-source/compiler/runtime hashes and reproduction assertions. Native compilation
-ran on Princess-Luna over SSH; execution and numerical proof belong only to the
-Mac. This is correctness evidence, not timing or selector promotion.
-
-Remaining: biased/noncausal and broader-shape low-precision device coverage,
-full semantic operand projection, and subsequent Graph-owned families. The
-assertions-enabled LLVM gate remains open.
-
-
-### Broader Apple coverage and measured runtime promotion — 2026-09-07
-
-**F0/F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1:** six additional M1 Max
-package differential cases passed: MHA/GQA/MQA, B=1/2, Sq=7/9/17/19,
-Sk=7/19/33/65, D=16/32/64/128, causal/noncausal, fp16/bf16 unbiased and fp32
-biased. All dQ/dK/dV outputs were checked against a float64 analytic VJP and
-every launch required native GPU placement. Low-precision compiled bias remains
-explicitly refused: native IR specifies fp32 bias while the runtime variant
-requires storage-typed bias. Silently quantizing it would change the program.
-
-Five independent, paired/interleaved runtime benchmark processes (seven trials,
-ten repetitions) validated all three routes on the existing six-case closure
-matrix. The strict median-order-statistic gate promoted `split_reduced` over
-`serial_recompute` for six exact shape/dtype keys in both timing domains.
-Across the recorded per-run medians, device speedups were 5.25–22.55x and
-host-input/output end-to-end speedups were 4.26–16.72x; these ranges describe
-these fixtures only. Atomic was measured but was not the selected winner.
-
-[Raw reports and coverage](../../../benchmarks/baselines/apple_backward_20260907/)
-and the [strict family ledger](../../../benchmarks/baselines/apple7_attention_backward_strict_v2_route_ledger.json)
-retain distinct timing domains and exact context. The backward route-policy
-resolver now defaults to this dedicated ledger, preserving explicit global and
-per-call overrides. Live validation accepted 12 rows, refused a changed runtime
-fingerprint, and retained serial when the split workspace exceeded the cap.
-This promotes the measured **runtime-route policy**; compiled artifacts still
-bind their declared fixed two-way split and these reports do not establish
-package-subgraph performance. Biased BF16 direct-runtime evidence uses BF16
-bias and is not evidence for compiled fp32-bias inputs.
-
-Remaining: mixed-storage bias ABI/projection, package-level promotion evidence,
-unmeasured shape envelopes, and assertions-enabled compiler validation.
-
-
-## Math audit / foundation reconciliation — 2026-09-07
-
-This is a source-and-ownership review, not a fresh reproduction of the cited
-papers or every historical numerical result. Math semantics and reference laws
-feed one native compiler; they do not justify parallel Python lowering stacks.
-Keep four evidence tiers distinct: reference law, serialized native contract,
-executed target artifact, and measured candidate admission.
-
-| Document | Disposition | Current integration / remaining gate |
-|---|---|---|
-| MLIR_NATIVE_FOUNDATION_SURVEY | Keep as architectural reference; this section supersedes dated census/absence claims. | F0 inventory plus F2 descriptor/ancestry migration; static Apple softmax now delegates through native IR for f32/f16/bf16. General program-body compilation remains distinct from library delegation. |
-| MATH_SOURCE_WORKSTREAM | Archive the original proposal; live routing note retains MSW IDs. | MSW-1–8 bounded reference work stays landed. MSW-9 uses ANN/F3 for automatic native fragment discovery, executable identity and measured admission. Native higher-order products use the AD execution plan. |
-| MATRIX_CALCULUS_REVIEW | Keep mathematical reference, label its historical findings. | MC1/2/5/8 remediation is not a new backlog. MC3 metric/manifold descent uses geometry + native AD; MC4 native Kronecker/vec rewrite uses F3 and a no-materialization gate; MC6 native higher-order composition uses AD-CLOSEOUT-1 and AD-WEIL-1; MC7/9 counting/law fixes stay landed and are reused as gates. Recheck deferred matrix operations before adding new public ops. |
-| RIEMANNIAN_OT_PLAN | Keep scoped acceptance-workload plan. | Existing ga.manifold Euclidean/Sphere/SOn and metric reference methods contradict a blanket “whole layer missing” claim. R0/R1 require explicit native manifold/domain carriers and consumers; R2 reuses native AD/residual authority, R3–R5 are downstream workloads. No fresh OT numerical/backend proof is inferred. |
-| SEQUENCE_MIXER_ENGINEERING_PLAN | Keep scoped implementation plan. | W1/W2 reference/state interfaces precede W3/W4 native recurrence descent, then W5/W8 target forward/backward ownership. W6 precision and W7 admission use NUMPOL/F3/FA-4. The common tiled SSD program remains distinct from ReplaySSM's bounded ABI. |
-| SEQUENCE_MIXER_THEORY | Keep reference; dated capability table is not current status. | Transition/state/reassociation semantics constrain native IR. Check each transition family and current producer, not just the existence of scalar delta_rule or a runtime kernel. |
-| PDE_STENCIL_CAPABILITY_PLAN | Keep scoped contract/consumer plan. | Python pde_operator classification and diagonal-diffusion certificates, coordinate fields and stencil materialization are bounded. PDE-STENCIL-FOUNDATION-1 / FA-7 require explicit spacing, coefficients, boundary/domain and discretization assumptions consumed by native passes and target code. |
-| FORGE_ASSESSMENT | Archive proposal; preserve mathematical evidence and live routing note. | W1/W2 → LAYOUT-ALG-1/Schedule memory authority; W3/W4/W7/W8 → F3 stateful fusion; W5 → NUMPOL/FA-1; W6 → DIST-NATIVE-1. No new residency registry or unconditional “exact candidate” promotion. |
-
-### Dependency order and exit tests
-
-1. **F0/F2 native ownership:** every selected family serializes ABI, layout,
-   numeric policy, state and provenance; package fields are checked projections.
-   Wrong dtype, operand ancestry, alias or policy rejects before launch.
-2. **Native AD and numerical legality:** wire manifold/coordinate/recurrence
-   consumers into existing AD and NUMPOL/FA-1 authority. State norm, domain,
-   discretization and error-budget assumptions; unsupported cases refuse.
-3. **F3 math optimizations:** native Kronecker/vec, ANN and stateful epilogues
-   require original/transformed execution, alias/effect and no-materialization
-   checks, then candidate identity binding. Reference identities remain oracles.
-4. **Target workloads:** sequence mixers/SSD, PDE/OT and optimizer state updates
-   consume that foundation. Paired package-level performance evidence is owned
-   per architecture; direct-runtime measurements do not promote a compiled
-   package or transfer to a sibling target.
-
-The two archived proposals are consolidated, not completed programs. Remaining
-work above stays active under existing IDs; the archive is not a second queue.
-
-
-### Mixed-storage bias and native-package admission — 2026-09-07
-
-**F2 / APPLE-ATTN-BWD-1 / IR-NATIVE-FOUNDATION-1:** dedicated f16/bf16 + fp32-bias
-status ABIs now preserve the native bias tensor without narrowing. MSL bias
-loads and buffer allocation widths are independent of Q/K/V/dO storage; existing
-storage-typed ABI signatures are unchanged. Python binding registration, native
-launcher dispatch, descriptor types/alignment and non-Metal stubs agree.
-Eight broader M1 Max package VJP cases passed, including fp16/bf16 biased cases.
-This supersedes the earlier mixed-storage refusal as an implementation gap.
-
-Five independent paired reports compare complete native-package dispatch with
-the identical direct split-kernel ABI, excluding compilation from warm timings
-and reporting it separately. The strict `package_subgraph` ledger retains the
-direct incumbent: f16 package calls were slower; bf16 evidence was mixed and
-failed its lower-bound gate. No package promotion is made. These are native
-image/LaunchDescriptor packages, not `.mtlpackage` ML execution, and no device
-clock claim is derived from the complete-call timer. See
-[package reports and ledger](../../../benchmarks/baselines/apple_native_backward_package_20260907/).
-The instability reason no longer incorrectly says a mixed-win candidate won
-every run; the admission thresholds themselves are unchanged.
-
-Remaining: reduce measured package overhead with identity-preserving caching,
-then remeasure before admission; extend mixed-bias shape/policy coverage. The
-new runtime changes the exact fingerprint. Five fresh owning-device runtime
-reports admit split_reduced for six shapes in both timing domains; live loading,
-context mismatch refusal and workspace fallback passed. See
-[refreshed runtime evidence](../../../benchmarks/baselines/apple_backward_mixed_runtime_20260907/).
-Fresh M1 Max fleet measurement is now sealed against committed source
-`80504c8384e61f157a5fb7e772f3d6b2c22da56c`: matmul and softmax prove Metal
-placement at fixture and timing shapes, with device-event and end-to-end rows.
-The initial 15-sample/50-iteration attempt failed the unchanged 4% stability
-gate; 21 samples with 200 amortized iterations passed. This is a fresh
-measurement, not a fingerprint-only update. See
-[the sealed fleet packet](../evidence/e2e_spine/apple_gpu/apple7/manifest.json).
-
-
-### PR #733 contract corrections — 2026-09-07
-
-F2 / APPLE-ATTN-BWD-1: the initial low-precision softmax placement claim used
-void ABIs and could not distinguish CPU fallback. Native packages now require
-v2 status ABIs that return success only for Metal; failed or missing status
-refuses. Ten fresh M1 Max differential cases passed using this boundary.
-Low-precision attention recompute is admitted only with reciprocal primal/VJP
-symbol links and verified matching types, zero/explicit bias and numerical
-policy. A checkpoint attribute alone is insufficient. Shared graph producers
-emit the relationship; standalone low-precision Apple forward remains refused.
-The Apple tests use the central hardware capability inventory. Five fresh runtime reports retain the six-key admission in both timing domains.
-The fresh fleet packet is sealed against e73cdfcee39c8265cdc329b407b05c834c5a5a70;
-matmul and softmax passed placement and timing checks at the unchanged 4% gate.
-
-## Capability-plan reconciliation — 2026-09-07
-
-This source/evidence reconciliation retains existing IDs and creates no parallel
-compiler queue. It follows the F0–F4 foundation order above. Reference laws,
-serialized native contracts, exact-target execution and measured admission
-remain separate. The review's 111 passing focused reference/evidence tests
-(one skipped) do not renew device measurements or external-paper surveys.
-
-| Scoped document / residual | Existing owner | Required implementation and exit gate |
-|---|---|---|
-| CORE_SUBSTRATE_VIEW S1–S9 | W2.4a / W5.2 / F0–F4 / NUMPOL / LAYOUT-ALG-1 / AD | Keep one map to actual consumers. Retire the old blanket absence/unowned claims; derive alias/effect/lifetime facts and preserve serialized policy/provenance. The archived P0–P5 sequence is historical. |
-| DIFFERENTIABLE_PROGRAMMING C1–C6/T1–T3/R1–R2 | AUTODIFF_EXECUTION_PLAN / AD-CLOSEOUT-1 / AD-HIGHER / AD-WEIL / NUMPOL | Preserve linear-transpose, effect, reference-loss and bounded solver foundations. Extend native products, checkpoint-plan execution, constrained/matrix-free solves and named estimators with appropriate laws, certificates and target evidence. These labels are provenance aliases, not new work IDs. |
-| BLOCK-ATTNRES-1 phases 6–7 and broader envelopes | BLOCK-ATTNRES-ROCM-2026-08-12 / F2/F3 / W2.4a / AD / W5.2 | Consume the existing depth-statistics/merge contract. Prove native query hoisting and block-state retention/recompute legality; broaden storage/shapes with explicit numeric policy. Sibling packages need independent ancestry and device correctness; selector admission needs valid target clocks and matched baselines. TP uses DIST-NATIVE-1. |
-| EGGROLL W2 reverse/breadth | EGGROLL-ES-LOWRANK-2026-08-09 / F2/F4 / AD / NUMPOL | Use shared linear transposition for the fixed-key correction, preserving member/RNG identity. Rank>1, quantized accumulation and other targets need explicit contracts and native comparison; rank-1 fp32 x86/gfx1151 correctness is already recorded. |
-| EGGROLL W3/W4 | F3 / W5.2 / DIST-NATIVE-1 | Preserve optimizer-state order, aliases and numeric policy; prove no forbidden materialization, then measure the complete update. Mock scalar-gather reconstruction does not close native transport or multi-rank performance. |
-| GAME G1b/G5 | REF-TIER-PHYS-2026-08-16 / LAYOUT-ALG-1 / F2/F3 | Preserve the shared coalition carrier. Replace FFT-only tiling/sharding only after layout and FFT bit-identity gates pass; require per-target package evidence. Coalition kernels do not imply equilibrium-solver support. |
-| GAME G2–G4/G6 | AD execution / W4 / F4 / DIST-NATIVE-1 | Build a named certified solver or game workload using existing segmented reduction, scans and explicit RNG. Check constrained derivative assumptions, game-oracle correctness and real batching. Distributed/sampled variants require their own transport or estimator certificates. |
-
-Workload selection is downstream of the required foundation slice, not a reason
-to recreate it. Keep Block AttnRes, EGGROLL and game theory as scoped landing
-plans; keep substrate and differentiable-programming documents as references.
-Historical status/sequence excerpts live in `archive/` and carry no active queue.
-The four backend plans retain architecture-specific validation obligations.
-
-## Status, native GELU and recipe instantiation — 2026-09-07
-
-**F0/F2/F3 / IR-NATIVE-FOUNDATION-1:** this increment closes the native status
-boundary for descriptor f32 softmax and f32/f16/bf16 GELU, including their dynamic
-compatibility descriptors. ABI v2 uses native-only status symbols; missing or
-failed dispatch refuses. The native Apple softmax/GELU lowering also consumes
-status with `cf.assert`; it no longer drops the result of a fallible submission.
-The legacy void APIs retain their explicit compatibility fallback. Positive i32
-shape limits are checked before the runtime boundary.
-
-Static GELU packaging now accepts a retained native artifact, replays its parent,
-and projects its tensor contract from native-printed IR. Unsupported policies,
-extra operations, edited output IR and wrong target identity refuse before
-runtime access. This uses the existing Apple native library lowering rather
-than adding a duplicate Schedule dialect operation. Dynamic GELU now delegates through the same native parent/replay artifact path.
-Native dimension positivity and i32 element-count guards precede allocation.
-CUDA floating matmul (including bounded dynamic and fused epilogues) and ROCm
-plain/dynamic matmul now verify descriptor projections against native Schedule
-and replayed Tile IR. Static axes retain equality guards even in a partly
-dynamic CUDA package. Graph text remains historical provenance, not an input
-to these package verifiers.
-
-F3 now has explicit native instantiation of a straight-line matmul recipe using
-`tessera-symdim-equality`'s opt-in dimension witness. Two buckets preserve one
-optimized parent identity and produce distinct concrete IR identities. This
-has no execution/promotion bit: broader shape-transfer rules, native ANN pair
-execution and artifact-bound arbiter admission remain next consumers.
-
-Package profiling identified buffer-contract preparation overhead. Only immutable
-NumPy dtype spelling is cached. Mutable nested descriptor metadata invalidates
-the cached-identity premise, so descriptor digests are recomputed. Every launch
-still validates live buffers/scalars. Five new M1 Max complete-package/direct-ABI
-comparisons do **not** justify promotion; see the
-[reports](../../../benchmarks/baselines/apple_package_status_20260907/README.md).
-
-Remaining dependency order:
-
-1. Dynamic GELU and CUDA/ROCm floating matmul descriptor projection are implemented
-   for their existing envelopes, with native replay and metadata-corruption
-   regressions. Broader GELU shapes and ROCm fused matmul are not admitted;
-   neither package replay nor differential execution establishes promotion.
-2. Extend recipe shape transfers to the chosen ANN fragment; bind original and
-   transformed executable artifacts, numerical policy and measured admission to
-   each concrete instance. Matmul instantiation alone does not close ANN/F3.
-3. Static mixed f32/f64 slots and proven counted whiles now have a native
-   persistent consumer. Continue integer/predicate and dynamic slots, genuinely
-   data-dependent while termination and completion-owned asynchronous retirement.
-   Selected bounded SAVE/HYBRID/recompute-all plans execute on CUDA/HIP; automatic
-   checkpoint-plan selection and performance promotion remain open.
-4. FA-1 now has a bounded frozen-affine absolute-error consumer in native ANN
-   admission. Extend beyond this fixed f32/linf envelope: serialized numerical
-   carriers, general reductions, spectral/approximation consumers and justified
-   domain composition. Sampled agreement alone remains insufficient.
-
-Cross-cutting: all three current LLVM installations report assertions OFF.
-A separate assertions-enabled LLVM/MLIR build remains required. The generated
-route inventory must distinguish compatibility frontend adapters from
-Graph-owned packaging, and a native library call from general program-body
-compilation. The fleet packet
-must be resealed after committing the changed runtime source, before publishing.
-
-### Dynamic package projection validation — 2026-09-07
-
-F2 / IR-NATIVE-FOUNDATION-1: the dynamic GELU native producer handles dimensions
-in IR; its compatibility frontend no longer constructs a separate descriptor.
-Argument-local dimension names survive packaging. Matmul validation projects
-shape bounds, individual dynamic axes, storage, accumulation, epilogues and
-entry/tile identity. A modified Tile program refuses before compilation.
-
-Focused WSL compiler/registry checks: 371 passed, 26 skipped for capabilities;
-RTX 5070 scheduled-matmul device suite: 14 passed; M1 Max selected native
-softmax/GELU suite: 6 passed; gfx1151 scheduled matmul: 3 passed. These are correctness results, not performance
-promotion packets. Shared changes do not establish x86 or other GPU parity.
-
-The next implementation boundary is F3's native ANN program-pair executable
-adapter and artifact-bound admission. In parallel with that dependency chain,
-AD-RESIDUAL-EVAL-1 still requires typed saved slots and bounded while retirement
-before general checkpoint execution, and FA-1 still requires a real analytic
-consumer. None of those is closed by this F2 increment.
-
-### Native ANN admission and persistent checkpoint execution — 2026-09-07
-
-Owners: **F3 / FA-1 / AD-RESIDUAL-EVAL-1 / W2.4a / IR-NATIVE-FOUNDATION-1**.
-
-`native_ann.py` prepares one native two-affine-layer to one-layer rewrite and
-replays its native producer before admission. The evaluator uses the existing
-MLIR/LLVM JIT on x86, with no Graph reconstruction or reference fallback. Both
-programs are checked against an independent rational-arithmetic affine oracle;
-matching wrong native outputs refuse. `register_native_ann` registers original
-and rewritten programs in the existing arbiter under its internal `ann_affine`
-family. The field is bound to the program pair, input domain, budget and probe
-snapshots. An over-budget rewrite is excluded even before timing. Equal-tier
-selection retains the original; actual calls recheck the input domain.
-
-The analytic contract is deliberately bounded: static rank-two f32 tensors with
-dimensions at most 64, frozen normal-or-zero parameters, explicit reassociation
-permission, finite inputs with `||X||inf <= R`, and absolute output linf difference from the original program.
-Round-to-nearest is checked on the calling thread; other rounding modes refuse.
-Exact rational analysis includes folded parameter error, each matrix's induced
-column-sum norm, at most 2K arithmetic roundings per dot plus bias rounding, and
-additive minimum-normal allowances for underflow/flush-to-zero. `2Ku < 1` and a
-conservative intermediate-overflow exclusion are mandatory. Downstream domain
-bounds include preceding rounding errors. This is numerical eligibility, not a
-performance packet, automatic JIT routing, or GPU ANN proof. Broader recipe
-instantiation, nonlinear ANN fragments, numerical-carrier integration and
-measured promotion remain open.
-
-Persistent storage now projects f32/f64 widths through compiler private arrays,
-ABI manifests, owned allocations and backward outputs. Replay-loop capacity is
-derived from bounded SSA arithmetic/selects over enclosing induction variables;
-loaded bounds and unchecked maximum annotations do not constitute proofs. Every
-nested allocation reserves a distinct slot for its maximum iteration path.
-The optional paired-AD `normalize-counted-while` converts only pure zero-origin,
-unit-step, constant-bound whiles with sufficient declared capacity to native
-for loops, retaining SAVE/HYBRID policy. Other while forms remain refused by the
-physical tape consumer.
-
-The owning-device recorder exercises mixed storage, nested SAVE, HYBRID,
-recompute-all and counted-while SAVE, with repeated backward calls and unchanged
-residuals. See `benchmarks/baselines/tape_checkpoint_20260907/`. Physical retained
-bytes are recorded separately from private temporary capacity. These results
-do not establish latency, overlap, general mixed-state while execution, or
-checkpoint autotuning. Apple still needs MSL-owned typed tape materialization;
-x86 ANN execution does not supply CUDA/HIP ANN proof.
-
-### Data-dependent native tapes and nonlinear GPU ANN — 2026-09-07
-
-Owners: **F3 / FA-1 / AD-RESIDUAL-EVAL-1 / W2.4a / IR-NATIVE-FOUNDATION-1**.
-
-The next physical increment preserves MLIR ownership throughout:
-
-- `normalize-data-while` admits pure, single-block whiles with a zero-origin,
-  unit-step index counter and an actual signed `counter < constant` conjunct.
-  It freezes the complete carried state after a data-dependent exit, then uses
-  the existing generic counted-loop checkpoint machinery. A `max_iters`
-  annotation by itself is insufficient. Capacity remains at most 1024 steps;
-  physical temporary storage remains at most 4096 logical bytes.
-- `box-product-scalars` projects logical index/predicate residuals, including
-  checkpoint tensors, into i64/i8 tensor storage in the native export. It does
-  not change the differentiation domain: discrete region yields no longer
-  receive cotangent seeds. Rank-zero LLVM memref descriptors now omit empty
-  dimension/stride arrays. Dynamic tensor extents still refuse at this physical
-  boundary; static integer checkpoint storage is not dynamic allocation proof.
-- Persistent backward can submit distinct generations on caller-owned streams.
-  Completion polling retires event owners, while each result advertises its
-  producer stream. Explicit generation release waits for device completion and
-  frees only that generation. Fully asynchronous allocation retirement requires
-  tracking every downstream reader; no such general closure is claimed.
-- The native frozen-affine rewrite can retain a terminal ReLU. ReLU is
-  nonexpansive in the absolute infinity norm, so the existing analytic bound
-  remains valid. Internal nonlinear activations cannot be commuted through an
-  affine composition. CUDA/HIP original and transformed programs now consume
-  native bufferized IR, preserve nonsplat constants, and replay source-to-device
-  arena ancestry before binding. This is a bounded serial physical baseline,
-  not a tuned tensor-core/WMMA ANN schedule.
-- Nine independent processes compare each original/rewrite package, including
-  the host buffer bridge, using randomized paired samples. Raw measurements are
-  rechecked before applying the existing exact median order-statistic interval.
-  Nine runs give a second-order bound, so one extreme run cannot alone set
-  the lower endpoint. The lower bound must exceed a 2% margin. Package wall time is not a kernel
-  clock, and numerical eligibility does not register a production GPU winner.
-
-Six tape cases pass on each GPU. Nine independent ANN runs per target refuse
-promotion: CUDA median 1.00447× (lower 0.98833×), ROCm median 1.00243×
-(lower 0.99360×), against the 1.02× threshold. Evidence is in
-[the native tape/ANN packet](../../../benchmarks/baselines/native_tape_ann_20260907/README.md).
-The previous bounded checkpoint packet remains historical evidence for its own
-source fingerprints. Neither GPU transfers proof to Metal or x86 tape execution.
-
-Next concrete boundaries remain: shape-varying residual allocation with native
-extent guards; broader while/CFG recovery beyond the proven counter envelope;
-reader-complete asynchronous allocation retirement; GPU arbiter registration
-and tuned ANN schedules; reduction/spectral/approximation error-budget consumers;
-and measured promotion only where the independent bound passes. Assertions-enabled
-MLIR validation remains missing on the fleet.
-
-
-### Shape-varying host tapes and GPU ANN arbitration — 2026-09-07
-
-Owners: **F3 / FA-1 / AD-RESIDUAL-EVAL-1 / W2.4a / IR-NATIVE-FOUNDATION-1**.
-
-Native Tessera-to-Linalg binary lowering now derives dynamic output extents
-from the operand and checks unresolved operand/result equality before identity
-indexing. Dynamic `zeros_like` adjoints use logical primal extents. The host JIT
-accepts signature-checked i64/i8 residual buffers without widening its floating
-high-level math API. Three shrinking-loop cases (input widths 4, 8, 16) execute
-native x86 forward and repeated backward products with saved shape tapes and
-unchanged persistent payloads. The host JIT now runs upstream ownership-based
-deallocation after DPS result copies, including loop-carried temporary allocations.
-Native extent violations currently lower through `cf.assert` to process abort,
-not a recoverable Python exception. This is bounded shape-varying **host execution**;
-CUDA/HIP persistent slot allocation still rejects dynamic extents.
-
-Counter-bound recovery also recognizes the frontend's false-else short-circuit
-`scf.if`, and equivalent `arith.select`. An arbitrary else value cannot prove
-capacity. Arbitrary source CFG recovery, unbounded termination, dynamic device
-slot allocation and generalized checkpoint selection remain open.
-
-Terminal absolute value joins ReLU as a nonexpansive consumer of the affine
-absolute-error bound. GPU candidates bind the logical domain and numerical
-budget to both native artifact digests and the owning architecture. Scoped
-registration retains the original under a zero rewrite budget and unregisters
-its candidates only after successful binding close. Both GPUs execute all four
-ReLU/absolute-value budget cases. The optional upstream elementwise-fusion
-pipeline is serialized and replayed as part of artifact ancestry.
-
-Nine fresh independent processes per GPU still refuse performance promotion:
-CUDA median 0.99809x, lower bound 0.97773x; ROCm median 0.99728x, lower bound
-0.98430x. Neither clears the 1.02x threshold. These are warm package wall times,
-including transfers, for the small serial schedule; they neither measure kernel
-clocks nor establish a tuned tensor-core/WMMA schedule. See
-[raw reports and scope](../../../benchmarks/baselines/shape_tape_ann_20260907/README.md).
-
-Fully asynchronous reclamation remains open: producer-event completion cannot
-prove completion of readers of exported views. The next implementation needs
-reader leases that prevent new acquisitions after retirement, stream-ordered
-allocator/free support, and failure retention until all recorded readers finish.
-The existing context barrier is retained. Further numerical consumers need
-operator-specific induced-norm/error propagation; absolute value does not prove
-reduction, spectral or approximation legality. Assertions-enabled MLIR validation
-and Metal-owned tape storage remain required follow-ups.
-
-**PR #734 review closure (F3):** `register_native_ann` returns a
-`NativeANNRegistration`; use its `.region` inside a context manager or call
-`.close()` when retiring a model/bucket. Close removes exact candidate instances,
-invalidates retained candidates and releases owned probe references. Same-name
-replacement ownership and registration rollback are tested without native tools.
-Native-only tests now check compiler/JIT availability before preparing IR;
-clean CI does not claim native execution. No new physical promotion is made.
+| AD-HIGHER-1 | [AD-HIGHER-1](#ad-higher-1) | owner |
+| AD-RESIDUAL-EVAL-1 | [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1) | owner |
+| AD-SOLVER-IFT-1 | [AD-SOLVER-IFT-1](#ad-solver-ift-1) | owner |
+| COMPILER-DEVEX-1 | [COMPILER-DEVEX-1](#compiler-devex-1) | owner |
+| DISPATCH-BREAKER | [DISPATCH-BREAKER](#dispatch-breaker) | owner |
+| DIST-NATIVE-1 | [DIST-NATIVE-1](#dist-native-1) | owner |
+| E2E-REAL-6 | [E2E-REAL-6](#e2e-real-6) | owner |
+| E2E-REAL-6F | [E2E-REAL-6F](#e2e-real-6f) | owner |
+| EVIDENCE-PACKET-1 | [EVIDENCE-PACKET-1](#evidence-packet-1) | owner |
+| FRONTEND-IR-MEDIUM-1 | [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1) | owner |
+| LAYOUT-ALG-1 | [LAYOUT-ALG-1](#layout-alg-1) | owner |
+| MSW-9 | [MSW-9](#msw-9) | owner |
+| NUMPOL-CARRIER-1 | [NUMPOL-CARRIER-1](#numpol-carrier-1) | owner |
+| RIEMANNIAN-OT | [RIEMANNIAN-OT](#riemannian-ot) | owner |
+| TPROF-NATIVE-1 | [TPROF-NATIVE-1](#tprof-native-1) | owner |
+| TSOL-PHYS-TAIL-1 | [TSOL-PHYS-TAIL-1](#tsol-phys-tail-1) | owner |
+| TSOL-POLICY-PHYS-1 | [TSOL-POLICY-PHYS-1](#tsol-policy-phys-1) | owner |
+| TSOL-SCALE-1 | [TSOL-SCALE-1](#tsol-scale-1) | owner |
+| TSOL-SHARD-1 | [TSOL-SHARD-1](#tsol-shard-1) | owner |
+| W0.1 | [W0.1](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w01) | archive |
+| W0.10 | [W0.10](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w010) | archive |
+| W0.2 | [W0.2](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w02) | archive |
+| W0.3 | [W0.3](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w03) | archive |
+| W0.4 | [W0.4](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w04) | archive |
+| W0.5 | [W0.5](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w05) | archive |
+| W0.6 | [W0.6](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w06) | archive |
+| W0.7 | [W0.7](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w07) | archive |
+| W0.8 | [W0.8](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w08) | archive |
+| W0.9 | [W0.9](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w09) | archive |
+| W1.1 | [W1.1](#w11) | owner |
+| W1.1b | [W1.1b](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w11b) | archive |
+| W1.2 | [W1.2](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w12) | archive |
+| W1.3 | [W1.3](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w13) | archive |
+| W1.4 | [W1.4](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w14) | archive |
+| W2.1 | [W2.1](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w21) | archive |
+| W2.2 | [W2.2](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w22) | archive |
+| W2.3 | [W2.3](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w23) | archive |
+| W2.4 | [W2.4a](#w24a) | successor |
+| W2.4a | [W2.4a](#w24a) | owner |
+| W3.1 | [E2E-REAL-6](#e2e-real-6) | successor |
+| W3.2 | [E2E-REAL-6](#e2e-real-6) | successor |
+| W3.3 | [W3.3](#w33) | owner |
+| W3.4 | [E2E-REAL-6](#e2e-real-6) | successor |
+| W3.5 | [AD-SOLVER-IFT-1](#ad-solver-ift-1) | successor |
+| W3.6 | [W6.4](#w64) | successor |
+| W3.7 | [E2E-REAL-6](#e2e-real-6) | successor |
+| W4-PRODUCT-1 | [W4-PRODUCT-1](#w4-product-1) | owner |
+| W4.1 | [W4-PRODUCT-1](#w4-product-1) | successor |
+| W4.2 | [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1) | successor |
+| W4.3 | [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1) | successor |
+| W5.1 | [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1) | successor |
+| W5.2 | [W5.2](#w52) | owner |
+| W5.2a | [W5.2a](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w52a) | archive |
+| W5.2b | [W5.2b](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w52b) | archive |
+| W5.2c | [W5.2c](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w52c) | archive |
+| W5.2d | [W5.2d](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w52d) | archive |
+| W5.2e | [W5.2](#w52) | successor |
+| W5.2e-PRODUCER-1 | [W5.2](#w52) | successor |
+| W5.2f | [W5.2f](#w52f) | owner |
+| W5.2g | [W5.2g](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md#w52g) | archive |
+| W5.3 | [W5.2](#w52) | successor |
+| W5.4 | [DIST-NATIVE-1](#dist-native-1) | successor |
+| W5.5 | [W5.5](#w55) | owner |
+| W6.1 | [AD-HIGHER-1](#ad-higher-1) | successor |
+| W6.2 | [AD-HIGHER-1](#ad-higher-1) | successor |
+| W6.3 | [AD-HIGHER-1](#ad-higher-1) | successor |
+| W6.4 | [W6.4](#w64) | owner |
+| PDE-STENCIL-FOUNDATION-1 | [PDE_STENCIL_CAPABILITY_PLAN.md](PDE_STENCIL_CAPABILITY_PLAN.md) | owner |
+| MATH-SOURCE-WORKSTREAM-1 | [MATH_SOURCE_WORKSTREAM.md](MATH_SOURCE_WORKSTREAM.md) | owner |
+| BLOCK-ATTNRES-1 | [BLOCK_ATTNRES_ROCM_PLAN.md](BLOCK_ATTNRES_ROCM_PLAN.md) | owner |
+| REF-TIER-PHYS-1 | [PDE_STENCIL_CAPABILITY_PLAN.md](PDE_STENCIL_CAPABILITY_PLAN.md) | owner |
+| FA-1 | [FUNCTIONAL_ANALYSIS_TSOL_PLAN.md](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
+| FA-2 | [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md) | owner |
+| AD-BATCH-1 | [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md) | owner |
+| AD-SPARSE-1 | [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md) | owner |
+| AD-JET-IR-1 | [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md) | owner |
+| IKF-1 | [INTRA_KERNEL_FEEDBACK_PLAN.md](INTRA_KERNEL_FEEDBACK_PLAN.md) | owner |
+| F0 | [F0](#f0) | owner |
+| F2 | [F2](#f2) | owner |
+| F3 | [F3](#f3) | owner |
+| F4 | [F4](#f4) | owner |
+| F5 | [F5](#f5) | owner |
+| F1 | [first migration](INTEGRATED_COMPILER_LOG.md#2026-09-04--foundation-f1-implementation) | archive |
+| E2E-REAL-0 | [E2E-REAL-6](#e2e-real-6) | successor |
+| E2E-REAL-1 | [E2E-REAL-6](#e2e-real-6) | successor |
+| E2E-REAL-2 | [E2E-REAL-6](#e2e-real-6) | successor |
+| E2E-REAL-3 | [E2E-REAL-6](#e2e-real-6) | successor |
+| E2E-REAL-4 | [E2E-REAL-6](#e2e-real-6) | successor |
+| E2E-REAL-5 | [E2E-REAL-6](#e2e-real-6) | successor |
+| MSW-1 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-2 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-3 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-4 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-5 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-6 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-7 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| MSW-8 | [math-source owner](MATH_SOURCE_WORKSTREAM.md) | owner |
+| FA-3 | [functional-analysis owner](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
+| FA-4 | [functional-analysis owner](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
+| FA-5 | [functional-analysis owner](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
+| FA-6 | [functional-analysis owner](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
+| FA-7 | [functional-analysis owner](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) | owner |
+| AD-FWD-NATIVE-1 | [active AD owner](AUTODIFF_EXECUTION_PLAN.md) | owner |

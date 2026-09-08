@@ -40,7 +40,7 @@ plan_state: landing
 
 Apple/NVIDIA consumers and integer quantization semantics remain separate
 acceptance work. The existing synchronization key **EGGROLL-ES-LOWRANK-2026-08-09**
-is retained in the [integrated mapping](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+is retained in the [integrated mapping](INTEGRATED_COMPILER_LOG.md#2026-09-07--capability-plan-reconciliation).
 This plan defines workload scope; the operator-improvement catalog is not a
 parallel compiler backlog.
 

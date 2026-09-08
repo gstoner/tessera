@@ -31,6 +31,7 @@ from __future__ import annotations
 import ctypes
 import glob
 import os
+from pathlib import Path
 import subprocess
 import sys
 import textwrap
@@ -78,9 +79,9 @@ def test_tpp_survives_a_foreign_llvm_in_the_global_namespace():
         """
     )
     env = dict(os.environ)
-    env["PYTHONPATH"] = "python" + os.pathsep + env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "python") + os.pathsep + env.get("PYTHONPATH", "")
     result = subprocess.run([sys.executable, "-c", script],
-                            capture_output=True, text=True, timeout=300)
+                            env=env, capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, (
         f"embedded TPP driver died with a foreign LLVM loaded "
         f"(returncode={result.returncode}; -11 is SIGSEGV, the original bug). "

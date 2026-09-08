@@ -137,6 +137,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
@@ -150,6 +152,16 @@ jobs:
           python -m pip install -e . --no-deps
           # shellcheck disable=SC2086
           python -m pip install $TESSERA_CI_PY_DEPS
+
+      - name: Compiler plan ownership and log maintenance
+        env:
+          PLAN_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PLAN_BASE_SHA" ]; then
+            python scripts/check_compiler_plan.py --base "$PLAN_BASE_SHA"
+          else
+            python scripts/check_compiler_plan.py
+          fi
 
       - name: Generated audit-doc drift checks
         env:

@@ -5,7 +5,7 @@ plan_state: landing
 ---
 
 > Current ownership review (2026-09-07): use the
-> [math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+> [live compiler queue](INTEGRATED_COMPILER_PLAN.md#live-queue)
 > for live residuals and dependency order. Historical absence claims, timings,
 > fleet instructions and effort estimates below describe their dated review;
 > reference implementation is not native execution or promotion evidence.
@@ -451,7 +451,7 @@ oracle-gated PR.
 
 ## FA-4 recurrence-stability ownership
 
-The [integrated plan](INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership)
+The [functional-analysis reconciliation record](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
 assigns the remaining FA-4 work here. Preserve the hypotheses in the
 [archived mathematical design](archive/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md),
 but bind each certificate to a concrete recurrence, norm, admissible domain

@@ -1,0 +1,18 @@
+{
+  "nvidia": {
+    "runs": 9,
+    "median_speedup": 1.0004967353449274,
+    "median_lower_bound": 0.9835067445633839,
+    "median_upper_bound": 1.0191624068418503,
+    "promotion_eligible": false,
+    "timing_domain": "warm_package_h2d_dispatch_d2h_host_wall"
+  },
+  "rocm": {
+    "runs": 9,
+    "median_speedup": 0.9971610287046907,
+    "median_lower_bound": 0.9862662450969535,
+    "median_upper_bound": 1.0097464795740658,
+    "promotion_eligible": false,
+    "timing_domain": "warm_package_h2d_dispatch_d2h_host_wall"
+  }
+}

@@ -63,7 +63,7 @@ reassessment: 2026-08-15 — full mathematical verification pass
 | G5 | Coalition physical slices are not a general game backend. | Family-specific packages, dtype support and exact-host evidence before admission; F2/F3. |
 | G6 | Distributed/sampled lattice acceptance remains open. | Real transport or explicitly scoped mock proof; estimators retain stderr/sample count and RNG identity; DIST-NATIVE-1. |
 
-[Integrated ownership](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+[Integrated ownership](INTEGRATED_COMPILER_PLAN.md#live-queue)
 controls global order. G1 is not an unstarted prerequisite; generic FFT
 consolidation must still earn its replacement gate.
 

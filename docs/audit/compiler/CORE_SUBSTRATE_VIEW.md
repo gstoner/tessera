@@ -7,7 +7,7 @@ audit_role: reference
 
 Start at [README.md](README.md). This reference maps capability demands onto
 existing owners; it creates no work IDs or independent build sequence.
-[The integrated plan](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+[The integrated plan](INTEGRATED_COMPILER_PLAN.md#live-queue)
 owns global order. The [August snapshot](archive/CORE_SUBSTRATE_VIEW_2026_08.md)
 preserves the original demand analysis, mathematics and proposed phases.
 
@@ -134,7 +134,7 @@ These replace the old "unowned" claims. A mapped owner is not a completion claim
 
 ## 4. Build sequence
 
-Follow the [integrated dependency order](INTEGRATED_COMPILER_PLAN.md#dependency-order-and-exit-tests):
+Follow the [integrated foundation map](INTEGRATED_COMPILER_PLAN.md#foundation-program):
 serialized ownership and invocation checks, AD/numerical legality, native
 rewrites and specialization, then target workload admission. The archived
 P0–P5 proposal is historical; do not run it as a parallel queue.

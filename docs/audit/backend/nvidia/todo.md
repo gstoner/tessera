@@ -6287,7 +6287,7 @@ NVIDIA selector, timing policy, runtime ABI or device evidence changes.
 First migration: remove Graph re-entry and the base-package build from scheduled matmul, derive the ABI from verified scheduled IR, then extend semantic-kernel consumers. Follow-up required on Super-Bear for exact RTX 5070 numerics and resource/performance comparison; this survey adds no CUDA execution proof.
 
 Sequencing and acceptance are owned by
-[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program).
 Shared change in this slice: architectural migration plan only; runtime, ABI,
 selector and physical schedules are unchanged. Historical routes have explicit
 replacement and deletion gates, not permanent compatibility exemptions.
@@ -6459,7 +6459,7 @@ metadata and paged-KV bounds/returns are stricter. No performance promotion.
 ### Deleted functionality reassessment — 2026-09-05
 
 Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
-[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+[central reassessment](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
 routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
 native residual policy to W5.1, and sharding/halo composition to W5.4 and
 COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
@@ -6696,7 +6696,7 @@ theory remain scoped landing plans; AD residuals use the active AD plan and
 shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
 NVIDIA workload consumers still need independent native package and exact-SM evidence; no physical schedule is copied from gfx1151.
 No runtime, ABI or support status changes. Follow-up requirements are mapped in
-[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-07--capability-plan-reconciliation).
 
 
 **Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
@@ -6734,7 +6734,7 @@ original remains the incumbent. See the packet README for target-local bounds.
 Parity validated for the bounded GPU ANN slice on Super-Bear RTX 5070 (sm_120): four native arbiter cases pass. Nine fused-package runs refuse promotion (median 0.99809x, lower 0.97773x against 1.02x). Shape-varying x86 execution does not transfer to CUDA; dynamic GPU residual storage, reader-complete asynchronous frees and tuned parallel ANN remain follow-ups.
 
 Shared source, physical artifact replay, numerical-domain guards and evidence are
-recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-07--shape-varying-host-tapes-and-gpu-ann-arbitration). All fleet LLVM builds still lack assertions.
 
 The shared host JIT now retires compiler-owned temporaries through upstream
 ownership-based buffer deallocation after DPS copies. Validation is x86 on
@@ -6747,3 +6747,53 @@ registration now returns a scoped owner. Explicit/context close unregisters
 only its own candidates, disables retained candidate handles and releases
 probe references; failed registration rolls back. This is host registry ownership; no nvidia runtime ABI or device promotion changes.
 CUDA/HIP registration continues to use its separate device binding owner.
+
+
+### 2026-09-07 — W2.4a / F3 / FA-1: while and row ANN integration
+
+Sync key: **AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1**.
+SM120 owning-device validation passes six row-parallel ANN admission cases and twelve asynchronous derivative generations across four strided while exits and two predicate paths. This is correctness evidence; no tensor-core or overlap claim.
+
+Shared changes: proved constant-stride while capacity, terminal row-sum error
+propagation and rank-changing ABI projection, and opt-in row independence with
+serialized launch/pipeline replay. See the integrated compiler plan's bounded
+while recovery increment and `benchmarks/baselines/row_ann_while_20260907/`.
+Follow-up required: general CFG recovery, GPU shape-capacity materialization,
+reader-complete stream-ordered reclamation, and measured schedule selection.
+The raw-view context barrier is retained; producer-event completion is not a
+proof that external readers have finished. Assertions-enabled MLIR remains open.
+
+
+### 2026-09-07 — W2.4a / AD-RESIDUAL-EVAL-1: dynamic capacity and reader ownership
+
+Sync key: **IR-NATIVE-FOUNDATION-1**. Parity validated on RTX 5070 / SM120: dynamic internal widths 1/2/3 preserve logical copy extents; four tape exits retire pool-allocated derivatives after two reader streams, with a third retirement stream and no context barrier in the tracked region.
+
+Shared contracts: SSA-proved temporary capacity separate from logical shape,
+matching dynamic-copy dimension SSA, typed bounded `cf.switch` edges, and scoped
+reader completion before stream-ordered frees. Partial-free/event failures retain
+ownership; legacy unrestricted exports retain the context barrier. See the
+integrated compiler plan's dynamic temporary capacity increment and
+`benchmarks/baselines/dynamic_readers_20260907/`.
+Follow-up required: exported dynamic tape descriptors/status, loaded residual
+shape validation, broader source CFG recovery and adoption by composed consumers.
+Assertions-enabled MLIR and measured overlap/throughput remain open.
+
+Free API failures quarantine the frame for device teardown and forbid normal
+close/retry; event-record failures retain an explicit completion-wait recovery.
+
+Native CFG cross-block SSA definitions now receive distinct state slots, with
+host forward/reverse proof. GPU multiway products still refuse the retained
+bound-exhaustion assertion pending a device status/termination consumer.
+
+
+### 2026-09-07 — checked products and composed readers
+
+Owner: **W2.4a / AD-RESIDUAL-EVAL-1**; sync key **IR-NATIVE-FOUNDATION-1**.
+Parity validated on SM120 for checked switch products, exhaustion refusal and composed scoped readers. Returned logical shapes, nested guards and asynchronous checked-result exposure remain follow-ups. No schedule or performance promotion.
+
+See the integrated plan for the exported shape-varying ABI design: returned
+logical extents, validated loaded bounds, capacity ownership and status before
+view exposure. Arbitrary Python CFG/effects, assertions-enabled MLIR and measured
+reclamation/overlap remain open.
+
+Exact-device packet: `benchmarks/baselines/product_status_20260907/nvidia.json`. Six correctness cases; checked-status and asynchronous composition are separate routes.

@@ -1,0 +1,45 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "rows": [
+    {
+      "case": "switch",
+      "input": 0.5,
+      "repeated_backward": 2
+    },
+    {
+      "case": "switch",
+      "input": 1.5,
+      "repeated_backward": 2
+    },
+    {
+      "case": "switch",
+      "input": 2.5,
+      "repeated_backward": 2
+    },
+    {
+      "case": "imported_function_cfg",
+      "forward": 15.625,
+      "reverse": 18.75
+    },
+    {
+      "case": "exhaustion",
+      "output_refused": true
+    },
+    {
+      "case": "scoped_reverse_composition",
+      "derivative": 24,
+      "streams": 3
+    }
+  ],
+  "promotion_eligible": false,
+  "compiler_sha256": "7026e19403f8f951ac24fbd1670e1c7fbfaaa4afdffaf50845ad748f71fe62a1",
+  "sources": {
+    "src/transforms/lib/AutodiffPairedPass.cpp": "e4feb06226a9499ae2e21fdb4906a7a992dafa83e18f8100513ce4fbeb5f680c",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "fd06f9c1a7187ccce339cadd6c7a9dc324e2c0275e1cfc26d17687046f52f707",
+    "python/tessera/compiler/native_persistent_tape.py": "de01ea087366d1bacbd667c1b92d8163bf253df246867bf0111c624040e89175",
+    "python/tessera/compiler/native_reader_retirement.py": "bc7c69f56413b097a4a4fb476495ee983a8ff820282701453d2110d8470cbce9",
+    "python/tessera/compiler/native_gpu_tensor.py": "38c1fa0c418932f8629d5d791fa49297fab4eb460f201025a8f72d1c73bdd5b5"
+  },
+  "recorder_sha256": "c8486f0d8bffbc8a90c220bc42301f1d5f105cd996fb3959fbe4ba183ce8e971"
+}

@@ -312,7 +312,7 @@ Disposition after PR #544:
    `queue_depth` remains a stage-count resource estimate. The historical §2.1
    finding describes the pre-deletion tree, not current capability. Ownership
    semantics are reconsidered under the integrated plan's
-   [reassessment](INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05),
+   [reassessment](INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment),
    without restoring the deleted implementation.
 2. **Phantom `CollectiveScheduler`/`ChunkPlanner` names — corrected.** Live
    documentation now points to the real runtime/planner surfaces.

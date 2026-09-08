@@ -4,7 +4,7 @@ audit_role: reference
 ---
 
 > Current ownership review (2026-09-07): use the
-> [math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+> [live compiler queue](INTEGRATED_COMPILER_PLAN.md#live-queue)
 > for live residuals and dependency order. Historical absence claims, timings,
 > fleet instructions and effort estimates below describe their dated review;
 > reference implementation is not native execution or promotion evidence.
@@ -18,7 +18,7 @@ through a backend-owned native artifact. Adding another executable kernel is
 useful, but does not by itself close that milestone.
 
 This survey supplies evidence and disposition to
-[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md#foundation-program).
 Only that plan sequences work. [`README.md`](README.md) owns navigation; existing
 registries and their generated projections retain status authority.
 

@@ -137,7 +137,10 @@ h=jit.compile_module(''' + repr('''module { func.func @add(%a: tensor<?xf32>, %b
 }}''') + ''')
 jit.invoke(h,'add',[np.ones(3,np.float32),np.ones(4,np.float32)],np.empty(3,np.float32))
 '''
-    result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True)
+    import os
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "python") + os.pathsep + env.get("PYTHONPATH", "")
+    result=subprocess.run([sys.executable,'-c',code],env=env,capture_output=True,text=True)
     import signal
     # Upstream cf.assert lowers to abort; the native LLVM path does not retain
     # its MLIR message. Test the signal, not an unrelated Python exception.

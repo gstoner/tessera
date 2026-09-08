@@ -10,7 +10,7 @@ import threading
 
 
 class _Buffer:
-    def __init__(self, frame, shape, dtype='fp32'):
+    def __init__(self, frame, shape, dtype='fp32', *, stream=None):
         if dtype not in ('fp32', 'fp64', 'int8', 'int64'):
             raise ValueError('native tape allocation requires fp32, fp64, int8 or int64 storage')
         self.dtype = dtype
@@ -24,7 +24,10 @@ class _Buffer:
             if self.nbytes > ((1 << 63) - 1) // dim:
                 raise ValueError('native tape allocation byte extent overflows')
             self.nbytes *= dim
-        frame.check(frame.alloc(ct.byref(self.pointer), self.nbytes))
+        if stream is None:
+            frame.check(frame.alloc(ct.byref(self.pointer), self.nbytes))
+        else:
+            frame.check(frame.alloc_async(ct.byref(self.pointer), self.nbytes, ct.c_void_p(stream)))
         frame.buffers.append(self)
 
     @property

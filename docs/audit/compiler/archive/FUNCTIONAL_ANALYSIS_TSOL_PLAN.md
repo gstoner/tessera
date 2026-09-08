@@ -6,7 +6,7 @@ plan_state: superseded_for_active_execution_work
 
 > Archived on 2026-09-06 as a superseded execution queue, not completed functionality.
 > Current FA-1–FA-7 dispositions and acceptance gates live in
-> [the integrated plan](../INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership).
+> [the integrated plan](../INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership).
 > The mathematical models, hypotheses and verification log below are preserved
 > as historical design; their implementation-status statements are dated.
 

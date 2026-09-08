@@ -43,11 +43,21 @@ def _dtype(type_name):
     return {'f32':'fp32','f64':'fp64','i8':'int8','i64':'int64'}[type_name.split('x')[-1].removeprefix('tensor<').removesuffix('>')]
 
 
-def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip):
+def _checked_status(package):
+    if 'tessera.autodiff.gpu_status' not in package.arena_ir:
+        return False
+    if _attribute(package.arena_ir,'tessera.autodiff.gpu_status')!='guard-v1':
+        raise ValueError('unknown persistent tape GPU status contract')
+    return True
+
+
+def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, checked_status=False):
     """Generate, bufferize and materialize both products from one fresh request."""
     compiler,llvm_bin=Path(compiler),Path(llvm_bin)
     if backend not in ('nvidia','rocm'):
         raise ValueError('persistent tape requires a CUDA or HIP consumer')
+    if type(checked_status) is not bool:
+        raise ValueError('checked status selection must be boolean')
     packages=[]
     contracts=[]
     lineages=[]
@@ -63,10 +73,10 @@ def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip):
             '--one-shot-bufferize=bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map allow-return-allocs-from-loops',
             '--buffer-results-to-out-params=modify-public-functions hoist-static-allocs',
             '--convert-linalg-to-loops','--canonicalize',source=native)
-        gpu=_run(compiler,'--allow-unregistered-dialect','--tessera-native-tape-to-gpu=backend='+backend,source=buffered)
+        gpu=_run(compiler,'--allow-unregistered-dialect','--tessera-native-tape-to-gpu=backend='+backend+(' status-buffer=true' if checked_status else ''),source=buffered)
         inputs=len(contract['inputs'])
         specs=tuple(TensorSpec(f'arg{i}',_dtype(t),shape,i>=inputs)
-                    for i,(t,shape) in enumerate(zip(contract['inputs']+contract['results'],shapes,strict=True)))+(IndexSpec('scratch',1,1),)
+                    for i,(t,shape) in enumerate(zip(contract['inputs']+contract['results'],shapes,strict=True)))+((TensorSpec('status','int64',(1,),True),) if checked_status else ())+(IndexSpec('scratch',1,1),)
         first,rest=gpu.split('\n',1)
         prefix='module attributes {'
         if not first.startswith(prefix) or not first.endswith('} {'):
@@ -102,13 +112,15 @@ class PersistentTapePair:
             manifest=read_tensor_contract(package)
             inputs=len(c['inputs'])
             expected=tuple(TensorSpec(f'arg{i}',_dtype(t),_shape(t),i>=inputs)
-                           for i,t in enumerate(c['inputs']+c['results']))+(IndexSpec('scratch',1,1),)
+                           for i,t in enumerate(c['inputs']+c['results']))+((TensorSpec('status','int64',(1,),True),) if _checked_status(package) else ())+(IndexSpec('scratch',1,1),)
             if (tensor_contract_specs(manifest)!=expected or manifest['grid']!=[1,1,1]
                     or manifest['block']!=[1,1,1]):
                 raise ValueError('persistent tape tensor binding disagrees with native product ABI')
             contracts.append(c)
         if (self.forward.backend,self.forward.chip)!=(self.backward.backend,self.backward.chip):
             raise ValueError('persistent tape products require the same backend')
+        if _checked_status(self.forward)!=_checked_status(self.backward):
+            raise ValueError('persistent tape status contracts disagree')
         f,b=contracts
         if b['inputs']!=f['inputs']+f['results'] or b['results']!=f['inputs']:
             raise ValueError('persistent tape residual ABI disagrees')
@@ -140,9 +152,10 @@ class PersistentTapeFrame:
         self._submissions=[]
         self._lock=threading.RLock()
         self._identities=(pair.forward.binding_digest,pair.backward.binding_digest)
+        self._checked_status=_checked_status(pair.forward)
         self._bindings=[]
         for package,contract in zip((pair.forward,pair.backward),(f,b),strict=True):
-            names=[f'arg{i}' for i in range(len(contract['inputs'])+len(contract['results']))]+['scratch']
+            names=[f'arg{i}' for i in range(len(contract['inputs'])+len(contract['results']))]+(['status'] if self._checked_status else [])+['scratch']
             signature=inspect.Signature([inspect.Parameter(n,inspect.Parameter.POSITIONAL_ONLY) for n in names])
             self._bindings.append(generate_tensor_binding(package,signature))
         self._bindings[0]._bound=pair.forward.bind()
@@ -163,13 +176,15 @@ class PersistentTapeFrame:
         self.context=self.context_type()
         self.check(self.current(ct.byref(self.context)))
         try:
+            self._status: tuple[_Buffer,...]=(_Buffer(self,(1,),'int64'),) if self._checked_status else ()
             self._inputs=tuple(_Buffer(self,_shape(t),_dtype(t)) for t in f['inputs'])
             self._outputs=tuple(_Buffer(self,_shape(t),_dtype(t)) for t in f['results'])
-            self._bindings[0]._resident(*inputs,*self._outputs,1)
+            self._bindings[0]._resident(*inputs,*self._outputs,*self._status,1)
             self.check(self.sync())
             for source,target in zip(inputs,self._inputs,strict=True):
                 self.check(self.copy(target.pointer,P(source.__cuda_array_interface__['data'][0]),target.nbytes))
-            self._bindings[0](*self._inputs,*self._outputs,1)
+            self._bindings[0](*self._inputs,*self._outputs,*self._status,1)
+            self._check_status()
             self._primal_count=f['primal_results']
             self.primals=tuple(_ReadOnly(v) for v in self._outputs[:self._primal_count])
             self.residuals=tuple(_ReadOnly(v) for v in self._outputs[self._primal_count:])
@@ -177,15 +192,28 @@ class PersistentTapeFrame:
             self.close()
             raise
 
-    def _ready(self):
+    def _ready(self, *, allow_retirement_failure=False):
         if self.closed:
             raise ValueError('persistent tape frame is closed')
+        if getattr(self,'_retirement_poisoned',False) and not allow_retirement_failure:
+            raise RuntimeError('failed asynchronous free quarantined the frame; device teardown is required')
         current=self.context_type()
         self.check(self.current(ct.byref(current)))
         if current.value!=self.context.value:
             raise ValueError('persistent tape requires its owning device context')
         if self._identities!=(self.pair.forward.binding_digest,self.pair.backward.binding_digest):
             raise ValueError('persistent tape package changed')
+
+    def _check_status(self):
+        if not self._checked_status:
+            return
+        result=ct.c_int64()
+        cuda=self.pair.forward.backend=='nvidia'
+        copy=getattr(self._driver,'cuMemcpyDtoH_v2' if cuda else 'hipMemcpyDtoH')
+        copy.argtypes,copy.restype=[ct.c_void_p,ct.c_void_p,ct.c_size_t],ct.c_int
+        self.check(copy(ct.byref(result),self._status[0].pointer,ct.sizeof(result)))
+        if result.value!=0:
+            raise RuntimeError('persistent GPU product guard failed; outputs are unavailable')
 
     def backward(self,*cotangents):
         with self._lock:
@@ -195,31 +223,50 @@ class PersistentTapeFrame:
             start=len(self.buffers)
             try:
                 outputs=tuple(_Buffer(self,v.shape,v.dtype) for v in self._inputs)
-                self._bindings[1](*self._inputs,*cotangents,*self._outputs[self._primal_count:],*outputs,1)
+                self._bindings[1](*self._inputs,*cotangents,*self._outputs[self._primal_count:],*outputs,*self._status,1)
+                self._check_status()
                 return tuple(_ReadOnly(v) for v in outputs)
             except BaseException:
                 self._release(start)
                 raise
 
-    def backward_async(self, stream, *cotangents):
+    def backward_async(self, stream, *cotangents, tracked=False):
         """Enqueue a distinct derivative generation on a caller-owned stream.
 
         The event retains the frame and cotangents. Outputs advertise their
         producer stream, so another native tensor binding can order consumers.
         Close still synchronizes before freeing externally visible generations.
+        With tracked=True, outputs use stream-ordered pool storage and are exposed
+        only by read(stream) scopes; retire(stream) orders frees after all readers.
+        The frame's unrestricted primal/residual exports retain their close barrier.
         """
         with self._lock:
             self._ready()
+            if self._checked_status:
+                raise ValueError('checked GPU products require synchronous status consumption')
             if type(stream) is not int or not 0 < stream < (1 << 64):
                 raise ValueError('persistent tape requires a non-null stream')
             if len(cotangents)!=self._primal_count:
                 raise ValueError('persistent tape cotangent arity disagrees')
+            if type(tracked) is not bool:
+                raise ValueError('tracked ownership selection must be boolean')
+            if tracked:
+                cuda=self.pair.forward.backend=='nvidia'
+                self.alloc_async=getattr(self._driver,'cuMemAllocAsync' if cuda else 'hipMallocAsync')
+                self.free_async=getattr(self._driver,'cuMemFreeAsync' if cuda else 'hipFreeAsync')
+                self.alloc_async.argtypes,self.alloc_async.restype=[ct.POINTER(ct.c_void_p),ct.c_size_t,ct.c_void_p],ct.c_int
+                self.free_async.argtypes,self.free_async.restype=[ct.c_void_p,ct.c_void_p],ct.c_int
             start=len(self.buffers)
             try:
-                outputs=tuple(_Buffer(self,v.shape,v.dtype) for v in self._inputs)
+                outputs=tuple(_Buffer(self,v.shape,v.dtype,stream=stream if tracked else None) for v in self._inputs)
                 submission=self._bindings[1].submit(stream,*self._inputs,*cotangents,
                     *self._outputs[self._primal_count:],*outputs,1)
-                result=PersistentDerivativeSubmission(self,submission,outputs,stream)
+                from .native_reader_retirement import TrackedDerivativeGeneration
+                result: TrackedDerivativeGeneration | PersistentDerivativeSubmission
+                if tracked:
+                    result=TrackedDerivativeGeneration(self,submission,outputs,self._bindings[1]._bound)
+                else:
+                    result=PersistentDerivativeSubmission(self,submission,outputs,stream)
                 self._submissions.append(result)
                 return result
             except BaseException:
@@ -234,7 +281,8 @@ class PersistentTapeFrame:
             self._ready()
             for submission in tuple(self._submissions):
                 if submission.poll():
-                    self._submissions.remove(submission)
+                    if submission in self._submissions:
+                        self._submissions.remove(submission)
             return not self._submissions
 
     def _release(self,start):

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-06
+last_updated: 2026-09-07
 audit_role: theme
 ---
 
@@ -29,7 +29,7 @@ execution from compilation through the canonical IR. The driver still reaches
 historical Graph-owned package constructors beside newer scheduled consumers;
 the NVIDIA scheduled matmul wrapper has migrated to native artifact ownership.
 Remaining Graph-owned families are migration targets, not a permanent second
-authority. The [integrated foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
+authority. The [integrated foundation program](INTEGRATED_COMPILER_PLAN.md#foundation-program)
 owns the cuts and retirement gates. Python stays the interface/oracle; native
 MLIR/LLVM transformations and backend generators own program compilation.
 This is source inspection and plan reconciliation, not new device evidence.
@@ -95,7 +95,7 @@ contracts. The stays-deleted gate remains in
 
 The deletion established that the old implementation had no usable native path;
 it did not measure the value of queue ownership semantics. The integrated
-plan's [deleted functionality reassessment](INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+plan's [deleted functionality reassessment](INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
 compares the existing pipeline model against bounded capacity, safe reuse and
 slot/phase requirements before considering a replacement. Any new dialect must
 have a parseable name, real producer and consumer, native lowering, and passing
@@ -2065,7 +2065,7 @@ review. No new compiler/runtime capability is inferred from the consolidation.
 
 The former FUNCTIONAL_ANALYSIS_TSOL_PLAN.md is now a reference redirect; its
 mathematical models and verification log are preserved in the archive.
-[FA-1–FA-7 ownership](INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership)
+[FA-1–FA-7 ownership](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
 keeps numerical-budget composition, spectral multiplier consumption and
 consumer-gated low-rank legality open. Existing AD laws are reused, recurrence
 stability belongs to the sequence-mixer plan, and broad functional calculus
@@ -2077,9 +2077,23 @@ it does not close these features or change backend evidence states.
 
 FORGE and the original math-source proposal moved to archived references after
 all residual IDs were mapped into existing owners in the
-[integrated plan](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07).
+[integrated plan](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation).
 Their live paths are routing notes. Matrix calculus and sequence theory retain
 unique mathematical contracts and stay references; PDE, Riemannian OT and the
 sequence engineering plan retain active native-consumer obligations. This
 supersedes earlier blanket “keep FORGE live” guidance without claiming its
 stateful fusion/distributed work complete.
+
+
+## Integrated-plan role reconciliation — 2026-09-07
+
+The integrated plan now owns only the foundation map, grouped remaining-task
+records and navigation index. The older central queue, E2E reset, wave tables,
+estimates and duplicated governance/fleet statements moved to
+[archived provenance](archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md).
+All later increments are preserved in the [engineering log](INTEGRATED_COMPILER_LOG.md),
+with role `reference`; historical “Next” lists are not current priority.
+The [reconciliation table](INTEGRATED_COMPILER_PLAN.md#reconciliation-before-archival)
+routes unresolved work, including W1/W2 target proof, W3 ownership, W4 products,
+W5 scheduling/transport, W6 AD/algebra and ordered TSOL/tooling rows 8–14.
+No capability row or exact-device promotion changes in this documentation move.

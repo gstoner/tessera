@@ -30,7 +30,7 @@ Gaps filled by this contract remain labeled **[GAP-n]**.
 | Phase 6 | Sibling packages do not inherit gfx1151 proof. | Independent package ancestry and owning-host numerical evidence; F2 and backend queues. |
 | Phase 7 | Query-hoisted reference algorithm exists. | Native query hoisting, block-state lifetime/checkpoint legality and real pipeline/TP transport; F3 / W2.4a / AD / DIST-NATIVE-1. |
 
-[Integrated ownership and exit gates](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+[Integrated ownership and exit gates](INTEGRATED_COMPILER_PLAN.md#live-queue)
 control sequencing. This plan retains the model and workload-specific oracles.
 
 **Verification:** every derived result below is numerically checked by

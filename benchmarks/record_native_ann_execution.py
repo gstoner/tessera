@@ -40,12 +40,13 @@ def main():
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--seed',type=int,required=True)
     p.add_argument('--fuse-elementwise',action='store_true')
+    p.add_argument('--parallel-rows',action='store_true')
     args=p.parse_args()
     Device(args.backend)
     chip='sm_120' if args.backend=='nvidia' else 'gfx1151'
     os.environ['TESSERA_OPT']=str(args.compiler.resolve())
     pair=prepare_native_ann(source(),allow_reassociation=True)
-    physical=materialize_native_ann_gpu(pair,compiler=args.compiler,llvm_bin=Path('/usr/lib/llvm-23/bin'),backend=args.backend,chip=chip,fuse_elementwise=args.fuse_elementwise)
+    physical=materialize_native_ann_gpu(pair,compiler=args.compiler,llvm_bin=Path('/usr/lib/llvm-23/bin'),backend=args.backend,chip=chip,fuse_elementwise=args.fuse_elementwise,parallel_rows=args.parallel_rows)
     values=[np.zeros((3,2),np.float32),np.ones((3,2),np.float32),-np.ones((3,2),np.float32),
             np.array([[-1,1],[.5,-.5],[1,-1]],np.float32)]
     medians=[]
@@ -65,7 +66,7 @@ def main():
         bounds=[str(v) for v in runner.bounds]
     names=['python/tessera/compiler/native_ann.py','python/tessera/compiler/native_ann_gpu.py',
            'python/tessera/compiler/native_gpu_storage.py','src/transforms/lib/NativeTapeToGPUPass.cpp']
-    args.output.write_text(json.dumps(dict(schema=1,backend=args.backend,chip=chip,pid=os.getpid(),seed=args.seed,
+    args.output.write_text(json.dumps(dict(schema=1,parallel_rows=args.parallel_rows,backend=args.backend,chip=chip,pid=os.getpid(),seed=args.seed,
         pair=pair.digest,original=physical.original.binding_digest,transformed=physical.transformed.binding_digest,
         input_bound=1.0,absolute_budget=.001,bounds=bounds,numerical_verified=True,
         timing_domain='warm_package_h2d_dispatch_d2h_host_wall',samples_ms=samples,medians_ms=medians,

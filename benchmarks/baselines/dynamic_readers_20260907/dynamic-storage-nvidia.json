@@ -1,0 +1,66 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "rows": [
+    {
+      "result": [
+        [
+          7.0,
+          0.0,
+          0.0
+        ],
+        [
+          7.0,
+          7.0,
+          0.0
+        ],
+        [
+          7.0,
+          7.0,
+          7.0
+        ]
+      ],
+      "logical_widths": [
+        1,
+        2,
+        3
+      ],
+      "slot_capacity": 3,
+      "binding_digest": "311e6a21dfbe3250243526946d5154d125df8e5ce7cdf808e52fa01c73a10e45"
+    },
+    {
+      "result": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          7.0,
+          0.0,
+          0.0
+        ],
+        [
+          7.0,
+          7.0,
+          0.0
+        ]
+      ],
+      "logical_widths": [
+        0,
+        1,
+        2
+      ],
+      "slot_capacity": 2,
+      "binding_digest": "d553a48835239c0b4489468fed594cdae41ae0a1ace1341cd9dbbb367eb9ae38"
+    }
+  ],
+  "isolated_iteration_slots": 3,
+  "compiler_sha256": "f8fe0be108aa931b8e9d63c1e813eb1e399e686c536ca2d58bafe79efabdfe0a",
+  "sources": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "8f9719451f1d581e636187e8d80acd6080871afad5ce01492cc7c5fc6b1200a8",
+    "python/tessera/compiler/native_gpu_storage.py": "afa3cfda7db34c134ea13ad34389f47b40bfbc501551eaef3e0a397238683d69"
+  },
+  "recorder_sha256": "54b9f37de3dbd0871c0f707b4a40febed3649f7a24f56b14ea816058cb15a6f0",
+  "promotion_eligible": false
+}

@@ -6,7 +6,7 @@ audit_role: reference
 # Capability-plan status and sequencing — August 2026
 
 Historical record, not a current queue or execution claim. Current ownership is
-[in the integrated plan](../INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07). Mathematical contracts retained here
+[in the integrated plan](../INTEGRATED_COMPILER_LOG.md#2026-09-07--capability-plan-reconciliation). Mathematical contracts retained here
 are not new device or performance evidence.
 
 ## Block AttnRes original introduction

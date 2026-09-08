@@ -182,6 +182,7 @@ class BoundNativeGPUStorage:
         self._event_destroy = bind('cuEventDestroy_v2', 'hipEventDestroy', [P])
         self._stream_wait = bind('cuStreamWaitEvent', 'hipStreamWaitEvent', [P, P, U])
         self._pending: list[NativeSubmission] = []
+        self._untracked_inflight = False
         self._lock = threading.RLock()
         self._module, self._function = P(), P()
         blob = ct.create_string_buffer(package.image)
@@ -265,9 +266,28 @@ class BoundNativeGPUStorage:
             values, count = self._launch_size(arguments, grid, block)
             P = ct.c_void_p
             argv = (P * len(values))(*(ct.cast(ct.byref(v), P) for v in values))
+            self._untracked_inflight = True
             self._check(self._launch(self._function, *grid, *block, count, None, argv, None))
             self._check(self._sync())
+            self._untracked_inflight = False
             return count
+
+    def close_if_complete(self) -> bool:
+        """Unload only after every tracked launch proves completion by query.
+
+        Used by scoped owners that never export untracked kernel work. Driver
+        module unload itself is not claimed to have bounded host latency.
+        """
+        with self._lock:
+            if getattr(self,"_untracked_inflight",False):
+                return False
+            if not all(ticket.poll() for ticket in tuple(self._pending)):
+                return False
+            if self._module:
+                self._check(self._unload(self._module))
+                self._module = ct.c_void_p()
+            self._directory.cleanup()
+            return True
 
     def close(self) -> None:
         with self._lock:
@@ -275,6 +295,7 @@ class BoundNativeGPUStorage:
                 ticket.wait()
             if self._module:
                 self._check(self._sync())
+                self._untracked_inflight = False
                 self._check(self._unload(self._module))
                 self._module = ct.c_void_p()
             self._directory.cleanup()
@@ -293,6 +314,7 @@ class NativeSubmission:
         self._keepalive = keepalive
         self.dynamic_bytes = dynamic_bytes
         self.done = False
+        self._completed = False
         self._stream = stream
         _LIVE_SUBMISSIONS.add(self)
 
@@ -300,7 +322,7 @@ class NativeSubmission:
         if type(stream) is not int or not 0 < stream < (1 << 64):
             raise ValueError('dependency requires a non-null native stream')
         with self._owner._lock:
-            if not self.done:
+            if not self.done and not self._completed:
                 if self._event is None:
                     self.wait()
                 else:
@@ -311,27 +333,38 @@ class NativeSubmission:
         with self._owner._lock:
             if self.done:
                 return True
+            if self._completed:
+                self._finish_completion()
+                return True
             if self._event is None:
                 return False  # Failed event recording needs an explicit wait.
             status = self._owner._event_query(self._event)
             if status == 600:  # CUDA_ERROR_NOT_READY / hipErrorNotReady
                 return False
             self._owner._check(status)
-            self.wait()  # The successful query proves this wait cannot stall.
+            self._completed = True
+            self._finish_completion()  # Query success is already a completion proof.
             return True
 
     def wait(self) -> int:
         with self._owner._lock:
             if not self.done:
-                if self._event is None:
-                    self._owner._check(self._owner._stream_sync(ct.c_void_p(self._stream)))
-                else:
-                    self._owner._check(self._owner._event_sync(self._event))
-                while self._events:
-                    self._owner._check(self._owner._event_destroy(self._events[-1]))
-                    self._events.pop()
-                self._keepalive = ()
-                self.done = True
-                self._owner._pending.remove(self)
-                _LIVE_SUBMISSIONS.discard(self)
+                if not self._completed:
+                    if self._event is None:
+                        self._owner._check(self._owner._stream_sync(ct.c_void_p(self._stream)))
+                    else:
+                        self._owner._check(self._owner._event_sync(self._event))
+                    self._completed = True
+                self._finish_completion()
             return self.dynamic_bytes
+
+    def _finish_completion(self):
+        # Caller holds the owner lock and has observed successful completion.
+        # Failed event destruction retains the remaining events and resources.
+        while self._events:
+            self._owner._check(self._owner._event_destroy(self._events[-1]))
+            self._events.pop()
+        self._keepalive = ()
+        self.done = True
+        self._owner._pending.remove(self)
+        _LIVE_SUBMISSIONS.discard(self)

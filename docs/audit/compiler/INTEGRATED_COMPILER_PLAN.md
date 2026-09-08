@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 audit_role: plan
 plan_state: open
 ---
@@ -79,20 +79,20 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Route census and exact-device certificates**
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-- Gate: Reconcile every route/envelope with native ancestry and exact-device certificates; audit current inventories before any constructor deletion.
+- Gate: Native unary ancestry now covers x86 and Apple; reconcile the remaining route/envelope census and exact-device certificates before constructor deletion.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--f0-apple-family-domains-and-native-unary-ancestry)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--native-unary-ancestry-and-direct-x86-migration)
 
 ### COMPILER-DEVEX-1
 
 **Assertions-enabled validation and usable tools**
 
 - Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
-- Gate: Establish assertions-enabled MLIR negative tests, installed-driver smoke and reproducible tool provenance; retain release-build evidence separately.
+- Gate: Assertions-enabled LLVM and Tessera now execute on Super-Bear with focused negative tests. Broaden this lane to the full pass corpus and installed-driver smoke; preserve pinned provenance and separate release/device evidence.
 - Depends on: —
 - Start: host-free
-- Latest: [migration record](INTEGRATED_COMPILER_LOG.md#2026-09-07--compiler-plan-role-migration)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--assertions-enabled-native-compiler)
 
 ### EVIDENCE-PACKET-1
 
@@ -131,10 +131,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Remaining Graph-owned packaging and frontend retirement**
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-- Gate: Migrate surviving Graph-owned forward/direct/plugin callers and JitFn decomposition per family; delete _OpExtractor only after symbolic tracing, nonexecuting effect discovery and differential certificates cover its users.
+- Gate: Direct x86 f32 matmul joins baseline/AVX-512 unary native Schedule/Tile ownership. Migrate remaining non-f32 matmul, attention, cohort and breadth callers with target-specific descriptor projection and replay.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--dynamic-package-projection-validation)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--x86-f32-matmul-native-ownership)
 
 ### W1.1
 
@@ -173,10 +173,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Broader ANN admission and tuned candidates**
 
 - Owner: [ANN_CALCULUS_DESIGN_SPIKE.md](ANN_CALCULUS_DESIGN_SPIKE.md)
-- Gate: Extend bounded native ANN admission to composed nonlinear families and tuned GPU candidates; scoped registration lifetime and domain/error guards remain mandatory.
+- Gate: Extend fresh affine/absolute-value and affine/ReLU workload measurements into broader nonlinear families and physical schedules. Admit only exact-artifact scoped candidates passing the measured lower-bound gate; retain incumbents when evidence is insufficient.
 - Depends on: [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1): recipe/native identity for the candidate; broader raising is independent.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--broader-ann-workload-evidence)
 
 ### W5.2
 
@@ -205,30 +205,30 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Source CFG and effect-aware recovery**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Extend imported bounded native CFG recovery to frontend-produced typed edges, merge values, break/continue/early return and effect-aware replay; bounded native support is not arbitrary Python capture.
+- Gate: Implement tracer-owned typed source edges, merge values and effect-aware break/continue/early-return recovery. TraceRef still refuses Python value-dependent truth conversion; imported bounded native CFG and nested GPU guards do not close arbitrary Python source capture.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--dynamic-temporary-capacity-and-tracked-reader-retirement)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--python-cfg-boundary-review)
 
 ### AD-RESIDUAL-EVAL-1
 
 **Logical-shape ABI and persistent checkpoint execution**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Return logical shapes alongside capacity-backed GPU results; validate loaded extents before view/slice replay. Extend selected checkpoint execution, nested guards and asynchronous checked-result exposure without publishing failed outputs.
+- Gate: Native AD products now bind bounded dynamic GPU inputs and multiple rank-one through rank-four floating results using checked capacity/shape sidecars. Extend joint temporary-volume proofs, saved heterogeneous products, general alias/layout envelopes and automatic frontend wiring; exported shapes do not establish arbitrary Python CFG capture.
 - Depends on: [W4-PRODUCT-1](#w4-product-1): existing bounded product carrier; arbitrary source CFG closure is not a prerequisite.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--checked-persistent-products-and-composed-readers)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--runtime-shaped-ad-products)
 
 ### W2.4a
 
 **Generation ownership and scoped readers**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Broaden scoped readers and generation ownership; verify barrier-at-birth obligations on current SM120 producers. Keep failure quarantine and unrestricted-export barriers until all readers are tracked.
+- Gate: Scoped frames now enqueue generation and frame-storage frees after registered readers, then query completion before module release. Checked public results expose shapes only after completion/status checks. Extend ownership to runtime-shaped public frames, asynchronous capture and external readers; bound module-unload/failure handling. Scoped persistent frames are still static-shaped, and unrestricted views retain synchronous close.
 - Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--checked-persistent-products-and-composed-readers)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--scoped-whole-frame-retirement)
 
 ### NUMPOL-CARRIER-1
 

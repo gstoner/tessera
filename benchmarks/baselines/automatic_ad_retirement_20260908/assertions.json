@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "scope": "assertions-ON Tessera compiler checks; downstream image tools remain release",
+  "validation": "...............................                                          [100%]\n31 passed in 2.79s\n",
+  "compiler_sha256": "8f2477f4f4d3efdcaa4a2e79d9e61d3ac06a0588ee6f60432daa97825afc7c76",
+  "sources": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "bc925486cfa33fcab0e2861762cf679f820d161b4f22994170d4653927004329"
+  },
+  "device_execution_proven": false
+}

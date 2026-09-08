@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-09-08
 audit_role: plan
 plan_state: landing
 ---
@@ -910,3 +910,41 @@ defensive sort + roundtrip test) `[MAC]` first, then E2 ratchet baselines on the
 silicon boxes. Workstream A (mechanical dedup) can start in parallel since B1 is
 clean. **C2's launch-bridge scope (9.1(2)) is now the long pole of the lead-lane
 work** — sequence it accordingly.
+
+
+## COMPILER-DEVEX-1 — Assertions build recipe (2026-09-08)
+
+Current sequencing and remaining acceptance gates live at
+[COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1); the older phase
+ordering above is historical implementation context.
+
+`scripts/build_assertions_llvm.sh SOURCE_DIR BUILD_DIR` builds pinned LLVM/MLIR
+23.1.1 (`e7ce3600b55034ddf819638f395e3c475fad5be2`) with assertions enabled and
+X86/NVPTX/AMDGPU targets in an isolated directory. It verifies the source checkout
+and `llvm-config --assertion-mode`. Run in the owning host WSL environment.
+No install step replaces a production compiler.
+
+For the resulting upstream no-RTTI build, configure an isolated Tessera tree:
+
+```sh
+cmake -S . -B build-assertions -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS=-fno-rtti \
+  -DLLVM_DIR="$LLVM_ASSERT_BUILD/lib/cmake/llvm" \
+  -DMLIR_DIR="$LLVM_ASSERT_BUILD/lib/cmake/mlir" \
+  -DTESSERA_BUILD_EXAMPLES=OFF -DTESSERA_BUILD_PYTHON=OFF
+cmake --build build-assertions --target tessera-opt -j8
+python scripts/probe_llvm_assertions.py \
+  --llvm-config "$LLVM_ASSERT_BUILD/bin/llvm-config" --output /tmp/assertions.json
+TESSERA_OPT="$PWD/build-assertions/tools/tessera-opt/tessera-opt" \
+  python -m pytest tests/unit/test_native_public_results.py \
+    tests/unit/test_native_product_status.py tests/unit/test_pass_metadata.py \
+    tests/unit/test_diagnostic_code_registry.py -q
+```
+
+LLVM's RTTI setting must match the consumer; upstream defaults to OFF, while
+packaged production LLVM may differ. `HandleLLVMOptions` supplies `-UNDEBUG` to
+Tessera compilation. The executable probe requires SIGABRT and an LLVM assertion
+message; configuration alone is insufficient. Exact compiler hashes, assertion
+probe and focused pass evidence belong in
+`benchmarks/baselines/assertions_llvm_20260908/`. This is a compiler contract lane,
+not GPU execution proof or an installed-driver/whole-fleet closure claim.

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "pair": "a203898b95be45284bad72f1b78043da751b2d09ef18fdfe7a1094b180731af8",
+  "timing_domain": "warm_package_h2d_dispatch_d2h_host_wall",
+  "run_speedups": [
+    0.9905651876626578,
+    1.025564767472653,
+    0.996274124906042,
+    1.041178345841911,
+    1.0136407104559082,
+    1.0534577610301197,
+    0.9882659643660636,
+    0.9953749267248565,
+    1.0169516152467672
+  ],
+  "median_speedup": 1.0136407104559082,
+  "median_bounds": [
+    0.9905651876626578,
+    1.041178345841911
+  ],
+  "threshold": 1.02,
+  "performance_eligible": false,
+  "production_promoted": false,
+  "reason": "lower bound does not clear 2 percent margin",
+  "selected_candidate": "ann_gpu_original_e8b9da3bc5eda4cf27220f789b360772c476f062092196632ef31fa5e023742b",
+  "scoped_rewrite_selected": false,
+  "reports": [
+    "run-1.json",
+    "run-2.json",
+    "run-3.json",
+    "run-4.json",
+    "run-5.json",
+    "run-6.json",
+    "run-7.json",
+    "run-8.json",
+    "run-9.json"
+  ],
+  "candidate_retired": true
+}

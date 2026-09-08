@@ -41,7 +41,9 @@ Evidence: Test fixture.
 '''
     with pytest.raises(ValueError,match='requires an update'):
         checker.check_transition(plan,log,plan,log+extra)
-    changed=plan.replace('Gate: Broaden scoped readers','Gate: Extend scoped readers')
+    gate=checker.records(plan)['W2.4a']['Gate']
+    changed=plan.replace('- Gate: '+gate, '- Gate: Test-only changed acceptance boundary.', 1)
+    assert changed != plan
     checker.check_transition(plan,log,changed,log+extra)
 
 

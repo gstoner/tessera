@@ -222,3 +222,49 @@ def test_scoped_reverse_composition_owns_cotangent_reader():
     assert owner.backward_into(frame,22)=='child'
     assert owner._active==0 and len(owner._readers)==1
     owner.retire(23).wait()
+
+
+
+def test_checked_generation_retires_status_without_exposing_unchecked_readers():
+    from tessera.compiler.native_reader_retirement import CheckedTrackedDerivativeGeneration
+    base,native=setup()
+    status=SimpleNamespace(pointer=ct.c_void_p(3))
+    base.frame.buffers.append(status)
+    owner=CheckedTrackedDerivativeGeneration(base.frame,base._submission,base._buffers,status,native)
+    with pytest.raises(ValueError,match='compiler-gated'):
+        owner.read(21)
+    owner.retire(22)
+    assert owner.poll()
+    assert [c[1] for c in native.calls if c[0]=='free']==[1,2,3]
+    assert not any(c[0] in ('event_wait','stream_sync') for c in native.calls)
+
+
+def test_scoped_frame_retirement_requires_closed_readers_and_releases_modules():
+    from tessera.compiler.native_persistent_tape import PersistentTapeFrame
+    owner,native=setup()
+    frame=owner.frame
+    frame._submissions=[]
+    frame._scoped=True
+    frame._frame_owner=owner
+    frame._retiring=False
+    frame.closed=False
+    frame._bindings=[SimpleNamespace(close_if_complete=lambda: native.calls.append(('module_close',)) or True)]
+    with owner.read(21):
+        with pytest.raises(ValueError,match='closed scoped readers'):
+            PersistentTapeFrame.retire(frame,23)
+    PersistentTapeFrame.retire(frame,23)
+    native.ready=False
+    assert not PersistentTapeFrame.poll_retired(frame)
+    assert not frame.closed and ('module_close',) not in native.calls
+    native.ready=True
+    assert PersistentTapeFrame.poll_retired(frame)
+    assert frame.closed and not frame.buffers
+    assert not any(call[0] in ('event_wait','stream_sync') for call in native.calls)
+
+
+def test_unrestricted_frame_refuses_asynchronous_retirement():
+    from tessera.compiler.native_persistent_tape import PersistentTapeFrame
+    owner,_=setup()
+    owner.frame._scoped=False
+    with pytest.raises(ValueError,match='unrestricted'):
+        PersistentTapeFrame.retire(owner.frame,23)

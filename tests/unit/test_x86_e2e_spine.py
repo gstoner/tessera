@@ -327,8 +327,23 @@ def test_canonical_x86_selector_preserves_opt_out_and_unsupported_route(
     assert fallback.launch_descriptor is None
 
 
+def _stub_unary_schedule_boundary(monkeypatch):
+    # These tests isolate image/descriptor joining. Native replay and execution
+    # are exercised separately in test_x86_unary_migration.
+    from dataclasses import replace
+    from tests.unit.test_scheduled_kernel_consumers import _artifact
+    from tessera.compiler import native_unary_contract
+    def lower(module, *, target):
+        family = 'softmax' if module.functions[0].body[0].op_name == 'tessera.softmax' else 'reduce'
+        artifact = _artifact(family=family, target='x86')
+        return replace(artifact, axis=-1 if family == 'softmax' else 2)
+    monkeypatch.setattr('tessera.compiler.scheduled_kernel.lower_scheduled_kernel', lower)
+    monkeypatch.setattr(native_unary_contract, 'verify_unary_ancestry', lambda *args, **kwargs: None)
+
+
 @pytest.mark.parametrize("family,abi", [("softmax", X86_SOFTMAX_F32_ABI), ("reduction", X86_REDUCE_F32_ABI)])
 def test_x86_packages_own_shared_object_and_typed_descriptor(monkeypatch, family, abi) -> None:
+    _stub_unary_schedule_boundary(monkeypatch)
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
     package = (
         package_softmax(_softmax_module(), pipeline_name="tessera-lower-to-x86")
@@ -339,7 +354,7 @@ def test_x86_packages_own_shared_object_and_typed_descriptor(monkeypatch, family
     assert package.image.architecture == "x86_64_avx512"
     assert package.image.binary_format == "shared_object"
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-1"
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-5"
 
 
 @pytest.mark.skipif(
@@ -423,6 +438,7 @@ def test_x86_loader_uses_unique_temporary_image_without_memfd(monkeypatch) -> No
 
 
 def test_driver_joins_x86_native_package(monkeypatch) -> None:
+    _stub_unary_schedule_boundary(monkeypatch)
     monkeypatch.setattr(
         "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
         lambda module, *, target: False,
@@ -463,6 +479,13 @@ def test_x86_builtin_launcher_registers_each_pilot_abi_in_isolation(abi) -> None
     ],
 )
 def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager, abi) -> None:
+    if abi == X86_MATMUL_F32_ABI:
+        # This is a host-free descriptor test. Actual Schedule replay and
+        # execution are covered in test_x86_unary_migration.
+        from tests.unit.test_scheduled_matmul_consumers import _artifact
+        monkeypatch.setattr("tessera.compiler.scheduled_matmul.lower_scheduled_matmul",
+                            lambda *args, **kwargs: _artifact(target="x86"))
+        monkeypatch.setattr("tessera.compiler.scheduled_matmul.verify_matmul_projection",lambda _: None)
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
     monkeypatch.setattr(
         "tessera.compiler.x86_native._lower_attention_semantics",
@@ -474,7 +497,7 @@ def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager
     expected_item = (
         "X86-ATTN-CANON-1"
         if abi in {X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI}
-        else "X86-E2E-1"
+        else "E2E-REAL-3"
     )
     assert package.descriptor.provenance["work_item"] == expected_item
     if expected_item == "X86-ATTN-CANON-1":

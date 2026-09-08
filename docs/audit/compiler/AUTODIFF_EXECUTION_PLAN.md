@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 audit_role: plan
 plan_state: landing
 ---
@@ -262,7 +262,86 @@ can submit into native tensor bindings or another frame's backward call, closing
 reader scopes even after an enqueue error. This is reverse-program composition,
 not automatic higher-order differentiation.
 
-The integrated plan's **Checked persistent products and composed readers**
-section owns the remaining returned logical-shape ABI, validated loaded extents,
-source CFG/effect recovery and asynchronous checked-reader protocol. Static
-capacity allocation alone does not close exported shape-varying GPU tapes.
+Current sequencing belongs to the live integrated-plan tasks:
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1) owns the
+returned logical-shape ABI, validated loaded extents and checked-result protocol;
+[W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1) owns source CFG/effect
+recovery; [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns scoped readers and
+generation retirement. The [historical increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--checked-persistent-products-and-composed-readers)
+records bounded evidence only. Static capacity allocation alone does not close
+exported shape-varying GPU tapes.
+
+
+### Checked host tickets — 2026-09-08
+
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1) now includes
+asynchronous static-product submission with independent per-generation status.
+Successful `wait()` or `poll()` must consume status before `outputs` is exposed.
+Failure is retained, while release/close still drains outstanding device work.
+`tracked=True` remains refused for checked products: event completion is not a
+success predicate for device readers. Dynamic public shapes, nested guards and
+fully asynchronous reclamation remain open under the live owners above.
+
+
+## 2026-09-08 — Nested guards and checked device readers
+
+The latest [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+consumer accepts explicitly authored rank-one capacity-buffer programs with
+compiler-projected shape sidecars. Device status and host extent validation
+precede public logical views. This supersedes the earlier blanket nested-guard
+refusal for supported single-block `scf.for`/`scf.if`, including scalar yields.
+General tensor-returning AD still needs an automatic producer for this ABI.
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) now includes dependent checked backward
+submission: an event orders producer completion, and an incoming device status
+prevents the child body from reading failed derivative data. SM120 and gfx1151
+prove the successful chain and injected failure. Allocation and release retain
+context completion barriers; fully asynchronous reclamation remains open.
+Apple has no corresponding MSL status/shape producer; x86 proof is independent.
+
+
+## 2026-09-08 — Automatic result ABI and checked pool retirement
+
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1) now has an
+automatic native export-to-public-result adapter for a single rank-one AD
+result with static external arguments. Capacity is a checked storage budget;
+logical length is computed by the device. Dynamic backward inputs and saved
+multi-result/multidimensional products still need their own carriers.
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) now retires checked derivative data
+and status through the pool after every registered reader event. Gated child
+backwards do not need a host success readback; generic scoped reads require
+`wait_success()`. Healthy retirement/poll does not wait on the context. Whole
+frame capture/close and exceptional teardown retain their completion barriers.
+
+
+### Runtime-shaped products and scoped frames — 2026-09-08
+
+AD-RESIDUAL-EVAL-1 now generates multiple rank-one through rank-four public
+result sidecars and bounded dynamic input descriptors from exported native AD.
+`public-input-capacity` binds flat physical storage and separate per-axis i64
+shapes; native guards reject negative, overflowing, static-axis-mismatched and
+incompatible elementwise dimensions before access. Output copies pack logical
+row-major data and check total volume. `NativePublicResult.submit` queries device
+completion before reading status/shapes and exposing a logical view.
+
+W2.4a adds `capture(scoped=True, stream=...)`, scoped primal/residual readers and
+`retire` / `poll_retired` for whole-frame storage. Generation readers precede
+frame frees. Pool/event failures preserve ownership; module release happens only
+after tracked completion. Scoped persistent frames still use static tensor shapes; runtime-shaped public
+frames retain synchronous close. Capture, exceptional recovery and unrestricted-export
+close remain synchronous. Module unload latency and general external-reader
+adoption are not closed. No overlap or performance claim follows from this proof.
+
+Source CFG remains owned by W4-PRODUCT-1: the tracer rejects Python data-dependent
+truth conversion. Native bounded CFG normalization and nested guard execution do
+not recover Python merge values, early return, break/continue or arbitrary effects.
+See the live integrated plan for sequencing and
+`benchmarks/baselines/runtime_shape_frames_20260908/` for exact-device scope.
+
+The private temporary allocator still reserves the product of independently
+proved dimension maxima under its 4096-byte ceiling. It does not yet reuse the
+new input volume guard as a joint allocation bound. Consequently larger dynamic
+multidimensional products can refuse even when their actual logical volume fits
+the public capacity. AD-RESIDUAL-EVAL-1 owns carrying that joint bound through
+allocation/view lowering; the current small-shape packets do not close it.

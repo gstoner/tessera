@@ -104,3 +104,56 @@ def test_shared_readonly_inputs_do_not_serialize_independent_outputs():
     call.submit(9, source, first)
     assert tickets[0].waits == [9]
     assert tickets[1].waits == []
+
+
+
+def test_completed_cleanup_retries_without_requerying_destroyed_event():
+    from tessera.compiler.native_gpu_storage import NativeSubmission
+    calls=[]; failures=[True]
+    def destroy(event):
+        calls.append(('destroy',event))
+        if event==11 and failures and failures.pop():
+            return 1
+        return 0
+    def check(code):
+        if code:raise RuntimeError('destroy failed')
+    owner=SimpleNamespace(_lock=threading.RLock(),_pending=[],_check=check,
+        _event_query=lambda event:calls.append(('query',event)) or 0,
+        _event_destroy=destroy,_event_sync=lambda event:pytest.fail('completed event waited'))
+    ticket=NativeSubmission(owner,12,[11,12],(object(),),0,7)
+    owner._pending.append(ticket)
+    with pytest.raises(RuntimeError):ticket.poll()
+    assert ticket._keepalive and not ticket.done
+    ticket.wait_on(9)
+    assert ticket.poll() and not ticket._keepalive
+    assert [c for c in calls if c[0]=='query']==[('query',12)]
+
+
+def test_idle_module_close_queries_completion_without_context_wait():
+    native,calls=binding()
+    native._directory=SimpleNamespace(cleanup=lambda: calls.append('cleanup'))
+    native._unload=lambda module: calls.append('unload') or 0
+    native._event_query=lambda event: 600
+    native.submit((32,),grid=(1,1,1),block=(32,1,1),stream=7)
+    assert not native.close_if_complete()
+    assert 'unload' not in calls
+    native._event_query=lambda event: 0
+    assert native.close_if_complete()
+    assert calls[-2:]==['unload','cleanup']
+    assert 'event_sync' not in calls
+    with pytest.raises(ValueError,match='closed'):
+        native.submit((32,),grid=(1,1,1),block=(32,1,1),stream=7)
+
+
+def test_module_query_close_refuses_failed_synchronous_launch_completion():
+    native,calls=binding()
+    native._directory=SimpleNamespace(cleanup=lambda: calls.append('cleanup'))
+    native._unload=lambda module: calls.append('unload') or 0
+    native._sync=lambda: 1
+    with pytest.raises(RuntimeError,match='driver status'):
+        native.launch((32,),grid=(1,1,1),block=(32,1,1))
+    assert not native.close_if_complete()
+    assert 'unload' not in calls
+    native._sync=lambda: 0
+    native.close()
+    assert calls[-2:]==['unload','cleanup']

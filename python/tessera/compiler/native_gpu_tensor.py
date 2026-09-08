@@ -211,6 +211,15 @@ class NativeTensorCall:
             self._inflight.append((ticket, accesses))
             return TensorSubmission(ticket, outputs)
 
+    def close_if_complete(self):
+        with self._lock:
+            if self._bound is not None:
+                if not self._bound.close_if_complete():
+                    return False
+                self._bound = None
+            self._inflight = []
+            return True
+
     def close(self):
         with self._lock:
             if self._bound is not None:

@@ -18,7 +18,9 @@ from .native_storage_contract import attach_tensor_contract, generate_tensor_bin
 from .native_persistent_tape import _attribute
 
 
-def materialize_native_ann_gpu(pair, *, compiler, llvm_bin, backend, chip, fuse_elementwise=False, parallel_rows=False):
+def materialize_native_ann_gpu(pair, *, compiler, llvm_bin, backend, chip, fuse_elementwise=False, parallel_rows=False, tune_transformed=False):
+    if type(tune_transformed) is not bool:
+        raise ValueError("ANN tuning selection must be boolean")
     if type(fuse_elementwise) is not bool or type(parallel_rows) is not bool:
         raise ValueError('ANN fusion and row-parallel selections must be boolean')
     pair.validate()
@@ -26,8 +28,10 @@ def materialize_native_ann_gpu(pair, *, compiler, llvm_bin, backend, chip, fuse_
     if hashlib.sha256(compiler.read_bytes()).hexdigest() != pair.compiler_digest:
         raise ValueError('ANN physical compiler differs from rewrite owner')
     packages=[]
-    for source in (pair.original, pair.transformed):
-        gpu=_prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fuse_elementwise,parallel_rows)
+    for transformed,source in enumerate((pair.original, pair.transformed)):
+        fused = fuse_elementwise or (tune_transformed and bool(transformed))
+        rows = parallel_rows or (tune_transformed and bool(transformed))
+        gpu=_prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fused,rows)
         packages.append(build_native_gpu_storage(gpu,compiler=compiler,llvm_bin=llvm_bin,backend=backend,chip=chip))
     result=NativeANNDevicePair(pair,packages[0],packages[1],compiler,llvm_bin)
     result.validate()
@@ -220,7 +224,7 @@ def summarize_native_ann_measurements(reports):
     seen=set()
     speedups=[]
     for report in reports:
-        if any(report[k]!=first[k] for k in identity_keys) or report.get('numerical_verified') is not True:
+        if any(type(report[k]) is not type(first[k]) or report[k]!=first[k] for k in identity_keys) or report.get('numerical_verified') is not True:
             raise ValueError('ANN measurement identity or numerical evidence disagrees')
         if type(report.get('pid')) is not int or report['pid']<=0 or report['pid'] in seen:
             raise ValueError('ANN measurement requires distinct process runs')
@@ -332,6 +336,39 @@ class NativeANNDeviceRegistration:
         self.candidates=(NativeANNDeviceCandidate(self,False),NativeANNDeviceCandidate(self,True))
         register_op_kind(ANN_GPU,_verify_gpu_ann)
         for candidate in self.candidates:register_candidate(candidate)
+
+    def select_from_measurements(self, reports):
+        """Admit fixed-count evidence for these exact artifacts, then verify.
+
+        Selection is scoped to this registration. It does not publish a global
+        tuned route or transfer package timings to a different target/domain.
+        """
+        from .emit.candidate import arbitrate
+        if self.closed or self.runner.closed:
+            raise ValueError('ANN measurement owner is closed')
+        self.runner._ready()
+        summary = summarize_native_ann_measurements(reports)
+        first = reports[0]
+        expected = dict(backend=self.region.backend,chip=self.region.chip,
+            pair=self.region.logical.pair.digest,original=self.region.original_digest,
+            transformed=self.region.transformed_digest,input_bound=self.region.logical.input_bound,
+            absolute_budget=self.region.logical.absolute_budget,bounds=[str(v) for v in self.runner.bounds])
+        if any(type(first.get(k)) is not type(v) or first[k]!=v for k,v in expected.items()):
+            raise ValueError('ANN measurements do not belong to this artifact/domain/budget')
+        root = Path(__file__).resolve().parents[3]
+        names = ('python/tessera/compiler/native_ann.py','python/tessera/compiler/native_ann_gpu.py',
+                 'python/tessera/compiler/native_gpu_storage.py','src/transforms/lib/NativeTapeToGPUPass.cpp')
+        if first.get('sources') != {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in names}:
+            raise ValueError('ANN measurement source identity changed')
+        recorder = root/'benchmarks/record_native_ann_execution.py'
+        if first.get('recorder_sha256') != hashlib.sha256(recorder.read_bytes()).hexdigest():
+            raise ValueError('ANN measurement recorder identity changed')
+        rewrite = bool(summary['performance_eligible'] and self.runner.rewrite_admitted)
+        selected = arbitrate(self.region,ANN_GPU,self.region.backend,force=self.candidates[int(rewrite)].name)
+        if selected is None:
+            raise ValueError('ANN candidate failed scoped arbitration')
+        return selected, {**summary,'selected_candidate':selected.name,'scoped_rewrite_selected':rewrite,
+                          'production_promoted':False}
 
     def close(self):
         from .emit.candidate import unregister_candidate

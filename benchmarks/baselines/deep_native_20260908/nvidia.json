@@ -1,0 +1,52 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution_kind": "native_gpu",
+  "rows": [
+    {
+      "case": "device_computed_length",
+      "logical_length": 0,
+      "capacity": 8
+    },
+    {
+      "case": "device_computed_length",
+      "logical_length": 8,
+      "capacity": 8
+    },
+    {
+      "case": "device_computed_length",
+      "logical_length": 3,
+      "capacity": 8
+    },
+    {
+      "case": "nested_guard",
+      "output_refused": true,
+      "failed_body_and_suffix_writes_suppressed": true
+    },
+    {
+      "case": "invalid_returned_length",
+      "output_refused": true
+    },
+    {
+      "case": "missing_returned_length",
+      "output_refused": true
+    },
+    {
+      "case": "device_gated_reader",
+      "injected_upstream_failure": false
+    },
+    {
+      "case": "device_gated_reader",
+      "injected_upstream_failure": true
+    }
+  ],
+  "promotion_eligible": false,
+  "overlap_measured": false,
+  "sources": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "30cda5268c4f9acf2679532a43730ddda3e7ba309ba5d0cdc6e65ed85467d7f0",
+    "python/tessera/compiler/native_public_result.py": "05f11a3c957e67b47b495d857d4f10b1d4bc34d915a651306c4fab56a2f43386",
+    "python/tessera/compiler/native_persistent_tape.py": "039f8faadba904fc6f395740253828983c52b8cd4c0b10e59e54ca0d233a2285"
+  },
+  "compiler_sha256": "6593431f00e72d1d6d408c042dc2f98e3906a5bde2d46a2f29c6785cc346e6fd",
+  "recorder_sha256": "a84f1ec7a12a054fb644e18e3d0c0446d7f4dacdf33877bd8d1af625281ca7fd"
+}

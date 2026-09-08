@@ -1137,108 +1137,37 @@ def package_softmax(
     module: GraphIRModule, *, pipeline_name: str,
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> X86NativePackage:
-    contract = _softmax_contract(module)
-    if contract is None:
+    if _softmax_contract(module) is None:
         raise ValueError("x86 native softmax requires one static f32 last-axis operation")
-    input_name, output_name, shape = contract
-    symbol = (
-        "tessera_x86_base_softmax_f32"
-        if architecture == X86_BASE_ARCHITECTURE
-        else "tessera_x86_avx512_softmax_f32"
-    )
-    tile_ir = emit_softmax_tile_ir(entry="tessera_tile_x86_softmax_f32")
-    target_ir, payload, compiler, toolchain = (
-        _lower(tile_ir, symbol, "softmax", architecture)
-        if architecture == X86_BASE_ARCHITECTURE
-        else _lower(tile_ir, symbol, "softmax")
-    )
-    image = _image(target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
-                   pipeline_name=pipeline_name, symbol=symbol, abi=X86_SOFTMAX_F32_ABI,
-                   architecture=architecture)
-    rows, columns = (math.prod(shape[:-1]) if len(shape) > 1 else 1), shape[-1]
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=X86_SOFTMAX_F32_ABI,
-        buffers=(
-            BufferBinding(0, input_name, "input", "fp32", len(shape), "row_major", 4),
-            BufferBinding(1, output_name, "output", "fp32", len(shape), "row_major", 4),
-        ),
-        scalars=(ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64")),
-        shape_guards=tuple(
-            ShapeGuard(name, axis, "eq", extent)
-            for name in (input_name, output_name) for axis, extent in enumerate(shape)
-        ),
-        geometry=LaunchGeometry(policy=f"{architecture}_rows"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
-        provenance={
-            "work_item": (
-                "E2E-SPINE-3" if architecture == X86_BASE_ARCHITECTURE
-                else "X86-E2E-1"
-            ),
-            "route": f"{architecture}_c_abi",
-            "shape": list(shape), "rows": rows, "columns": columns,
-            "storage": "f32", "accum": "f32",
-        },
-    )
-    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
+    return _package_unary(module, pipeline_name, architecture)
 
 
 def package_reduction(
     module: GraphIRModule, *, pipeline_name: str,
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> X86NativePackage:
-    contract = _reduction_contract(module)
-    if contract is None:
-        raise ValueError("x86 native reduction requires one static f32 last-axis sum/mean/max")
-    input_name, output_name, kind, shape, output_shape, axis, keepdims = contract
-    symbol = (
-        "tessera_x86_base_reduce_f32"
-        if architecture == X86_BASE_ARCHITECTURE
-        else "tessera_x86_avx512_reduce_f32"
-    )
-    tile_ir = emit_reduce_tile_ir(entry=f"tessera_tile_x86_reduce_{kind}_f32", kind=kind, axis=axis, keepdims=keepdims)
-    target_ir, payload, compiler, toolchain = (
-        _lower(tile_ir, symbol, "reduction", architecture)
-        if architecture == X86_BASE_ARCHITECTURE
-        else _lower(tile_ir, symbol, "reduction")
-    )
-    image = _image(target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
-                   pipeline_name=pipeline_name, symbol=symbol, abi=X86_REDUCE_F32_ABI,
-                   architecture=architecture)
-    outer, extent = (math.prod(shape[:-1]) if len(shape) > 1 else 1), shape[-1]
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=X86_REDUCE_F32_ABI,
-        buffers=(
-            BufferBinding(0, input_name, "input", "fp32", len(shape), "row_major", 4),
-            BufferBinding(1, output_name, "output", "fp32", len(output_shape), "row_major", 4),
-        ),
-        scalars=(
-            ScalarArgument(2, "Outer", "int64"), ScalarArgument(3, "AxisExtent", "int64"),
-            ScalarArgument(4, "Inner", "int64"),
-        ),
-        shape_guards=tuple(
-            [ShapeGuard(input_name, index, "eq", value) for index, value in enumerate(shape)]
-            + [ShapeGuard(output_name, index, "eq", value) for index, value in enumerate(output_shape)]
-        ),
-        geometry=LaunchGeometry(policy=f"{architecture}_rows"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
-        provenance={
-            "work_item": (
-                "E2E-SPINE-3" if architecture == X86_BASE_ARCHITECTURE
-                else "X86-E2E-1"
-            ),
-            "route": f"{architecture}_c_abi", "kind": kind,
-            "shape": list(shape), "axis": axis, "keepdims": keepdims,
-            "outer": outer, "axis_extent": extent, "inner": 1,
-            "storage": "f32", "accum": "f32",
-        },
-    )
-    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
+    if _reduction_contract(module) is None:
+        raise ValueError("x86 native reduction requires one static f32 last-axis operation")
+    return _package_unary(module, pipeline_name, architecture)
+
+
+def _package_unary(module, pipeline_name, architecture):
+    from .scheduled_kernel import lower_scheduled_kernel
+    if architecture not in (X86_BASE_ARCHITECTURE, X86_AVX512_ARCHITECTURE):
+        raise ValueError('unsupported x86 unary architecture')
+    native_arch = 'x86_64_base' if architecture == X86_BASE_ARCHITECTURE else 'zen5-avx512'
+    return package_scheduled_kernel(lower_scheduled_kernel(module,target='x86',
+                                    **({'architecture': native_arch} if architecture == X86_BASE_ARCHITECTURE else {})),
+                                    pipeline_name=pipeline_name)
 
 
 def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
     contract = _matmul_contract(module)
     if contract is None:
         raise ValueError("x86 native matmul requires one static rank-2 f32 matmul")
+    if contract[-1] == ("fp32", "fp32", "fp32"):
+        from .scheduled_matmul import lower_scheduled_matmul
+        return package_scheduled_matmul(lower_scheduled_matmul(module,target="x86"),pipeline_name=pipeline_name)
     a_name, b_name, output_name, (m, n, k), dtypes = contract
     a_dtype, b_dtype, output_dtype = dtypes
     variants = {
@@ -1306,6 +1235,8 @@ def package_scheduled_matmul(
     """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
 
     artifact.validate()
+    from .scheduled_matmul import verify_matmul_projection
+    verify_matmul_projection(artifact)
     if (
         artifact.target != "x86"
         or artifact.architecture != "zen5-avx512"
@@ -1385,36 +1316,41 @@ def package_scheduled_kernel(
     """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
 
     artifact.validate()
+    from .native_unary_contract import verify_unary_ancestry
+    baseline = artifact.architecture == "x86_64_base"
+    architecture = X86_BASE_ARCHITECTURE if baseline else X86_AVX512_ARCHITECTURE
+    verify_unary_ancestry(artifact, target="x86", architecture=artifact.architecture)
     if (
         artifact.target != "x86"
-        or artifact.architecture != "zen5-avx512"
+        or artifact.architecture not in ("zen5-avx512", "x86_64_base")
         or artifact.dtype != "fp32"
         or artifact.storage != "f32"
         or artifact.accum != "f32"
     ):
-        raise ValueError("x86 scheduled semantic kernel requires the f32 Zen 5 contract")
+        raise ValueError("x86 scheduled semantic kernel requires a supported f32 architecture contract")
     scalars: tuple[ScalarArgument, ...]
     if artifact.family == "softmax":
-        symbol, abi = "tessera_x86_avx512_softmax_f32", X86_SOFTMAX_F32_ABI
+        symbol, abi = ("tessera_x86_base_softmax_f32" if baseline else "tessera_x86_avx512_softmax_f32"), X86_SOFTMAX_F32_ABI
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
-        geometry = "x86_64_avx512_rows"
+        geometry = architecture + "_rows"
     elif artifact.family == "reduce" and artifact.axis == len(artifact.input_shape) - 1:
-        symbol, abi = "tessera_x86_avx512_reduce_f32", X86_REDUCE_F32_ABI
+        symbol, abi = ("tessera_x86_base_reduce_f32" if baseline else "tessera_x86_avx512_reduce_f32"), X86_REDUCE_F32_ABI
         scalars = (
             ScalarArgument(2, "Outer", "int64"),
             ScalarArgument(3, "AxisExtent", "int64"),
             ScalarArgument(4, "Inner", "int64"),
         )
-        geometry = "x86_64_avx512_rows"
+        geometry = architecture + "_rows"
     else:
         raise ValueError("unsupported x86 scheduled semantic-kernel family")
     family = "reduction" if artifact.family == "reduce" else artifact.family
-    target_ir, payload, compiler, toolchain = _lower(
-        artifact.tile_ir, symbol, family
+    target_ir, payload, compiler, toolchain = (
+        _lower(artifact.tile_ir, symbol, family, architecture) if baseline
+        else _lower(artifact.tile_ir, symbol, family)
     )
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler,
-        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
+        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi, architecture=architecture,
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
@@ -1452,7 +1388,7 @@ def package_scheduled_kernel(
             "accum": artifact.accum,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
-            "required_features": ["avx512f"],
+            "required_features": [] if baseline else ["avx512f"],
         },
     )
     return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)

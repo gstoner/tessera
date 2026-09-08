@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-05
+last_updated: 2026-09-08
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -6797,3 +6797,54 @@ view exposure. Arbitrary Python CFG/effects, assertions-enabled MLIR and measure
 reclamation/overlap remain open.
 
 Exact-device packet: `benchmarks/baselines/product_status_20260907/nvidia.json`. Six correctness cases; checked-status and asynchronous composition are separate routes.
+
+
+### 2026-09-08 — F0 / F2 / F4: native unary ancestry and checked tickets
+
+Owner: **E2E-REAL-6F / E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / W2.4a**; sync key **IR-NATIVE-FOUNDATION-1**.
+
+Checked host tickets pass independent derivative generations and injected failure refusal on RTX 5070/SM120. Tracked checked readers, dynamic returned shapes and measured overlap remain open.
+
+Current sequencing: [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+LLVM assertions remain OFF on the two probed Linux fleet builds. Correctness
+and injected-status evidence are separate from performance promotion.
+
+
+### 2026-09-08 — Native result and measured-admission increment
+
+Sync key: `DEEP-NATIVE-2026-09-08`; owners: AD-RESIDUAL-EVAL-1, W2.4a, E2E-REAL-6, MSW-9 and COMPILER-DEVEX-1 in the [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+SM120 exact-device validation covers logical lengths 0/3/8, nested failure refusal and checked device-reader chaining. Release remains context-synchronous; no overlap claim. Scoped ANN evidence remains package timing, not kernel or global promotion.
+
+Shared contracts: compiler-projected capacity/shape ABI, nested status propagation, incoming product status and exact-artifact scoped measurement admission. Evidence: `benchmarks/baselines/deep_native_20260908/`, `benchmarks/baselines/deep_ann_20260908/` and focused native contract tests. General dynamic tensor/AD production, broader reader adoption and tuned ANN families remain open.
+
+COMPILER-DEVEX-1: Super-Bear now hosts an isolated assertions-ON LLVM/Tessera
+compiler lane (257 focused checks). It found and fixed a missing Tile dialect
+dependency in NativeTapeToGPUPass. Other hosts retain release builds; compiler
+validation is shared contract evidence, not sibling device execution proof.
+
+
+### 2026-09-08 — Automatic AD, checked pools and independent ANN tuning
+
+Owners: AD-RESIDUAL-EVAL-1 / W2.4a / E2E-REAL-6 / MSW-9; sync key `AUTO-AD-POOL-ANN-2026-09-08`. See the [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+SM120 validates generated dynamic forward lengths, capacity refusal and checked generation retirement. Scoped 16x8 ANN evidence selects the independently fused row-parallel rewrite at 1.0753x median package speedup; this does not publish a global route.
+
+Shared changes: native result-capacity projection, monotonic completion proof during event cleanup, scoped checked readers and independent physical ANN schedules. Whole-frame asynchronous ownership, dynamic GPU backward inputs and wider tuned families remain open. Evidence: `benchmarks/baselines/automatic_ad_retirement_20260908/` and `benchmarks/baselines/tuned_ann_20260908/`.
+
+
+### 2026-09-08 — Runtime shapes and scoped frame retirement
+
+Owners: AD-RESIDUAL-EVAL-1 / W2.4a / E2E-REAL-6 / MSW-9 / W4-PRODUCT-1;
+sync key `RUNTIME-SHAPES-FRAMES-2026-09-08`. Sequencing:
+[live integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+SM120 device proof covers runtime-shaped backward products, multiple matrix results and eight scoped frame retirements. Broader ANN measurements remain workload-specific; no global promotion.
+
+Shared contracts: checked per-axis/volume bounds, contiguous dynamic input
+views, independent output sidecars, post-completion checked exposure and scoped
+frame reader retirement. Capture and exceptional cleanup remain synchronous;
+module-unload latency, arbitrary Python CFG, general saved products and wider
+nonlinear consumers remain open. Evidence:
+`benchmarks/baselines/runtime_shape_frames_20260908/` and
+`benchmarks/baselines/broad_ann_20260908/`.

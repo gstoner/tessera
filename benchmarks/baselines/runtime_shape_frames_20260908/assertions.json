@@ -1,0 +1,14 @@
+{
+  "scope": "Assertions-enabled Tessera/LLVM 23.1.1; downstream tools remain release builds",
+  "focused_and_audit_tests_passed": 299,
+  "host_free_descriptor_tests_passed": 4,
+  "device_execution_proven": false,
+  "compiler_sha256": "68bf1182abde8f6c9f3c297c57b84ba53ded2f8a8dfd8cc1644447685c31e149",
+  "sources": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "300bf4951197707380ead8860c167ccbd260dd851f5ab902b6b5057e291dc8d5",
+    "tests/unit/test_automatic_ad_public_results.py": "450df7cf8a58232349e45d1841abf2703edb26ce55c761bb2961366bb78b181c",
+    "tests/unit/test_native_public_results.py": "8c69b2fef2180a504630956ae53559ccbaf4f440cf9db709f231fbf6cd91f2ea",
+    "tests/unit/test_native_reader_retirement.py": "17a5ffb56e6ac2ee172a2557f75c297d385d6b9fb171f028b3d67721193c6def",
+    "tests/unit/test_native_gpu_streams.py": "45349cbfbbff5bd4b4d0ddd08e948bdcbeb0f8f2a15e172477c3891214e06a8f"
+  }
+}

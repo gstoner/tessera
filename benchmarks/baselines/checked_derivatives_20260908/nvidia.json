@@ -1,0 +1,28 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "rows": [
+    {
+      "case": "independent_checked_generation",
+      "derivative": 6
+    },
+    {
+      "case": "independent_checked_generation",
+      "derivative": 12
+    },
+    {
+      "case": "injected_status_failure",
+      "output_refused": true,
+      "released": true
+    }
+  ],
+  "promotion_eligible": false,
+  "overlap_measured": false,
+  "compiler_sha256": "7026e19403f8f951ac24fbd1670e1c7fbfaaa4afdffaf50845ad748f71fe62a1",
+  "sources": {
+    "python/tessera/compiler/native_persistent_tape.py": "12ead912836bc661d9fddecd204e04c4cf659badc1aa758b343912c0277c1c20",
+    "python/tessera/compiler/native_gpu_tensor.py": "38c1fa0c418932f8629d5d791fa49297fab4eb460f201025a8f72d1c73bdd5b5",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "fd06f9c1a7187ccce339cadd6c7a9dc324e2c0275e1cfc26d17687046f52f707"
+  },
+  "recorder_sha256": "48ae59af7e6aed238643e790b24abcec1005b49c0632f9a407fbbdb57f45e138"
+}

@@ -130,6 +130,8 @@ def test_graph_lowers_through_content_addressed_semantic_kernel(family, target, 
 
 
 def test_x86_packages_exact_scheduled_softmax(monkeypatch) -> None:
+    from tessera.compiler import native_unary_contract
+    monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
     artifact = _artifact(family="softmax", target="x86")
     monkeypatch.setattr(
         x86_native, "_lower",
@@ -301,6 +303,8 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, tmp_path, 
 
     monkeypatch.setattr(_driver, "_apple_scheduled_boundary_available", lambda: True)
     if target == "x86":
+        from tessera.compiler import native_unary_contract
+        monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
         monkeypatch.setattr(
             x86_native, "_lower",
             lambda tile_ir, symbol, family: (f"module {{ call @{symbol} }}", b"x86", "compiler", "toolchain"),

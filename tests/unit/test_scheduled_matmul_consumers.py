@@ -490,6 +490,9 @@ def test_scheduled_artifact_rejects_graph_reentry() -> None:
 
 def test_x86_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     artifact = _artifact(target="x86")
+    # Isolate image consumption; native projection/tampering is tested by
+    # test_x86_unary_migration with an actual compiler-produced parent.
+    monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda _: None)
 
     def fake_lower(tile_ir: str, symbol: str, family: str):
         assert tile_ir == artifact.tile_ir

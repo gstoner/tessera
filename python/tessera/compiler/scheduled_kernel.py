@@ -92,6 +92,7 @@ def lower_scheduled_kernel(
     *,
     target: str,
     schedule: str | None = None,
+    architecture: str | None = None,
 ) -> ScheduledKernelArtifact:
     if schedule is not None:
         module = copy.deepcopy(module)
@@ -99,6 +100,10 @@ def lower_scheduled_kernel(
                 and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin"}):
             module.functions[0].body[0].kwargs["schedule"] = schedule
     contract = _graph_contract(module, target)
+    if architecture is not None:
+        if target != 'x86' or architecture not in ('zen5-avx512','x86_64_base'):
+            raise ValueError('unsupported scheduled unary architecture')
+        contract = (contract[0], architecture, *contract[2:])
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("scheduled softmax/reduction lowering requires production tessera-opt")
@@ -110,7 +115,7 @@ def lower_scheduled_kernel(
     if contract[5] == "reduce":
         op.op_name = "tessera.reduce"
         op.kwargs = {"kind": contract[6], "axis": contract[14]}
-        if target == "nvidia_sm120":
+        if target in {"nvidia_sm120", "x86"}:
             op.kwargs.update(keepdims=contract[15], schedule=contract[20])
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
@@ -232,7 +237,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         if not isinstance(keepdims, bool):
             raise ValueError("scheduled reduction keepdims must be boolean")
         allowed = {"sum", "mean", "max", "min"} if target == "nvidia_sm120" else {"sum", "mean", "max"}
-        if kind not in allowed or (keepdims and target != "nvidia_sm120"):
+        if kind not in allowed or (keepdims and target not in {"nvidia_sm120", "x86"}):
             raise ValueError("scheduled reduction requires rank-reducing sum/mean/max")
         raw_axis = op.kwargs.get("axis", -1)
         if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):

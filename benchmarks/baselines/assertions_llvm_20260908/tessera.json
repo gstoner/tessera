@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "host": "Super-Bear WSL",
+  "llvm_revision": "e7ce3600b55034ddf819638f395e3c475fad5be2",
+  "assertion_mode": "ON",
+  "tessera_opt_sha256": "820f80ebf98c33fb1aafb8c79e588a60d17375470be78d71005f93cedf36eb29",
+  "sources": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "30cda5268c4f9acf2679532a43730ddda3e7ba309ba5d0cdc6e65ed85467d7f0",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "117eb8bd8944e4f2a0bf1548b1775a03382c1b1ed9f99122f41b25818bfede5d"
+  },
+  "validation": "................................ss..sss................................. [ 27%]\n........................................................................ [ 54%]\n........................................................................ [ 82%]\n..............................................                           [100%]\n257 passed, 5 skipped in 1.60s\n",
+  "configuration": "RelWithDebInfo; CMAKE_CXX_FLAGS=-fno-rtti; HandleLLVMOptions adds -UNDEBUG",
+  "fixed_finding": "NativeTapeToGPUPass created Tile IR without declaring TesseraTileDialect in dependent dialects",
+  "production_toolchain_replaced": false,
+  "composed_pipeline_validation": "........................................................................ [ 94%]\n....                                                                     [100%]\n76 passed in 36.12s\n",
+  "composed_pipeline_scope": "Tessera passes use assertions-ON tessera-opt; downstream /usr/lib/llvm-23 tools and host JIT use release builds. ROCM_PATH=/tmp/tessera-rocdl-linker points llvm/bin/ld.lld to /usr/lib/llvm-23/bin/ld.lld for image-only cross-compilation, not a ROCm runtime."
+}

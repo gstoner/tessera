@@ -641,7 +641,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     return failure();
   auto keepAttr = op->getAttrOfType<BoolAttr>("keepdims");
   bool keepdims = keepAttr && keepAttr.getValue();
-  if (keepdims && !nvidia) return failure();
+  if (keepdims && !nvidia && !x86) return failure();
   if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
     schedule.reductionSchedule = mode.getValue();
   if (schedule.reductionSchedule != "serial" &&

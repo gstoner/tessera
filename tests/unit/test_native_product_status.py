@@ -26,11 +26,12 @@ def test_checked_guard_retains_failed_status_and_gates_suffix(backend):
     assert 'memref<1xi64>' in text
 
 
-def test_nested_assertions_still_refuse():
+def test_nested_assertions_propagate_status():
     source = dynamic_source().replace('%n = arith.addi %i, %one : index',
         '%ok = arith.constant true\ncf.assert %ok, "nested"\n%n = arith.addi %i, %one : index')
-    with pytest.raises(RuntimeError):
-        run_tessera_opt(compiler(),source,'--tessera-native-tape-to-gpu=status-buffer=true')
+    text = run_tessera_opt(compiler(),source,'--tessera-native-tape-to-gpu=status-buffer=true')
+    assert 'cf.assert' not in text
+    assert 'scf.if' in text and 'memref<1xi64>' in text
 
 
 def test_synchronous_binding_refuses_scoped_reader():
@@ -41,11 +42,11 @@ def test_synchronous_binding_refuses_scoped_reader():
         NativeTensorCall.__call__(call,SimpleNamespace(_tessera_reader_stream=21))
 
 
-def test_checked_frame_refuses_async_before_allocating():
+def test_checked_frame_refuses_invalid_stream_before_allocating():
     from tessera.compiler.native_persistent_tape import PersistentTapeFrame
     frame=SimpleNamespace(_lock=threading.RLock(),_ready=lambda:None,_checked_status=True)
-    with pytest.raises(ValueError,match='synchronous status'):
-        PersistentTapeFrame.backward_async(frame,21)
+    with pytest.raises(ValueError,match='non-null stream'):
+        PersistentTapeFrame.backward_async(frame,0,tracked=True)
 
 
 from benchmarks.record_product_status import function_cfg_source

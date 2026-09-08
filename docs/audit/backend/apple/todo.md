@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-05
+last_updated: 2026-09-08
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -8084,3 +8084,54 @@ See the integrated plan for the exported shape-varying ABI design: returned
 logical extents, validated loaded bounds, capacity ownership and status before
 view exposure. Arbitrary Python CFG/effects, assertions-enabled MLIR and measured
 reclamation/overlap remain open.
+
+
+### 2026-09-08 — F0 / F2 / F4: native unary ancestry and checked tickets
+
+Owner: **E2E-REAL-6F / E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / W2.4a**; sync key **IR-NATIVE-FOUNDATION-1**.
+
+Shared unary descriptor projection is reused with Apple-native target replay. Metal execution is not revalidated in this Linux-host loop. MSL logical-shape/status and completion ownership still need an Apple consumer.
+
+Current sequencing: [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+LLVM assertions remain OFF on the two probed Linux fleet builds. Correctness
+and injected-status evidence are separate from performance promotion.
+
+
+### 2026-09-08 — Native result and measured-admission increment
+
+Sync key: `DEEP-NATIVE-2026-09-08`; owners: AD-RESIDUAL-EVAL-1, W2.4a, E2E-REAL-6, MSW-9 and COMPILER-DEVEX-1 in the [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Follow-up required: no MSL public-shape or incoming-status producer is implemented here; CUDA/HIP proof does not transfer. Existing Apple scheduled unary projection is unchanged.
+
+Shared contracts: compiler-projected capacity/shape ABI, nested status propagation, incoming product status and exact-artifact scoped measurement admission. Evidence: `benchmarks/baselines/deep_native_20260908/`, `benchmarks/baselines/deep_ann_20260908/` and focused native contract tests. General dynamic tensor/AD production, broader reader adoption and tuned ANN families remain open.
+
+COMPILER-DEVEX-1: Super-Bear now hosts an isolated assertions-ON LLVM/Tessera
+compiler lane (257 focused checks). It found and fixed a missing Tile dialect
+dependency in NativeTapeToGPUPass. Other hosts retain release builds; compiler
+validation is shared contract evidence, not sibling device execution proof.
+
+
+### 2026-09-08 — Automatic AD, checked pools and independent ANN tuning
+
+Owners: AD-RESIDUAL-EVAL-1 / W2.4a / E2E-REAL-6 / MSW-9; sync key `AUTO-AD-POOL-ANN-2026-09-08`. See the [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Follow-up required: the new automatic rank-one AD result adapter and checked pool reader protocol have CUDA/HIP consumers only. MSL logical-shape and status production remain open; no Metal proof transfers.
+
+Shared changes: native result-capacity projection, monotonic completion proof during event cleanup, scoped checked readers and independent physical ANN schedules. Whole-frame asynchronous ownership, dynamic GPU backward inputs and wider tuned families remain open. Evidence: `benchmarks/baselines/automatic_ad_retirement_20260908/` and `benchmarks/baselines/tuned_ann_20260908/`.
+
+
+### 2026-09-08 — Runtime shapes and scoped frame retirement
+
+Owners: AD-RESIDUAL-EVAL-1 / W2.4a / E2E-REAL-6 / MSW-9 / W4-PRODUCT-1;
+sync key `RUNTIME-SHAPES-FRAMES-2026-09-08`. Sequencing:
+[live integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Follow-up required: MSL still needs native input/output shape sidecars and completion ownership. CUDA/HIP proof does not transfer; no Apple runtime change.
+
+Shared contracts: checked per-axis/volume bounds, contiguous dynamic input
+views, independent output sidecars, post-completion checked exposure and scoped
+frame reader retirement. Capture and exceptional cleanup remain synchronous;
+module-unload latency, arbitrary Python CFG, general saved products and wider
+nonlinear consumers remain open. Evidence:
+`benchmarks/baselines/runtime_shape_frames_20260908/` and
+`benchmarks/baselines/broad_ann_20260908/`.

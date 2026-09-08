@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-05
+last_updated: 2026-09-08
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -4462,3 +4462,54 @@ See the integrated plan for the exported shape-varying ABI design: returned
 logical extents, validated loaded bounds, capacity ownership and status before
 view exposure. Arbitrary Python CFG/effects, assertions-enabled MLIR and measured
 reclamation/overlap remain open.
+
+
+### 2026-09-08 — F0 / F2 / F4: native unary ancestry and checked tickets
+
+Owner: **E2E-REAL-6F / E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / W2.4a**; sync key **IR-NATIVE-FOUNDATION-1**.
+
+Direct AVX-512 softmax and rank-reducing sum/mean/max now consume replayed Schedule/Tile with native descriptor projection; direct runtime execution passes on Princess-Luna. Baseline and keepdims fallback constructors remain. CUDA/HIP checked tickets do not establish x86 asynchronous retirement.
+
+Current sequencing: [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+LLVM assertions remain OFF on the two probed Linux fleet builds. Correctness
+and injected-status evidence are separate from performance promotion.
+
+
+### 2026-09-08 — Native result and measured-admission increment
+
+Sync key: `DEEP-NATIVE-2026-09-08`; owners: AD-RESIDUAL-EVAL-1, W2.4a, E2E-REAL-6, MSW-9 and COMPILER-DEVEX-1 in the [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated for AVX-512 keepdims sum/mean/max native package execution on Princess-Luna. Baseline Graph-owned packaging remains open. CUDA/HIP result and reader execution is not applicable to this host ABI.
+
+Shared contracts: compiler-projected capacity/shape ABI, nested status propagation, incoming product status and exact-artifact scoped measurement admission. Evidence: `benchmarks/baselines/deep_native_20260908/`, `benchmarks/baselines/deep_ann_20260908/` and focused native contract tests. General dynamic tensor/AD production, broader reader adoption and tuned ANN families remain open.
+
+COMPILER-DEVEX-1: Super-Bear now hosts an isolated assertions-ON LLVM/Tessera
+compiler lane (257 focused checks). It found and fixed a missing Tile dialect
+dependency in NativeTapeToGPUPass. Other hosts retain release builds; compiler
+validation is shared contract evidence, not sibling device execution proof.
+
+
+### 2026-09-08 — Automatic AD, checked pools and independent ANN tuning
+
+Owners: AD-RESIDUAL-EVAL-1 / W2.4a / E2E-REAL-6 / MSW-9; sync key `AUTO-AD-POOL-ANN-2026-09-08`. See the [live compiler plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Baseline softmax/reduction now consume native Schedule/Tile and their own scalar ABI, with direct runtime proof on Princess-Luna. GPU dynamic-result and pool-retirement execution is not applicable to this host ABI.
+
+Shared changes: native result-capacity projection, monotonic completion proof during event cleanup, scoped checked readers and independent physical ANN schedules. Whole-frame asynchronous ownership, dynamic GPU backward inputs and wider tuned families remain open. Evidence: `benchmarks/baselines/automatic_ad_retirement_20260908/` and `benchmarks/baselines/tuned_ann_20260908/`.
+
+
+### 2026-09-08 — Runtime shapes and scoped frame retirement
+
+Owners: AD-RESIDUAL-EVAL-1 / W2.4a / E2E-REAL-6 / MSW-9 / W4-PRODUCT-1;
+sync key `RUNTIME-SHAPES-FRAMES-2026-09-08`. Sequencing:
+[live integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Direct f32 matmul joins the native Schedule/Tile route with descriptor projection and replay. CUDA/HIP frame retirement is not applicable to this host ABI; non-f32 matmul/attention/cohort/breadth migration remains open.
+
+Shared contracts: checked per-axis/volume bounds, contiguous dynamic input
+views, independent output sidecars, post-completion checked exposure and scoped
+frame reader retirement. Capture and exceptional cleanup remain synchronous;
+module-unload latency, arbitrary Python CFG, general saved products and wider
+nonlinear consumers remain open. Evidence:
+`benchmarks/baselines/runtime_shape_frames_20260908/` and
+`benchmarks/baselines/broad_ann_20260908/`.

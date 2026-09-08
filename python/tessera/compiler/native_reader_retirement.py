@@ -79,7 +79,7 @@ class _ReaderLease:
             owner._submission.ticket.wait_on(self.stream)
             self.used = self._active = True
             owner._active += 1
-            return tuple(_BorrowedView(self, buffer) for buffer in owner._buffers)
+            return tuple(_BorrowedView(self, buffer) for buffer in owner._reader_buffers)
 
     def __exit__(self, *exc):
         owner = self.owner
@@ -103,6 +103,7 @@ class TrackedDerivativeGeneration:
     def __init__(self, frame, submission, outputs, native):
         self.frame, self._submission, self._buffers = frame, submission, outputs
         self.native = native
+        self._reader_buffers = outputs
         self._readers = []
         self._retirements = []
         self._active = 0
@@ -196,3 +197,52 @@ class TrackedDerivativeGeneration:
             if self._free_failed:
                 raise RuntimeError("failed asynchronous free quarantined the frame; device teardown is required")
             return self._finish()
+
+
+class CheckedTrackedDerivativeGeneration(TrackedDerivativeGeneration):
+    """Checked pool generation: gated or status-checked readers, async retirement.
+
+    There is no unrestricted output export. Completion status is propagated on
+    the device; retiring a failed generation is safe after its readers finish.
+    """
+    def __init__(self, frame, submission, outputs, status, native):
+        super().__init__(frame, submission, (*outputs, status), native)
+        self._reader_buffers = outputs
+        self._status_buffer = status
+        self._success_checked = False
+
+    @property
+    def submission(self):
+        return self._submission
+
+    def wait_success(self):
+        """Explicit host status boundary for optional generic scoped readers."""
+        with self.frame._lock:
+            self.frame._ready()
+            if self.retiring:
+                raise ValueError('checked generation is retiring')
+            self._submission.ticket.wait()
+            self.frame._check_status(self._status_buffer)
+            self._success_checked = True
+        return self
+
+    def read(self, stream):
+        if not self._success_checked:
+            raise ValueError('checked tracked derivatives require a compiler-gated reader or successful status check')
+        return _ReaderLease(self, stream)
+
+    def backward_into(self, frame, stream, *, tracked=True):
+        from contextlib import ExitStack
+        from .native_persistent_tape import PersistentTapeFrame, _input_status
+        if not isinstance(frame, PersistentTapeFrame):
+            raise TypeError('checked reader requires a persistent frame')
+        with ExitStack() as stack:
+            for owner in sorted({self.frame, frame}, key=id):
+                stack.enter_context(owner._lock)
+                owner._ready()
+            if (self.frame.pair.forward.backend, self.frame.pair.forward.chip) != (frame.pair.forward.backend, frame.pair.forward.chip):
+                raise ValueError('checked reader requires the same owning target')
+            if not _input_status(frame.pair.backward):
+                raise ValueError('checked reader requires a compiler-gated product')
+            with _ReaderLease(self, stream) as outputs:
+                return frame.backward_async(stream, *outputs, tracked=tracked, _dependency=self)

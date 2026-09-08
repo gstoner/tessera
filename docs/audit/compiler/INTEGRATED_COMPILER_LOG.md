@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 audit_role: reference
 ---
 
@@ -2439,3 +2439,272 @@ support statuses. CI checks structured references and requires an owner-record
 or disposition update when adding an entry; the pre-push hook performs the
 structural check. Current-priority links were separated from historical evidence
 links, including the earlier math/capability reconciliation anchors.
+
+
+### 2026-09-08 — Native unary ancestry and direct x86 migration
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: x86 unary packages replay the native Schedule parent, verify native target attributes and project descriptor shapes, scalar extents and arithmetic policy before compilation; Apple reuses the bounded projection verifier.
+
+Remaining: Other family ancestry and full route/envelope census; assertions-enabled LLVM/MLIR validation remains unavailable on the probed fleet builds.
+
+Evidence: tests/unit/test_x86_unary_migration.py; tests/unit/test_scheduled_kernel_consumers.py; llvm-config --assertion-mode reports OFF on Princess-Luna and Super-Bear.
+
+<!-- entry-fields:end -->
+
+Forged dimensions/scalars, altered Tile dataflow and relabelled foreign parents
+refuse before compilation. Host aliases remain explicit binding aliases rather
+than claims about native SSA names. No device evidence transfers between targets.
+
+### 2026-09-08 — Direct x86 unary caller migration
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Direct AVX-512 softmax and rank-reducing sum/mean/max route through the existing native Schedule/Tile producer and checked consumer.
+
+Remaining: Baseline x86 and keepdims reductions retain their Graph constructors; other census families and frontend retirement are unchanged.
+
+Evidence: tests/unit/test_x86_unary_migration.py direct runtime execution on Princess-Luna and native ancestry rejection tests.
+
+<!-- entry-fields:end -->
+
+The lower-level C ABI and native library implementation are unchanged. This is
+package-authority migration, not new vectorization or a performance promotion.
+The census still counts Graph-typed compatibility entry points; a migrated
+branch does not erase its function's remaining fallback surface.
+
+### 2026-09-08 — Checked asynchronous derivative tickets
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Static checked GPU products enqueue backward asynchronously with an independent status allocation per generation; successful wait/poll is mandatory before exposing outputs.
+
+Remaining: Exported logical shapes, loaded extents, nested guards, fully asynchronous allocation/reclamation and device-gated tracked readers remain open under AD-RESIDUAL-EVAL-1 and W2.4a.
+
+Evidence: benchmarks/baselines/checked_derivatives_20260908/; tests/unit/test_checked_derivative_ticket.py; tests/unit/test_native_product_status.py.
+
+<!-- entry-fields:end -->
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) retains scoped-reader ownership.
+Failed status never exposes output and can still drain/release safely; frame
+close drains failed submissions without treating status failure as a reason to
+leak allocations. Unrestricted successful exports keep their context-completion
+release barrier. Two owning-device generations and explicitly injected nonzero
+status pass on SM120 and gfx1151; no overlap or performance claim is made.
+
+
+### 2026-09-08 — Native keepdims reduction
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: AVX-512 keepdims sum/mean/max now project output shapes and policy from native Schedule/Tile; descriptor keepdims forgery refuses before compilation.
+
+Remaining: Baseline x86 and remaining census families still retain Graph-owned paths. No performance promotion.
+
+Evidence: tests/unit/test_x86_unary_migration.py; direct native execution on Princess-Luna.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Logical results and nested device guards
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Native rank-one capacity-buffer programs return checked device-written logical lengths. Nested for/if guards suppress the enclosing suffix and later loop iterations, including scalar loop-carried exits.
+
+Remaining: This is an explicit buffer-program producer, not automatic dynamic tensor/AD result generation. Multidimensional logical shapes, arbitrary while regions and asynchronous public-result reclamation remain open.
+
+Evidence: benchmarks/baselines/deep_native_20260908/; tests/unit/test_native_public_results.py; tests/unit/test_native_product_status.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Device-gated derivative readers
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: CheckedDerivativeSubmission.backward_into enqueues a dependent backward with an event wait and native incoming-status gate before body effects; parent status need not return to the host first.
+
+Remaining: Release still uses a context completion barrier, and ordinary checked outputs still require successful host-status consumption. This does not close fully asynchronous reader-aware reclamation or general device graphs.
+
+Evidence: benchmarks/record_deep_native_contracts.py on SM120 and gfx1151; injected upstream failure refuses child output; no overlap claim.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Scoped measured ANN admission
+
+Owner: [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Scoped native ANN registration binds nine independent reports to exact package images, source/recorder identity, target, domain and analytic budget before oracle-verified arbitration. Closing the registration retires its candidates.
+
+Remaining: Package timing includes the host bridge and is not kernel timing. Broader nonlinear programs, tuning and global production promotion remain open.
+
+Evidence: tests/unit/test_native_ann_measurement_owner.py; benchmarks/baselines/deep_ann_20260908/; benchmarks/select_native_ann_measurements.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Assertions-enabled native compiler
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Pinned LLVM/MLIR 23.1.1 assertions-ON build and isolated Tessera consumer run on Super-Bear. An executable LLVM assertion probe aborts as expected. The new lane exposed and fixed NativeTapeToGPUPass's missing Tile dependent-dialect registration; the corrected compiler passes 257 focused checks plus 76 composed tape/ANN/storage/reader checks. The latter retain release downstream LLVM tools and host JIT.
+
+Remaining: Full pass-corpus and installed-driver assertions lanes; other hosts continue using release toolchains. Upstream no-RTTI and Tessera compile flags must match. No GPU execution/performance claim follows from compiler validation.
+
+Evidence: scripts/build_assertions_llvm.sh; scripts/probe_llvm_assertions.py; benchmarks/baselines/assertions_llvm_20260908/; tests/unit/test_native_public_results.py; tests/unit/test_native_product_status.py; native unary, pass metadata and diagnostic registry checks. Five target-tool tests skipped in the isolated build.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Baseline x86 unary ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Baseline softmax/reduction now project from native Schedule/Tile into their own scalar C ABI and image, with no AVX-512 feature requirement. Direct runtime tests cover both baseline families.
+
+Remaining: Matmul/attention, cohort and breadth routes remain Graph-owned; frontend retirement is unchanged.
+
+Evidence: tests/unit/test_x86_unary_migration.py; tests/unit/test_x86_e2e_spine.py on Princess-Luna.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Automatic AD public result generation
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: NativeTapeToGPUPass generates a checked capacity copy and logical-length sidecar from a rank-one exported AD result. Integer select alternatives extend SSA allocation bounds. Python invokes native export/bufferization rather than synthesizing result-copy math.
+
+Remaining: The dynamic forward slice uses static external inputs and one rank-one result; dynamic GPU backward inputs and saved multi-result/multidimensional products remain open.
+
+Evidence: tests/unit/test_automatic_ad_public_results.py; benchmarks/baselines/automatic_ad_retirement_20260908/.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Checked generation asynchronous reclamation
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Checked derivative data and status use stream-ordered pool allocation/free. Device-gated backward readers register completion before retirement; optional generic scoped reads require explicit successful host status. Successful polling cleans up events without a redundant wait, and failed destruction retains a monotonic completion proof for safe retry.
+
+Remaining: Whole-frame capture/close and exceptional teardown remain synchronous. Uncertain free submissions quarantine ownership. This is not general external-reader tracking or measured overlap.
+
+Evidence: tests/unit/test_native_reader_retirement.py; tests/unit/test_native_gpu_streams.py; benchmarks/record_checked_retirement.py on SM120 and gfx1151.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Independently tuned ANN rewrite
+
+Owner: [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Native source replay now allows a fused row-parallel transformed candidate against an unchanged serial incumbent. Nine independent 16x8 runs yield scoped SM120 selection (median 1.0753x; interval [1.0374,1.0883]); gfx1151 retains the incumbent (median 0.9997x; interval [0.9657,1.0170]).
+
+Remaining: Evidence is warm host-wall package timing for this frozen affine/ReLU workload, not kernel timing, arbitrary nonlinear closure or global promotion. Registrations retire after use.
+
+Evidence: benchmarks/baselines/tuned_ann_20260908/; benchmarks/record_native_ann_execution.py; benchmarks/select_native_ann_measurements.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Runtime-shaped AD products
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Native export/bufferization now binds dynamic GPU backward inputs with checked physical capacities and per-axis shape sidecars. Multiple rank-one through rank-four floating outputs use independent flat storage; native guards validate each extent and total volume. GPU result submission exposes no logical view until event completion and successful status/shape consumption.
+
+Remaining: Exact-device proof covers rank-one lengths 0/2/4, dynamic rank-two shapes, malformed/mismatched inputs and two matrix outputs. General saved mixed products, arbitrary layouts/aliases and automatic Python capture remain open.
+
+Evidence: benchmarks/baselines/runtime_shape_frames_20260908/; tests/unit/test_automatic_ad_public_results.py; tests/unit/test_native_public_results.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Scoped whole-frame retirement
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Opt-in scoped capture uses pool storage and reader leases for primals/residuals. Frame retirement enqueues every generation and frame free after registered readers; successful polling releases idle modules without an explicit context wait. Active readers refuse retirement and uncertain frees retain quarantine.
+
+Remaining: Scoped persistent frames still use static tensor shapes; runtime-shaped public-result frames retain synchronous close. Capture and exceptional cleanup remain synchronous. Module unload has no bounded-latency claim. Existing unrestricted views still require synchronous close; general external reader adoption and measured overlap remain open.
+
+Evidence: benchmarks/baselines/runtime_shape_frames_20260908/; tests/unit/test_native_reader_retirement.py; tests/unit/test_native_gpu_streams.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — x86 f32 matmul native ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Direct f32 matmul now enters native Graph-to-Schedule-to-Tile lowering. Packaging replays the Schedule parent and validates projected fields before target compilation; descriptor shape forgery refuses.
+
+Remaining: Non-f32 matmul, attention, cohort and breadth constructors remain scoped F2 work. This changes ownership, not the runtime kernel or performance promotion.
+
+Evidence: tests/unit/test_x86_unary_migration.py; tests/unit/test_x86_e2e_spine.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Broader ANN workload evidence
+
+Owner: [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: The measurement workload generator and scoped replay admit terminal absolute value alongside ReLU. Fresh 8x4 absolute-value and 32x4 ReLU comparisons retain independently replayed incumbent/rewrite schedules, analytic domains and finite error budgets. Nine quiet runs per workload and target retain the incumbent in all four comparisons; no lower confidence bound clears the 2% margin.
+
+Remaining: Use the revision-bound packets for selection outcomes. Host-wall package timing is not kernel timing or global promotion. Nonexpansive terminal consumers do not authorize moving nonlinearities across affine composition; arbitrary nonlinear graphs remain open.
+
+Evidence: benchmarks/baselines/broad_ann_20260908/; benchmarks/record_native_ann_execution.py; benchmarks/select_native_ann_measurements.py.
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-08 — Python CFG boundary review
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted follow-through after #735.
+
+Outcome: Source review confirms TraceRef.__bool__ rejects raw value-dependent Python if/while; explicit tessera.control regions and imported native bounded CFGs are the current consumed paths. Nested native status guards now also protect dynamic input shapes and multiple output shape copies.
+
+Remaining: Arbitrary Python source CFG remains open: tracer-owned typed merge values, break/continue/early return, effect legality and source-location-preserving recovery require a frontend producer. Legacy AST markers are not execution proof.
+
+Evidence: python/tessera/compiler/trace.py; python/tessera/compiler/structured_cfg.py; tests/unit/test_trace_f4.py; tests/unit/test_native_public_results.py; docs/audit/compiler/AUTODIFF_EXECUTION_PLAN.md.
+
+<!-- entry-fields:end -->

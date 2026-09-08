@@ -50,7 +50,7 @@ This table supersedes the [historical status tables](archive/DIFFERENTIABLE_PROG
 The book-derived sections below retain dated observations and mathematical
 rationale; they are not an independent current backlog. Active AD implementation
 belongs to [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md); global order
-belongs to the [integrated reconciliation](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+belongs to the [integrated reconciliation](INTEGRATED_COMPILER_PLAN.md#live-queue).
 
 | Findings | Existing boundary to preserve | Remaining consumer / acceptance gate | Owner |
 |---|---|---|---|

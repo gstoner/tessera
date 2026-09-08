@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-06
+last_updated: 2026-09-07
 audit_role: index
 ---
 
@@ -22,13 +22,13 @@ direction.
    cross-plan order.
 3. **Global sequencing:**
    [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) is the sole
-   cross-domain compiler queue. Its current-route section wins when a scoped
+   cross-domain compiler queue. Its live queue wins when a scoped
    plan proposes a different order.
 4. **Scoped plans:** autodiff, evaluator, refactor, optimization, geometry, and
    sequence-mixer plans own their domain contracts and acceptance criteria.
    They do not independently reprioritize the compiler.
 5. **Backend evidence:** the Apple, NVIDIA, ROCm, and x86
-   [`todo.md`](../backend/) queues own exact-device promotion and rejection.
+   [`todo.md`](../backend) queues own exact-device promotion and rejection.
    Evidence never transfers between architectures.
 
 References and surveys explain *why*. Archived and historical-design documents
@@ -68,55 +68,18 @@ The complete file-by-file catalog is below. Its practical summary is:
   inventories every live compiler document and identifies historical Graph-owned
   packaging, source emitters and their canonical IR migration targets.
 
-## Central plan at a glance
+## Current plan and historical evidence
 
-The [MLIR/LLVM native foundation program](INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04)
-owns the current architectural sequence:
+The [foundation map](INTEGRATED_COMPILER_PLAN.md#foundation-program) and
+[grouped live queue](INTEGRATED_COMPILER_PLAN.md#live-queue) own sequencing.
+[Start here](INTEGRATED_COMPILER_PLAN.md#start-here) selects the first host-free
+entry point in each cut; prerequisites and device gates still apply.
 
-1. Inventory live routes and their actual IR/native boundaries.
-2. Remove NVIDIA scheduled matmul's remaining Graph re-entry and duplicate build.
-3. Migrate historical package families to verified IR consumers, one envelope at a time.
-4. Connect parametric instantiation, fusion and arbiter admission to those artifacts.
-5. Expand structured AD/effects/memory/distributed programs through the same path.
-6. Retire redundant semantic source generators only after target-owned differential proof.
-
-Python remains the interface, orchestration and oracle. MLIR/LLVM and backend
-native generators own compilation; deployment/runtime data stays explicitly bound
-to the artifact. Telemetry, safe waits and clock evidence remain support work.
-The older landed ledger below is historical context, not a second work order.
-
-## Landed foundation and active-boundary ledger
-
-The next compiler work should move down one semantic spine and leave executable
-proof at every boundary:
-
-| Order | Owning item | Outcome |
-|---|---|---|
-| 1 | **AD-CORE-LINEAR-1 — complete** | `LinearTransposeInterface` owns transpose/reshape, broadcast/expand, structural views, and operand-wise matmul; both compiler autodiff passes and paired CPU numerical proofs consume it. |
-| 2 | **AD-TSOL-SPECTRAL-1 — bounded native slice landed** | Explicit Graph spectral identity, FFT/IFFT/RFFT/IRFFT/DCT transposes, and compound VJPs are implemented. Complex-f32 spectral-filter and unbroadcast full-f32 spectral-convolution adjoints now have content-addressed native AVX-512 and gfx1151 consumers with exact-host/device numerical proof. Native STFT/ISTFT backward, broader axes/dtypes/broadcasting, and performance packets remain architecture-owned and fail closed. |
-| 3 | **GRAPH-VERIFY-SIGNED-1 — complete** | Graph and canonical-attention integer verifiers consume signed `IntegerAttr` values, with negative IR tests proving that MLIR 23 unsigned accessors cannot bypass legality. |
-| 4 | **AD-CORE-EFFECT-CONTROL-1 — complete** | Canonical `stop_gradient`, SSA activity, Graph effect propagation, active-stochastic rejection, and fail-closed active-region/residual behavior are compiler-owned and directly tested. |
-| 5 | **W4 / AD-SOLVER-IFT-1 — typed residual-program expansion landing** | The canonical tracer recovers explicit CFG identity from nested `if`/counted-loop/bounded-while/scan regions without AST re-entry, and typed Presburger identity propagates to every recovered block. `RegionAdjointInterface` consumes dynamic branch-local residuals, bounded SAVE/HYBRID while tapes, and bounded-dynamic counted-loop tapes. The first native four-block MLIR diamond is verified and structurized. Digest-bound AVX-512 and gfx1151 products consume one branch and one loop through architecture-owned children with zero Graph re-entry; their WSL packets prove correctness but not promotable timing. Arbitrary source/native CFG, more general products, and clean timing remain open. |
-| 6 | **AD-RESIDUAL-EVAL-1 — executable policy evaluator landed** | The Evaluator measures complete backward samples and unique retained residual allocation, and rematerialization consumes only eligible exact-device rows. Counted-region cohorts now execute and label SAVE/RECOMPUTE/HYBRID plans with exact replay/backward counts. Connecting selected checkpoints to generated MLIR and collecting broader exact-device packets remain open. |
-| 7 | **DIST-SHARD-ALIAS-1 — bounded portable slice landed** | The nine public names are classified by ownership: three placement/region contracts, five exact aliases of registered collective Target IR, and one distinct point-to-point `collective_permute` gap. The five aliases execute through the deterministic multi-rank runtime; frontend capture, point-to-point Target IR, and native transport remain open. |
-| 8 | **AD-FWD-PRODUCT-2 / AD-FWD-NATIVE-1 / AD-HIGHER-1 — bounded products landed** | Public requests carry forward/JVP mode and stable `wrt_indices`; compiler products include compound spectral rules and the exact `tessera.istft_jvp` quotient carrier. The compiler now composes paired reverse with forward mode as `@f__bwd__jvp`, exposes it through `compiled_hvp_ir`, and numerically proves the emitted quadratic product; unsupported second-order operations fail closed. The eager Python `hvp` helper remains a separately labelled finite-difference compatibility path. Native NCCL/RCCL products remain hardware-gated. Broader HVP/ISTFT coverage, Apple/NVIDIA consumption, native multi-rank evidence, and clean performance packets remain open. |
-| 9 | **TILE-SYNC-RECONCILE-2026-08-10 — compiler contract and gfx1151 correctness closed** | `tile.async_copy` and `tile.wait_async` share one declared dual-form contract; typed `!tile.async_token` SSA is production and legacy grouping keys are optional compatibility inputs. PR #544 closed required host-free compiler parity, and the follow-up gfx1151 global→LDS/LDS-WMMA/via-Tile cohort passed. Migration of remaining Python/stage-only carriers remains open; host-compiler timing makes no selector claim. |
-| 10 | **COMP-SCHED-OVERLAP-1 R1–R4 + W2.1/W2.2/W5.2g — shared software boundary closed** | Explicit async lineage, registered Graph effects, and fail-closed shape/alias/liveness/memory-dependence/activity analysis are landed. Measured resource vectors feed a deterministic critical-path/list scheduler with an admissible resource/queue lower bound; exhaustive enumeration survives only as the ≤8-action oracle. Safe lower-bound losers may be pruned, but exact-device scalar latency remains selection authority. Native transport, clean calibration, and wiring inferred edges into remaining producers stay architecture/client work. |
-| 11 | **E2E-REAL-6 — active family-migration cohort** | Native products use tracer-produced canonical Graph IR and explicit family plugins. Pure statically annotated programs now abstract-trace at decoration without `_OpExtractor`; the AST oracle is created lazily only for an explicit proof. SGD and Momentum/Nesterov on x86/gfx1151, Adam/AdamW on gfx1151, and the existing SM120 Lion/causal-DeltaNet packages resolve through family plugins; their unreachable JitFn compatibility helpers are deleted. `_OpExtractor` remains for non-executing effect discovery and dynamic/untraceable compatibility families; other unmigrated products remain until their own lineage, differential, and target gates close. |
-| 12 | **PDE-STENCIL-FOUNDATION-1 — semantic correctness slice landed** | Neighbors owns explicit tap coefficients; TPP owns required scheme/order/per-axis spacing; only linkable Target implementations receive callable symbols. Typed PDE classification/stability analysis, stencil-stack unification, and architecture-owned gfx1151/x86 physical packets remain open. |
-| 13 | **BLOCK-ATTNRES-1 — gfx1151 Phase 5 landed** | Shared statistics/merge/finalize semantics, typed Graph products, and the content-addressed Schedule→Tile boundary now feed a typed ROCm Target record and exact gfx1151 HSACO/runtime consumer. Three exact-device shapes pass; WSL operation-total timing is retained but selector-ineligible pending bare-metal device timing. AVX-512 Phase 6 remains independent. |
-| 14 | **AMD-ISA-DTYPE-1 — cross-generation foundation landing** | A dtype-total selector now distinguishes RDNA3.5, RDNA4, and CDNA5 scalar/vector, dense, sparse, accumulator, scale, shape, and evidence states. CDNA5 gfx1250/MI455X and gfx1251/MI430X are wave32 XDL-WMMA targets with separate cost identities; only existing f16/bf16 K32 materialization is executable, and every newer dtype path remains explicitly gated. |
-| 15 | **OP-DTYPE-FLOW-1 — generated end-to-end datatype audit landing** | A normalized generated matrix joins frontend/Graph/Schedule/Tile state, numeric-policy storage and accumulator identity, TSOL membership, per-operation physical manifests, target capability declarations, and exact AMD architecture legality. Derived dtype legality is reported as `legal_only` and cannot masquerade as an operator-specific kernel. |
-
-Hardware packets and backend-specific tuning are synchronized follow-ups to
-these slices, not blockers for landing shared contracts with honest fail-closed
-states.
-
-Generated evidence inventories are triage inputs, not a flat implementation
-queue. Route direct-test and benchmark gaps through the owning family row above
-and then the architecture queue. Prioritize correctness-sensitive value
-semantics and selector-bearing native paths; structural carriers and host-only
-metadata do not acquire artificial device benchmarks merely to reduce a count.
+`INTEGRATED_COMPILER_LOG.md` preserves dated implementation/validation records,
+including their historical next-step lists. It is a reference, not a work queue.
+`archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md` preserves older central/E2E
+queues, wave tables and estimates. The plan's [routing index](INTEGRATED_COMPILER_PLAN.md#routing-index)
+resolves old IDs to current owners, successors or archived dispositions.
 
 ## Route by question
 
@@ -136,7 +99,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | Where do higher-order derivatives, coordinate-aware calculus, and contraction algebra land? | [`MATH_SOURCE_WORKSTREAM.md`](MATH_SOURCE_WORKSTREAM.md) | [active AD plan](AUTODIFF_EXECUTION_PLAN.md) preserves the implemented algebra foundation and remaining native jets; [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) owns MSW-5 |
 | What is the LSE identity contract? | [`LSE_CHECKPOINT_CONTRACT.md`](LSE_CHECKPOINT_CONTRACT.md) | architecture-owned attention plans |
 | When may a consumer fuse into its producer's tiled epilogue? | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) for the arbiter, [`TARGET_IR_REVIEW.md`](TARGET_IR_REVIEW.md) for the emitter seam |
-| When may an effectful op enter a differentiated region? | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) queue order 2 for the ordering; `CONTROL_FLOW_CONTRACT.md` for the region carrier |
+| When may an effectful op enter a differentiated region? | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) W4-PRODUCT-1 for the ordering; `CONTROL_FLOW_CONTRACT.md` for the region carrier |
 | How should layouts and index arithmetic be represented? | [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md) | [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) S9 for the consumer, [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) for the typing precedent |
 
 ## Complete live-document catalog
@@ -147,6 +110,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 |---|---|
 | [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) | Living compiler audit and narrative status. |
 | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) | Sole cross-plan sequencing authority. |
+| [`INTEGRATED_COMPILER_LOG.md`](INTEGRATED_COMPILER_LOG.md) | Revision-bound historical engineering reference; no current priorities or capability status. |
 | [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) | Durable architecture and invariants; not a queue. |
 
 ### Scoped implementation plans
@@ -161,7 +125,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) | Correctness/evidence rung and promotion contract. |
 | [`W4_ADMISSIBLE_EFFECTS_PLAN.md`](W4_ADMISSIBLE_EFFECTS_PLAN.md) | W4-EFFECTS-1: operation-owned recorded products that let keyed RNG, recorded-state mutation, and ordered collectives enter a differentiated region without weakening the fail-closed gate. States the admissibility criterion (reproducibility + confinement), the per-class verdicts including why I/O stays closed, and five delivery slices. Global order defers to `INTEGRATED_COMPILER_PLAN.md` queue order 2. |
 | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | Coalition-lattice / equilibrium operator family: subset zeta/Möbius butterfly, semivalues, differentiable equilibria, regret/CFR dynamics, and the numerically verified oracle set (`research/game_theory/`). Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
-| [`INTRA_KERNEL_FEEDBACK_PLAN.md`](INTRA_KERNEL_FEEDBACK_PLAN.md) | IKF-1: intra-kernel measurement as compiler training data (assessment of CUTLASS IKET, 2026-08-27). Per-instance indexed-slot records keyed by schedule coordinates, constant-clock contract with fail-closed validity rules, offline stall classification + realized critical path, cost-model coefficient fitting with roofline prior bands and paired-instance statistics, the explain-vs-decide (`instr_level`) arbiter guard, and delivery phases IKF-P0..P6 (ROCm gfx1151 first). Global order defers to `INTEGRATED_COMPILER_PLAN.md`; not yet bound to a queue entry (plan §13). |
+| [`INTRA_KERNEL_FEEDBACK_PLAN.md`](INTRA_KERNEL_FEEDBACK_PLAN.md) | IKF-1: intra-kernel measurement as compiler training data (assessment of CUTLASS IKET, 2026-08-27). Per-instance indexed-slot records keyed by schedule coordinates, constant-clock contract with fail-closed validity rules, offline stall classification + realized critical path, cost-model coefficient fitting with roofline prior bands and paired-instance statistics, the explain-vs-decide (`instr_level`) arbiter guard, and delivery phases IKF-P0..P6 (ROCm gfx1151 first). Global order defers to `INTEGRATED_COMPILER_PLAN.md`; routed through TPROF-NATIVE-1 in the integrated plan. |
 | [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis and backend-lift details. |
 | [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) | PDE-operator semantics, symbol classification, discrete-stability certificates, and the stencil/halo contract queue. |
 | [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md) | Geometry/implicit-differentiation consumer and acceptance workload. |
@@ -196,7 +160,7 @@ The [old typing inventory](archive/W1_1_TYPING_INVENTORY.md) is archived;
 the [current typing census](MLIR_NATIVE_FOUNDATION_SURVEY.md#typing-inventory-replacement--2026-09-04)
 and `W1_1_TYPING_DESIGN.md` retain the NVIDIA producer obligation.
 
-Documents under [`archive/`](archive/) are point-in-time evidence only. This
+Documents under [`archive/`](archive) are point-in-time evidence only. This
 includes the superseded
 [`STAGE_A_EMIT_PLAN.md`](archive/STAGE_A_EMIT_PLAN.md) and the completed
 [`WORKSTREAM_C_HANDOFF.md`](archive/WORKSTREAM_C_HANDOFF.md), plus the completed
@@ -216,12 +180,12 @@ none is an active setup or execution guide.
 
 MSW-9's bounded ANN-calculus prototype and integration decisions are recorded in
 [`ANN_CALCULUS_DESIGN_SPIKE.md`](ANN_CALCULUS_DESIGN_SPIKE.md). The spike separates
-reference laws from native proof. The program-pair evaluator adapter is implemented;
-the Graph IR fragment and fusion consumers remain open.
+reference laws from native proof. Bounded native evaluation and scoped admission now have device evidence;
+broader composition, tuned schedules and promotion remain under MSW-9 in the live queue.
 
 
 Functional-analysis FA-1–FA-7 tasks are consolidated in the
-[integrated plan](INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership),
+[integrated routing index](INTEGRATED_COMPILER_PLAN.md#routing-index),
 with AD and recurrence follow-ups in their scoped plans. The former
 [`FUNCTIONAL_ANALYSIS_TSOL_PLAN.md`](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md) is a reference redirect to the
 preserved mathematical design, not an independent execution queue.
@@ -229,7 +193,7 @@ preserved mathematical design, not an independent execution queue.
 
 ## Math audit consolidation — 2026-09-07
 
-The [foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+The [foundation reconciliation](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)
 assigns the math plans to native ownership, AD, numerical legality and measured
 admission. FORGE and the original math-source proposal are archived references
 with live routing notes; their remaining tasks are not closed. Matrix calculus
@@ -239,7 +203,7 @@ sequence-mixer implementation plans remain live scoped consumer plans.
 
 ### September capability-plan reconciliation
 
-[The integrated mapping](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+[The integrated mapping](INTEGRATED_COMPILER_LOG.md#2026-09-07--capability-plan-reconciliation)
 consolidates the five reviewed documents under existing F0–F4, AD, NUMPOL,
 layout and transport owners. All five live paths remain useful: three scoped
 landing plans and two references. The August substrate snapshot and superseded

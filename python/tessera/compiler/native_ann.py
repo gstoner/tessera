@@ -69,6 +69,21 @@ def _require_nearest():
 def _affine(text):
     """Read only the native printer's isolated constant affine-chain envelope."""
     _require_nearest()
+    activation = None
+    # Project a terminal row sum into its affine input for analysis only. The
+    # executable artifact retains the native reduction and rank-changing ABI.
+    reduction = re.search(
+        r'%(\w+) = tessera.reduce %(\w+) \{axis = 1 : i64, kind = "sum"\} : '
+        r'\(tensor<([1-9][0-9]*)x([1-9][0-9]*)xf32>\) -> tensor<\3xf32>\s*'
+        r'return %\1 : tensor<\3xf32>', text)
+    if reduction:
+        _, operand, rows, columns = reduction.groups()
+        text, count = re.subn(r'(\) -> )tensor<'+rows+r'xf32>( \{)',
+                              r'\1tensor<'+rows+'x'+columns+r'xf32>\2', text, count=1)
+        if count != 1:
+            raise ValueError('ANN row reduction result contract disagrees')
+        text = text.replace(reduction.group(0), f'return %{operand} : tensor<{rows}x{columns}xf32>')
+        activation = 'sum'
     ty = r'tensor<([1-9][0-9]*)x([1-9][0-9]*)xf32>'
     match = re.fullmatch(r'\s*module \{\s*func.func @(\w+)\(%(\w+): ' + ty
                          + r'\) -> ' + ty + r' \{\s*(.*?)\s*\}\s*\}\s*', text, re.S)
@@ -82,10 +97,9 @@ def _affine(text):
     layers = []
     pending = None
     lines = body.strip().splitlines()
-    activation = None
     # A terminal ReLU is a shared nonexpansive consumer. It does not license
     # moving an activation across an affine composition.
-    if len(lines) >= 2:
+    if len(lines) >= 2 and activation is None:
         tail = re.fullmatch(r'%(\w+) = tessera.relu %(\w+) : \(tensor<[^>]+>\) -> (tensor<[^>]+>)', lines[-2].strip())
         if tail:
             result, operand, result_type = tail.groups()
@@ -194,6 +208,13 @@ def _affine_error_bounds(pair: NativeANNPair, input_bound: float):
             domain = ideal + local
             if domain >= maximum/2:
                 raise ValueError('ANN analytic domain cannot exclude intermediate overflow')
+        if before[3] == 'sum':
+            count = layers[-1][0].shape[1]
+            gamma = count*u/(1-count*u)
+            magnitude = count*domain
+            if magnitude >= maximum/2:
+                raise ValueError('ANN row-sum domain cannot exclude intermediate overflow')
+            error = count*error + gamma*magnitude + (2*count+2)*tiny/(1-count*u)
         return error
 
     w1, b1 = map(_rational, before[2][0])
@@ -201,6 +222,8 @@ def _affine_error_bounds(pair: NativeANNPair, input_bound: float):
     wf, bf = map(_rational, after[2][0])
     exact_w, exact_b = w1 @ w2, b1 @ w2 + b2
     folded_parameter_error = radius*_norm(wf-exact_w) + _magnitude(bf-exact_b)
+    if before[3] == 'sum':
+        folded_parameter_error *= wf.shape[1]
     return execute_bound(before[2]), execute_bound(after[2]) + folded_parameter_error
 
 
@@ -218,7 +241,13 @@ def _exact_output(program, value):
         result = np.maximum(result, Fraction(0))
     elif program[3] == 'abs':
         result = np.abs(result)
+    elif program[3] == 'sum':
+        result = result.sum(axis=1)
     return result
+
+
+def _output_shape(program):
+    return (program[1][0],) if program[3] == 'sum' else (program[1][0], program[2][-1][0].shape[1])
 
 
 def _exact_error(actual, reference):
@@ -277,7 +306,7 @@ def evaluate_native_ann(pair: NativeANNPair, samples, *, input_bound: float,
         for value in values:
             outputs = []
             for handle, program in zip(handles, (before, after), strict=True):
-                out = np.empty((value.shape[0], program[2][-1][0].shape[1]), np.float32)
+                out = np.empty(_output_shape(program), np.float32)
                 jit.invoke(handle, program[0], [value], out)
                 outputs.append(out)
             if any(not np.isfinite(out).all() for out in outputs):
@@ -370,13 +399,14 @@ class NativeANNCandidate(Candidate):
             raise ValueError('ANN candidate does not admit this artifact/domain/budget')
         from tessera import _jit_boundary as jit
         source = region.pair.transformed if self.transformed else region.pair.original
-        entry, shape, layers, _ = _affine(source)
+        program = _affine(source)
+        entry = program[0]
         # Copy caller inputs after domain validation and recheck the copy. This
         # also provides contiguous stable storage throughout native invocation.
         value = np.array(inputs[0], copy=True, order='C')
         if not self.applies_to_inputs(region, value):
             raise ValueError('ANN input changed outside its admitted domain')
-        output = np.empty((shape[0], layers[-1][0].shape[1]), np.float32)
+        output = np.empty(_output_shape(program), np.float32)
         handle = jit.compile_module(source)
         try:
             jit.invoke(handle, entry, [value], output)

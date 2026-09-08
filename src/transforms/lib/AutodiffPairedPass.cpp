@@ -471,6 +471,40 @@ static bool isReplayableCFGBodyOperation(mlir::Operation &operation) {
 // so mixed tensor shapes/dtypes never alias merely because their types match.
 static mlir::LogicalResult structurizeBoundedNativeCFGs(
     mlir::func::FuncOp function) {
+  // Imported native source may carry its CFG directly in the function body.
+  // Normalize that representation into the same bounded state-machine input;
+  // do not demand a frontend-manufactured execute_region wrapper.
+  if (!function.getBody().empty() && !function.getBody().hasOneBlock()) {
+    auto bound=function->getAttrOfType<mlir::IntegerAttr>("tessera.structured_cfg.max_steps");
+    auto digest=function->getAttrOfType<mlir::StringAttr>("tessera.structured_cfg.digest");
+    if (!bound || bound.getInt()<=0 || bound.getInt()>1'000'000 ||
+        !digest || digest.getValue().size()!=64)
+      return function.emitError("native function CFG requires a bounded step count and CFG identity");
+    mlir::Region original;
+    original.takeBody(function.getBody());
+    auto *entry=function.addEntryBlock();
+    mlir::OpBuilder builder=mlir::OpBuilder::atBlockBegin(entry);
+    auto execute=mlir::scf::ExecuteRegionOp::create(builder,function.getLoc(),function.getResultTypes());
+    execute.getRegion().takeBody(original);
+    auto &oldEntry=execute.getRegion().front();
+    for (auto [oldArg,newArg]:llvm::zip_equal(oldEntry.getArguments(),entry->getArguments()))
+      oldArg.replaceAllUsesWith(newArg);
+    oldEntry.eraseArguments(0,oldEntry.getNumArguments());
+    for (auto name:{"tessera.structured_cfg.max_steps","tessera.structured_cfg.digest",
+                    "tessera.autodiff.checkpoint_policy",
+                    "tessera.autodiff.saved_slot_shape_envelope_indices",
+                    "tessera.autodiff.saved_slot_shape_envelope_ranks",
+                    "tessera.autodiff.saved_slot_shape_envelope_bounds"})
+      if (auto attr=function->getAttr(name)) execute->setAttr(name,attr);
+    for (auto &block:execute.getRegion()) {
+      if (auto ret=mlir::dyn_cast<mlir::func::ReturnOp>(block.getTerminator())) {
+        mlir::OpBuilder at(ret);
+        mlir::scf::YieldOp::create(at,ret.getLoc(),ret.getOperands());
+        ret.erase();
+      }
+    }
+    mlir::func::ReturnOp::create(builder,function.getLoc(),execute.getResults());
+  }
   llvm::SmallVector<mlir::scf::ExecuteRegionOp> regions;
   function.walk<mlir::WalkOrder::PostOrder>(
       [&](mlir::scf::ExecuteRegionOp region) {
@@ -503,6 +537,7 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
     llvm::SmallVector<mlir::Block *> blocks;
     llvm::DenseMap<mlir::Block *, unsigned> blockOrdinals;
     llvm::DenseMap<mlir::BlockArgument, unsigned> argumentSlots;
+    llvm::DenseMap<mlir::Value, unsigned> valueSlots;
     llvm::SmallVector<mlir::Type> slotTypes;
     for (mlir::Block &block : region) {
       blockOrdinals.try_emplace(&block, blocks.size());
@@ -520,10 +555,10 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
         }
       }
       mlir::Operation *terminator = block.getTerminator();
-      if (!llvm::isa<mlir::cf::BranchOp, mlir::cf::CondBranchOp,
+      if (!llvm::isa<mlir::cf::BranchOp, mlir::cf::CondBranchOp, mlir::cf::SwitchOp,
                      mlir::scf::YieldOp>(terminator)) {
         execute.emitError()
-            << "general native CFG supports cf.br, cf.cond_br, and scf.yield "
+            << "general native CFG supports cf.br, cf.cond_br, cf.switch, and scf.yield "
                "terminators";
         return mlir::failure();
       }
@@ -531,6 +566,23 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
           yield && yield.getNumOperands() != execute.getNumResults()) {
         execute.emitError() << "native CFG yield/result cardinality mismatch";
         return mlir::failure();
+      }
+    }
+    // CFG SSA permits dominating definitions to be used across blocks without
+    // edge operands. Those values also need persistent state-machine slots.
+    for (mlir::Block *block : blocks) {
+      for (mlir::Operation &op : block->without_terminator()) {
+        for (mlir::Value value : op.getResults()) {
+          bool crossesBlock = llvm::any_of(value.getUsers(), [&](mlir::Operation *user) {
+            while (user && user->getParentRegion() != &region)
+              user = user->getParentOp();
+            return user && user->getBlock() != block;
+          });
+          if (crossesBlock) {
+            valueSlots.try_emplace(value, slotTypes.size());
+            slotTypes.push_back(value.getType());
+          }
+        }
       }
     }
     llvm::SmallVector<mlir::Type> envelopeStateTypes{
@@ -575,6 +627,17 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
           execute.emitError()
               << "native CFG has an invalid cf.cond_br edge ABI";
           return mlir::failure();
+        }
+      } else if (auto branch = mlir::dyn_cast<mlir::cf::SwitchOp>(block->getTerminator())) {
+        if (mlir::failed(validateEdge(branch.getDefaultDestination(), branch.getDefaultOperands()))) {
+          execute.emitError() << "native CFG has an invalid cf.switch default edge ABI";
+          return mlir::failure();
+        }
+        for (auto [index, target] : llvm::enumerate(branch.getCaseDestinations())) {
+          if (mlir::failed(validateEdge(target, branch.getCaseOperands(index)))) {
+            execute.emitError() << "native CFG has an invalid cf.switch case edge ABI";
+            return mlir::failure();
+          }
         }
       }
     }
@@ -632,14 +695,21 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
     executeBlock = [&](mlir::Block *block, mlir::ValueRange state)
         -> mlir::FailureOr<llvm::SmallVector<mlir::Value>> {
       mlir::IRMapping mapping;
-      for (mlir::BlockArgument argument : block->getArguments())
-        mapping.map(argument, state[slotBase + argumentSlots.lookup(argument)]);
+      for (auto [argument, slot] : argumentSlots)
+        mapping.map(argument, state[slotBase + slot]);
+      for (auto [value, slot] : valueSlots)
+        if (value.getDefiningOp()->getBlock() != block)
+          mapping.map(value, state[slotBase + slot]);
       for (mlir::Operation &nested : block->without_terminator())
         builder.clone(nested, mapping);
+      llvm::SmallVector<mlir::Value> updatedState(state.begin(), state.end());
+      for (auto [value, slot] : valueSlots)
+        if (value.getDefiningOp()->getBlock() == block)
+          updatedState[slotBase + slot] = mapping.lookup(value);
 
       auto edgeState = [&](mlir::Block *target,
                            mlir::ValueRange operands) {
-        llvm::SmallVector<mlir::Value> next(state.begin(), state.end());
+        llvm::SmallVector<mlir::Value> next(updatedState.begin(), updatedState.end());
         next[0] = mlir::arith::ConstantIndexOp::create(
             builder, loc, blockOrdinals.lookup(target));
         next[1] = mlir::arith::ConstantIntOp::create(
@@ -675,9 +745,38 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
         return llvm::SmallVector<mlir::Value>(select.getResults().begin(),
                                                select.getResults().end());
       }
+      if (auto branch = mlir::dyn_cast<mlir::cf::SwitchOp>(block->getTerminator())) {
+        llvm::SmallVector<llvm::APInt> cases;
+        if (auto values = branch.getCaseValues())
+          llvm::append_range(cases, values->getValues<llvm::APInt>());
+        std::function<llvm::SmallVector<mlir::Value>(unsigned)> choose;
+        choose = [&](unsigned ordinal) -> llvm::SmallVector<mlir::Value> {
+          if (ordinal == cases.size())
+            return edgeState(branch.getDefaultDestination(), branch.getDefaultOperands());
+          auto value = mlir::arith::ConstantOp::create(builder, loc,
+              builder.getIntegerAttr(branch.getFlag().getType(), cases[ordinal]));
+          auto matches = mlir::arith::CmpIOp::create(builder, loc,
+              mlir::arith::CmpIPredicate::eq, mapping.lookupOrDefault(branch.getFlag()), value);
+          auto select = mlir::scf::IfOp::create(builder, loc, stateTypes, matches, true);
+          {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(select.thenBlock());
+            auto next = edgeState(branch.getCaseDestinations()[ordinal], branch.getCaseOperands(ordinal));
+            mlir::scf::YieldOp::create(builder, loc, next);
+          }
+          {
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(select.elseBlock());
+            auto next = choose(ordinal + 1);
+            mlir::scf::YieldOp::create(builder, loc, next);
+          }
+          return llvm::SmallVector<mlir::Value>(select.getResults().begin(), select.getResults().end());
+        };
+        return choose(0);
+      }
       auto yield =
           mlir::cast<mlir::scf::YieldOp>(block->getTerminator());
-      llvm::SmallVector<mlir::Value> next(state.begin(), state.end());
+      llvm::SmallVector<mlir::Value> next(updatedState.begin(), updatedState.end());
       next[1] = mlir::arith::ConstantIntOp::create(
           builder, loc, 1, 1);
       for (auto [ordinal, value] : llvm::enumerate(yield.getOperands()))
@@ -1544,8 +1643,12 @@ static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
     auto inc=yield.getOperand(0).getDefiningOp<arith::AddIOp>();
     APInt initial,step;
     if (!inc || inc.getLhs()!=after.getArgument(0) ||
-        !matchPattern(loop.getInits()[0],m_ConstantInt(&initial)) || !initial.isZero() ||
-        !matchPattern(inc.getRhs(),m_ConstantInt(&step)) || !step.isOne()) return;
+        !matchPattern(loop.getInits()[0],m_ConstantInt(&initial)) || !initial.isSignedIntN(64) ||
+        !matchPattern(inc.getRhs(),m_ConstantInt(&step)) || !step.isSignedIntN(64)) return;
+    // Prove a finite iteration capacity from constants rather than requiring
+    // the source counter to be the synthetic zero-origin unit-step tape index.
+    int64_t start=initial.getSExtValue(), stride=step.getSExtValue();
+    if (start<0 || start>1024 || stride<=0 || stride>1024) return;
     std::function<std::optional<int64_t>(Value)> cap=[&](Value v)->std::optional<int64_t> {
       if (auto andOp=v.getDefiningOp<arith::AndIOp>()) {
         auto lhs=cap(andOp.getLhs()); return lhs ? lhs : cap(andOp.getRhs());
@@ -1567,9 +1670,14 @@ static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
         return cap(select.getCondition());
       }
       auto cmp=v.getDefiningOp<arith::CmpIOp>(); APInt bound;
-      if (!cmp || cmp.getPredicate()!=arith::CmpIPredicate::slt || cmp.getLhs()!=before.getArgument(0) ||
+      if (!cmp || (cmp.getPredicate()!=arith::CmpIPredicate::slt &&
+                   cmp.getPredicate()!=arith::CmpIPredicate::sle) ||
+          cmp.getLhs()!=before.getArgument(0) ||
           !matchPattern(cmp.getRhs(),m_ConstantInt(&bound)) || !bound.isSignedIntN(64)) return std::nullopt;
-      int64_t n=bound.getSExtValue();
+      int64_t end=bound.getSExtValue();
+      if (end<0 || end>1024) return std::nullopt;
+      if (cmp.getPredicate()==arith::CmpIPredicate::sle) ++end;
+      int64_t n=end<=start ? 0 : (end-start+stride-1)/stride;
       return n>=2 && n<=1024 ? std::optional<int64_t>(n) : std::nullopt;
     };
     auto count=cap(condition.getCondition());

@@ -439,7 +439,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(
-            "Optional normalize-counted-while converts proven counted whiles; normalize-data-while freezes data-dependent state after exit when an SSA counter guard proves the capacity, including false-else short-circuit scf.if/arith.select guards. box-product-scalars projects index/predicate residuals into i64/i8 tensor storage. "
+            "Optional normalize-counted-while converts proven counted whiles; normalize-data-while freezes data-dependent state after exit when an SSA counter guard proves the capacity, including nonnegative initial counters, positive constant strides, signed inclusive/exclusive upper bounds and false-else short-circuit scf.if/arith.select guards. box-product-scalars projects index/predicate residuals into i64/i8 tensor storage. "
+            "Bounded pure native CFG replay accepts execute regions or bounded multi-block function bodies, supports typed cf.br, cf.cond_br and cf.switch edges, and promotes cross-block SSA definitions to distinct state slots. "
             "Optional export-product preserves full typed nested residual forward/backward ABIs and paired lineage without scalarization. "
             "Emits paired forward and backward functions under the explicit "
             "residual ABI: recompute-all by default, SAVE state tapes for "
@@ -663,11 +664,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-native-tape-to-gpu",
         cpp_class="NativeTapeToGPUPass",
-        summary="Lowers isolated static floating/integer bufferized AD or source-bound ANN products to serial GPU entries, preserving full residual shapes. Bounded for/if temporaries use dtype-sized slots and are limited to 4096 logical bytes, with distinct slots per iteration path. The backend option selects NVVM generic or AMDGPU private allocation addressing; replay bounds derived from enclosing induction variables are supported, while loaded bounds, dynamic extents and while loops refuse.",
-        input_dialects=("func", "arith", "math", "scf", "memref"),
+        summary="Lowers isolated static floating/integer bufferized AD or source-bound ANN products to GPU entries, preserving full residual shapes. Optional parallel-ann-rows proves row-independent memory accesses and assigns one row per thread for batches 2 through 64; the default remains serial. Bounded for/if temporaries use dtype-sized slots and are limited to 4096 reserved bytes, with distinct slots per iteration path. The backend option selects NVVM generic or AMDGPU private allocation addressing; replay bounds derived from enclosing induction variables are supported, with SSA-bounded dynamic allocations retaining logical dimensions and capacity-sized slots. Dynamic copies require identical dimension SSA operands. Optional status-buffer appends a guard-v1 i64 status result, guards the suffix after top-level assertions, and refuses nested assertions. Loaded bounds, dynamic external arguments, unknown dynamic aliases and while loops refuse.",
+        input_dialects=("func", "arith", "math", "scf", "memref", "cf"),
         output_dialects=("gpu", "llvm", "arith", "math", "scf", "memref", "tile"),
         required_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.ann.source"),
-        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.ann.source", "tessera.autodiff.temporary_bytes"),
+        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.ann.source", "tessera.autodiff.temporary_bytes", "tessera.autodiff.gpu_status"),
         diagnostic_codes=(), pass_kind="lowering", sprint="W2.4a",
     ),
     PassMetadata(

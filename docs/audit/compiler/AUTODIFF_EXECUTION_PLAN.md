@@ -69,7 +69,7 @@ policy and a justified `pd_witness`; none may disappear during native lowering.
 
 ## FA-2 adjoint-contract follow-up
 
-The [functional-analysis consolidation](INTEGRATED_COMPILER_PLAN.md#functional-analysis-contracts--consolidated-ownership)
+The [functional-analysis consolidation](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
 retains FA-2 under AD-LAW / AD-CLOSEOUT-1. The adjoint harness and
 canonical-forward checks already exist in `autodiff/laws.py` and
 `compiler/law_audit.py`; do not recreate them. Remaining scope is a public debug
@@ -109,7 +109,7 @@ are complete or explicitly rehomed again.
 
 The [differentiable-programming review](DIFFERENTIABLE_PROGRAMMING_REVIEW.md)
 retains book-derived labels and mathematical rationale; its old status tables
-are historical. The [integrated capability mapping](INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07)
+are historical. The [integrated live queue](INTEGRATED_COMPILER_PLAN.md#live-queue)
 owns cross-plan sequencing. Reuse the active work above:
 
 - C1/C2/C3 map to native linear/nonlinear products, kink policy and explicit
@@ -205,3 +205,64 @@ The existing context barrier is retained. Further numerical consumers need
 operator-specific induced-norm/error propagation; absolute value does not prove
 reduction, spectral or approximation legality. Assertions-enabled MLIR validation
 and Metal-owned tape storage remain required follow-ups.
+
+
+### 2026-09-07: bounded recovery with logical shape residuals
+
+W2.4a now proves nonnegative constant starts, positive strides, and signed
+inclusive/exclusive counter bounds for data-dependent while normalization.
+Declared capacity remains checked against the derived trip count. Both CUDA
+SM120 and ROCm gfx1151 execute the static-slot strided products with early exits
+and repeated backward calls. Native x86 executes logical shape-varying while
+tapes for widths 3/4/5/8/16 and zero through three trips. See
+`tests/unit/test_native_loop_next.py` and the integrated plan's corresponding
+increment for the exact envelope and raw owning-device evidence.
+
+Still open: arbitrary multi-block recovery, dynamic GPU capacity materialization,
+and fully asynchronous reclamation. Reader tracking and stream-ordered allocator
+ownership are prerequisites; existing externally exported views retain the
+context barrier. This increment does not change that lifetime contract.
+
+
+### 2026-09-07: internal dynamic capacity and tracked generations
+
+Native bounded CFG replay now handles typed multiway switch edges. GPU internal
+allocations can preserve dynamic logical extents within SSA-proved capacity;
+external shape-varying tape arguments remain open. See the integrated plan's
+dynamic temporary capacity increment for the exact envelope and device packets.
+
+Opt-in tracked backward generations use stream-ordered pool storage and scoped
+reader events. Retirement closes acquisitions and queues frees after every
+reader. Faulted records and partial frees retain owners for explicit wait/close.
+Unrestricted frame exports still require the context barrier. The next consumer
+integration must preserve the declared reader stream and scope, not extract and
+retain an untracked pointer.
+
+
+**Allocator-failure boundary:** a failed free quarantines the frame and retains
+its owners for device teardown; normal close must not retry an ambiguously freed
+pointer. Completion-event failures alone retain the explicit stream-wait recovery
+path. Quarantine is intentionally not reclaimed by garbage collection.
+
+
+Cross-block SSA values are also owned state: dominating operation results and
+foreign block arguments used by a successor are mapped to distinct state slots,
+not left pointing into the erased CFG region. Native forward/reverse regressions
+cover direct shared definitions across all switch cases and the default. Dynamic
+saved values still require explicit shape envelopes for their new state slots.
+
+### Checked native CFG products and scoped composition — 2026-09-07
+
+W2.4a / AD-RESIDUAL-EVAL-1 now admits bounded native function-body CFGs through
+existing state-machine recovery. The opt-in CUDA/HIP `guard-v1` status ABI handles
+top-level product assertions and prevents suffix execution after failure.
+Synchronous capture/backward checks status before exposing results; asynchronous
+checked products and nested assertions still refuse. Scoped derivative owners
+can submit into native tensor bindings or another frame's backward call, closing
+reader scopes even after an enqueue error. This is reverse-program composition,
+not automatic higher-order differentiation.
+
+The integrated plan's **Checked persistent products and composed readers**
+section owns the remaining returned logical-shape ABI, validated loaded extents,
+source CFG/effect recovery and asynchronous checked-reader protocol. Static
+capacity allocation alone does not close exported shape-varying GPU tapes.

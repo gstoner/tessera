@@ -1,4 +1,4 @@
-"""Native frozen ANN programs on the bounded serial CUDA/HIP consumer.
+"""Native frozen ANN programs on bounded serial or row-parallel CUDA/HIP consumers.
 
 This owns an explicit host-buffer bridge and never labels CPU execution as GPU.
 The physical schedule is a correctness baseline, not a tuned GEMM candidate.
@@ -11,31 +11,32 @@ from pathlib import Path
 from types import SimpleNamespace
 import threading
 import numpy as np
-from .native_ann import NativeANNPair, _affine, _affine_error_bounds, _exact_output, _exact_error
+from .native_ann import NativeANNPair, _affine, _affine_error_bounds, _exact_output, _exact_error, _output_shape
 from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 from .native_persistent_tape import _attribute
 
 
-def materialize_native_ann_gpu(pair, *, compiler, llvm_bin, backend, chip, fuse_elementwise=False):
-    if type(fuse_elementwise) is not bool:
-        raise ValueError('ANN fusion selection must be boolean')
+def materialize_native_ann_gpu(pair, *, compiler, llvm_bin, backend, chip, fuse_elementwise=False, parallel_rows=False):
+    if type(fuse_elementwise) is not bool or type(parallel_rows) is not bool:
+        raise ValueError('ANN fusion and row-parallel selections must be boolean')
     pair.validate()
     compiler, llvm_bin = Path(compiler), Path(llvm_bin)
     if hashlib.sha256(compiler.read_bytes()).hexdigest() != pair.compiler_digest:
         raise ValueError('ANN physical compiler differs from rewrite owner')
     packages=[]
     for source in (pair.original, pair.transformed):
-        gpu=_prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fuse_elementwise)
+        gpu=_prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fuse_elementwise,parallel_rows)
         packages.append(build_native_gpu_storage(gpu,compiler=compiler,llvm_bin=llvm_bin,backend=backend,chip=chip))
     result=NativeANNDevicePair(pair,packages[0],packages[1],compiler,llvm_bin)
     result.validate()
     return result
 
 
-def _prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fuse_elementwise=False):
-    _, shape, layers, _ = _affine(source)
+def _prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fuse_elementwise=False,parallel_rows=False):
+    program = _affine(source)
+    shape = program[1]
     native=_run(compiler, '--tessera-to-linalg', source=source)
     native=_run(llvm_bin/'mlir-opt','--allow-unregistered-dialect','--convert-elementwise-to-linalg',
                 *(['--linalg-fuse-elementwise-ops'] if fuse_elementwise else []),source=native)
@@ -44,15 +45,15 @@ def _prepare_ann_gpu_ir(source,compiler,llvm_bin,backend,fuse_elementwise=False)
         '--buffer-results-to-out-params=modify-public-functions hoist-static-allocs',
         '--convert-linalg-to-loops', '--canonicalize', source=native)
     encoded='"'+''.join('\\'+format(b,'02X') for b in source.encode())+'"'
-    pipeline='elementwise-fused-v1' if fuse_elementwise else 'serial-v1'
+    pipeline=('elementwise-fused' if fuse_elementwise else 'serial')+('-rows-v1' if parallel_rows else '-v1')
     buffered=buffered.replace('module {', 'module attributes {tessera.ann.pipeline = \"'+pipeline+'\", tessera.ann.source = '+encoded+'} {',1)
     gpu=_run(compiler, '--allow-unregistered-dialect',
-        '--tessera-native-tape-to-gpu=backend='+backend, source=buffered)
+        '--tessera-native-tape-to-gpu=backend='+backend+' parallel-ann-rows='+str(parallel_rows).lower(), source=buffered)
     first,rest=gpu.split('\n',1)
     attributes=first[len('module attributes {'):-3]
     specs=(TensorSpec('x','fp32',shape,False),
-           TensorSpec('out','fp32',(shape[0],layers[-1][0].shape[1]),True),IndexSpec('scratch',1,1))
-    gpu=attach_tensor_contract('module {\n'+rest,specs,grid=(1,1,1),block=(1,1,1))
+           TensorSpec('out','fp32',_output_shape(program),True),IndexSpec('scratch',1,1))
+    gpu=attach_tensor_contract('module {\n'+rest,specs,grid=(1,1,1),block=(shape[0] if parallel_rows else 1,1,1))
     gpu=gpu.replace('module attributes {','module attributes {'+attributes+', ',1)
     return gpu
 
@@ -75,9 +76,9 @@ class NativeANNDevicePair:
             if hashlib.sha256((self.llvm_bin/'mlir-opt').read_bytes()).hexdigest()!=package.llvm_digest:
                 raise ValueError('ANN physical toolchain identity changed')
             pipeline=_attribute(package.arena_ir,'tessera.ann.pipeline')
-            if pipeline not in ('serial-v1','elementwise-fused-v1'):
+            if pipeline not in ('serial-v1','elementwise-fused-v1','serial-rows-v1','elementwise-fused-rows-v1'):
                 raise ValueError('ANN physical optimization pipeline is unsupported')
-            gpu=_prepare_ann_gpu_ir(source,self.compiler,self.llvm_bin,package.backend,pipeline=='elementwise-fused-v1')
+            gpu=_prepare_ann_gpu_ir(source,self.compiler,self.llvm_bin,package.backend,pipeline.startswith('elementwise-fused'),'-rows-' in pipeline)
             replay=_run(self.compiler,'--allow-unregistered-dialect','--tessera-tile-buffer-reuse',
                         '--tessera-tile-buffer-arena','--canonicalize',source=gpu)
             if replay!=package.arena_ir:
@@ -128,7 +129,7 @@ class BoundNativeANNDevice:
             native._check(self.current(ct.byref(self.context)))
             program=_affine(pair.logical.original)
             self.shape=program[1]
-            self.output_shape=(self.shape[0],program[2][-1][0].shape[1])
+            self.output_shape=_output_shape(program)
             self.views=[]
             for shape in (self.shape,self.output_shape):
                 pointer=P()

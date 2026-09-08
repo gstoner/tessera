@@ -4040,7 +4040,7 @@ policy, runtime contract or execution claim changes.
 Migrate Graph-owned cohort/elementwise/breadth packages to verified IR inputs; use the existing MLIR-to-LLVM JIT for general bodies and preserve explicit tuned-library calls as distinct routes. Follow-up required for Zen 5 exact-host proof. A prebuilt shared-library call is native execution, not proof of a generated LLVM kernel body.
 
 Sequencing and acceptance are owned by
-[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program).
 Shared change in this slice: architectural migration plan only; runtime, ABI,
 selector and physical schedules are unchanged. Historical routes have explicit
 replacement and deletion gates, not permanent compatibility exemptions.
@@ -4147,7 +4147,7 @@ remain follow-up required.
 ### Deleted functionality reassessment — 2026-09-05
 
 Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
-[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+[central reassessment](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
 routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
 native residual policy to W5.1, and sharding/halo composition to W5.4 and
 COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
@@ -4366,7 +4366,7 @@ theory remain scoped landing plans; AD residuals use the active AD plan and
 shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
 Existing bounded AVX-512 ES, solver and coalition consumers remain scoped; Block AttnRes and broader solver/workload packages need their own execution and measurement.
 No runtime, ABI or support status changes. Follow-up requirements are mapped in
-[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-07--capability-plan-reconciliation).
 
 
 **Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
@@ -4401,7 +4401,7 @@ See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
 Parity validated for native host shape-varying tapes on Princess-Luna x86: widths 4/8/16, two saved logical extents and repeated backward calls. Dynamic binary extent guards and dynamic adjoint zeros lower to native LLVM; signature-checked i64/i8 residual buffers execute through the JIT. CUDA/HIP GPU arbitration and timing are not x86 promotion evidence. General CFG recovery remains open.
 
 Shared source, physical artifact replay, numerical-domain guards and evidence are
-recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-07--shape-varying-host-tapes-and-gpu-ann-arbitration). All fleet LLVM builds still lack assertions.
 
 The shared host JIT now retires compiler-owned temporaries through upstream
 ownership-based buffer deallocation after DPS copies. Validation is x86 on
@@ -4414,3 +4414,51 @@ registration now returns a scoped owner. Explicit/context close unregisters
 only its own candidates, disables retained candidate handles and releases
 probe references; failed registration rolls back. x86 native selection and lifecycle regressions validate this owner.
 CUDA/HIP registration continues to use its separate device binding owner.
+
+
+### 2026-09-07 — W2.4a / F3 / FA-1: while and row ANN integration
+
+Sync key: **AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1**.
+The native LLVM JIT validates shape-varying while residuals at widths 3/4/5/8/16, zero through three iterations, and repeated reverse evaluation. A terminal row-sum ANN consumer is numerically checked. Host descriptor execution does not establish dynamic GPU storage.
+
+Shared changes: proved constant-stride while capacity, terminal row-sum error
+propagation and rank-changing ABI projection, and opt-in row independence with
+serialized launch/pipeline replay. See the integrated compiler plan's bounded
+while recovery increment and `benchmarks/baselines/row_ann_while_20260907/`.
+Follow-up required: general CFG recovery, GPU shape-capacity materialization,
+reader-complete stream-ordered reclamation, and measured schedule selection.
+The raw-view context barrier is retained; producer-event completion is not a
+proof that external readers have finished. Assertions-enabled MLIR remains open.
+
+
+### 2026-09-07 — W2.4a / AD-RESIDUAL-EVAL-1: dynamic capacity and reader ownership
+
+Sync key: **IR-NATIVE-FOUNDATION-1**. Parity validated for native multiway CFG forward/reverse execution (two cases and default). CUDA/HIP reader retirement and private dynamic GPU allocations are not x86 device evidence.
+
+Shared contracts: SSA-proved temporary capacity separate from logical shape,
+matching dynamic-copy dimension SSA, typed bounded `cf.switch` edges, and scoped
+reader completion before stream-ordered frees. Partial-free/event failures retain
+ownership; legacy unrestricted exports retain the context barrier. See the
+integrated compiler plan's dynamic temporary capacity increment and
+`benchmarks/baselines/dynamic_readers_20260907/`.
+Follow-up required: exported dynamic tape descriptors/status, loaded residual
+shape validation, broader source CFG recovery and adoption by composed consumers.
+Assertions-enabled MLIR and measured overlap/throughput remain open.
+
+Free API failures quarantine the frame for device teardown and forbid normal
+close/retry; event-record failures retain an explicit completion-wait recovery.
+
+Native CFG cross-block SSA definitions now receive distinct state slots, with
+host forward/reverse proof. GPU multiway products still refuse the retained
+bound-exhaustion assertion pending a device status/termination consumer.
+
+
+### 2026-09-07 — checked products and composed readers
+
+Owner: **W2.4a / AD-RESIDUAL-EVAL-1**; sync key **IR-NATIVE-FOUNDATION-1**.
+Shared native function-body recovery reuses the bounded typed state machine. CUDA/HIP status/results and reader completion do not establish x86 execution or asynchronous host retirement; existing host product contracts remain unchanged.
+
+See the integrated plan for the exported shape-varying ABI design: returned
+logical extents, validated loaded bounds, capacity ownership and status before
+view exposure. Arbitrary Python CFG/effects, assertions-enabled MLIR and measured
+reclamation/overlap remain open.

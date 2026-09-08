@@ -279,8 +279,11 @@ counter increments, scalar predicate residuals or unchecked maximum annotations.
 ### Persistent data-dependent exits (2026-09-07)
 
 The optional native paired-AD `normalize-data-while` path accepts a pure
-single-block while only when its zero-origin, unit-increment counter has an
-actual signed constant upper-bound conjunct. A fixed-capacity for loop freezes
+single-block while only when its nonnegative constant initial counter and
+positive constant stride have an actual signed `<` or `<=` upper-bound
+conjunct. Initial value, stride and bound are limited to 1024; the proven trip
+capacity must be 2–1024 and fit the declared maximum. The original counter is
+retained separately from the synthetic zero-origin tape index. A fixed-capacity for loop freezes
 all carried state after the first false predicate. The existing checkpoint
 machinery then records discrete and differentiable state separately. This
 supports data-dependent exit within a proven capacity; it does not infer a bound
@@ -295,3 +298,54 @@ now execute bounded shape-varying slices with saved logical extents and dynamic
 adjoint zeros. This does not change the frontend's shape-preserving carry
 contract or enable dynamic CUDA/HIP persistent slots. See the integrated plan's
 2026-09-07 shape-tape increment for exact evidence and remaining CFG boundaries.
+
+
+Native x86 regression also composes shape-varying residuals with this while
+recovery: widths 3/4/5/8/16 exercise zero through three trips and repeated reverse
+evaluation without mutating saved state. The CUDA/HIP strided-counter evidence
+uses static residual slots; it must not be read as dynamic slot support.
+
+
+### Bounded multiway native CFG edges (2026-09-07)
+
+The native AD structurizer accepts `cf.switch` with typed case/default successor
+arguments inside a bounded pure `scf.execute_region`. Each selected edge updates
+its own state slots; native x86 forward/reverse tests cover two cases and the
+default. The required positive replay bound and pure-body checks are unchanged.
+This extends native CFG input, not arbitrary Python source recovery.
+
+GPU internal temporaries may have logical dimensions proved bounded from index
+SSA. Their physical slots reserve capacity separately, and dynamic copies require
+matching dimension SSA. External dynamic tape descriptors, loaded shape guards
+and effectful/unbounded control flow remain outside this envelope.
+
+The exported multiway AD product still carries a bound-exhaustion `cf.assert`;
+the current GPU packager refuses it. Device execution needs a status/termination
+consumer for that guard. The host forward/reverse proof does not authorize
+silently dropping it.
+
+
+Cross-block SSA values are also owned state: dominating operation results and
+foreign block arguments used by a successor are mapped to distinct state slots,
+not left pointing into the erased CFG region. Native forward/reverse regressions
+cover direct shared definitions across all switch cases and the default. Dynamic
+saved values still require explicit shape envelopes for their new state slots.
+
+
+ROCm already has a separate per-element state-machine status consumer in
+`GenerateROCMStateMachineKernel.cpp`, covered by the irreducible-CFG execution
+lane. The pending work is integrating/extending that status contract for the
+persistent-product route, plus a CUDA counterpart; it is not a claim that ROCm
+has no bounded CFG device execution. Preserve each route's shape and control
+scope when reusing the status mechanism.
+
+### Persistent-product guard status
+
+Bounded native multi-block function bodies may enter AD recovery directly when
+carrying the existing step bound and CFG identity. This does not expand Python
+source capture. Serial CUDA/HIP persistent products may opt into `guard-v1`: a
+writable `memref<1xi64>` physical argument, initialized to 0, becomes 1 on a
+failed top-level assertion. The remainder of that product is skipped. Nested
+assertions are not admitted. Checked synchronous Python frames consume status
+before returning views; checked asynchronous frames are refused. Completion
+alone must never be interpreted as a successful product or valid logical shape.

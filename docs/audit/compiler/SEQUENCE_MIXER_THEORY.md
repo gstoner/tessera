@@ -4,7 +4,7 @@ audit_role: reference
 ---
 
 > Current ownership review (2026-09-07): use the
-> [math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07)
+> [live compiler queue](INTEGRATED_COMPILER_PLAN.md#live-queue)
 > for live residuals and dependency order. Historical absence claims, timings,
 > fleet instructions and effort estimates below describe their dated review;
 > reference implementation is not native execution or promotion evidence.

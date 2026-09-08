@@ -17,6 +17,6 @@ Coordinate/PDE descent belongs to [PDE_STENCIL_CAPABILITY_PLAN.md](PDE_STENCIL_C
 The contraction reference algebra is not evidence of a native rewrite pass.
 No original MSW ID is reopened or silently declared generally complete.
 
-Global order and acceptance gates: [integrated math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07).
+Global order and acceptance gates: [live compiler queue](INTEGRATED_COMPILER_PLAN.md#live-queue).
 
 [Read the historical assessment](archive/MATH_SOURCE_WORKSTREAM.md).

@@ -166,6 +166,10 @@ class NativeTensorCall:
 
     def __call__(self, *args, **kwargs):
         with self._lock:
+            bound = self.signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+            if any(hasattr(v, '_tessera_reader_stream') for v in bound.arguments.values()):
+                raise ValueError('borrowed persistent view requires explicit stream submission')
             raw, _, grid, block, outputs = self._resident(*args, **kwargs)
             self._bound._check(self._bound._sync())
             self._bound.launch(raw, grid=grid, block=block)
@@ -187,7 +191,10 @@ class NativeTensorCall:
             producers = []
             for spec in self.specs:
                 if isinstance(spec, TensorSpec):
-                    producer = bound.arguments[spec.name].__cuda_array_interface__.get('stream')
+                    value = bound.arguments[spec.name]
+                    if getattr(value, '_tessera_reader_stream', stream) != stream:
+                        raise ValueError('borrowed persistent view requires its declared reader stream')
+                    producer = value.__cuda_array_interface__.get('stream')
                     if producer is not None:
                         if type(producer) is not int or not 0 < producer < (1 << 64):
                             raise ValueError('invalid array producer stream')

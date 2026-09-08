@@ -264,8 +264,13 @@ def test_pde_graph_theory_findings_route_to_existing_authorities() -> None:
     assert "W5.2g" in pde and "W5.4" in pde
     assert "MODEL-ROUTE-CERT-1" in pde
     assert "Shared `python/tessera/testing` infrastructure" in pde
+    # The closed search row routes to preserved provenance; current producer
+    # and transport work remains owned by W5.2 / DIST-NATIVE-1.
     assert "| W5.2g |" in integrated
-    assert "conflict-free collective scheduler" in integrated
+    assert "### W5.2" in integrated and "### DIST-NATIVE-1" in integrated
+    archived = (_AUDIT / "compiler/archive/INTEGRATED_COMPILER_PLAN_2026-08-02_WAVES.md").read_text(encoding="utf-8")
+    assert "### W5.2g" in archived
+    assert "conflict-free collective scheduler" in archived
     assert "MODEL-ROUTE-CERT-1" in models
 
 

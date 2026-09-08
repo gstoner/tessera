@@ -21,6 +21,6 @@ mutation order, aliasing, tied weights and distributed partials must be checked
 before target-specific measurement. Archiving the proposal does not close any
 of those residuals.
 
-Global order and acceptance gates: [integrated math/foundation reconciliation](INTEGRATED_COMPILER_PLAN.md#math-audit-foundation-reconciliation--2026-09-07).
+Global order and acceptance gates: [live compiler queue](INTEGRATED_COMPILER_PLAN.md#live-queue).
 
 [Read the historical assessment](archive/FORGE_ASSESSMENT.md).

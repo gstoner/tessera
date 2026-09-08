@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-06
+last_updated: 2026-09-07
 audit_role: root
 ---
 
@@ -41,7 +41,8 @@ migration, general AD, specialization and runtime safety also require engineerin
 The active AD scope is [AUTODIFF_EXECUTION_PLAN.md](compiler/AUTODIFF_EXECUTION_PLAN.md).
 
 Its active work is concentrated in the following
-programs.
+programs. The numbering identifies themes, not priority or delivery order;
+[the integrated plan](compiler/INTEGRATED_COMPILER_PLAN.md#live-queue) alone owns sequencing.
 
 ### 1. E2E-REAL-6 — one compiler authority
 

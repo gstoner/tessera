@@ -1,0 +1,70 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "parallel_rows": true,
+  "rows": [
+    {
+      "activation": "relu",
+      "budget": 0.0,
+      "region": "b098d5f30376903ef1eb7762b2fa3c9a58fd489d6115cd20bfd77946482d74fb",
+      "original": "321e1533498e35e93625cde7b6aa8e4616d790b57c6df159fc729977854f0c82",
+      "transformed": "5124d5d38fbdd2818152ccb8b53ca326877bbd527da1870f951256df4e9a87ad",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "relu",
+      "budget": 0.001,
+      "region": "c8e8a420b178c13ade31cb2093bdc30dbbbfdee9435caf99268eaf690dcf14fa",
+      "original": "321e1533498e35e93625cde7b6aa8e4616d790b57c6df159fc729977854f0c82",
+      "transformed": "5124d5d38fbdd2818152ccb8b53ca326877bbd527da1870f951256df4e9a87ad",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    },
+    {
+      "activation": "abs",
+      "budget": 0.0,
+      "region": "913c147768d683b1130460239c60aa29d8bc1b69f08f1ae34620d8b4e1a25dcf",
+      "original": "afc3834627cb6f63e3a042d434945263ed0e87c2259497b062bd78a62e78cc02",
+      "transformed": "10f81dfa926caee181b1c0c4130c27df5c75723e6eeeafec34bebfdb30596d09",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "abs",
+      "budget": 0.001,
+      "region": "8a0a48bf72e0f77d966106de6181fd38c9aa8ab6ba24bacd09edf4db17715ff8",
+      "original": "afc3834627cb6f63e3a042d434945263ed0e87c2259497b062bd78a62e78cc02",
+      "transformed": "10f81dfa926caee181b1c0c4130c27df5c75723e6eeeafec34bebfdb30596d09",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    },
+    {
+      "activation": "sum",
+      "budget": 0.0,
+      "region": "a489c46807c04dd3aee53bdf9a5ce7490e1e5d3e5096fa8e597876376ff94bad",
+      "original": "b500d03478c825c32ee0c568ef804fc5e312f24e09aee08dd3ab286aabb9354b",
+      "transformed": "4fe3b37bd8a5f1eb2e20a1e8ca91d1833e7256b36d8d1e2a382ffe4da74af0c7",
+      "incumbent_retained": true,
+      "rewrite_admitted": false
+    },
+    {
+      "activation": "sum",
+      "budget": 0.001,
+      "region": "5d1b0621d86071c264e26a0d8cfb56afbd1b5af877b1926b87dc6fa1c7883682",
+      "original": "b500d03478c825c32ee0c568ef804fc5e312f24e09aee08dd3ab286aabb9354b",
+      "transformed": "4fe3b37bd8a5f1eb2e20a1e8ca91d1833e7256b36d8d1e2a382ffe4da74af0c7",
+      "incumbent_retained": true,
+      "rewrite_admitted": true
+    }
+  ],
+  "compiler_sha256": "4f611f4d3059a645a3ccf18adee1f3f69807aac01cc9a58c10d0904a543b61b3",
+  "sources": {
+    "python/tessera/compiler/native_ann.py": "5f974cc6f3b93d5fc7a48ad25ad5518ef5fc8a69a73df3b7fec74ea4bf7551cc",
+    "python/tessera/compiler/native_ann_gpu.py": "59324edacbf0755c97a8d5721b9782e0cfb853db2485db738e3fe2af9b9535e7",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "02552558ab07f5762d1481757e4950a6b44e9e8c2ad53baa4109b57537046005",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "52de87accf8593daa405602b9a99b91b20ccdb3b66521d18663745d7709a9f96"
+  },
+  "recorder_sha256": "391186ca94dbf2e6512b7e54901215a048e81d2659773ce1b114e2b4e0ffc297",
+  "promotion_eligible": false
+}

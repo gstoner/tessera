@@ -2724,7 +2724,7 @@ epilogue execution remains SDK-gated and TF32 is not applicable to Apple.
 This plan brings the proof discipline established by the CUDA and ROCm work to
 the Apple backend. It complements [`APPLE_AUDIT.md`](APPLE_AUDIT.md), the
 generated execution inventory, and the durable architecture under
-[`docs/backends/apple/`](../../../backends/apple/). The generated execution
+[`docs/backends/apple/`](../../../backends/apple). The generated execution
 inventory is the authority for exact-target execution state (including
 `native_gpu` versus `reference_cpu`); the durable backend documents are the
 architecture authority. This file owns only the active execution order and
@@ -7655,7 +7655,7 @@ Sync: `APPLE-POLICY-COMPARE-20260904`.
 Both GPU value packages and Apple CPU Graph-owned descriptors are migration targets. Extend scheduled consumers and native IR-derived call/ABI records; compiler-owned MSL/Metal materialization is the GPU endpoint, LLVM is the general CPU endpoint. Follow-up required on M1 Max per family. No direct LLVM-to-Metal backend or new execution proof is assumed.
 
 Sequencing and acceptance are owned by
-[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#mlirllvm-native-foundation-program--2026-09-04).
+[`INTEGRATED_COMPILER_PLAN.md`](../../compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program).
 Shared change in this slice: architectural migration plan only; runtime, ABI,
 selector and physical schedules are unchanged. Historical routes have explicit
 replacement and deletion gates, not permanent compatibility exemptions.
@@ -7761,7 +7761,7 @@ apply; no Metal execution or new saved-LSE support is claimed in this cut.
 ### Deleted functionality reassessment — 2026-09-05
 
 Synchronization key: `IR-NATIVE-FOUNDATION-1`. The
-[central reassessment](../../compiler/INTEGRATED_COMPILER_PLAN.md#deleted-functionality-reassessment--2026-09-05)
+[central reassessment](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
 routes pipeline ownership to W2.4a/CAKE/SO-2, verifier coverage to W2.4,
 native residual policy to W5.1, and sharding/halo composition to W5.4 and
 COMP-SCHED-OVERLAP-1. StableHLO interoperability is deferred pending a named
@@ -7980,7 +7980,7 @@ theory remain scoped landing plans; AD residuals use the active AD plan and
 shared substrate demands use existing F0–F4/NUMPOL/layout/transport owners.
 Apple workload consumers still need their own MSL/runtime packages and device proof; ROCm and x86 reference/physical results do not promote them.
 No runtime, ABI or support status changes. Follow-up requirements are mapped in
-[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_PLAN.md#capability-plan-reconciliation--2026-09-07).
+[the integrated reconciliation](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-07--capability-plan-reconciliation).
 
 
 **Native status / artifact identity / recipe instances — F0/F2/F3 / IR-NATIVE-FOUNDATION-1 (2026-09-07):**
@@ -8015,7 +8015,7 @@ See the integrated plan and benchmarks/baselines/native_tape_ann_20260907/.
 Follow-up required. Shared extent guards, logical shape residuals and numerical contracts apply to the compiler foundation. The host i64/i8 ABI and CUDA/HIP arbiter bindings do not establish MSL storage, Metal tape execution or Apple performance. No Apple runtime change in this increment; the earlier runtime edit is now re-sealed against commit `0ba34c26` on the M1 Max.
 
 Shared source, physical artifact replay, numerical-domain guards and evidence are
-recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md#shape-varying-host-tapes-and-gpu-ann-arbitration--2026-09-07). All fleet LLVM builds still lack assertions.
+recorded in [the integrated plan](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-07--shape-varying-host-tapes-and-gpu-ann-arbitration). All fleet LLVM builds still lack assertions.
 
 The shared host JIT now retires compiler-owned temporaries through upstream
 ownership-based buffer deallocation after DPS copies. Validation is x86 on
@@ -8036,3 +8036,51 @@ registration now returns a scoped owner. Explicit/context close unregisters
 only its own candidates, disables retained candidate handles and releases
 probe references; failed registration rolls back. This is host registry ownership; no apple runtime ABI or device promotion changes.
 CUDA/HIP registration continues to use its separate device binding owner.
+
+
+### 2026-09-07 — W2.4a / F3 / FA-1: while and row ANN integration
+
+Sync key: **AD-RESIDUAL-EVAL-1 / IR-NATIVE-FOUNDATION-1**.
+No Apple runtime or MSL binding changed. Row-parallel GPU lowering is CUDA/HIP-only; Apple requires its own threadgroup and dynamic residual binding and fresh Metal proof.
+
+Shared changes: proved constant-stride while capacity, terminal row-sum error
+propagation and rank-changing ABI projection, and opt-in row independence with
+serialized launch/pipeline replay. See the integrated compiler plan's bounded
+while recovery increment and `benchmarks/baselines/row_ann_while_20260907/`.
+Follow-up required: general CFG recovery, GPU shape-capacity materialization,
+reader-complete stream-ordered reclamation, and measured schedule selection.
+The raw-view context barrier is retained; producer-event completion is not a
+proof that external readers have finished. Assertions-enabled MLIR remains open.
+
+
+### 2026-09-07 — W2.4a / AD-RESIDUAL-EVAL-1: dynamic capacity and reader ownership
+
+Sync key: **IR-NATIVE-FOUNDATION-1**. Not applicable to current MSL execution: this increment changes shared native analysis and CUDA/HIP pool/event ownership. Follow-up required for MSL dynamic threadgroup/residual storage and Apple completion ownership; no Metal runtime change or device proof.
+
+Shared contracts: SSA-proved temporary capacity separate from logical shape,
+matching dynamic-copy dimension SSA, typed bounded `cf.switch` edges, and scoped
+reader completion before stream-ordered frees. Partial-free/event failures retain
+ownership; legacy unrestricted exports retain the context barrier. See the
+integrated compiler plan's dynamic temporary capacity increment and
+`benchmarks/baselines/dynamic_readers_20260907/`.
+Follow-up required: exported dynamic tape descriptors/status, loaded residual
+shape validation, broader source CFG recovery and adoption by composed consumers.
+Assertions-enabled MLIR and measured overlap/throughput remain open.
+
+Free API failures quarantine the frame for device teardown and forbid normal
+close/retry; event-record failures retain an explicit completion-wait recovery.
+
+Native CFG cross-block SSA definitions now receive distinct state slots, with
+host forward/reverse proof. GPU multiway products still refuse the retained
+bound-exhaustion assertion pending a device status/termination consumer.
+
+
+### 2026-09-07 — checked products and composed readers
+
+Owner: **W2.4a / AD-RESIDUAL-EVAL-1**; sync key **IR-NATIVE-FOUNDATION-1**.
+Follow-up required: shared CFG normalization applies, but guard-v1 is a CUDA/HIP serial product ABI. Apple still needs MSL logical-shape/status storage and completion ownership; no Metal execution or runtime change is claimed.
+
+See the integrated plan for the exported shape-varying ABI design: returned
+logical extents, validated loaded bounds, capacity ownership and status before
+view exposure. Arbitrary Python CFG/effects, assertions-enabled MLIR and measured
+reclamation/overlap remain open.

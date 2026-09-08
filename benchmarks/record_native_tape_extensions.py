@@ -45,10 +45,17 @@ def main():
     p.add_argument('--backend',choices=('nvidia','rocm'),required=True)
     p.add_argument('--compiler',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--strided-counter',action='store_true')
     args=p.parse_args()
     d=Device(args.backend)
     chip='sm_120' if d.cuda else 'gfx1151'
-    pair=materialize_persistent_tape(data_while_source(),compiler=args.compiler,
+    loop_source=data_while_source()
+    if args.strided_counter:
+        loop_source=loop_source.replace('%one = arith.constant 1 : index',
+            '%one = arith.constant 2 : index\n%start = arith.constant 2 : index').replace(
+            '"scf.while"(%zero, %x)', '"scf.while"(%start, %x)').replace(
+            '%three = arith.constant 3 : index', '%three = arith.constant 8 : index')
+    pair=materialize_persistent_tape(loop_source,compiler=args.compiler,
         llvm_bin=Path('/usr/lib/llvm-23/bin'),backend=args.backend,chip=chip)
     branch_pair=materialize_persistent_tape(predicate_source(),compiler=args.compiler,
         llvm_bin=Path('/usr/lib/llvm-23/bin'),backend=args.backend,chip=chip)
@@ -109,7 +116,7 @@ def main():
     names=['src/transforms/lib/AutodiffPairedPass.cpp','src/transforms/lib/NativeTapeToGPUPass.cpp',
            'python/tessera/compiler/native_persistent_tape.py','python/tessera/compiler/native_device_tape.py',
            'python/tessera/compiler/native_gpu_storage.py']
-    args.output.write_text(json.dumps(dict(backend=args.backend,chip=chip,rows=rows,
+    args.output.write_text(json.dumps(dict(backend=args.backend,chip=chip,strided_counter=args.strided_counter,rows=rows,
         forward=pair.forward.binding_digest,backward=pair.backward.binding_digest,
         predicate_forward=branch_pair.forward.binding_digest,predicate_backward=branch_pair.backward.binding_digest,
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),

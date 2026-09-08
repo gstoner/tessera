@@ -27,6 +27,12 @@ repo_root="$(git rev-parse --show-toplevel)"
 # shellcheck source=scripts/_python_env.sh
 . "${repo_root}/scripts/_python_env.sh" || exit 1
 
+# Match CI's structural ownership check. CI additionally checks PR history.
+if ! "${TESSERA_PY}" "${repo_root}/scripts/check_compiler_plan.py"; then
+  echo "[pre-push] compiler plan routing/log ownership failed" >&2
+  exit 1
+fi
+
 # Gate 1 — structural spec/registry sync (fast, <1s). These are full-pytest-only
 # invariants that otherwise surface ~10 min into CI: a new op-catalog entry not
 # documented in PYTHON_API_SPEC.md, or a generated *.md dropped into

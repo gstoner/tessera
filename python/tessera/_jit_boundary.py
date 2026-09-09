@@ -494,8 +494,9 @@ def _free_cache_at_exit() -> None:  # pragma: no cover - process teardown
 
 _SIGNATURE_CACHE: dict[tuple[int, str], tuple[list, list] | None] = {}
 
-# tensor<7x?xf32> → ((7, None), "f32"); any other type → (None, spelling).
-_TENSOR_RE = re.compile(r"^tensor<((?:(?:\d+|\?)x)*)([^x>]+)>$")
+# Ranked tensor or identity memref descriptors share the same array ABI.
+# Layout/memory-space spellings do not match a supported element dtype.
+_TENSOR_RE = re.compile(r"^(?:tensor|memref)<((?:(?:\d+|\?)x)*)([^x>,]+)>$")
 
 
 def _parse_sig_type(spelling: str):

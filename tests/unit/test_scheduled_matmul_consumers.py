@@ -607,9 +607,12 @@ def test_apple_gpu_scheduled_matmul_rejects_non_apple_contract(monkeypatch, tmp_
         )
 
 
-def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch) -> None:
+def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch, tmp_path) -> None:
     pipelines: list[str] = []
-    monkeypatch.setattr(rocm_native, "_tessera_opt", lambda: Path("/fake/tessera-opt"))
+    tool=tmp_path/"tessera-opt"
+    tool.write_bytes(b"compiler-v1")
+    monkeypatch.setattr(rocm_native, "_tessera_opt", lambda: tool)
+    monkeypatch.setattr(rocm_native, "_cache", {})
     monkeypatch.setattr(rocm_native, "_driver_selected_device_libraries", lambda: ())
     monkeypatch.setattr(rocm_native, "_extract_hsaco", lambda text: b"hsaco")
     monkeypatch.setattr(rocm_native, "_version_fingerprint", lambda tool: "fingerprint")
@@ -631,6 +634,13 @@ def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch) -> None:
         family="softmax",
     )
     softmax_target, softmax_native = pipelines
+    # Same binary reuses the image; replacing a compiler at the same path
+    # must not recycle an image produced by its previous contents.
+    rocm_native._compile_native_tile_ir("legacy-tile",directive="tessera_rocm.test",family="softmax")
+    assert len(pipelines)==2
+    tool.write_bytes(b"compiler-v2")
+    rocm_native._compile_native_tile_ir("legacy-tile",directive="tessera_rocm.test",family="softmax")
+    assert len(pipelines)==4
     assert "tessera-rocm-executable{" in softmax_target
     assert "family=softmax" in softmax_target
     assert "output=target" in softmax_target

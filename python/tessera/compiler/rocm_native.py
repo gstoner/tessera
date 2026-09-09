@@ -1233,6 +1233,7 @@ def _compile_native_tile_ir(
     tile_q: int = 64,
     tile_kv: int = 64,
     staging: str = "register",
+    depth_cooperative: bool = False,
 ) -> tuple[
     str,
     str,
@@ -1252,7 +1253,7 @@ def _compile_native_tile_ir(
     key = hashlib.sha256(
         (
             f"{tile_ir}|{directive}|{family}|{input_level.value}|"
-            f"{tile_q}|{tile_kv}|{staging}|{library_identity}"
+            f"{tile_q}|{tile_kv}|{staging}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1274,6 +1275,7 @@ def _compile_native_tile_ir(
         tile_q=tile_q,
         tile_kv=tile_kv,
         staging=staging,
+        depth_cooperative=depth_cooperative,
     )
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
@@ -1371,11 +1373,12 @@ def _compile_scheduled_attention_tile_ir(tile_ir: str):
     )
 
 
-def _compile_scheduled_depth_attention_tile_ir(tile_ir: str):
+def _compile_scheduled_depth_attention_tile_ir(tile_ir: str, *, cooperative_width: bool = False):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.depth_attention",
         family="depth_attention",
+        depth_cooperative=cooperative_width,
     )
 
 
@@ -1761,9 +1764,11 @@ def package_scheduled_depth_attention(
     artifact: ScheduledDepthAttentionArtifact,
     *,
     pipeline_name: str,
+    cooperative_width: bool = False,
 ) -> ROCMNativePackage:
     """Package the exact Block AttnRes Schedule-to-Tile artifact for gfx1151."""
 
+    if type(cooperative_width) is not bool:raise ValueError('cooperative_width must be boolean')
     artifact.validate()
     if (
         artifact.target != "rocm"
@@ -1783,7 +1788,7 @@ def package_scheduled_depth_attention(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_scheduled_depth_attention_tile_ir(artifact.tile_ir)
+    ) = (_compile_scheduled_depth_attention_tile_ir(artifact.tile_ir,cooperative_width=True) if cooperative_width else _compile_scheduled_depth_attention_tile_ir(artifact.tile_ir))
     entry = artifact.function_name
     image = NativeImageArtifact(
         target="rocm_gfx1151",

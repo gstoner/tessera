@@ -2831,3 +2831,124 @@ Evidence: `benchmarks/baselines/source_object_ownership_20260909/`, focused nati
 Additional owners: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a), [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
 Synchronization key: `SOURCE-OBJECT-OWNERSHIP-2026-09-09`.
 Writable overlapping views require one shared backing-storage SSA root, typed view maps and ordered updates. Independent input snapshots cannot preserve interleaved alias writes, so those writes still refuse before execution. VJP derivatives are per formal tensor input; this does not differentiate mutable object state.
+
+### 2026-09-09 — Mixed aliases and asynchronous state
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted follow-through after #737.
+
+Outcome: Read-only partial overlaps remain admissible beside disjoint mutable state at compilation, cache selection and execution. Plain custom instances project dictionary fields without custom accessors. Explicit CPU VJP differentiates functional results plus declared next-state outputs without copyback. Single-stream GPU submit/poll validates computation before event-ordered copyback and excludes readers until completion; failures poison the owner and retain pending storage.
+
+Remaining: Arbitrary accessors/object rebinding, overlapping writes with common backing-storage SSA, dynamic/implicit exception payloads and chaining, object/exception AD, aliased state VJP, multi-writer mutation and asynchronous teardown of failed updates. Close may synchronize; no full exception or asynchronous lifecycle closure is claimed.
+
+Evidence: `benchmarks/baselines/mixed_alias_async_state_20260909/`; native source regressions, injected pending/failure ownership tests and independent SM120/gfx1151 asynchronous state packets. No performance promotion.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a), [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+Synchronization key: `MIXED-ALIAS-ASYNC-STATE-2026-09-09`.
+
+### 2026-09-09 — Writable views and exception value transport
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #737.
+
+Outcome: Contiguous rank-one writable aliases share an explicit containing-input SSA root; standard tensor.extract_slice/insert_slice preserve ordered writes and subsequent reads. Runtime revalidates view offsets and cache identity includes the view map. Single-element f32 exception-value payloads cross native completion, loop exits and finally; nested re-raise restores the outer payload. Explicit native VJP projects declared object fields and differentiates public/next-state values without mutation.
+
+Remaining: Writable views without a supplied containing input, noncontiguous/multidimensional write maps, aliased state adjoints, dynamic strings/heterogeneous exception values, cause/context/traceback transport and implicit operation errors. Mutable exception aliases refuse rather than silently changing finally semantics. Exception AD and GPU view/exception execution remain open.
+
+Evidence: `benchmarks/baselines/source_views_exception_20260909/`; native CPU execution regressions and independent SM120/gfx1151 regression packets for the existing single-state asynchronous consumer. Device packets do not prove writable view or exception execution. No performance promotion.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Synchronization key: `SOURCE-VIEW-EXCEPTION-2026-09-09`.
+
+### 2026-09-09 — Strided roots static causes and device execution
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #737.
+
+Outcome: Positive-stride rank-one views and local static slices project onto an explicit contiguous root. Exact-alias state VJP accumulates at that root and returns zero for duplicate alias arguments. Explicit literal builtin causes and from-None suppression cross the native completion boundary. GPU bufferization copies before writes; the native ownership verifier resolves bounded known subview/cast chains to private allocations or output roots and continues rejecting input-rooted writes.
+
+Remaining: Negative/multidimensional views, nontrivial slice adjoints, general caught exception identity/context/tracebacks, dynamic causes, exception AD and GPU exception transport. Copy-before-write can increase temporary storage and does not establish performance eligibility. Local one-root GPU slices do not admit arbitrary external aliased device pointers.
+
+Evidence: `benchmarks/baselines/strided_source_gpu_20260909/`; focused source/ownership tests, compiler rebuilds, and independently measured strided asynchronous state updates. No performance promotion.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Synchronization key: `STRIDED-SOURCE-GPU-2026-09-09`.
+
+### 2026-09-09 — Mapped adjoints and GPU exception completion
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #737.
+
+Outcome: Bounded injective negative/multidimensional views lower through standard tensor slices. Native slice adjoints accumulate overlapping reads at the containing root and mask overwritten destination gradients. Static caught bindings retain identity through re-raise; explicit causes and implicit contexts decode as an exception graph, with logical native source notes. SM120 and gfx1151 independently execute mapped forward/backward and checked synchronous/asynchronous static/dynamic exception cases. Failed public frames remain unreadable and repeated polls retain the same error object. Block AttnRes now routes these foundations into native package, lifetime and performance gates; its incorrect full-matrix-rank liveness claim is removed.
+
+Remaining: Runtime-sized/rank-changing or large mapped views, noninjective writes, general object mutation, loop exception-context slots, retained dynamic context payloads, real Python traceback frames and exception AD. Owned in-place GPU mutation remains exception-free. Multi-state device aliases, tuned cooperative kernels and performance promotion are separate.
+
+Evidence: `benchmarks/baselines/source_exception_gpu_20260909/`; native source/ownership regressions, finite-difference view adjoints, Block AttnRes rank counterexample, independent device packets.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a), [Block AttnRes](BLOCK_ATTNRES_ROCM_PLAN.md).
+Synchronization key: `SOURCE-MAPPED-EXCEPTION-2026-09-09`.
+
+### 2026-09-09 — Runtime maps context slots and cooperative experiment
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #737.
+
+Outcome: Positive rectangular source maps use compact native slices; CPU VJP no longer inherits a GPU slot cap. Per-site dynamic exception payload slots retain cause/context values; CPU VJP validates forward status before backward and zero-seeds completion metadata. Runtime-shaped native slice products execute across shapes on SM120/gfx1151, with exact cotangent-shape assertions, nonnegative unsigned-division allocation bounds and dominating equality proofs for logical copies. Block AttnRes has an opt-in cooperative width reduction, distinct cache/compiler identity and serialized pipeline policy; measured operation-total results do not establish promotion.
+
+Remaining: Automatic runtime Python slice capture, large/general negative maps, generation-indexed loop context storage, full CPython frames/tracebacks and product-aware GPU exception AD. Cooperative Block AttnRes needs device-clock attribution, broader numerical/shape coverage and repeatable package wins; CUDA depth-attention packaging remains separate.
+
+Evidence: `benchmarks/baselines/runtime_source_maps_20260909/`; CPU source/AD, artifact and registry tests; independent twenty-case GPU packets; default/cooperative gfx1151 package measurements.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a), [Block AttnRes](BLOCK_ATTNRES_ROCM_PLAN.md).
+Synchronization key: `RUNTIME-SOURCE-MAPS-2026-09-09`.
+
+
+### 2026-09-09 — Source index generations and checked GPU VJP
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #737.
+
+Outcome: Python source slices lower runtime int64 tensor bounds and positive steps to native arithmetic and dynamic slice results. Read-only view roots retain their SSA value across local rebinding. Bounded expanded loops carry one completion code and distinct per-generation exception payload slots; nested cause/context chains no longer depend on a frozen pre-loop edge table. Native public results preserve scalar i8/i64 residual types. A paired GPU VJP owns device input snapshots, checks forward exceptions before backward and zero-seeds completion metadata. Repeated failed-frame polling preserves exception identity without accumulating old host traceback chains.
+
+Remaining: Python integer/index protocols, negative runtime strides, nested/runtime-shaped source roots and dynamic CPU JIT result allocation; cross-iteration arbitrary exception objects and unbounded storage; full CPython traceback frames/locals; asynchronous exception-aware AD. Block AttnRes promotion is unchanged.
+
+Evidence: `benchmarks/baselines/source_generation_ad_20260909/`; native CPU and independent SM120/gfx1151 slice, generation and checked-VJP cases. No performance promotion.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Synchronization key: `SOURCE-GENERATION-AD-2026-09-09`.
+
+
+### 2026-09-09 — Signed nested views and asynchronous source VJP
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #737.
+
+Outcome: Signed runtime slice maps compose nested rank-preserving views against an immutable root and lower through tensor.generate, including INT64_MIN steps and empty results. The CPU JIT uses compiler-projected capacity/shape sidecars to allocate multiple multidimensional dynamic outputs; Python integer bounds remain runtime inputs. Identity memref arguments receive Python and C static-extent checks. Bounded loop-carried exception references retain their original generation payload and explicit cause. Same-stream GPU snapshots and checked asynchronous VJP stage backward only after a successful forward, retaining matching residuals until completion.
+
+Remaining: Runtime-shaped original roots, custom index protocols, runtime gather adjoints, arbitrary custom exception heaps and unbounded generations; full CPython frames with live locals/closures and instruction identity; fully asynchronous retirement and cross-queue ownership. CPU automatic capacity is bounded to 1024 elements. Device source VJP remains single-input without projected state aliases/object fields. No performance promotion.
+
+Evidence: `benchmarks/baselines/source_nested_async_20260909/`; 19 independently measured cases each on SM120 and gfx1151, host source/ABI tests and assertions-enabled compiler validation.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Synchronization key: `SOURCE-NESTED-ASYNC-2026-09-09`.

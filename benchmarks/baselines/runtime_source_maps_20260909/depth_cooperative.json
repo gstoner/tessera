@@ -1,0 +1,171 @@
+{
+  "algorithm": "rms_key_online_softmax_stats_v1",
+  "architecture": "gfx1151",
+  "compiler_sha256": "6409b91cf818ed866a951f8e81f879f670494df979ee8d63704dd0d58357f56d",
+  "cooperative_width": true,
+  "device": "AMD Radeon 8060S / Strix Halo",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "merge": "max_shifted_pairwise_merge_v1",
+  "numeric_policy": {
+    "accum": "fp32",
+    "softmax": "fp32",
+    "storage": "fp32"
+  },
+  "recorder_sha256": "a997494e0a207881a02c37685ea6e61e95a808037201796f7a06d94491583c43",
+  "rows": [
+    {
+      "compile_state": "cold",
+      "correct": true,
+      "hip_event_ns": {
+        "median": null,
+        "samples": [],
+        "selector_eligible": false,
+        "source": "not_collected_by_descriptor_launcher",
+        "valid": false
+      },
+      "host_wall_ns": {
+        "median": 2061226,
+        "minimum": 1988722,
+        "samples": [
+          2031894,
+          2027514,
+          2093707,
+          2059386,
+          2061226,
+          2135740,
+          2048845,
+          2262472,
+          2097793,
+          1988722,
+          2008838,
+          2044640,
+          2072846,
+          2085417,
+          2086408
+        ],
+        "selector_eligible": false,
+        "source": "synchronized_host_wall",
+        "valid": true
+      },
+      "hsaco_sha256": "662ca62569876a54089306fd22916c63f55a2e924dc7ad1ec36ec5de88c08a93",
+      "image_digest": "44892a08a960f806a125e1c53cf55ad79e13b13c7e53b2c1d9e082845562e928",
+      "maximum_absolute_error": 7.152557373046875e-07,
+      "schedule_digest": "1416a4214dc3944b747ffae62cebd0e69a9af4696a88b32f23d8bbb6deae7158",
+      "shape": {
+        "rows": 3,
+        "sources": 7,
+        "width": 8
+      },
+      "target_ir_digest": "95e8ff9f397b36360c0568fd732012c322980e3a87e150f87996c50b791cb9c6",
+      "tile_ir_digest": "5a2d678503d77a2a2a729899766025cdd1b0c120d2f33d633b4ddfed472cb79c"
+    },
+    {
+      "compile_state": "cold",
+      "correct": true,
+      "hip_event_ns": {
+        "median": null,
+        "samples": [],
+        "selector_eligible": false,
+        "source": "not_collected_by_descriptor_launcher",
+        "valid": false
+      },
+      "host_wall_ns": {
+        "median": 2727613,
+        "minimum": 2622258,
+        "samples": [
+          2701362,
+          2623068,
+          2755885,
+          2727613,
+          2622258,
+          2696652,
+          2777797,
+          2675860,
+          2714103,
+          2814598,
+          2785017,
+          2872182,
+          2764365,
+          2824569,
+          2721863
+        ],
+        "selector_eligible": false,
+        "source": "synchronized_host_wall",
+        "valid": true
+      },
+      "hsaco_sha256": "8d8e869a0b72a6fb254828368aebbcfc48f2a953712fc83e6a194ce362d59c12",
+      "image_digest": "9576d529642a94c65da4c65be38035278a4f5f11d4556c1c28e97ef958210db1",
+      "maximum_absolute_error": 3.680586814880371e-06,
+      "schedule_digest": "40e210f320e062b7f0e25cc6921e24f78f622f0df974921d1459eff993053a3d",
+      "shape": {
+        "rows": 31,
+        "sources": 17,
+        "width": 64
+      },
+      "target_ir_digest": "e7b36eb439e8cdcfecf5a0226d179a179c64f4701b181a3162d4ee02c4a785db",
+      "tile_ir_digest": "a2063739e38d03eef0b531a12b41d790e3981a39b10c08b59861071929b96e5d"
+    },
+    {
+      "compile_state": "cold",
+      "correct": true,
+      "hip_event_ns": {
+        "median": null,
+        "samples": [],
+        "selector_eligible": false,
+        "source": "not_collected_by_descriptor_launcher",
+        "valid": false
+      },
+      "host_wall_ns": {
+        "median": 3676247,
+        "minimum": 3518658,
+        "samples": [
+          3566340,
+          4406563,
+          3518658,
+          3583771,
+          3664907,
+          3775862,
+          3676247,
+          3660886,
+          3684677,
+          3716649,
+          3747151,
+          3710709,
+          3623394,
+          3606823,
+          3684117
+        ],
+        "selector_eligible": false,
+        "source": "synchronized_host_wall",
+        "valid": true
+      },
+      "hsaco_sha256": "19983e09af837fdca853eb3f39e51f1e06912335fca24c4b547d358ea8bd0a0e",
+      "image_digest": "a913b2ee13af2ad67c21063c7d844a7369361ca9b58fef371e49439cbc6762a7",
+      "maximum_absolute_error": 1.0788440704345703e-05,
+      "schedule_digest": "b6df7135f9a8344b7d2881449b073490d0caa0579e30c3548de425819267880b",
+      "shape": {
+        "rows": 127,
+        "sources": 33,
+        "width": 128
+      },
+      "target_ir_digest": "9201d07171d4137a9fcca02fad4f4999992e84af56cfc83f1e5ccb97087e3246",
+      "tile_ir_digest": "1146e8e659b803f68c90ba6760fb74c3c14b53cceb8db536d5580aa1eee2e1f9"
+    }
+  ],
+  "schema": "tessera.block_attnres.gfx1151.phase5.v1",
+  "sync_key": "BLOCK-ATTNRES-ROCM-2026-08-12",
+  "timing_provenance": {
+    "environment": "WSL gfx1151",
+    "includes_allocation_module_load_copy_and_synchronization": true,
+    "operation_total": true,
+    "promotion_blocker": "requires calibrated HIP events or ROCprofiler activity on bare metal",
+    "selector_eligible": false
+  },
+  "verdict": {
+    "correctness": "retain",
+    "performance": "provisional_operation_total_only",
+    "physical_package": "retain",
+    "selector_eligible": false
+  },
+  "work_item": "BLOCK-ATTNRES-ROCM-1"
+}

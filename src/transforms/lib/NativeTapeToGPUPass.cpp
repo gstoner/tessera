@@ -27,9 +27,10 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
   NativeTapeToGPUPass() = default;
   NativeTapeToGPUPass(const NativeTapeToGPUPass &other) : PassWrapper(other) {}
   Option<std::string> backend{*this, "backend", llvm::cl::desc("Private allocation lowering: nvidia or rocm"), llvm::cl::init("nvidia")};
+  Option<bool> hostResultsOnly{*this, "host-results-only", llvm::cl::desc("Stop after checked capacity/result projection for the native CPU companion"), llvm::cl::init(false)};
   Option<bool> parallelRows{*this, "parallel-ann-rows", llvm::cl::desc("Assign proven independent ANN rows to GPU threads"), llvm::cl::init(false)};
   Option<bool> statusBuffer{*this, "status-buffer", llvm::cl::desc("Append a checked i64 status result for structured product assertions"), llvm::cl::init(false)};
-  Option<int64_t> publicResultCapacity{*this, "public-result-capacity", llvm::cl::desc("Export generated rank-one through rank-four AD results into checked capacity storage"), llvm::cl::init(0)};
+  Option<int64_t> publicResultCapacity{*this, "public-result-capacity", llvm::cl::desc("Export generated scalar through rank-four AD results into checked capacity storage"), llvm::cl::init(0)};
   Option<int64_t> publicInputCapacity{*this, "public-input-capacity", llvm::cl::desc("Bind dynamic AD inputs to checked flat capacity and logical shape sidecars"), llvm::cl::init(0)};
   Option<bool> inputStatus{*this, "input-status", llvm::cl::desc("Require a successful incoming product status before any body effect"), llvm::cl::init(false)};
   Option<unsigned> inputStatusCount{*this, "input-status-count", llvm::cl::desc("Number of independently checked incoming statuses (1 through 8)"), llvm::cl::init(1)};
@@ -124,15 +125,17 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       SmallVector<Value> returned(ret.getOperands());
       for (Value value:returned) {
         auto type=dyn_cast<MemRefType>(value.getType());
-        if (!type || type.getRank()<1 || type.getRank()>4 ||
-            !(type.getElementType().isF32() || type.getElementType().isF64())) return reject();
+        if (!type || type.getRank()>4 ||
+            !(type.getElementType().isF32() || type.getElementType().isF64() ||
+              type.getElementType().isInteger(8) || type.getElementType().isInteger(64))) return reject();
         unsigned outIndex=f.getNumArguments();
-        auto outputType=MemRefType::get({publicResultCapacity},type.getElementType());
-        auto shapeType=MemRefType::get({type.getRank()},IntegerType::get(m.getContext(),64));
+        auto outputType=MemRefType::get({type.getRank()==0 ? 1 : int64_t(publicResultCapacity)},type.getElementType());
+        auto shapeType=MemRefType::get({std::max<int64_t>(1,type.getRank())},IntegerType::get(m.getContext(),64));
         if (failed(f.insertArgument(outIndex,outputType,DictionaryAttr{},f.getLoc())) ||
             failed(f.insertArgument(outIndex+1,shapeType,DictionaryAttr{},f.getLoc()))) return reject();
         OpBuilder at(ret);
         f.setArgAttr(outIndex,"tessera.result_shape",at.getI64IntegerAttr(outIndex+1));
+        if (type.getRank()==0) f.setArgAttr(outIndex,"tessera.result_scalar",at.getUnitAttr());
         auto zero=arith::ConstantIndexOp::create(at,f.getLoc(),0);
         auto one=arith::ConstantIndexOp::create(at,f.getLoc(),1);
         auto capacity=arith::ConstantIndexOp::create(at,f.getLoc(),publicResultCapacity);
@@ -166,6 +169,10 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
           indices.pop_back();
         };
         copyDimension(0,zero);
+        if (type.getRank()==0) {
+          auto scalarSize=arith::ConstantIntOp::create(at,f.getLoc(),1,64);
+          memref::StoreOp::create(at,f.getLoc(),scalarSize,f.getArgument(outIndex+1),ValueRange{zero});
+        }
         for (auto [d,extent]:llvm::enumerate(extents)) {
           auto index=arith::ConstantIndexOp::create(at,f.getLoc(),d);
           auto length=arith::IndexCastOp::create(at,f.getLoc(),at.getI64Type(),extent);
@@ -188,7 +195,8 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         auto dataType=dyn_cast<MemRefType>(f.getArgument(i).getType());
         int64_t j=shapeSlot.getInt();
         if (j<0 || j>=f.getNumArguments() || j==i || !dataType || dataType.getRank()!=1 || !dataType.hasStaticShape() ||
-            !(dataType.getElementType().isF32() || dataType.getElementType().isF64())) return reject();
+            !(dataType.getElementType().isF32() || dataType.getElementType().isF64() ||
+              dataType.getElementType().isInteger(8) || dataType.getElementType().isInteger(64))) return reject();
         auto shapeType=dyn_cast<MemRefType>(f.getArgument(j).getType());
         if (!shapeType || shapeType.getRank()!=1 || !shapeType.hasStaticShape() ||
             shapeType.getDimSize(0)<1 || shapeType.getDimSize(0)>4 || !shapeType.getElementType().isInteger(64) ||
@@ -196,7 +204,9 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         int64_t rank=shapeType.getDimSize(0);
         outputSlots.insert(i); outputSlots.insert(j);
         llvm::json::Object result{{"data",i},{"shape",j},{"capacity",dataType.getDimSize(0)}};
-        if (rank!=1) result["rank"]=rank;
+        bool scalar=f.getArgAttr(i,"tessera.result_scalar")!=nullptr;
+        if (scalar && (rank!=1 || dataType.getDimSize(0)!=1)) return reject();
+        if (rank!=1 || scalar) result["rank"]=scalar ? 0 : rank;
         results.push_back(std::move(result));
         OpBuilder begin=OpBuilder::atBlockBegin(&f.getBody().front());
         auto missing=arith::ConstantIntOp::create(begin,f.getLoc(),-1,64);
@@ -223,9 +233,18 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       // the shape annotations. Unknown/forwarded write aliases refuse here.
       bool invalidWrite=false;
       auto writable=[&](Value value) {
-        if (auto arg=dyn_cast<BlockArgument>(value))
-          return arg.getOwner()==&f.getBody().front() && outputSlots.contains(arg.getArgNumber());
-        return isa_and_nonnull<memref::AllocOp,memref::AllocaOp>(value.getDefiningOp());
+        // Known view chains preserve the allocation's ownership. Do not infer
+        // ownership through unknown producers or control-flow forwarding.
+        for (unsigned depth=0;depth<32;++depth) {
+          if (auto arg=dyn_cast<BlockArgument>(value))
+            return arg.getOwner()==&f.getBody().front() && outputSlots.contains(arg.getArgNumber());
+          if (isa_and_nonnull<memref::AllocOp,memref::AllocaOp>(value.getDefiningOp())) return true;
+          if (auto view=value.getDefiningOp<memref::SubViewOp>()) value=view.getSource();
+          else if (auto view=value.getDefiningOp<memref::CastOp>()) value=view.getSource();
+          else if (auto view=value.getDefiningOp<memref::ReinterpretCastOp>()) value=view.getSource();
+          else return false;
+        }
+        return false;
       };
       f.walk([&](Operation *op) {
         if (auto store=dyn_cast<memref::StoreOp>(op); store && !writable(store.getMemRef())) invalidWrite=true;
@@ -362,6 +381,12 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       if (failed(guardBlock(f.getBody().front()))) return reject();
       m->setAttr("tessera.autodiff.gpu_status",entry.getStringAttr("guard-v1"));
     }
+    if (hostResultsOnly) {
+      if (!publicResults || !publicResultCapacity || !statusBuffer || parallelRows || inputStatus) return reject();
+      m->removeAttr("tessera.autodiff.gpu_status");
+      m->setAttr("tessera.native_result_status",StringAttr::get(m.getContext(),"guard-v1"));
+      return;
+    }
     auto admissible=[](Type t) {
       auto mt=dyn_cast<MemRefType>(t);
       if (!mt || !mt.hasStaticShape() || !(mt.getElementType().isF32() || mt.getElementType().isF64() || mt.getElementType().isInteger(8) || mt.getElementType().isInteger(64) || mt.getElementType().isInteger(1) || mt.getElementType().isIndex()) || !mt.getLayout().isIdentity() || mt.getMemorySpace()) return false;
@@ -418,6 +443,13 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       if (!a || !b) return std::nullopt;
       Interval result;
       if (isa<arith::AddIOp>(op)) result={a->first+b->first,a->second+b->second};
+      else if (isa<arith::DivUIOp>(op)) {
+        // Unsigned monotone division is safe only for proven nonnegative
+        // numerators and strictly positive denominators. No zero/negative
+        // divisor or wrapped signed interval may establish allocation bounds.
+        if (a->first < 0 || b->first <= 0) return std::nullopt;
+        result={a->first/b->second,a->second/b->first};
+      }
       else if (isa<arith::SubIOp>(op)) result={a->first-b->second,a->second-b->first};
       else if (isa<arith::MulIOp>(op)) {
         int64_t products[]={a->first*b->first,a->first*b->second,a->second*b->first,a->second*b->second};
@@ -496,6 +528,25 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       if (!admissible(capacity)) return std::nullopt;
       return SmallVector<int64_t>{count};
     };
+    auto logicalShape=[&](Value value) -> std::optional<SmallVector<OpFoldResult>> {
+      auto type=dyn_cast<MemRefType>(value.getType());
+      if (!type) return std::nullopt;
+      if (auto view=value.getDefiningOp<memref::SubViewOp>()) {
+        if (view.getSourceType().getRank()!=type.getRank()) return std::nullopt;
+        return view.getMixedSizes();
+      }
+      if (auto view=value.getDefiningOp<memref::ReinterpretCastOp>())
+        return view.getMixedSizes();
+      auto alloc=value.getDefiningOp<memref::AllocOp>();
+      if (!alloc && !type.hasStaticShape()) return std::nullopt;
+      SmallVector<OpFoldResult> sizes;
+      unsigned dynamic=0;
+      Builder builder(m.getContext());
+      for (int64_t n:type.getShape())
+        sizes.push_back(ShapedType::isDynamic(n) ? OpFoldResult(alloc.getDynamicSizes()[dynamic++])
+                                                : OpFoldResult(builder.getIndexAttr(n)));
+      return sizes;
+    };
     bool bad=false;
     int64_t bytes=0;
     f.walk([&](Operation *op) {
@@ -509,9 +560,21 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         // allocations; capacity equality is not a logical shape proof.
         if (source.getShape()!=target.getShape()) bad=true;
         if (!source.hasStaticShape() || !target.hasStaticShape()) {
-          auto a=copy.getSource().getDefiningOp<memref::AllocOp>();
-          auto b=copy.getTarget().getDefiningOp<memref::AllocOp>();
-          if (!a || !b || !llvm::equal(a.getDynamicSizes(),b.getDynamicSizes())) bad=true;
+          auto a=logicalShape(copy.getSource()), b=logicalShape(copy.getTarget());
+          if (!a || !b || a->size()!=b->size()) bad=true;
+          else for (auto [left,right]:llvm::zip(*a,*b)) {
+            if (left==right) continue;
+            auto lhs=dyn_cast<Value>(left), rhs=dyn_cast<Value>(right);
+            bool proved=false;
+            if (lhs && rhs) for (Operation *child=op,*parent=op->getParentOp(); parent && parent!=f.getOperation(); child=parent,parent=parent->getParentOp()) {
+              auto branch=dyn_cast<scf::IfOp>(parent);
+              if (!branch || child->getParentRegion()!=&branch.getThenRegion()) continue;
+              auto cmp=branch.getCondition().getDefiningOp<arith::CmpIOp>();
+              if (cmp && cmp.getPredicate()==arith::CmpIPredicate::eq &&
+                  ((cmp.getLhs()==lhs && cmp.getRhs()==rhs) || (cmp.getLhs()==rhs && cmp.getRhs()==lhs))) proved=true;
+            }
+            if (!proved) bad=true;
+          }
         }
       }
       if (op->getNumRegions() && op!=f.getOperation() && !isa<scf::ForOp,scf::IfOp>(op)) bad=true;

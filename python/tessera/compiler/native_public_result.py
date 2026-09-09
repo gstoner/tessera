@@ -89,7 +89,7 @@ class _LogicalView:
 
 class PublicResultFrame:
     """Owns capacities and immutable host-validated logical result views."""
-    def __init__(self, program, inputs, *, stream=None, scoped=False):
+    def __init__(self, program, inputs, *, stream=None, scoped=False, snapshot=False):
         if type(scoped) is not bool or (scoped and stream is None):
             raise ValueError('scoped public frames require asynchronous submission')
         self._scoped, self._stream = scoped, stream
@@ -131,6 +131,19 @@ class PublicResultFrame:
                     raise ValueError("native result argument is not a tensor")
                 arguments.append(_Buffer(self,spec.shape,spec.dtype,stream=stream) if spec.writable else next(values))
             status = _Buffer(self,(1,),'int64',stream=stream)
+            if snapshot:
+                raw,_,_,_,_=self.binding._resident(*arguments,status,1)
+                copy=bind('cuMemcpyDtoD_v2' if stream is None else 'cuMemcpyDtoDAsync_v2','hipMemcpyDtoD' if stream is None else 'hipMemcpyDtoDAsync',[ct.c_void_p,ct.c_void_p,ct.c_size_t]+([] if stream is None else [ct.c_void_p]))
+                if stream is None:self.check(self.sync())
+                self._snapshot_borrows=tuple(inputs)
+                owned=[]
+                for i,spec in enumerate(specs[:-2]):
+                    if not spec.writable:
+                        buffer=_Buffer(self,spec.shape,spec.dtype,stream=stream)
+                        self.check(copy(buffer.pointer,ct.c_void_p(raw[i]),buffer.nbytes,*(() if stream is None else (ct.c_void_p(stream),))))
+                        arguments[i]=buffer
+                        owned.append(buffer)
+                self._snapshot_inputs=tuple(owned)
             self._arguments,self._status=arguments,status
             if stream is None:
                 self.binding(*arguments,status,1)
@@ -153,6 +166,27 @@ class PublicResultFrame:
             if any(not 0<=dim<=row['capacity'] for dim in shape) or math.prod(shape)>row['capacity']:
                 raise RuntimeError('public result logical extent exceeds capacity')
             results.append(_LogicalView(self._arguments[row['data']],shape))
+        if 'tessera.source_state' in self.program.source:
+            contract=json.loads(_attribute(self.program.source,'tessera.source_state'))
+            product=json.loads(_attribute(self.program.source,'tessera.autodiff.product_abi')) if 'tessera.autodiff.product_abi' in self.program.source else None
+            if contract.get('error_specs') and (product is None or product['role']=='forward'):
+                import numpy as np
+                from .native_source_state import decode_source_exception
+                outputs=[]
+                # Only completion sidecars cross back to the host. Tensor
+                # results remain resident and unexposed on an exception.
+                primal=results if product is None else results[:product['primal_results']]
+                for view in primal[-((2 if contract.get('error_dynamic') else 1)+len(contract.get('error_payload_sites',()))):]:
+                    interface=view.__cuda_array_interface__
+                    array=np.empty(interface['shape'],dtype=interface['typestr'])
+                    self.check(self.copy_out(array.ctypes.data,view.pointer,array.nbytes))
+                    outputs.append(array)
+                if not hasattr(self,'_source_exception'):
+                    self._source_exception=decode_source_exception(contract,outputs)
+                if self._source_exception is not None:
+                    # Polling the same failed frame must not retain every prior
+                    # caller and its locals in an ever-growing traceback chain.
+                    raise self._source_exception.with_traceback(None)
         self._results=tuple(results)
         if self._scoped:
             assert self._owner is not None
@@ -250,6 +284,7 @@ class PublicResultFrame:
             buffer = self.buffers[-1]
             self.check(self.free(buffer.pointer)); buffer.pointer=ct.c_void_p(); self.buffers.pop()
         self.binding.close()
+        self._snapshot_borrows=()
         self.closed=True
 
     def __enter__(self):
@@ -272,11 +307,145 @@ def materialize_ad_public_results(source, *, compiler, llvm_bin, backend, chip, 
     if type(input_capacity) is not int or not 0 <= input_capacity <= 1024:
         raise ValueError('AD input capacity must be a bounded integer')
     compiler,llvm_bin=Path(compiler),Path(llvm_bin)
+    if 'tessera.source_state' in source and json.loads(_attribute(source,'tessera.source_state')).get('error_specs'):
+        raise ValueError('GPU source exception AD requires a product-aware checked forward binding')
+    return _materialize_ad_product(source,compiler=compiler,llvm_bin=llvm_bin,backend=backend,chip=chip,capacity=capacity,role=role,input_capacity=input_capacity)
+
+
+def _materialize_ad_product(source, *, compiler, llvm_bin, backend, chip, capacity, role, input_capacity=0):
     exported=_run(compiler,'--tessera-autodiff-paired=box-product-scalars=true export-product='+role,source=source)
     native=_run(compiler,'--tessera-to-linalg',source=exported)
     buffered=_run(llvm_bin/'mlir-opt','--allow-unregistered-dialect','--convert-elementwise-to-linalg',
-        '--one-shot-bufferize=bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map',
+        '--one-shot-bufferize=bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map'+(' copy-before-write=true' if 'tessera.source_state' in source else ''),
         '--convert-linalg-to-loops','--canonicalize',source=native)
     gpu,_,_=_prepare(buffered,compiler,backend,capacity,input_capacity)
     package=build_native_gpu_storage(gpu,compiler=compiler,llvm_bin=llvm_bin,backend=backend,chip=chip)
     return NativePublicResult(buffered,compiler,package,capacity,input_capacity)
+
+
+@dataclass(frozen=True)
+class NativeSourceVJP:
+    """Exception-gated reverse execution over owned input snapshots.
+
+    Only the checked forward's residuals enter backward. Completion metadata
+    receives zero seeds. Exception objects are transported, not differentiated.
+    """
+    _forward: NativePublicResult
+    _backward: NativePublicResult
+
+    def _validate_pair(self,cotangents):
+        forward_abi=json.loads(_attribute(self._forward.source,'tessera.autodiff.product_abi'))
+        backward_abi=json.loads(_attribute(self._backward.source,'tessera.autodiff.product_abi'))
+        if (_attribute(self._forward.source,'tessera.autodiff.product_pair')!=
+                _attribute(self._backward.source,'tessera.autodiff.product_pair')
+                or forward_abi['role']!='forward' or backward_abi['role']!='backward'):
+            raise ValueError('source VJP products do not share a generated pair')
+        contract=json.loads(_attribute(self._forward.source,'tessera.source_state'))
+        public_count=contract['result_count']+len(contract['groups'])
+        if not isinstance(cotangents,tuple) or len(cotangents)!=public_count:
+            raise ValueError('source VJP needs a cotangent per public result and next state')
+        return forward_abi,public_count
+
+    def _backward_inputs(self,forward,cotangents,primal_count,public_count,stream=None):
+        cuda=self._forward.package.backend=='nvidia'
+        driver=forward.binding._bound._driver
+        name=('cuMemsetD8_v2' if cuda else 'hipMemset') if stream is None else ('cuMemsetD8Async' if cuda else 'hipMemsetAsync')
+        zero=getattr(driver,name)
+        zero.argtypes=[ct.c_void_p,ct.c_ubyte if cuda else ct.c_int,ct.c_size_t]+([] if stream is None else [ct.c_void_p])
+        zero.restype=ct.c_int
+        seeds=list(cotangents)
+        for result in forward.results[public_count:primal_count]:
+            buffer=_Buffer(forward,result._shape,result._buffer.dtype,stream=stream)
+            forward.check(zero(buffer.pointer,0,buffer.nbytes,*(() if stream is None else (ct.c_void_p(stream),))))
+            seeds.append(buffer)
+        return (*forward._snapshot_inputs,*seeds,*forward.results[primal_count:])
+
+    def run(self,*inputs,cotangents):
+        abi,public_count=self._validate_pair(cotangents)
+        forward=PublicResultFrame(self._forward,inputs,snapshot=True)
+        try:
+            backward=self._backward.run(*self._backward_inputs(forward,cotangents,abi['primal_results'],public_count))
+            return SourceVJPFrame(forward,backward,public_count)
+        except BaseException:
+            forward.close()
+            raise
+
+    def submit(self,stream,*inputs,cotangents):
+        if type(stream) is not int or not 0<stream<(1<<64):
+            raise ValueError('source VJP requires a non-null stream')
+        return AsyncSourceVJPFrame(self,stream,inputs,cotangents)
+
+
+class AsyncSourceVJPFrame:
+    """Poll-driven forward/check/backward staging; explicit close may synchronize.
+
+    Inputs/cotangents must be ready on the supplied stream and remain owned.
+    Snapshot, zero fills and both launches use that stream. No backward is
+    enqueued until the forward's device status and exception completion pass.
+    """
+    def __init__(self,program,stream,inputs,cotangents):
+        self._abi,self._public_count=program._validate_pair(cotangents)
+        self._program,self._stream=program,stream
+        self._cotangents=cotangents
+        self._lock=threading.RLock()
+        self._backward=None
+        self._error=None
+        self.closed=False
+        self._forward=PublicResultFrame(program._forward,inputs,stream=stream,snapshot=True)
+
+    def poll(self):
+        with self._lock:
+            if self.closed:raise ValueError('source VJP frame is closed')
+            if self._error is not None:raise self._error.with_traceback(None)
+            if hasattr(self,'derivatives'):return True
+            try:
+                if self._backward is None:
+                    if not self._forward.poll():return False
+                    args=self._program._backward_inputs(self._forward,self._cotangents,self._abi['primal_results'],self._public_count,self._stream)
+                    self._backward=self._program._backward.submit(self._stream,*args)
+                if not self._backward.poll():return False
+                self.primals=self._forward.results[:self._public_count]
+                self.derivatives=self._backward.results
+                return True
+            except BaseException as error:
+                self._error=error
+                raise
+
+    def close(self):
+        with self._lock:
+            if self.closed:return
+            if self._backward is not None:self._backward.close()
+            self._forward.close()
+            self._cotangents=()
+            self.closed=True
+
+    def __enter__(self):return self
+    def __exit__(self,*exc):self.close()
+
+
+class SourceVJPFrame:
+    def __init__(self,forward,backward,public_count):
+        self._forward,self._backward=forward,backward
+        self.primals=forward.results[:public_count]
+        self.derivatives=backward.results
+
+    def close(self):
+        self._backward.close()
+        self._forward.close()
+
+    def __enter__(self):return self
+    def __exit__(self,*exc):self.close()
+
+
+def materialize_source_vjp(source, *, compiler, llvm_bin, backend, chip, capacity):
+    """Bind native exception products; standalone backward admission stays closed."""
+    if type(capacity) is not int or not 1<=capacity<=1024:
+        raise ValueError('source VJP requires capacity from one through 1024')
+    contract=json.loads(_attribute(source,'tessera.source_state'))
+    if contract.get('schema')!=1 or not contract.get('error_specs'):
+        raise ValueError('source VJP requires a serialized source exception contract')
+    if len(contract.get('arguments',()))!=1 or contract.get('groups') not in ([],[[0]]) or contract.get('state_views') or contract.get('object_fields'):
+        raise ValueError('source VJP currently requires one input without projected aliases or object fields')
+    programs=[_materialize_ad_product(source,compiler=Path(compiler),llvm_bin=Path(llvm_bin),
+        backend=backend,chip=chip,capacity=capacity,role=role) for role in ('forward','backward')]
+    return NativeSourceVJP(*programs)

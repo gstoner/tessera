@@ -1,0 +1,102 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "compiler_sha256": "4cfab7c1901bef0705053aff2e238f993b6abcd67de0b8970f60dec1d76a0f53",
+  "source_sha256": {
+    "python/tessera/compiler/source_control_flow.py": "82437606d264726e5049cabcc67839d58798e5d9a014f42ffe4a018b55ab0b98",
+    "python/tessera/compiler/trace.py": "cb95c2f8cb87dbea3fb126ee30c95f600c7ac6a0de71d4f4d97a37200ba1f5b8",
+    "python/tessera/compiler/native_public_result.py": "4d503897420a5d0231fc0054ea1b9a58597c1a937a2634c8a1bca579e33a6ac1",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "a87f84d702641f8c9c55b2c6f2bf2cebb6509751696d2bb2a34eddf69d91b7a2",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "ea438ba196f1f33556b5d20eaebec83928d8f653782896801ce00491ad1fa872",
+    "benchmarks/record_source_generation_ad_gpu.py": "d595c99e9b01014882676ac86a17ee0d4c18eb8d38e649e7d54941b16044be00"
+  },
+  "cases": [
+    {
+      "family": "checked_cube",
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "bounds": [
+        1,
+        7,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "bounds": [
+        -6,
+        -1,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "bounds": [
+        -100,
+        100,
+        3
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "bounds": [
+        7,
+        1,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "bounds": [
+        0,
+        8,
+        100
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "bounds": [
+        -9223372036854775808,
+        9223372036854775807,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice",
+      "step": 0,
+      "guard_refused": true
+    },
+    {
+      "family": "runtime_slice",
+      "step": -1,
+      "guard_refused": true
+    }
+  ],
+  "performance_promotion": false
+}

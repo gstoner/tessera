@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import time
 from types import SimpleNamespace
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
@@ -21,15 +22,25 @@ def advance(x):
     return x*x
 
 
+def advance_strided(x):
+    even=x[::2]
+    even[:]=even+even
+    odd=x[1::2]
+    odd[:]=odd+odd
+    return x*x
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend',choices=('nvidia','rocm'),required=True)
     parser.add_argument('--compiler',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument("--async-steps",action="store_true")
+    parser.add_argument("--strided-state",action="store_true")
     args=parser.parse_args()
     device=Device(args.backend)
     chip='sm_120' if device.cuda else 'gfx1151'
-    source=to_native_source_ir(trace(advance,np.ones(4,np.float32),
+    source=to_native_source_ir(trace(advance_strided if args.strided_state else advance,np.ones(4,np.float32),
         source_control_flow=True,source_state_groups=((0,),)))
     program=materialize_source_state(source,compiler=args.compiler,llvm_bin='/usr/lib/llvm-23/bin',
                                      backend=args.backend,chip=chip,capacity=4)
@@ -65,7 +76,29 @@ def main():
             except ValueError as error:assert 'scope ended' in str(error)
             else:raise AssertionError('expired reader exposed its pointer')
             for expected in (8.,16.,32.):
-                with owner.step() as result:
+                if args.async_steps:
+                    stream=ct.c_void_p()
+                    create=getattr(device.lib,'cuStreamCreate' if device.cuda else 'hipStreamCreateWithFlags')
+                    create.argtypes=[ct.POINTER(ct.c_void_p),ct.c_uint];create.restype=ct.c_int
+                    device.check(create(ct.byref(stream),1))
+                    try:
+                        owner.submit_step(stream.value)
+                        try:
+                            with owner.read():pass
+                        except ValueError as error:assert 'pending' in str(error)
+                        else:raise AssertionError('pending write admitted reader')
+                        deadline=time.monotonic()+20
+                        result=owner.poll_step()
+                        while result is None:
+                            if time.monotonic()>deadline:raise TimeoutError('owned mutation pending')
+                            time.sleep(.001)
+                            result=owner.poll_step()
+                    finally:
+                        destroy=getattr(device.lib,'cuStreamDestroy_v2' if device.cuda else 'hipStreamDestroy')
+                        destroy.argtypes=[ct.c_void_p];destroy.restype=ct.c_int
+                        device.check(destroy(stream))
+                else:result=owner.step()
+                with result:
                     value=np.empty(4,np.float32)
                     device.check(device.dtoh(value.ctypes.data,result.results[0].pointer,16) if device.cuda else device.copy(value.ctypes.data,result.results[0].pointer,16,2))
                     np.testing.assert_array_equal(value,np.full(4,expected**2,np.float32))
@@ -83,7 +116,7 @@ def main():
            'python/tessera/compiler/native_source_state.py','python/tessera/compiler/native_public_result.py',
            'src/transforms/lib/NativeTapeToGPUPass.cpp']
     args.output.write_text(json.dumps(dict(backend=args.backend,chip=chip,execution_kind='native_gpu',
-        rows=rows,in_place_mutation=True,promotion_eligible=False,
+        rows=rows,in_place_mutation=True,asynchronous_steps=args.async_steps,strided_state=args.strided_state,promotion_eligible=False,
         sources={n:hashlib.sha256((ROOT/n).read_bytes()).hexdigest() for n in files},
         source_ir_sha256=hashlib.sha256(source.encode()).hexdigest(),
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),

@@ -123,7 +123,10 @@ class TracedFunction:
     output_values: Tuple[Any, ...] = field(default=(), compare=False, repr=False)
     source_state_groups: tuple[tuple[int, ...], ...] = ()
     source_error_specs: tuple = ()
+    source_state_views: tuple = ()
+    source_error_dynamic: bool = False
     source_error_table: tuple = ()
+    source_error_payload_sites: tuple = ()
     source_object_fields: tuple = ()
 
 
@@ -604,6 +607,8 @@ def _np_dtype_to_elem(dt) -> str:
         return "complex128"
     if name == "float64":
         return "f64"
+    if name == "int64":
+        return "i64"
     return "f32"
 
 
@@ -614,6 +619,7 @@ def trace(
     source_control_flow: bool = False,
     max_steps: int | None = None,
     source_state_groups: tuple[tuple[int, ...], ...] = (),
+    source_state_views: tuple = (),
     source_error_specs: tuple = (),
     source_object_fields: tuple = (),
 ) -> TracedFunction:
@@ -626,13 +632,15 @@ def trace(
         raise TesseraTraceError('source control-flow options require explicit source_control_flow=True')
     if source_state_groups and (not source_control_flow or not isinstance(source_state_groups,tuple)):
         raise TesseraTraceError('source state groups require explicit source control recovery')
+    if source_state_views and (not source_control_flow or not source_state_groups):
+        raise TesseraTraceError('source state views require declared state groups')
     if source_error_specs and (not source_control_flow or not isinstance(source_error_specs,tuple)):
         raise TesseraTraceError('source error specs require explicit source control recovery')
     if source_object_fields and not source_control_flow:
         raise TesseraTraceError('source object fields require explicit control recovery')
     if source_control_flow:
         from .source_control_flow import recover_callable
-        fn = recover_callable(fn, max_steps=max_steps, state_groups=source_state_groups,error_specs=source_error_specs,object_fields=source_object_fields)
+        fn = recover_callable(fn, max_steps=max_steps, state_groups=source_state_groups,state_views=source_state_views,error_specs=source_error_specs,object_fields=source_object_fields)
     if arg_names is not None and len(arg_names) != len(example_specs):
         raise TesseraTraceError("trace arg_names must match the example arity")
     tb = TraceBuilder()
@@ -655,9 +663,12 @@ def trace(
                 f"{type(o).__name__}")
     tb.set_outputs([o.ssa for o in outs])
     traced=tb.finish(tuple(o.value for o in outs))
+    traced.source_state_views=source_state_views
     traced.source_state_groups=source_state_groups
     traced.source_error_specs=source_error_specs
     traced.source_object_fields=source_object_fields
+    traced.source_error_dynamic=getattr(fn,"source_error_dynamic",False)
+    traced.source_error_payload_sites=getattr(fn,"source_error_payload_sites",())
     traced.source_error_table=getattr(fn,"source_error_table",())
     return traced
 

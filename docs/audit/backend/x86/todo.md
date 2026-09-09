@@ -4580,3 +4580,97 @@ Shared contracts: field projection, read-only overlapping snapshots, static
 exception args and scoped exclusive GPU writes. Custom accessors, overlapping
 writes, general exception semantics and automatic effectful AD remain open.
 Evidence: `benchmarks/baselines/source_object_ownership_20260909/`.
+
+### Mixed aliases and asynchronous state (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `W2.4a` / `AD-RESIDUAL-EVAL-1`.
+Sync key: `MIXED-ALIAS-ASYNC-STATE-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Parity validated: native mixed read-only aliases, plain instance fields and explicit functional state VJP. GPU stream ownership is not applicable to host copyback.
+Shared contracts: per-pair alias admission, plain instance projection, explicit
+next-state VJP and event-ordered checked copyback. Custom hooks, writable overlap,
+dynamic exception transport, effectful replay and multi-writer mutation remain
+open. Failure teardown can synchronize; no performance promotion.
+Evidence: `benchmarks/baselines/mixed_alias_async_state_20260909/`.
+
+### Writable source views and exception values (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1` / `W2.4a`.
+Sync key: `SOURCE-VIEW-EXCEPTION-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Parity validated: native overlapping view writes, typed exception values and declared-object state VJP.
+Shared contracts: containing-input view maps, typed completion payload outputs,
+field-projected VJP and invocation/cache ancestry checks. General write maps,
+exception identity/chains, exception AD and GPU view/exception lowering remain
+open. No performance promotion.
+Evidence: `benchmarks/baselines/source_views_exception_20260909/`.
+
+### Strided source roots (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1` / `W2.4a`.
+Sync key: `STRIDED-SOURCE-GPU-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Parity validated: positive-stride source views, exact-alias state VJP and explicit static exception causes execute through native CPU products.
+Shared contracts: stride-aware view maps, exact-alias adjoint roots, static
+exception cause metadata, copy-before-write and bounded native write ancestry.
+Negative/multidimensional views, slice adjoints, exception identity/context and
+GPU exception transport remain open. No performance promotion.
+Evidence: `benchmarks/baselines/strided_source_gpu_20260909/`.
+
+### Mapped views and GPU exception completion (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1` / `W2.4a`.
+Sync key: `SOURCE-MAPPED-EXCEPTION-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Native CPU validation covers mapped/overlapping view adjoints, static exception identity/cause/context and refusal of unrepresented loop contexts. GPU stream proof is not applicable.
+Shared contracts: bounded root-coordinate maps, native slice adjoints, static
+exception graph identity and checked completion before public result exposure.
+Mapped expansion is bounded to 256 elements; runtime-sized/general maps,
+dynamic context slots, full tracebacks and multi-state device bindings remain
+open. No performance promotion; private copies and teardown synchronization
+remain possible. [Block AttnRes](../../compiler/BLOCK_ATTNRES_ROCM_PLAN.md)
+uses these as foundation oracles, not a workload kernel/promotion claim.
+Evidence: `benchmarks/baselines/source_exception_gpu_20260909/`.
+
+### Runtime maps and context payload slots (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1` / `W2.4a` / `BLOCK-ATTNRES-1`.
+Sync key: `RUNTIME-SOURCE-MAPS-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Native CPU large rectangular views and exception-aware VJP validated; GPU slot limits no longer constrain host products. CPython traceback/frame compatibility remains open.
+Shared changes: compact rectangular maps, dynamic slice seed guards, exact
+logical-shape equality proofs, bounded unsigned division and per-site exception
+payload outputs. General runtime Python slicing, large negative maps, loop
+exception generations, CPython frame semantics and GPU exception AD remain
+open. Full tracebacks are not equivalent to source notes. No performance
+promotion; see [Block AttnRes](../../compiler/BLOCK_ATTNRES_ROCM_PLAN.md).
+Evidence: `benchmarks/baselines/runtime_source_maps_20260909/`.
+
+
+### Source generations and checked VJP (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1` / `W2.4a`.
+Sync key: `SOURCE-GENERATION-AD-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Native CPU validates runtime index clipping and bounded loop cause/context slots. Dynamic CPU JIT output allocation and full CPython frame reconstruction remain follow-ups.
+Shared contracts: int64 source slice bounds, bounded per-generation exception
+slots, scalar integer residuals, forward-gated VJP over snapshots and bounded
+host traceback retention. Negative runtime strides, arbitrary loop exception
+objects, full CPython frames and asynchronous exception AD remain open.
+Block AttnRes cooperative kernel/promotion work is unchanged; no performance
+promotion follows from these correctness packets.
+Evidence: `benchmarks/baselines/source_generation_ad_20260909/`.
+
+
+### Signed nested source maps and asynchronous VJP (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1` / `W2.4a`.
+Sync key: `SOURCE-NESTED-ASYNC-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+Native CPU validates automatic dynamic output allocation, signed/nested maps and retained exception references. The C JIT validates identity memref extents before dispatch. GPU proofs do not transfer to x86.
+Shared contracts: signed int64 view composition, compiler-projected CPU result
+capacities, bounded loop-carried exception identities and forward-gated async
+VJP over retained snapshots. Runtime gather adjoints, arbitrary exception heaps,
+full CPython frames, runtime-shaped source roots and fully asynchronous teardown
+remain open. Block AttnRes kernel/promotion obligations are unchanged.
+Evidence: `benchmarks/baselines/source_nested_async_20260909/`.

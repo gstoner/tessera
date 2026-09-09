@@ -165,7 +165,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/AUTODIFF_EXECUTION_PLAN.md` | - | 2026-09-09 | 0 | ✓ |
 | `compiler/AUTODIFF_NEXTGEN_PLAN.md` | - | 2026-09-06 | 3 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-09-06 | 3 | ✓ |
-| `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-09-07 | 2 | ✓ |
+| `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-09-09 | 0 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 29 | ✓ |
 | `compiler/COMPILER_AUDIT.md` | - | 2026-09-07 | 2 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-09-08 | 1 | ✓ |

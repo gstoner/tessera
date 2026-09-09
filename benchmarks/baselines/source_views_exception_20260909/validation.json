@@ -1,0 +1,18 @@
+{
+  "focused_passed": 102,
+  "compiler": "LLVM 23 assertions-enabled on Super-Bear",
+  "native_execution": "x86 JIT",
+  "sources": {
+    "python/tessera/compiler/source_control_flow.py": "d1ea4073f8909316b98e7009d8904f9a5ec72b81cf3215ef0941ee47a6ddc913",
+    "python/tessera/compiler/native_source_state.py": "336cad858433320685de3632ebcc30e28c2a8981aa07912594437b6afcdd2b7f",
+    "python/tessera/compiler/trace.py": "ffffa9ccf00fcde9382fda26945471695a80d9f050506261b8904310b042ecbd",
+    "tests/unit/test_source_object_exceptions.py": "19ece1d03c85afa1aa36dd91181533df58b618b2aaa8631226ed87245806e379",
+    "tests/unit/test_native_source_state.py": "22675b60222ac50b313296e4f469e36a9b8bc1b78daafbbf2e8ab1f2f88d7488"
+  },
+  "full_unit_before_alignment_guard": {
+    "passed": 18568,
+    "skipped": 2266,
+    "deselected": 870,
+    "seconds": 614.25
+  }
+}

@@ -2,7 +2,8 @@
 //
 // BLOCK-ATTNRES-1 Phase 5: materialize the exact gfx1151 depth-attention
 // statistics/merge contract. One workgroup owns one flattened token row.
-// Lanes [0, source_count) compute RMS-normalized logits, then output lanes
+// The default uses one lane per source; an explicit experimental option
+// cooperates across width. Output lanes
 // replay fixed source tiles and apply the declared max-shifted pairwise merge.
 // This intentionally favors a transparent, auditable first physical package;
 // exact-device evidence decides subsequent subgroup/vector refinements.
@@ -40,7 +41,7 @@ static void emitDepthAttentionBody(OpBuilder &builder, Location loc,
                                    gpu::GPUFuncOp function,
                                    int64_t sourceCount, int64_t rows,
                                    int64_t width, int64_t sourceTile,
-                                   double epsilon) {
+                                   double epsilon, bool cooperative) {
   MLIRContext *context = builder.getContext();
   Type f32 = builder.getF32Type();
   auto workgroup = gpu::AddressSpaceAttr::get(
@@ -82,6 +83,83 @@ static void emitDepthAttentionBody(OpBuilder &builder, Location loc,
                                          /*withElseRegion=*/false);
   builder.setInsertionPointToStart(rowIf.thenBlock());
 
+  if (cooperative) {
+  // All lanes cooperate across width for each source. Combine RMS and dot
+  // loads and use a deterministic shared-memory tree; every lane reaches
+  // every barrier, including lanes beyond the width tail.
+  Value partials = function.addWorkgroupAttribution(
+      MemRefType::get({2, WorkgroupSize}, f32, MemRefLayoutAttrInterface(),
+                      workgroup), loc);
+  auto sourceLoop = builder.create<scf::ForOp>(loc, c0, cSources, c1);
+  {
+    OpBuilder::InsertionGuard sourceGuard(builder);
+    builder.setInsertionPointToStart(sourceLoop.getBody());
+    Value source = sourceLoop.getInductionVar();
+    auto sums = builder.create<scf::ForOp>(
+        loc, lane, cWidth, cWorkgroup, ValueRange{zero, zero});
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(sums.getBody());
+      Value column = sums.getInductionVar();
+      Value value = builder.create<memref::LoadOp>(
+          loc, sources, ValueRange{sourceIndex(builder, loc, source, row,
+                                               column, cRows, cWidth)});
+      Value q = builder.create<memref::LoadOp>(loc, query, ValueRange{column});
+      Value square = builder.create<arith::MulFOp>(loc, value, value);
+      Value product = builder.create<arith::MulFOp>(loc, q, value);
+      Value sumSquare = builder.create<arith::AddFOp>(
+          loc, sums.getRegionIterArgs()[0], square);
+      Value sumDot = builder.create<arith::AddFOp>(
+          loc, sums.getRegionIterArgs()[1], product);
+      builder.create<scf::YieldOp>(loc, ValueRange{sumSquare, sumDot});
+    }
+    builder.create<memref::StoreOp>(loc, sums.getResult(0), partials,
+                                    ValueRange{c0, lane});
+    builder.create<memref::StoreOp>(loc, sums.getResult(1), partials,
+                                    ValueRange{c1, lane});
+    builder.create<gpu::BarrierOp>(loc);
+    for (int64_t stride = WorkgroupSize / 2; stride; stride /= 2) {
+      Value active = builder.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::slt, lane, ci(stride));
+      auto reduce = builder.create<scf::IfOp>(loc, active, false);
+      {
+        OpBuilder::InsertionGuard reduceGuard(builder);
+        builder.setInsertionPointToStart(reduce.thenBlock());
+        Value peer = builder.create<arith::AddIOp>(loc, lane, ci(stride));
+        for (Value component : {c0, c1}) {
+          Value left = builder.create<memref::LoadOp>(
+              loc, partials, ValueRange{component, lane});
+          Value right = builder.create<memref::LoadOp>(
+              loc, partials, ValueRange{component, peer});
+          Value sum = builder.create<arith::AddFOp>(loc, left, right);
+          builder.create<memref::StoreOp>(loc, sum, partials,
+                                          ValueRange{component, lane});
+        }
+      }
+      builder.create<gpu::BarrierOp>(loc);
+    }
+    Value first = builder.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, lane, c0);
+    auto store = builder.create<scf::IfOp>(loc, first, false);
+    {
+      OpBuilder::InsertionGuard storeGuard(builder);
+      builder.setInsertionPointToStart(store.thenBlock());
+      Value squareSum = builder.create<memref::LoadOp>(
+          loc, partials, ValueRange{c0, c0});
+      Value dotSum = builder.create<memref::LoadOp>(
+          loc, partials, ValueRange{c1, c0});
+      Value meanSquare = builder.create<arith::MulFOp>(loc, squareSum,
+                                                       inverseWidth);
+      Value rms = builder.create<math::SqrtOp>(
+          loc, builder.create<arith::AddFOp>(loc, meanSquare, epsilonValue));
+      Value normalized = builder.create<arith::DivFOp>(loc, dotSum, rms);
+      builder.create<memref::StoreOp>(loc, normalized, logits,
+                                      ValueRange{source});
+    }
+    builder.create<gpu::BarrierOp>(loc);
+  }
+
+  } else {
   Value sourceLane = builder.create<arith::CmpIOp>(
       loc, arith::CmpIPredicate::slt, lane, cSources);
   auto logitIf = builder.create<scf::IfOp>(loc, sourceLane,
@@ -131,6 +209,8 @@ static void emitDepthAttentionBody(OpBuilder &builder, Location loc,
                                     ValueRange{lane});
   }
   builder.create<gpu::BarrierOp>(loc);
+
+  }
 
   auto columns = builder.create<scf::ForOp>(loc, lane, cWidth, cWorkgroup);
   {
@@ -202,6 +282,13 @@ struct GenerateROCMDepthAttentionKernelPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
       GenerateROCMDepthAttentionKernelPass)
 
+  GenerateROCMDepthAttentionKernelPass() = default;
+  GenerateROCMDepthAttentionKernelPass(const GenerateROCMDepthAttentionKernelPass &other)
+      : PassWrapper(other) {}
+  Option<bool> cooperativeWidth{*this, "cooperative-width",
+      llvm::cl::desc("experimental workgroup tree reduction across source width"),
+      llvm::cl::init(false)};
+
   StringRef getArgument() const final {
     return "generate-rocm-depth-attention-kernel";
   }
@@ -267,7 +354,7 @@ struct GenerateROCMDepthAttentionKernelPass
       OpBuilder body(function.getContext());
       emitDepthAttentionBody(
           body, loc, function, sourceCount.getInt(), rows.getInt(),
-          width.getInt(), sourceTile.getInt(), eps.getValueAsDouble());
+          width.getInt(), sourceTile.getInt(), eps.getValueAsDouble(), cooperativeWidth);
       op->erase();
     }
   }

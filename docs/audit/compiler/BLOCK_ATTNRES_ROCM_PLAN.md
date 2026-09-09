@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-09
 audit_role: plan
 plan_state: landing
 ---
@@ -11,7 +11,7 @@ plan_state: landing
 > sequencing remains owned by
 > [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
 
-**Current scope (2026-09-07):** phases 0–4 establish reference and typed native
+**Current scope (2026-09-09):** phases 0–4 establish reference and typed native
 contracts; phase 5 has bounded gfx1151 execution with selector-ineligible WSL
 operation-total timing. The source paper is *Attention Residuals*, arXiv
 2603.15031. Appendix B is a dated August survey, not a renewed claim about
@@ -39,6 +39,32 @@ matches central finite differences to ≤ 5e-10; the softmax-merge lemma is exac
 (atol 1e-12) over random partition trees; properties P2–P4 hold as stated.
 
 ---
+
+## Cooperative-width experiment (2026-09-09)
+
+The existing gfx1151 kernel is already workgroup-owned; its logit stage uses
+one lane per source with serial width loops. The new opt-in variant combines
+RMS and dot loads across all 256 lanes, then uses a uniform shared-memory tree
+(2048 additional bytes) before the existing stats/merge output stage. Baseline
+remains default. `ROCMExecutablePipeline.depth_cooperative` is restricted to
+this family, serialized into Target pipeline policy and included in cache
+identity; the native package also binds compiler content identity.
+
+Both final variants passed the three existing shape oracles, with distinct
+HSACO hashes. Final operation-total medians changed by approximately +0.6%,
+-4.3% and -1.8%; an earlier comparison was inconsistent. These measurements
+include allocation/module/copy costs and contain no device-clock attribution.
+They do not establish a stable kernel speedup or selector eligibility.
+[Packets](../../../benchmarks/baselines/runtime_source_maps_20260909/) are
+located at repository `benchmarks/baselines/runtime_source_maps_20260909/`.
+
+Next: measure repeated interleaved comparisons with calibrated device timing,
+cover wider widths/source counts and reduced precision, and consider subgroup
+reductions to reduce the workgroup-barrier cost. CUDA needs its own native
+producer/package; shared runtime-map and exception proof is not a CUDA
+Block AttnRes kernel. Large positive rectangular views and runtime native slice
+adjoints now strengthen state-view/lifetime oracles; automatic Python runtime
+slicing and model-scale backward/checkpoint closure remain separate.
 
 ## Part I — Mathematical Model
 
@@ -146,7 +172,7 @@ Output aggregation:
   compressed into the storage dtype string.
 
 **Recovered limits.** `N = L, S = 1` ⇒ Full AttnRes with
-`σ(l) = (v_0..v_{l−1})`. `N = 1` ⇒ every sub-layer sees exactly `(b_0, p)`:
+`σ(l) = (v_0..v_{l−1})`. `N = 1` ⇒ the first sub-layer sees only `b_0`; subsequent sub-layers see `(b_0, p)`:
 a two-source convex gate between embedding and accumulated sum.
 
 ### I.4 Depth-mixing-matrix form
@@ -154,10 +180,13 @@ a two-source convex gate between embedding and accumulated sum.
 Unrolling (4)–(9): `h_l = Σ_{j<l} M_{j→l}(x)·v_j + M_{0→l}(x)·x` with
 **row-stochastic** `M`. Sources in a completed block share their block's
 weight; sources accumulated into the current partial share the partial's
-weight. Hence `rank(M) ≤ N + S` and `M` is block-semiseparable. Standard
-residual is the all-ones-triangular limit; Full AttnRes the dense rank-L
-limit. **Mixing-matrix rank = number of depth-states that must stay live** —
-the liveness bound the memory planner can consume (§III.4).
+weight. The recurrence has compact depth state, but the full causal mixing matrix
+need not have low algebraic rank. With `N=2`, `S=3`, `L=6` and zero queries,
+the six-by-six map from `(x,v₁,…,v₅)` to `(h₁,…,h₆)` has rank six, exceeding
+`N+S=5`; `test_depth_state_bound_is_not_full_mixing_matrix_rank` records this
+counterexample. Any off-diagonal/semiseparable rank statement needs its own
+precise submatrix definition and proof. Derive storage from SSA consumers,
+block boundaries and backward/checkpoint retention, never from full-matrix rank.
 
 ### I.5 Backward pass (VJP) — **[GAP-5]**, derived (the paper gives none)
 
@@ -170,8 +199,7 @@ Let `g = ∂ℒ/∂h` be the cotangent of `A_w(V)`. Write `r_j = RMS(v_j)`,
         + α_j (u_j − ū) · (1/r_j)(I − k̂_j k̂_jᵀ/d) w   (key path)       (13)
 ```
 
-Derivation of (13): RMSNorm Jacobian `∂k̂/∂v = (1/r)(I − k̂k̂ᵀ/d)` (using
-`v vᵀ/‖v‖² = k̂k̂ᵀ/d`), then the softmax VJP `∂ℒ/∂s_j = α_j(u_j − ū)`.
+Derivation of (13): RMSNorm Jacobian `∂k̂/∂v = (1/r)(I − k̂k̂ᵀ/d)` (using `r² = ‖v‖²/d + ε` and `k̂ = v/r`; the formula retains ε), then the softmax VJP `∂ℒ/∂s_j = α_j(u_j − ū)`.
 Machine-checked against central finite differences (≤ 5e-10).
 
 **Gradient-highway reading.** The value path (12) replaces the residual
@@ -353,31 +381,28 @@ until the gfx1151 proof flips them.
 
 ### III.3 ROCm execution lane (the first hardware proof)
 
-The gfx1151 lane already executes a compiler-generated matmul +
-flash-attention family via `runtime.launch()`; the deltas are small and stay
-inside existing seams:
+The current physical consumer is
+`rocm_native.package_scheduled_depth_attention`, using
+`ScheduledDepthAttentionArtifact` and `_compile_scheduled_depth_attention_tile_ir`.
+Extend this retained Graph→Schedule→Tile→`tessera_rocm.depth_attention`→HSACO
+path; the old `emit/rocm_hip.py` shortcut is not the implementation authority.
 
-1. **Stats-emitting attention kernel.** The online-softmax emitters hold
-   `run_max/run_sum` in registers at exactly the point they would be stored —
-   the change in `emit/rocm_hip.py` is "also write `(m, ℓ)`", not a new kernel
-   family. Depth-attn Phase 1 is attention with tiny KV
-   (`Nk = n ≤ N+1 ≈ 9`, `q = S ≈ 6–16`, one head, batched over `B·T` tokens):
-   small GEMM + row softmax on **vector ALUs — no WMMA needed** (shapes are far
-   below the 16×16×16 WMMA tile; RDNA 3.5's lack of FP8 WMMA is irrelevant
-   here).
-2. **Merge/finalize kernel.** `SOFTMAX_MERGE + FINALIZE + Norm` is a
-   pointwise-reduce region — the `pointwise-graph`/`pointwise-reduce` seams in
-   `fusion_core.py`; fuses into the sub-layer's PreNorm.
-3. **Target IR discipline (Decision #19).** Both ops lower through
-   `tessera_rocm.*` hardware-free ops before AMDGCN emission; lit fixtures in
-   the ROCm backend suite (`check-tessera-rocm` — note this suite runs under
-   `tessera-rocm-opt` and is NOT covered by `lit tests/tessera-ir/`).
-4. **Hardware verification on Strix Halo.** F4-verify the fused kernels
-   against the numpy references (A1/A3/A4); WSL specifics apply
-   (`/dev/dxg` not `/dev/kfd`; no torch — numpy-only tests).
-5. **Benchmark row** (stable JSON schema, Decision #12): measured
-   residual-mechanism I/O vs the `(N/S+5)d` model; `op = "depth_attn"`,
-   `backend = "rocm"`.
+1. Preserve source-count/row/width, epsilon, statistics/merge recurrence,
+   storage/softmax/accumulator policy and schedule identity in the serialized
+   artifact. Runtime descriptors must remain projections of that artifact.
+2. Implement multi-query stats and merge/finalize consumers in the native
+   pipeline. Small source counts are a reason to evaluate vector reductions,
+   not proof that WMMA or a cooperative kernel is slower: width, rows and
+   query count determine the measured schedule.
+3. Keep block-state aliases and saved backward readers visible to lifetime
+   analysis. The bounded source-view pilot below supplies correctness cases;
+   its copy-before-write singleton slices are not the production schedule.
+4. Reuse the mathematical oracles on exact gfx1151 hardware, with independent
+   CUDA SM120 package evidence when its native producer is added. Host/device
+   timing and end-to-end allocation/copy overhead remain separate measurements.
+5. Require matched baselines and selector-grade timing before promotion.
+   Existing gfx1151 correctness and WSL operation-total packets retain their
+   original scope; this work does not refresh or upgrade them.
 
 ### III.4 Schedule IR and the physical boundary
 
@@ -413,9 +438,33 @@ The later scheduling transformations remain:
 
 | Target | Path |
 |---|---|
-| Apple GPU | Same two deltas in `emit/apple_msl.py` (`synthesize_attention_online_msl` stats variant + merge kernel); F4-verify. Mac-routed work. |
-| x86 | Reference lane via `tessera.cpu.reference`; AVX-512 vectorized softmax/merge later through `emit/x86_llvm.py`. |
-| NVIDIA sm_120 | Deferred until the pattern is proven on ROCm; `mma.sync` unnecessary at these shapes. |
+| Apple GPU | Native MSL package and architecture-specific descriptor projection remain separate; no CUDA/HIP evidence transfers. |
+| x86 | Reference and native CPU contracts can check math and aliases; vectorized package/timing proof remains independent. |
+| NVIDIA sm_120 | Native depth-attention producer/package and ancestry proof remain open. CUDA source-view/AD/exception tests now provide foundation evidence, not a depth-attention kernel. |
+
+### III.5a How source views, adjoints and completion help both GPU lanes
+
+Owners: `BLOCK-ATTNRES-1`, F2/F3, `AD-RESIDUAL-EVAL-1`, `W2.4a`.
+[Current source/AD ownership](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+| Foundation increment | Workload use | Remaining workload gate |
+|---|---|---|
+| Injective negative/multidimensional static view maps; 256-element mapped envelope | Test completed-block, partial-state and token-slice alias semantics without detached snapshots | Production multidimensional descriptor projection, large/runtime-shaped maps and cooperative lowering; never unroll model-sized state |
+| Native slice gather/scatter adjoints, with overwritten destination gradients masked | Accumulate all later-layer contributions at a shared block-state root | Composed depth-attention/key-normalization products; save/recompute contracts for `α`, `K`, `r` and block-state reader lifetimes |
+| Checked CUDA/HIP exception completion, static cause/context identity and f32 payload | Fail closed before exposing a result after a native source failure | Workload-specific guards and statuses, multi-state integration and collective-safe failure propagation |
+| Independent SM120/gfx1151 mapped forward/backward packets | Establish that this shared primitive path executes on both targets | Depth-attention package ancestry, mixed precision, numerical tolerances and device/operation timing on each target |
+
+Evidence: `benchmarks/baselines/source_exception_gpu_20260909/`.
+The pilot uses one thread and copied private roots; it is correctness evidence,
+not a speedup or zero-copy claim. Exception source notes identify the native
+raise site; they are not reconstructed Python traceback frames. New loop
+context graphs and dynamic context payload storage remain explicit gaps.
+
+Next workload actions, within the integrated owners: project multi-query stats
+and block-state descriptors from native IR; prove forward/backward reader
+lifetimes; lower a cooperative reduction for each target; then measure the
+complete package against matched baselines. General Python exception identity
+and traceback closure are not prerequisites for those kernel steps.
 
 ### III.6 Verification plan (oracles + tests)
 
@@ -467,8 +516,8 @@ residual = depth cumsum (vanilla linear attention), Highway =
 1-semiseparable, HC/mHC = m-semiseparable, DDL = depth DeltaNet, AttnRes =
 depth softmax attention. Recommendation carried from the review: make the
 recurrence **axis** (time | depth) a facet of `linear_recurrence` before the
-W3 freeze, and expose the mixing-matrix semiseparable rank to the analysis
-layer as a liveness bound.
+W3 freeze, and derive liveness from concrete depth-state consumers and saved backward readers;
+any semiseparable rank claim needs a separate proof and cannot replace that analysis.
 
 ## Appendix B — Public implementation survey (2026-08-12)
 
@@ -483,6 +532,6 @@ layer as a liveness bound.
 - `AbdelStark/attnres` (Rust/burn): only public two-phase implementation;
   alpha; Full variant only.
 
-No faithful, complete Block AttnRes implementation exists publicly; the
-pipeline cross-stage caching has zero public implementations. Phase 2 above
-would be the first.
+Those were observations from the dated August survey, not current public
+implementation claims. They do not determine the present compiler queue or
+justify a first-implementation claim; refresh primary sources before reuse.

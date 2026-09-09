@@ -70,9 +70,23 @@ def test_measure_latency_is_monotonic_positive():
     assert slow > fast >= 0.0
 
 
-def test_measured_arbitrate_picks_fastest_and_caches():
+@pytest.mark.parametrize("separated", [True, False])
+def test_measured_arbitrate_picks_fastest_and_caches(monkeypatch, separated):
+    # Exercise real candidate execution and cache admission, but control the
+    # samples: host scheduling noise must not decide which branch this tests.
+    batches = iter(([5.0] * 5, [1.0] * 5) if separated else
+                   ([5.0] * 5, [1.0, 1.0, 1.0, 1.0, 20.0]) * 2)
+
+    def samples(run_fn, *, reps, warmup):
+        for _ in range(warmup + reps):
+            run_fn()
+        values = next(batches)
+        assert len(values) == reps
+        return values
+
+    monkeypatch.setattr(AT, "measure_latency_samples", samples)
     fast = _FakeCand("fake_fast", "fake_real", delay=0.0)
-    slow = _FakeCand("fake_slow", "fake_real", delay=0.005)
+    slow = _FakeCand("fake_slow", "fake_real", delay=0.0)
     register_candidate(slow)      # register slow first: tier-priority would tie →
     register_candidate(fast)      # measurement must be what picks the fast one
     region, cache = _FakeRegion(), AT.MeasureCache()
@@ -84,13 +98,14 @@ def test_measured_arbitrate_picks_fastest_and_caches():
     assert cache.misses == 1 and cache.size == 1
     rec = cache.to_dict()["records"][0]
     assert set(rec["candidates"]) == {"fake_fast", "fake_slow"}  # both were timed
+    assert rec["separation"]["separated"] is separated
     runs_after_first = fast.runs + slow.runs
-    # Second call, same bucket → cache hit, no re-timing.
+    # A cache lookup is reusable only when its ranking cleared the noise gate.
     win2 = AT.measured_arbitrate(region, OP_MATMUL, _TGT, A, B,
                                  dims=(4, 4, 4), dtype="bfloat16",
                                  cache=cache, reps=5, warmup=1, device="fakedev")
     assert win2.name == "fake_fast" and cache.hits == 1
-    assert fast.runs + slow.runs == runs_after_first       # nothing re-measured
+    assert fast.runs + slow.runs == runs_after_first * (1 if separated else 2)
 
 
 def test_measured_arbitrate_buckets_distinct_shapes_separately():

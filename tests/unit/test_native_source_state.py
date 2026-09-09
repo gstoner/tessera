@@ -79,3 +79,11 @@ def test_gpu_state_refuses_unprojected_input_alias_contract(declared):
     with pytest.raises(ValueError,match='one declared state input'):
         materialize_source_state(ir,compiler='/missing',llvm_bin='/missing',
                                  backend='rocm',chip='gfx1151',capacity=1)
+
+
+def test_writable_view_byte_offset_must_be_element_aligned():
+    from tessera.compiler.native_source_state import _state_layout
+    backing=np.zeros(8,np.float32)
+    view=np.ndarray((4,),dtype=np.float32,buffer=backing,offset=1)
+    with pytest.raises(ValueError,match='element-aligned'):
+        _state_layout((backing,view),(1,))

@@ -2566,6 +2566,22 @@ private:
     if (auto extract = mlir::dyn_cast<mlir::tensor::ExtractSliceOp>(op)) {
       if (outputCotangents.size() != 1 || !outputCotangents.front())
         return mlir::failure();
+      // Runtime cotangent descriptors must agree with the slice shape before
+      // scattering. Matching dynamic tensor types do not prove equal extents.
+      auto seedType = mlir::cast<mlir::RankedTensorType>(outputCotangents.front().getType());
+      if (!seedType.hasStaticShape() && seedType.getRank() == extract.getSourceType().getRank()) {
+        auto sizes = extract.getMixedSizes();
+        for (int64_t i = 0; i < seedType.getRank(); ++i) {
+          mlir::Value expected;
+          if (auto value = mlir::dyn_cast<mlir::Value>(sizes[i])) expected = value;
+          else expected = mlir::arith::ConstantIndexOp::create(builder, op->getLoc(),
+              mlir::cast<mlir::IntegerAttr>(mlir::cast<mlir::Attribute>(sizes[i])).getInt());
+          auto actual = mlir::tensor::DimOp::create(builder, op->getLoc(), outputCotangents.front(), i);
+          auto equal = mlir::arith::CmpIOp::create(builder, op->getLoc(), mlir::arith::CmpIPredicate::eq, actual, expected);
+          mlir::cf::AssertOp::create(builder, op->getLoc(), equal,
+              builder.getStringAttr("slice cotangent shape mismatch"));
+        }
+      }
       mlir::Value sourceZero = buildZeroLike(builder, extract.getSource());
       mlir::Value sourceCotangent =
           mlir::tensor::InsertSliceOp::create(

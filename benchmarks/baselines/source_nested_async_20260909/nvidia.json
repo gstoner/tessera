@@ -1,0 +1,160 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "compiler_sha256": "95ccd237007c2c180c05ec671cf9b4595837c3d8d58f7198a5fda4efbf8bbf51",
+  "source_sha256": {
+    "python/tessera/compiler/source_control_flow.py": "9e6d01224f9675f289644a619f34f5943343dd8956344f5ec7fb12c0bb28dd5d",
+    "python/tessera/compiler/trace.py": "cb95c2f8cb87dbea3fb126ee30c95f600c7ac6a0de71d4f4d97a37200ba1f5b8",
+    "python/tessera/compiler/native_public_result.py": "321f699f63bd0a86bf5d50c7bc71270e35235aedebe6f6c04c1c20de2e3a744c",
+    "python/tessera/compiler/native_source_state.py": "b88f1db0f2788771441d9bdff85633a09361ea02a26ec758588f5ad11c491ff6",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "751e1801691d82791946b4295fb5458678ee3077ecef4595b1800e8afdf955d3",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "ea438ba196f1f33556b5d20eaebec83928d8f653782896801ce00491ad1fa872",
+    "benchmarks/record_source_nested_async_gpu.py": "e7b248b66132846e69cbf8f752e2a0474d872eaf65b44bcd43a164512f12274a"
+  },
+  "cases": [
+    {
+      "family": "checked_cube",
+      "asynchronous": false,
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": false,
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": true,
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": true,
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": false,
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": false,
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": true,
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": true,
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "retained_exception",
+      "earlier_generation_payload": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        1,
+        7,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -6,
+        -1,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -100,
+        100,
+        3
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        1,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        0,
+        8,
+        100
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -9223372036854775808,
+        9223372036854775807,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        0,
+        -2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        100,
+        -100,
+        -3
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        0,
+        -9223372036854775808
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "step": 0,
+      "guard_refused": true
+    }
+  ],
+  "performance_promotion": false
+}

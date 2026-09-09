@@ -50,6 +50,9 @@ struct ROCMExecutablePipelineOptions
       *this, "staging",
       llvm::cl::desc("matmul staging policy: register or lds"),
       llvm::cl::init("register")};
+  Option<bool> depthCooperative{*this, "depth-cooperative",
+      llvm::cl::desc("experimental depth-attention cooperative width reduction"),
+      llvm::cl::init(false)};
   Option<int> tileQ{*this, "tile-q", llvm::cl::desc("attention Q tile"),
                     llvm::cl::init(64)};
   Option<int> tileKv{*this, "tile-kv", llvm::cl::desc("attention KV tile"),
@@ -62,12 +65,12 @@ struct DeclareROCMPipelineContractPass
 
   DeclareROCMPipelineContractPass() = default;
   DeclareROCMPipelineContractPass(StringRef family, StringRef input,
-                                  StringRef output, StringRef arch)
+                                  StringRef output, StringRef arch, bool cooperative = false)
       : family(family.str()), input(input.str()), output(output.str()),
-        arch(arch.str()) {}
+        arch(arch.str()), cooperative(cooperative) {}
   DeclareROCMPipelineContractPass(const DeclareROCMPipelineContractPass &other)
       : PassWrapper(other), family(other.family), input(other.input),
-        output(other.output), arch(other.arch) {}
+        output(other.output), arch(other.arch), cooperative(other.cooperative) {}
 
   StringRef getArgument() const final { return "declare-rocm-pipeline-contract"; }
   StringRef getDescription() const final {
@@ -127,6 +130,10 @@ struct DeclareROCMPipelineContractPass
           << "' has no promoted family-plugin profile";
       return signalPassFailure();
     }
+    if (cooperative && family != "depth_attention") {
+      getOperation().emitError("cooperative depth reduction requires depth_attention");
+      return signalPassFailure();
+    }
     Builder b(&getContext());
     ModuleOp module = getOperation();
     module->setAttr("tessera.pipeline.schema",
@@ -141,9 +148,12 @@ struct DeclareROCMPipelineContractPass
                     b.getStringAttr("rocdl_hsaco"));
     module->setAttr("tessera.pipeline.arch", b.getStringAttr(arch));
     module->setAttr("tessera.pipeline.output", b.getStringAttr(output));
+    if (family == "depth_attention")
+      module->setAttr("tessera.pipeline.depth_cooperative", b.getBoolAttr(cooperative));
   }
 
   std::string family, input, output, arch;
+  bool cooperative = false;
 };
 
 struct VerifyROCMExecutablePass
@@ -193,7 +203,7 @@ static std::unique_ptr<Pass> configuredPass(std::unique_ptr<Pass> pass,
 }
 
 static void addFamilyGenerator(OpPassManager &pm, StringRef family,
-                               bool viaTile, StringRef staging) {
+                               bool viaTile, StringRef staging, bool depthCooperative = false) {
   if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
@@ -265,7 +275,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
-    pm.addPass(createGenerateROCMDepthAttentionKernelPass());
+    pm.addPass(configuredPass(createGenerateROCMDepthAttentionKernelPass(),
+        Twine("cooperative-width=") + (depthCooperative ? "true" : "false")));
   } else if (family == "tridiagonal_solve") {
     pm.addPass(createGenerateROCMTridiagonalKernelPass());
   } else if (family == "coalition_butterfly") {
@@ -337,7 +348,7 @@ static void buildROCMExecutablePipeline(
   StringRef output = opts.output;
   StringRef arch = opts.arch;
   pm.addPass(std::make_unique<DeclareROCMPipelineContractPass>(
-      family, input, output, arch));
+      family, input, output, arch, opts.depthCooperative));
 
   if (input == "graph") {
     if (family == "matmul")
@@ -354,12 +365,12 @@ static void buildROCMExecutablePipeline(
   // plugin runs after the Target-IR consumer.
   bool matmulPlugin = family == "matmul";
   if (matmulPlugin && input != "graph" && output == "binary")
-    addFamilyGenerator(pm, family, input == "tile", opts.staging);
+    addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
   if (matmulPlugin && input == "graph" && output == "binary")
-    addFamilyGenerator(pm, family, false, opts.staging);
+    addFamilyGenerator(pm, family, false, opts.staging, opts.depthCooperative);
   pm.addPass(configuredPass(createLowerTileToROCMPass(),
                             Twine("arch=") + arch));
 
@@ -371,7 +382,7 @@ static void buildROCMExecutablePipeline(
     return;
 
   if (!matmulPlugin)
-    addFamilyGenerator(pm, family, false, opts.staging);
+    addFamilyGenerator(pm, family, false, opts.staging, opts.depthCooperative);
 
   pm.addPass(createLowerKernelABIPass());
   // This ordering is architectural: executable global->LDS copies and their

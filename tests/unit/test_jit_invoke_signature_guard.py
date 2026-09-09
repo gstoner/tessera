@@ -151,3 +151,21 @@ def test_signature_abi_reports_compiled_types():
     assert raw is not None
     assert raw.decode() == "tensor<2x?xf32>;tensor<2x?xf32>|tensor<2x?xf32>"
     assert lib.tessera_jit_signature(handle, b"missing") is None
+
+
+def test_c_backstop_rejects_bad_memref_extent():
+    handle = jb.compile_module("""module {
+      func.func @write(%out: memref<7xf32>) {
+        %i = arith.constant 6 : index
+        %v = arith.constant 1.0 : f32
+        memref.store %v, %out[%i] : memref<7xf32>
+        return
+      }
+    }""")
+    lib = jb._load()
+    short = _f32(1, 2)
+    descs = [jb._make_descriptor(short)]
+    packed, keep = jb._build_packed_args(descs)
+    assert lib.tessera_jit_invoke(handle, b"write", packed, 1) == 1
+    assert "expects extent 7, got 2" in lib.tessera_jit_last_error().decode()
+    np.testing.assert_array_equal(short, _f32(1, 2))

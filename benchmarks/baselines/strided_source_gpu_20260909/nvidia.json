@@ -1,0 +1,76 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution_kind": "native_gpu",
+  "rows": [
+    {
+      "value": [
+        16.0,
+        16.0,
+        16.0,
+        16.0
+      ],
+      "state": [
+        4.0,
+        4.0,
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "value": [
+        64.0,
+        64.0,
+        64.0,
+        64.0
+      ],
+      "state": [
+        8.0,
+        8.0,
+        8.0,
+        8.0
+      ]
+    },
+    {
+      "owned_state": [
+        8.0,
+        8.0,
+        8.0,
+        8.0
+      ],
+      "allocation_reused": true
+    },
+    {
+      "owned_state": [
+        16.0,
+        16.0,
+        16.0,
+        16.0
+      ],
+      "allocation_reused": true
+    },
+    {
+      "owned_state": [
+        32.0,
+        32.0,
+        32.0,
+        32.0
+      ],
+      "allocation_reused": true
+    }
+  ],
+  "in_place_mutation": true,
+  "asynchronous_steps": true,
+  "strided_state": true,
+  "promotion_eligible": false,
+  "sources": {
+    "python/tessera/compiler/source_control_flow.py": "9e03c077f393820d50be53ca0cc5e789e63a2dd4c0aae444d5f072082df189ae",
+    "python/tessera/compiler/trace.py": "ffffa9ccf00fcde9382fda26945471695a80d9f050506261b8904310b042ecbd",
+    "python/tessera/compiler/native_source_state.py": "c3cd9846f8fbe7db0bf04cc30dc1c3942c945af6e55a42ad052ede0d3cd07a02",
+    "python/tessera/compiler/native_public_result.py": "b18e2fac97a6a83da05ac076e6c0c1708231f77a99bfa81b7365d59786e89b37",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "8d935fe46b7c0967f622f9c83f43c1056ff81905b92ecbe640e234466ce694c7"
+  },
+  "source_ir_sha256": "b9c78562b0dfd9ddbb87131e56d770965d9d4ce04017fd04cf398c226577e913",
+  "compiler_sha256": "e0f7b383ad6bf99f462142d29d79a7411d4c1fe54e1bcac992747943bfde7885",
+  "recorder_sha256": "d46b291534fef90290940f4e210ac6776f6ab65d9d3308400aa6d7f17d26f003"
+}

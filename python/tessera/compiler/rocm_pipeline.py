@@ -117,8 +117,11 @@ class ROCMExecutablePipeline:
     staging: str = "register"
     tile_q: int = 64
     tile_kv: int = 64
+    depth_cooperative: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.depth_cooperative) is not bool or (self.depth_cooperative and self.family!='depth_attention'):
+            raise ValueError('cooperative depth reduction requires the depth_attention family')
         if self.family not in FAMILY_PLUGINS:
             raise ValueError(f"unknown ROCm family plugin {self.family!r}")
         if (self.family == "control_state_machine"
@@ -151,6 +154,7 @@ class ROCMExecutablePipeline:
             f"output={terminal.value} arch={self.arch} staging={self.staging} "
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
+        if self.depth_cooperative:options += " depth-cooperative=true"
         return f"builtin.module(tessera-rocm-executable{{{options}}})"
 
     def cache_key(self) -> tuple[str, ...]:
@@ -162,4 +166,5 @@ class ROCMExecutablePipeline:
             self.staging,
             str(self.tile_q),
             str(self.tile_kv),
+            str(self.depth_cooperative),
         )

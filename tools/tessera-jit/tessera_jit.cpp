@@ -129,6 +129,7 @@ void setError(const std::string &msg) { g_lastError = msg; }
 // indexing math — the descriptor's sizes are NOT consulted for them).
 struct ArgSig {
   bool isRankedTensor = false;
+  bool isRankedMemRef = false;
   SmallVector<int64_t> dims;  // ShapedType::kDynamic for '?'
   std::string typeText;       // element type for tensors, full type otherwise
 };
@@ -171,6 +172,11 @@ void captureSignatures(ModuleOp module, llvm::StringMap<FuncSig> &sigs) {
         a.isRankedTensor = true;
         a.dims.assign(rt.getShape().begin(), rt.getShape().end());
         os << rt.getElementType();
+      } else if (auto mr = dyn_cast<MemRefType>(t);
+                 mr && mr.getLayout().isIdentity() && !mr.getMemorySpace()) {
+        a.isRankedMemRef = true;
+        a.dims.assign(mr.getShape().begin(), mr.getShape().end());
+        os << mr.getElementType();
       } else {
         os << t;
       }
@@ -188,11 +194,11 @@ void captureSignatures(ModuleOp module, llvm::StringMap<FuncSig> &sigs) {
     std::string txt;
     llvm::raw_string_ostream os(txt);
     auto render = [&](const ArgSig &a) {
-      if (!a.isRankedTensor) {
+      if (!a.isRankedTensor && !a.isRankedMemRef) {
         os << a.typeText;
         return;
       }
-      os << "tensor<";
+      os << (a.isRankedMemRef ? "memref<" : "tensor<");
       for (int64_t d : a.dims) {
         if (ShapedType::isDynamic(d))
           os << "?";
@@ -1053,7 +1059,7 @@ int tessera_jit_invoke(void *handle, const char *name, void **packed_args,
     }
     for (int i = 0; i < nargs; ++i) {
       const ArgSig &a = sig.cifaceArgs[static_cast<size_t>(i)];
-      if (!a.isRankedTensor)
+      if (!a.isRankedTensor && !a.isRankedMemRef)
         continue;
       if (!packed_args[i]) {
         setError(std::string("tessera_jit: function '") + name + "' argument " +

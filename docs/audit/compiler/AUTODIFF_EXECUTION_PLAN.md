@@ -497,3 +497,201 @@ backing-storage SSA model with ordered extract/insert operations before admissio
 Owned GPU state has synchronous SM120/gfx1151 copyback proof and scoped-reader
 exclusion. Asynchronous writes and externally owned mutation remain open.
 Evidence: `benchmarks/baselines/source_object_ownership_20260909/`.
+
+### Mixed alias and state derivative follow-through (2026-09-09)
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), with
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1) and
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Plain instance dictionaries can supply declared tensor fields; descriptors and
+custom lookup hooks still refuse. Alias checks classify each pair by writable
+state participation, so disjoint mutable state does not prohibit overlapping
+read-only inputs. Writable overlap still needs shared backing-storage SSA.
+State VJP accepts explicit seeds for public and next-state outputs, computes
+native products and leaves caller inputs unchanged. Mutable input aliases,
+object AD and exception AD remain excluded.
+
+Dynamic exceptions need a typed completion payload in the serialized frame,
+including exception tag, payload storage, cause/context relationships and
+ownership across handlers/finally. A class-code table alone cannot implement
+those semantics. Exception paths must preserve preceding state writes, and AD
+must define replay and differentiation of each admitted effect before promotion.
+This is the next architectural gate, not implemented runtime support.
+
+Single-stream GPU submit/poll now validates the computation before enqueuing
+copyback. Readers and additional writes refuse while pending. Copy/event errors
+poison the owner and keep storage until synchronized close succeeds. This is
+asynchronous update completion, not nonblocking failure teardown or concurrent
+multi-writer mutation. Evidence: `benchmarks/baselines/mixed_alias_async_state_20260909/`.
+
+### Shared view roots and typed exception values (2026-09-09)
+
+Owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1) and
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+The native CPU state path now admits contiguous rank-one overlapping writes
+when an input contains every participating view. One SSA root owns the state;
+standard tensor slices project reads and insert writes in program order. The
+serialized view map binds argument indices, offsets and lengths, is checked at
+capture and invocation, and participates in specialization identity. No hidden
+NumPy allocation is assumed to be a usable compiler input. Noncontiguous views,
+absent containing inputs and alias-aware adjoints remain open.
+
+Explicit object-state VJP flattens declared fields, returns gradients in field
+order, and seeds public outputs followed by next-state outputs. It does not
+mutate caller fields. Effectful accessors and exception AD still refuse.
+
+Dynamic exception transport now has one typed f32 tensor payload output of
+shape (1,), alongside the completion tag. Explicit exception-value expressions
+are snapshots at the raise; handler/finally re-raise preserves the appropriate
+payload through nested completion. Raising a mutable alias directly refuses
+because a value snapshot would not preserve alias changes made by finally.
+This is not full Python exception identity, dynamic strings, causes, traceback
+or implicit-error transport. Those remain explicit ABI/ownership tasks.
+
+Evidence: `benchmarks/baselines/source_views_exception_20260909/`. CUDA/HIP
+packets cover regression of the existing single-state asynchronous consumer;
+they do not promote multi-input writable views or exception execution on GPUs.
+
+### Positive-stride roots and exact-alias adjoints (2026-09-09)
+
+Owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1),
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1),
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+View records retain compatibility with old rank-one triples/quadruples. Bounded
+injective negative and same-rank multidimensional maps retain explicit root
+coordinates (up to 256 mapped elements). Local static slices compose those maps;
+standard tensor singleton slices avoid negative-stride MLIR slice assumptions.
+This is a correctness fallback, not scalable model-state code generation.
+
+Native slice adjoints now serve source JIT: gather/scatter accumulates at the
+canonical root and overwritten destination gradients are masked. Duplicate
+alias argument gradients remain zero. Finite differences cover sequential
+partially overlapping writes. Users must not re-sum the root derivative for
+each alias. SM120 and gfx1151 independently execute a mapped backward product.
+
+Static caught exception bindings support identity tests and named/bare re-raise.
+The host decoder retains cause/context identity and suppression. Native raise
+sites appear as notes, never synthetic Python traceback frames. Dynamic f32
+payloads remain typed completion results; dynamic context payload retention,
+new loop context slots, full traceback semantics and exception AD remain open.
+
+GPU source/AD bufferization copies before writes. Checked public frames decode
+exception sidecars after successful completion/shape validation and before
+exposing any result. Repeated asynchronous polls preserve the decoded error
+object. Error cleanup can synchronize; owned in-place mutation still rejects
+exception-bearing contracts. Exact-device proof covers one state input, not
+arbitrary external GPU alias sets or collective-safe exception propagation.
+Evidence: `benchmarks/baselines/source_exception_gpu_20260909/`.
+
+[Block AttnRes integration](BLOCK_ATTNRES_ROCM_PLAN.md#iii5a-how-source-views-adjoints-and-completion-help-both-gpu-lanes)
+uses these contracts for state/lifetime oracles; cooperative workload kernels
+and target-specific timing remain independent gates.
+
+### Runtime maps and exception-bearing products (2026-09-09)
+
+Owners remain W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1 / W2.4a.
+Positive rectangular views now use compact offset/size/stride records and native
+slice operations at model-sized CPU shapes. Native CPU product allocation has
+an independent 16M-element slot cap; it no longer imports the GPU 1024-element
+cap. General negative/permuted maps retain the 256-element fallback bound.
+
+The runtime-even-columns fixture uses descriptor dimensions, not Python shape
+buckets. Both GPUs execute forward/backward for several shapes. Dynamic slice
+pullbacks assert seed extents before scatter; removed/inverted guards refuse.
+Allocation intervals admit unsigned division only with nonnegative numerators
+and positive divisors. Dynamic copies require identical logical dimensions or
+an exact dominating equality guard, never equal capacities alone. Automatic
+runtime-sized Python slicing remains a frontend integration task.
+
+Per-dynamic-raise-site SSA slots preserve distinct f32 cause/context payloads.
+They do not provide arbitrary generation-indexed exception objects across loop
+iterations. CPU exception-aware VJP executes the native forward, decodes its
+completion, and launches backward only on success; status/payload cotangents
+are zero and state is not committed. GPU exception AD explicitly refuses until
+its exported product ABI can bind the corresponding checked forward. Ordinary
+GPU exception transport retains its synchronous/asynchronous completion proof.
+
+**Full Python traceback boundary:** LLVM execution does not create CPython
+frames. Current errors have genuine host-bridge tracebacks and native source
+location notes. Full Python-compatible traceback objects would require an
+explicit interpreter/frame ABI, locals/closure state and reference ownership,
+exception chaining across native/host calls, GIL interaction and frame lifetime
+through asynchronous retirement. Do not synthesize dummy frames or relabel
+location notes as this implementation. Keep that compatibility work independent
+of numeric kernel promotion and measure its success-path overhead before any
+default integration.
+
+Evidence: `benchmarks/baselines/runtime_source_maps_20260909/`.
+
+
+### Source indices, generation slots and checked GPU VJP (2026-09-09)
+
+Owners: W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1 / W2.4a. Sync key:
+`SOURCE-GENERATION-AD-2026-09-09`. This increment supersedes the corresponding
+remaining boundaries in the preceding historical entries.
+
+Source capture admits rank-preserving slices with runtime single-element int64
+tensor bounds and positive steps on statically ranked roots. Native signed
+normalization clips negative/out-of-range bounds; zero/negative runtime steps
+fail through the status guard. Empty results are valid. Bounds are not read from
+trace samples. A tracer int64-to-f32 misclassification is fixed. Read-only views
+retain the defining SSA root after Python local rebinding. The native CPU DPS
+caller currently supplies the dynamic output shape; automatic dynamic-result
+allocation in `NativeSourceJit`, Python integer/index protocols, negative runtime
+strides and nested dynamic views are still open.
+
+Expanded loops now carry one completion code, with an exception table that may
+grow while handlers are traced. Each syntactic dynamic raise and bounded loop
+iteration has its own SSA payload slot (at most 32). Cause/context chains can
+escape a loop with the correct payload and shared exception identity. This is
+bounded generation storage, not a heap of arbitrary exception objects carried
+between iterations; the existing expansion/depth/edge caps still apply.
+
+`materialize_source_vjp` binds an isolated single-input generated pair; projected aliases and object fields refuse. The synchronous owner
+validates and snapshots device inputs, executes the forward product, checks its
+primal completion prefix (before saved residuals), then launches backward with
+those same snapshots/residuals and zero metadata seeds. Failed forward execution
+never launches backward. Scalar i8/i64 products retain logical rank zero with
+one physical storage element and a checked shape sidecar. Standalone source
+exception backward packaging still refuses. Dynamic/async VJP staging, arbitrary
+exception values and derivative-through-exception-object semantics are absent.
+
+**CPython traceback architecture decision:** keep the real host traceback and
+native location notes distinct. CPython's
+[traceback API](https://docs.python.org/3.12/c-api/exceptions.html#tracebacks)
+prepends an actual frame; it does not recover a native instruction's locals or
+call history. Full compatibility needs a separate compiler-owned debug-frame
+contract: code identity/instruction mapping, live local and closure ownership at
+the throw point, native-to-Python caller links, and lazy materialization under the
+owning interpreter/GIL. First validate one frame with locals and cause/context;
+then nested calls and asynchronous frame retention. Do not replay the function
+or fabricate execution frames from filename/line notes. Repeated GPU failure
+polls now restart the same exception's host traceback, preventing indefinite
+retention of earlier callers and their locals. This fixes ownership, not native
+frame reconstruction. No full-CPython support or performance promotion is claimed.
+
+Evidence: `benchmarks/baselines/source_generation_ad_20260909/`.
+
+
+## Signed runtime views and asynchronous source products (2026-09-09)
+
+Owners remain W4-PRODUCT-1 and AD-RESIDUAL-EVAL-1 in the live integrated plan.
+Signed/nested runtime source views now execute through compact tensor.generate
+maps. Their reverse gather/scatter rule remains unsupported and must refuse;
+static slice adjoints do not prove this path. CPU source JIT automatically
+allocates dynamic outputs from the compiler's capacity/shape projection, with a
+1024-element capacity bound. Bounded exception references survive iterations
+without losing the original payload. Arbitrary custom exception objects do not.
+
+CUDA SM120 and ROCm gfx1151 independently execute checked same-stream source
+VJP: asynchronous snapshots retain inputs, forward completion gates backward,
+and failed forward execution exposes neither primal nor derivative. Explicit
+close may synchronize. Fully asynchronous reclamation and cross-queue writer
+coordination remain open. Evidence and exact envelope:
+`benchmarks/baselines/source_nested_async_20260909/`.
+
+Full CPython frame reconstruction is a separate ABI requirement: preserve the
+original code and instruction identity, throw-site live locals and closures,
+caller links, and interpreter/GIL ownership through asynchronous completion.
+Current native source notes and host bridge frames do not satisfy that contract;
+replaying the source or constructing dummy frames would misrepresent execution.

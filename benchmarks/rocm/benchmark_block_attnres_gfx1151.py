@@ -56,7 +56,7 @@ def _module(sources: int, rows: int, width: int) -> GraphIRModule:
     )
 
 
-def record(*, warmup: int = 3, repetitions: int = 10) -> dict[str, object]:
+def record(*, warmup: int = 3, repetitions: int = 10, cooperative_width: bool = False) -> dict[str, object]:
     rng = np.random.default_rng(20260813)
     rows_out: list[dict[str, object]] = []
     for sources, rows, width in ((7, 3, 8), (17, 31, 64), (33, 127, 128)):
@@ -70,12 +70,19 @@ def record(*, warmup: int = 3, repetitions: int = 10) -> dict[str, object]:
         assert bundle.native_image is not None
         assert bundle.launch_descriptor is not None
         assert bundle.tile is not None and bundle.target_ir is not None
+        if cooperative_width:
+            from tessera.compiler.scheduled_depth_attention import lower_scheduled_depth_attention
+            from tessera.compiler.rocm_native import package_scheduled_depth_attention
+            artifact=lower_scheduled_depth_attention(_module(sources,rows,width),target="rocm_gfx1151")
+            package=package_scheduled_depth_attention(artifact,pipeline_name=bundle.native_image.pipeline_name,cooperative_width=True)
+            image,descriptor,target_ir=package.image,package.descriptor,package.target_ir
+        else:image,descriptor,target_ir=bundle.native_image,bundle.launch_descriptor,bundle.target_ir.text
         runtime_artifact = rt.RuntimeArtifact(
             metadata={"target": "rocm_gfx1151"},
-            native_image=bundle.native_image,
-            launch_descriptor=bundle.launch_descriptor,
+            native_image=image,
+            launch_descriptor=descriptor,
             tile_ir=bundle.tile.text,
-            target_ir=bundle.target_ir.text,
+            target_ir=target_ir,
         )
         query = np.ascontiguousarray(rng.normal(size=(width,)), dtype=np.float32)
         source_values = np.ascontiguousarray(rng.normal(size=(sources, rows, width)), dtype=np.float32)
@@ -100,12 +107,12 @@ def record(*, warmup: int = 3, repetitions: int = 10) -> dict[str, object]:
         rows_out.append(
             {
                 "shape": {"sources": sources, "rows": rows, "width": width},
-                "schedule_digest": bundle.launch_descriptor.provenance["schedule_digest"],
+                "schedule_digest": descriptor.provenance["schedule_digest"],
                 "tile_ir_digest": hashlib.sha256(bundle.tile.text.encode()).hexdigest(),
-                "target_ir_digest": bundle.native_image.target_ir_digest,
-                "image_digest": bundle.native_image.image_digest,
-                "hsaco_sha256": hashlib.sha256(bundle.native_image.payload).hexdigest(),
-                "compile_state": bundle.native_image.compile_state,
+                "target_ir_digest": image.target_ir_digest,
+                "image_digest": image.image_digest,
+                "hsaco_sha256": hashlib.sha256(image.payload).hexdigest(),
+                "compile_state": image.compile_state,
                 "maximum_absolute_error": maximum_error,
                 "correct": True,
                 "host_wall_ns": {
@@ -127,6 +134,9 @@ def record(*, warmup: int = 3, repetitions: int = 10) -> dict[str, object]:
         )
     return {
         "schema": "tessera.block_attnres.gfx1151.phase5.v1",
+        "cooperative_width": cooperative_width,
+        "compiler_sha256": hashlib.sha256(__import__('tessera.compiler.rocm_native',fromlist=['_tessera_opt'])._tessera_opt().read_bytes()).hexdigest(),
+        "recorder_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "work_item": "BLOCK-ATTNRES-ROCM-1",
         "sync_key": "BLOCK-ATTNRES-ROCM-2026-08-12",
         "architecture": "gfx1151",
@@ -157,8 +167,9 @@ def main() -> int:
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--cooperative-width",action="store_true")
     args = parser.parse_args()
-    packet = record(warmup=args.warmup, repetitions=args.repetitions)
+    packet = record(warmup=args.warmup, repetitions=args.repetitions,cooperative_width=args.cooperative_width)
     rendered = json.dumps(packet, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.write_text(rendered, encoding="utf-8")

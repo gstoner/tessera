@@ -1,0 +1,75 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution_kind": "native_gpu",
+  "promotion_eligible": false,
+  "rows": [
+    {
+      "family": "mapped",
+      "asynchronous": false,
+      "matched": true
+    },
+    {
+      "family": "mapped",
+      "asynchronous": true,
+      "matched": true
+    },
+    {
+      "family": "failure",
+      "asynchronous": false,
+      "matched": true
+    },
+    {
+      "family": "failure",
+      "asynchronous": false,
+      "exception": "RuntimeError",
+      "result_exposed": false
+    },
+    {
+      "family": "failure",
+      "asynchronous": true,
+      "matched": true
+    },
+    {
+      "family": "failure",
+      "asynchronous": true,
+      "exception": "RuntimeError",
+      "result_exposed": false
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": false,
+      "matched": true
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": false,
+      "exception": "ValueError",
+      "result_exposed": false
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": true,
+      "matched": true
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": true,
+      "exception": "ValueError",
+      "result_exposed": false
+    },
+    {
+      "family": "mapped_adjoint",
+      "matched": true
+    }
+  ],
+  "sources": {
+    "python/tessera/compiler/source_control_flow.py": "84566d80b937c96ef55d8f67551085be8f6ad38f99dc53344f24b515808a3b4a",
+    "python/tessera/compiler/native_source_state.py": "17b9b998bc65fbc98653c259d07ec4128d60b72308020408604ea4888a5cc8b7",
+    "python/tessera/compiler/native_public_result.py": "6d39f236c8698535516a6911667244d3d96430beb5cd5e6c829c612e965c0da1",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "8d935fe46b7c0967f622f9c83f43c1056ff81905b92ecbe640e234466ce694c7",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "e4feb06226a9499ae2e21fdb4906a7a992dafa83e18f8100513ce4fbeb5f680c"
+  },
+  "compiler_sha256": "e0f7b383ad6bf99f462142d29d79a7411d4c1fe54e1bcac992747943bfde7885",
+  "recorder_sha256": "4740aa055eca75028a3ae25db50cfd3e9feccab34c820fbab16bc38a63f4d98b"
+}

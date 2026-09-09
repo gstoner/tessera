@@ -82,6 +82,7 @@ def test_scoped_dynamic_public_results_require_checked_reader_scopes():
     frame._arguments = list(owner._buffers)
     frame._metadata = {'results': [{'data': 0, 'shape': 1, 'capacity': 4}]}
     frame.binding = SimpleNamespace(close_if_complete=lambda **kwargs: True)
+    frame.program = SimpleNamespace(source='module {}')
     with pytest.raises(ValueError, match='successful completion'):
         frame.read(21)
     assert frame.poll() and not hasattr(frame, 'results')
@@ -94,3 +95,44 @@ def test_scoped_dynamic_public_results_require_checked_reader_scopes():
         _ = borrowed.__cuda_array_interface__
     frame.retire(22)
     assert frame.poll_retired() and frame.closed and not frame.buffers
+
+
+@pytest.mark.parametrize('root,admitted',[('%x',False),('%out',True)])
+def test_public_view_write_preserves_root_ownership(root,admitted):
+    source=public_source().replace('memref.store %v, %out[%count] : memref<8xf32>',
+        f'%view = memref.subview {root}[0] [8] [1] : memref<8xf32> to memref<8xf32, strided<[1]>>\n'
+        '            memref.store %v, %view[%count] : memref<8xf32, strided<[1]>>')
+    assert source!=public_source()
+    if admitted:
+        assert run_tessera_opt(compiler(),source,'--tessera-native-tape-to-gpu=status-buffer=true')
+    else:
+        with pytest.raises(RuntimeError):run_tessera_opt(compiler(),source,'--tessera-native-tape-to-gpu=status-buffer=true')
+
+
+def test_repolling_exception_does_not_accumulate_host_tracebacks():
+    import ctypes as ct
+    import json
+    from types import SimpleNamespace
+    from tessera.compiler.native_public_result import PublicResultFrame
+    contract={'error_specs':[[[1],'f32']],'error_dynamic':False}
+    frame=object.__new__(PublicResultFrame)
+    frame.program=SimpleNamespace(source='module attributes {tessera.source_state = '+json.dumps(json.dumps(contract))+'} {}')
+    frame._status=None
+    frame._integer=lambda _:0
+    frame._integers=lambda *args:(1,)
+    frame._metadata={'results':[{'data':0,'shape':1,'capacity':1}]}
+    frame._arguments=[SimpleNamespace(pointer=ct.c_void_p(1),__cuda_array_interface__={'shape':(1,),'typestr':'<f4','data':(1,True),'version':3}),None]
+    frame.copy_out=lambda *args:0
+    frame.check=lambda status:None
+    frame._source_exception=ValueError('same native failure')
+    lengths=[]
+    for _ in range(10):
+        try:frame._expose()
+        except ValueError as error:
+            assert error is frame._source_exception
+            tb=error.__traceback__;count=0
+            while tb is not None:count+=1;tb=tb.tb_next
+            lengths.append(count)
+        else:raise AssertionError('failed frame exposed results')
+    assert min(lengths)==max(lengths)
+    assert not hasattr(frame,'results')

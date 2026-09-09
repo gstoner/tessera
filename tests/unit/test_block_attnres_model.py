@@ -357,3 +357,21 @@ def test_input_validation_errors() -> None:
         block_attnres_forward(
             np.zeros(D), [lambda h: h], [np.zeros(D), np.zeros(D)], [2]
         )
+
+
+def test_depth_state_bound_is_not_full_mixing_matrix_rank():
+    # N=2, S=3, L=6. At zero queries the source weights are uniform.
+    # Columns are independent values (x,v1,...,v5); rows are (h1,...,h6).
+    basis=np.eye(6)
+    blocks=[basis[0]]
+    rows=[]
+    for start in (1,4):
+        partial=None
+        for layer in range(start,start+3):
+            sources=blocks if partial is None else [*blocks,partial]
+            rows.append(np.mean(sources,axis=0))
+            if layer<6:
+                partial=basis[layer] if partial is None else partial+basis[layer]
+        blocks.append(partial)
+    assert np.linalg.matrix_rank(np.stack(rows))==6
+    assert 6>2+3  # A low state count does not prove low full-matrix rank.

@@ -1,0 +1,147 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "execution_kind": "native_gpu",
+  "promotion_eligible": false,
+  "rows": [
+    {
+      "family": "mapped",
+      "asynchronous": false,
+      "matched": true
+    },
+    {
+      "family": "mapped",
+      "asynchronous": true,
+      "matched": true
+    },
+    {
+      "family": "failure",
+      "asynchronous": false,
+      "matched": true
+    },
+    {
+      "family": "failure",
+      "asynchronous": false,
+      "exception": "RuntimeError",
+      "result_exposed": false
+    },
+    {
+      "family": "failure",
+      "asynchronous": true,
+      "matched": true
+    },
+    {
+      "family": "failure",
+      "asynchronous": true,
+      "exception": "RuntimeError",
+      "result_exposed": false
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": false,
+      "matched": true
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": false,
+      "exception": "ValueError",
+      "result_exposed": false
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": true,
+      "matched": true
+    },
+    {
+      "family": "dynamic_failure",
+      "asynchronous": true,
+      "exception": "ValueError",
+      "result_exposed": false
+    },
+    {
+      "family": "context_failure",
+      "asynchronous": false,
+      "exception": "RuntimeError",
+      "result_exposed": false
+    },
+    {
+      "family": "context_failure",
+      "asynchronous": true,
+      "exception": "RuntimeError",
+      "result_exposed": false
+    },
+    {
+      "family": "mapped_adjoint",
+      "matched": true
+    },
+    {
+      "family": "runtime_even_columns",
+      "role": "forward",
+      "shape": [
+        2,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_even_columns",
+      "role": "forward",
+      "shape": [
+        2,
+        5
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_even_columns",
+      "role": "forward",
+      "shape": [
+        2,
+        6
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_even_columns",
+      "role": "backward",
+      "shape": [
+        2,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_even_columns",
+      "role": "backward",
+      "shape": [
+        2,
+        5
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_even_columns",
+      "role": "backward",
+      "shape": [
+        2,
+        6
+      ],
+      "matched": true
+    },
+    {
+      "family": "runtime_slice_bad_cotangent",
+      "refused": true
+    }
+  ],
+  "sources": {
+    "python/tessera/compiler/source_control_flow.py": "dad61b41c150590aa0884999e5d064984d86816fc1321788fe6923deccd4c627",
+    "python/tessera/compiler/native_source_state.py": "4a49f603fc3fa495abf982b391918aa4553a4d193c003797e2fc6597b7967a81",
+    "python/tessera/compiler/native_public_result.py": "333901a525b7996c792f4b6a26c3a92d360058f9ec80742b6cdb1461a5bf5138",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "f1f8369d8d02d86639d0150301664db34e81163e249354903ad3ecdea5784984",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "ea438ba196f1f33556b5d20eaebec83928d8f653782896801ce00491ad1fa872",
+    "tests/fixtures/source_maps/runtime_even_columns.mlir": "c6416575962c72bd13ad5bf001c31343d828462f72835450c4f25bb853e086b6",
+    "python/tessera/compiler/trace.py": "483c81c0f019196e495f50ecbe4487294dd891679dbb7c33d396201d12334582"
+  },
+  "compiler_sha256": "6409b91cf818ed866a951f8e81f879f670494df979ee8d63704dd0d58357f56d",
+  "recorder_sha256": "e83c0a6cf599ac9ebbfb5732a6c7900eb032feda6ca464d33de8adb45ae06b78"
+}

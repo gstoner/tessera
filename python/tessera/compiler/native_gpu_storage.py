@@ -171,6 +171,14 @@ class BoundNativeGPUStorage:
             fn.argtypes, fn.restype = types, ct.c_int
             return fn
 
+        context_type = P if cuda else ct.c_int
+        context = context_type()
+        self._check(bind('cuCtxGetCurrent', 'hipGetDevice', [ct.POINTER(context_type)])(ct.byref(context)))
+        set_context = bind('cuCtxSetCurrent', 'hipSetDevice', [context_type])
+        self._enter_unload_context = lambda: self._check(set_context(context))
+        self._leave_unload_context = (lambda: self._check(set_context(P()))) if cuda else (lambda: None)
+        self._module_retirement = None
+        self._closing = False
         self._unload = bind('cuModuleUnload', 'hipModuleUnload', [P])
         self._sync = bind('cuCtxSynchronize', 'hipDeviceSynchronize', [])
         self._launch = bind('cuLaunchKernel', 'hipModuleLaunchKernel', [P] + [U] * 7 + [P, ct.POINTER(P), ct.POINTER(P)])
@@ -210,8 +218,8 @@ class BoundNativeGPUStorage:
         return [t(v) for t, v in zip(self._types, arguments, strict=True)]
 
     def _launch_size(self, arguments, grid, block):
-        if not self._module:
-            raise ValueError('native storage binding is closed')
+        if not self._module or getattr(self, '_closing', False):
+            raise ValueError('native storage binding is closed or retiring')
         values = self._arguments(arguments)
         if len(grid) != 3 or len(block) != 3 or any(type(v) is not int or not 0 < v < (1 << 32) for v in grid + block):
             raise ValueError('invalid native launch geometry')
@@ -272,16 +280,27 @@ class BoundNativeGPUStorage:
             self._untracked_inflight = False
             return count
 
-    def close_if_complete(self) -> bool:
+    def close_if_complete(self, *, defer_unload=False) -> bool:
         """Unload only after every tracked launch proves completion by query.
 
         Used by scoped owners that never export untracked kernel work. Driver
         module unload itself is not claimed to have bounded host latency.
         """
         with self._lock:
+            retirement = getattr(self, '_module_retirement', None)
+            if retirement is not None:
+                if not retirement.poll():
+                    return False
+                self._module = ct.c_void_p()
+                return True
             if getattr(self,"_untracked_inflight",False):
                 return False
             if not all(ticket.poll() for ticket in tuple(self._pending)):
+                return False
+            if self._module and (defer_unload or getattr(self, '_closing', False)):
+                from .native_module_retirement import ModuleRetirement
+                self._closing = True
+                self._module_retirement = ModuleRetirement.submit(self)
                 return False
             if self._module:
                 self._check(self._unload(self._module))
@@ -291,6 +310,10 @@ class BoundNativeGPUStorage:
 
     def close(self) -> None:
         with self._lock:
+            if getattr(self, '_closing', False):
+                if not self.close_if_complete(defer_unload=True):
+                    raise RuntimeError('native module retirement is pending; poll completion')
+                return
             for ticket in tuple(self._pending):
                 ticket.wait()
             if self._module:

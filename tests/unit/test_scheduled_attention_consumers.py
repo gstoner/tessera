@@ -208,6 +208,8 @@ def test_rdna4_attention_fails_closed_without_profile(target: str) -> None:
 
 
 def test_x86_packages_exact_attention_tile(monkeypatch) -> None:
+    # Isolate image consumption; native projection is exercised independently.
+    monkeypatch.setattr('tessera.compiler.native_attention_contract.verify_attention_ancestry', lambda *a, **kw: None)
     artifact = _artifact(target="x86")
     monkeypatch.setattr(
         x86_native,
@@ -415,6 +417,7 @@ def test_apple_gpu_scheduled_attention_executes_exact_artifact(dims, causal) -> 
 
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
 def test_driver_records_adjacent_attention_lineage(monkeypatch, target: str) -> None:
+    monkeypatch.setattr('tessera.compiler.native_attention_contract.verify_attention_ancestry', lambda *a, **kw: None)
     artifact = _artifact(target="x86" if target == "x86" else "rocm")
     monkeypatch.setattr(scheduled_attention, "lower_scheduled_attention", lambda module, *, target: artifact)
     if target == "x86":

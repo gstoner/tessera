@@ -42,6 +42,8 @@ def test_asynchronous_result_does_not_expose_uncompleted_or_failed_output():
     from types import SimpleNamespace
     from tessera.compiler.native_public_result import PublicResultFrame
     frame=object.__new__(PublicResultFrame)
+    import threading
+    frame._lock=threading.RLock()
     frame.closed=False
     frame.context_type=ct.c_int
     frame.context=ct.c_int(0)
@@ -57,3 +59,38 @@ def test_asynchronous_result_does_not_expose_uncompleted_or_failed_output():
     with pytest.raises(RuntimeError,match='guard failed'):
         frame.poll()
     assert not hasattr(frame,'results')
+
+
+def test_scoped_dynamic_public_results_require_checked_reader_scopes():
+    import ctypes as ct
+    from types import SimpleNamespace
+    from tests.unit.test_native_reader_retirement import setup
+    from tessera.compiler.native_public_result import PublicResultFrame
+    owner, native = setup()
+    frame = object.__new__(PublicResultFrame)
+    frame.__dict__.update(vars(owner.frame))
+    del frame._ready  # Exercise the public frame's real lifecycle guard.
+    owner.frame = frame
+    frame.closed = False
+    frame._scoped, frame._retiring, frame._owner = True, False, owner
+    frame.context_type, frame.context = ct.c_int, ct.c_int(0)
+    frame.current = lambda _: 0
+    frame._submission = owner._submission
+    frame._status = object()
+    frame._integer = lambda _: 0
+    frame._integers = lambda *args: (2,)
+    frame._arguments = list(owner._buffers)
+    frame._metadata = {'results': [{'data': 0, 'shape': 1, 'capacity': 4}]}
+    frame.binding = SimpleNamespace(close_if_complete=lambda **kwargs: True)
+    with pytest.raises(ValueError, match='successful completion'):
+        frame.read(21)
+    assert frame.poll() and not hasattr(frame, 'results')
+    with frame.read(21) as results:
+        borrowed = results[0]
+        assert borrowed.__cuda_array_interface__['shape'] == (2,)
+        with pytest.raises(ValueError, match='scopes'):
+            frame.retire(22)
+    with pytest.raises(ValueError, match='lease is closed'):
+        _ = borrowed.__cuda_array_interface__
+    frame.retire(22)
+    assert frame.poll_retired() and frame.closed and not frame.buffers

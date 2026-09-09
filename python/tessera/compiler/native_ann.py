@@ -115,6 +115,14 @@ def _affine(text):
                     raise ValueError('ANN absolute-value result is not the unique return')
                 lines[-2:] = [f'return %{operand} : {result_type}']
                 activation = 'abs'
+    if len(lines) >= 2 and activation is None:
+        tail = re.fullmatch(r'%(\w+) = tessera.mul %(\w+), %(\w+) : \(tensor<[^>]+>, tensor<[^>]+>\) -> (tensor<[^>]+>)', lines[-2].strip())
+        if tail:
+            result, lhs, rhs, result_type = tail.groups()
+            if lhs != rhs or lines[-1].strip() != f'return %{result} : {result_type}':
+                raise ValueError('ANN square requires a unique self-product result')
+            lines[-2:] = [f'return %{lhs} : {result_type}']
+            activation = 'square'
     for line in lines[:-1]:
         line = line.strip()
         constant = re.fullmatch(r'%(\w+) = arith.constant dense<(.*)> : ' + ty, line)
@@ -191,7 +199,7 @@ def _affine_error_bounds(pair: NativeANNPair, input_bound: float):
     u, tiny = Fraction(1, 1 << 24), Fraction(1, 1 << 126)
     maximum = Fraction(float(np.finfo(np.float32).max))
 
-    def execute_bound(layers):
+    def execute_bound(layers, parameter_error=Fraction(0)):
         domain, error = radius, Fraction(0)
         for weights, bias in layers:
             w, b = _rational(weights), _rational(bias)
@@ -208,6 +216,12 @@ def _affine_error_bounds(pair: NativeANNPair, input_bound: float):
             domain = ideal + local
             if domain >= maximum/2:
                 raise ValueError('ANN analytic domain cannot exclude intermediate overflow')
+        error += parameter_error
+        domain += parameter_error
+        if before[3] == 'square':
+            if domain*domain >= maximum/2:
+                raise ValueError('ANN square domain cannot exclude intermediate overflow')
+            error = 2*domain*error + error*error + u*domain*domain + 3*tiny
         if before[3] == 'sum':
             count = layers[-1][0].shape[1]
             gamma = count*u/(1-count*u)
@@ -222,9 +236,7 @@ def _affine_error_bounds(pair: NativeANNPair, input_bound: float):
     wf, bf = map(_rational, after[2][0])
     exact_w, exact_b = w1 @ w2, b1 @ w2 + b2
     folded_parameter_error = radius*_norm(wf-exact_w) + _magnitude(bf-exact_b)
-    if before[3] == 'sum':
-        folded_parameter_error *= wf.shape[1]
-    return execute_bound(before[2]), execute_bound(after[2]) + folded_parameter_error
+    return execute_bound(before[2]), execute_bound(after[2], folded_parameter_error)
 
 
 def affine_error_bound(pair: NativeANNPair, input_bound: float) -> Fraction:
@@ -241,6 +253,8 @@ def _exact_output(program, value):
         result = np.maximum(result, Fraction(0))
     elif program[3] == 'abs':
         result = np.abs(result)
+    elif program[3] == 'square':
+        result = result * result
     elif program[3] == 'sum':
         result = result.sum(axis=1)
     return result

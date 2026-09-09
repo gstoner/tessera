@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -6848,3 +6848,70 @@ module-unload latency, arbitrary Python CFG, general saved products and wider
 nonlinear consumers remain open. Evidence:
 `benchmarks/baselines/runtime_shape_frames_20260908/` and
 `benchmarks/baselines/broad_ann_20260908/`.
+
+### Source CFG and asynchronous ownership (2026-09-08)
+
+Owners: `W4-PRODUCT-1`, `AD-RESIDUAL-EVAL-1`, `W2.4a`, `E2E-REAL-6`, `MSW-9`;
+sync key `SOURCE-ASYNC-FOUNDATION-2026-09-08`. Sequencing and remaining gates:
+[live integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated on RTX 5070/SM120 for scoped dynamic public frames, cross-stream checked readers, asynchronous capture/backward and whole-frame retirement. The recorder forbids explicit context waits in the successful asynchronous path. Joint-volume matrices include a 64-element capacity rather than the independent 64x64 upper envelope. Nine independent terminal-square ANN runs did not clear the promotion margin; the incumbent remains selected.
+
+Shared contracts: explicit source-comparison predicates, tracer-owned SSA,
+exact dominating product guards, immutable checked shape/status exposure,
+reader-aware event ordering and bounded off-thread unload admission. Arbitrary
+CFG and exceptional cleanup remain open; worker admission does not guarantee
+driver latency. Evidence: `benchmarks/baselines/source_async_foundation_20260908/`.
+
+### Effect-aware CFG and status composition (2026-09-08)
+
+Owners: `W4-PRODUCT-1` / `W2.4a`; sync key
+`CFG-STATUS-COMPOSITION-2026-09-08`. Sequencing:
+[live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated on SM120: two native status arguments gate capture plus upstream failure, with four-case truth-table execution and reader-aware retirement. No overlap or performance promotion is claimed.
+
+Shared contracts: typed multi-result conditional SSA, registered assertion effects,
+explicit bounded loop expansion and serialized incoming-status count. Unknown
+Python effects refuse before capture. Loop returns, external aliases, exceptions,
+wider status joins and heterogeneous dynamic capture remain open. Evidence:
+`benchmarks/baselines/cfg_status_composition_20260908/`.
+
+### Completion state and status fan-in (2026-09-08)
+
+Owners: `W4-PRODUCT-1` / `W2.4a`; sync key
+`COMPLETION-STATE-FANIN-2026-09-08`. Sequencing:
+[live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated on RTX 5070 / SM120: four incoming statuses passed all sixteen truth-table combinations with scoped upstream readers and successful frame retirement. Eight-input device proof, GPU external mutation and overlap/performance promotion remain follow-ups.
+
+Shared contracts: typed completion payloads, explicit serialized source state,
+bounded incoming-status count and reader leases for every prerequisite.
+Arbitrary object/view mutation, uncaught exception transport, heterogeneous
+dynamic capture and unbounded effect joins remain open. Evidence:
+`benchmarks/baselines/completion_state_fanin_20260908/`.
+
+### Source JIT and device state (2026-09-08)
+
+Owners: `W4-PRODUCT-1` / `W2.4a`; sync key `SOURCE-JIT-STATE-2026-09-08`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Follow-up required: Super-Bear SSH timed out on repeated probes. Eight-status and source-state device proofs were not run; prior four-status proof remains historical. Source synchronization also remains pending.
+
+Shared contracts: serialized state/error results, capacity/shape projection,
+exact alias checks and bounded JIT module ownership. Arbitrary objects, partial
+overlap, dynamic exception objects/messages and in-place GPU mutation remain open.
+Evidence: `benchmarks/baselines/source_jit_state_20260908/`.
+
+### Declared object state and owned GPU mutation (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `W2.4a` / `AD-RESIDUAL-EVAL-1`.
+Sync key: `SOURCE-OBJECT-OWNERSHIP-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated on RTX 5070 SM120: three owned in-place state updates preserve allocation identity, and active/expired readers refuse. All 256 eight-status fan-in combinations also passed on this host. No asynchronous-write or performance claim.
+
+Shared contracts: field projection, read-only overlapping snapshots, static
+exception args and scoped exclusive GPU writes. Custom accessors, overlapping
+writes, general exception semantics and automatic effectful AD remain open.
+Evidence: `benchmarks/baselines/source_object_ownership_20260909/`.

@@ -17,6 +17,7 @@ wiring (F3–F5) build on this.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import inspect
 import os
 from dataclasses import dataclass, field
@@ -47,6 +48,9 @@ def _inside_tessera(filename: str) -> bool:
         return False
 
 
+_source_control_span: contextvars.ContextVar[SourceSpan | None] = contextvars.ContextVar("source_control_span", default=None)
+
+
 def _user_source_span() -> SourceSpan | None:
     """The first stack frame OUTSIDE the tessera package -- the user's op call
     site -- as a :class:`SourceSpan` for the canonical render's ``loc(...)``.
@@ -58,6 +62,9 @@ def _user_source_span() -> SourceSpan | None:
     reported line is the caller's, not the library's. Never raises: a miss
     yields ``None``, which the render leaves as MLIR's honest ``loc(unknown)``.
     """
+    explicit = _source_control_span.get()
+    if explicit is not None:
+        return explicit
     try:
         for info in inspect.stack(context=0):
             filename = info.filename
@@ -114,6 +121,10 @@ class TracedFunction:
     body: List[IROp]
     outputs: List[str]                            # output SSA names
     output_values: Tuple[Any, ...] = field(default=(), compare=False, repr=False)
+    source_state_groups: tuple[tuple[int, ...], ...] = ()
+    source_error_specs: tuple = ()
+    source_error_table: tuple = ()
+    source_object_fields: tuple = ()
 
 
 # ── shape rules (executable subset; widened in F6) ────────────────────────── #
@@ -442,6 +453,7 @@ class TraceBuilder:
                     f"(then {then_value.shape}/{then_value.dtype}, "
                     f"else {else_value.shape}/{else_value.dtype})"
                 )
+        from .graph_ir import tensor_ir_type
         results = tuple(self._fresh() for _ in then_values)
         result_types = tuple(_ty(value.shape, value.dtype) for value in then_values)
         self.body.append(IROp(
@@ -454,6 +466,7 @@ class TraceBuilder:
                 if len(result_types) == 1
                 else "(" + ", ".join(result_types) + ")"
             ),
+            inferred_types=tuple(tensor_ir_type(tuple(map(str, value.shape)), value.dtype) for value in then_values),
             kwargs={"_region": "if", "_flag_ssa": pred.ssa,
                     "_then_body": then_body,
                     "_then_ssas": tuple(value.ssa for value in then_values),
@@ -598,12 +611,28 @@ def trace(
     fn: Callable,
     *example_specs: Any,
     arg_names: Sequence[str] | None = None,
+    source_control_flow: bool = False,
+    max_steps: int | None = None,
+    source_state_groups: tuple[tuple[int, ...], ...] = (),
+    source_error_specs: tuple = (),
+    source_object_fields: tuple = (),
 ) -> TracedFunction:
     """Interpret ``fn`` over ``Tracer`` args, returning the recorded
     :class:`TracedFunction`. ``example_specs`` are arrays (concrete tracing —
     shapes/dtypes come from real numpy execution, full vocab), ``(shape, dtype)``
     pairs, or bare shape tuples (abstract tracing — shape rules, executable
     subset only)."""
+    if type(source_control_flow) is not bool or (max_steps is not None and not source_control_flow):
+        raise TesseraTraceError('source control-flow options require explicit source_control_flow=True')
+    if source_state_groups and (not source_control_flow or not isinstance(source_state_groups,tuple)):
+        raise TesseraTraceError('source state groups require explicit source control recovery')
+    if source_error_specs and (not source_control_flow or not isinstance(source_error_specs,tuple)):
+        raise TesseraTraceError('source error specs require explicit source control recovery')
+    if source_object_fields and not source_control_flow:
+        raise TesseraTraceError('source object fields require explicit control recovery')
+    if source_control_flow:
+        from .source_control_flow import recover_callable
+        fn = recover_callable(fn, max_steps=max_steps, state_groups=source_state_groups,error_specs=source_error_specs,object_fields=source_object_fields)
     if arg_names is not None and len(arg_names) != len(example_specs):
         raise TesseraTraceError("trace arg_names must match the example arity")
     tb = TraceBuilder()
@@ -625,7 +654,12 @@ def trace(
                 "trace: function must return Tracer value(s); got "
                 f"{type(o).__name__}")
     tb.set_outputs([o.ssa for o in outs])
-    return tb.finish(tuple(o.value for o in outs))
+    traced=tb.finish(tuple(o.value for o in outs))
+    traced.source_state_groups=source_state_groups
+    traced.source_error_specs=source_error_specs
+    traced.source_object_fields=source_object_fields
+    traced.source_error_table=getattr(fn,"source_error_table",())
+    return traced
 
 
 def to_graph_ir_module(
@@ -643,6 +677,8 @@ def to_graph_ir_module(
     """
     from .graph_ir import GraphIRFunction, GraphIRModule, IRArg, IRType, tensor_ir_type
     from .structured_cfg import recover_structured_cfg
+    if traced.source_state_groups or traced.source_error_specs:
+        raise TesseraTraceError('source state requires the native state consumer')
 
     result_types: list[IRType] = []
     by_result = {

@@ -65,3 +65,30 @@ def test_function_body_cfg_without_bound_refuses():
     with pytest.raises(RuntimeError):
         run_tessera_opt(compiler(),function_cfg_source().replace('max_steps = 2','max_steps = 0'),
             '--tessera-autodiff-paired=export-product=forward')
+
+
+@pytest.mark.parametrize('backend', ['nvidia', 'rocm'])
+def test_two_statuses_are_serialized_and_consumed(backend):
+    text=run_tessera_opt(compiler(), dynamic_source(),
+        '--tessera-native-tape-to-gpu=backend='+backend+' status-buffer=true input-status=true input-status-count=2')
+    assert 'tessera.autodiff.input_status_count = 2 : i64' in text
+    assert 'cf.assert' not in text
+    from tessera.compiler.native_persistent_tape import _input_status_count, _status_specs
+    assert _input_status_count(SimpleNamespace(arena_ir=text)) == 2
+    assert [s.name for s in _status_specs(2)] == ['dependency_status','dependency_status_1']
+
+
+@pytest.mark.parametrize('count', [0, 9])
+def test_unsupported_status_count_refuses(count):
+    with pytest.raises(RuntimeError):
+        run_tessera_opt(compiler(), dynamic_source(),
+            f'--tessera-native-tape-to-gpu=status-buffer=true input-status=true input-status-count={count}')
+
+
+@pytest.mark.parametrize('count',[3,4,8])
+def test_wider_status_count_has_a_native_consumer(count):
+    text=run_tessera_opt(compiler(),dynamic_source(),
+        f'--tessera-native-tape-to-gpu=status-buffer=true input-status=true input-status-count={count}')
+    from tessera.compiler.native_persistent_tape import _input_status_count
+    assert _input_status_count(SimpleNamespace(arena_ir=text))==count
+    assert 'cf.assert' not in text

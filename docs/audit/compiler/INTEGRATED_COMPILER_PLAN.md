@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 audit_role: plan
 plan_state: open
 ---
@@ -131,10 +131,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Remaining Graph-owned packaging and frontend retirement**
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-- Gate: Direct x86 f32 matmul joins baseline/AVX-512 unary native Schedule/Tile ownership. Migrate remaining non-f32 matmul, attention, cohort and breadth callers with target-specific descriptor projection and replay.
+- Gate: Direct x86 forward attention now joins f32 matmul and unary native Schedule/Tile ownership, including symmetric-window/bias/softcap ABI projection and replay. Migrate non-f32 matmul, attention backward, cohort and breadth callers with target-specific descriptor proof.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--x86-f32-matmul-native-ownership)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--source-cfg-and-asynchronous-ownership)
 
 ### W1.1
 
@@ -173,10 +173,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Broader ANN admission and tuned candidates**
 
 - Owner: [ANN_CALCULUS_DESIGN_SPIKE.md](ANN_CALCULUS_DESIGN_SPIKE.md)
-- Gate: Extend fresh affine/absolute-value and affine/ReLU workload measurements into broader nonlinear families and physical schedules. Admit only exact-artifact scoped candidates passing the measured lower-bound gate; retain incumbents when evidence is insufficient.
+- Gate: Terminal square now has explicit analytic error amplification and intermediate-overflow refusal alongside ReLU/absolute-value consumers. Extend measured nonlinear families and physical schedules. Admit only exact-artifact scoped candidates passing the measured lower-bound gate; retain incumbents when evidence is insufficient.
 - Depends on: [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1): recipe/native identity for the candidate; broader raising is independent.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--broader-ann-workload-evidence)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--source-cfg-and-asynchronous-ownership)
 
 ### W5.2
 
@@ -205,30 +205,30 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Source CFG and effect-aware recovery**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Implement tracer-owned typed source edges, merge values and effect-aware break/continue/early-return recovery. TraceRef still refuses Python value-dependent truth conversion; imported bounded native CFG and nested GPU guards do not close arbitrary Python source capture.
+- Gate: Opt-in source recovery records native single-carry while and bounded multi-variable break/continue expansion, merging each iteration before the next. Assertions remain ordered native effects; unmodelled calls refuse even on dead paths. Bounded nested/tuple loop returns and statically handled builtin exceptions now execute natively; explicit CPU state slots preserve exact input aliases and non-overlapping strided views through serialized SSA state and post-completion copyback. An opt-in native CPU JIT owns four shape/alias specializations; explicit result specs transport builtin exception classes with preceding writes. Declared dict/SimpleNamespace tensor fields and read-only overlapping snapshots now execute; static exception args, inherited/tuple handlers and bare re-raise are transported. Pure tensor source JIT exposes explicit native paired VJP. Extend custom object access, overlapping writes with shared backing-storage SSA, dynamic exception objects/chaining, changing loop state and automatic effectful AD; arbitrary CFG is not closed.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--python-cfg-boundary-review)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--declared-object-state-and-owned-gpu-mutation)
 
 ### AD-RESIDUAL-EVAL-1
 
 **Logical-shape ABI and persistent checkpoint execution**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Native AD products now bind bounded dynamic GPU inputs and multiple rank-one through rank-four floating results using checked capacity/shape sidecars. Extend joint temporary-volume proofs, saved heterogeneous products, general alias/layout envelopes and automatic frontend wiring; exported shapes do not establish arbitrary Python CFG capture.
+- Gate: Native AD products now bind bounded dynamic GPU inputs and multiple rank-one through rank-four floating results using checked capacity/shape sidecars. Exact dominating SSA product guards now tighten joint temporary capacities. Extend relational/aliased volume proofs, saved heterogeneous products, general layout envelopes and automatic frontend wiring; exported shapes do not establish arbitrary Python CFG capture.
 - Depends on: [W4-PRODUCT-1](#w4-product-1): existing bounded product carrier; arbitrary source CFG closure is not a prerequisite.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--runtime-shaped-ad-products)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--source-cfg-and-asynchronous-ownership)
 
 ### W2.4a
 
 **Generation ownership and scoped readers**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Scoped frames now enqueue generation and frame-storage frees after registered readers, then query completion before module release. Checked public results expose shapes only after completion/status checks. Extend ownership to runtime-shaped public frames, asynchronous capture and external readers; bound module-unload/failure handling. Scoped persistent frames are still static-shaped, and unrestricted views retain synchronous close.
+- Gate: Scoped runtime-shaped public frames and asynchronous static capture now order frees after declared readers. Module unload can run off-thread with bounded admission and non-waiting polls; a stalled/failed driver retains its owner. One through eight serialized incoming statuses now support bounded fan-in with scoped readers for each prerequisite; all 256 eight-status combinations have independent SM120/gfx1151 truth-table proof. Source state can produce immutable next-state GPU generations; exclusive synchronous owned-state copyback now reuses a private allocation with independent SM120/gfx1151 proof and blocks active scoped readers. External borrowed-pointer mutation and asynchronous writes remain open. Extend heterogeneous dynamic persistent capture, unbounded/heterogeneous effect joins and external-reader adoption. Driver unload itself is not cancellable or latency-bounded, and unrestricted views retain synchronous close.
 - Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--scoped-whole-frame-retirement)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--declared-object-state-and-owned-gpu-mutation)
 
 ### NUMPOL-CARRIER-1
 

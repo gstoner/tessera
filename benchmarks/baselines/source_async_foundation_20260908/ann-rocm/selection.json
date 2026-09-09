@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "pair": "a56a9d3868256771dd3bb5833b44be2770dc2ed74ec08755d387655d04e3880f",
+  "timing_domain": "warm_package_h2d_dispatch_d2h_host_wall",
+  "run_speedups": [
+    1.0130069595414024,
+    1.0143747266060448,
+    1.0153489343326731,
+    1.0778494451953364,
+    1.020647559360968,
+    0.9969290511758762,
+    1.0133745166291634,
+    0.9968478572547073,
+    1.0097647806222587
+  ],
+  "median_speedup": 1.0133745166291634,
+  "median_bounds": [
+    0.9969290511758762,
+    1.020647559360968
+  ],
+  "threshold": 1.02,
+  "performance_eligible": false,
+  "production_promoted": false,
+  "reason": "lower bound does not clear 2 percent margin",
+  "selected_candidate": "ann_gpu_original_6c3e7dc44771938bab0a6cf4e0bf019ff0f7e0e285f0800db1345a522507af98",
+  "scoped_rewrite_selected": false,
+  "reports": [
+    "run-1.json",
+    "run-2.json",
+    "run-3.json",
+    "run-4.json",
+    "run-5.json",
+    "run-6.json",
+    "run-7.json",
+    "run-8.json",
+    "run-9.json"
+  ],
+  "candidate_retired": true
+}

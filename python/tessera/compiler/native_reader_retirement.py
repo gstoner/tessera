@@ -231,18 +231,34 @@ class CheckedTrackedDerivativeGeneration(TrackedDerivativeGeneration):
             raise ValueError('checked tracked derivatives require a compiler-gated reader or successful status check')
         return _ReaderLease(self, stream)
 
-    def backward_into(self, frame, stream, *, tracked=True):
+    def backward_into(self, frame, stream, *, tracked=True, dependencies=()):
+        """Consume this cotangent with additional checked status prerequisites.
+
+        Every prerequisite owns a reader lease through consumer submission;
+        status-only prerequisites do not add cotangent operands to the ABI.
+        """
         from contextlib import ExitStack
-        from .native_persistent_tape import PersistentTapeFrame, _input_status
+        from .native_persistent_tape import PersistentTapeFrame, _input_status_count
         if not isinstance(frame, PersistentTapeFrame):
             raise TypeError('checked reader requires a persistent frame')
+        if not isinstance(dependencies, tuple) or any(not isinstance(parent, CheckedTrackedDerivativeGeneration) for parent in dependencies):
+            raise TypeError('dependencies must be a tuple of checked tracked generations')
+        parents=(self,*dependencies)
+        if len({id(parent) for parent in parents}) != len(parents):
+            raise ValueError('status dependencies must be distinct')
+        count=_input_status_count(frame.pair.backward)
+        if not count or len(parents)>max(1,count-1):
+            raise ValueError('incoming status count cannot cover every dependency')
         with ExitStack() as stack:
-            for owner in sorted({self.frame, frame}, key=id):
+            owners={frame,*[parent.frame for parent in parents]}
+            for owner in sorted(owners, key=id):
                 stack.enter_context(owner._lock)
                 owner._ready()
-            if (self.frame.pair.forward.backend, self.frame.pair.forward.chip) != (frame.pair.forward.backend, frame.pair.forward.chip):
-                raise ValueError('checked reader requires the same owning target')
-            if not _input_status(frame.pair.backward):
-                raise ValueError('checked reader requires a compiler-gated product')
-            with _ReaderLease(self, stream) as outputs:
-                return frame.backward_async(stream, *outputs, tracked=tracked, _dependency=self)
+            target=(frame.pair.forward.backend,frame.pair.forward.chip)
+            for parent in parents:
+                if (parent.frame.pair.forward.backend,parent.frame.pair.forward.chip)!=target:
+                    raise ValueError('checked reader requires the same owning target')
+            outputs=stack.enter_context(_ReaderLease(self,stream))
+            for parent in dependencies:
+                stack.enter_context(_ReaderLease(parent,stream))
+            return frame.backward_async(stream,*outputs,tracked=tracked,_dependency=parents)

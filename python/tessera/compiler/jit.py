@@ -3072,6 +3072,11 @@ def _jit_emit_graph_ir(
 def jit(
     fn: Optional[Callable] = None,
     *,
+    source_control_flow: bool = False,
+    source_mutable: tuple[int, ...] = (),
+    source_fields: tuple = (),
+    source_error_specs: tuple = (),
+    source_max_steps: int | None = None,
     deterministic: bool = False,
     seed: Optional[int] = None,
     bindings: Optional[Dict[str, int]] = None,
@@ -3092,6 +3097,12 @@ def jit(
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
+
+    source_control_flow=True selects the bounded native CPU source consumer.
+    source_mutable declares input state slots, source_error_specs declares
+    floating result shapes for builtin exception transport, and source_max_steps
+    bounds recovered loops. This opt-in owner must be closed or used as a context
+    manager; it retains at most four native shape/alias specializations.
 
     Can be used with or without arguments:
 
@@ -3144,7 +3155,20 @@ def jit(
         TesseraJitError        : if the Graph IR emission pipeline fails
     """
 
-    def _decorate(fn: Callable) -> JitFn:
+    if type(source_control_flow) is not bool:
+        raise ValueError('source_control_flow must be boolean')
+    if not source_control_flow and (source_mutable or source_fields or source_error_specs or source_max_steps is not None):
+        raise ValueError('source options require source_control_flow=True')
+
+    def _decorate(fn: Callable) -> Any:
+        if source_control_flow:
+            if (target not in (None,'cpu','x86') or deterministic or seed is not None or bindings
+                    or attn_config is not None or cpu_tile != (128,128,64) or source is not None or source_path is not None
+                    or autodiff is not None or wrt is not None or auto_batch is not None or max_ops_per_cb is not None
+                    or emit_package or dispatch_via_package is not None or phase is not None or slo is not None):
+                raise ValueError('native source JIT requires its explicit CPU source contract; incompatible options supplied')
+            from .native_source_state import NativeSourceJit
+            return NativeSourceJit(fn,mutable=source_mutable,error_specs=source_error_specs,max_steps=source_max_steps,object_fields=source_fields)
         source_text, source_origin = _resolve_source_text(
             fn,
             source=source,

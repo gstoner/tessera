@@ -1047,6 +1047,12 @@ class IROp:
                 f"{bias_count}>"
             )
         attr_str = f" {{{', '.join(attr_parts)}}}" if attr_parts else ""
+        if canonical and self.op_name in {'arith.constant', 'arith.cmpf', 'tensor.extract', 'cf.assert'}:
+            # Source CFG effects use registered upstream MLIR operations. Their
+            # assembly formats differ; the generic form preserves typed SSA.
+            results = self.result_type if names else '()'
+            return (f'{indent}{lhs}"{self.op_name}"({ops_str}){attr_str}'
+                    f' : ({types_in}) -> {results}{_loc_suffix(self.source_span)}')
         if canonical:
             # Parseable custom-assembly form: `op %operands {attrs} : type` — no
             # parens around the operands, so it round-trips through tessera-opt's

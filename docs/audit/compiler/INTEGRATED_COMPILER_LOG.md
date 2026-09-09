@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 audit_role: reference
 ---
 
@@ -2708,3 +2708,126 @@ Remaining: Arbitrary Python source CFG remains open: tracer-owned typed merge va
 Evidence: python/tessera/compiler/trace.py; python/tessera/compiler/structured_cfg.py; tests/unit/test_trace_f4.py; tests/unit/test_native_public_results.py; docs/audit/compiler/AUTODIFF_EXECUTION_PLAN.md.
 
 <!-- entry-fields:end -->
+
+### 2026-09-08 — Source CFG and asynchronous ownership
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted engineering continuation after #736.
+
+Outcome: Opt-in pure Python branch/early-return and single-carry bounded while recovery feeds typed tracer SSA and native SCF. Scoped dynamic public frames and asynchronous persistent capture use checked status, reader leases and event-ordered retirement. Module unload admission is bounded and polling does not wait for the driver. Dominating exact-product guards bound joint temporary volume. x86 forward attention consumes scheduled artifacts; terminal-square ANN has an analytic error consumer.
+
+Remaining: Effectful/arbitrary Python CFG, multiple loop carries, automatic general JIT wiring, multi-status asynchronous composition, exceptional cleanup, driver cancellation, remaining Graph families and broader nonlinear kernels remain open. Bounded worker admission is not a bound on driver unload latency. GPU correctness is not performance promotion.
+
+Evidence: `benchmarks/baselines/source_async_foundation_20260908/`; focused source, ownership, joint-volume, ancestry and nonlinear tests. NVIDIA's nine-run square comparison retained the incumbent. See the evidence README for independent host outcomes and measured scope.
+
+<!-- entry-fields:end -->
+
+Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1),
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a),
+[E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6), and
+[MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9).
+Synchronization key: `SOURCE-ASYNC-FOUNDATION-2026-09-08`.
+
+The source producer rejects effect-only calls, mutation, break/continue and
+implicit numeric tensor truth. Native exhaustion asserts rather than silently
+truncating. Logical dynamic shapes retain independent sidecars even when an
+exact dominating product guard permits a smaller flat physical allocation.
+
+Successful asynchronous retirement covers data, shape and status storage plus
+registered readers. Generic capture readers require successful `poll_capture`;
+the single incoming-status ABI cannot replace an unchecked capture status with
+an external dependency. Unload workers retain their context and admission slot
+on failure or stall. Explicit retirement/polling is the asynchronous API;
+exceptional cleanup and unrestricted legacy views remain synchronous.
+
+x86 attention now replays Schedule-to-Tile ancestry and projects native fields
+through a shared contract. The extended route supplies the runtime's symmetric
+`window` field. Non-f32 matmul, backward attention/cohorts and generic Graph
+families are not retired by this migration. Square ANN propagates folded
+parameter error through the nonlinear tail; route admission still requires
+independent exact-device measurement and successful retirement of scoped candidates.
+
+### 2026-09-08 — Effect-aware CFG and status composition
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #736.
+
+Outcome: Bounded break/continue and multi-variable source loops merge iteration state, native assertions preserve effects, and dead-path unmodelled calls refuse. Two serialized native status inputs preserve capture plus upstream failure through checked asynchronous composition. The CAKE enhancement review now maps lessons to current consumers and owners.
+
+Remaining: Loop-return payloads, external mutation/alias contracts, arbitrary Python CFG, wider status joins, exceptional recovery and general JIT integration. This bounded expansion is not general source recovery; host assertion failure still uses the LLVM abort ABI.
+
+Evidence: `benchmarks/baselines/cfg_status_composition_20260908/`, source/compiler negative tests and independent SM120/gfx1151 four-case status truth tables.
+
+<!-- entry-fields:end -->
+
+Additional owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Sync key: `CFG-STATUS-COMPOSITION-2026-09-08`.
+The first expansion prototype grew exponentially; per-iteration merges make
+successive iterations linear in this fixed body. Native multi-result conditional
+traces now retain the full inferred result types. Distinct status storage avoids
+relaxing the native package's alias contract. `compiler_enhancement.md` preserves
+its August assessment as historical provenance and corrects unsupported current
+claims about phase readiness, pruning regret and fixed economic thresholds.
+
+### 2026-09-08 — Completion state and status fan-in
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #736.
+
+Outcome: Bounded nested loops carry tuple return payloads and statically resolved builtin exception completions. Explicit CPU state slots preserve exact full-tensor input aliases through serialized state results and post-completion copyback. Incoming checked statuses support counts one through eight, retaining reader leases for every prerequisite.
+
+Remaining: Arbitrary objects, partial/strided mutable views, mutable return aliases, changing loop-state types, uncaught exception transport, general JIT integration, GPU mutation and heterogeneous/unbounded asynchronous effect joins. Eight-status device execution is not claimed by the four-status packet.
+
+Evidence: `benchmarks/baselines/completion_state_fanin_20260908/`; native CPU differential tests and independent CUDA SM120/ROCm gfx1151 sixteen-case status truth tables.
+
+<!-- entry-fields:end -->
+
+Additional owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Sync key: `COMPLETION-STATE-FANIN-2026-09-08`.
+The source producer handles explicit ValueError, RuntimeError and AssertionError
+without creating Python exception objects. Finally continuations preserve or
+override the pending completion. Native assertion exhaustion still uses the host
+abort ABI. State execution requires exclusive host ownership; copyback is not an
+atomic transaction against concurrent external readers. Device status-only
+prerequisites add gates and reader lifetimes, not extra cotangent operands.
+
+### 2026-09-08 — Source JIT error transport and device state
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #736.
+
+Outcome: CPU source state accepts non-overlapping strided views and exact aliases. Explicit floating result specs transport builtin exception classes, preserving prior writes. Opt-in public JIT owns at most four native shape/alias specializations. ROCm executes two immutable source-state generations and all 256 eight-status combinations.
+
+Remaining: Arbitrary object/overlapping-view mutation, implicit/dynamic exception transport and original messages, broader JIT/AD integration, in-place device state mutation and NVIDIA eight-status/device-state proof. Super-Bear SSH was unavailable for this increment; Apple needs a separate MSL consumer.
+
+Evidence: `benchmarks/baselines/source_jit_state_20260908/`, focused native CPU tests and independent gfx1151 packets. No performance promotion.
+
+<!-- entry-fields:end -->
+
+Additional owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Synchronization key: `SOURCE-JIT-STATE-2026-09-08`.
+The sequence mixer theory now distinguishes exact algebra, numerical legality,
+state ownership and physical proof. NoPE alone does not justify MQA conversion;
+scalar SSD is not generic DPLR, and zero/underflowing decay invalidates division.
+
+### 2026-09-09 — Declared object state and owned GPU mutation
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #736.
+
+Outcome: Declared dict/SimpleNamespace tensor fields project to native arguments and full-slice state writes. Read-only overlapping arrays use snapshots. Static builtin exception args, inherited/tuple handlers and bare re-raise, including pending exceptions in finally, survive native completion transport. Pure tensor source JIT exposes explicit compiler-exported CPU VJP. Exclusive owned GPU state reuses its allocation after synchronous checked computation; scoped readers prevent writes.
+
+Remaining: Custom accessors and object identity/rebinding; overlapping writes; implicit/dynamic exception objects, chaining and traceback semantics; automatic effectful JIT/AD; asynchronous in-place writes and external borrowed storage. The GPU implementation computes into fresh output storage then copies back: this is allocation identity and correctness evidence, not a fused mutation kernel or performance promotion.
+
+Evidence: `benchmarks/baselines/source_object_ownership_20260909/`, focused native CPU regressions and independent SM120/gfx1151 recorder packets.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a), [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+Synchronization key: `SOURCE-OBJECT-OWNERSHIP-2026-09-09`.
+Writable overlapping views require one shared backing-storage SSA root, typed view maps and ordered updates. Independent input snapshots cannot preserve interleaved alias writes, so those writes still refuse before execution. VJP derivatives are per formal tensor input; this does not differentiate mutable object state.

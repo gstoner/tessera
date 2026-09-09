@@ -291,6 +291,7 @@ def test_canonical_x86_selector_defaults_to_descriptor(
         lambda module, *, target: False,
     )
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    _stub_attention_schedule_boundary(monkeypatch)
     monkeypatch.setattr(
         "tessera.compiler.x86_native._lower_attention_semantics",
         _fake_attention_semantics,
@@ -324,6 +325,26 @@ def test_canonical_x86_selector_preserves_opt_out_and_unsupported_route(
         unsupported, target="x86", enable_tool_validation=False,
     )
     assert fallback.launch_descriptor is None
+
+
+def _stub_attention_schedule_boundary(monkeypatch):
+    from dataclasses import replace
+    from tests.unit.test_scheduled_attention_consumers import _artifact
+    def lower(module, *, target):
+        from tessera.compiler.x86_native import _attention_contract
+        names, bias, output, dims, scale, causal, window, softcap = _attention_contract(module)
+        value = _artifact(target='x86')
+        semantic = value.semantic_ir
+        if bias is not None:
+            semantic += ' tessera_attn.score_bias'
+        if softcap:
+            semantic += ' tessera_attn.softcap'
+        return replace(value, q_name=names[0], k_name=names[1], v_name=names[2],
+                       bias_name=bias, output_name=output, dims=dims, scale=scale,
+                       causal=causal, window_left=window, window_right=window,
+                       softcap=softcap, semantic_ir=semantic)
+    monkeypatch.setattr('tessera.compiler.scheduled_attention.lower_scheduled_attention', lower)
+    monkeypatch.setattr('tessera.compiler.native_attention_contract.verify_attention_ancestry', lambda *a, **kw: None)
 
 
 def _stub_matmul_schedule_boundary(monkeypatch):
@@ -494,6 +515,7 @@ def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager
     if abi == X86_MATMUL_F32_ABI:
         _stub_matmul_schedule_boundary(monkeypatch)
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    _stub_attention_schedule_boundary(monkeypatch)
     monkeypatch.setattr(
         "tessera.compiler.x86_native._lower_attention_semantics",
         _fake_attention_semantics,
@@ -502,7 +524,7 @@ def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager
     assert package.descriptor.abi_id == abi
     assert package.image.entry_points[0].abi_id == abi
     expected_item = (
-        "X86-ATTN-CANON-1"
+        "E2E-REAL-5A"
         if abi in {X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI}
         else "E2E-REAL-3"
     )

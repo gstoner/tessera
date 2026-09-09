@@ -279,3 +279,19 @@ producers. Signed INT4 and bounded paged reads also consume native Schedule/Tile
 artifacts, with their Python Tile constructors retired. Scaled packing, fused
 paged attention, replay-SSM and MoE remain in this census. A checkpoint descriptor
 still does not prove runtime buffer provenance or complete AD policy integration.
+
+
+## X86 attention and source-region continuation (2026-09-08)
+
+E2E-REAL-6 / W4-PRODUCT-1, sync `SOURCE-ASYNC-FOUNDATION-2026-09-08`:
+direct x86 forward attention now consumes the native Schedule/Tile artifact.
+Descriptor fields are projected through the shared Apple/x86 attention contract
+and target-specific Schedule replay. Extended attention preserves its symmetric
+window runtime scalar; this field was missing from the previous scheduled
+consumer. Non-f32 matmul, attention backward, cohort and generic elementwise
+Graph-owned packaging remain in the census.
+
+Opt-in pure source branches and single-carry bounded loops now have a tracer-to-SCF
+consumer and native LLVM execution proof. This does not close arbitrary source
+CFG or migrate general JIT callers. Source effects, multi-value loop state and
+exceptional edges require explicit next contracts in the integrated plan.

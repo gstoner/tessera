@@ -1,0 +1,92 @@
+{
+  "execution_kind": "native_cpu",
+  "rows": [
+    {
+      "family": "branch",
+      "inputs": [
+        -3.0,
+        2.0
+      ],
+      "result": [
+        -2.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "branch",
+      "inputs": [
+        -3.0,
+        -2.0
+      ],
+      "result": [
+        9.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "branch",
+      "inputs": [
+        -1.0,
+        -2.0
+      ],
+      "result": [
+        -2.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "branch",
+      "inputs": [
+        3.0,
+        2.0
+      ],
+      "result": [
+        2.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "loop",
+      "inputs": [
+        0.0,
+        1.0,
+        3.0
+      ],
+      "result": [
+        9.0
+      ],
+      "native_ir_sha256": "767556b212751f0ba442faaf2e4d2aa767882b7d103c75cc0a5b2b9d53aaa112"
+    },
+    {
+      "family": "loop",
+      "inputs": [
+        3.0,
+        1.0,
+        3.0
+      ],
+      "result": [
+        9.0
+      ],
+      "native_ir_sha256": "767556b212751f0ba442faaf2e4d2aa767882b7d103c75cc0a5b2b9d53aaa112"
+    },
+    {
+      "family": "loop",
+      "inputs": [
+        -2.0,
+        0.5,
+        1.0
+      ],
+      "result": [
+        1.0
+      ],
+      "native_ir_sha256": "767556b212751f0ba442faaf2e4d2aa767882b7d103c75cc0a5b2b9d53aaa112"
+    }
+  ],
+  "jit_library_sha256": "51384992825e69303cb98c3959c3e2118deab39d7488871278f1aa9ee39b929a",
+  "sources": {
+    "python/tessera/compiler/trace.py": "21d2238e7d15d3acbd934932b56e26326b8871102851e986fdcaca14fdb6fd8a",
+    "python/tessera/compiler/source_control_flow.py": "b20f702cb55b21b67a5c7f17ed434b972a7b82809d8c9e638f4e4b3b80b5f6c9",
+    "benchmarks/record_source_cfg_native.py": "95395751c5c9fa76ed04a9ecc96e7f44e25c958dc8ab2bb7fd294f01a336b3a7"
+  },
+  "promotion_eligible": false
+}

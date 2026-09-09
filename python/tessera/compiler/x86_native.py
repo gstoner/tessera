@@ -1402,6 +1402,8 @@ def package_scheduled_attention(
     """Package the exact E2E-REAL-5A Tile artifact without Graph re-entry."""
 
     artifact.validate()
+    from .native_attention_contract import verify_attention_ancestry
+    verify_attention_ancestry(artifact, target='x86', architecture='zen5-avx512')
     if (
         artifact.target != "x86"
         or artifact.architecture != "zen5-avx512"
@@ -1492,6 +1494,7 @@ def package_scheduled_attention(
             "scale": artifact.scale,
             "causal": artifact.causal,
             "bias": artifact.bias_name is not None,
+            "window": artifact.window_left,
             "window_left": artifact.window_left,
             "window_right": artifact.window_right,
             "softcap": artifact.softcap,
@@ -1599,79 +1602,11 @@ def package_scheduled_attention_backward(
 
 
 def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
-    contract = _attention_contract(module)
-    if contract is None:
-        raise ValueError(
-            "x86 native attention requires static rank-4 f32 MHA, optional exact-shape "
-            "f32 bias, symmetric window semantics, and dropout=0"
-        )
-    names, bias_name, output_name, dims, scale, causal, window, softcap = contract
-    b, hq, hkv, sq, sk, d, dv = dims
-    attention_dims = (b, hq, hkv, sq, sk, d, dv)
-    extended = bias_name is not None or window >= 0 or softcap > 0.0
-    symbol = "tessera_x86_flash_attn_ext_f32" if extended else "tessera_x86_flash_attn_f32"
-    abi = X86_ATTENTION_EXT_F32_ABI if extended else X86_ATTENTION_F32_ABI
-    semantic = hashlib.sha256(
-        f"{scale:.17g}:{causal}:{bool(bias_name)}:{window}:{softcap:.17g}".encode()
-    ).hexdigest()[:10]
-    graph_ir = emit_attention_graph_ir(
-        entry=f"tessera_graph_x86_attention_{semantic}", dims=attention_dims,
-        scale=scale, causal=causal, bias=bias_name is not None,
-        window=window, softcap=softcap,
-    )
-    semantic_ir = _lower_attention_semantics(
-        graph_ir, tile_q=sq, tile_kv=16
-    )
-    physical_carrier = emit_attention_tile_ir(
-        entry=f"tessera_tile_x86_attention_{semantic}", scale=scale, causal=causal,
-        bias=bias_name is not None, window=window, softcap=softcap,
-    )
-    target_ir, payload, compiler, toolchain = _lower(
-        physical_carrier, symbol, "attention"
-    )
-    image = _image(
-        target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
-        pipeline_name=pipeline_name, symbol=symbol, abi=abi,
-    )
-    q_name, k_name, v_name = names
-    bindings = [
-        BufferBinding(0, q_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(1, k_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(2, v_name, "input", "fp32", 4, "row_major", 4),
-    ]
-    if bias_name is not None:
-        bindings.append(BufferBinding(3, bias_name, "input", "fp32", 4, "row_major", 4))
-    bindings.append(BufferBinding(len(bindings), output_name, "output", "fp32", 4, "row_major", 4))
-    shapes = {
-        q_name: (b, hq, sq, d), k_name: (b, hkv, sk, d),
-        v_name: (b, hkv, sk, dv), output_name: (b, hq, sq, dv),
-    }
-    if bias_name is not None:
-        shapes[bias_name] = (b, hq, sq, sk)
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=tuple(bindings),
-        scalars=tuple(
-            ScalarArgument(len(bindings) + index, name, "int64")
-            for index, name in enumerate(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
-        ),
-        shape_guards=tuple(
-            ShapeGuard(name, axis, "eq", extent)
-            for name, shape in shapes.items() for axis, extent in enumerate(shape)
-        ),
-        geometry=LaunchGeometry(policy="x86_avx512_attention_rows"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
-        provenance={
-            "work_item": "X86-ATTN-CANON-1", "route": "avx512_c_abi",
-            "shape": list(dims), "storage": "f32", "accum": "f32",
-            "scale": scale, "causal": causal, "bias": bias_name is not None,
-            "window": window, "softcap": softcap, "extended": extended,
-            "sync_key": "CORE-STREAMING-ATTN-RANK4-X86-2026-07-30",
-            "semantic_route": "canonical_rank4_kv_scf_for",
-            "semantic_ir_digest": hashlib.sha256(semantic_ir.encode()).hexdigest(),
-        },
-    )
-    return X86NativePackage(graph_ir, target_ir, semantic_ir, image, descriptor)
+    if _attention_contract(module) is None:
+        raise ValueError('x86 attention requires its static f32 MHA contract')
+    from .scheduled_attention import lower_scheduled_attention
+    return package_scheduled_attention(lower_scheduled_attention(module, target='x86'),
+                                       pipeline_name=pipeline_name)
 
 
 def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:

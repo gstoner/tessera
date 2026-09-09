@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 audit_role: plan
 plan_state: landing
 ---
@@ -12,8 +12,9 @@ This is the active scoped AD plan. It consolidates the unification phases P0–P
 architecture findings A1–A8/B1–B8 and capabilities D1–D7, and next-generation
 AD-LAW/WEIL/JET/OPERATOR work. Existing IDs are retained; no parallel scheduler
 or new AD engine is proposed. Global order belongs to
-[INTEGRATED_COMPILER_PLAN.md](INTEGRATED_COMPILER_PLAN.md), particularly W4,
-W5.1 and W6 under **IR-NATIVE-FOUNDATION-1**.
+[INTEGRATED_COMPILER_PLAN.md](INTEGRATED_COMPILER_PLAN.md), particularly [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1),
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1) and
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
 
 The [AD specification](../../spec/AUTODIFF_SPEC.md) owns public semantics.
 The [connection ledger](../generated/autodiff_connection_ledger.md) and
@@ -345,3 +346,154 @@ new input volume guard as a joint allocation bound. Consequently larger dynamic
 multidimensional products can refuse even when their actual logical volume fits
 the public capacity. AD-RESIDUAL-EVAL-1 owns carrying that joint bound through
 allocation/view lowering; the current small-shape packets do not close it.
+
+
+## Source recovery and scoped asynchronous ownership (2026-09-08)
+
+Owners: W4-PRODUCT-1, AD-RESIDUAL-EVAL-1 and W2.4a; synchronization key
+`SOURCE-ASYNC-FOUNDATION-2026-09-08`. Sequencing remains in the live integrated plan.
+
+`trace(..., source_control_flow=True, max_steps=N)` recovers pure local Python
+branches, nested branch early returns and one initialized tensor loop carry.
+The source adapter calls the existing TraceBuilder; `to_native_source_ir` emits
+SCF from its typed SSA edges. Native while exhaustion asserts rather than
+silently truncating. The comparison boundary explicitly converts the native i1
+result to the tracer's historical floating mask. Ordinary tensor truth tests,
+object mutation, arbitrary calls, break/continue, multi-value loop carries and
+loop early returns remain refused. This is opt-in source capture, not automatic
+JIT migration or arbitrary Python CFG closure.
+
+`NativePublicResult.submit(..., scoped=True)` exposes logical views only inside
+`read(stream)` after successful completion/status/shape checks. `retire(stream)`
+orders all capacity/sidecar/status frees after registered readers.
+`PersistentTapePair.capture_async(stream, ...)` uses pool allocation, ordered
+copies and forward submission without explicit context synchronization; generic
+readers require `poll_capture`, while native backward uses the captured status.
+Legacy one-status packages require a successful capture check before replacing
+that dependency. The two-status continuation below preserves both checks. Persistent captures retain static
+storage shapes; dynamic public frames are a separate ABI.
+
+Asynchronous owners defer module unloading to at most eight worker slots.
+`poll_retired` does not wait for driver unload. Stalled workers retain modules,
+contexts and slots; failed unloads are quarantined without retries. This bounds
+admission and keeps polling responsive, not the driver's completion latency.
+The caller must retain its owning context until retirement completes. Exceptional
+buffer cleanup and unrestricted exports retain conservative synchronous recovery.
+
+Temporary storage can use an exact dominating `ule(product(extents), capacity)`
+then-edge proof. Wrong products, reverse predicates and non-dominating/else-edge
+bounds cannot tighten storage. Logical dimensions and distinct iteration slots
+are preserved; unknown aliases and more general relational volume proofs remain
+open. Evidence is recorded under
+`benchmarks/baselines/source_async_foundation_20260908/`.
+
+
+### Effect-aware CFG and two-status composition (2026-09-08)
+
+Owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1) and
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a). Sync key:
+`CFG-STATUS-COMPOSITION-2026-09-08`.
+
+Pure single-carry while retains native `scf.while`. Loops with multiple initialized
+tensor variables and break/continue use bounded expansion (at most 16 iterations,
+256 statement/region visits), merging each iteration's state before constructing
+the next. Assertions use registered scalar MLIR and `cf.assert`; their effects
+cannot be dropped as unused tensor results. Budget exhaustion is an assertion,
+not silent truncation. Loop-return payloads, external aliases/mutation, exceptions
+and general JIT plumbing remain open. Calls outside the admitted pure vocabulary
+are rejected before tracing, including unreachable statements.
+
+`materialize_persistent_tape(..., checked_status=True, gated_input=True,
+status_inputs=2)` serializes `tessera.autodiff.input_status_count = 2 : i64`.
+The native producer checks both statuses before body effects. The package projects
+two distinct readonly status arguments; capture preserves distinct storage rather
+than weakening the no-alias contract. A checked derivative's `backward_into`
+retains its reader scope and orders its event before the consumer, while the
+consumer's capture event orders its own status. Neither success can overwrite or
+substitute for the other. Without an external dependency, both inputs reflect the
+capture result. One-status packages remain compatible with their checked-host
+replacement rule. Count/ABI tampering is rejected by native replay and projection.
+
+Independent CUDA SM120 and ROCm gfx1151 recorders exercise all four combinations
+of capture/upstream success and failure, expected derivative values, reader-aware
+retirement and no host capture check. These are correctness packets, not overlap
+or performance evidence. Arbitrary fan-in, heterogeneous dynamic capture and
+exceptional asynchronous recovery remain open.
+
+### Completion state and bounded status fan-in (2026-09-08)
+
+Owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1) and
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a); sync key
+`COMPLETION-STATE-FANIN-2026-09-08`. This supersedes the corresponding open
+boundaries in the preceding increment, without implying general AD closure.
+
+Expanded loops now carry return flags and floating tensor/tuple payloads;
+nested returns and finally overrides execute through typed native conditionals.
+Explicit raises of unshadowed builtin ValueError, RuntimeError and AssertionError
+resolve to statically matching handlers, including across loop exits. Exception
+objects, dynamic classes, re-raise/causes and an uncaught exception result ABI
+remain excluded. Bounds remain 16 expanded iterations and 256 continuation visits.
+
+`compile_source_state(..., mutable=(...))` is an explicit native CPU adapter.
+It serializes exact input alias groups, shape/dtype and state-result contracts
+in `tessera.source_state`. Full-slice writes update shared SSA roots; execution
+uses snapshots and separate outputs before copying declared state back. All
+aliases in a mutable group must be writable. Partial overlaps, mutable return
+aliases and changed alias topology refuse. The caller exclusively owns the
+arrays during execution; concurrent mutation and GPU state binding remain open.
+Graph conversion refuses these state traces until it has an effect consumer.
+
+`status_inputs` now admits one through eight. A checked generation's
+`backward_into(..., dependencies=(...))` adds status-only prerequisites, retains
+all reader scopes through submission and orders every producer before the
+consumer. Its own capture remains a separate status for counts above one.
+Duplicate dependencies, insufficient slots and mismatched targets refuse.
+The legacy single-status host-check rule remains intact.
+
+Four incoming statuses passed all sixteen combinations on SM120 and gfx1151;
+counts three/four/eight also have compiler contract tests. These correctness
+packets do not establish eight-input device proof, overlap, performance,
+heterogeneous dynamic capture or general exceptional reclamation. Evidence:
+`benchmarks/baselines/completion_state_fanin_20260908/`.
+
+### Source JIT and state generations (2026-09-08)
+
+Owners: W4-PRODUCT-1 / W2.4a; sync key `SOURCE-JIT-STATE-2026-09-08`.
+`jit(source_control_flow=True, source_mutable=(...), source_error_specs=(...),
+source_max_steps=...)` selects an explicit native CPU consumer, without Graph
+reconstruction or Python execution fallback. Use the returned owner as a context
+manager or close it. At most four shape/alias specializations retain native modules.
+Incompatible target, batching and AD options refuse; this is not general JIT closure.
+
+CPU state accepts injective strided/reversed views; partial overlapping aliases,
+broadcast/self-overlap and arbitrary objects refuse. Writes commit after native
+completion, including writes before a transported explicit builtin exception.
+`source_error_specs` supplies static floating return shapes so failure paths have
+a typed payload. Codes transport AssertionError/RuntimeError/ValueError with a
+generic message; original messages, implicit operation errors, dynamic exception
+objects and source-bound exhaustion transport remain open.
+
+The GPU adapter admits one declared state input until multi-input alias
+projection reaches its binding. The native GPU producer accepts serialized source-state results and constructs
+capacity/shape sidecars through the existing public-result path. Two state
+steps execute on gfx1151 while original input storage remains unchanged.
+Results retain their owning frames; this functional generation protocol is not
+arbitrary in-place device mutation, GPU Python exception transport or AD support.
+ROCm also proves all 256 eight-status cases. NVIDIA follow-up is blocked by SSH
+access; no Apple proof transfers. Evidence: `benchmarks/baselines/source_jit_state_20260908/`.
+
+### Source object and paired-product boundary (2026-09-09)
+
+Owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1),
+[AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1),
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+`NativeSourceJit.vjp` executes compiler-exported forward/backward products on CPU
+for pure tensor inputs. It is explicit seeded VJP, not automatic differentiation
+of effects. Mutable fields, exception transport and object arguments refuse AD.
+Declared dict/SimpleNamespace fields and static exception payloads now have native
+source execution; custom objects and full exception semantics remain open.
+Read-only overlapping views snapshot safely; writable aliases need a common
+backing-storage SSA model with ordered extract/insert operations before admission.
+Owned GPU state has synchronous SM120/gfx1151 copyback proof and scoped-reader
+exclusion. Asynchronous writes and externally owned mutation remain open.
+Evidence: `benchmarks/baselines/source_object_ownership_20260909/`.

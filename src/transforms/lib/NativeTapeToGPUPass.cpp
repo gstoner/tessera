@@ -32,6 +32,7 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
   Option<int64_t> publicResultCapacity{*this, "public-result-capacity", llvm::cl::desc("Export generated rank-one through rank-four AD results into checked capacity storage"), llvm::cl::init(0)};
   Option<int64_t> publicInputCapacity{*this, "public-input-capacity", llvm::cl::desc("Bind dynamic AD inputs to checked flat capacity and logical shape sidecars"), llvm::cl::init(0)};
   Option<bool> inputStatus{*this, "input-status", llvm::cl::desc("Require a successful incoming product status before any body effect"), llvm::cl::init(false)};
+  Option<unsigned> inputStatusCount{*this, "input-status-count", llvm::cl::desc("Number of independently checked incoming statuses (1 through 8)"), llvm::cl::init(1)};
   llvm::StringRef getArgument() const final { return "tessera-native-tape-to-gpu"; }
   llvm::StringRef getDescription() const final { return "Materialize bounded bufferized AD/ANN products with proved temporary capacities"; }
   void getDependentDialects(mlir::DialectRegistry &r) const override {
@@ -47,7 +48,9 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
     bool ad=m->hasAttr("tessera.autodiff.product_abi") && m->hasAttr("tessera.autodiff.product_pair");
     bool ann=m->hasAttr("tessera.ann.source");
     bool publicResults=m->hasAttr("tessera.native_result_program");
-    if (fs.size()!=1 || (static_cast<int>(ad)+static_cast<int>(ann)+static_cast<int>(publicResults))!=1) return reject();
+    bool sourceState=m->hasAttr("tessera.source_state") && !ad && !ann && !publicResults;
+    if (sourceState && !publicResultCapacity) return reject();
+    if (fs.size()!=1 || (static_cast<int>(ad)+static_cast<int>(ann)+static_cast<int>(publicResults)+static_cast<int>(sourceState))!=1) return reject();
     auto f=fs[0];
     if (publicInputCapacity) {
       if (!ad || !statusBuffer || !publicResultCapacity || publicInputCapacity<1 || publicInputCapacity>1024 ||
@@ -114,7 +117,7 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       f.setType(FunctionType::get(m.getContext(),f.getBody().front().getArgumentTypes(),f.getResultTypes()));
     }
     if (publicResultCapacity) {
-      if (!ad || !statusBuffer || inputStatus || publicResultCapacity<1 || publicResultCapacity>1024 ||
+      if (!(ad || sourceState) || !statusBuffer || inputStatus || publicResultCapacity<1 || publicResultCapacity>1024 ||
           !f.getBody().hasOneBlock() || !f.getNumResults()) return reject();
       auto ret=dyn_cast<func::ReturnOp>(f.getBody().front().getTerminator());
       if (!ret || ret.getNumOperands()!=f.getNumResults()) return reject();
@@ -252,26 +255,28 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       auto encoded=llvm::formatv("{0}",llvm::json::Value(std::move(contract))).str();
       m->setAttr("tessera.native_result_abi",StringAttr::get(m.getContext(),encoded));
     }
+    if (inputStatusCount < 1 || inputStatusCount > 8 || (!inputStatus && inputStatusCount != 1)) return reject();
     if (inputStatus && !statusBuffer) return reject();
     if (statusBuffer) {
       if ((!ad && !publicResults) || parallelRows) return reject();
       OpBuilder entry=OpBuilder::atBlockBegin(&f.getBody().front());
       auto statusType=MemRefType::get({1},entry.getI64Type());
-      Value dependency;
-      if (inputStatus) {
+      SmallVector<Value> dependencies;
+      if (inputStatus) for (unsigned i=0; i<inputStatusCount; ++i) {
         if (failed(f.insertArgument(f.getNumArguments(),statusType,DictionaryAttr{},f.getLoc()))) return reject();
-        dependency=f.getArguments().back();
+        dependencies.push_back(f.getArguments().back());
       }
       if (failed(f.insertArgument(f.getNumArguments(),statusType,DictionaryAttr{},f.getLoc()))) return reject();
       auto status=f.getArguments().back();
       auto zero=arith::ConstantIndexOp::create(entry,f.getLoc(),0);
       auto success=arith::ConstantIntOp::create(entry,f.getLoc(),0,64);
       memref::StoreOp::create(entry,f.getLoc(),success,status,ValueRange{zero});
-      if (dependency) {
+      for (Value dependency : dependencies) {
         auto incoming=memref::LoadOp::create(entry,f.getLoc(),dependency,ValueRange{zero});
         auto ok=arith::CmpIOp::create(entry,f.getLoc(),arith::CmpIPredicate::eq,incoming,success);
         cf::AssertOp::create(entry,f.getLoc(),ok,entry.getStringAttr("upstream product failed"));
         m->setAttr("tessera.autodiff.input_status",entry.getStringAttr("guard-v1"));
+        if (inputStatusCount > 1) m->setAttr("tessera.autodiff.input_status_count",entry.getI64IntegerAttr(inputStatusCount));
       }
       // A nested failure must suppress the enclosing suffix and every later
       // loop iteration. Loop-carried scalars keep their previous value while
@@ -434,7 +439,7 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
     // dynamic in each view and copy. Loaded extents and unknown aliases refuse.
     auto allocationShape=[&](Operation *op) -> std::optional<SmallVector<int64_t>> {
       auto type=dyn_cast<MemRefType>(op->getResult(0).getType());
-      if (!type) return std::nullopt;
+      if (!type || !type.getLayout().isIdentity() || type.getMemorySpace()) return std::nullopt;
       SmallVector<int64_t> shape(type.getShape());
       if (!type.hasStaticShape()) {
         auto alloc=dyn_cast<memref::AllocOp>(op);
@@ -446,9 +451,50 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
           dim=bounds->second;
         }
       }
-      auto capacity=MemRefType::get(shape,type.getElementType(),type.getLayout(),type.getMemorySpace());
+      // Per-axis intervals can overestimate a guarded joint volume (e.g.
+      // dimensions each <= 64 whose product is <= 64). Only a dominating
+      // then-edge with the exact SSA product can tighten physical storage.
+      int64_t count=1;
+      for (int64_t dim:shape) {
+        if (dim<1 || dim>1024 || count>(INT64_MAX/dim)) return std::nullopt;
+        count*=dim;
+      }
+      if (auto alloc=dyn_cast<memref::AllocOp>(op); alloc && !type.hasStaticShape()) {
+        SmallVector<Value> expected(alloc.getDynamicSizes());
+        int64_t fixed=1;
+        for (int64_t dim:type.getShape()) if (!ShapedType::isDynamic(dim)) fixed*=dim;
+        for (Operation *child=op,*parent=op->getParentOp(); parent && parent!=f.getOperation();
+             child=parent,parent=parent->getParentOp()) {
+          auto branch=dyn_cast<scf::IfOp>(parent);
+          if (!branch || child->getParentRegion()!=&branch.getThenRegion()) continue;
+          auto cmp=branch.getCondition().getDefiningOp<arith::CmpIOp>();
+          if (!cmp || cmp.getPredicate()!=arith::CmpIPredicate::ule) continue;
+          APInt upper;
+          if (!matchPattern(cmp.getRhs(),m_ConstantInt(&upper)) || !upper.isSignedIntN(64) ||
+              upper.getSExtValue()<1 || upper.getSExtValue()>1024) continue;
+          SmallVector<Value> remaining(expected);
+          int64_t coefficient=1;
+          std::function<bool(Value,unsigned)> matchProduct=[&](Value v,unsigned depth) {
+            if (depth>32) return false;
+            // Match an extent before descending into its defining arithmetic.
+            auto found=llvm::find(remaining,v);
+            if (found!=remaining.end()) { remaining.erase(found); return true; }
+            APInt constant;
+            if (matchPattern(v,m_ConstantInt(&constant))) {
+              if (!constant.isSignedIntN(64) || constant.getSExtValue()<1 ||
+                  constant.getSExtValue()>1024 || coefficient>1024/constant.getSExtValue()) return false;
+              coefficient*=constant.getSExtValue(); return true;
+            }
+            auto mul=v.getDefiningOp<arith::MulIOp>();
+            return mul && matchProduct(mul.getLhs(),depth+1) && matchProduct(mul.getRhs(),depth+1);
+          };
+          if (matchProduct(cmp.getLhs(),0) && remaining.empty() && coefficient==fixed)
+            count=std::min(count,upper.getSExtValue());
+        }
+      }
+      auto capacity=MemRefType::get({count},type.getElementType());
       if (!admissible(capacity)) return std::nullopt;
-      return shape;
+      return SmallVector<int64_t>{count};
     };
     bool bad=false;
     int64_t bytes=0;

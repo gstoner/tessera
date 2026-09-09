@@ -1,0 +1,129 @@
+{
+  "execution_kind": "native_cpu",
+  "rows": [
+    {
+      "family": "branch",
+      "inputs": [
+        -3.0,
+        2.0
+      ],
+      "result": [
+        -2.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "branch",
+      "inputs": [
+        -3.0,
+        -2.0
+      ],
+      "result": [
+        9.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "branch",
+      "inputs": [
+        -1.0,
+        -2.0
+      ],
+      "result": [
+        -2.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "branch",
+      "inputs": [
+        3.0,
+        2.0
+      ],
+      "result": [
+        2.0
+      ],
+      "native_ir_sha256": "9c423e4220c3608dc01c887ce878059a90f1a2a3eb80832a41e1592b736183e5"
+    },
+    {
+      "family": "loop",
+      "inputs": [
+        0.0,
+        1.0,
+        3.0
+      ],
+      "result": [
+        9.0
+      ],
+      "native_ir_sha256": "767556b212751f0ba442faaf2e4d2aa767882b7d103c75cc0a5b2b9d53aaa112"
+    },
+    {
+      "family": "loop",
+      "inputs": [
+        3.0,
+        1.0,
+        3.0
+      ],
+      "result": [
+        9.0
+      ],
+      "native_ir_sha256": "767556b212751f0ba442faaf2e4d2aa767882b7d103c75cc0a5b2b9d53aaa112"
+    },
+    {
+      "family": "loop",
+      "inputs": [
+        -2.0,
+        0.5,
+        1.0
+      ],
+      "result": [
+        1.0
+      ],
+      "native_ir_sha256": "767556b212751f0ba442faaf2e4d2aa767882b7d103c75cc0a5b2b9d53aaa112"
+    },
+    {
+      "family": "mixed_edges",
+      "inputs": [
+        -2.0,
+        1.0,
+        4.0
+      ],
+      "result": [
+        36.0
+      ],
+      "native_ir_sha256": "ea413183161e41251f4f33b8202810a4e14c8aaa7b538e5afe95c2a62ec4364d"
+    },
+    {
+      "family": "mixed_edges",
+      "inputs": [
+        0.0,
+        1.0,
+        3.0
+      ],
+      "result": [
+        36.0
+      ],
+      "native_ir_sha256": "ea413183161e41251f4f33b8202810a4e14c8aaa7b538e5afe95c2a62ec4364d"
+    },
+    {
+      "family": "mixed_edges",
+      "inputs": [
+        5.0,
+        1.0,
+        3.0
+      ],
+      "result": [
+        0.0
+      ],
+      "native_ir_sha256": "ea413183161e41251f4f33b8202810a4e14c8aaa7b538e5afe95c2a62ec4364d"
+    }
+  ],
+  "jit_library_sha256": "51384992825e69303cb98c3959c3e2118deab39d7488871278f1aa9ee39b929a",
+  "sources": {
+    "python/tessera/compiler/trace.py": "653d677e1191f81bd823cbc04e9b7af2b46a86409f658296fc360bc12774f585",
+    "python/tessera/compiler/source_control_flow.py": "b26bd69e7fd2d61548f6e67ab41832c99cd2f0978f52ced4839d2501495b5aaf",
+    "benchmarks/record_source_cfg_native.py": "dc63ce43c162b28be98ec53ce9ba255ee7fdfba2377e729aa52fb4f2f8b7f449",
+    "python/tessera/compiler/graph_ir.py": "133c252f4d8293b35c4a5d8c3ac584a4aece8fefb257558c0ce7931ff9bbada1"
+  },
+  "promotion_eligible": false
+}

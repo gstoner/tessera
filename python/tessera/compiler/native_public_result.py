@@ -9,6 +9,7 @@ import hashlib
 import inspect
 import json
 import math
+import threading
 from pathlib import Path
 from .native_gpu_storage import _run, build_native_gpu_storage, NativeGPUStoragePackage
 from .native_gpu_tensor import TensorSpec, IndexSpec
@@ -64,15 +65,19 @@ class NativePublicResult:
     def run(self, *inputs):
         return PublicResultFrame(self,inputs)
 
-    def submit(self, stream, *inputs):
+    def submit(self, stream, *inputs, scoped=False):
         if type(stream) is not int or not 0<stream<(1<<64):
             raise ValueError('public result submission requires a non-null stream')
-        return PublicResultFrame(self,inputs,stream=stream)
+        return PublicResultFrame(self,inputs,stream=stream,scoped=scoped)
 
 
 class _LogicalView:
     def __init__(self, buffer, shape):
         self._buffer, self._shape = buffer, shape
+
+    @property
+    def pointer(self):
+        return self._buffer.pointer
 
     @property
     def __cuda_array_interface__(self):
@@ -84,11 +89,19 @@ class _LogicalView:
 
 class PublicResultFrame:
     """Owns capacities and immutable host-validated logical result views."""
-    def __init__(self, program, inputs, *, stream=None):
+    def __init__(self, program, inputs, *, stream=None, scoped=False):
+        if type(scoped) is not bool or (scoped and stream is None):
+            raise ValueError('scoped public frames require asynchronous submission')
+        self._scoped, self._stream = scoped, stream
+        self._lock = threading.RLock()
+        self._retiring = False
+        self._owner = None
+        self._submissions = []
         metadata, specs = program.validate()
         if len(inputs)!=sum(not row['writable'] for row in metadata['arguments']):
             raise ValueError('public result input arity disagrees')
-        self.program, self.closed, self.buffers = program, False, []
+        self.program, self.closed = program, False
+        self.buffers: list[_Buffer] = []
         self._submission=None
         self._metadata=metadata
         signature = inspect.Signature([inspect.Parameter(s.name,inspect.Parameter.POSITIONAL_ONLY) for s in specs])
@@ -105,6 +118,7 @@ class PublicResultFrame:
         self.free = bind('cuMemFree_v2','hipFree',[ct.c_void_p])
         if stream is not None:
             self.alloc_async=bind('cuMemAllocAsync','hipMallocAsync',[ct.POINTER(ct.c_void_p),ct.c_size_t,ct.c_void_p])
+            self.free_async=bind('cuMemFreeAsync','hipFreeAsync',[ct.c_void_p,ct.c_void_p])
         self.copy_out = bind('cuMemcpyDtoH_v2','hipMemcpyDtoH',[ct.c_void_p,ct.c_void_p,ct.c_size_t])
         self.context_type = ct.c_void_p if cuda else ct.c_int
         self.current = bind('cuCtxGetCurrent','hipGetDevice',[ct.POINTER(self.context_type)])
@@ -123,6 +137,9 @@ class PublicResultFrame:
                 self._expose()
             else:
                 self._submission=self.binding.submit(stream,*arguments,status,1)
+                if scoped:
+                    from .native_reader_retirement import TrackedDerivativeGeneration
+                    self._owner = TrackedDerivativeGeneration(self, self._submission, tuple(self.buffers), native)
         except BaseException:
             self.close()
             raise
@@ -136,20 +153,29 @@ class PublicResultFrame:
             if any(not 0<=dim<=row['capacity'] for dim in shape) or math.prod(shape)>row['capacity']:
                 raise RuntimeError('public result logical extent exceeds capacity')
             results.append(_LogicalView(self._arguments[row['data']],shape))
-        self.results=tuple(results)
+        self._results=tuple(results)
+        if self._scoped:
+            assert self._owner is not None
+            self._owner._reader_buffers = self._results
+        else:
+            self.results=self._results
 
     def poll(self):
+        with self._lock:
+            return self._poll()
+
+    def _poll(self):
         """Expose logical views only after completion and successful status.
 
         Completion is queried; small status/shape readbacks happen only after
         it succeeds. Closing unrestricted exported views remains synchronous.
         """
-        if self.closed:
-            raise ValueError('public result frame is closed')
+        if self.closed or getattr(self, '_retiring', False):
+            raise ValueError('public result frame is closed or retiring')
         current=self.context_type(); self.check(self.current(ct.byref(current)))
         if current.value!=self.context.value:
             raise ValueError('public result requires its owning device context')
-        if hasattr(self,'results'):
+        if hasattr(self,'_results'):
             return True
         if self._submission is not None and not self._submission.ticket.poll():
             return False
@@ -164,8 +190,57 @@ class PublicResultFrame:
     def _integer(self, buffer):
         return self._integers(buffer,1)[0]
 
+    def _ready(self, *, allow_retirement_failure=False):
+        if self.closed or (self._retiring and not allow_retirement_failure):
+            raise ValueError('public result frame is closed or retiring')
+        if getattr(self, '_retirement_poisoned', False) and not allow_retirement_failure:
+            raise RuntimeError('failed asynchronous free quarantined the public frame')
+        context = self.context_type()
+        self.check(self.current(ct.byref(context)))
+        if context.value != self.context.value:
+            raise ValueError('public result requires its owning device context')
+
+    def read(self, stream):
+        with self._lock:
+            self._ready()
+            if not self._scoped or self._owner is None:
+                raise ValueError('public reader scopes require scoped submission')
+            if not hasattr(self, '_results'):
+                raise ValueError('public readers require successful completion and shape checks')
+            return self._owner.read(stream)
+
+    def retire(self, stream):
+        with self._lock:
+            self._ready()
+            if not self._scoped or self._owner is None:
+                raise ValueError('unrestricted public views require synchronous close')
+            try:
+                self._owner.retire(stream)
+            finally:
+                self._retiring = self._owner.retiring
+        return self
+
+    def poll_retired(self):
+        with self._lock:
+            if self.closed:
+                return True
+            self._ready(allow_retirement_failure=True)
+            if not self._retiring or self._owner is None or not self._owner.poll():
+                return False
+            if not self.binding.close_if_complete(defer_unload=True):
+                return False
+            self.closed = True
+            return True
+
     def close(self):
         if self.closed:
+            return
+        if self._scoped and self._owner is not None:
+            if not self._retiring:
+                self.retire(self._stream)
+            self._owner.wait()
+            if not self.poll_retired():
+                raise RuntimeError('public frame retirement remains pending')
             return
         context = self.context_type(); self.check(self.current(ct.byref(context)))
         if context.value != self.context.value:

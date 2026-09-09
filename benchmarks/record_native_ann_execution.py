@@ -49,13 +49,14 @@ def _relu_source(rows=3,width=2):
 
 
 def source(rows=3,width=2,activation='relu'):
-    if activation not in ('relu','abs'):
-        raise ValueError('ANN measured activation requires relu or abs')
+    if activation not in ('relu','abs','square'):
+        raise ValueError('ANN measured activation requires relu, abs or square')
     text=_relu_source(rows,width)
-    if activation=='abs':
+    if activation in ('abs', 'square'):
         shape=f'{rows}x{width}'
         text=text.replace(f'"tessera.relu"(%o) : (tensor<{shape}xf32>) -> tensor<{shape}xf32>',
-                          f'math.absf %o : tensor<{shape}xf32>')
+                          (f'math.absf %o : tensor<{shape}xf32>' if activation == 'abs' else
+                           f'"tessera.mul"(%o,%o) : (tensor<{shape}xf32>,tensor<{shape}xf32>) -> tensor<{shape}xf32>'))
     return text
 
 
@@ -70,7 +71,7 @@ def main():
     p.add_argument('--rows',type=int,default=3)
     p.add_argument('--width',type=int,default=2)
     p.add_argument('--tune-transformed',action='store_true')
-    p.add_argument('--activation',choices=('relu','abs'),default='relu')
+    p.add_argument('--activation',choices=('relu','abs','square'),default='relu')
     args=p.parse_args()
     Device(args.backend)
     chip='sm_120' if args.backend=='nvidia' else 'gfx1151'

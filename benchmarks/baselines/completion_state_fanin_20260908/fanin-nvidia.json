@@ -1,0 +1,181 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution_kind": "native_gpu",
+  "rows": [
+    {
+      "failures": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "success": true,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        false,
+        false,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        false,
+        true,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        false,
+        true,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        true,
+        false,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        true,
+        false,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        true,
+        true,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        false,
+        true,
+        true,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        false,
+        true,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        false,
+        true,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "success": false,
+      "retained_buffers": 0
+    },
+    {
+      "failures": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "success": false,
+      "retained_buffers": 0
+    }
+  ],
+  "forward_binding": "e8711ffbea0fc38e71b537b7b7f1339b22ed2d205e998a85021a0b5877c4961b",
+  "backward_binding": "f31d6f9e266ed512aeebc9eed29eaa5c3da7e6d48850cd452b56aa130b67948b",
+  "sources": {
+    "python/tessera/compiler/native_persistent_tape.py": "13434b870fa6b7ba4feae1a66cbb0078c8280eb9b602c86e0b327376a749bacd",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "600784c60c0574f95710c8e49fe6a5d019f488d9181ba3853a6488d5b531724c",
+    "python/tessera/compiler/native_reader_retirement.py": "33c5cc01126e35016c5ca934dfbd03db9cf313c5e61029a294f352fe9c37e3c2",
+    "python/tessera/compiler/native_gpu_storage.py": "05ba3f0026730bd36f280465f4012d236747e5824b995572cf6b940a040cadaa",
+    "python/tessera/compiler/native_gpu_tensor.py": "3fd19ef324555819aa01b6be90f612c6524fbe1c85a6af67bfec54c1e4ec2530",
+    "python/tessera/compiler/native_module_retirement.py": "507ea4c43621a9dffc4bafcec834c51f7c388491a154805deb512db1a82f88e8",
+    "python/tessera/compiler/native_storage_contract.py": "de8db87bb22827acd2cac9c13b9c396564ecd20fe7e32eb6f81af7bface53700"
+  },
+  "compiler_sha256": "b9e3a6288229a8a2f4174d6ab4fb77b07a9b4219a1836a534518ceadb85e30b3",
+  "recorder_sha256": "a9f013ba297df25e857d9601ce9cfcb71ee9f3b068d977e2cea75dbf29515c42",
+  "promotion_eligible": false
+}

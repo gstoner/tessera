@@ -1,0 +1,47 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "execution_kind": "native_gpu",
+  "rows": [
+    {
+      "value": [
+        16.0,
+        16.0,
+        16.0,
+        16.0
+      ],
+      "state": [
+        4.0,
+        4.0,
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "value": [
+        64.0,
+        64.0,
+        64.0,
+        64.0
+      ],
+      "state": [
+        8.0,
+        8.0,
+        8.0,
+        8.0
+      ]
+    }
+  ],
+  "in_place_mutation": false,
+  "promotion_eligible": false,
+  "sources": {
+    "python/tessera/compiler/source_control_flow.py": "96fa8591a9bb843c5afb6b07e64f417fa71f794acc36eeb3935f63343e8f085d",
+    "python/tessera/compiler/trace.py": "36a175303a073fe49339f8950f2f8c1754c5b35b8e1bdc3cfc36160dad7ee958",
+    "python/tessera/compiler/native_source_state.py": "e1a28cccd1056288a7893ad69557d212d3cca0f994c9cc84bbdae7f4992dadca",
+    "python/tessera/compiler/native_public_result.py": "b18e2fac97a6a83da05ac076e6c0c1708231f77a99bfa81b7365d59786e89b37",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "231a28ff03a814bbede668c2be66af4c184f43872d5bae0a4c91708ec4e051bd"
+  },
+  "source_ir_sha256": "d49827a1e7c891477702a7dbf08addb2856b3431fe7d8706f36e0ac450e5b754",
+  "compiler_sha256": "92ab2facaa2a022c6371a63c5d958f1acf8e93fc1cbe1feee9e9d4ee9580324a",
+  "recorder_sha256": "d721a4cf4b14a34bac11d38f2b42c87f1068443d0e87f8482015da985d83cbc5"
+}

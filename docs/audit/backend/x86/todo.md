@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -4513,3 +4513,70 @@ module-unload latency, arbitrary Python CFG, general saved products and wider
 nonlinear consumers remain open. Evidence:
 `benchmarks/baselines/runtime_shape_frames_20260908/` and
 `benchmarks/baselines/broad_ann_20260908/`.
+
+### Source CFG and asynchronous ownership (2026-09-08)
+
+Owners: `W4-PRODUCT-1`, `AD-RESIDUAL-EVAL-1`, `W2.4a`, `E2E-REAL-6`, `MSW-9`;
+sync key `SOURCE-ASYNC-FOUNDATION-2026-09-08`. Sequencing and remaining gates:
+[live integrated plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated for native LLVM execution of recovered nested branches/early returns and single-carry bounded while, and scheduled forward attention including extended modifiers. Descriptor projection fixes the extended runtime window field. GPU pool ownership/module unloading is not applicable to the x86 host ABI. Non-f32 matmul, backward attention/cohorts and generic Graph-owned routes remain follow-ups.
+
+Shared contracts: explicit source-comparison predicates, tracer-owned SSA,
+exact dominating product guards, immutable checked shape/status exposure,
+reader-aware event ordering and bounded off-thread unload admission. Arbitrary
+CFG and exceptional cleanup remain open; worker admission does not guarantee
+driver latency. Evidence: `benchmarks/baselines/source_async_foundation_20260908/`.
+
+### Effect-aware CFG and status composition (2026-09-08)
+
+Owners: `W4-PRODUCT-1` / `W2.4a`; sync key
+`CFG-STATUS-COMPOSITION-2026-09-08`. Sequencing:
+[live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated: native LLVM execution of mixed local-state break/continue and ordered assertions. Failure-effect tests invoke compiled code in a subprocess and require SIGABRT; no richer runtime error ABI is claimed. GPU two-status pool ownership is not applicable to the host ABI.
+
+Shared contracts: typed multi-result conditional SSA, registered assertion effects,
+explicit bounded loop expansion and serialized incoming-status count. Unknown
+Python effects refuse before capture. Loop returns, external aliases, exceptions,
+wider status joins and heterogeneous dynamic capture remain open. Evidence:
+`benchmarks/baselines/cfg_status_composition_20260908/`.
+
+### Completion state and status fan-in (2026-09-08)
+
+Owners: `W4-PRODUCT-1` / `W2.4a`; sync key
+`COMPLETION-STATE-FANIN-2026-09-08`. Sequencing:
+[live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated: native LLVM differential execution covers nested/tuple loop returns, handled exception/finally edges and declared exact full-tensor input aliases. Exclusive host ownership and synchronous copyback are required. GPU status storage and pool retirement are not applicable to this host ABI.
+
+Shared contracts: typed completion payloads, explicit serialized source state,
+bounded incoming-status count and reader leases for every prerequisite.
+Arbitrary object/view mutation, uncaught exception transport, heterogeneous
+dynamic capture and unbounded effect joins remain open. Evidence:
+`benchmarks/baselines/completion_state_fanin_20260908/`.
+
+### Source JIT and device state (2026-09-08)
+
+Owners: `W4-PRODUCT-1` / `W2.4a`; sync key `SOURCE-JIT-STATE-2026-09-08`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated on native LLVM CPU: strided/reversed state views, explicit builtin exception transport and bounded public source-JIT ownership. GPU ownership does not apply to this host ABI.
+
+Shared contracts: serialized state/error results, capacity/shape projection,
+exact alias checks and bounded JIT module ownership. Arbitrary objects, partial
+overlap, dynamic exception objects/messages and in-place GPU mutation remain open.
+Evidence: `benchmarks/baselines/source_jit_state_20260908/`.
+
+### Declared object state and owned GPU mutation (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `W2.4a` / `AD-RESIDUAL-EVAL-1`.
+Sync key: `SOURCE-OBJECT-OWNERSHIP-2026-09-09`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+Parity validated for native CPU declared object fields, static exception payloads and explicit pure-tensor paired VJP. GPU ownership proof is not applicable to the host copyback ABI.
+
+Shared contracts: field projection, read-only overlapping snapshots, static
+exception args and scoped exclusive GPU writes. Custom accessors, overlapping
+writes, general exception semantics and automatic effectful AD remain open.
+Evidence: `benchmarks/baselines/source_object_ownership_20260909/`.

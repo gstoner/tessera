@@ -1,10 +1,57 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-09-08
 audit_role: plan
-plan_state: open
+plan_state: landing
 ---
 
-# Compiler enhancement — what CAKE says about our Tile IR, and the two phases it scopes
+# Compiler enhancement — applying CAKE lessons to the native foundation
+
+## Current application review (2026-09-08)
+
+This document retains the original CAKE assessment below as dated provenance.
+Its August counts, "unstarted" wording and phase dependencies are **not current
+capability evidence**. The integrated plan owns sequencing; this review maps
+lessons to existing owners rather than creating another phase queue.
+
+| Lesson | Current consumer/evidence | Remaining gate and owner |
+| --- | --- | --- |
+| Make dependencies typed and executable | `TileDataflowLegalityPass` resolves role roots across SSA and loop carries; `TileBarrierReuseLegalityPass` tracks allocation accesses and pending generations. | General aliases, nested lifetimes and target evidence: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a). The old "type-blind verifier" finding is historical. |
+| One authored representation, lowering derives physical details | `ScheduleObject`, Schedule-to-Tile replay, native descriptor projection and `SCHEDULE_OBJECT_DESIGN.md` now exist. | Remaining Graph-owned packagers and provenance: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6). Do not start another schedule dialect or competing Python system of record. |
+| Test forwarding and effects before expanding syntax | Source recovery feeds typed tracer SSA; bounded expansion handles completion payloads and statically handled exceptions. Declared full-tensor aliases use serialized state results; assertions retain native effects. | Arbitrary CFG, object/view aliases and uncaught exception transport: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1). Unknown Python effects refuse before capture, including dead paths; no host callback substitutes for device semantics. |
+| A dependency declaration needs a real consumer | The native tape pass can serialize two incoming statuses and gates body effects on both. A capture failure cannot be replaced by an upstream success. | Broader effect/status composition and asynchronous cleanup: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1). A completion event proves ordering, not successful numerical execution. |
+| Predict to prune; measure to admit | Native ANN scoped selection checks analytic bounds, identity and independent repeated measurements. The September square experiment retained both incumbents. | Broader nonlinear workloads and measured promotion: [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9). Never promote from a cost-model score or transfer device evidence. |
+| Optimize repair effort as well as runtime | Assertions-enabled MLIR validation and negative producer/consumer tests catch malformed contracts before benchmarking. | Measure repair rounds, rejection fraction and compile/device costs before justifying a new search layer; see `SCHEDULE_OBJECT_DESIGN.md`. No convergence improvement is measured by this review. |
+
+The most useful CAKE lesson is the feedback loop: a concrete failure becomes a
+localized compiler contract, a negative fixture and an executable positive
+fixture. For this increment those failures are omitted capture status,
+unsupported effect calls on dead source paths, and silently truncated bounded
+control flow. The tests must name the affected boundary; broad passing counts
+cannot replace these witnesses.
+
+**Corrections to the historical recommendations:** the arbitrary `p < 0.2`
+cutoff in §7 is not a general economic gate; use measured `c_s/c_g < p`, include
+measurement noise, and protect an incumbent from pruning. Surviving the prune
+does not guarantee zero selection regret under noisy measurements. A historical
+p10–p90 band is exploratory monitoring, not a calibrated regression test; use
+revision-bound independent-run evidence and a prespecified decision rule. The
+claim in §0 that convergence is the supported result is superseded by §2.3's
+correct exploratory interpretation. A point estimate remains descriptive
+engineering evidence, not a replicated causal effect.
+
+The [paper's v1 abstract](https://arxiv.org/abs/2608.12629v1) was checked again;
+this review does not independently reproduce its experiments. Its NVIDIA-only
+results do not establish Tessera performance or cross-target portability.
+
+**Disposition:** keep this file live as the scoped lesson review while its
+remaining owners are active. Preserve the historical assessment and anchors
+until inbound references and every phase remainder are reconciled; a future
+archive must not discard the statistical caveats or create a duplicate backlog.
+
+## Historical assessment — August 2026
+
+Everything below is the original dated assessment and follow-through, not a
+current implementation inventory. Current interpretation and owners are above.
 
 > **Source:** Ye et al., *CAKE: Compiler–Agent Co-Design for Frontier Kernel
 > Evolution*, arXiv:2608.12629v1 (NVIDIA / CMU). Companion artifact:

@@ -1,0 +1,96 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution_kind": "native_gpu",
+  "rows": [
+    {
+      "case": "dynamic_backward_input_and_result",
+      "length": 0
+    },
+    {
+      "case": "dynamic_backward_input_and_result",
+      "length": 2
+    },
+    {
+      "case": "dynamic_backward_input_and_result",
+      "length": 4
+    },
+    {
+      "case": "invalid_backward_shape",
+      "shapes": [
+        -1,
+        -1
+      ],
+      "refused": true
+    },
+    {
+      "case": "invalid_backward_shape",
+      "shapes": [
+        5,
+        5
+      ],
+      "refused": true
+    },
+    {
+      "case": "invalid_backward_shape",
+      "shapes": [
+        2,
+        3
+      ],
+      "refused": true
+    },
+    {
+      "case": "dynamic_matrix_backward",
+      "shape": [
+        8,
+        8
+      ]
+    },
+    {
+      "case": "dynamic_matrix_backward",
+      "shape": [
+        1,
+        64
+      ]
+    },
+    {
+      "case": "dynamic_matrix_backward",
+      "shape": [
+        0,
+        64
+      ]
+    },
+    {
+      "case": "multiple_matrix_results",
+      "shapes": [
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scoped_whole_frame_retirement",
+      "iterations": 8,
+      "explicit_context_waits": 0,
+      "retained_buffers": 0
+    }
+  ],
+  "sources": {
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "f024be9fe3bbb9d4195a5b3c3d76f82d14e9820d244a8877cdf3bbd1294ac164",
+    "python/tessera/compiler/native_public_result.py": "b18e2fac97a6a83da05ac076e6c0c1708231f77a99bfa81b7365d59786e89b37",
+    "python/tessera/compiler/native_persistent_tape.py": "d90f5f7b5d0d9a71af9996ae230b35803ebe60260a6ba6dbd2831a53c36da4ad",
+    "python/tessera/compiler/native_reader_retirement.py": "588f156ff004b033c28b4b0030112659ad946df60413a071cb1c622cc8ec592c",
+    "python/tessera/compiler/native_gpu_storage.py": "05ba3f0026730bd36f280465f4012d236747e5824b995572cf6b940a040cadaa",
+    "python/tessera/compiler/native_gpu_tensor.py": "3fd19ef324555819aa01b6be90f612c6524fbe1c85a6af67bfec54c1e4ec2530",
+    "python/tessera/compiler/native_storage_contract.py": "de8db87bb22827acd2cac9c13b9c396564ecd20fe7e32eb6f81af7bface53700",
+    "python/tessera/compiler/native_module_retirement.py": "507ea4c43621a9dffc4bafcec834c51f7c388491a154805deb512db1a82f88e8"
+  },
+  "compiler_sha256": "020365b1e0f16253438e6c4d0e847c6e81d9b239f5799a094f37c0a4cc8dde53",
+  "recorder_sha256": "37b890f6440168febc54a07bb41b4f75023ae476034f2717ab6939992ac1312c",
+  "promotion_eligible": false
+}

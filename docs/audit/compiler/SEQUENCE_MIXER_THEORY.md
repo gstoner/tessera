@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 audit_role: reference
 ---
 
@@ -62,8 +62,10 @@ The task is **unification and faithful completion**, not greenfield.
 > ```
 >
 > such that **streaming ≡ recompute**: composing `M` over single-token spans
-> carrying `state` equals one call over the whole span. This equivalence is the
-> mixer's defining correctness contract, not an implementation detail.
+> carrying `state` represents the same causal operator as one whole-span call,
+> with identical initial state, masks, positions and RNG assignment. Floating
+> results require a declared error budget; bitwise equality additionally requires
+> preserving the evaluation order. This contract is not performance evidence.
 
 Every mixer in the family (full attention, sliding-window attention, GLA,
 RetNet, DeltaNet, Gated DeltaNet, **KDA**, Mamba-2 SSD, short causal conv, MLA)
@@ -77,41 +79,46 @@ is characterized by **four orthogonal facets** plus **two lowerings**:
 | **D. Numeric policy** | Accumulation dtype, chunk bound, scale metadata? | §5 |
 | **Lowerings** | Sequential (decode) vs chunk-parallel (prefill) | §6 |
 
-The power of the decomposition: **the facets are independent knobs**. KDA and
-Gated DeltaNet differ *only* in Facet A (channel-diagonal vs scalar-diagonal
-gate); they share Facets B/C/D and both lowerings. Inkling's local layer and a
-global layer differ *only* in Facet B (windowed vs growing KV) and the window
-bound in C. Getting the compiler to treat these as **one op with attributes**
-instead of a dozen bespoke ops is the entire thesis.
+These facets organize contracts, not independent optimization knobs. Transition
+structure constrains reassociation and layout; precision and decay range constrain
+chunk length. A common interface can dispatch to distinct typed operation families
+without replacing every family with one attribute-heavy op.
 
 ---
 
 ## 2. Facet A — the transition-structure lattice
 
 Model the per-step state update as a typed **transition** with a structure tag.
-The tag is an IR attribute; the chunkwise-scan lowering (§6) is a *function of
-the tag*. The lattice, from cheapest to most general:
+The proposed tag describes transition structure; lowering additionally needs
+shape, numerical and ownership contracts. The table is a family taxonomy,
+not a proved lattice or a hardware cost ordering:
 
 | Tag | Per-step state update | Model instance | Chunk cost |
 |-----|----------------------|----------------|-----------|
 | `identity` | `S_t = S_{t-1} + k_t v_tᵀ` | linear attention | cumsum |
-| `scalar_diagonal` | `S_t = α_t S_{t-1} + k_t v_tᵀ`, `α_t∈ℝ` | GLA / RetNet | +scalar decay |
+| `scalar_diagonal` | `S_t = α_t S_{t-1} + k_t v_tᵀ`, `α_t∈ℝ` | scalar-decay attention / Mamba-2 SSD core | +scalar decay |
 | `channel_diagonal` | `S_t = Diag(α_t) S_{t-1} + k_t v_tᵀ`, `α_t∈ℝ^{d_k}` | **KDA gate** | fold-into-K |
 | `identity_minus_rank1` | `S_t = (I − β_t k_t k_tᵀ) S_{t-1} + β_t k_t v_tᵀ` | DeltaNet | UT solve |
 | `dplr_bound` | `S_t = (I − β_t k_t k_tᵀ) Diag(α_t) S_{t-1} + β_t k_t v_tᵀ` | **KDA (full)** | fold + UT solve |
-| `dplr_general` | `S_t = (Diag(a_t) + u_t w_tᵀ) S_{t-1} + b_t c_tᵀ` | Mamba-2 / SSD | full DPLR scan |
+| `dplr_general` | `S_t = (Diag(a_t) + u_t w_tᵀ) S_{t-1} + b_t c_tᵀ` | general DPLR; not Mamba-2 SSD | structure-dependent scan |
 | `conv(k)` | `y_t = Σ_{i<k} w_i x_{t-i}` (state = last `k−1`) | short causal conv | depthwise |
-| `none` | (no recurrent state; S×S softmax) | full / windowed attn | not reassociable |
+| `none` | (no finite-rank linear transition; carried KV history) | full / windowed attn | online softmax attention |
 
 **The KDA insight, stated structurally.** KDA's transition is
 `A_t = (I − β_t k_t k_tᵀ) Diag(α_t)` — a **Diagonal-Plus-Low-Rank** matrix whose
 low-rank factor is *bound to the key* `k_t`. A *general* DPLR (`dplr_general`)
-has independent low-rank factors and a heavier scan; `dplr_bound` exploits the
-binding to (a) halve the low-rank work and (b) stay algebraically identical to
-the classical delta rule (numerically stable, reuses the WY/UT machinery). This
-is a real cost-model fork the arbiter should see: **`dplr_bound` is a strictly
-cheaper, exact specialization of `dplr_general` recognizable by structural
-equality of the two low-rank factors** — a canonicalization, not a heuristic.
+has independent low-rank factors; `dplr_bound` exploits the binding to specialize
+the delta-rule algorithm and its WY/UT machinery. This does not by itself prove
+floating-point stability or an exact factor-of-two reduction in work. This
+is a cost-model distinction the arbiter should see. With `D = Diag(α)`,
+`(I − βkkᵀ)D = D + uwᵀ` has `u = −βk` and `w = Dk`: the factors are related,
+not generally equal. Recognition must prove that relation, update coefficients
+and multiplication order. No universal speed ordering follows from the tag.
+[Kimi Linear report](https://arxiv.org/abs/2510.26692).
+
+Mamba-2 SSD instead restricts its transition to scalar-times-identity and belongs
+with that specialization, not generic DPLR.
+[SSD authors' model explanation](https://goombalab.github.io/blog/2024/mamba2-part1-model/).
 
 **Why channel-diagonal is the load-bearing generalization.** Scalar decay
 (`α_t∈ℝ`) lets the chunkwise form factor the pairwise decay as a scalar
@@ -122,22 +129,22 @@ the operands**: with cumulative channel decay `Γ_t = Π_{i≤t} α_i`,
 k̂_t = k_t ⊙ Γ_t ,   k̃_j = k_j ⊘ Γ_j   ⇒   k̂_tᵀ k̃_j = k_tᵀ Diag(Γ_t/Γ_j) k_j
 ```
 
-so a **single pre-pass reweighting of K by `Γ` and `1/Γ`** turns the
-channel-diagonal / `dplr_bound` chunk form back into "all GEMM + one triangular
-solve." That pre-pass is a nameable compiler legalization
-(`AbsorbChannelDecayIntoKeys`, §6), shared by KDA, GLA and Mamba. Its cost is
-numerical: `1/Γ` grows as decay → 0, which **bounds chunk size and mandates
-fp32 accumulation** (Facet D) — a compiler-enforceable precondition, not a
-kernel footnote.
+This exact-arithmetic identity requires nonzero cumulative decay and does not
+alone derive the full erase/write recurrence. Zero gates invalidate division;
+underflow, overflow and conditioning can invalidate a floating implementation
+even with fp32 accumulation. A proposed `AbsorbChannelDecayIntoKeys` legalization
+needs domain, finite-intermediate and error-budget checks, reset handling and
+chunk-local scaling. Retain a safe recurrence when these cannot be proved. The
+pass name is a proposal, not a registered executable pass.
 
 ---
 
 ## 3. Facet B — carried-state types and the N-way cache
 
 Each mixer carries a distinct state object. The compiler's memory planner must
-allocate the right type per layer **and normalize heterogeneous types onto one
-physical block class** (the vLLM lesson: size the logical KV block so linear and
-full layers share a physical footprint, avoiding fragmentation).
+allocate the right type per layer. Shared size classes are an allocator policy
+subject to alignment, lifetime, capacity and fragmentation measurements; one
+uniform physical block is not a mathematical requirement.
 
 | State type | Shape | Growth | Tessera handle today |
 |------------|-------|--------|----------------------|
@@ -165,32 +172,29 @@ Two consequences:
 
 ## 4. Facet C — the reassociation normal form
 
-The root legality under every linear mixer is a **matmul-chain reassociation**:
+For dense, unmasked linear attention in exact arithmetic:
 
 ```
-(Q Kᵀ) V   →   Q (Kᵀ V)          [legal iff no softmax between QKᵀ and V]
+(Q Kᵀ) V   =   Q (Kᵀ V)          [dense, unmasked, exact arithmetic]
    S×S matrix         d×d state
 ```
 
-Computing `KᵀV` first produces a fixed `d_v×d_k` state; the sequence dimension
-never materializes as a pairwise matrix. **Every mixer with a recurrent state
-(Facet A ≠ `none`) is an instance of this reassociation**, distinguished only by
-the transition structure inserted between the running `KᵀV` accumulation and the
-`Q` read. This gives the compiler one canonical form:
+Computing `KᵀV` first produces a fixed `d_k×d_v` state. Causal attention needs
+prefix state rather than the final all-token state. Masks, bias, dropout,
+normalization and data-dependent erase/write transitions need separate proofs;
+convolution is not simply this reassociation. A proposed common interface is:
 
 * `tessera.linear_recurrence` is the **normal form** that a reassociation
   rewrite lowers `softmax-free-attention → running-state recurrence` into. GLA,
   DeltaNet, KDA, Mamba all become this op + a transition tag.
-* Mixers with Facet A = `none` (full / windowed / MLA) are the
-  **non-reassociable branch** — they *do* form an (S×S) or (S×W) score matrix
-  and lower through the attention path (`FlashAttn` family, windowed variant).
+* Softmax attention follows its own online reduction algorithm. FlashAttention
+  need not materialize a global score matrix to preserve softmax semantics.
 
-The legality predicate is exactly "no nonlinearity (softmax) sits on the score
-matrix" — the same shape of reasoning as `EffectLattice`: a rewrite is legal
-because a specific structure is *absent*. **NoPE composes here**: because Kimi's
-linear layers carry no positional encoding, the *global* anchor layers can be
-legally collapsed to MQA at inference — an "absence-of-effect unlocks a rewrite"
-pattern worth modeling positional encoding as a tracked effect to make sound.
+Absence of softmax is insufficient for general reassociation, and floating
+reassociation needs numerical permission. NoPE does not make arbitrary MHA/GQA
+weights equivalent to MQA: head sharing requires equality of the projections and
+readout, or an explicitly admitted approximation. Absence of positional encoding
+alone proves neither.
 
 ---
 
@@ -199,54 +203,51 @@ pattern worth modeling positional encoding as a tracked effect to make sound.
 Every mixer carries a `numeric_policy` (Decision #15a): **storage dtype on the
 operand, accumulator separate, plus mixer-specific constraints**:
 
-* **Accumulation.** Delta/DPLR state is numerically sensitive (erase +
-  rank-update); fp32 accumulation over bf16 storage is mandatory regardless of
-  the storage dtype. The `AbsorbChannelDecayIntoKeys` pre-pass (§2) makes this a
-  *precondition*, not advice: `1/Γ` conditioning bounds chunk size.
-* **Low-precision as operand-type metadata.** Inkling forces
-  MXFP8 / NVFP4 from "planned_gated" (Decision #15a) to a required path. The
-  correct model — consistent with the DeepGEMM extraction ("scale layout as an
-  IR operand type") — is:
-  * **NVFP4** = FP4 (E2M1) values + per-16 **UE4M3** (unsigned E4M3, bias 7)
-    block scale (+ optional per-tensor FP32). **MXFP4** uses an **E8M0**
-    (power-of-two) block scale instead; **MXFP8** = FP8 + per-32 E8M0. The block
-    scale is *operand-type metadata carried in the IR*, not a side tensor — and
-    its physical layout is load-bearing: on consumer Blackwell the interleaved
-    UE4M3 scale layout (CuTe atom `((32,4),(16,4))`) must be exact or ~10% of
-    outputs corrupt. This is the concrete case for "scale layout as an IR operand
-    type" (the DeepGEMM extraction), not a hand-fudged side buffer.
-  * **W4A4 vs W4A16** is an accuracy/VRAM tradeoff the **measured,
-    accuracy-budgeted arbiter** (Decision #28) selects per
-    `(op, shape-bucket, dtype, target)` — Inkling ships both checkpoints because
-    it *is* a budget decision. W4A4 requires SM100+ (Blackwell `tcgen05` FP4
-    MMA); on the fleet, the sm_120 box exercises the FP4 path.
+* **Accumulation.** Delta/DPLR state is numerically sensitive. FP32 accumulation
+  can be a minimum implementation envelope but does not prove stability or finite
+  inverse decay. Require a recurrence-specific domain and error budget, including
+  long-horizon drift, near-zero gates and nonnormal transient amplification.
+* **Quantized state.** Scale values are runtime data; format, block size,
+  packing and addressing are typed layout contracts. Scales may be explicit
+  operands or part of a packed representation. Metadata cannot replace their
+  storage, ownership and propagation.
+* **Target admission.** Consult canonical dtype capabilities and backend queues
+  for exact formats/instructions: SM100 and SM120 do not inherit each other's
+  instruction or schedule proof. Model checkpoint storage does not establish
+  a KV-cache format or a native quantized recurrence.
+* **Promotion.** Measure storage, accumulation and state error together for the
+  actual target and shape. The arbiter compares admissible implementations of
+  the same semantics; changing head sharing or quantization policy requires a
+  separate equality or approximation proof.
 
-Low-precision is **orthogonal to the mixer math** — it plugs into Facet D and
-the arbiter, and can be built as a parallel track (see plan W6).
+Precision work can proceed as a separate track, but its numerical constraints
+couple to chunk size, recurrence conditioning and state representation.
 
 ---
 
 ## 6. The two lowerings and symbolic-dim policy
 
-One mixer op carries **two algebraically-equivalent lowerings**, selected by the
-sequence-length bucket (Decision #28's `static | bucket | dynamic` policy):
+Each eligible family can expose recurrence and chunked candidates once their
+equivalence is proved. For delta-rule families, the candidate forms include:
 
-* **Sequential recurrence** — `O(S·d²)`, decode / `S=1` bucket, state reused.
+* **Sequential recurrence** — state-update work per token, decode / `S=1`
+  bucket, state reused (often `O(S·d_k·d_v)` for the rank-one update).
   (Tessera: `gated_delta_rule_recurrent`, `_ssm_scan`, `DeltaNetStateHandle`.)
 * **Chunk-parallel scan (WY/UT transform)** — prefill / large-S bucket. Rank-1
   sequential updates compress into a block-dense form: **everything is GEMM
   except one within-chunk unit-lower-triangular solve** `(I + Ã)⁻¹`. (Tessera:
   `gated_delta_rule_chunked` + `_forward_substitution`.)
 
-The **chunkwise scan is a single shared Tile-IR lowering parameterized by the
-Facet-A tag** — not one per mixer. The tag changes only the pre-fold
-(`AbsorbChannelDecayIntoKeys` for diagonal decay; the `k k̂ᵀ` erase for delta);
-the scan body — chunk the sequence, build `Ã`/`W̃`, triangular-solve, carry
-state — is common to DeltaNet, KDA, GLA, and Mamba-2. The triangular solve is
-"the triangular-solve tile primitive" a real kernel specializes.
+Shared compiler infrastructure includes loops, contractions, reductions and
+verified state ownership. Delta-rule families can share justified WY/triangular
+machinery; scalar SSD needs its own derivation. Do not force a triangular solve
+into every mixer or assume that a common interface implies a common physical
+schedule. Specialize only after semantic and numerical legality, then measure
+on the owning target.
 
-Decode and prefill are thus **two lowerings of one op**, and the arbiter picks
-by bucket — decode is the `S=1` specialization, prefill the large-S one.
+The arbiter selects eligible candidates by bucket after checking the complete
+state and numerical contract; decode is an `S=1` specialization and prefill is
+the larger-span workload, not a guarantee of one universal lowering pair.
 Symbolic-dim awareness is from day one: `S` is `bucket`-policy, window `W` and
 chunk `C` are static/tuning params.
 
@@ -254,8 +255,9 @@ chunk `C` are static/tuning params.
 
 ## 7. Correctness discipline — host-free oracles
 
-Everything is provable without hardware (Tessera's oracle discipline). The
-mixer abstraction comes with a fixed set of equivalence oracles:
+Host-free oracles establish bounded mathematical/reference claims. Native
+execution, race freedom and performance additionally require artifact and
+exact-device evidence. The mixer abstraction needs these equivalence oracles:
 
 | Oracle | Claim | Guards |
 |--------|-------|--------|
@@ -357,3 +359,24 @@ The abstraction turns a dozen would-be bespoke ops into **one op × four facet
 knobs**, and turns "add KDA / add Inkling-style hybrids" into "register a
 transition tag / a cheap-mixer tag" — each a small, oracle-gated increment.
 The engineering plan sequences that build.
+
+## 10. Current compiler ownership (2026-09-08)
+
+This reference owns algebra and acceptance contracts, not readiness or priority.
+Earlier model timings and inventory tables are dated design context. The
+[integrated plan](INTEGRATED_COMPILER_PLAN.md) owns sequencing.
+
+| Boundary | Reusable foundation | Remaining mixer obligation |
+| --- | --- | --- |
+| Source effects — W4-PRODUCT-1 | Explicit source-state SSA, bounded completion and builtin error results, opt-in CPU JIT | Typed cache fields/views, positions and reset semantics; arbitrary objects remain unsupported |
+| Lifetime — W2.4a | Scoped generations and bounded checked status fan-in | Register every reader/writer, including failed steps, before reuse |
+| Native binding — F2 | Artifact projection and device next-state results | First-class tiled SSD/mixer producer, state ABI and backend consumers |
+| Optimization — F3 / MSW-9 | Recipe identity and measured admission contracts | Prove the recurrence, masks and initial state, then measure candidates |
+| Numerical legality — FA-4 | Scoped recurrence-stability obligation in the engineering plan | Certificates consumed by chunking/lowering, not detached declarations |
+
+For an effectful step, specify `(values, next_state, completion)` and ownership
+separately. CPU error transport preserves preceding declared writes. A device
+next-state generation is not automatic in-place mutation. Define whether a failed
+token commits state and how completion gates the next token before claiming
+streaming/prefill equivalence. Test nonzero initial state, resets, uneven chunks,
+zero gates, overlapping views, failure after writes and pending readers at reuse.

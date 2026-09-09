@@ -1,0 +1,30 @@
+{
+  "execution_kind": "native_cpu",
+  "host": "Princess-Luna WSL",
+  "sources": {
+    "python/tessera/compiler/native_source_state.py": "e1a28cccd1056288a7893ad69557d212d3cca0f994c9cc84bbdae7f4992dadca",
+    "python/tessera/compiler/source_control_flow.py": "96fa8591a9bb843c5afb6b07e64f417fa71f794acc36eeb3935f63343e8f085d",
+    "python/tessera/compiler/trace.py": "36a175303a073fe49339f8950f2f8c1754c5b35b8e1bdc3cfc36160dad7ee958",
+    "python/tessera/compiler/jit.py": "39e0813e6dc4796ae88fb39ac85d0e2dc040870ecdd655dbc645ce6eede3b8ad",
+    "tests/unit/test_source_error_transport.py": "fd064519039763af6eb92e11e0f999202670b3ebc413d4c42acc45e775c8b7a0",
+    "tests/unit/test_native_source_state.py": "5fe8ee5e9b336ce464906bbe1539934209033bae267554fd90190634a7967c36"
+  },
+  "focused_suites": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "292",
+      "time": "4.387",
+      "timestamp": "2026-09-08T21:30:59.971396-05:00",
+      "hostname": "Princess-Luna"
+    }
+  ],
+  "full_suite_summary": "18577 passed, 2231 skipped, 870 deselected, 10 warnings in 643.05s (0:10:43)",
+  "full_suite_precedes_final_gpu_admission_guard": true,
+  "final_gpu_admission_guard": "single declared state input; two added rejection tests and device pilot rerun",
+  "jit_sha256": "51384992825e69303cb98c3959c3e2118deab39d7488871278f1aa9ee39b929a",
+  "compiler_sha256": "92ab2facaa2a022c6371a63c5d958f1acf8e93fc1cbe1feee9e9d4ee9580324a",
+  "promotion_eligible": false
+}

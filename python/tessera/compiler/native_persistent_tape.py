@@ -59,7 +59,27 @@ def _input_status(package):
     return True
 
 
-def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, checked_status=False, gated_input=False):
+def _status_specs(count):
+    return tuple(TensorSpec('dependency_status' if i == 0 else f'dependency_status_{i}',
+                            'int64', (1,), False) for i in range(count))
+
+
+def _input_status_count(package):
+    import re
+    if not _input_status(package):
+        if 'tessera.autodiff.input_status_count' in package.arena_ir:
+            raise ValueError('status count requires an incoming status contract')
+        return 0
+    match = re.search(r'tessera\.autodiff\.input_status_count\s*=\s*(\d+)\s*:\s*i64', package.arena_ir)
+    if 'tessera.autodiff.input_status_count' in package.arena_ir and match is None:
+        raise ValueError('malformed incoming status count')
+    count = int(match[1]) if match else 1
+    if not 1 <= count <= 8:
+        raise ValueError('unsupported incoming status count')
+    return count
+
+
+def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, checked_status=False, gated_input=False, status_inputs=1):
     """Generate, bufferize and materialize both products from one fresh request."""
     compiler,llvm_bin=Path(compiler),Path(llvm_bin)
     if backend not in ('nvidia','rocm'):
@@ -68,6 +88,8 @@ def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, ch
         raise ValueError('gated input requires checked status')
     if type(checked_status) is not bool:
         raise ValueError('checked status selection must be boolean')
+    if type(status_inputs) is not int or not 1 <= status_inputs <= 8 or (not gated_input and status_inputs != 1):
+        raise ValueError("status_inputs requires one through eight compiler-gated statuses")
     packages=[]
     contracts=[]
     lineages=[]
@@ -83,10 +105,10 @@ def materialize_persistent_tape(source, *, compiler, llvm_bin, backend, chip, ch
             '--one-shot-bufferize=bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map allow-return-allocs-from-loops',
             '--buffer-results-to-out-params=modify-public-functions hoist-static-allocs',
             '--convert-linalg-to-loops','--canonicalize',source=native)
-        gpu=_run(compiler,'--allow-unregistered-dialect','--tessera-native-tape-to-gpu=backend='+backend+(' status-buffer=true' if checked_status else '')+(' input-status=true' if gated_input and role=='backward' else ''),source=buffered)
+        gpu=_run(compiler,'--allow-unregistered-dialect','--tessera-native-tape-to-gpu=backend='+backend+(' status-buffer=true' if checked_status else '')+(f' input-status=true input-status-count={status_inputs}' if gated_input and role=='backward' else ''),source=buffered)
         inputs=len(contract['inputs'])
         specs=tuple(TensorSpec(f'arg{i}',_dtype(t),shape,i>=inputs)
-                    for i,(t,shape) in enumerate(zip(contract['inputs']+contract['results'],shapes,strict=True)))+((TensorSpec('dependency_status','int64',(1,),False),) if gated_input and role=='backward' else ())+((TensorSpec('status','int64',(1,),True),) if checked_status else ())+(IndexSpec('scratch',1,1),)
+                    for i,(t,shape) in enumerate(zip(contract['inputs']+contract['results'],shapes,strict=True)))+_status_specs(status_inputs if gated_input and role=='backward' else 0)+((TensorSpec('status','int64',(1,),True),) if checked_status else ())+(IndexSpec('scratch',1,1),)
         first,rest=gpu.split('\n',1)
         prefix='module attributes {'
         if not first.startswith(prefix) or not first.endswith('} {'):
@@ -124,7 +146,7 @@ class PersistentTapePair:
             manifest=read_tensor_contract(package)
             inputs=len(c['inputs'])
             expected=tuple(TensorSpec(f'arg{i}',_dtype(t),_shape(t),i>=inputs)
-                           for i,t in enumerate(c['inputs']+c['results']))+((TensorSpec('dependency_status','int64',(1,),False),) if _input_status(package) else ())+((TensorSpec('status','int64',(1,),True),) if _checked_status(package) else ())+(IndexSpec('scratch',1,1),)
+                           for i,t in enumerate(c['inputs']+c['results']))+_status_specs(_input_status_count(package))+((TensorSpec('status','int64',(1,),True),) if _checked_status(package) else ())+(IndexSpec('scratch',1,1),)
             if (tensor_contract_specs(manifest)!=expected or manifest['grid']!=[1,1,1]
                     or manifest['block']!=[1,1,1]):
                 raise ValueError('persistent tape tensor binding disagrees with native product ABI')
@@ -141,6 +163,9 @@ class PersistentTapePair:
     def capture(self,*inputs,scoped=False,stream=None):
         return PersistentTapeFrame(self,inputs,scoped=scoped,stream=stream)
 
+    def capture_async(self, stream, *inputs):
+        return PersistentTapeFrame(self, inputs, scoped=True, stream=stream, asynchronous=True)
+
 
 class _ReadOnly:
     def __init__(self,buffer):
@@ -154,9 +179,13 @@ class _ReadOnly:
 
 
 class PersistentTapeFrame:
-    def __init__(self,pair,inputs,*,scoped=False,stream=None):
+    def __init__(self,pair,inputs,*,scoped=False,stream=None,asynchronous=False):
         if type(scoped) is not bool or (scoped and (type(stream) is not int or not 0<stream<(1<<64))) or (not scoped and stream is not None):
             raise ValueError('scoped frame capture requires a non-null stream')
+        if asynchronous and (not scoped or (_checked_status(pair.forward) and not _input_status(pair.backward))):
+            raise ValueError('asynchronous checked capture requires a gated backward product')
+        self._asynchronous_capture = asynchronous
+        self._capture_checked = not asynchronous
         self._scoped,self._capture_stream=scoped,stream
         self._retiring=False
         self._frame_owner=None
@@ -172,7 +201,7 @@ class PersistentTapeFrame:
         self._checked_status=_checked_status(pair.forward)
         self._bindings=[]
         for package,contract in zip((pair.forward,pair.backward),(f,b),strict=True):
-            names=[f'arg{i}' for i in range(len(contract['inputs'])+len(contract['results']))]+(['dependency_status'] if _input_status(package) else [])+(['status'] if self._checked_status else [])+['scratch']
+            names=[f'arg{i}' for i in range(len(contract['inputs'])+len(contract['results']))]+[spec.name for spec in _status_specs(_input_status_count(package))]+(['status'] if self._checked_status else [])+['scratch']
             signature=inspect.Signature([inspect.Parameter(n,inspect.Parameter.POSITIONAL_ONLY) for n in names])
             self._bindings.append(generate_tensor_binding(package,signature))
         self._bindings[0]._bound=pair.forward.bind()
@@ -200,25 +229,48 @@ class PersistentTapeFrame:
             self._status: tuple[_Buffer,...]=(_Buffer(self,(1,),'int64'),) if self._checked_status else ()
             self._inputs=tuple(_Buffer(self,_shape(t),_dtype(t)) for t in f['inputs'])
             self._outputs=tuple(_Buffer(self,_shape(t),_dtype(t)) for t in f['results'])
-            if scoped:
-                self.check(self.sync())
-            self._bindings[0]._resident(*inputs,*self._outputs,*self._status,1)
-            self.check(self.sync())
-            for source,target in zip(inputs,self._inputs,strict=True):
-                self.check(self.copy(target.pointer,P(source.__cuda_array_interface__['data'][0]),target.nbytes))
-            self._bindings[0](*self._inputs,*self._outputs,*self._status,1)
-            self._check_status()
-            self._dependency_status: tuple[_Buffer,...]=()
-            if _input_status(pair.backward):
-                self._dependency_status=(_Buffer(self,(1,),'int64'),)
+            if asynchronous:
+                from .native_reader_retirement import _record
+                self._bindings[0]._resident(*inputs,*self._outputs,*self._status,1)
+                copy_async = bind('cuMemcpyDtoDAsync_v2','hipMemcpyDtoDAsync',[P,P,S,P])
+                # Preserve producer ordering and retain source owners until all
+                # copies and the forward product have completed on this stream.
+                for source,target in zip(inputs,self._inputs,strict=True):
+                    producer = source.__cuda_array_interface__.get('stream')
+                    lease_stream = getattr(source, '_tessera_reader_stream', stream)
+                    if lease_stream != stream:
+                        raise ValueError('capture must use the declared reader stream')
+                    if producer is not None and producer != stream:
+                        if type(producer) is not int or not 0 < producer < (1 << 64):
+                            raise ValueError('invalid capture producer stream')
+                        _record(native,producer,(source,),[]).wait_on(stream)
+                    self.check(copy_async(target.pointer,P(source.__cuda_array_interface__['data'][0]),target.nbytes,P(stream)))
+                self._bindings[0].submit(stream,*self._inputs,*self._outputs,*self._status,1)
+                count = _input_status_count(pair.backward)
+                self._dependency_status = self._status + tuple(_Buffer(self,(1,),'int64') for _ in range(count-1)) if count else ()
+                for destination in self._dependency_status[1:]:
+                    self.check(copy_async(destination.pointer,next(iter(self._status)).pointer,8,P(stream)))
+            else:
                 if scoped:
                     self.check(self.sync())
-                self.check(self.copy(self._dependency_status[0].pointer,next(iter(self._status)).pointer,8))
+                self._bindings[0]._resident(*inputs,*self._outputs,*self._status,1)
+                self.check(self.sync())
+                for source,target in zip(inputs,self._inputs,strict=True):
+                    self.check(self.copy(target.pointer,P(source.__cuda_array_interface__['data'][0]),target.nbytes))
+                self._bindings[0](*self._inputs,*self._outputs,*self._status,1)
+                self._check_status()
+                self._dependency_status=()
+                if _input_status(pair.backward):
+                    self._dependency_status=tuple(_Buffer(self,(1,),'int64') for _ in range(_input_status_count(pair.backward)))
+                    if scoped:
+                        self.check(self.sync())
+                    for destination in self._dependency_status:
+                        self.check(self.copy(destination.pointer,next(iter(self._status)).pointer,8))
             self._primal_count=f['primal_results']
             if scoped:
                 from types import SimpleNamespace
                 from .native_reader_retirement import TrackedDerivativeGeneration, _record
-                capture=_record(native,stream,(self,),[])
+                capture=_record(native,stream,(self,*inputs),[])
                 self._frame_owner=TrackedDerivativeGeneration(self,SimpleNamespace(ticket=capture),tuple(self.buffers),native)
                 self._frame_owner._reader_buffers=self._outputs
             else:
@@ -299,15 +351,31 @@ class PersistentTapeFrame:
                 self.free_async=getattr(self._driver,'cuMemFreeAsync' if cuda else 'hipFreeAsync')
                 self.alloc_async.argtypes,self.alloc_async.restype=[ct.POINTER(ct.c_void_p),ct.c_size_t,ct.c_void_p],ct.c_int
                 self.free_async.argtypes,self.free_async.restype=[ct.c_void_p,ct.c_void_p],ct.c_int
+            if getattr(self, '_asynchronous_capture', False):
+                assert self._frame_owner is not None
+                self._frame_owner._submission.ticket.wait_on(stream)
             dependency = self._dependency_status
             if _dependency is not None:
                 from .native_reader_retirement import CheckedTrackedDerivativeGeneration
-                if not isinstance(_dependency, (CheckedDerivativeSubmission, CheckedTrackedDerivativeGeneration)) or not _input_status(self.pair.backward):
-                    raise ValueError('device reader requires a compiler-gated checked product')
-                if _dependency._released:
-                    raise ValueError('upstream derivative generation is released')
-                dependency=(_dependency._status_buffer,)
-                _dependency.submission.ticket.wait_on(stream)
+                parents = _dependency if isinstance(_dependency, tuple) else (_dependency,)
+                count = _input_status_count(self.pair.backward)
+                if not parents or len({id(p) for p in parents}) != len(parents):
+                    raise ValueError('status dependencies must be nonempty and distinct')
+                if any(not isinstance(parent, (CheckedDerivativeSubmission, CheckedTrackedDerivativeGeneration)) for parent in parents) or not count:
+                    raise ValueError('device reader requires compiler-gated checked products')
+                if len(parents) > max(1, count-1):
+                    raise ValueError('incoming status count cannot cover every dependency')
+                if count == 1 and getattr(self, '_asynchronous_capture', False) and not self._capture_checked:
+                    raise ValueError('composed asynchronous capture requires successful poll_capture before replacing its status dependency')
+                for parent in parents:
+                    if parent._released:
+                        raise ValueError('upstream derivative generation is released')
+                    parent.submission.ticket.wait_on(stream)
+                if count == 1:
+                    dependency=(parents[0]._status_buffer,)
+                else:
+                    dependency=(self._dependency_status[0], *(parent._status_buffer for parent in parents),
+                                *self._dependency_status[1+len(parents):])
             start=len(self.buffers)
             try:
                 outputs=tuple(_Buffer(self,v.shape,v.dtype,stream=stream if tracked else None) for v in self._inputs)
@@ -357,7 +425,22 @@ class PersistentTapeFrame:
             self._ready()
             if not self._scoped or self._frame_owner is None:
                 raise ValueError('scoped capture is required for frame reader tracking')
+            if not self._capture_checked:
+                raise ValueError('captured readers require successful poll_capture first')
             return self._frame_owner.read(stream)
+
+    def poll_capture(self):
+        """Check capture completion/status before exposing generic readers."""
+        with self._lock:
+            self._ready()
+            if self._capture_checked:
+                return True
+            assert self._frame_owner is not None
+            if not self._frame_owner._submission.ticket.poll():
+                return False
+            self._check_status()
+            self._capture_checked = True
+            return True
 
     def retire(self, stream):
         """Enqueue complete scoped-frame storage retirement after all readers."""
@@ -396,7 +479,7 @@ class PersistentTapeFrame:
                     return False
             if not self._frame_owner.poll():
                 return False
-            if not all(binding.close_if_complete() for binding in self._bindings):
+            if not all(binding.close_if_complete(**({"defer_unload": True} if getattr(self, "_asynchronous_capture", False) else {})) for binding in self._bindings):
                 return False
             self.closed=True
             return True

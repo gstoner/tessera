@@ -153,3 +153,49 @@ def test_hung_health_probe_is_bounded_and_worker_reclaimed():
         IsolatedNativeANN(Pair(health_stall=True), input_bound=1,
                           absolute_budget=.1, timeout_seconds=3)
     assert _UNCERTAIN_WORKERS == before
+
+
+def test_invalid_inputs_do_not_poison_healthy_worker():
+    with IsolatedNativeANN(Pair(), input_bound=1, absolute_budget=.1) as runner:
+        pid = runner._process.pid
+        for value in (np.zeros((2, 3), np.float32), np.full((3, 2), np.nan, np.float32),
+                      np.full((3, 2), np.inf, np.float32), np.full((3, 2), 2, np.float32)):
+            with pytest.raises(ValueError, match='shape or domain'):
+                runner.submit(value)
+            assert not runner.failed and runner._pending is None and runner._next == 0
+        np.testing.assert_array_equal(runner.run(np.ones((3, 2), np.float32)), 2)
+        assert runner._process.pid == pid
+
+
+@pytest.mark.parametrize('raise_in_body', [False, True])
+def test_context_exit_reclaims_pending_worker(raise_in_body):
+    error = LookupError('caller failure')
+    runner = IsolatedNativeANN(Pair(stall=True), input_bound=1, absolute_budget=.1)
+    try:
+        with runner:
+            runner.submit(np.ones((3, 2), np.float32))
+            if raise_in_body:
+                raise error
+    except LookupError as caught:
+        assert raise_in_body and caught is error
+    assert runner.closed and runner._process.exitcode is not None
+    assert runner._pending is None and runner not in _UNCERTAIN_WORKERS
+
+
+def test_context_exit_preserves_body_error_when_recovery_is_uncertain(monkeypatch):
+    runner = IsolatedNativeANN(Pair(stall=True), input_bound=1, absolute_budget=.1)
+    recover = runner.recover
+    error = LookupError('original caller error')
+    def fail_recovery():
+        raise OSError('unconfirmed process death')
+    monkeypatch.setattr(runner, 'recover', fail_recovery)
+    try:
+        with pytest.raises(LookupError) as caught:
+            with runner:
+                runner.submit(np.ones((3, 2), np.float32))
+                raise error
+        assert caught.value is error
+        assert runner in _UNCERTAIN_WORKERS
+        assert 'cleanup incomplete' in error.__notes__[0]
+    finally:
+        recover()

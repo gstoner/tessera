@@ -317,3 +317,21 @@ def test_multistream_validation_precedes_acquisition(streams):
         with owner.read_many(*streams):
             pass
     assert not native.calls and not owner._active
+
+
+def test_missing_reader_event_allows_retirement_after_explicit_wait():
+    owner, native = setup()
+    native.record_failure = True
+    with pytest.raises(RuntimeError):
+        with owner.read(21):
+            pass
+    native.record_failure = False
+    with pytest.raises(RuntimeError, match='completion is unproven'):
+        owner.retire(23)
+    assert not owner.retiring and not owner._retirements
+    assert not any(call[0] == 'free' for call in native.calls)
+    assert not owner.wait()
+    owner.retire(23)
+    assert owner.poll()
+    assert sum(call[0] == 'free' for call in native.calls) == 2
+    assert not owner.frame.buffers

@@ -8411,3 +8411,5 @@ Owner: W2.4a. Sync: `HEALTH-READERS-2026-09-10`.
 Shared no-implicit-wait contract reviewed; Metal process isolation and health admission remain follow-up. No Apple device proof in this increment.
 
 Fresh ANN workers execute numerical probes before admission. External readers may borrow on multiple declared streams; eventless dependency insertion refuses implicit host synchronization. Unkillable processes, driver reset/recovery and arbitrary external pointer lifetimes remain open. Evidence: `benchmarks/baselines/health_reader_admission_20260910/`.
+
+PR #740 review follow-up (`HEALTH-READERS-2026-09-10`): eventless retirement remains retryable; parent ANN input checks preserve healthy workers; pending context exit retains or reclaims ownership without masking caller errors. Shared host lifecycle fixes; existing exact-device evidence remains scoped to its recorded revision.

@@ -159,11 +159,14 @@ class TrackedDerivativeGeneration:
                 raise ValueError("persistent retirement requires all reader scopes to close")
             if self.retiring:
                 raise ValueError("persistent generation retirement already requested")
+            # Dependencies may lack completion events after a record failure.
+            # No free has been attempted yet: keep retirement retryable after
+            # the caller establishes completion with an explicit wait.
+            self._submission.ticket.wait_on(stream)
+            for reader in self._readers:
+                reader.wait_on(stream)
             self.retiring = True
             try:
-                self._submission.ticket.wait_on(stream)
-                for reader in self._readers:
-                    reader.wait_on(stream)
                 for buffer in self._buffers:
                     try:
                         self.frame.check(self.frame.free_async(buffer.pointer, ct.c_void_p(stream)))

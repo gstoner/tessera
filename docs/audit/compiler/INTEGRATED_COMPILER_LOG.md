@@ -3210,3 +3210,17 @@ Remaining: These probes establish workload/device-zero readiness at admission, n
 Evidence: `benchmarks/baselines/health_reader_admission_20260910/` records independent SM120/gfx1151 health/replacement and two-stream native copy consumers across four tape generations. Host tests cover numerical rejection, a hung probe, partial reader failures and retained ownership.
 
 <!-- entry-fields:end -->
+
+### 2026-09-10 — Recovery retry and caller-error boundaries
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: #740 review follow-up.
+
+Outcome: Missing dependency events refuse before retirement commits state, preserving retry after explicit completion. Invalid ANN shape/domain inputs refuse in the parent without poisoning a healthy worker. Leaving a scope with pending work poisons and tears down the worker; uncertain cleanup retains ownership and preserves the caller's original exception.
+
+Remaining: Actual wedged-driver recovery and unrestricted external-reader lifetimes remain open; these fixes establish host lifecycle behavior.
+
+Evidence: focused reader-retirement and isolated-ANN regressions cover retry after a missing event, repeated invalid inputs followed by successful execution, pending context exit and failed cleanup with exception preservation.
+
+<!-- entry-fields:end -->

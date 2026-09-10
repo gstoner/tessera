@@ -161,8 +161,12 @@ class IsolatedNativeANN:
             value = np.array(value, copy=True, order='C')
             # Shape/domain checks also execute in the owning worker. Bound IPC
             # to the supported ANN envelope; no arbitrary pointer transport.
-            if value.dtype != np.float32 or value.ndim != 2 or value.size > 512:
-                raise ValueError('isolated ANN requires bounded rank-two fp32 input')
+            from .native_ann import _affine
+            shape = _affine(self.pair.logical.original)[1]
+            if (value.dtype != np.float32 or value.ndim != 2 or value.size > 512
+                    or value.shape != shape or not np.isfinite(value).all()
+                    or np.any(np.abs(value.astype(np.float64)) > self.input_bound)):
+                raise ValueError('isolated ANN input violates the admitted shape or domain')
             self._next += 1
             self._pending = (self._next, time.monotonic() + self.timeout)
             try:
@@ -277,8 +281,19 @@ class IsolatedNativeANN:
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
-        if self.failed:
-            self.recover()
-        else:
-            self.close()
+    def __exit__(self, exc_type, exc, traceback):
+        try:
+            with self._lock:
+                if self._pending is not None:
+                    self._poison()
+                if self.failed:
+                    self.recover()
+                else:
+                    self.close()
+        except BaseException as cleanup_error:
+            # Unconfirmed cleanup remains quarantined, without replacing the
+            # exception that caused the caller to leave its ownership scope.
+            if exc is None:
+                raise
+            exc.add_note(f'isolated ANN cleanup incomplete: {cleanup_error}')
+        return False

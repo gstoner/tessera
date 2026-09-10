@@ -7094,3 +7094,31 @@ Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2
 Native 16x8 ANN numerical validation and independent repeated package measurements run on RTX 5070 SM120. Nine independent runs retain the incumbent: median speedup 0.999666x and lower bound 0.977299x fail the 1.02 margin; no global route is promoted. Device-clock attribution and broader workloads remain open.
 Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
 Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Arena readers, BF16 migration and isolated ANN (2026-09-10)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6/F`, `MSW-9`, `TPROF-NATIVE-1`.
+Sync: `OWNERSHIP-CENSUS-PROFILE-2026-09-10`.
+Native isolated ANN execution and stopped-worker teardown/replacement pass on SM120. Nsight Systems/Compute record 32x8 square ANN: kernel time is small relative to host costs and one-block occupancy is low. This is not driver-hang recovery or promotion proof.
+Shared contracts: exported arena leases pin storage and block mutation; partial collection reuses payload holes. Isolated ANN returns copied checked host results, retains uncertain workers and requires confirmed process death before replacement. General device heaps/readers and driver-fault recovery remain open.
+Evidence: `benchmarks/baselines/ownership_census_profile_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Asynchronous isolation teardown (2026-09-10)
+
+Owner: W2.4a. Sync: `ASYNC-ISOLATION-2026-09-10`.
+
+SM120 native execution and stopped-worker asynchronous teardown/replacement independently passed. This is process-fault evidence, not a wedged CUDA driver test.
+
+Shared recovery tickets retain owners on uncertain termination; ANN and declared isolated module owners can poll process teardown. General driver-hang recovery, device-health admission and broader external-reader integration remain follow-ups. Evidence: `benchmarks/baselines/async_isolation_20260910/`.
+
+### Health admission and external reader scopes (2026-09-10)
+
+Owner: W2.4a. Sync: `HEALTH-READERS-2026-09-10`.
+
+SM120 workload health probes, replacement admission and two native external copy streams passed independently. Actual wedged CUDA driver recovery remains unproven.
+
+Fresh ANN workers execute numerical probes before admission. External readers may borrow on multiple declared streams; eventless dependency insertion refuses implicit host synchronization. Unkillable processes, driver reset/recovery and arbitrary external pointer lifetimes remain open. Evidence: `benchmarks/baselines/health_reader_admission_20260910/`.
+
+PR #740 review follow-up (`HEALTH-READERS-2026-09-10`): eventless retirement remains retryable; parent ANN input checks preserve healthy workers; pending context exit retains or reclaims ownership without masking caller errors. Shared host lifecycle fixes; existing exact-device evidence remains scoped to its recorded revision.

@@ -8385,3 +8385,31 @@ Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2
 Native-device parity validated for static/dynamic GELU on M1 Max. fp16/bf16 attention backward with fp32 bias is numerically validated and timed through the package and direct native ABI. Timing is host complete-call, without device-clock coverage; broader MSL and promotion gates remain open.
 Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
 Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Arena readers, BF16 migration and isolated ANN (2026-09-10)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6/F`, `MSW-9`, `TPROF-NATIVE-1`.
+Sync: `OWNERSHIP-CENSUS-PROFILE-2026-09-10`.
+Follow-up required: shared host ABI lease and IPC contracts apply, but no isolated Metal worker or new Apple device proof is included.
+Shared contracts: exported arena leases pin storage and block mutation; partial collection reuses payload holes. Isolated ANN returns copied checked host results, retains uncertain workers and requires confirmed process death before replacement. General device heaps/readers and driver-fault recovery remain open.
+Evidence: `benchmarks/baselines/ownership_census_profile_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Asynchronous isolation teardown (2026-09-10)
+
+Owner: W2.4a. Sync: `ASYNC-ISOLATION-2026-09-10`.
+
+Shared host contract only; no Metal isolation worker or device validation in this increment.
+
+Shared recovery tickets retain owners on uncertain termination; ANN and declared isolated module owners can poll process teardown. General driver-hang recovery, device-health admission and broader external-reader integration remain follow-ups. Evidence: `benchmarks/baselines/async_isolation_20260910/`.
+
+### Health admission and external reader scopes (2026-09-10)
+
+Owner: W2.4a. Sync: `HEALTH-READERS-2026-09-10`.
+
+Shared no-implicit-wait contract reviewed; Metal process isolation and health admission remain follow-up. No Apple device proof in this increment.
+
+Fresh ANN workers execute numerical probes before admission. External readers may borrow on multiple declared streams; eventless dependency insertion refuses implicit host synchronization. Unkillable processes, driver reset/recovery and arbitrary external pointer lifetimes remain open. Evidence: `benchmarks/baselines/health_reader_admission_20260910/`.
+
+PR #740 review follow-up (`HEALTH-READERS-2026-09-10`): eventless retirement remains retryable; parent ANN input checks preserve healthy workers; pending context exit retains or reclaims ownership without masking caller errors. Shared host lifecycle fixes; existing exact-device evidence remains scoped to its recorded revision.

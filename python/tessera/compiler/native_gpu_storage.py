@@ -367,7 +367,7 @@ class NativeSubmission:
         with self._owner._lock:
             if not self.done and not self._completed:
                 if self._event is None:
-                    self.wait()
+                    raise RuntimeError("dependency completion is unproven; explicit wait or isolated recovery required")
                 else:
                     self._owner._check(self._owner._stream_wait(ct.c_void_p(stream), self._event, 0))
 

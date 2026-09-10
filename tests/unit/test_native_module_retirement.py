@@ -172,3 +172,33 @@ def test_synchronous_unknown_unload_never_retries_or_relaunches(synchronize):
         assert native._module_retirement in retirement._LIVE
         assert native._module_retirement.error is failure
     finally:retirement._LIVE.discard(native._module_retirement)
+
+
+def test_async_isolation_cleanup_waits_for_process_death():
+    from tessera.compiler.native_driver_isolation import DriverIsolationLease
+    entered, release = threading.Event(), threading.Event()
+    class Process:
+        code = None
+        def poll(self): return self.code
+        def terminate(self):
+            entered.set()
+            release.wait(5)
+            self.code = -15
+        def wait(self, timeout=None): return self.code
+    calls = []
+    owner = SimpleNamespace(_module=42,
+        _directory=SimpleNamespace(cleanup=lambda: calls.append('cleanup')),
+        _isolation_lease=DriverIsolationLease(Process(), context_identity='module-worker'))
+    ticket = retirement.ModuleRetirement.retain_failure(owner, RuntimeError('driver'), 'driver_unload')
+    recovery = ticket.recover_isolation_async()
+    try:
+        assert entered.wait(5)
+        assert not ticket.poll_isolation_recovery()
+        assert not calls and owner._module == 42
+    finally:
+        release.set()
+    assert recovery.done.wait(5)
+    assert ticket.poll_isolation_recovery()
+    assert ticket.poll_isolation_recovery()
+    assert calls == ['cleanup'] and owner._module == 0
+    assert ticket not in retirement._LIVE

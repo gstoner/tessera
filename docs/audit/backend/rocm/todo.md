@@ -7382,3 +7382,31 @@ Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2
 Native 16x8 ANN passes numerical validation on gfx1151. Nine independent package runs retain the incumbent: median speedup 0.997695x and lower bound 0.983878x do not clear the 1.02 margin. No RDNA4/CDNA, device-clock or hardware-counter proof transfers.
 Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
 Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Arena readers, BF16 migration and isolated ANN (2026-09-10)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6/F`, `MSW-9`, `TPROF-NATIVE-1`.
+Sync: `OWNERSHIP-CENSUS-PROFILE-2026-09-10`.
+Native isolated ANN execution and stopped-worker teardown/replacement pass on gfx1151. rocprofv3 records HIP API calls; missing kernel/copy trace rows prevent device-time and counter attribution on this WSL host. No RDNA4/CDNA proof transfers.
+Shared contracts: exported arena leases pin storage and block mutation; partial collection reuses payload holes. Isolated ANN returns copied checked host results, retains uncertain workers and requires confirmed process death before replacement. General device heaps/readers and driver-fault recovery remain open.
+Evidence: `benchmarks/baselines/ownership_census_profile_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Asynchronous isolation teardown (2026-09-10)
+
+Owner: W2.4a. Sync: `ASYNC-ISOLATION-2026-09-10`.
+
+gfx1151 native execution and stopped-worker asynchronous teardown/replacement independently passed. This supplies no hardware-counter or wedged HIP driver evidence.
+
+Shared recovery tickets retain owners on uncertain termination; ANN and declared isolated module owners can poll process teardown. General driver-hang recovery, device-health admission and broader external-reader integration remain follow-ups. Evidence: `benchmarks/baselines/async_isolation_20260910/`.
+
+### Health admission and external reader scopes (2026-09-10)
+
+Owner: W2.4a. Sync: `HEALTH-READERS-2026-09-10`.
+
+gfx1151 workload health probes, replacement admission and two native external copy streams passed independently. Actual wedged HIP driver recovery remains unproven; no hardware-counter attribution added.
+
+Fresh ANN workers execute numerical probes before admission. External readers may borrow on multiple declared streams; eventless dependency insertion refuses implicit host synchronization. Unkillable processes, driver reset/recovery and arbitrary external pointer lifetimes remain open. Evidence: `benchmarks/baselines/health_reader_admission_20260910/`.
+
+PR #740 review follow-up (`HEALTH-READERS-2026-09-10`): eventless retirement remains retryable; parent ANN input checks preserve healthy workers; pending context exit retains or reclaims ownership without masking caller errors. Shared host lifecycle fixes; existing exact-device evidence remains scoped to its recorded revision.

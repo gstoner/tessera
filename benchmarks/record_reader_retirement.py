@@ -51,12 +51,14 @@ def main():
                 def forbidden():raise AssertionError('tracked retirement used a context barrier')
                 frame.sync=forbidden
                 try:
-                    for stream,targets in zip(streams[:2],destinations,strict=True):
-                        with generation.read(stream.value) as outputs:
+                    with generation.read_many(*(stream.value for stream in streams[:2])) as readers:
+                        for stream,targets in zip(streams[:2],destinations,strict=True):
+                            outputs = readers[stream.value]
                             for output,target in zip(outputs,targets,strict=True):
                                 src=output.__cuda_array_interface__['data'][0]
                                 dst=target.__cuda_array_interface__['data'][0]
                                 d.check(copy(P(dst),P(src),16,stream))
+                    for outputs in readers.values():
                         try:outputs[0].__cuda_array_interface__
                         except ValueError:pass
                         else:raise AssertionError('borrow survived its scope')

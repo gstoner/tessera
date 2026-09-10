@@ -46,10 +46,34 @@ def test_dtype_matmul_packages_have_distinct_abis(monkeypatch, dtypes, abi) -> N
         ),
     )
     module = _module(*dtypes)
+    artifact = None
+    if dtypes == ("bf16", "bf16", "fp32"):
+        # This is an ABI projection unit test, not a native compiler test.
+        # Model the new producer boundary; real replay and owning-CPU execution
+        # remain covered by test_scheduled_matmul_consumers.
+        from dataclasses import replace
+        from test_scheduled_matmul_consumers import _artifact
+        from tessera.compiler import scheduled_matmul
+        base = _artifact(target="x86")
+        artifact = replace(base, a_dtype="bf16", b_dtype="bf16", storage="bf16",
+                           m=5, n=7, k=9,
+                           tile_ir=base.tile_ir.replace('storage = "f32"', 'storage = "bf16"'))
+        def produce(graph, *, target):
+            assert graph is module and target == "x86"
+            return artifact
+        monkeypatch.setattr(scheduled_matmul, "lower_scheduled_matmul", produce)
+        monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda value: None)
+        monkeypatch.setattr(scheduled_matmul, "find_tessera_opt", lambda: None)
     assert supports_matmul(module)
     package = package_matmul(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
+    if artifact is not None:
+        assert package.tile_ir == artifact.tile_ir
+        assert package.descriptor.provenance["work_item"] == "E2E-REAL-3"
+        assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+        assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
+    else:
+        assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
     assert f"call @{package.descriptor.entry_symbol}" in package.target_ir
 
 

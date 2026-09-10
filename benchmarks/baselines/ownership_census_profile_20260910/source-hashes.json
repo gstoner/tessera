@@ -1,0 +1,10 @@
+{
+  "python/tessera/compiler/native_exception_arena.py": "51b44d39d5a26d90af8129f11b1f6ed664f51f95233a6264659d1595c15e7b49",
+  "python/tessera/compiler/native_isolated_ann.py": "554a135037fe780a1e72b88d874ecdbdf9744aebb90f5d57e7fa9658060e88ee",
+  "python/tessera/compiler/x86_native.py": "f1431a783611a4e88e93237f3d16e205fe746129b8979b406fba5ca2c65f3fdb",
+  "python/tessera/compiler/scheduled_matmul.py": "73234b96d73105e6ebe2b88d782b678303cd7ba341205d62cae2713486136d36",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "7110dba6483e6997e95aba61d18ec575b447d7337c37a1f10364f7e1f1153145",
+  "tests/unit/test_scheduled_matmul_consumers.py": "bf5028e076fab2a5d7c3f1597b7e0aef66450337b2c2934bc79059be58ce73f1",
+  "scripts/record_package_route_census.py": "d86eb105e5775f82425912b95cb65a3d8c9804d62b33e71d6dc8b10aa8bbefcc",
+  "compiler_binary_built_on_super_bear": "5dc1d24725dfe52e1be42a9242631db81d8ad81ed54dc5ca43bd26a20ff882b2"
+}

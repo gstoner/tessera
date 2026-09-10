@@ -1,0 +1,15 @@
+F0910 08:58:20.466949   80504 ioctl_adapter.cpp:100] Cannot open /dev/kfd for pc sampling
+*** Check failure stack trace: ***
+Traceback (most recent call last):
+  File "/usr/bin/rocprofv3", line 2560, in <module>
+    ec = main(sys.argv[1:])
+  File "/usr/bin/rocprofv3", line 2505, in main
+    ec = run(app_args, args, pass_id=pass_idx)
+  File "/usr/bin/rocprofv3", line 2030, in run
+    exit_code = subprocess.check_call(
+        [sys.executable, path, "info", "--pc-sampling"],
+        env=app_env,
+    )
+  File "/usr/lib/python3.14/subprocess.py", line 420, in check_call
+    raise CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command '['/usr/bin/python3', '/opt/rocm/core-10.0/bin/rocprofv3-avail', 'info', '--pc-sampling']' died with <Signals.SIGABRT: 6>.

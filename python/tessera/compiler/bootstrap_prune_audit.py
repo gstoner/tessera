@@ -84,7 +84,7 @@ class BackendInventory:
 
     @property
     def bootstrap(self) -> tuple[str, ...]:
-        """Packagers that re-enter Graph IR — the prune target."""
+        """Packagers with Graph inputs; bodies may already delegate to scheduled IR."""
         return tuple(n for n, t in self.packagers if _is_bootstrap(t))
 
     @property
@@ -123,8 +123,9 @@ def _packagers(tree: ast.Module, source: str = "") -> tuple[tuple[str, str], ...
     The first parameter partitions the declared input types; it does not prove
     what the body consumes. Unknown types remain a separate population:
 
-    * ``GraphIRModule`` -- the function reads Graph IR and emits target code
-      itself, bypassing Schedule and Tile. That is the bootstrap compiler.
+    * ``GraphIRModule`` -- a Graph-input boundary requiring body/envelope
+      review. Some wrappers immediately delegate to Schedule/Tile; mixed
+      wrappers can retain direct emitters for other dtypes.
     * ``Scheduled*Artifact`` -- the function packages an artifact the compiled
       route already lowered ("without Graph re-entry"). That is the mainline
       compiler's packaging step and is NOT a prune target.
@@ -475,7 +476,7 @@ def render_markdown() -> str:
         "|---|---|",
         f"| Backends with a bootstrap module | {s['backends']} |",
         f"| `package_*` functions total | {s['packagers']} |",
-        f"| — **bootstrap** (re-enter Graph IR; prune target) | {s['bootstrap']} |",
+        f"| — Graph-input boundaries (including scheduled wrappers) | {s['bootstrap']} |",
         f"|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | {s['constructs_tile_ir']} |",
         f"|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | {s['delegates']} |",
         f"|   ·  of the bootstrap, both | {s['both']} |",
@@ -487,6 +488,10 @@ def render_markdown() -> str:
         f"| — covered by a compiled route | {s['compiled']} |",
         f"| — **gap (no declared family route)** | {s['gap']} |",
         f"| Packagers matching no family | {s['orphan_packagers']} |",
+        "",
+        "Graph input alone does not prove reconstruction: wrappers may call the",
+        "scheduled producer for some or all envelopes. Review direct calls and",
+        "exact artifacts before treating a row as a constructor deletion target.",
         "",
         "## Per-backend bootstrap surface",
         "",

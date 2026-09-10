@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "original": "7aeaeee96e881934d46a44da3ae8db47a39da7b2f90f40ffcaa32d02fa903d00",
+  "transformed": "0ea48771d92fd571ef75c056682ef6464b0dcfcc63c4c9b06ccb2bbc5826bf51",
+  "numerical_verified": true,
+  "fault": "SIGSTOP idle owning process before request; not an injected GPU driver failure",
+  "process_death_confirmed": true,
+  "replacement_verified": true,
+  "recovery_seconds": 0.7297207999945385,
+  "production_promoted": false,
+  "sources": {
+    "native_isolated_ann.py": "554a135037fe780a1e72b88d874ecdbdf9744aebb90f5d57e7fa9658060e88ee",
+    "native_ann_gpu.py": "c0e40cf70f41e77e9d5953fbf532ad87af57a0078bb1dd4f939f2a40ec04a829",
+    "native_driver_isolation.py": "4df026d7b34e81e574c7ca1757abc25b21c880104606bdd14da25be8b8aad2ab"
+  }
+}

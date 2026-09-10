@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "original": "f1c511d9d7d642b97208c231a66ee49f3209379cd5bedea00898d9856639e760",
+  "transformed": "818a1fc6d978e6ec23fff7a1e16c49c5f212aea2b7be2939833574d6bbe45575",
+  "numerical_verified": true,
+  "fault": "SIGSTOP idle owning process before request; not an injected GPU driver failure",
+  "process_death_confirmed": true,
+  "replacement_verified": true,
+  "recovery_seconds": 0.5517479889995229,
+  "production_promoted": false,
+  "sources": {
+    "native_isolated_ann.py": "554a135037fe780a1e72b88d874ecdbdf9744aebb90f5d57e7fa9658060e88ee",
+    "native_ann_gpu.py": "c0e40cf70f41e77e9d5953fbf532ad87af57a0078bb1dd4f939f2a40ec04a829",
+    "native_driver_isolation.py": "4df026d7b34e81e574c7ca1757abc25b21c880104606bdd14da25be8b8aad2ab"
+  }
+}

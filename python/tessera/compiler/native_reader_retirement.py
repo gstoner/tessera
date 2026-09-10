@@ -4,6 +4,7 @@ Borrowed views may only be submitted on the lease's declared stream before
 leaving its scope. They are not unrestricted external pointer exports.
 """
 
+from contextlib import ExitStack, contextmanager
 import ctypes as ct
 from .native_gpu_storage import NativeSubmission
 
@@ -115,6 +116,20 @@ class TrackedDerivativeGeneration:
     def read(self, stream):
         return _ReaderLease(self, stream)
 
+    @contextmanager
+    def read_many(self, *streams):
+        """Borrow read-only views on every declared external consumer stream.
+
+        Consumers must enqueue all reads before leaving this scope and must
+        not retain raw pointers. Every stream records its own completion even
+        when another consumer raises. Views do not authorize cross-device use.
+        """
+        streams = tuple(_stream(stream) for stream in streams)
+        if not streams or len(set(streams)) != len(streams):
+            raise ValueError('reader streams must be nonempty and distinct')
+        with ExitStack() as stack:
+            yield {stream: stack.enter_context(self.read(stream)) for stream in streams}
+
     def submit_to(self, binding, stream, *args, **kwargs):
         """Submit derivatives as the leading arguments of a native consumer.
 
@@ -144,11 +159,14 @@ class TrackedDerivativeGeneration:
                 raise ValueError("persistent retirement requires all reader scopes to close")
             if self.retiring:
                 raise ValueError("persistent generation retirement already requested")
+            # Dependencies may lack completion events after a record failure.
+            # No free has been attempted yet: keep retirement retryable after
+            # the caller establishes completion with an explicit wait.
+            self._submission.ticket.wait_on(stream)
+            for reader in self._readers:
+                reader.wait_on(stream)
             self.retiring = True
             try:
-                self._submission.ticket.wait_on(stream)
-                for reader in self._readers:
-                    reader.wait_on(stream)
                 for buffer in self._buffers:
                     try:
                         self.frame.check(self.frame.free_async(buffer.pointer, ct.c_void_p(stream)))

@@ -3122,3 +3122,105 @@ Evidence: `benchmarks/baselines/installed_device_gates_20260910/`, `scripts/chec
 
 Additional owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1).
 Sync: `INSTALLED-DEVICE-GATES-2026-09-10`.
+
+
+### 2026-09-10 — Exception arena reader and payload lifetimes
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #739.
+
+Outcome: Exported exception ABI views now pin storage through explicit reader leases. Allocation and collection refuse while any lease remains. Partial collection coalesces and reuses dead payload ranges without moving live payloads; repeated transient allocations alongside permanent roots remain bounded.
+
+Remaining: Native arena producer integration, arbitrary object heaps and real CPython frame reconstruction. A caller must retain its ABI lease through native completion; raw addresses must not escape that lease.
+
+Evidence: `test_native_exception_arena.py` pointer/owner retention and repeated partial-collection tests on Super-Bear and Princess-Luna. Addresses are host pointers, not a GPU heap claim.
+
+<!-- entry-fields:end -->
+
+### 2026-09-10 — Isolated native ANN worker and recovery
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted continuation after #739.
+
+Outcome: Native ANN packages can bind in spawned CUDA/HIP workers with worker-owned contexts. One outstanding request carries only copied host tensors. Failed or timed-out completion exposes no result and quarantines ownership; explicit recovery confirms process death before replacement. Error paths exit without destructor-driven driver retries.
+
+Remaining: General package families, heterogeneous dynamic frames, external device readers, concurrent writers and actual uncertain-driver fault testing. Worker IPC is opt-in and is not a performance candidate.
+
+Evidence: `benchmarks/baselines/ownership_census_profile_20260910/`; independent SM120/gfx1151 numerical execution, stopped-idle-worker timeout, confirmed teardown and replacement. SIGSTOP injection is a process/transport fault, not a GPU driver failure.
+
+<!-- entry-fields:end -->
+
+### 2026-09-10 — x86 BF16 scheduled package migration
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation after #739.
+
+Outcome: x86 BF16 inputs with f32 accumulation/output now traverse the canonical Schedule/Tile producer. Native packaging projects dtype, byte widths, shape guards, CPU feature requirements and schedule identity, and rejects altered projection/Tile evidence before lowering.
+
+Remaining: uint8/int8 and fp64 matmul, cohort/breadth constructors and target-specific promotion. Existing BF16 runtime kernels remain the physical consumer; no new speedup is claimed.
+
+Evidence: `test_scheduled_matmul_consumers.py` BF16 producer, descriptor/replay tampering and owning-CPU differential cases; exact results recorded in the wave evidence directory.
+
+<!-- entry-fields:end -->
+
+### 2026-09-10 — Route census and device profile attribution
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+
+PRs: Uncommitted continuation after #739.
+
+Outcome: A reproducible direct-call census keeps Graph-input wrappers separate from native scheduled consumers. The broader 32x8 terminal-square ANN workload is measured independently with Nsight Systems/Compute and rocprofv3.
+
+Remaining: The 64x8 workload exceeds the current 4096-byte temporary bound. Row-parallel lowering still allocates full matrix temporaries per thread; per-row storage projection needs its own ownership proof. CUDA has one-block underutilization and substantial host launch/transfer overhead. ROCm WSL supplies HIP API traces but no kernel/copy timeline in this run; no counter/device-time parity or performance promotion follows.
+
+Evidence: `benchmarks/baselines/ownership_census_profile_20260910/`. Profiler-instrumented timings are diagnostic, not independent promotion measurements.
+
+<!-- entry-fields:end -->
+
+Additional owners: [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+Sync for this wave: `OWNERSHIP-CENSUS-PROFILE-2026-09-10`.
+
+### 2026-09-10 — Asynchronous isolation teardown
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted continuation after #739.
+
+Outcome: A bounded off-thread process teardown ticket retains dependent owners and admission slots on uncertain termination. ANN workers and declared process-owned module retirements consume it; host cleanup follows confirmed death. Nonfinite recovery deadlines are refused.
+
+Remaining: Real driver-hang recovery, fresh device-health admission, external device readers and in-process hung unloads are not closed. A failed ticket deliberately retains its slot; operator-level recovery of an unkillable process remains necessary. Module filesystem cleanup during completion polling is still synchronous.
+
+Evidence: focused isolation/ANN/module ownership tests and independently measured SM120/gfx1151 stopped-worker replacement in `benchmarks/baselines/async_isolation_20260910/`. No GPU hang was injected and no performance promotion follows.
+
+<!-- entry-fields:end -->
+
+### 2026-09-10 — Device health admission and external readers
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted continuation after #739.
+
+Outcome: Fresh isolated ANN workers must execute deterministic bounded numerical probes against the analytic oracle before announcing readiness. Replacement requires confirmed failed-worker teardown and repeats admission. A stuck health probe is bounded by the parent deadline. Multi-stream read scopes record every declared consumer, including exception paths. Eventless dependencies no longer silently synchronize the host; completion needs an explicit wait or isolated recovery.
+
+Remaining: These probes establish workload/device-zero readiness at admission, not global driver health. Real wedged-driver recovery, unkillable kernel-mode processes, arbitrary device selection and unsupervised raw-pointer consumers remain open. External consumers must enqueue reads on declared streams and not retain pointers outside the scope. No automatic GPU reset or performance promotion is introduced.
+
+Evidence: `benchmarks/baselines/health_reader_admission_20260910/` records independent SM120/gfx1151 health/replacement and two-stream native copy consumers across four tape generations. Host tests cover numerical rejection, a hung probe, partial reader failures and retained ownership.
+
+<!-- entry-fields:end -->
+
+### 2026-09-10 — Recovery retry and caller-error boundaries
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: #740 review follow-up.
+
+Outcome: Missing dependency events refuse before retirement commits state, preserving retry after explicit completion. Invalid ANN shape/domain inputs refuse in the parent without poisoning a healthy worker. Leaving a scope with pending work poisons and tears down the worker; uncertain cleanup retains ownership and preserves the caller's original exception.
+
+Remaining: Actual wedged-driver recovery and unrestricted external-reader lifetimes remain open; these fixes establish host lifecycle behavior.
+
+Evidence: focused reader-retirement and isolated-ANN regressions cover retry after a missing event, repeated invalid inputs followed by successful execution, pending context exit and failed cleanup with exception preservation.
+
+<!-- entry-fields:end -->

@@ -1,0 +1,67 @@
+{
+  "hipDeviceSynchronize": {
+    "count": 179,
+    "median_ns": 80144,
+    "total_ns": 18650811
+  },
+  "hipFree": {
+    "count": 2,
+    "median_ns": 7865.5,
+    "total_ns": 15731
+  },
+  "hipGetDevice": {
+    "count": 180,
+    "median_ns": 390.0,
+    "total_ns": 78327
+  },
+  "hipInit": {
+    "count": 1,
+    "median_ns": 67926636,
+    "total_ns": 67926636
+  },
+  "hipMalloc": {
+    "count": 2,
+    "median_ns": 240236.0,
+    "total_ns": 480472
+  },
+  "hipMemGetAddressRange": {
+    "count": 176,
+    "median_ns": 340.0,
+    "total_ns": 44075
+  },
+  "hipMemcpyDtoH": {
+    "count": 88,
+    "median_ns": 79239.5,
+    "total_ns": 7668771
+  },
+  "hipMemcpyHtoD": {
+    "count": 88,
+    "median_ns": 84975.0,
+    "total_ns": 85450047
+  },
+  "hipModuleGetFunction": {
+    "count": 2,
+    "median_ns": 3070.5,
+    "total_ns": 6141
+  },
+  "hipModuleLaunchKernel": {
+    "count": 88,
+    "median_ns": 24741.0,
+    "total_ns": 2201485
+  },
+  "hipModuleLoadData": {
+    "count": 2,
+    "median_ns": 36301936.5,
+    "total_ns": 72603873
+  },
+  "hipModuleUnload": {
+    "count": 2,
+    "median_ns": 920958.0,
+    "total_ns": 1841916
+  },
+  "hipPointerGetAttributes": {
+    "count": 176,
+    "median_ns": 600.0,
+    "total_ns": 79564
+  }
+}

@@ -83,7 +83,7 @@ def test_retirement_orders_every_reader_and_invalidates_borrowed_views():
             with pytest.raises(ValueError, match="scopes"):
                 owner.retire(23)
         with pytest.raises(ValueError, match="lease is closed"):
-            view.__cuda_array_interface__
+            _ = view.__cuda_array_interface__
     native.ready = False
     owner.retire(23)
     assert native.calls.index(("stream_wait", 23)) < next(i for i, c in enumerate(native.calls) if c[0] == "free")
@@ -108,6 +108,10 @@ def test_failed_reader_event_retains_owner_until_explicit_wait():
     assert not owner._active
     assert not owner._readers[0].poll()
     native.record_failure = False
+    with pytest.raises(RuntimeError, match="completion is unproven"):
+        owner._readers[0].wait_on(23)
+    assert ("stream_sync", 21) not in native.calls
+    owner._readers[0].wait()  # Deliberate synchronous recovery remains explicit.
     owner.retire(23)
     assert ("stream_sync", 21) in native.calls
     owner.wait()
@@ -268,3 +272,66 @@ def test_unrestricted_frame_refuses_asynchronous_retirement():
     owner.frame._scoped=False
     with pytest.raises(ValueError,match='unrestricted'):
         PersistentTapeFrame.retire(owner.frame,23)
+
+
+def test_external_multistream_scope_tracks_every_reader_on_exception():
+    owner, native = setup()
+    with pytest.raises(LookupError):
+        with owner.read_many(21, 22) as views:
+            assert owner._active == 2
+            for stream, outputs in views.items():
+                assert outputs[0].__cuda_array_interface__['stream'] == stream
+            with pytest.raises(ValueError, match='scopes'):
+                owner.retire(23)
+            raise LookupError('external enqueue failed')
+    assert owner._active == 0
+    assert ('record', 21) in native.calls and ('record', 22) in native.calls
+    for outputs in views.values():
+        with pytest.raises(ValueError, match='closed'):
+            _ = outputs[0].__cuda_array_interface__
+    owner.retire(23)
+    assert owner.poll()
+    assert sum(c == ('stream_wait', 23) for c in native.calls) == 2
+
+
+def test_multistream_record_failure_still_closes_all_scopes():
+    owner, native = setup()
+    native.record_failure = True
+    with pytest.raises(RuntimeError):
+        with owner.read_many(21, 22):
+            pass
+    assert owner._active == 0 and len(owner._readers) == 2
+    assert all(not ticket.poll() for ticket in owner._readers)
+    assert len(owner.frame.buffers) == 2
+    native.record_failure = False
+    for ticket in owner._readers:
+        ticket.wait()
+    owner.retire(23)
+    assert owner.poll()
+
+
+@pytest.mark.parametrize('streams', [(), (21, 21), (21, 0)])
+def test_multistream_validation_precedes_acquisition(streams):
+    owner, native = setup()
+    with pytest.raises(ValueError):
+        with owner.read_many(*streams):
+            pass
+    assert not native.calls and not owner._active
+
+
+def test_missing_reader_event_allows_retirement_after_explicit_wait():
+    owner, native = setup()
+    native.record_failure = True
+    with pytest.raises(RuntimeError):
+        with owner.read(21):
+            pass
+    native.record_failure = False
+    with pytest.raises(RuntimeError, match='completion is unproven'):
+        owner.retire(23)
+    assert not owner.retiring and not owner._retirements
+    assert not any(call[0] == 'free' for call in native.calls)
+    assert not owner.wait()
+    owner.retire(23)
+    assert owner.poll()
+    assert sum(call[0] == 'free' for call in native.calls) == 2
+    assert not owner.frame.buffers

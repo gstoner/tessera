@@ -4770,3 +4770,31 @@ Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2
 Installed driver and LLVM translation parity validated on Super-Bear. The compiler-tools component survives prefix relocation without loader overrides. CUDA/HIP and Metal measurements do not establish x86 kernel performance.
 Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
 Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Arena readers, BF16 migration and isolated ANN (2026-09-10)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6/F`, `MSW-9`, `TPROF-NATIVE-1`.
+Sync: `OWNERSHIP-CENSUS-PROFILE-2026-09-10`.
+BF16-to-f32 matmul now uses the shared Schedule/Tile producer and replay-verified descriptor projection. Princess-Luna is the owning Zen 5 CPU validation host. Mixed integer/fp64 matmul and cohort/breadth callers remain.
+Shared contracts: exported arena leases pin storage and block mutation; partial collection reuses payload holes. Isolated ANN returns copied checked host results, retains uncertain workers and requires confirmed process death before replacement. General device heaps/readers and driver-fault recovery remain open.
+Evidence: `benchmarks/baselines/ownership_census_profile_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Asynchronous isolation teardown (2026-09-10)
+
+Owner: W2.4a. Sync: `ASYNC-ISOLATION-2026-09-10`.
+
+Host WSL lifecycle tests cover retention, bounded admission and module finalization. No GPU recovery proof transfers to x86.
+
+Shared recovery tickets retain owners on uncertain termination; ANN and declared isolated module owners can poll process teardown. General driver-hang recovery, device-health admission and broader external-reader integration remain follow-ups. Evidence: `benchmarks/baselines/async_isolation_20260910/`.
+
+### Health admission and external reader scopes (2026-09-10)
+
+Owner: W2.4a. Sync: `HEALTH-READERS-2026-09-10`.
+
+Host WSL ownership/failure tests cover this shared contract. There is no CUDA/HIP execution claim for the x86 companion.
+
+Fresh ANN workers execute numerical probes before admission. External readers may borrow on multiple declared streams; eventless dependency insertion refuses implicit host synchronization. Unkillable processes, driver reset/recovery and arbitrary external pointer lifetimes remain open. Evidence: `benchmarks/baselines/health_reader_admission_20260910/`.
+
+PR #740 review follow-up (`HEALTH-READERS-2026-09-10`): eventless retirement remains retryable; parent ANN input checks preserve healthy workers; pending context exit retains or reclaims ownership without masking caller errors. Shared host lifecycle fixes; existing exact-device evidence remains scoped to its recorded revision.

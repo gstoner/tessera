@@ -145,7 +145,7 @@ def test_native_instantiation_refuses_unknown_shape_transfer():
     import subprocess
     with pytest.raises(subprocess.CalledProcessError) as error:
         recipe.instantiate_buckets([{'M': 2, 'K': 4, 'N': 3}], tessera_opt=tool())
-    assert 'straight-line matmul recipes only' in error.value.stderr
+    assert 'straight-line matmul or rank-four attention recipes only' in error.value.stderr
 
 
 def test_native_instantiation_refuses_constraint_violation():

@@ -19,6 +19,17 @@ def _stream(value):
     return value
 
 
+
+@contextmanager
+def _read_many(read, *streams):
+    """Compose checked reader scopes, unwinding every entered stream on failure."""
+    streams = tuple(_stream(stream) for stream in streams)
+    if not streams or len(set(streams)) != len(streams):
+        raise ValueError('reader streams must be nonempty and distinct')
+    with ExitStack() as stack:
+        yield {stream: stack.enter_context(read(stream)) for stream in streams}
+
+
 def _record(native, stream, keepalive, tickets):
     event = ct.c_void_p()
     events = []
@@ -124,11 +135,8 @@ class TrackedDerivativeGeneration:
         not retain raw pointers. Every stream records its own completion even
         when another consumer raises. Views do not authorize cross-device use.
         """
-        streams = tuple(_stream(stream) for stream in streams)
-        if not streams or len(set(streams)) != len(streams):
-            raise ValueError('reader streams must be nonempty and distinct')
-        with ExitStack() as stack:
-            yield {stream: stack.enter_context(self.read(stream)) for stream in streams}
+        with _read_many(self.read, *streams) as views:
+            yield views
 
     def submit_to(self, binding, stream, *args, **kwargs):
         """Submit derivatives as the leading arguments of a native consumer.

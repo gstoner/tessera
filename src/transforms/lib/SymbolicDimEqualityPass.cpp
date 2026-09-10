@@ -1105,9 +1105,32 @@ struct SymbolicDimEquality
     // transfers are refused rather than specializing only the signature.
     for (Operation &op : fn.getBody().front()) {
       if (isa<func::ReturnOp>(op)) continue;
-      if (op.getName().getStringRef() != "tessera.matmul" || op.getNumRegions())
-        return op.emitError("SYMDIM_BINDING_MALFORMED: instantiation supports straight-line matmul recipes only");
-      if (propagateThroughOp(&op, names, nullptr)) return failure();
+      if (op.getName().getStringRef() == "tessera.flash_attn" && !op.getNumRegions() &&
+          op.getNumOperands() == 3 && op.getNumResults() == 1) {
+        auto q = names.find(op.getOperand(0)), k = names.find(op.getOperand(1)),
+             v = names.find(op.getOperand(2));
+        if (q == names.end() || k == names.end() || v == names.end() ||
+            q->second.size() != 4 || k->second.size() != 4 || v->second.size() != 4 ||
+            q->second[0] != k->second[0] || q->second[0] != v->second[0] ||
+            q->second[1] != k->second[1] || q->second[1] != v->second[1] ||
+            q->second[3] != k->second[3] || k->second[2] != v->second[2])
+          return op.emitError("SYMDIM_BINDING_MALFORMED: attention requires matching rank-four batch/head/key/contraction names");
+        int64_t width;
+        if (StringRef(q->second[3]).getAsInteger(10, width)) {
+          auto bound = sizes.find(q->second[3]);
+          if (bound == sizes.end())
+            return op.emitError("SYMDIM_BINDING_MALFORMED: attention head width has no binding");
+          width = bound->second;
+        }
+        auto head = op.getAttrOfType<IntegerAttr>("head_dim");
+        if (!head || head.getInt() != width)
+          return op.emitError("SYMDIM_BINDING_MALFORMED: attention head_dim contradicts its bound Q/K width");
+        names[op.getResult(0)] = {q->second[0], q->second[1], q->second[2], v->second[3]};
+      } else {
+        if (op.getName().getStringRef() != "tessera.matmul" || op.getNumRegions())
+          return op.emitError("SYMDIM_BINDING_MALFORMED: instantiation supports straight-line matmul or rank-four attention recipes only");
+        if (propagateThroughOp(&op, names, nullptr)) return failure();
+      }
     }
     SmallVector<std::pair<Value, RankedTensorType>> rewrites;
     auto resolve = [&](Value value) -> LogicalResult {

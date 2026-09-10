@@ -632,3 +632,22 @@ def Schedule_PagedKVReadOp : Op<ScheduleDialect, "paged_kv_read"> {
   let results = (outs AnyRankedTensor:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
 }
+
+// A shared semantic recurrence, not a target-specific ReplaySSM marker.
+def Schedule_SSDOp : Op<ScheduleDialect, "ssd", [Pure]> {
+  let summary = "Chunked scalar-decay SSD with explicit carry and checkpoints";
+  let description = [{
+    For each time t and head h, S[n,p] = decay[t,h] * S[n,p] +
+    B[t,h,n] * X[t,h,p], then Y[t,h,p] = sum_n C[t,h,n] * S[n,p].
+    Initial carry is immutable. Results are Y, final carry, and carry after
+    each chunk (including the final partial chunk). Decay is multiplicative,
+    not a logarithm. The baseline uses ordered f32 multiply/add, no fastmath.
+    This internal Schedule contract does not admit a target runtime route.
+  }];
+  let arguments = (ins AnyRankedTensor:$x, AnyRankedTensor:$decay,
+                       AnyRankedTensor:$b, AnyRankedTensor:$c,
+                       AnyRankedTensor:$initial, I64Attr:$chunk_size);
+  let results = (outs AnyRankedTensor:$output, AnyRankedTensor:$carry,
+                      AnyRankedTensor:$checkpoints);
+  let hasVerifier = 1;
+}

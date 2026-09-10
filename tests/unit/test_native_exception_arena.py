@@ -1,7 +1,7 @@
 from tessera.compiler.native_exception_arena import NativeExceptionArena
 
 
-def test_arena_grows_and_collects_unreachable_cycles():
+def test_arena_grows_and_collects_unreachable_chain():
     arena = NativeExceptionArena(2, 4)
     leaf = arena.allocate(1, b'leaf')
     root = arena.allocate(2, b'root', edges=(leaf,), root=True)
@@ -79,3 +79,28 @@ def test_export_keeps_arena_alive_until_reader_completes():
     lease.close()
     gc.collect()
     assert reference() is None
+
+
+def test_actual_cycle_lives_through_root_and_is_collected_after_release():
+    import ctypes as ct
+    import pytest
+    from tessera.compiler.native_exception_arena import _Node
+    arena = NativeExceptionArena(3, 12)
+    first = arena.allocate(1, b'one', root=True)
+    second = arena.allocate(2, b'two', edges=(first,))
+    arena.set_edges(first, edges=(second,))
+    arena.retain(second)
+    arena.release(first)
+    assert arena.collect() == 0
+    with arena.abi as abi:
+        nodes = ct.cast(abi.nodes, ct.POINTER(_Node))
+        assert nodes[first].cause == second and nodes[second].cause == first
+        with pytest.raises(RuntimeError, match='ABI readers'):
+            arena.set_edges(first, edges=())
+    with pytest.raises(ValueError, match='live handles'):
+        arena.set_edges(first, edges=(99,))
+    arena.release(second)
+    assert arena.collect() == 2
+    assert arena._payload_used == 0
+    with pytest.raises(ValueError, match='live handle'):
+        arena.retain(first)

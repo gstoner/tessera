@@ -52,6 +52,7 @@ namespace tessera {
 
 #include "NativeCheckpoint.h"
 #include "NativePagedKV.h"
+#include "NativeSSD.h"
 
 // ---------------------------------------------------------------------------
 // Dialect registration
@@ -374,6 +375,14 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
               (lhsElement.isBF16() && rhsElement.isBF16())) && outElement.isF32()) {
     schedule.storage = lhsElement.isBF16() ? "bf16" : "f32";
     schedule.accum = "f32";
+    if (schedule.arch.empty())
+      schedule.arch = "x86-avx512";
+    return schedule;
+  }
+  if (x86 && lhsElement.isF64() && rhsElement.isF64() && outElement.isF64()) {
+    schedule.storage = "f64";
+    schedule.accum = "f64";
+    schedule.output = "f64";
     if (schedule.arch.empty())
       schedule.arch = "x86-avx512";
     return schedule;
@@ -2761,14 +2770,15 @@ struct ScheduleToTilePass
   StringRef getArgument() const override { return "tessera-schedule-to-tile"; }
   StringRef getDescription() const override {
     return "Revalidate registered content-addressed Schedule decisions against "
-           "retained Graph producers and emit launch-level Tile carriers";
+           "retained Graph producers, emit launch-level Tile carriers, and lower "
+           "the shared SSD recurrence to structured tensor loops";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
                     func::FuncDialect, LLVM::LLVMDialect, memref::MemRefDialect,
                     NVVM::NVVMDialect, scf::SCFDialect,
-                    schedule::ScheduleDialect>();
+                    schedule::ScheduleDialect, tensor::TensorDialect>();
     tile::registerTileDialect(registry);
 #ifdef TESSERA_HAVE_NVIDIA_TARGET_IR
     registry.insert<tessera::nvidia::TesseraNVIDIADialect>();
@@ -2780,6 +2790,7 @@ struct ScheduleToTilePass
     OpBuilder builder(mod.getContext());
     if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
+    if (failed(lowerNativeSSD(mod))) return signalPassFailure();
 
     SmallVector<Operation *> scheduledTridiagonalSolves;
     mod.walk([&](Operation *op) {

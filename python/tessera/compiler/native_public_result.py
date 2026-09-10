@@ -254,6 +254,10 @@ class PublicResultFrame:
                 raise ValueError('public readers require successful completion and shape checks')
             return self._owner.read(stream)
 
+    def read_many(self, *streams):
+        from .native_reader_retirement import _read_many
+        return _read_many(self.read, *streams)
+
     def retire(self, stream):
         with self._lock:
             self._ready()
@@ -427,6 +431,7 @@ class AsyncSourceVJPFrame:
     def __init__(self,program,stream,inputs,cotangents,*,scoped=False):
         if type(scoped) is not bool:raise ValueError("scoped must be boolean")
         self._scoped,self._retiring,self._complete=scoped,False,False
+        self._retirement_stream: int | None = None
         self._abi,self._public_count=program._validate_pair(cotangents)
         self._program,self._stream=program,stream
         self._cotangents=cotangents
@@ -472,19 +477,31 @@ class AsyncSourceVJPFrame:
                     yield primals[:self._public_count],derivatives
         return lease()
 
+    def read_many(self, *streams):
+        from .native_reader_retirement import _read_many
+        return _read_many(self.read, *streams)
+
     def retire(self,stream):
         from .native_reader_retirement import _stream
         stream=_stream(stream)
         with self._lock:
-            if not self._scoped or self.closed or self._retiring:
+            if not self._scoped or self.closed:
                 raise ValueError('source VJP retirement requires an open scoped frame')
-            # Check both owners before queuing any free, avoiding partial
-            # teardown when a reader scope still owns either product.
+            if self._retiring and self._retirement_stream != stream:
+                raise ValueError('resume source VJP retirement on its original stream')
             frames=[self._forward]+([self._backward] if self._backward is not None else [])
             if any(frame._owner._active for frame in frames):
                 raise ValueError('source VJP retirement requires closed reader scopes')
-            self._retiring=True
-            for frame in reversed(frames):frame.retire(stream)
+            self._retirement_stream=stream
+            try:
+                for frame in reversed(frames):
+                    # A failed free is uncertain and must never be retried.
+                    # A dependency failure before any frees leaves that child
+                    # retryable after explicit completion has been established.
+                    if not frame._retiring:
+                        frame.retire(stream)
+            finally:
+                self._retiring=any(frame._retiring for frame in frames)
         return self
 
     def retry_retirement_cleanup(self,product):

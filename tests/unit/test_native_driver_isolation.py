@@ -85,3 +85,40 @@ def test_async_unconfirmed_death_quarantines_owner(monkeypatch):
     assert ticket.owner is owner and ticket in module._RECOVERIES
     assert not lease.reusable
     assert module.IsolationRecovery.submit(lease, owner=owner) is None
+
+
+def test_late_worker_exit_releases_failed_ticket_once_without_retry(monkeypatch):
+    import concurrent.futures
+    import threading
+    import pytest
+    from tessera.compiler import native_driver_isolation as module
+    class LateExit(Process):
+        def terminate(self):
+            self.calls.append('terminate')
+            raise OSError('termination uncertain')
+    slots = threading.BoundedSemaphore(1)
+    monkeypatch.setattr(module, '_RECOVERY_SLOTS', slots)
+    monkeypatch.setattr(module, '_RECOVERIES', set())
+    process = LateExit()
+    lease = DriverIsolationLease(process, context_identity='late-worker')
+    lease.mark_uncertain()
+    owner = object()
+    ticket = module.IsolationRecovery.submit(lease, owner=owner)
+    assert ticket.done.wait(5)
+    with pytest.raises(RuntimeError, match='owner retained'):
+        ticket.poll()
+    assert ticket.owner is owner and not slots.acquire(blocking=False)
+    process.code = -9
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        assert all(pool.map(lambda _: ticket.poll(), range(16)))
+    assert lease.reusable and ticket.owner is None and ticket.error is None
+    assert ticket not in module._RECOVERIES
+    assert process.calls == ['terminate']
+    assert slots.acquire(blocking=False)
+    assert not slots.acquire(blocking=False)
+    slots.release()
+
+    def closed_process():
+        raise AssertionError('completed ticket polled released process')
+    process.poll = closed_process
+    assert ticket.poll()

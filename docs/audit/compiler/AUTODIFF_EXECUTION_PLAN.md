@@ -811,3 +811,7 @@ record described above. No frame is fabricated and no source is replayed.
 Unknown driver outcomes still require pre-established isolation and confirmed
 teardown; retained raw-pointer owners cannot safely be reset in place.
 Sync: `COMPLETION-CORPUS-2026-09-09`; live owners `W4-PRODUCT-1` / `W2.4a`.
+
+## Native heap, attention and SSD follow-through (2026-09-10)
+
+`native_exception_producer.py` binds the native `tsr_exception_heap_*` C ABI. The fixed-capacity C++ heap allocates and collects actual cause/context cycles, reuses dead payload holes and rejects stale generation handles. Reads copy payload bytes; no moving storage pointer escapes. Native callers must stop using the heap before destruction. Automatic allocation/root operations from source exception IR, GPU heap execution and arbitrary Python object graphs remain open. Full CPython frames still require the native deoptimization record described above, including live SSA locals/cells, bytecode position and interpreter exception state; this allocator does not reconstruct those records.

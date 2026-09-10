@@ -207,3 +207,9 @@ def test_symbolic_dim_equality_declares_both_argument_carriers():
     for carrier in ('tessera.dim_names', 'tessera.arg_dim_names'):
         assert carrier in metadata.required_attrs
         assert carrier in metadata.preserved_attrs
+
+
+def test_native_gpu_pass_declares_ssd_source_contract():
+    spec = pass_lookup("tessera-native-tape-to-gpu")
+    assert "tessera.ssd.source" in spec.required_attrs
+    assert "tessera.ssd.source" in spec.preserved_attrs

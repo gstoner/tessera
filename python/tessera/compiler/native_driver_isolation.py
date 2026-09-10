@@ -41,6 +41,18 @@ class DriverIsolationLease:
                 raise RuntimeError("driver isolation process did not terminate")
             self._recovered = True
 
+    def reconcile_death(self) -> bool:
+        """Observe a late exit without retrying termination or driver operations."""
+        with self._lock:
+            if not self._uncertain:
+                raise ValueError("driver isolation recovery requires an uncertain outcome")
+            if self._recovered:
+                return True
+            if self.process.poll() is None:
+                return False
+            self._recovered = True
+            return True
+
     @property
     def reusable(self) -> bool:
         return self._recovered and self.process.poll() is not None
@@ -63,6 +75,8 @@ class IsolationRecovery:
         self._slot = _RECOVERY_SLOTS
         self.done = threading.Event()
         self.error = None
+        self._finalize_lock = threading.Lock()
+        self._released = False
 
     @classmethod
     def submit(cls, lease, *, owner):
@@ -88,15 +102,27 @@ class IsolationRecovery:
             self.error = error
         finally:
             if self.error is None:
-                self.owner = None
-                with _RECOVERY_LOCK:
-                    _RECOVERIES.remove(self)
-                self._slot.release()
+                self._release_owner()
             self.done.set()
+
+    def _release_owner(self):
+        with self._finalize_lock:
+            if not self._released:
+                self.owner = None
+                self.error = None
+                with _RECOVERY_LOCK:
+                    _RECOVERIES.discard(self)
+                self._slot.release()
+                self._released = True
 
     def poll(self):
         if not self.done.is_set():
             return False
+        with self._finalize_lock:
+            if self._released:
+                return True
         if self.error is not None:
-            raise RuntimeError('isolation teardown unconfirmed; owner retained') from self.error
+            if not self.lease.reconcile_death():
+                raise RuntimeError('isolation teardown unconfirmed; owner retained') from self.error
+            self._release_owner()
         return True

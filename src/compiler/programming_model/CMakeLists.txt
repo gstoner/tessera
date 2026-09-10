@@ -71,6 +71,8 @@ target_link_libraries(TesseraPM
         MLIRBufferizationDialect
         MLIRLLVMDialect
         MLIRMemRefDialect
+        MLIRSCFDialect
+        MLIRTensorDialect
         MLIRIR
         MLIRPass
         MLIRFuncDialect

@@ -186,8 +186,6 @@ class CpuBackend final : public Backend {
 
 std::unique_ptr<Backend> CreateCpuBackend() { return std::make_unique<CpuBackend>(); }
 
-// Stub factories for CUDA/HIP (return nullptr here; real impls in separate files if enabled)
-std::unique_ptr<Backend> CreateCudaBackend() { return nullptr; }
-std::unique_ptr<Backend> CreateHipBackend()  { return nullptr; }
+// CUDA/HIP factories, including disabled-backend stubs, live in their own TUs.
 
 } // namespace tsr

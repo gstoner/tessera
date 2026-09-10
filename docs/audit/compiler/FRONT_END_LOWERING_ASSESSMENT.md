@@ -278,3 +278,7 @@ the Decision #28 arbiter.
   medium; the `SymbolicDimEqualityPass` producerless consumer), **#32**
   (elaboration and privilege/constraint drops must be declared).
 - Reproduction probes are inline in each section; all host-independent.
+
+## Native heap, attention and SSD follow-through (2026-09-10)
+
+`recognize_attention_loop` accepts one exact dense unmasked f32 loop recurrence, retains its source oracle, and refuses altered normalization or effects. All dimensions except the positive static head width may be symbolic. The native instantiator derives output dimensions from Q/V and validates the head-width witness. Two buckets from one optimized recipe lower through Graph-to-Schedule and Schedule-to-Tile. This is bounded recognition and artifact proof: broader source patterns, executable candidate binding and exact-device arbiter admission remain open.

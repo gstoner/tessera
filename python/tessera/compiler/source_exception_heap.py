@@ -98,15 +98,25 @@ def decode_heap(heap, code, contract, outputs, bindings):
         payloads.clear()
         error=None
         raise
+    # Restore interpreter-owned exception fields without invoking arbitrary
+    # custom __setattr__ or add_note hooks during completion publication.
     for index,error in objects.items():
         node=nodes[index]
-        if node['cause'] is not None:error.__cause__=objects[node['cause']]
-        if node['context'] is not None:error.__context__=objects[node['context']]
-        error.__suppress_context__=node['suppress']
+        for field in ('cause', 'context'):
+            value = objects[node[field]] if node[field] is not None else None
+            BaseException.__dict__['__' + field + '__'].__set__(error, value)
+        BaseException.__dict__['__suppress_context__'].__set__(error, node['suppress'])
         if node['location'] is not None:
             file,line=node['location']
-            getattr(error,'add_note')(f'Native source raise at {file}:{line}; no Python frame executed there')
-            error.__tessera_native_frames__ = ({
+            attrs = BaseException.__dict__['__dict__'].__get__(error)
+            notes = attrs.get('__notes__')
+            if notes is None:
+                notes = []
+                attrs['__notes__'] = notes
+            if not isinstance(notes, list):
+                raise TypeError('source exception notes must be a list')
+            list.append(notes, f'Native source raise at {file}:{line}; no Python frame executed there')
+            attrs['__tessera_native_frames__'] = ({
                 'schema': 1, 'file': file, 'line': line,
                 'function': contract.get('function_name', '<native>'),
                 'instruction': contract.get('instruction_sites', {}).get(str(line)),

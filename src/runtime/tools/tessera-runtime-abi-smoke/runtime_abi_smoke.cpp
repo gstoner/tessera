@@ -42,6 +42,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "tessera/tessera_runtime.h"
+#include "tessera/exception_heap.h"
+#include <cassert>
 
 #include <cstdint>
 #include <cstdio>
@@ -296,6 +298,17 @@ int test_multi_device_handle_isolation_when_more_than_one() {
 
 
 int main() {
+  tsr_exception_heap *heap = nullptr;
+  assert(tsr_exception_heap_create(2, 8, &heap) == 0);
+  uint64_t first = 0, second = 0;
+  assert(tsr_exception_heap_alloc(heap, 1, "one", 3, 0, 0, 1, &first) == 0);
+  assert(tsr_exception_heap_alloc(heap, 2, "two", 3, first, 0, 0, &second) == 0);
+  assert(tsr_exception_heap_edges(heap, first, second, 0) == 0);
+  uint32_t collected = 0;
+  assert(tsr_exception_heap_collect(heap, &collected) == 0 && collected == 0);
+  assert(tsr_exception_heap_root(heap, first, 0) == 0);
+  assert(tsr_exception_heap_collect(heap, &collected) == 0 && collected == 2);
+  tsr_exception_heap_destroy(heap);
   int rc = 0;
   rc |= test_init_is_idempotent_and_returns_devices();
   rc |= test_buffer_create_destroy_balances_counters();

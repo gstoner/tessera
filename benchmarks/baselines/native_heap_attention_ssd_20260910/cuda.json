@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "architecture": "sm_120",
+  "compiler_sha256": "a06984f943975fca7515e963ee6bcdf6caf54d4259b8ab01a2f7f2c4a8126362",
+  "execution": "native_gpu",
+  "rows": [
+    {
+      "chunk": 1,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "fa23eda4452f300028902c39c05dc5185c7c490195d5e598e26beb8c947f5fa5",
+      "image_sha256": "57a6ed7092d306be9d206c7277911df8b8fcde509415d2b966313b23ad4022b7"
+    },
+    {
+      "chunk": 2,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "4c3ab965f43f47901fbd9edf2fe39533fa3993c06823bcea3052dba9a0fa9411",
+      "image_sha256": "b3cf4f375001ecbac3a3451f9ae911ff5979323abd2a472cf80acc37fb704cb7"
+    },
+    {
+      "chunk": 5,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "bab5a6b8717d527fca58905ef4a6daa55ed8c6141ed8420f24da97e094a0c7bc",
+      "image_sha256": "d625ae42e3cdf8e124c1934db0490c2e8caf016c1f145f9bfd3708d6ea93100a"
+    }
+  ],
+  "promotion_eligible": false
+}

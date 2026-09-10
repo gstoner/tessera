@@ -84,3 +84,37 @@ def test_failed_materialization_does_not_cache_unpublished_objects():
     # Keep the failure traceback alive, as the public completion cache does.
     assert caught.value.__traceback__ is not None
     assert references[0]() is None
+
+
+def test_native_completion_bypasses_custom_exception_field_hooks():
+    calls = []
+    class Custom(Exception):
+        def __setattr__(self, name, value):
+            calls.append(name)
+            raise RuntimeError('unexpected user field hook')
+        def add_note(self, note):
+            raise RuntimeError('unexpected user note hook')
+    error = decode([node(kind='Custom',cause=1,context=1,suppress=True,
+                         location=('step.py',9)),node(context=0)], {'Custom':Custom})
+    assert calls == []
+    assert error.__cause__ is error.__context__
+    assert error.__cause__.__context__ is error
+    assert error.__suppress_context__
+    assert error.__tessera_native_frames__[0]['line'] == 9
+    assert error.__traceback__ is None
+
+
+def test_native_chain_clears_constructor_edges_and_bypasses_descriptors():
+    class Custom(Exception):
+        def __init__(self, *args):
+            super().__init__(*args)
+            BaseException.__dict__['__cause__'].__set__(self,ValueError('unrecorded'))
+        @property
+        def __context__(self):
+            raise AssertionError('custom context descriptor read')
+        @__context__.setter
+        def __context__(self, value):
+            raise AssertionError('custom context descriptor written')
+    error = decode([node(kind='Custom')],{'Custom':Custom})
+    assert BaseException.__dict__['__cause__'].__get__(error) is None
+    assert BaseException.__dict__['__context__'].__get__(error) is None

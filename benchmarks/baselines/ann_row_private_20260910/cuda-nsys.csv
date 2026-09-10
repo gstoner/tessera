@@ -1,0 +1,21 @@
+Generating SQLite file /tmp/ann64-row-private.sqlite from /tmp/ann64-row-private.nsys-rep
+Processing [/tmp/ann64-row-private.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,85727,88,974.2,879.5,800,9504,922.2,product
+
+Processing [/tmp/ann64-row-private.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_mem_time_sum.py]...
+Time (%),Total Time (ns),Count,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Operation
+51.5,33055,88,375.6,288.0,287,1216,172.8,[CUDA memcpy Host-to-Device]
+48.5,31104,88,353.5,320.0,320,2336,215.1,[CUDA memcpy Device-to-Host]
+
+Processing [/tmp/ann64-row-private.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_api_sum.py]...
+Time (%),Total Time (ns),Num Calls,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+93.9,229555386,1,229555386.0,229555386.0,229555386,229555386,0.0,cuCtxCreate_v2
+1.9,4693968,88,53340.5,49645.5,40120,96091,10581.9,cuMemcpyDtoH_v2
+1.1,2796554,88,31779.0,19615.0,16821,978175,102235.8,cuLaunchKernel
+1.1,2715971,179,15173.0,9170.0,1690,189971,20969.9,cuCtxSynchronize
+0.8,1999573,88,22722.4,15856.0,13030,309472,33040.0,cuMemcpyHtoD_v2
+0.4,1051420,2,525710.0,525710.0,15050,1036370,722182.3,cuModuleUnload
+0.4,931395,2,465697.5,465697.5,117961,813434,491773.7,cuModuleLoadData
+0.2,450763,2,225381.5,225381.5,4800,445963,311949.3,cuMemAlloc_v2
+0.1,366336,2,183168.0,183168.0,18560,347776,232790.9,cuMemFree_v2

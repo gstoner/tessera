@@ -102,9 +102,13 @@ def test_scoped_vjp_retirement_never_uses_synchronous_close(monkeypatch):
     calls=[]
     ready=iter((False,True))
     def child(name,poll):
-        return SimpleNamespace(_owner=SimpleNamespace(_active=0),
-            retire=lambda stream:calls.append((name,stream)),poll_retired=poll,
-            close=lambda:pytest.fail('synchronous close used'))
+        result = SimpleNamespace(_owner=SimpleNamespace(_active=0), _retiring=False,
+            poll_retired=poll, close=lambda:pytest.fail('synchronous close used'))
+        def retire(stream):
+            calls.append((name,stream))
+            result._retiring = True
+        result.retire = retire
+        return result
     frame=object.__new__(module.AsyncSourceVJPFrame)
     frame._lock=threading.RLock()
     frame._scoped=True;frame._retiring=False;frame.closed=False

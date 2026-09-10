@@ -817,8 +817,10 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
       Value row=gpu::ThreadIdOp::create(at,loc,gpu::Dimension::x);
       Value one=arith::ConstantIndexOp::create(at,loc,1);
       Value end=arith::AddIOp::create(at,loc,row,one);
-      // Every mutable access was proved row-local before cloning. Constants
-      // remain complete private/read-only arrays in every thread.
+      // Every mutable access was proved row-local before cloning. This also
+      // narrows the top-level loops expanded from admitted memref.copy ops:
+      // their full-buffer side keeps the thread row while compacted private
+      // accesses use zero. Constants remain complete private/read-only arrays.
       for (auto loop:kernel.getBody().front().getOps<scf::ForOp>()) {
         loop.getLowerBoundMutable().assign(row);
         loop.getUpperBoundMutable().assign(end);

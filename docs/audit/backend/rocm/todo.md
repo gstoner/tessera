@@ -7436,3 +7436,5 @@ Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f.
 Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
 
 gfx1151 executes the replay-bound serial SSD package for chunks 1, 2 and 5 with immutable-input, output, carry and checkpoint checks. This is correctness evidence; cooperative scheduling, hardware-counter attribution and promotion remain open. Exact dense f32 attention recognition and native bucket instantiation are shared artifact contracts, not sibling-device certificates. Automatic heap IR producers, full CPython frames and broader attention remain follow-ups. Evidence: `benchmarks/baselines/native_heap_attention_ssd_20260910/`; [current owner](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+PR #741 review follow-up (`NATIVE-HEAP-ATTENTION-SSD-2026-09-10`): the GPU pass now declares `tessera.ssd.source` in both metadata inventories. Expanded copies already narrow their outer loops to the owning thread row; new NVIDIA/ROCm lowering regressions pin global/private/output indexing. Shared contract validation only; no new device performance evidence. Apple and x86 execution claims remain unchanged.

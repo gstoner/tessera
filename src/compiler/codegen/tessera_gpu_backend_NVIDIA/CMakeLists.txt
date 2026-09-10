@@ -20,7 +20,9 @@ if(NOT DEFINED TESSERA_CUDA_ARCH)
 endif()
 message(STATUS "TESSERA_CUDA_ARCH = ${TESSERA_CUDA_ARCH}")
 
-add_subdirectory(lib/IR)
+if(NOT TARGET TesseraNVIDIAIR)
+  add_subdirectory(lib/IR)
+endif()
 add_subdirectory(lib/Conversion)
 
 # Shipped NVRTC-compiled mma.sync GEMM runtime symbols (self-gates on

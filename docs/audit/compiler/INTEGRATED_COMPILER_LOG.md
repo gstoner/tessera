@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-09
+last_updated: 2026-09-10
 audit_role: reference
 ---
 
@@ -2952,3 +2952,173 @@ Evidence: `benchmarks/baselines/source_nested_async_20260909/`; 19 independently
 
 Additional owners: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
 Synchronization key: `SOURCE-NESTED-ASYNC-2026-09-09`.
+
+
+### 2026-09-09 — Gather transposes and scoped source retirement
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #738.
+
+Outcome: Index-only tensor.generate gathers transpose to serial nested scatter-add loops with exact seed-shape assertions, preserving repeated-index accumulation. CPU source JIT retains explicitly captured custom exception class bindings and invokes their constructors only on failed completion. Scoped source VJP records backward as a reader of forward snapshots/residuals; retirement enqueues frees after closed reader scopes and queries completion without a context wait on the healthy path.
+
+Remaining: Arbitrary exception object heaps/attributes in native execution, GPU custom-class bindings, nonlinear generator adjoints, source-level dynamic VJP output allocation, fully asynchronous module unloading/failure recovery and full CPython frames. Native source notes remain distinct from interpreter frames and locals. No performance promotion.
+
+Evidence: Native CPU gather/source regressions; independent 19-case SM120/gfx1151 packets in `benchmarks/baselines/source_scoped_ad_20260909/`.
+
+<!-- entry-fields:end -->
+
+Additional owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+Synchronization key: `SOURCE-GATHER-SCOPED-2026-09-09`.
+
+
+### 2026-09-09 — Exception class bindings and unload cleanup recovery
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted continuation after #738.
+
+Outcome: Expanded raise sites now carry occurrence/generation identities even for identical literal payloads. GPU source VJP accepts explicitly owned host exception-class bindings and validates missing bindings before compilation; failed completion constructs the host exception once, including repeated polling. Actual host constructor/completion traceback frames survive repeated polls without accumulating polling frames. Module retirement separates confirmed unload/context exit from filesystem cleanup. Only post-unload cleanup failures admit off-thread retry through native tensor, public-result and source-product owners; uncertain driver outcomes retain their quarantine and admission slot.
+
+Remaining: Unbounded exception heaps, arbitrary object-field mutation/arguments in native execution, custom constructor effects inside handled source paths, true CPython frame reconstruction, cancellation of stalled driver unload and recovery from uncertain free/unload/context failures. No performance promotion.
+
+Evidence: `benchmarks/baselines/source_exception_bindings_20260909/`; CPU identity and failure-injection tests plus independent SM120/gfx1151 custom-class completion and scoped-retirement packets.
+
+<!-- entry-fields:end -->
+
+Additional owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+Synchronization key: `SOURCE-EXCEPTION-BINDINGS-2026-09-09`.
+
+### 2026-09-09 — Architecture sweep and failure-boundary reconciliation
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Reconciled the historical sweep into live owner routes; structural shape compatibility replaces string identity and pipeline validation rejects missing stages. Selected exception graphs validate before host constructors; unload failures survive a second context-exit failure with ownership retained.
+
+Remaining: General nonlinear constraint solving, automatic distributed placement, arbitrary exception heaps, native CPython frames and uncertain driver recovery remain open. No new device or performance promotion.
+
+Evidence: Super-Bear host WSL: 228 passed, 1 skipped across source/shape/distributed/lifetime/audit regressions; Ruff passed and mypy checked 305 files. Princess-Luna host WSL: 18 shared regression/fault-injection cases passed independently. This is not new GPU execution evidence.
+
+<!-- entry-fields:end -->
+
+Additional owners: [DIST-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#dist-native-1),
+[W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1),
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Sync: `ARCH-SWEEP-FAILURE-2026-09-09`.
+See [reconciliation](COMPILER_ARCHITECTURE_SWEEP.md#current-reconciliation-2026-09-09).
+Previous source-exception packets retain their original fingerprints; they are
+historical evidence and are not re-labelled as validation of this changed tree.
+
+### 2026-09-09 — Indexed exception completion and one-shot unload
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Source IR emits indexed exception objects, runtime validates and materializes shared/cyclic identities iteratively, and synchronous unknown unload/sync outcomes retain owners and refuse repeat driver actions.
+
+Remaining: Arbitrary runtime native heap allocation, full CPython deoptimization/frame materialization and isolation-based recovery remain open. Current source generations remain bounded; no performance promotion.
+
+Evidence: Super-Bear host WSL: 201 passed, 1 skipped; Princess-Luna: 18 heap/retirement tests passed. Ruff and mypy (306 files) pass. `benchmarks/baselines/source_exception_heap_20260909/` records 19 cases each on SM120 and gfx1151; this is completion-carrier correctness, not native heap allocation or destructive driver recovery.
+
+<!-- entry-fields:end -->
+
+Additional owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Sync: `SOURCE-HEAP-RETIRE-2026-09-09`.
+
+### 2026-09-09 — Completion reclamation and broader assertions corpus
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Broader lit execution found an undeclared Tile dialect dependency in AutodiffForwardPass; declaring it fixes the assertions-build abort. Fifteen x86/Apple fixtures now declare the optional backend they consume, so omitted components report unsupported rather than misleading compiler failures. Schedule-to-Tile declares its NVIDIA Target dialect dependency instead of loading it during pass execution. A hardware-free all-target build can explicitly retain the full compiler driver; ROCm translation registration follows the serialization libraries actually linked. The resulting assertions build passes every active fixture, and the opt-in CI lit lane requests the same portable matrix. Successful public completion retirement drops cached exception/traceback roots without mutating caller-owned errors. Unknown synchronous frees retain frames and refuse retry.
+
+Remaining: Structural assertions coverage is closed. Add installed-driver smoke; keep native Apple, NVIDIA and ROCm device correctness and performance under their owning evidence gates. General native heap allocation, complete CPython frame state and isolation-based driver recovery remain open.
+
+Evidence: 428 passed, 1 skipped in host WSL unit gates. Super-Bear assertions-enabled LLVM/MLIR 23.1.1 hardware-free all-target lane: 474 passed, 0 unsupported and 0 failed with CUDA/HIP runtime integration disabled. `scripts/check_lit_fleet_union.py` reports 474/474 active fixtures covered with no unexpected results. `benchmarks/baselines/source_completion_retirement_20260909/` retains the reports and exact compiler/source hashes. Ruff and mypy (306 files) pass.
+
+<!-- entry-fields:end -->
+
+Additional owners: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f),
+[W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a).
+Sync: `COMPLETION-CORPUS-2026-09-09`.
+F0 reconciliation: 72 package functions = 45 Graph/bootstrap inputs + 14 typed
+scheduled inputs + 13 raw/unclassified inputs. This is an input inventory, not
+artifact-consumption or device proof. Native unary family mappings still require
+consumer-by-consumer reconciliation before any Graph constructor deletion.
+
+### 2026-09-09 — Four canonicalization legality improvements
+
+Owner: [W5.5](INTEGRATED_COMPILER_PLAN.md#w55)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Compose actual transpose permutations and eliminate only identities; fold only rank-two matrix swaps into matmul while preserving bias/residual operands; retain identity casts carrying policy/metadata; refuse epilogue fusion when the replacement cannot carry source attributes. Direct rank-two transpose lowering honors explicit identity permutations. Failed host exception materialization drops unpublished object roots while retaining constructor failure tracebacks.
+
+Remaining: These are legality and data-movement improvements, not tuned GPU candidate promotion. Arbitrary native heap allocation/collection, full native CPython frames and isolation-based driver recovery remain open. The core assertions corpus has zero failures; owning-backend matrix coverage remains open.
+
+Evidence: `canonicalize_permutation_policy.mlir`, existing fusion/transpose fixtures, `test_native_canonical_permutation.py` and `test_source_exception_heap.py`. Super-Bear: 236 focused unit/registry checks passed; Princess-Luna: 13 semantic/heap checks and three MLIR fixtures passed independently. CPU execution distinguishes an identity permutation from a matrix swap on non-symmetric square data. Broader source/operation/dtype checks: 179 passed, 1 skipped. The final all-target assertions corpus passes all 474 active fixtures.
+
+<!-- entry-fields:end -->
+
+Additional owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+Sync: `CANONICAL-LEGALITY-2026-09-09`.
+The generic and custom canonicalizers share transpose interpretation; unknown
+metadata refuses simplification instead of silently losing an obligation.
+Non-inverse permutations of equal-sized axes no longer cancel by type equality.
+### 2026-09-09 — Native exception arena and isolation recovery boundary
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Native exception allocation/collection and process-isolation recovery foundations implemented; typed native frame records cross the checked exception boundary.
+
+Remaining: Exact CPython frames require interpreter deoptimization; F2 non-f32 matmul/cohort/breadth migrations and the registered W5.2f Schedule/Tile SSD producer remain open.
+
+Evidence: Super-Bear passes 37 focused runtime/audit checks; Princess-Luna passes 26 focused runtime checks.
+
+<!-- entry-fields:end -->
+
+Additional owners: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6),
+[W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f).
+
+A C-compatible exception arena now exposes node and
+payload pointers, grows without invalidating live handles, and collects
+unrooted object graphs including cycles. Transported exceptions retain a typed
+native deoptimization-frame record (file, line, function and instruction
+slot); no synthetic Python traceback is claimed because CPython provides no
+supported API for constructing an exact frame with native locals. A bounded
+driver-isolation lease now permits recovery after an uncertain outcome only by
+proving death of the owning process/context, and refuses recovery of a healthy
+context. CUDA and ROCm host suites each pass the focused 15-case contract set.
+
+The F2 x86 automatic package selector now routes backward attention through
+the existing content-addressed Schedule/Tile artifact and saved-LSE descriptor;
+its compiled consumer is no longer reachable only by a manual artifact call.
+The remaining census identifies non-f32 matmul, cohort and breadth constructors.
+The W5.2f source audit
+found backend ReplaySSM kernels but no shared Schedule SSD producer or
+Schedule-to-Tile consumer; the first correct SSD increment must add that typed
+IR boundary before any backend package is promoted.
+
+
+### 2026-09-10 — Installed drivers and owning-device measurements
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: The compiler-tools install component ships both compiler drivers and the layout shared library. Relative loader paths support prefix relocation. A smoke check copies the installed prefix, removes loader overrides, runs both drivers outside the checkout and translates MLIR to LLVM IR. The opt-in CI lane now consumes both the lit-union and installed-driver checks. Native Metal GELU correctness and attention-backward package timing are measured on M1 Max; native ANN correctness and scoped measurement admission run independently on CUDA SM120 and ROCm gfx1151.
+
+Remaining: CI execution of this revision is pending publication. Measurements cover bounded workloads and complete-call timing; they do not close general backend execution, device-clock attribution or production performance promotion.
+
+Evidence: `benchmarks/baselines/installed_device_gates_20260910/`, `scripts/check_installed_compiler.py`; installed-prefix smoke and all 474 assertions lit fixtures pass on Super-Bear. Two native Metal static/dynamic GELU tests pass on the Mac. Per-device measurement reports retain numerical checks and admission outcomes.
+
+<!-- entry-fields:end -->
+
+Additional owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1).
+Sync: `INSTALLED-DEVICE-GATES-2026-09-10`.

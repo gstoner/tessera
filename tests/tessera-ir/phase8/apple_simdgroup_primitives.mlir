@@ -1,3 +1,4 @@
+// REQUIRES: tessera-apple-backend
 // RUN: tessera-opt %s | FileCheck %s
 //
 // The Apple GPU machine primitives, in the shape `emit/apple_msl.py` already

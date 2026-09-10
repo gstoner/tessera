@@ -1,11 +1,75 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-09-09
 audit_role: reference
 scope: effects, shape system, fusion region formation, distributed planning, canonicalization, autotuner
-companions: AUTODIFF_ARCHITECTURE_REVIEW.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md · RIEMANNIAN_OT_PLAN.md
+companions: INTEGRATED_COMPILER_PLAN.md · AUTODIFF_EXECUTION_PLAN.md · RIEMANNIAN_OT_PLAN.md
 ---
 
-# Compiler Architecture Sweep — Where Else to Re-architect
+# Compiler architecture sweep
+
+## Current reconciliation (2026-09-09)
+
+This is a diagnostic reference. The [integrated plan](INTEGRATED_COMPILER_PLAN.md)
+owns sequencing; generated evidence owns capability status. The August review
+below is retained as historical rationale, including its original estimates and
+recommendations. Its ranked queue is **not a current backlog**.
+
+The review is stale in important places: effects and the common dataflow substrate
+landed, affine expressions and Presburger constraints exist, native recipes and
+ANN consumers exist, and sharding propagation has an implementation. It is still
+useful for finding boundaries where those mechanisms are bypassed. File existence
+alone does not establish universal lowering, execution or performance closure.
+
+| Original finding | Current source reconciliation | Remaining owner / next gate |
+|---|---|---|
+| F1 effects | `_EffectVisitor` is gone; registered IR effects and fixed-point propagation replaced it. The original prose contradicts its own resolved notice. | [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6): preserve effect authority across remaining frontend/package boundaries. |
+| F2 shapes | `shape.py` has `AffineDimExpr`; `presburger.py` and `parametric_recipe.py` exist. This increment removes display-string comparison from dimension compatibility and normalizes product factor order/integer content. Nonlinear equality is not a Presburger proof. | [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1): broader native recipe consumers and symbolic legality. |
+| F3 fusion | `fusion_core.py` still has family envelopes, but generic pointwise regions and native ANN rewrites mean the old seven-class count is not an inventory. No general costed partitioner is established by those bounded paths. | [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9) and [W5.2](INTEGRATED_COMPILER_PLAN.md#w52): broader legal candidates with artifact-bound measured admission. |
+| F4 distribution | `sharding_propagation.py` exists; the blanket “no propagation” claim is stale. `distributed_planner.py` still silently accepted pipeline-stage gaps; this increment rejects gaps/invalid indices while allowing several layers per stage. | [DIST-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#dist-native-1): native transport and placement beyond bounded proof. Validation is not partition search or multi-rank proof. |
+| F5 canonicalization | `CanonicalizeTesseraIR.cpp` still registers explicit patterns, including optional ANN composition. Fixed old operation counts do not justify either a rewrite or saturation. | [W5.5](INTEGRATED_COMPILER_PLAN.md#w55): identify a missing consumer and prove rewrite legality before choosing rule infrastructure. |
+| F6 autotuning | Retain measured candidate admission and exact artifact identity. Cross-target observations can propose trials, never qualify a different target. | [W5.2](INTEGRATED_COMPILER_PLAN.md#w52): target calibration and eligible packets. |
+
+### Reconciliation of the old numbered queue
+
+These routes preserve obligations without a second status registry. Historical
+completion claims remain in their original context, not new closure claims.
+
+| Old items | Current authority |
+|---|---|
+| 1, 11–14: traceable energies, activity, forward/region AD, checkpointing | [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md); [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1) |
+| 2, 7, 15: verified geometry, semantic keys, IFT | [RIEMANNIAN-OT](INTEGRATED_COMPILER_PLAN.md#riemannian-ot), [AD-SOLVER-IFT-1](INTEGRATED_COMPILER_PLAN.md#ad-solver-ift-1); repository governance owns semantic-key rules |
+| 3, 4, 6, 8, 9: inert policies, summaries, effects, analysis substrate | Historical disposition retained below; [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6) owns remaining boundary checks, not reimplementation of landed substrate |
+| 5, 20, 21: batching, sparse AD, jets | [AD-HIGHER-1](INTEGRATED_COMPILER_PLAN.md#ad-higher-1) |
+| 10: symbolic shape consumers | [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1) |
+| 16: sharding | [DIST-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#dist-native-1) |
+| 17, 18: fusion and canonicalization | [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9), [W5.5](INTEGRATED_COMPILER_PLAN.md#w55) |
+| 19, 22: grades and algebra kernels | [W6.4](INTEGRATED_COMPILER_PLAN.md#w64) |
+
+### Exception and recovery boundary
+
+[W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1) owns exception
+transport. The current carrier is a bounded serialized cause/context graph with
+typed payload slots, not an arbitrary exception heap. Selected graphs must be
+validated before any custom host constructor runs. Arbitrary heaps need runtime
+node identities, typed object/edge storage, capacity failure and cycle ownership;
+adding an unused schema does not provide that implementation.
+
+Full native CPython frames remain unimplemented. Source notes and preserved real
+host constructor tracebacks are distinct. A native producer must export original
+code/instruction offsets, live typed locals/cells and caller links; a matching
+interpreter-affine materializer must own references and cycles without replaying
+user effects. The new regression explicitly checks that location notes do not
+manufacture a frame. Neither GPU backend receives CPython execution semantics
+from host exception reconstruction.
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns uncertain driver outcomes.
+This increment preserves the unload failure even if context exit also fails,
+retains both diagnostics and quarantines the owner. Only confirmed post-unload
+filesystem cleanup can retry. Device reset/process isolation recovery is still
+open; retrying an uncertain unload/free could double-release live resources.
+
+## Historical August review (non-authoritative)
+
 
 Three reviews (GA/EBM, autodiff, and the OT-plan hardening) surfaced the same
 handful of failure shapes over and over. This document names those shapes as a

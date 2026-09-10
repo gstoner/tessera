@@ -7,6 +7,12 @@
 # union of MLIR's upstream translations plus the Tessera dialects.
 
 add_executable(tessera-translate-mlir tessera-translate.cpp)
+if(APPLE)
+  set_target_properties(tessera-translate-mlir PROPERTIES INSTALL_RPATH "@loader_path/../lib")
+elseif(UNIX)
+  set_target_properties(tessera-translate-mlir PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+endif()
+install(TARGETS tessera-translate-mlir RUNTIME DESTINATION bin COMPONENT compiler-tools)
 target_link_libraries(tessera-translate-mlir PRIVATE
   MLIRIR
   MLIRSupport
@@ -51,8 +57,7 @@ target_link_libraries(tessera-translate-mlir PRIVATE
 )
 
 # Tessera core dialects (Graph IR / Tile IR / Schedule IR).
-if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
-        (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
+if(NOT TESSERA_HARDWARE_FREE_TARGET_BUILD)
   target_compile_definitions(tessera-translate-mlir PRIVATE
     TESSERA_HAVE_CORE_TESSERA_IR)
   target_link_libraries(tessera-translate-mlir PRIVATE TesseraIR)

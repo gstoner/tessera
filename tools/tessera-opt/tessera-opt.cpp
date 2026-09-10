@@ -561,7 +561,7 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendDialects(registry);
-#ifdef TESSERA_HAVE_CORE_TESSERA_IR
+#ifdef TESSERA_HAVE_ROCM_SERIALIZATION
   // Stage L3: LLVM-IR translations + the #rocdl.target serialization interface
   // that gpu-module-to-binary needs to lower the gpu.module to an ELF hsaco.
   mlir::registerBuiltinDialectTranslation(registry);

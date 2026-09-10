@@ -188,12 +188,13 @@ class DistributedPlan:
                 )
 
         # Pipeline stages must be 0-based contiguous
-        stages = sorted(s.pp_stage for s in self.layers if s.pp_stage is not None)
+        assigned = [s.pp_stage for s in self.layers if s.pp_stage is not None]
+        if any(type(stage) is not int or stage < 0 for stage in assigned):
+            raise ValueError('pipeline stages must be nonnegative integers')
+        stages = sorted(set(assigned))
         if stages:
-            expected = list(range(stages[-1] + 1))
-            if stages != expected:
-                # Allow gaps — warn but don't raise
-                pass  # could emit a warning here
+            if any(stage != index for index, stage in enumerate(stages)):
+                raise ValueError('pipeline stages must be contiguous starting from 0')
 
     def add_layer(self, spec: LayerSpec) -> "DistributedPlan":
         """Append a layer spec and return self (fluent API)."""

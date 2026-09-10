@@ -1,5 +1,7 @@
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/IR/TransposeUtils.h"
+#include "Tessera/IR/TesseraOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Pass/Pass.h"
@@ -43,6 +45,16 @@ struct FuseMatmulBiasGELU : public RewritePattern {
     Value bias = add->getOperand(1);
     if (!isOp(mm, "tessera.matmul")) return failure();
     if (!mm->getResult(0).hasOneUse()) return failure();
+    // The fused consumer has no transpose, tiling or numeric-policy contract.
+    // Do not silently discard one while selecting an epilogue candidate.
+    if (mm->getNumOperands() != 2 || !add->getAttrs().empty() ||
+        !gelu->getAttrs().empty()) return failure();
+    for (auto attr : mm->getAttrs()) {
+      auto name = attr.getName().strref();
+      auto flag = dyn_cast<BoolAttr>(attr.getValue());
+      if ((name != "transposeA" && name != "transposeB") || !flag || flag.getValue())
+        return failure();
+    }
     OperationState st(gelu->getLoc(), "tessera.fused_epilogue");
     st.addOperands({mm->getOperand(0), mm->getOperand(1), bias});
     st.addTypes(gelu->getResult(0).getType());
@@ -59,6 +71,7 @@ struct FuseConvRelu : public RewritePattern {
     if (relu->getNumOperands() != 1) return failure();
     Operation *conv = relu->getOperand(0).getDefiningOp();
     if (!isOp(conv, "tessera.conv2d_nhwc")) return failure();
+    if (!relu->getAttrs().empty()) return failure();
     // The conv result is folded into the epilogue'd replacement; another
     // consumer would keep the original conv alive and duplicate the work.
     if (!conv->getResult(0).hasOneUse()) return failure();
@@ -103,8 +116,8 @@ struct TransposeIntoMatmul : public RewritePattern {
     Operation *bDef = mm->getOperand(1).getDefiningOp();
     bool transA = false, transB = false;
     Value a = mm->getOperand(0), b = mm->getOperand(1);
-    if (isOp(aDef, "tessera.transpose")) { transA = true; a = aDef->getOperand(0); }
-    if (isOp(bDef, "tessera.transpose")) { transB = true; b = bDef->getOperand(0); }
+    if (tessera::isMatrixTranspose(aDef)) { transA = true; a = aDef->getOperand(0); }
+    if (tessera::isMatrixTranspose(bDef)) { transB = true; b = bDef->getOperand(0); }
     if (!transA && !transB) return failure();
     OperationState st(mm->getLoc(), "tessera.matmul");
     st.addOperands({a, b});
@@ -177,7 +190,7 @@ struct EraseIdentityCast : public RewritePattern {
     // A `tessera.layout` attribute makes a same-type cast a layout-change marker
     // (the cast{layout} form a LayoutAssignmentPass inserts) — not dead weight.
     // Erasing it would drop the requested layout before legality/codegen sees it.
-    if (cast->hasAttr("tessera.layout"))
+    if (!cast->getAttrs().empty())
       return failure();
     rewriter.replaceOp(cast, cast->getOperand(0));
     return success();
@@ -198,6 +211,7 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   }
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
+    tessera::TransposeOp::getCanonicalizationPatterns(patterns, &getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
                  TransposeThroughPointwise, EraseIdentityCast>(&getContext());
     if (annReassociate) patterns.add<ComposeConstantANN>(&getContext());

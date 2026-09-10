@@ -508,8 +508,41 @@ def dims_compatible(lhs: DimLike, rhs: DimLike) -> bool:
     if isinstance(lhs, int) and isinstance(rhs, int):
         return lhs == rhs
     if isinstance(lhs, Dim) and isinstance(rhs, Dim):
-        return lhs.name == rhs.name or (lhs.value is not None and rhs.value is not None and lhs.value == rhs.value)
-    return str(lhs) == str(rhs)
+        if lhs.value is not None and rhs.value is not None:
+            return lhs.value == rhs.value
+        if lhs.name == rhs.name:
+            return True
+    return _dimension_identity(lhs) == _dimension_identity(rhs)
+
+
+def _dimension_identity(dim: DimLike) -> tuple:
+    """Structural product equality, without claiming a nonlinear solver proof.
+
+    Normalize affine factors and collect integer content without expanding
+    products of sums (which can grow exponentially). Display text is not an
+    identity: a legal symbol name may itself contain punctuation.
+    """
+    from math import gcd
+
+    scalar = 1
+    factors = []
+    pending = [dim]
+    while pending:
+        factor = pending.pop()
+        if isinstance(factor, DimProduct):
+            pending.extend(factor.factors)
+            continue
+        affine = _as_affine(factor)
+        if not affine.coefficients:
+            scalar *= affine.constant
+            continue
+        content = reduce(gcd, (v for _, v in affine.coefficients), affine.constant)
+        if affine.coefficients[0][1] < 0:
+            content = -content
+        scalar *= content
+        factors.append((tuple((name, value // content) for name, value in affine.coefficients),
+                        affine.constant // content))
+    return (0, ()) if scalar == 0 else (scalar, tuple(sorted(factors)))
 
 
 def _broadcast_dim(lhs: DimLike, rhs: DimLike) -> DimLike:

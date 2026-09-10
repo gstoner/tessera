@@ -1,5 +1,6 @@
 // x86 now defaults layout assignment on and consumes its physical row-major
 // contract before tiling:
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt %s -pass-pipeline='builtin.module(tessera-lower-to-x86)' | FileCheck %s --check-prefix=ON
 //
 // With assign-layouts=true the assignment half runs inside the named pipeline

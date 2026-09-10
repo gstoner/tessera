@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt --allow-unregistered-dialect --pass-pipeline='builtin.module(tessera-lower-to-x86)' %s | FileCheck %s --check-prefix=X86
 // RUN: tessera-opt --allow-unregistered-dialect --pass-pipeline='builtin.module(tessera-lower-to-gpu)' %s | FileCheck %s --check-prefix=NVIDIA
 // RUN: tessera-opt --allow-unregistered-dialect --tessera-compute-legalize --tessera-storage-legalize --tessera-storage-pack-consume %s | FileCheck %s --check-prefix=EXPLICIT-PACK

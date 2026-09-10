@@ -11,7 +11,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = ROOT / "tests/tessera-ir/phase2/x86_composed_layout_exec.mlir"
+FIXTURE = ROOT / "tests/fixtures/x86_composed_layout_exec.mlir"
 LLVM_BIN = Path("/usr/lib/llvm-23/bin")
 
 

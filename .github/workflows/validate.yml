@@ -404,9 +404,14 @@ jobs:
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DTESSERA_BUILD_EXAMPLES=ON \
+            -DTESSERA_BUILD_EXAMPLES=OFF \
             -DTESSERA_BUILD_APPLE_BACKEND=ON \
             -DTESSERA_BUILD_X86_BACKEND=ON \
+            -DTESSERA_BUILD_NVIDIA_BACKEND=ON \
+            -DTESSERA_BUILD_ROCM_BACKEND=ON \
+            -DTESSERA_FORCE_FULL_COMPILER_DRIVER=ON \
+            -DTESSERA_ENABLE_CUDA=OFF \
+            -DTESSERA_ENABLE_HIP=OFF \
             -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
             -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
           # The Apple Target-IR dialect + lowering passes are portable MLIR
@@ -419,15 +424,11 @@ jobs:
           # never exists, tessera-opt does not register `tessera_x86`, and every
           # phase2 x86 fixture dies with "Dialect `tessera_x86' not found".
           #
-          # ROCM_BACKEND is deliberately NOT set here. On a HIP-less runner
-          # `TESSERA_BUILD_ROCM_BACKEND=ON` (with ENABLE_HIP/ENABLE_CUDA off)
-          # forces TESSERA_OPT_LEAN_ARTIFACT_DRIVER — see
-          # tools/tessera-opt/CMakeLists.txt:95 — which drops core TesseraIR /
-          # TesseraPasses AND the x86 Target IR (gated on `NOT lean` at :133).
-          # Enabling it here would trade ~12 rocm fixtures for a far larger set
-          # of core+x86 failures. The `tessera-ir` rocm_*.mlir fixtures need a
-          # separate lean driver or a HIP host; tracked as
-          # CI-LIT-BACKEND-DIALECTS-2026-08-12 in docs/audit/backend/rocm/todo.md.
+          # CI explicitly requests the full compiler driver so the portable
+          # Apple, NVIDIA, ROCm and x86 dialects and transformations coexist
+          # without CUDA/HIP runtimes. Hardware-free artifact-only builds keep
+          # the lean driver by default. This lane proves structural compiler
+          # coverage; owning-device execution remains in backend evidence.
           cmake --build build --target tessera-opt tessera-translate-mlir
 
       - name: Run MLIR tool proof tests
@@ -451,7 +452,14 @@ jobs:
           TESSERA_VALIDATE_LIT: "1"
           PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-23/bin:${{ env.PATH }}"
         run: |
-          lit tests/tessera-ir -v
+          lit tests/tessera-ir -v -o lit-results.json
+          python scripts/check_lit_fleet_union.py lit-results.json
+
+      - name: Smoke installed compiler drivers from a relocated prefix
+        if: steps.deps.outputs.mlir == 'true'
+        run: |
+          cmake --install build --prefix "$RUNNER_TEMP/tessera-install" --component compiler-tools
+          python scripts/check_installed_compiler.py "$RUNNER_TEMP/tessera-install" --output installed-compiler.json
 
   # ────────────────────────────────────────────────────────────────────
   # Lane 5 — sanitizer  (asan / tsan / ubsan smoke)   ~15min

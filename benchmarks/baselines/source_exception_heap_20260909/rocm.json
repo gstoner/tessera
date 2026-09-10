@@ -1,0 +1,168 @@
+{
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "compiler_sha256": "1b6c7fcea51bec4117385fddb793a9137612b14baf5077e5c33ce2dee351812d",
+  "source_sha256": {
+    "python/tessera/compiler/source_exception_heap.py": "fdb628199d24e1f5c1d58373c2abc2f78690a8fc582ea3efdd59e28cfe04cc7d",
+    "python/tessera/compiler/source_control_flow.py": "15b8ebd164042a51762e3b835aeb397afefe8053a3786d942ff8fa8213094fd2",
+    "python/tessera/compiler/trace.py": "5f353e6cb55be0faa6992189b28cbc3d157e60f652c0a6d0807623dd27a99913",
+    "python/tessera/compiler/native_public_result.py": "b521bd74fca5bea00eb0e807540a5f63445dfb26be2f1ee8cc1ee3a94432a60d",
+    "python/tessera/compiler/native_source_state.py": "77050029528d0762b3c9a7f1e3b10711a77569b194bb16796f23ca47db9f5a7c",
+    "python/tessera/compiler/native_module_retirement.py": "909d6283dfcbf8b7ef25769bbb9ecaf7e65df50c678c22d2b2ca8a0911c44f57",
+    "python/tessera/compiler/native_gpu_storage.py": "bd252e5bc19c4cdcbc28ffcdd8dfdd18fb30dab721a60c00b5352046363c977f",
+    "python/tessera/compiler/native_gpu_tensor.py": "8531a34a9b81e72ca61f366b2b4b7e5cf0e221886ad4ec409ffe9b8a0eb8dfeb",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "751e1801691d82791946b4295fb5458678ee3077ecef4595b1800e8afdf955d3",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "3429f846a2ab3e0454c9c07b1c0b1e892222a72b8b31039c2532354a20935172",
+    "benchmarks/record_source_exception_bindings_gpu.py": "fb79ed737dbf8b8ff61cb284f8f2d152261f457fe53befe18ba7db006962ff2a"
+  },
+  "cases": [
+    {
+      "family": "checked_cube",
+      "asynchronous": false,
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": false,
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false,
+      "exception_class": "DomainError"
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": true,
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": true,
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false,
+      "exception_class": "DomainError"
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": false,
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false,
+      "exception_class": "RuntimeError"
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": false,
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": true,
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false,
+      "exception_class": "RuntimeError"
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": true,
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "retained_exception",
+      "earlier_generation_payload": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        1,
+        7,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -6,
+        -1,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -100,
+        100,
+        3
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        1,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        0,
+        8,
+        100
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -9223372036854775808,
+        9223372036854775807,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        0,
+        -2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        100,
+        -100,
+        -3
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        0,
+        -9223372036854775808
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "step": 0,
+      "guard_refused": true
+    }
+  ],
+  "performance_promotion": false
+}

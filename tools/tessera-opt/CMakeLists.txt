@@ -1,5 +1,11 @@
 
 add_executable(tessera-opt tessera-opt.cpp)
+if(APPLE)
+  set_target_properties(tessera-opt PROPERTIES INSTALL_RPATH "@loader_path/../lib")
+elseif(UNIX)
+  set_target_properties(tessera-opt PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+endif()
+install(TARGETS tessera-opt RUNTIME DESTINATION bin COMPONENT compiler-tools)
 target_link_libraries(tessera-opt PRIVATE
   TesseraPM
   MLIRIR
@@ -94,8 +100,7 @@ endif()
 # features remain a configure error. Ambient default-source targets such as
 # the two FA-4 dialects are excluded from the lean driver's link/feature ledger
 # instead of making the legitimate backend-only configuration impossible.
-if((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
-   (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA))
+if(TESSERA_HARDWARE_FREE_TARGET_BUILD)
   set(TESSERA_OPT_LEAN_ARTIFACT_DRIVER ON)
   target_compile_definitions(tessera-opt PRIVATE TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
 else()
@@ -204,6 +209,7 @@ if(TARGET TesseraROCMConversion)
   # gpu-module-to-binary drives (AMDGPU codegen from the shared libLLVM; ld.lld
   # from the platform LLVM). Only needed in a full ROCm build (real toolchain).
   if(TESSERA_BUILD_ROCM_BACKEND AND (TESSERA_ENABLE_HIP OR TESSERA_ENABLE_CUDA))
+    target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_ROCM_SERIALIZATION)
     target_link_libraries(tessera-opt PRIVATE
       MLIRROCDLTarget
       MLIRGPUToLLVMIRTranslation

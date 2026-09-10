@@ -100,6 +100,10 @@ def recover_callable(fn, *, max_steps=None, state_groups=(),state_views=(),error
                  *binary, *comparison)
     import builtins
     exception_types={name:getattr(builtins,name) for name in ('Exception','ValueError','RuntimeError','AssertionError','TypeError','IndexError','KeyError','OverflowError','ZeroDivisionError')}
+    custom_types={name:value for name,value in outer.items()
+                  if isinstance(value,type) and issubclass(value,Exception)
+                  and name not in exception_types}
+    exception_types.update(custom_types)
     raised_calls={id(value) for node in ast.walk(definition) if isinstance(node,ast.Raise) for value in (node.exc,node.cause)}
     local_names={arg.arg for arg in (*definition.args.posonlyargs,*definition.args.args)}
     local_names.update(part.id for node in ast.walk(definition) if isinstance(node,ast.Assign) for part in node.targets if isinstance(part,ast.Name))
@@ -156,6 +160,25 @@ def recover_callable(fn, *, max_steps=None, state_groups=(),state_views=(),error
     def literal(node):
         assert isinstance(node,ast.Constant)
         return node.value
+    def check_custom_handlers(node, handlers=()):
+        if isinstance(node,ast.Try):
+            caught=tuple(kind for handler in node.handlers for kind in
+                ((Exception,) if handler.type is None else tuple(exception_types[exception_name(part)]
+                 for part in (handler.type.elts if isinstance(handler.type,ast.Tuple) else (handler.type,)))))
+            for child in node.body:check_custom_handlers(child,handlers+caught)
+            for handler in node.handlers:
+                for child in handler.body:check_custom_handlers(child,handlers)
+            for child in (*node.orelse,*node.finalbody):check_custom_handlers(child,handlers)
+            return
+        if isinstance(node,ast.Raise) and isinstance(node.exc,ast.Call) and isinstance(node.exc.func,ast.Name):
+            kind=exception_types[node.exc.func.id]
+            has_custom=any(isinstance(value,ast.Call) and isinstance(value.func,ast.Name)
+                           and value.func.id in custom_types for value in (node.exc,node.cause))
+            if has_custom and any(issubclass(kind,handler) for handler in handlers):
+                raise SourceControlFlowError('custom exception constructors in handled native paths are unsupported')
+        for descendant in ast.iter_child_nodes(node):check_custom_handlers(descendant,handlers)
+    check_custom_handlers(definition)
+
     edges=[]
     dynamic_edges={}
     raise_edges={}
@@ -567,7 +590,7 @@ def recover_callable(fn, *, max_steps=None, state_groups=(),state_views=(),error
                 elif isinstance(reference,_ExceptionRef):cause=('edge',reference.edge)
                 else:raise SourceControlFlowError('exception cause binding requires a caught exception')
             context=env.get('@exception')
-            kind=(*kind[:2],cause,kind[3],context)
+            kind=(*kind[:2],cause,kind[3],context,site_name(str(node.lineno)+":"+str(node.col_offset),generation))
             if kind not in edges:
                 if len(edges)>=32:raise SourceControlFlowError('source exception table exceeds 32 static edges')
                 edges.append(kind)
@@ -869,6 +892,7 @@ def recover_callable(fn, *, max_steps=None, state_groups=(),state_views=(),error
         return result
     setattr(recovered,"source_error_payload_sites",payload_sites)
     setattr(recovered,"source_error_dynamic",bool(dynamic_edges and error_specs))
+    setattr(recovered,"source_exception_types",custom_types)
     setattr(recovered,"source_error_table",tuple(edges))
     return recovered
 
@@ -1001,9 +1025,13 @@ def to_native_source_ir(traced, *, name='source_program', autodiff=None):
     attributes='tessera.frontend.authority = "tracer"'
     groups=getattr(traced,'source_state_groups',())
     import json
-    contract=dict(schema=1,groups=groups,state_views=getattr(traced,'source_state_views',()),arguments=[dict(shape=shape,dtype=dtype) for _,shape,dtype in traced.args],
+    instruction_sites={str(edge[3][1]): index for index,edge in enumerate(getattr(traced,'source_error_table',()))
+                       if len(edge)>3 and isinstance(edge[3],(list,tuple)) and len(edge[3])==2}
+    contract=dict(schema=1,function_name=name,instruction_sites=instruction_sites,groups=groups,state_views=getattr(traced,'source_state_views',()),arguments=[dict(shape=shape,dtype=dtype) for _,shape,dtype in traced.args],
                   object_fields=getattr(traced,'source_object_fields',()),error_specs=getattr(traced,'source_error_specs',()),error_table=getattr(traced,'source_error_table',()),error_dynamic=getattr(traced,'source_error_dynamic',False),error_payload_sites=getattr(traced,'source_error_payload_sites',()),
                   result_count=len(traced.outputs)-len(groups)-bool(getattr(traced,'source_error_specs',()))-bool(getattr(traced,'source_error_dynamic',False))-len(getattr(traced,'source_error_payload_sites',())),outputs=[types[ssa] for ssa in traced.outputs])
+    from .source_exception_heap import pack_exception_table
+    contract['exception_heap']=pack_exception_table(contract.pop('error_table'))
     attributes+=', tessera.source_state = '+json.dumps(json.dumps(contract,sort_keys=True,separators=(',',':')))
     lines = ['module attributes {'+attributes+'} {', f'  func.func @{name}({args}) -> {signature}{function_attrs} {{', *emit(traced.body, '    '),
              '    return '+', '.join('%'+ssa for ssa in traced.outputs)+' : '+outputs, '  }', '}']

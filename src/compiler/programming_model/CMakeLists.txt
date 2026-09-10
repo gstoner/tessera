@@ -78,3 +78,11 @@ target_link_libraries(TesseraPM
 )
 
 add_dependencies(TesseraPM TesseraPMTableGen)
+
+if(TARGET TesseraNVIDIAIR)
+  target_compile_definitions(TesseraPM PRIVATE TESSERA_HAVE_NVIDIA_TARGET_IR)
+  target_include_directories(TesseraPM PRIVATE
+      ${CMAKE_BINARY_DIR}/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR
+  )
+  target_link_libraries(TesseraPM PRIVATE TesseraNVIDIAIR)
+endif()

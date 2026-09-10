@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt %s --tessera-tile-to-x86 --allow-unregistered-dialect | FileCheck %s
 
 // kv_cache_coverage_matrix.md (2026-05-10) — x86 KV-cache lowering.

@@ -1,3 +1,4 @@
+// REQUIRES: tessera-apple-backend
 // RUN: tessera-opt --split-input-file --verify-diagnostics %s
 //
 // `--verify-diagnostics` IS the check: it requires every expected-error and
@@ -175,4 +176,3 @@ func.func @integer_matrix_has_no_metal_spelling(%m: memref<64xi32>, %o: index) {
       : memref<64xi32>, index -> !tessera_apple.simdgroup_matrix<i32>
   return
 }
-

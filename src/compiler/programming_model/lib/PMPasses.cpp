@@ -36,6 +36,10 @@
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
 
+#ifdef TESSERA_HAVE_NVIDIA_TARGET_IR
+#include "TesseraNVIDIADialect.h.inc"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -2765,6 +2769,9 @@ struct ScheduleToTilePass
                     NVVM::NVVMDialect, scf::SCFDialect,
                     schedule::ScheduleDialect>();
     tile::registerTileDialect(registry);
+#ifdef TESSERA_HAVE_NVIDIA_TARGET_IR
+    registry.insert<tessera::nvidia::TesseraNVIDIADialect>();
+#endif
   }
 
   void runOnOperation() override {
@@ -3029,11 +3036,11 @@ struct ScheduleToTilePass
       Location loc = scheduled.getLoc();
 
       if (selected->target == "nvidia_sm120") {
-        // The shared scheduling library intentionally has no link-time
-        // dependency on an optional target backend.  In a CUDA-enabled tool,
-        // load the registered target dialect by namespace before constructing
-        // its block-coordinate boundary operation.
-        if (selected->storage != "int4" && !getContext().getOrLoadDialect("tessera_nvidia")) {
+        // Dynamic non-int4 schedules emit a registered Target IR boundary.
+        // The pass declares that dialect up front when the NVIDIA component is
+        // linked; loading a dialect here is forbidden during pass execution.
+        if (selected->storage != "int4" &&
+            !getContext().getLoadedDialect("tessera_nvidia")) {
           scheduled.emitError(
               "SM120 scheduled matmul requires the registered NVIDIA Target IR dialect");
           return signalPassFailure();

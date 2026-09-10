@@ -20,6 +20,7 @@ x86,softmax,—,gap
 x86,reduction,—,gap
 x86,matmul,scheduled_matmul.supports_scheduled_matmul,compiled
 x86,attention,scheduled_attention.supports_scheduled_attention,compiled
+x86,attention_backward,scheduled_attention_backward.supports_scheduled_attention_backward,compiled
 x86,cohort2,—,gap
 x86,breadth,—,gap
 x86,elementwise,—,gap

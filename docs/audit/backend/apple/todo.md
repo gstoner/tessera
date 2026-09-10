@@ -8296,3 +8296,92 @@ VJP over retained snapshots. Runtime gather adjoints, arbitrary exception heaps,
 full CPython frames, runtime-shaped source roots and fully asynchronous teardown
 remain open. Block AttnRes kernel/promotion obligations are unchanged.
 Evidence: `benchmarks/baselines/source_nested_async_20260909/`.
+
+
+### Gather transpose and scoped source retirement (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1`.
+Sync: `SOURCE-GATHER-SCOPED-2026-09-09`.
+Follow-up required: no MSL/custom-exception or scoped-source device proof in this increment.
+Shared contract: index-only accumulating gather adjoints, explicit CPU exception
+class ownership, scoped source VJP readers and ordered asynchronous retirement.
+Arbitrary exception heaps, full CPython frames and fully asynchronous unload or
+failure recovery remain open. Evidence: `benchmarks/baselines/source_scoped_ad_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Exception bindings and unload recovery (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1`.
+Sync: `SOURCE-EXCEPTION-BINDINGS-2026-09-09`.
+Follow-up required: MSL binding and exact-device proof remain absent for these source products.
+Shared contracts: raise occurrence identity, explicit host class bindings, cached
+completion exceptions, and retry only after confirmed unload/context exit.
+Arbitrary exception heaps, handled custom-constructor effects, CPython frames
+and uncertain driver recovery remain open. No performance promotion.
+Evidence: `benchmarks/baselines/source_exception_bindings_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Architecture sweep and failure boundaries (2026-09-09)
+
+Owners: `FRONTEND-IR-MEDIUM-1`, `DIST-NATIVE-1`, `W4-PRODUCT-1`, `W2.4a`.
+Sync: `ARCH-SWEEP-FAILURE-2026-09-09`.
+Follow-up required: no MSL or Apple exact-device validation for this increment.
+Shared changes: structural dimension equality, contiguous pipeline-stage
+validation, constructor-free exception graph preflight and preservation of both
+unload/context-exit failures. Unknown driver outcomes retain owners and refuse
+retry. Arbitrary exception heaps and native CPython frame reconstruction remain
+open; no device reset/recovery or performance claim.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Indexed exception completion and one-shot unload (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`. Sync: `SOURCE-HEAP-RETIRE-2026-09-09`.
+Follow-up required: no MSL source-heap producer or Apple device proof.
+Shared contract: indexed source exception objects, pre-constructor graph/payload
+snapshot, explicit bindings, and retention of synchronous uncertain driver
+outcomes. Arbitrary native heap allocation, full CPython frames and confirmed
+isolation teardown/replacement remain open. No performance promotion.
+Evidence: `benchmarks/baselines/source_exception_heap_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Completion roots and broader assertions corpus (2026-09-09)
+
+Owners: `COMPILER-DEVEX-1`, `E2E-REAL-6F`, `W4-PRODUCT-1`, `W2.4a`.
+Sync: `COMPLETION-CORPUS-2026-09-09`.
+The portable Apple compiler backend now participates in the Super-Bear
+assertions-enabled all-target lane; all 53 Apple-owned fixtures pass and the
+474-fixture union is complete. Native MSL execution remains a separate
+owning-device gate on the Mac and no device or performance evidence transfers.
+Shared changes: forward AD declares Tile dependency, completed frames release
+cached host exception roots, uncertain synchronous frees retain owners and
+refuse retry. General native heap allocation/reclamation, full CPython frames
+and isolation-based driver recovery remain open.
+Evidence: `benchmarks/baselines/source_completion_retirement_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Four canonicalization legality improvements (2026-09-09)
+
+Owners: `W5.5`, `W4-PRODUCT-1`. Sync: `CANONICAL-LEGALITY-2026-09-09`.
+Follow-up required: no Apple native-device/performance proof for these changes.
+Shared contracts: actual permutation composition, matrix-swap-only matmul flags,
+preserved epilogue operands, policy/metadata cast guards and conservative fusion
+admission. Failed exception reconstruction releases private unpublished roots.
+General native allocation/collection, full CPython frames and isolated driver
+recovery remain open. Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Native exception arena and isolation boundary (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6`, `W5.2f`. Sync: `NATIVE-HEAP-ISOLATION-2026-09-09`.
+Follow-up required: shared host contracts pass; Apple has no isolated Metal worker or native heap producer proof.
+The C-compatible arena collects unrooted cycles without moving live handles;
+typed deoptimization-frame records are diagnostic metadata, not CPython
+tracebacks. The SSD audit found no shared Schedule producer. No performance promotion.
+
+
+### Installed drivers and device measurements (2026-09-10)
+
+Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2026-09-10`.
+Native-device parity validated for static/dynamic GELU on M1 Max. fp16/bf16 attention backward with fp32 bias is numerically validated and timed through the package and direct native ABI. Timing is host complete-call, without device-clock coverage; broader MSL and promotion gates remain open.
+Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).

@@ -29,6 +29,17 @@ option(TESSERA_BUILD_ROCM_BACKEND     "Build ROCm compiler backend" OFF)
 option(TESSERA_BUILD_APPLE_BACKEND     "Build Apple Silicon compiler backend" OFF)
 option(TESSERA_BUILD_CLIFFORD_BACKEND  "Build the Clifford / Geometric-Algebra dialect (GA7+)" OFF)
 option(TESSERA_BUILD_EBM_BACKEND       "Build the Energy-Based-Model dialect (EBM5+)" OFF)
+option(TESSERA_FORCE_FULL_COMPILER_DRIVER
+       "Keep the full tessera-opt driver in hardware-free multi-target builds" OFF)
+
+set(TESSERA_HARDWARE_FREE_TARGET_BUILD OFF)
+if((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
+   (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA))
+  set(TESSERA_HARDWARE_FREE_TARGET_BUILD ON)
+endif()
+if(TESSERA_FORCE_FULL_COMPILER_DRIVER)
+  set(TESSERA_HARDWARE_FREE_TARGET_BUILD OFF)
+endif()
 
 # --------------------------------------------------------------------------
 # Sanitizers — runtime instrumentation for the C++ runtime + collectives.
@@ -270,9 +281,7 @@ endif()
 # --------------------------------------------------------------------------
 # Examples
 # --------------------------------------------------------------------------
-if(TESSERA_BUILD_EXAMPLES AND
-   ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
-    (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
+if(TESSERA_BUILD_EXAMPLES AND TESSERA_HARDWARE_FREE_TARGET_BUILD)
     message(STATUS "Skipping examples for hardware-free target build because CUDA is disabled")
 elseif(TESSERA_BUILD_EXAMPLES)
     add_subdirectory(examples)

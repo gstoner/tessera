@@ -136,3 +136,53 @@ def test_repolling_exception_does_not_accumulate_host_tracebacks():
         else:raise AssertionError('failed frame exposed results')
     assert min(lengths)==max(lengths)
     assert not hasattr(frame,'results')
+
+
+def _closing_frame():
+    import ctypes as ct
+    import threading
+    from types import SimpleNamespace
+    from tessera.compiler.native_public_result import PublicResultFrame
+    frame=object.__new__(PublicResultFrame)
+    frame._lock=threading.RLock()
+    frame.closed=False
+    frame._scoped=False
+    frame.context_type=ct.c_int
+    frame.context=ct.c_int(0)
+    frame.current=lambda _:0
+    frame.check=lambda code: None if code==0 else (_ for _ in ()).throw(RuntimeError('unknown free'))
+    frame.sync=lambda:0
+    frame.buffers=[SimpleNamespace(pointer=ct.c_void_p(7))]
+    frame.binding=SimpleNamespace(close=lambda:None)
+    return frame
+
+
+def test_synchronous_free_failure_retains_frame_and_never_retries():
+    from tessera.compiler.native_public_result import _QUARANTINED_PUBLIC_FRAMES
+    frame=_closing_frame();calls=[]
+    frame.free=lambda pointer:calls.append(pointer.value) or 1
+    try:
+        with pytest.raises(RuntimeError,match='unknown free'):frame.close()
+        with pytest.raises(RuntimeError,match='owner retained'):frame.close()
+        assert calls==[7] and frame.buffers[0].pointer.value==7
+        assert frame in _QUARANTINED_PUBLIC_FRAMES
+    finally:_QUARANTINED_PUBLIC_FRAMES.discard(frame)
+
+
+def test_close_drops_owned_exception_roots_without_mutating_external_error():
+    import weakref
+    import gc
+    import numpy as np
+    frame=_closing_frame();frame.free=lambda _:0
+    payload=np.ones(128)
+    reference=weakref.ref(payload)
+    error=ValueError(payload)
+    error.__context__=error
+    frame._source_exception=error
+    frame._source_exception_traceback=None
+    frame.close()
+    assert error.__context__ is error and error.args[0] is payload
+    assert not hasattr(frame,'_source_exception')
+    del payload,error
+    gc.collect()
+    assert reference() is None

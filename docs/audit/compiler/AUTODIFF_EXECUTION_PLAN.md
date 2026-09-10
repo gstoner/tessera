@@ -695,3 +695,119 @@ original code and instruction identity, throw-site live locals and closures,
 caller links, and interpreter/GIL ownership through asynchronous completion.
 Current native source notes and host bridge frames do not satisfy that contract;
 replaying the source or constructing dummy frames would misrepresent execution.
+
+
+## Gather transpose and scoped source ownership (2026-09-09)
+
+W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1 now consume index-only tensor.generate
+bodies containing one scalar tensor read. Reverse execution recomputes the
+index map and accumulates into a zero source, including repeated indices;
+seed logical dimensions are asserted before any scatter. Nonlinear generator
+bodies still refuse. Automatic source JIT VJP allocation remains static even
+though the native backward accepts a runtime-shaped seed.
+
+Custom exception classes explicitly captured from the callable are retained by
+the CPU binding and invoked after failed native completion. Serialized IR cannot
+import an arbitrary class by name. This supports host constructor attributes;
+it does not execute arbitrary object mutation or allocate Python objects on GPUs.
+GPU custom exception reconstruction still requires an explicit host binding.
+
+Scoped GPU source VJP now records its backward use of forward buffers and admits
+read-only output leases after successful completion. retire/poll queues frees
+behind submissions and readers, retaining seeds until both products retire.
+Failure quarantine and deferred module unloading remain separate obligations.
+
+**CPython frame reconstruction remains open, with a concrete next gate:** define
+an interpreter-owned code-object/offset binding, typed throw-site local/closure
+slots, caller-chain identifiers and their retention across asynchronous events.
+Validate those snapshots before considering a frame adapter. Python constructors
+at completion and source notes cannot supply missing execution frames; do not
+replay user source or fabricate dummy frames. A full adapter must also specify
+GIL/interpreter affinity, traceback cycles and deterministic reference release.
+
+
+## Exception object identity and unload failure phases (2026-09-09)
+
+The bounded exception graph now distinguishes identical literal raises by source
+occurrence and expanded loop generation. Payload equality is not object identity.
+This fixes a retained-reference alias bug; it does not create an unbounded heap.
+
+GPU source VJP binds custom class names explicitly through `exception_types` at
+materialization. These host objects are retained by the forward program; IR does
+not trigger imports. Constructors run at failed host completion, not on device.
+Repeated failed polls reuse the same exception or constructor failure and retain its real host traceback frames at bounded depth. General
+constructor effects inside handled native source paths remain unsupported;
+this boundary is typed completion reconstruction, not arbitrary Python object
+execution. The same distinction applies to dynamic attributes and arguments.
+
+Retirement retry is phase-specific. Successful module unload and context exit
+permit retry of a failed directory cleanup on a bounded worker. Driver unload,
+context-exit or free failures cannot establish resource disposition, so they
+remain quarantined and never trigger a second unload/free. Public source frames
+expose `retry_retirement_cleanup('forward' | 'backward')`; polling remains the
+completion authority. A blocked driver cannot be cancelled by these Python APIs.
+
+**Full CPython frames remain an architectural boundary, not an omitted call to
+a traceback helper.** Current compiled functions execute without Python frames;
+completion records lack original instruction offsets, live locals/cells and the
+caller chain. An offline adapter cannot recover those values from class bindings
+or source locations. The next frame work must first produce and consume a typed
+frame-snapshot ABI or retain live interpreter continuations across native calls,
+with interpreter affinity and ownership tests. Do not introduce unused frame
+attributes, replay effectful source, or claim generated bridge frames are the
+original execution. No full-frame compatibility is claimed by this increment.
+
+
+## Indexed exception completion and uncertain synchronous unload (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`. Sync: `SOURCE-HEAP-RETIRE-2026-09-09`.
+The source producer now serializes an indexed `exception_heap` in source-state
+IR instead of recursively embedding `error_table` trees. Runtime consumers
+validate references and explicit class bindings before constructors, snapshot
+caller-owned metadata/payloads, instantiate each reachable node once, then link
+cause/context edges. Host tests cover a 1,500-node chain, sharing and cycles.
+Legacy nested carriers remain readable. Source lowering still produces bounded
+expanded generations and typed tensor payload slots; arbitrary runtime allocation,
+custom attribute graphs, mutation and native cyclic heap reclamation remain open.
+Host cycle reconstruction is not proof of those missing native producers.
+
+Synchronous close now retains uncertain sync/unload failures in a reachable
+retirement ticket. Further close/poll reports the original error; relaunch and
+second unload refuse. This closes a retry hole outside the existing worker path.
+There is no assertion that an unknown device operation failed before taking effect.
+Recovery of such owners requires an isolated context/process established before
+launch, an ownership inventory excluding external pointers/readers, and confirmed
+teardown of that isolation boundary before replacement. Current raw-pointer
+bindings cannot establish that inventory, so in-process reset/reuse is not admitted.
+
+### Native CPython frame implementation gate
+
+The [CPython frame API](https://docs.python.org/3/c-api/frame.html) exposes frame
+creation and getters, but frame internals are opaque; creating a frame does not
+supply a native throw site's locals, instruction offset, or caller chain. Since
+3.13, the old fast-locals synchronization functions are no-ops. A ctypes wrapper
+around `PyFrame_New` would not close this contract.
+
+Implement the native deoptimization record and its interpreter-specific consumer
+together: original code identity and instruction mapping; live SSA locals/cells
+with tagged storage and ownership; nested call/exception-stack links; then a
+version-gated CPython adapter with GIL/interpreter affinity. Validate traceback
+inspection, closures, nested calls, exceptional exits and cycle release against
+interpreted execution without replaying effects. Until those records exist,
+logical source notes and actual host constructor frames retain their existing
+meaning. No full native frame reconstruction is implemented in this increment.
+
+
+## Completion roots and uncertain free retirement (2026-09-09)
+
+Successful close or asynchronous retirement now drops cached host exception and
+traceback roots. Caller-held exception graphs are not modified; unreachable host
+cycles remain CPython GC's responsibility. This is host reconstruction lifetime
+management, not a native allocator/collector. Synchronous free/sync failures now
+quarantine the public frame and reject repeat close/free or result use.
+
+Full native CPython reconstruction still requires the native deoptimization
+record described above. No frame is fabricated and no source is replayed.
+Unknown driver outcomes still require pre-established isolation and confirmed
+teardown; retained raw-pointer owners cannot safely be reset in place.
+Sync: `COMPLETION-CORPUS-2026-09-09`; live owners `W4-PRODUCT-1` / `W2.4a`.

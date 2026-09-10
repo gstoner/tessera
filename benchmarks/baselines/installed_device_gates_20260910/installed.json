@@ -1,0 +1,16 @@
+{
+  "drivers": {
+    "tessera-opt": {
+      "sha256": "dde13c3fbe14dbf1983397119e3b5286764ebc2f064b370c3c9b0cba8fca4a0a",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    "tessera-translate-mlir": {
+      "sha256": "94f099a5ed9ce6cc08b5a67cdd608cae24799e510177842a5a9697b3a9907cf3",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    }
+  },
+  "relocated": true,
+  "loader_overrides": false,
+  "llvm_translation": true,
+  "device_execution": false
+}

@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt --tessera-tile-to-x86='prefer-amx=true' %s  | FileCheck %s --check-prefix=AMX
 // RUN: tessera-opt --tessera-tile-to-x86='prefer-amx=false' %s | FileCheck %s --check-prefix=AVX
 // 2026-06: un-XFAIL'd.  Two MLIR-23 syntax drifts: bufferization.to_memref →

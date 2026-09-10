@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-09
+last_updated: 2026-09-10
 audit_role: plan
 plan_state: open
 ---
@@ -82,17 +82,17 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: Native unary ancestry now covers x86 and Apple; reconcile the remaining route/envelope census and exact-device certificates before constructor deletion.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--native-unary-ancestry-and-direct-x86-migration)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--completion-reclamation-and-broader-assertions-corpus)
 
 ### COMPILER-DEVEX-1
 
 **Assertions-enabled validation and usable tools**
 
 - Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
-- Gate: Assertions-enabled LLVM and Tessera now execute on Super-Bear with focused negative tests. Broaden this lane to the full pass corpus and installed-driver smoke; preserve pinned provenance and separate release/device evidence.
+- Gate: Assertions-enabled LLVM/MLIR 23.1.1 and a hardware-free all-target Tessera compiler now pass all 474 active lit fixtures on Super-Bear. Backend-owned fixtures declare their feature requirements, the data-only x86 execution input is outside lit discovery, and the union gate requires every active fixture to pass in at least one lane. The opt-in CI lit lane requests the same full portable target matrix. Installed drivers now pass relocated-prefix smoke on Super-Bear with loader overrides removed; the CI lane runs this check after installation. Preserve these regression gates; owning-device correctness and performance remain separate backend gates.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--assertions-enabled-native-compiler)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--installed-drivers-and-owning-device-measurements)
 
 ### EVIDENCE-PACKET-1
 
@@ -131,7 +131,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Remaining Graph-owned packaging and frontend retirement**
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-- Gate: Direct x86 forward attention now joins f32 matmul and unary native Schedule/Tile ownership, including symmetric-window/bias/softcap ABI projection and replay. Migrate non-f32 matmul, attention backward, cohort and breadth callers with target-specific descriptor proof.
+- Gate: Direct x86 forward and backward attention now join f32 matmul and unary native Schedule/Tile ownership, including symmetric-window/bias/softcap and saved-LSE ABI projection and replay. Migrate non-f32 matmul, cohort and breadth callers with target-specific descriptor proof.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
 - Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-08--source-cfg-and-asynchronous-ownership)
@@ -166,7 +166,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: Extend landed two-bucket recipe instantiation and native ANN evaluation to broader raising/attention and fused candidates; preserve complete witnesses and IR/image-bound admission.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--architecture-sweep-and-failure-boundary-reconciliation)
 
 ### MSW-9
 
@@ -193,10 +193,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Consumer-driven canonicalization**
 
 - Owner: [OPTIMIZING_COMPILER_PLAN.md](OPTIMIZING_COMPILER_PLAN.md)
-- Gate: Inventory live canonicalization consumers and implement needed rule-table rewrites with legality tests; equality saturation requires a demonstrated ordering problem.
+- Gate: Checked permutation composition, matrix-transpose flag folding, attribute-bearing cast retention and fusion guards now share legality across generic/custom canonicalization and direct transpose lowering. Extend live consumer coverage and measure candidate effects before promotion; equality saturation still requires a demonstrated ordering problem.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-04--foundation-f1-implementation)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--four-canonicalization-legality-improvements)
 
 ## F4
 
@@ -205,20 +205,20 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Source CFG and effect-aware recovery**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Opt-in source recovery records native single-carry while and bounded multi-variable break/continue expansion, merging each iteration before the next. Assertions remain ordered native effects; unmodelled calls refuse even on dead paths. Bounded nested/tuple loop returns and statically handled builtin exceptions now execute natively; explicit CPU state slots preserve exact input aliases and non-overlapping strided views through serialized SSA state and post-completion copyback. An opt-in native CPU JIT owns four shape/alias specializations; explicit result specs transport builtin exception classes with preceding writes. Declared plain-instance/dict/SimpleNamespace tensor fields and read-only overlapping snapshots now execute, including disjoint mutable state in the same invocation; static exception args, inherited/tuple handlers and bare re-raise are transported. Source JIT exposes explicit native paired VJP of functional results and declared next-state outputs, including projected object fields, without copyback; exact aliases accumulate their adjoint at the canonical root; native slice adjoints now accumulate mapped and overlapping reads at the containing root and mask overwritten destination gradients; exception objects remain nondifferentiable; checked source VJP differentiates successful numeric paths. Rank-one positive strides and bounded injective negative/multidimensional views share an explicit contiguous containing-input SSA root; local rank-preserving slices are captured, with general mapped code generation bounded to 256 elements; positive rectangular maps use compact native slices. Native runtime-shaped slice products reuse artifacts across shapes with guarded cotangent dimensions. Source slicing captures signed int64 bounds/steps on static ranked roots, including negative and nested runtime views, clipping and empty results. Python integer arguments reuse the same CPU JIT specialization; compiler-owned capacity/shape sidecars allocate multiple multidimensional outputs up to the 1024-element host capacity. Runtime gather adjoints, Python index protocols and runtime-shaped original roots remain open. Single-element f32 exception-value payloads cross loop/finally completion as typed outputs; per-site/generation SSA slots retain distinct dynamic cause/context values in bounded expanded loops, and CPU/GPU VJP gates backward on successful forward completion; bounded loop-carried caught references retain their original generation payload; static caught identities, named re-raise, explicit causes and implicit contexts are reconstructed at the host boundary with native source-location notes. CUDA SM120 and ROCm gfx1151 execute mapped forward/backward and checked synchronous/asynchronous exception completion; failed frames expose no result. Extend custom object access, ownerless/noncontiguous writable views, dynamic strings, unbounded or object-carried loop exception identity and real CPython frame/traceback semantics, changing loop state and automatic effectful AD; arbitrary CFG is not closed.
+- Gate: Opt-in source recovery records native single-carry while and bounded multi-variable break/continue expansion, merging each iteration before the next. Assertions remain ordered native effects; unmodelled calls refuse even on dead paths. Bounded nested/tuple loop returns and statically handled builtin exceptions now execute natively; explicit CPU state slots preserve exact input aliases and non-overlapping strided views through serialized SSA state and post-completion copyback. An opt-in native CPU JIT owns four shape/alias specializations; explicit result specs transport builtin exception classes with preceding writes. Declared plain-instance/dict/SimpleNamespace tensor fields and read-only overlapping snapshots now execute, including disjoint mutable state in the same invocation; static exception args, inherited/tuple handlers and bare re-raise are transported. Source JIT exposes explicit native paired VJP of functional results and declared next-state outputs, including projected object fields, without copyback; exact aliases accumulate their adjoint at the canonical root; native slice adjoints now accumulate mapped and overlapping reads at the containing root and mask overwritten destination gradients; exception objects remain nondifferentiable; checked source VJP differentiates successful numeric paths. Rank-one positive strides and bounded injective negative/multidimensional views share an explicit contiguous containing-input SSA root; local rank-preserving slices are captured, with general mapped code generation bounded to 256 elements; positive rectangular maps use compact native slices. Native runtime-shaped slice products reuse artifacts across shapes with guarded cotangent dimensions. Source slicing captures signed int64 bounds/steps on static ranked roots, including negative and nested runtime views, clipping and empty results. Python integer arguments reuse the same CPU JIT specialization; compiler-owned capacity/shape sidecars allocate multiple multidimensional outputs up to the 1024-element host capacity. Index-only runtime gather adjoints now use shape-guarded accumulating scatters; Python index protocols and runtime-shaped original roots remain open. Single-element f32 exception-value payloads cross loop/finally completion as typed outputs; per-site/generation SSA slots retain distinct dynamic cause/context values in bounded expanded loops, and CPU/GPU VJP gates backward on successful forward completion; bounded loop-carried caught references retain their original generation payload; static caught identities, named re-raise, explicit causes and implicit contexts are reconstructed at the host boundary with native source-location notes. CUDA SM120 and ROCm gfx1151 execute mapped forward/backward and checked synchronous/asynchronous exception completion; failed frames expose no result. Extend custom object access, ownerless/noncontiguous writable views, dynamic strings, unbounded or object-carried loop exception identity and real CPython frame/traceback semantics, changing loop state and automatic effectful AD; arbitrary CFG is not closed.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--signed-nested-views-and-asynchronous-source-vjp)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--native-exception-arena-and-isolation-recovery-boundary)
 
 ### AD-RESIDUAL-EVAL-1
 
 **Logical-shape ABI and persistent checkpoint execution**
 
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
-- Gate: Native AD products now bind bounded dynamic GPU inputs and scalar through rank-four floating/i8/i64 results using checked capacity/shape sidecars. A synchronous checked source VJP retains device snapshots and the matching forward residuals; exception completion is checked before backward and completion metadata receives zero seeds. Same-stream asynchronous snapshots and forward-gated backward submission now expose derivatives only after successful completion. Close can still synchronize; fully asynchronous reclamation, cross-queue dependency ownership and broader source product bindings remain open. Exact dominating SSA product guards now tighten joint temporary capacities. Extend relational/aliased volume proofs, saved heterogeneous products, general layout envelopes and automatic frontend wiring; exported shapes do not establish arbitrary Python CFG capture.
+- Gate: Native AD products now bind bounded dynamic GPU inputs and scalar through rank-four floating/i8/i64 results using checked capacity/shape sidecars. A synchronous checked source VJP retains device snapshots and the matching forward residuals; exception completion is checked before backward and completion metadata receives zero seeds. Same-stream asynchronous snapshots and forward-gated backward submission now expose derivatives only after successful completion. Scoped source VJP now supports reader-aware retire/poll without a context wait on the healthy path. Explicit close can still synchronize; failed-free quarantine, deferred module unload, cross-queue writer ownership and broader product bindings remain open. Exact dominating SSA product guards now tighten joint temporary capacities. Extend relational/aliased volume proofs, saved heterogeneous products, general layout envelopes and automatic frontend wiring; exported shapes do not establish arbitrary Python CFG capture.
 - Depends on: [W4-PRODUCT-1](#w4-product-1): existing bounded product carrier; arbitrary source CFG closure is not a prerequisite.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--signed-nested-views-and-asynchronous-source-vjp)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--exception-class-bindings-and-unload-cleanup-recovery)
 
 ### W2.4a
 
@@ -228,7 +228,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: Scoped runtime-shaped public frames and asynchronous static capture now order frees after declared readers. Module unload can run off-thread with bounded admission and non-waiting polls; a stalled/failed driver retains its owner. One through eight serialized incoming statuses now support bounded fan-in with scoped readers for each prerequisite; all 256 eight-status combinations have independent SM120/gfx1151 truth-table proof. Source state can produce immutable next-state GPU generations; exclusive synchronous owned-state copyback now reuses a private allocation with independent SM120/gfx1151 proof and blocks active scoped readers. Single-stream submit/poll now gates asynchronous copyback and excludes readers until completion; failure poisons the owner and retains pending storage. External borrowed-pointer mutation and concurrent multi-writer updates remain open. Extend heterogeneous dynamic persistent capture, unbounded/heterogeneous effect joins and external-reader adoption. Driver unload itself is not cancellable or latency-bounded, and unrestricted views retain synchronous close.
 - Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--signed-nested-views-and-asynchronous-source-vjp)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--completion-reclamation-and-broader-assertions-corpus)
 
 ### NUMPOL-CARRIER-1
 
@@ -278,7 +278,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: Extend bounded MPI proof beyond two ranks and proper-subgroup participants; add native NCCL/RCCL and other transports with process ownership and real multi-rank packets.
 - Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
 - Start: device
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--status-native-gelu-and-recipe-instantiation)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--architecture-sweep-and-failure-boundary-reconciliation)
 
 ## F5
 
@@ -287,7 +287,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Shared tiled-SSD compiler family**
 
 - Owner: [SEQUENCE_MIXER_ENGINEERING_PLAN.md](SEQUENCE_MIXER_ENGINEERING_PLAN.md)
-- Gate: Build the first shared tiled-SSD Schedule-to-Tile family with carry/checkpoint/mutation lineage; ReplaySSM remains a candidate/oracle, not the shared semantic owner.
+- Gate: Build the first shared tiled-SSD Schedule-to-Tile family with carry/checkpoint/mutation lineage; ReplaySSM remains a candidate/oracle, not the shared semantic owner. The 2026-09-09 producer audit found no `schedule.*` SSD op or Schedule-to-Tile conversion, so the next implementation starts with a registered Schedule op and verifier rather than packaging the existing ReplaySSM Tile strings as canonical IR.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: host-free
 - Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--math-audit--foundation-reconciliation)

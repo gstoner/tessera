@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt --tessera-tile-to-x86 %s | FileCheck %s
 
 module {

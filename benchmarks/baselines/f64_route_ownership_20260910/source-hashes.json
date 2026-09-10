@@ -1,0 +1,9 @@
+{
+  "src/compiler/programming_model/lib/PMPasses.cpp": "6629a8e0c73b2a46f13d11b16f8bf6de24464cf1c98c927cebeb9b7a134f3ccb",
+  "src/compiler/programming_model/ir/ScheduleDialect.cpp": "1a7cb6d0522c57ceba3329b8570bfeecfa119204ca20f94859d617bb88c44522",
+  "python/tessera/compiler/x86_native.py": "a76a64cc453a700a86d10dffa4ff48f76c203dc7099ce111b00b9582aef25036",
+  "python/tessera/compiler/scheduled_matmul.py": "190b5b4b339b9db23063bfef1413832b1244d03617cced49d4cce5a3a8abc5c7",
+  "tests/unit/test_scheduled_matmul_consumers.py": "a27880d2c46e4a60892a625da18819aef2583a4c1d9cff8eb24254f8263232aa",
+  "scripts/record_package_route_census.py": "3bb43049e7a3427304df5ac843ce5e184cc79ba03c204df74817da9ec168ec5c",
+  "assertions_compiler_sha256": "3c6b99067209e77f662f15746078f5cbf019c138a8a73fbfe32f539b229fc5cc"
+}

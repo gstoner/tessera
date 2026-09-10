@@ -61,7 +61,8 @@ def test_asynchronous_result_does_not_expose_uncompleted_or_failed_output():
     assert not hasattr(frame,'results')
 
 
-def test_scoped_dynamic_public_results_require_checked_reader_scopes():
+@pytest.mark.parametrize("streams", [(21,), (21, 23)])
+def test_scoped_dynamic_public_results_require_checked_reader_scopes(streams):
     import ctypes as ct
     from types import SimpleNamespace
     from tests.unit.test_native_reader_retirement import setup
@@ -86,8 +87,9 @@ def test_scoped_dynamic_public_results_require_checked_reader_scopes():
     with pytest.raises(ValueError, match='successful completion'):
         frame.read(21)
     assert frame.poll() and not hasattr(frame, 'results')
-    with frame.read(21) as results:
-        borrowed = results[0]
+    with frame.read_many(*streams) as readers:
+        assert owner._active == len(streams)
+        borrowed = readers[streams[-1]][0]
         assert borrowed.__cuda_array_interface__['shape'] == (2,)
         with pytest.raises(ValueError, match='scopes'):
             frame.retire(22)
@@ -186,3 +188,71 @@ def test_close_drops_owned_exception_roots_without_mutating_external_error():
     del payload,error
     gc.collect()
     assert reference() is None
+
+
+def test_paired_dynamic_readers_close_both_products_on_external_failure():
+    import threading
+    from types import SimpleNamespace
+    from tests.unit.test_native_reader_retirement import setup
+    from tessera.compiler.native_public_result import AsyncSourceVJPFrame
+    primal, primal_native = setup()
+    derivative, derivative_native = setup()
+    derivative._reader_buffers[0].__cuda_array_interface__['shape'] = (2, 2)
+    frame = object.__new__(AsyncSourceVJPFrame)
+    frame._lock = threading.RLock()
+    frame._scoped, frame._complete, frame.closed, frame._retiring = True, False, False, False
+    frame._forward = SimpleNamespace(read=primal.read)
+    frame._backward = SimpleNamespace(read=derivative.read)
+    frame._public_count = 1
+    with pytest.raises(ValueError, match='completed'):
+        with frame.read_many(21, 22):
+            pass
+    assert primal._active == derivative._active == 0
+    frame._complete = True
+    with pytest.raises(LookupError):
+        with frame.read_many(21, 22) as products:
+            assert primal._active == derivative._active == 2
+            p, d = products[21]
+            assert p[0].__cuda_array_interface__['shape'] == (4,)
+            assert d[0].__cuda_array_interface__['shape'] == (2, 2)
+            raise LookupError('external enqueue failed')
+    assert primal._active == derivative._active == 0
+    for owner, native in ((primal, primal_native), (derivative, derivative_native)):
+        assert sum(call[0] == 'record' for call in native.calls) == 2
+        owner.retire(23)
+        assert owner.poll()
+
+
+@pytest.mark.parametrize('failed_child', ['forward', 'backward'])
+def test_paired_retirement_resumes_only_unsubmitted_children(failed_child):
+    import threading
+    from types import SimpleNamespace
+    from tessera.compiler.native_public_result import AsyncSourceVJPFrame
+    class Child:
+        def __init__(self, fail):
+            self._retiring = False
+            self._owner = SimpleNamespace(_active=0)
+            self.fail = fail
+            self.frees = 0
+        def retire(self, stream):
+            if self.fail:
+                raise RuntimeError('dependency completion unproven')
+            assert not self._retiring
+            self._retiring = True
+            self.frees += 1
+    frame = AsyncSourceVJPFrame.__new__(AsyncSourceVJPFrame)
+    frame._lock = threading.RLock()
+    frame._scoped = True
+    frame.closed = frame._retiring = False
+    frame._forward = Child(failed_child == 'forward')
+    frame._backward = Child(failed_child == 'backward')
+    with pytest.raises(RuntimeError, match='unproven'):
+        frame.retire(21)
+    assert frame._retiring == (failed_child == 'forward')
+    if frame._retiring:
+        with pytest.raises(ValueError, match='original stream'):
+            frame.retire(22)
+    frame._forward.fail = frame._backward.fail = False
+    frame.retire(21)
+    frame.retire(21)
+    assert frame._forward.frees == frame._backward.frees == 1

@@ -35,7 +35,7 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
   Option<bool> inputStatus{*this, "input-status", llvm::cl::desc("Require a successful incoming product status before any body effect"), llvm::cl::init(false)};
   Option<unsigned> inputStatusCount{*this, "input-status-count", llvm::cl::desc("Number of independently checked incoming statuses (1 through 8)"), llvm::cl::init(1)};
   llvm::StringRef getArgument() const final { return "tessera-native-tape-to-gpu"; }
-  llvm::StringRef getDescription() const final { return "Materialize bounded bufferized AD/ANN products with proved temporary capacities"; }
+  llvm::StringRef getDescription() const final { return "Materialize bounded bufferized AD/ANN/SSD products with proved temporary capacities"; }
   void getDependentDialects(mlir::DialectRegistry &r) const override {
     r.insert<tessera::tile::TesseraTileDialect,mlir::arith::ArithDialect,mlir::func::FuncDialect,mlir::gpu::GPUDialect,
       mlir::LLVM::LLVMDialect,mlir::memref::MemRefDialect,mlir::scf::SCFDialect,mlir::math::MathDialect,mlir::cf::ControlFlowDialect>();
@@ -48,10 +48,11 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
     SmallVector<func::FuncOp> fs(m.getOps<func::FuncOp>());
     bool ad=m->hasAttr("tessera.autodiff.product_abi") && m->hasAttr("tessera.autodiff.product_pair");
     bool ann=m->hasAttr("tessera.ann.source");
+    bool ssd=m->hasAttr("tessera.ssd.source");
     bool publicResults=m->hasAttr("tessera.native_result_program");
-    bool sourceState=m->hasAttr("tessera.source_state") && !ad && !ann && !publicResults;
+    bool sourceState=m->hasAttr("tessera.source_state") && !ad && !ann && !ssd && !publicResults;
     if (sourceState && !publicResultCapacity) return reject();
-    if (fs.size()!=1 || (static_cast<int>(ad)+static_cast<int>(ann)+static_cast<int>(publicResults)+static_cast<int>(sourceState))!=1) return reject();
+    if (fs.size()!=1 || (static_cast<int>(ad)+static_cast<int>(ann)+static_cast<int>(ssd)+static_cast<int>(publicResults)+static_cast<int>(sourceState))!=1) return reject();
     auto f=fs[0];
     if (publicInputCapacity) {
       if (!ad || !statusBuffer || !publicResultCapacity || publicInputCapacity<1 || publicInputCapacity>1024 ||
@@ -592,7 +593,7 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
           n*=trip;
         }
       bytes+=n;
-      if (bytes>4096) bad=true;
+      if (bytes>4096 && !parallelRows) bad=true;
       if (auto get=dyn_cast<memref::GetGlobalOp>(op)) {
         auto global=m.lookupSymbol<memref::GlobalOp>(get.getName());
         auto value=global ? dyn_cast_or_null<DenseElementsAttr>(global.getInitialValueAttr()) : DenseElementsAttr();
@@ -646,6 +647,25 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         }
       });
     }
+    // Only entry-owned static mutable row buffers can be compacted. Constants
+    // remain complete; nested allocation generations retain their slot proof.
+    auto rowPrivate = [&](Operation *op) {
+      if (!parallelRows || op->getParentOp()!=f.getOperation() ||
+          !isa<memref::AllocOp,memref::AllocaOp>(op)) return false;
+      auto type=cast<MemRefType>(op->getResult(0).getType());
+      return type.hasStaticShape() && type.getRank()>0 && type.getDimSize(0)==rowCount;
+    };
+    llvm::DenseSet<Value> compactRows;
+    if (parallelRows && !bad) {
+      f.walk([&](Operation *op) {
+        if (!rowPrivate(op)) return;
+        auto type=cast<MemRefType>(op->getResult(0).getType());
+        int64_t full=type.getNumElements()*elementBytes(type.getElementType());
+        bytes-=full-full/rowCount;
+        compactRows.insert(op->getResult(0));
+      });
+      if (bytes>4096) bad=true;
+    }
     if (bad) return reject();
     std::string text; llvm::raw_string_ostream os(text);
     os<<"module { gpu.module @native_tape { gpu.func @product(";
@@ -684,8 +704,13 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
     kernel.walk([&](UnrealizedConversionCastOp cast){mapping.map(f.getArgument(argument++),cast.getResult(0));});
     OpBuilder b(kernel.getBody().front().getTerminator());
     for (auto &op:f.getBody().front().without_terminator()) b.clone(op,mapping);
+    llvm::DenseSet<Value> compactClones;
+    for (Value value:compactRows) compactClones.insert(mapping.lookup(value));
     SmallVector<Operation *> memory;
     kernel.walk([&](Operation *op){if (isa<memref::AllocOp,memref::GetGlobalOp,memref::CopyOp>(op) || (isa<memref::AllocaOp>(op) && cast<MemRefType>(op->getResult(0).getType()).hasStaticShape())) memory.push_back(op);});
+    llvm::stable_sort(memory, [](Operation *a, Operation *b) {
+      return isa<memref::CopyOp>(a) && !isa<memref::CopyOp>(b);
+    });
     for (auto *op:memory) {
       OpBuilder at(op); auto loc=op->getLoc();
       auto loopNest=[&](MemRefType type,auto leaf) {
@@ -709,6 +734,28 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
         }); op->erase(); continue;
       }
       auto type=cast<MemRefType>(op->getResult(0).getType());
+      if (compactClones.contains(op->getResult(0))) {
+        Value value=op->getResult(0);
+        SmallVector<Operation *> users(value.getUsers());
+        Value zero=arith::ConstantIndexOp::create(at,loc,0);
+        for (Operation *user:users) {
+          if (auto load=dyn_cast<memref::LoadOp>(user))
+            load.getIndicesMutable().slice(0,1).assign(zero);
+          else if (auto store=dyn_cast<memref::StoreOp>(user))
+            store.getIndicesMutable().slice(0,1).assign(zero);
+          else if (auto dim=dyn_cast<memref::DimOp>(user)) {
+            auto index=dim.getConstantIndex();
+            if (!index) return reject();
+            OpBuilder before(dim);
+            auto extent=arith::ConstantIndexOp::create(before,dim.getLoc(),type.getDimSize(*index));
+            dim.replaceAllUsesWith(extent.getResult());
+            dim.erase();
+          } else return reject();
+        }
+        SmallVector<int64_t> shape(type.getShape()); shape[0]=1;
+        type=MemRefType::get(shape,type.getElementType());
+        value.setType(type);
+      }
       // A GPU static alloca is not a fresh allocation on each loop trip.
       // Give every syntactic allocation an entry-owned byte array and derive
       // a distinct slot from the complete enclosing iteration path.

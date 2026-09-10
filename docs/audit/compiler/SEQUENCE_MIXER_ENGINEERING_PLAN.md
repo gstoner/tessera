@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-10
 audit_role: plan
 plan_state: landing
 ---
@@ -24,6 +24,27 @@ plan_state: landing
 > this plan is the build sequence, not a status claim.
 
 ---
+
+## Shared SSD baseline (2026-09-10)
+
+`W5.2f` now has a registered internal `schedule.ssd` producer and native
+Schedule-to-Tile lowering, independent of ReplaySSM. Its static f32 contract is
+`S[t,h,n,p] = decay[t,h]*S[t-1,h,n,p] + B[t,h,n]*X[t,h,p]` and
+`Y[t,h,p] = sum_n C[t,h,n]*S[t,h,n,p]`. Decay is multiplicative, not log-decay.
+The five immutable inputs have shapes `[T,H,P]`, `[T,H]`, `[T,H,N]`, `[T,H,N]`
+and `[H,N,P]`; three results are Y, final carry and
+`[ceil(T/chunk),H,N,P]` chunk-end carry, including the final partial chunk.
+The verifier requires unencoded positive static f32 tensors, at most 16777216
+elements per tensor, and `1 <= chunk_size <= T`. Arithmetic has no fastmath.
+
+The baseline emits structured tensor loops; it overwrites each chunk checkpoint
+until that chunk ends. Native CPU numerical tests establish this recurrence and
+input preservation. This is an internal compiler operation, with no new public
+operator registration or backend runtime capability. It does not claim a tiled
+GPU kernel. Next are public mixer linkage, checkpoint AD, target tiling and
+cooperative kernels, explicit mutation lineage, ReplaySSM differential evidence
+and independent device package/promotion gates. Sequencing remains owned by
+[W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f).
 
 ## 1. Scope, goals, non-goals
 
@@ -461,3 +482,7 @@ consumer that checks timestep/domain assumptions and rejects unsupported
 cases, tests for nonnormal transient amplification and discretization-specific
 stability, and separate native execution evidence on each claimed backend.
 Do not infer discrete stability from continuous-time eigenvalues alone.
+
+## Native heap, attention and SSD follow-through (2026-09-10)
+
+`native_ssd.py` projects immutable Schedule inputs before bufferization and binds a replay-checked serial CUDA/HIP package. The SM120 and gfx1151 recorders verify all five input buffers, Y, final carry and partial-chunk checkpoints for chunks 1, 2 and 5. These independent device correctness packets are in `benchmarks/baselines/native_heap_attention_ssd_20260910/`. Cooperative kernels, public mixer integration, checkpoint adjoints and ReplaySSM comparison remain open; no performance promotion is claimed.

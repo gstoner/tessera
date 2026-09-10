@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "architecture": "gfx1151",
+  "compiler_sha256": "a06984f943975fca7515e963ee6bcdf6caf54d4259b8ab01a2f7f2c4a8126362",
+  "execution": "native_gpu",
+  "rows": [
+    {
+      "chunk": 1,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "782e60e6572231e4c04167c72b2818f731b5f7ee6bbf815bdf087932a2fb47aa",
+      "image_sha256": "e2d36151db88fc83c51f8757e1d4d15df7a730f5581288896d2bc57b3bb1929a"
+    },
+    {
+      "chunk": 2,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "96845784f8f2dfbf83e171a4f660183fc61a11b86d5ed8af7b3aa50fe7fd3630",
+      "image_sha256": "a37dcd816d12fbaf3501ceea65eb1a88fccc7dd7cae04f48165aa6617c518a30"
+    },
+    {
+      "chunk": 5,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "bc5f166a0dea5a999e2f0efaa39095ed0523c91efa5cb8634baa52738e4e2173",
+      "image_sha256": "bcd834637339f1351e24d621fa826ca0fec115ffa10f1a1f021c4abd8ea8b29a"
+    }
+  ],
+  "promotion_eligible": false
+}

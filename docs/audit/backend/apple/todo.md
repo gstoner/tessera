@@ -8413,3 +8413,29 @@ Shared no-implicit-wait contract reviewed; Metal process isolation and health ad
 Fresh ANN workers execute numerical probes before admission. External readers may borrow on multiple declared streams; eventless dependency insertion refuses implicit host synchronization. Unkillable processes, driver reset/recovery and arbitrary external pointer lifetimes remain open. Evidence: `benchmarks/baselines/health_reader_admission_20260910/`.
 
 PR #740 review follow-up (`HEALTH-READERS-2026-09-10`): eventless retirement remains retryable; parent ANN input checks preserve healthy workers; pending context exit retains or reclaims ownership without masking caller errors. Shared host lifecycle fixes; existing exact-device evidence remains scoped to its recorded revision.
+
+### FP64 artifact ownership and route callers (2026-09-10)
+
+Owners: E2E-REAL-6 / E2E-REAL-6F. Sync: `F64-ROUTE-OWNERSHIP-2026-09-10`.
+
+No fp64 GPU route is admitted; this x86-specific Schedule capability does not change Apple execution support. Caller candidates and helper-to-emitter paths are recorded in `benchmarks/baselines/f64_route_ownership_20260910/`; they are not device certificates.
+
+### Dynamic readers and row-private ANN (2026-09-10)
+
+Owners: W2.4a / MSW-9. Sync: `DYNAMIC-READERS-ROW-ANN-2026-09-10`.
+
+Shared reader API assessed; no Apple row-private GPU lowering or Metal execution claim. Checked public/paired frames now support declared multi-stream reads; general heterogeneous capture and external-pointer escape remain open. Evidence: `benchmarks/baselines/ann_row_private_20260910/`.
+
+### Shared SSD and retryable completion (2026-09-10)
+
+Owners: W5.2f / W2.4a / W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1.
+Sync: `SSD-RETRY-COMPLETION-2026-09-10`.
+
+Follow-up required: apple target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. Native heap producers, full CPython deoptimization and attention raising remain open. See [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Native heap, attention recipes and SSD device proof (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f.
+Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
+
+Shared contracts reviewed; no Metal SSD package or device validation is supplied. Native host allocation does not establish Metal allocation. Apple needs its own executable SSD materialization and owning-device proof. Exact dense f32 attention recognition and native bucket instantiation are shared artifact contracts, not sibling-device certificates. Automatic heap IR producers, full CPython frames and broader attention remain follow-ups. Evidence: `benchmarks/baselines/native_heap_attention_ssd_20260910/`; [current owner](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).

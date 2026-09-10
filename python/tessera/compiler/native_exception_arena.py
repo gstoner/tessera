@@ -125,6 +125,27 @@ class NativeExceptionArena:
                 self._roots.add(handle)
             return handle
 
+    def retain(self, handle: int) -> None:
+        """Root an existing live node before a later allocation can collect it."""
+        with self._lock:
+            if type(handle) is not int or handle not in self._live:
+                raise ValueError("native exception root must name a live handle")
+            self._roots.add(handle)
+
+    def set_edges(self, handle: int, *, edges: tuple[int, ...]) -> None:
+        """Publish cause/context links, including cycles, while no ABI reader runs."""
+        with self._lock:
+            self._writable()
+            if type(handle) is not int or handle not in self._live:
+                raise ValueError("native exception node must name a live handle")
+            if not isinstance(edges, tuple) or len(edges) > 2 or any(
+                    type(edge) is not int or edge not in self._live for edge in edges):
+                raise ValueError("native exception edges must name live handles")
+            cause, context = edges + (-1,) * (2 - len(edges))
+            self._nodes[handle].cause = cause
+            self._nodes[handle].context = context
+            self._live[handle] = (self._live[handle][0], edges)
+
     def release(self, handle: int) -> None:
         with self._lock:
             self._roots.discard(handle)

@@ -28,6 +28,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ------------------------------------------------------------------
 add_library(tessera_runtime
     src/tessera_runtime.cpp
+    src/exception_heap.cpp
     src/scheduler/tile_scheduler.cpp
     src/backend/cpu_backend.cpp
     src/backend/cuda_backend.cpp

@@ -121,9 +121,12 @@ LogicalResult MatmulOp::verify() {
   if (!llvm::is_contained({"none", "relu", "gelu", "silu"},
                           getActivation()))
     return emitOpError("requires a supported pointwise activation");
-  if (getOutput() != "f32" && getOutput() != "f16" &&
+  bool f64 = getOutput() == "f64" && getStorage() == "f64" &&
+             getAccum() == "f64" &&
+             (getArch().contains("avx512") || getArch().contains("zen5"));
+  if (getOutput() != "f32" && getOutput() != "f16" && !f64 &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
-    return emitOpError("requires f32/f16 output or int4 with i32 accumulation/output");
+    return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, or int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")
     return emitOpError("initial matmul contract requires row/col layouts");
   if (getRasterOrder() != "row_major")
@@ -803,5 +806,38 @@ LogicalResult KnobOp::verify() {
     return emitOpError("logits and choices must have equal length");
   if (getSubject().getType() != getSelected().getType())
     return emitOpError("must preserve the subject type");
+  return success();
+}
+
+LogicalResult SSDOp::verify() {
+  const int64_t chunkSize = getChunkSizeAttr().getInt();
+  SmallVector<RankedTensorType> types;
+  for (Type type : llvm::concat<Type>(getOperandTypes(), getResultTypes())) {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    if (!tensor || !tensor.hasStaticShape() || tensor.getEncoding() ||
+        !tensor.getElementType().isF32())
+      return emitOpError("requires unencoded static f32 tensors");
+    int64_t elements = 1;
+    for (int64_t extent : tensor.getShape()) {
+      if (extent <= 0 || extent > (1 << 24) / elements)
+        return emitOpError("requires positive shapes with at most 16777216 elements");
+      elements *= extent;
+    }
+    types.push_back(tensor);
+  }
+  if (types[0].getRank() != 3 || types[2].getRank() != 3 || chunkSize <= 0)
+    return emitOpError("requires rank-three X/B and positive chunk_size");
+  int64_t t = types[0].getDimSize(0), h = types[0].getDimSize(1);
+  int64_t p = types[0].getDimSize(2), n = types[2].getDimSize(2);
+  if (chunkSize > t)
+    return emitOpError("chunk_size cannot exceed sequence length");
+  auto tensor = [&](ArrayRef<int64_t> shape) {
+    return RankedTensorType::get(shape, types[0].getElementType());
+  };
+  if (types[1] != tensor({t,h}) || types[2] != tensor({t,h,n}) ||
+      types[3] != types[2] || types[4] != tensor({h,n,p}) ||
+      types[5] != types[0] || types[6] != types[4] ||
+      types[7] != tensor({(t - 1) / chunkSize + 1,h,n,p}))
+    return emitOpError("SSD input, carry or checkpoint shapes disagree");
   return success();
 }

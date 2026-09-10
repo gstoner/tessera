@@ -193,7 +193,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/README.md` | - | 2026-09-07 | 3 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-09-07 | 3 | ✓ |
 | `compiler/SCHEDULE_OBJECT_DESIGN.md` | - | 2026-08-16 | 25 | ✓ |
-| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-09-07 | 3 | ✓ |
+| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-09-10 | 0 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-09-08 | 2 | ✓ |
 | `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 29 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-09-06 | 4 | ✓ |

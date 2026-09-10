@@ -3224,3 +3224,67 @@ Remaining: Actual wedged-driver recovery and unrestricted external-reader lifeti
 Evidence: focused reader-retirement and isolated-ANN regressions cover retry after a missing event, repeated invalid inputs followed by successful execution, pending context exit and failed cleanup with exception preservation.
 
 <!-- entry-fields:end -->
+
+### 2026-09-10 — Expanded route callers and f64 ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation after #740.
+
+Outcome: FP64 x86 matmul gains a native Schedule producer/verifier, complete storage/accumulation/output projection and the existing native fp64 consumer. Floating Graph constructor branches are removed; mixed-signedness VNNI remains. The caller census now includes x86 breadth, import aliases and local helper-to-emitter paths.
+
+Remaining: F0 certificate reconciliation and dynamic call resolution, mixed uint8/int8 matmul, cohort/elementwise/breadth migration. Tracks 3–10 retain their prior gates; no new driver-hang recovery, heap producer, CPython deoptimization, AD/F3/SSD closure or performance promotion follows from this increment.
+
+Evidence: `benchmarks/baselines/f64_route_ownership_20260910/`; fp64 compiler fixture and owning-CPU projection/numerical tests in `test_scheduled_matmul_consumers.py`. Registry and ABI tests preserve compiler-free coverage.
+
+<!-- entry-fields:end -->
+
+Additional owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f).
+
+### 2026-09-10 — Dynamic reader fanout and row-private ANN
+
+Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+
+PRs: Uncommitted continuation after #740.
+
+Outcome: Checked dynamic public results and paired source-VJP frames expose multi-stream scoped readers. Host regressions preserve both products on external failure and close every acquired reader. The existing native row-independence proof now authorizes compacting entry-owned mutable ANN temporaries to one row per thread, preserving complete constants and nested generation slots. Internal SSA proof sets, not user attributes, authorize compaction.
+
+Remaining: General package isolation, real wedged-driver recovery, native heap producers, CPython deoptimization, general heterogeneous saved-product generation and relational alias proofs, attention raising and shared tiled SSD remain open. This increment does not substitute host reader tests for owning-device frame proof. ROCm device counters and broader/multi-block tuning remain open.
+
+Evidence: 64x8 square ANN numerical oracles pass independently on SM120/gfx1151; single-run rewrite speedups about 0.991x/0.994x retain incumbents. CUDA Nsight separates kernel, transfer and API costs. See `benchmarks/baselines/ann_row_private_20260910/`. No promotion or direct old/new optimization speedup is claimed.
+
+<!-- entry-fields:end -->
+
+Additional owners: [MSW-9](INTEGRATED_COMPILER_PLAN.md#msw-9), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — SSD recurrence and retryable completion
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #740.
+
+Outcome: A native registered internal `schedule.ssd` and Python producer carry X, multiplicative decay, B/C, immutable initial carry, Y, final carry and chunk-end checkpoints. Schedule-to-Tile lowers the verified static f32 recurrence to structured tensor loops; native CPU tests cover partial chunks and input preservation. Artifact validation replays the incoming Schedule with the recorded compiler identity. Failed asynchronous recovery tickets can reconcile late process death without retrying termination; concurrent polls release owners/slots once. Paired VJP retirement resumes only unsubmitted children. Arena edge/root APIs permit actual cycles and preserve leased storage. Exception completion restores interpreter-owned fields without user assignment hooks.
+
+Remaining: SSD public/frontend integration, tiled/cooperative kernels, checkpoint adjoints, ReplaySSM comparison and target packages; native exception allocation producers, general CPython deoptimization/frames, general saved products and attention raising remain open. Process exit proves resource isolation teardown, not driver health or recovery from a wedged driver. No new GPU or performance promotion claim.
+
+Evidence: `tests/unit/test_scheduled_ssd.py`, `tests/tessera-ir/phase2/ssd_schedule.mlir`, `tests/unit/test_native_driver_isolation.py`, `tests/unit/test_native_public_results.py`, `tests/unit/test_native_exception_arena.py`, `tests/unit/test_source_exception_heap.py`. Assertions-enabled host compiler and CPU JIT; backend evidence boundaries remain independent.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a), [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1).
+
+### 2026-09-10 — Native heap, attention recipes and SSD device proof
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #740.
+
+Outcome: A bounded native C++ exception heap owns allocation, explicit roots, cause/context cycle collection and payload-hole reuse through generation-checked handles and copy-out reads. An exact dense f32 attention loop recognizer retains its source oracle and produces a native symbolic recipe; two buckets lower through Schedule and Tile with head-width witness validation. Serial replay-bound SSD packages execute on CUDA SM120 and ROCm gfx1151. Device tests exposed initial-carry mutation during bufferization; immutable input ownership is now projected before bufferization. The standalone runtime shared build also exposed duplicate disabled CUDA/HIP factories in the CPU translation unit; their owning backend files now supply them exclusively.
+
+Remaining: Automatic source-IR heap producers, GPU heap allocation, general exception objects and native CPython deoptimization records/frames remain open. Attention needs broader patterns and exact-device candidate admission. SSD needs cooperative kernels, public frontend and checkpoint AD integration, ReplaySSM comparison and measured promotion. No performance promotion is claimed.
+
+Evidence: `tests/unit/test_native_exception_producer.py`, `tests/unit/test_attention_loop_idiom.py`, `tests/unit/test_native_ssd.py`, the native runtime ABI smoke and `benchmarks/baselines/native_heap_attention_ssd_20260910/`. SSD records cover chunks 1, 2 and 5 on each owning device and verify all five inputs remain unchanged.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1).

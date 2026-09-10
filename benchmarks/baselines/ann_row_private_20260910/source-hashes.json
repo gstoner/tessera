@@ -1,0 +1,8 @@
+{
+  "src/transforms/lib/NativeTapeToGPUPass.cpp": "2f09d8e0d10d2c42ce90412b428975257ec0cdf3bfc3f539ac0110bf2e8f8041",
+  "python/tessera/compiler/native_public_result.py": "6bb710b5b0a801bf8345e12d730be51bb4f8c18a05683e56035a389e9bb1ac98",
+  "python/tessera/compiler/pass_metadata.py": "f6a05875903cd61020b79fc3d275f608024174e3dcadc6f4ca38c3bc2aef4893",
+  "tests/unit/test_native_ann_row_storage.py": "1d40ca4c0a5af016826f4a90e9bc31871c1ce0247cc15f773b92b9f93efbf63f",
+  "tests/unit/test_native_public_results.py": "ad832ed4e42cdd1d8bf12782b9c40a37d8b5559d7415f560826f7c96006a93a6",
+  "python/tessera/compiler/native_reader_retirement.py": "f9ac3960121e533b691f342fe1629ce22bf118f7c58e7a126e0642f30b5bd8c7"
+}

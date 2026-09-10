@@ -47,7 +47,7 @@ def test_dtype_matmul_packages_have_distinct_abis(monkeypatch, dtypes, abi) -> N
     )
     module = _module(*dtypes)
     artifact = None
-    if dtypes == ("bf16", "bf16", "fp32"):
+    if dtypes in (("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64")):
         # This is an ABI projection unit test, not a native compiler test.
         # Model the new producer boundary; real replay and owning-CPU execution
         # remain covered by test_scheduled_matmul_consumers.
@@ -55,9 +55,11 @@ def test_dtype_matmul_packages_have_distinct_abis(monkeypatch, dtypes, abi) -> N
         from test_scheduled_matmul_consumers import _artifact
         from tessera.compiler import scheduled_matmul
         base = _artifact(target="x86")
-        artifact = replace(base, a_dtype="bf16", b_dtype="bf16", storage="bf16",
+        storage = "bf16" if dtypes[0] == "bf16" else "f64"
+        accum = "f64" if dtypes[2] == "fp64" else "f32"
+        artifact = replace(base, a_dtype=dtypes[0], b_dtype=dtypes[1], output_dtype=dtypes[2], storage=storage, accum=accum,
                            m=5, n=7, k=9,
-                           tile_ir=base.tile_ir.replace('storage = "f32"', 'storage = "bf16"'))
+                           tile_ir=base.tile_ir.replace('storage = "f32"', f'storage = "{storage}"').replace('accum = "f32"', f'accum = "{accum}"'))
         def produce(graph, *, target):
             assert graph is module and target == "x86"
             return artifact

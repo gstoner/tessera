@@ -50,10 +50,10 @@ def _module(
         else ("fp32", "f32")
     )
     dtype = dtype or inferred_dtype
-    element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
+    element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32", "fp64": "f64"}[dtype]
     a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
     b = IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
-    output_element = {"fp16": "f16", "fp32": "f32"}[output_dtype]
+    output_element = {"fp16": "f16", "fp32": "f32", "fp64": "f64"}[output_dtype]
     output = IRType(
         f"tensor<{m}x{n}x{output_element}>", (str(m), str(n)), output_dtype
     )
@@ -1364,3 +1364,40 @@ def test_x86_bf16_scheduled_package_executes_on_owning_cpu(shape):
     result = rt.launch(artifact, {'a':a, 'b':b, 'o':out, 'M':m, 'N':n, 'K':k})
     assert result['ok'], result
     np.testing.assert_allclose(out, a.astype(np.float32) @ b.astype(np.float32), rtol=3e-5, atol=3e-5)
+
+
+@pytest.mark.skipif(x86_native._library_path() is None, reason="x86 native image unavailable")
+@requires_tessera_opt
+def test_x86_f64_scheduled_projection_rejects_dtype_and_tile_tampering(monkeypatch):
+    from dataclasses import replace
+    module = _module(target='x86', dtype='fp64', output_dtype='fp64', shape=(3, 9, 5))
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target='x86')
+    assert artifact.storage == artifact.accum == 'f64'
+    monkeypatch.setattr(x86_native, 'emit_matmul_tile_ir',
+                        lambda **kwargs: pytest.fail('Graph-owned Tile reconstruction'))
+    package = x86_native.package_matmul(module, pipeline_name='tessera-lower-to-x86')
+    assert package.tile_ir == artifact.tile_ir
+    assert package.descriptor.abi_id == x86_native.X86_MATMUL_F64_ABI
+    assert package.descriptor.provenance['output_storage'] == 'f64'
+    for altered in (replace(artifact, output_dtype='fp32'), replace(artifact, accum='f32'),
+                    replace(artifact, tile_ir=artifact.tile_ir.replace('f64', 'f32'))):
+        with pytest.raises(ValueError):
+            x86_native.package_scheduled_matmul(altered, pipeline_name='bad')
+
+
+@pytest.mark.hardware_avx512
+@pytest.mark.skipif(not x86_native.tools_available(), reason='owning AVX-512 host required')
+@pytest.mark.parametrize('shape', [(3, 9, 5), (2, 17, 9)])
+def test_x86_f64_scheduled_package_executes_on_owning_cpu(shape):
+    m, k, n = shape
+    package = x86_native.package_matmul(_module(target='x86', dtype='fp64', output_dtype='fp64', shape=shape),
+                                       pipeline_name='tessera-lower-to-x86')
+    artifact = rt.RuntimeArtifact(metadata={'target':'x86'}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    rng = np.random.default_rng(741)
+    a = rng.standard_normal((m,k)) + np.float64(2)**-35
+    b = rng.standard_normal((k,n))
+    out = np.zeros((m,n), np.float64)
+    result = rt.launch(artifact, {'a':a, 'b':b, 'o':out, 'M':m, 'N':n, 'K':k})
+    assert result['ok'], result
+    np.testing.assert_allclose(out, a @ b, rtol=1e-13, atol=1e-13)

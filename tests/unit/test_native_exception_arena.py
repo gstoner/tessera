@@ -19,3 +19,63 @@ def test_arena_rejects_dangling_native_edges():
         assert 'live handles' in str(error)
     else:
         raise AssertionError('dangling edge accepted')
+
+
+def test_exported_pointers_pin_storage_and_block_collection_and_growth():
+    import ctypes as ct
+    import pytest
+    from tessera.compiler.native_exception_arena import _Node
+    arena = NativeExceptionArena(1, 4)
+    root = arena.allocate(7, b'live', root=True)
+    with arena.abi as first, arena.abi as second:
+        nodes, payload = first.nodes, first.payload
+        with pytest.raises(RuntimeError, match='ABI readers'):
+            arena.allocate(2, b'growth', root=True)
+        arena.release(root)
+        with pytest.raises(RuntimeError, match='ABI readers'):
+            arena.collect()
+        first.close()
+        assert second.nodes == nodes and second.payload == payload
+        assert ct.cast(nodes, ct.POINTER(_Node))[root].kind == 7
+        assert ct.string_at(payload, 4) == b'live'
+        with pytest.raises(RuntimeError, match='ABI readers'):
+            arena.allocate(2, b'growth', root=True)
+    assert arena.collect() == 1
+    arena.allocate(2, b'growth', root=True)
+    with pytest.raises(ValueError, match='closed'):
+        _ = first.nodes
+
+
+def test_partial_collection_reuses_coalesced_payload_holes_without_moving_roots():
+    import ctypes as ct
+    arena = NativeExceptionArena(4, 16)
+    left = arena.allocate(1, b'left', root=True)
+    a = arena.allocate(2, b'aaaa', root=True)
+    b = arena.allocate(2, b'bbbb', root=True)
+    right = arena.allocate(1, b'end!', root=True)
+    arena.release(a); arena.release(b)
+    assert arena.collect() == 2
+    for _ in range(200):
+        transient = arena.allocate(2, b'12345678', root=True)
+        with arena.abi as abi:
+            assert abi.payload_capacity == 16 and abi.capacity == 4
+            assert ct.string_at(abi.payload, 4) == b'left'
+            assert ct.string_at(abi.payload + 12, 4) == b'end!'
+        arena.release(transient)
+        assert arena.collect() == 1
+    assert left in arena._live and right in arena._live
+
+
+def test_export_keeps_arena_alive_until_reader_completes():
+    import gc
+    import weakref
+    arena = NativeExceptionArena()
+    arena.allocate(1, b'kept', root=True)
+    reference = weakref.ref(arena)
+    lease = arena.abi
+    del arena
+    gc.collect()
+    assert reference() is not None
+    lease.close()
+    gc.collect()
+    assert reference() is None

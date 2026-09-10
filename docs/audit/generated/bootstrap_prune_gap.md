@@ -23,18 +23,22 @@ the bootstrap row can go.
 |---|---|
 | Backends with a bootstrap module | 5 |
 | `package_*` functions total | 72 |
-| — **bootstrap** (re-enter Graph IR; prune target) | 45 |
+| — Graph-input boundaries (including scheduled wrappers) | 45 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 12 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 2 |
 |   ·  of the bootstrap, both | 1 |
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 30 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 13 |
-| Lines in those modules | 10485 |
+| Lines in those modules | 10487 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
 | — **gap (no declared family route)** | 48 |
 | Packagers matching no family | 9 |
+
+Graph input alone does not prove reconstruction: wrappers may call the
+scheduled producer for some or all envelopes. Review direct calls and
+exact artifacts before treating a row as a constructor deletion target.
 
 ## Per-backend bootstrap surface
 
@@ -42,7 +46,7 @@ the bootstrap row can go.
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 11 | 12 | 3822 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 0 | 5 | 2901 |
-| `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1735 |
+| `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1737 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1812 |
 

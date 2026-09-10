@@ -1183,7 +1183,7 @@ def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePac
     contract = _matmul_contract(module)
     if contract is None:
         raise ValueError("x86 native matmul requires one static rank-2 f32 matmul")
-    if contract[-1] == ("fp32", "fp32", "fp32"):
+    if contract[-1] in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32")):
         from .scheduled_matmul import lower_scheduled_matmul
         return package_scheduled_matmul(lower_scheduled_matmul(module,target="x86"),pipeline_name=pipeline_name)
     a_name, b_name, output_name, (m, n, k), dtypes = contract
@@ -1259,10 +1259,12 @@ def package_scheduled_matmul(
         artifact.target != "x86"
         or artifact.architecture != "zen5-avx512"
         or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
-        != ("fp32", "fp32", "fp32")
+        not in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"))
     ):
-        raise ValueError("x86 scheduled matmul requires the f32 Zen 5 AVX-512 contract")
-    symbol = "tessera_x86_avx512_gemm_f32"
+        raise ValueError("x86 scheduled matmul requires the f32/bf16 Zen 5 AVX-512 contract")
+    bf16 = artifact.a_dtype == "bf16"
+    symbol = "tessera_x86_avx512_gemm_bf16" if bf16 else "tessera_x86_avx512_gemm_f32"
+    abi = X86_MATMUL_BF16_F32_ABI if bf16 else X86_MATMUL_F32_ABI
     target_ir, payload, compiler, toolchain = _lower(
         artifact.tile_ir, symbol, "matmul"
     )
@@ -1273,15 +1275,15 @@ def package_scheduled_matmul(
         toolchain=toolchain,
         pipeline_name=pipeline_name,
         symbol=symbol,
-        abi=X86_MATMUL_F32_ABI,
+        abi=abi,
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=symbol,
-        abi_id=X86_MATMUL_F32_ABI,
+        abi_id=abi,
         buffers=(
-            BufferBinding(0, artifact.a_name, "input", "fp32", 2, "row_major", 4),
-            BufferBinding(1, artifact.b_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(0, artifact.a_name, "input", artifact.a_dtype, 2, "row_major", 2 if bf16 else 4),
+            BufferBinding(1, artifact.b_name, "input", artifact.b_dtype, 2, "row_major", 2 if bf16 else 4),
             BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
         ),
         scalars=(
@@ -1312,7 +1314,7 @@ def package_scheduled_matmul(
             "output_storage": artifact.accum,
             "accum": artifact.accum,
             "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
-            "required_features": ["avx512f", "fma"],
+            "required_features": ["avx512_bf16"] if bf16 else ["avx512f", "fma"],
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

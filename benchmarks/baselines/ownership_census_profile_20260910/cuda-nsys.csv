@@ -1,0 +1,22 @@
+Generating SQLite file /tmp/ann-wave740-32.sqlite from /tmp/ann-wave740-32.nsys-rep
+Processing [/tmp/ann-wave740-32.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,306699,88,3485.2,3328.0,1440,10432,1835.0,product
+
+Processing [/tmp/ann-wave740-32.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_mem_time_sum.py]... 
+Time (%),Total Time (ns),Count,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Operation
+51.5,29952,88,340.4,256.0,256,1184,163.1,[CUDA memcpy Host-to-Device]
+48.5,28194,88,320.4,288.0,288,1760,157.3,[CUDA memcpy Device-to-Host]
+
+Processing [/tmp/ann-wave740-32.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_api_sum.py]... 
+Time (%),Total Time (ns),Num Calls,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+89.6,229890853,1,229890853.0,229890853.0,229890853,229890853,0.0,cuCtxCreate_v2
+3.3,8436474,179,47131.1,5690.0,1690,4543783,338995.6,cuCtxSynchronize
+2.9,7460187,88,84774.9,97821.0,44473,215323,31637.3,cuMemcpyDtoH_v2
+2.2,5625366,88,63924.6,24081.5,18011,3430775,363170.3,cuLaunchKernel
+0.8,2130043,88,24205.0,20811.0,13821,283212,28740.1,cuMemcpyHtoD_v2
+0.4,1132644,2,566322.0,566322.0,13451,1119193,781877.7,cuModuleUnload
+0.3,785283,2,392641.5,392641.5,19961,765322,527049.8,cuMemFree_v2
+0.3,705373,2,352686.5,352686.5,80395,624978,385078.3,cuModuleLoadData
+0.2,535532,2,267766.0,267766.0,3940,531592,373106.3,cuMemAlloc_v2
+

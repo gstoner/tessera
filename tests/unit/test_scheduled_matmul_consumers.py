@@ -1323,3 +1323,44 @@ def test_partial_dynamic_native_matmul_preserves_static_axis_guards(monkeypatch)
     guards = {(g.binding, g.dimension): g.predicate for g in package.descriptor.shape_guards}
     assert guards == {('a', 0): 'eq', ('a', 1): 'max', ('b', 0): 'max',
                       ('b', 1): 'eq', ('o', 0): 'eq', ('o', 1): 'eq'}
+
+
+@pytest.mark.skipif(x86_native._library_path() is None, reason="x86 native image unavailable")
+@requires_tessera_opt
+def test_x86_bf16_graph_caller_projects_scheduled_abi_and_rejects_tampering(monkeypatch):
+    from dataclasses import replace
+    module = _module(target='x86', dtype='bf16', shape=(5, 8, 7))
+    artifact = scheduled_matmul.lower_scheduled_matmul(module, target='x86')
+    assert artifact.storage == 'bf16' and artifact.accum == 'f32'
+    monkeypatch.setattr(x86_native, 'emit_matmul_tile_ir',
+                        lambda **kwargs: pytest.fail('Graph-owned Tile reconstruction'))
+    package = x86_native.package_matmul(module, pipeline_name='tessera-lower-to-x86')
+    assert package.tile_ir == artifact.tile_ir
+    assert package.descriptor.abi_id == x86_native.X86_MATMUL_BF16_F32_ABI
+    assert package.descriptor.provenance['schedule_digest'] == artifact.schedule_digest
+    assert package.descriptor.provenance['required_features'] == ['avx512_bf16']
+    for field, value in [('a_dtype', 'fp32'), ('storage', 'f32'), ('m', 6)]:
+        with pytest.raises(ValueError):
+            x86_native.package_scheduled_matmul(replace(artifact, **{field: value}), pipeline_name='bad')
+    with pytest.raises(ValueError):
+        x86_native.package_scheduled_matmul(
+            replace(artifact, tile_ir=artifact.tile_ir.replace('bf16', 'f16')), pipeline_name='bad')
+
+
+@pytest.mark.hardware_avx512
+@pytest.mark.skipif(not x86_native.tools_available(), reason='owning AVX-512 host required')
+@pytest.mark.parametrize('shape', [(5, 8, 7), (2, 17, 9)])
+def test_x86_bf16_scheduled_package_executes_on_owning_cpu(shape):
+    import ml_dtypes
+    m, k, n = shape
+    package = x86_native.package_matmul(_module(target='x86', dtype='bf16', shape=shape),
+                                        pipeline_name='tessera-lower-to-x86')
+    artifact = rt.RuntimeArtifact(metadata={'target':'x86'}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    rng = np.random.default_rng(740)
+    a = np.ascontiguousarray(rng.standard_normal((m,k)), dtype=ml_dtypes.bfloat16)
+    b = np.ascontiguousarray(rng.standard_normal((k,n)), dtype=ml_dtypes.bfloat16)
+    out = np.zeros((m,n), np.float32)
+    result = rt.launch(artifact, {'a':a, 'b':b, 'o':out, 'M':m, 'N':n, 'K':k})
+    assert result['ok'], result
+    np.testing.assert_allclose(out, a.astype(np.float32) @ b.astype(np.float32), rtol=3e-5, atol=3e-5)

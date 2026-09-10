@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import math
 import subprocess
 
 
@@ -11,8 +12,8 @@ class DriverIsolationLease:
             raise ValueError("driver isolation requires a context identity")
         self.process = process
         self.context_identity = context_identity
-        if not isinstance(timeout_seconds, (int, float)) or isinstance(timeout_seconds, bool) or timeout_seconds <= 0:
-            raise ValueError("driver isolation timeout must be positive")
+        if not isinstance(timeout_seconds, (int, float)) or isinstance(timeout_seconds, bool) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("driver isolation timeout must be finite and positive")
         self.timeout_seconds = float(timeout_seconds)
         self._uncertain = False
         self._recovered = False
@@ -43,3 +44,59 @@ class DriverIsolationLease:
     @property
     def reusable(self) -> bool:
         return self._recovered and self.process.poll() is not None
+
+
+_RECOVERY_SLOTS = threading.BoundedSemaphore(8)
+_RECOVERIES: set[IsolationRecovery] = set()
+_RECOVERY_LOCK = threading.Lock()
+
+
+class IsolationRecovery:
+    """Bounded off-thread process teardown, retaining dependent owners on failure.
+
+    A completed ticket proves process death only, never device health. Failed
+    tickets retain their admission slot and owners; repeated failures cannot
+    create an unlimited teardown backlog. No driver operation is retried.
+    """
+    def __init__(self, lease, owner):
+        self.lease, self.owner = lease, owner
+        self._slot = _RECOVERY_SLOTS
+        self.done = threading.Event()
+        self.error = None
+
+    @classmethod
+    def submit(cls, lease, *, owner):
+        if not _RECOVERY_SLOTS.acquire(blocking=False):
+            return None
+        ticket = cls(lease, owner)
+        with _RECOVERY_LOCK:
+            _RECOVERIES.add(ticket)
+        try:
+            threading.Thread(target=ticket._run, daemon=True,
+                             name='tessera-isolation-recovery').start()
+        except BaseException:
+            with _RECOVERY_LOCK:
+                _RECOVERIES.remove(ticket)
+            _RECOVERY_SLOTS.release()
+            raise
+        return ticket
+
+    def _run(self):
+        try:
+            self.lease.recover()
+        except BaseException as error:
+            self.error = error
+        finally:
+            if self.error is None:
+                self.owner = None
+                with _RECOVERY_LOCK:
+                    _RECOVERIES.remove(self)
+                self._slot.release()
+            self.done.set()
+
+    def poll(self):
+        if not self.done.is_set():
+            return False
+        if self.error is not None:
+            raise RuntimeError('isolation teardown unconfirmed; owner retained') from self.error
+        return True

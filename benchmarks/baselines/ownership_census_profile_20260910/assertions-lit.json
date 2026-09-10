@@ -1,0 +1,11 @@
+{
+  "active": 475,
+  "covered": 475,
+  "lanes": {
+    "wave740-lit.json": {
+      "PASS": 475
+    }
+  },
+  "uncovered": [],
+  "unexpected": []
+}

@@ -326,11 +326,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("scheduled matmul requires one named Graph result")
         output_name = function.return_values[0].removeprefix("%")
     function_name = function.name
-    if target == "x86" and (a_dtype, b_dtype, output_dtype) == ("fp32", "fp32", "fp32"):
+    if target == "x86" and (a_dtype, b_dtype, output_dtype) in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32")):
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "x86",
             "zen5-avx512",
-            "f32",
+            "bf16" if a_dtype == "bf16" else "f32",
             "f32",
             16,
             16,

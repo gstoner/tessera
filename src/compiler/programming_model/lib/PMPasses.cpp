@@ -370,8 +370,9 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   // macro-tile below is a logical default only; the MPS route owns its own
   // tiling, which the Apple package records as an explicit dropped decision.
   bool apple_gpu = schedule.target == "apple_gpu";
-  if (x86 && lhsElement.isF32() && rhsElement.isF32() && outElement.isF32()) {
-    schedule.storage = "f32";
+  if (x86 && ((lhsElement.isF32() && rhsElement.isF32()) ||
+              (lhsElement.isBF16() && rhsElement.isBF16())) && outElement.isF32()) {
+    schedule.storage = lhsElement.isBF16() ? "bf16" : "f32";
     schedule.accum = "f32";
     if (schedule.arch.empty())
       schedule.arch = "x86-avx512";
@@ -1999,7 +2000,7 @@ struct GraphToSchedulePass
       FailureOr<MatmulSchedule> selected = getMatmulSchedule(op);
       if (failed(selected)) {
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
-                      "x86 f32->f32, ROCm f16->f32, NVIDIA f16/bf16->f32 or signed int4->i32, "
+                      "x86 f32/bf16->f32, ROCm f16->f32, NVIDIA f16/bf16->f32 or signed int4->i32, "
                       "or Apple-GPU f32->f32 "
                       "matmul with no transpose");
         return signalPassFailure();

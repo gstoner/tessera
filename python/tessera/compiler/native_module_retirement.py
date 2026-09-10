@@ -23,6 +23,7 @@ class ModuleRetirement:
         self._slot = _SLOTS
         self._owns_slot = owns_slot
         self.isolation = getattr(owner, '_isolation_lease', None)
+        self._isolation_recovery = None
 
     @classmethod
     def retain_failure(cls, owner, error, phase):
@@ -119,6 +120,26 @@ class ModuleRetirement:
                 self.done.set()
                 raise
         return self
+
+    def recover_isolation_async(self):
+        """Admit off-thread teardown only for a declared process-owned module."""
+        from .native_driver_isolation import IsolationRecovery
+        with self._retry_lock:
+            if not self.done.is_set() or self.error is None or self.isolation is None:
+                raise ValueError('uncertain retirement has no isolation recovery boundary')
+            if self._isolation_recovery is None:
+                self.isolation.mark_uncertain()
+                self._isolation_recovery = IsolationRecovery.submit(self.isolation, owner=self)
+            return self._isolation_recovery
+
+    def poll_isolation_recovery(self):
+        if self._isolation_recovery is None:
+            raise ValueError('no asynchronous isolation recovery admitted')
+        if not self._isolation_recovery.poll():
+            return False
+        if self.phase == 'isolation_recovered':
+            return True
+        return self.recover_isolation()
 
     def recover_isolation(self):
         """Replace an uncertain context only after its owning process dies."""

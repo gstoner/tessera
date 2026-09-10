@@ -44,3 +44,4 @@ module attributes {tessera.ir.version = "1.0"} {
     return %C : tensor<128x512xf32>
   }
 }
+// REQUIRES: tessera-x86-target-ir

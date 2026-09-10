@@ -34,6 +34,14 @@ if(TESSERA_BUILD_X86_BACKEND)
   add_subdirectory(compiler/codegen/tessera_x86_backend/lib/IR)
 endif()
 
+# Schedule-to-Tile emits the registered NVIDIA block-coordinate boundary for
+# dynamic SM120 matmul.  Define the small hardware-free Target IR target before
+# TesseraPM so the pass can declare it as a dependent dialect; loading it lazily
+# from runOnOperation() is illegal under MLIR's multi-threaded pass manager.
+if(TESSERA_BUILD_NVIDIA_BACKEND)
+  add_subdirectory(compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR)
+endif()
+
 # The canonical Schedule dialect is shared by distribution lowering and the
 # programming-model passes. Define it before TesseraPasses so no transform may
 # invent a permissive dialect with the same namespace.
@@ -49,8 +57,7 @@ add_subdirectory(runtime)
 # Compiler components (dialects and passes under compiler/)
 # ------------------------------------------------------------------
 add_subdirectory(compiler/tile_opt_fa4)         # Attn + Queue dialects, FA4 conversions
-if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
-        (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
+if(NOT TESSERA_HARDWARE_FREE_TARGET_BUILD)
   add_subdirectory(compiler/tessera_neighbors)  # Neighbor topology + stencil passes
 else()
   message(STATUS "Skipping Neighbors dialect for hardware-free target artifact build")
@@ -89,8 +96,7 @@ endif()
 # ------------------------------------------------------------------
 # Solver suite and collectives
 # ------------------------------------------------------------------
-if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
-        (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
+if(NOT TESSERA_HARDWARE_FREE_TARGET_BUILD)
   add_subdirectory(solvers)            # scaling_resilience, tpp, spectral, sparse
 else()
   message(STATUS "Skipping solver suite for hardware-free target artifact build")

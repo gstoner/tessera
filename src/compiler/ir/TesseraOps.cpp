@@ -1,4 +1,5 @@
 #include "Tessera/IR/TesseraOps.h"
+#include "Tessera/IR/TransposeUtils.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -2395,20 +2396,41 @@ LogicalResult TransposeOp::verify() {
 }
 
 namespace {
-// Phase 1 — `transpose(transpose(x)) -> x`. A no-perm (reverse-dims) transpose
-// is its own inverse, so the round-trip is identity whenever the outer result
-// type matches the original input type (the type check makes this safe for any
-// rank and guards against a hypothetical attribute-bearing variant).
+// Compose validated permutations. Equal input/result types alone do not prove
+// identity: a nontrivial permutation of equally-sized axes preserves the type.
 struct FoldTransposeOfTranspose : public OpRewritePattern<TransposeOp> {
   using OpRewritePattern<TransposeOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(TransposeOp op,
                                 PatternRewriter &rewriter) const override {
+    auto outerPerm = plainTransposePermutation(op);
+    if (!outerPerm) return failure();
+    bool identity = true;
+    for (size_t i = 0; i < outerPerm->size(); ++i)
+      identity &= (*outerPerm)[i] == static_cast<int64_t>(i);
+    if (identity && op.getX().getType() == op.getType()) {
+      rewriter.replaceOp(op, op.getX());
+      return success();
+    }
     auto inner = op.getX().getDefiningOp<TransposeOp>();
     if (!inner)
       return failure();
-    if (inner.getX().getType() != op.getType())
-      return failure();
-    rewriter.replaceOp(op, inner.getX());
+    auto innerPerm = plainTransposePermutation(inner);
+    if (!innerPerm) return failure();
+    llvm::SmallVector<int64_t> composed;
+    identity = true;
+    for (size_t i = 0; i < outerPerm->size(); ++i) {
+      composed.push_back((*innerPerm)[(*outerPerm)[i]]);
+      identity &= composed.back() == static_cast<int64_t>(i);
+    }
+    if (identity && inner.getX().getType() == op.getType()) {
+      rewriter.replaceOp(op, inner.getX());
+    } else {
+      OperationState state(op.getLoc(), "tessera.transpose");
+      state.addOperands(inner.getX());
+      state.addTypes(op.getType());
+      state.addAttribute("permutation", rewriter.getDenseI64ArrayAttr(composed));
+      rewriter.replaceOp(op, rewriter.create(state)->getResults());
+    }
     return success();
   }
 };
@@ -2430,7 +2452,7 @@ struct FoldTransposeIntoMatmul : public OpRewritePattern<MatmulOp> {
   LogicalResult matchAndRewrite(MatmulOp mm,
                                 PatternRewriter &rewriter) const override {
     auto isTranspose = [](Operation *o) {
-      return o && o->getName().getStringRef() == "tessera.transpose";
+      return isMatrixTranspose(o);
     };
     Operation *aDef = mm.getLhs().getDefiningOp();
     Operation *bDef = mm.getRhs().getDefiningOp();
@@ -2442,6 +2464,7 @@ struct FoldTransposeIntoMatmul : public OpRewritePattern<MatmulOp> {
       return failure();
     OperationState st(mm.getLoc(), "tessera.matmul");
     st.addOperands({a, b});
+    st.addOperands(mm.getEpilogueInputs());
     st.addTypes(mm->getResultTypes());
     auto getFlag = [&](StringRef n) {
       if (auto fb = mm->getAttrOfType<BoolAttr>(n))
@@ -2988,8 +3011,7 @@ LogicalResult CastOp::verify() {
 // layout without changing dtype) — preserve it so layout legality and the
 // layout-sensitive backends still see the requested layout.
 OpFoldResult CastOp::fold(FoldAdaptor adaptor) {
-  if (getX().getType() == getY().getType() && !getNumericPolicy() &&
-      !(*this)->hasAttr("tessera.layout"))
+  if (getX().getType() == getY().getType() && (*this)->getAttrs().empty())
     return getX();
   return {};
 }

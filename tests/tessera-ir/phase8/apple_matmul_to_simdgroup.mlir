@@ -1,3 +1,4 @@
+// REQUIRES: tessera-apple-backend
 // RUN: tessera-opt --tessera-matmul-to-apple-simdgroup --allow-unregistered-dialect %s | FileCheck %s
 //
 // The producer for the Apple machine primitives. Before this pass the Apple
@@ -103,4 +104,3 @@ func.func @bf16_storage_with_fp32_accumulator(
 // fp32 accumulator matters at least as much for it.
 // CHECK: tessera_apple.gpu.simdgroup_matmul {{.*}}storage = "bf16"{{.*}} -> <f32>
 // CHECK: arith.truncf {{.*}} : f32 to bf16
-

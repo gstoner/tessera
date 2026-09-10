@@ -126,6 +126,7 @@ class TracedFunction:
     source_state_views: tuple = ()
     source_error_dynamic: bool = False
     source_error_table: tuple = ()
+    source_exception_types: dict = field(default_factory=dict)
     source_error_payload_sites: tuple = ()
     source_object_fields: tuple = ()
 
@@ -670,6 +671,7 @@ def trace(
     traced.source_error_dynamic=getattr(fn,"source_error_dynamic",False)
     traced.source_error_payload_sites=getattr(fn,"source_error_payload_sites",())
     traced.source_error_table=getattr(fn,"source_error_table",())
+    traced.source_exception_types=getattr(fn,"source_exception_types",{})
     return traced
 
 

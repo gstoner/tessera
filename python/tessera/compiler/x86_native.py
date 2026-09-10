@@ -236,12 +236,14 @@ def supports_native_package(module: GraphIRModule) -> bool:
     """
 
     from .x86_breadth import supports_promoted_graph_breadth
+    from .scheduled_attention_backward import supports_scheduled_attention_backward
 
     return any((
         supports_softmax(module),
         supports_reduction(module),
         supports_promoted_matmul(module),
         supports_attention(module),
+        supports_scheduled_attention_backward(module, target="x86"),
         supports_promoted_elementwise(module),
         supports_promoted_graph_breadth(module),
     ))
@@ -264,6 +266,8 @@ def native_package_kind(module: GraphIRModule) -> str | None:
         return "matmul"
     if requests_attention(module):
         return "attention"
+    if requests_attention_backward(module):
+        return "attention_backward"
     if requests_cohort2(module):
         return "cohort2"
     if requests_graph_breadth(module):
@@ -289,6 +293,12 @@ def package_native(
         return package_matmul(module, pipeline_name=pipeline_name)
     if kind == "attention":
         return package_attention(module, pipeline_name=pipeline_name)
+    if kind == "attention_backward":
+        from .scheduled_attention_backward import lower_scheduled_attention_backward
+        return package_scheduled_attention_backward(
+            lower_scheduled_attention_backward(module, target="x86"),
+            pipeline_name=pipeline_name,
+        )
     if kind == "cohort2":
         return package_cohort2(module, pipeline_name=pipeline_name)
     if kind == "breadth":
@@ -646,6 +656,14 @@ def requests_attention(module: GraphIRModule) -> bool:
     return (
         len(module.functions) == 1 and len(module.functions[0].body) == 1
         and module.functions[0].body[0].op_name == "tessera.flash_attn"
+    )
+
+
+def requests_attention_backward(module: GraphIRModule) -> bool:
+    return (
+        len(module.functions) == 1 and len(module.functions[0].body) == 1
+        and module.functions[0].body[0].op_name
+        in {"tessera.flash_attn_bwd", "tessera.flash_attn_vjp"}
     )
 
 

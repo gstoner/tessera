@@ -85,7 +85,7 @@ raises rather than degrading quietly.
 | Family | Compiled route | Classified by | Members |
 |---|---|---|---|
 | `attention` | ✅ | nvidia_sm120, rocm_gfx1151, x86 | `flash_attn` |
-| `attention_backward` | ✅ | nvidia_sm120 | `flash_attn` |
+| `attention_backward` | ✅ | nvidia_sm120, x86 | `flash_attn` |
 | `attention_backward_lse` | — | nvidia_sm120 | `flash_attn` |
 | `attention_lse` | — | nvidia_sm120 | `flash_attn` |
 | `breadth` | — | x86 | *benchmark cohort, not an op pattern* |

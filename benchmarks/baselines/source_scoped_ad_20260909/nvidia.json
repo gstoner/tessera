@@ -1,0 +1,160 @@
+{
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "compiler_sha256": "83c73bcfe7dc589e826df981822a9081afd8bbff24c7c02881f7d10068420cfb",
+  "source_sha256": {
+    "python/tessera/compiler/source_control_flow.py": "cbde5b236373d157be638739105f68c4a33036ddd5dc98920abc7ce1e1db1f53",
+    "python/tessera/compiler/trace.py": "5f353e6cb55be0faa6992189b28cbc3d157e60f652c0a6d0807623dd27a99913",
+    "python/tessera/compiler/native_public_result.py": "879ab8ba07d1d492f690dbbde9667c703301f49af387298cdcbe2d24a05051db",
+    "python/tessera/compiler/native_source_state.py": "83020434a8e0aa1c9d5ee808270de2f5e0f15e9ad83c5ccc5714f212b888a062",
+    "src/transforms/lib/NativeTapeToGPUPass.cpp": "751e1801691d82791946b4295fb5458678ee3077ecef4595b1800e8afdf955d3",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "3429f846a2ab3e0454c9c07b1c0b1e892222a72b8b31039c2532354a20935172",
+    "benchmarks/record_source_scoped_ad_gpu.py": "d4234d46e7ef64a2b403be56160c128b2d453dc1d794fb725003c1fc1772bc74"
+  },
+  "cases": [
+    {
+      "family": "checked_cube",
+      "asynchronous": false,
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": false,
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": true,
+      "value": 2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "checked_cube",
+      "asynchronous": true,
+      "value": -2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": false,
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": false,
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": true,
+      "value": 2.0,
+      "exception_matched": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "loop_error",
+      "asynchronous": true,
+      "value": -2.0,
+      "derivative_matched": true
+    },
+    {
+      "family": "retained_exception",
+      "earlier_generation_payload": true,
+      "derivative_exposed": false
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        1,
+        7,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -6,
+        -1,
+        2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -100,
+        100,
+        3
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        1,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        0,
+        8,
+        100
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        -9223372036854775808,
+        9223372036854775807,
+        1
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        0,
+        -2
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        100,
+        -100,
+        -3
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "bounds": [
+        7,
+        0,
+        -9223372036854775808
+      ],
+      "matched": true
+    },
+    {
+      "family": "nested_runtime_slice",
+      "step": 0,
+      "guard_refused": true
+    }
+  ],
+  "performance_promotion": false
+}

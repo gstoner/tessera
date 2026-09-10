@@ -501,6 +501,75 @@ class TestLitFeatureHygiene:
                 offenders.append(str(fixture.relative_to(REPO)))
         assert not offenders, f"obsolete target flags in lit fixtures: {offenders}"
 
+    def test_backend_owned_fixtures_declare_their_lit_feature(self):
+        """Do not execute a target-only parser or pass in a core-only build.
+
+        Lit's unsupported count is configuration-local.  A missing REQUIRES
+        declaration instead turns a fixture for an omitted backend into a
+        misleading compiler failure, as happened in the assertions-enabled
+        core lane.  Keep the inference deliberately narrow: backend pass names
+        in RUN lines, plus registered target dialect operations parsed without
+        ``--allow-unregistered-dialect``.
+        """
+        import re
+
+        run_markers = {
+            "tessera-x86-target-ir": (
+                "tessera-tile-to-x86",
+                "tessera-lower-to-x86",
+                "tessera-x86-executable",
+            ),
+            "tessera-apple-backend": (
+                "tessera-lower-to-apple_gpu",
+                "tessera-matmul-to-apple",
+                "tessera-apple-materialize",
+            ),
+            "tessera-rocm-backend": (
+                "tessera-lower-to-rocm",
+                "lower-tile-to-rocm",
+                "tessera-rocm-executable",
+            ),
+            "tessera-nvidia-backend": (
+                "lower-tile-to-nvidia",
+                "lower-tessera-nvidia-to-nvvm",
+            ),
+        }
+        optional_target_dialects = {
+            "tessera-x86-target-ir": "tessera_x86.",
+            "tessera-apple-backend": "tessera_apple.",
+        }
+        offenders: list[str] = []
+        for fixture in TESSERA_IR_FIXTURES.rglob("*.mlir"):
+            body = fixture.read_text()
+            if "// UNSUPPORTED: true" in body:
+                continue
+            run_lines = "\n".join(
+                line for line in body.splitlines() if line.startswith("// RUN:")
+            )
+            # Remove comments before looking for parsed target operations;
+            # FileCheck-only vocabulary and explanatory prose are not parser
+            # dependencies.
+            source = re.sub(r"//.*", "", body)
+            parses_strictly = (
+                "tessera-opt" in run_lines
+                and "--allow-unregistered-dialect" not in run_lines
+            )
+            for feature, markers in run_markers.items():
+                uses_backend = any(marker in run_lines for marker in markers)
+                target_dialect = optional_target_dialects.get(feature)
+                uses_backend |= (
+                    parses_strictly
+                    and target_dialect is not None
+                    and target_dialect in source
+                )
+                has_requirement = f"REQUIRES: {feature}" in body
+                has_waiver = f"BACKEND-FEATURE-WAIVER: {feature}" in body
+                if uses_backend and not has_requirement and not has_waiver:
+                    offenders.append(
+                        f"{fixture.relative_to(REPO)} requires {feature}"
+                    )
+        assert not offenders, "missing backend lit features: " + "; ".join(offenders)
+
 
 # ──────────────────────────────────────────────────────────────────────────
 #                  Cross-checks: kernel coverage parity

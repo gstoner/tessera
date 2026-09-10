@@ -280,6 +280,30 @@ class BoundNativeGPUStorage:
             self._untracked_inflight = False
             return count
 
+    def retry_retirement_cleanup(self):
+        """Retry only known post-unload filesystem failures without blocking."""
+        with self._lock:
+            retirement=getattr(self,'_module_retirement',None)
+            if retirement is None:raise ValueError('native module has no retirement ticket')
+            retirement.retry_cleanup()
+
+    def _unload_synchronously(self, *, synchronize):
+        # Once a driver action starts, failure does not authorize a retry.
+        # Keep an externally reachable ticket even if the caller drops self.
+        self._closing=True
+        phase='device_synchronize' if synchronize else 'driver_unload'
+        try:
+            if synchronize:
+                self._check(self._sync())
+                self._untracked_inflight=False
+            phase='driver_unload'
+            self._check(self._unload(self._module))
+            self._module=ct.c_void_p()
+        except BaseException as error:
+            from .native_module_retirement import ModuleRetirement
+            self._module_retirement=ModuleRetirement.retain_failure(self,error,phase)
+            raise
+
     def close_if_complete(self, *, defer_unload=False) -> bool:
         """Unload only after every tracked launch proves completion by query.
 
@@ -303,8 +327,7 @@ class BoundNativeGPUStorage:
                 self._module_retirement = ModuleRetirement.submit(self)
                 return False
             if self._module:
-                self._check(self._unload(self._module))
-                self._module = ct.c_void_p()
+                self._unload_synchronously(synchronize=False)
             self._directory.cleanup()
             return True
 
@@ -317,10 +340,7 @@ class BoundNativeGPUStorage:
             for ticket in tuple(self._pending):
                 ticket.wait()
             if self._module:
-                self._check(self._sync())
-                self._untracked_inflight = False
-                self._check(self._unload(self._module))
-                self._module = ct.c_void_p()
+                self._unload_synchronously(synchronize=True)
             self._directory.cleanup()
 
     def __enter__(self) -> BoundNativeGPUStorage:

@@ -129,29 +129,94 @@ def _output(type_name):
     return np.empty(shape,dtype='float'+match[2])
 
 
-def decode_source_exception(contract,outputs):
+def bind_source_exception_types(contract, supplied=None):
+    """Resolve declared class names only through explicitly owned host bindings."""
+    allowed={'Exception','ValueError','RuntimeError','AssertionError','TypeError','IndexError','KeyError','OverflowError','ZeroDivisionError'}
+    bindings=dict(supplied or {})
+    if any(type(name) is not str or name in allowed or not isinstance(kind,type) or not issubclass(kind,Exception) for name,kind in bindings.items()):
+        raise ValueError('invalid explicit source exception class binding')
+    if 'exception_heap' in contract:
+        from .source_exception_heap import validate_heap
+        validate_heap(contract['exception_heap'],bindings)
+        return bindings
+    def visit(edge,depth=0):
+        if depth>32 or not isinstance(edge,(list,tuple)) or len(edge)<2:
+            raise ValueError('invalid source exception graph')
+        name=edge[0]
+        if type(name) is not str or name not in allowed and name not in bindings:
+            raise ValueError('source exception class requires an explicit host binding')
+        if len(edge)>2 and edge[2] is not None:
+            cause,args=edge[2]
+            if cause=='edge':visit(args,depth+1)
+            # The table also retains pre-elaboration declaration entries.
+            # A named cause is resolved to an edge by the source producer;
+            # "binding" denotes a local reference, never a host class name.
+            elif cause not in ('suppress','binding'):visit((cause,args),depth+1)
+        if len(edge)>4 and edge[4] is not None:visit(edge[4],depth+1)
+    for edge in contract.get('error_table',()):visit(edge)
+    return bindings
+
+
+def decode_source_exception(contract,outputs,*,exception_types=None):
     """Decode checked completion data; logical source locations are not Python frames."""
     import builtins
     sites=contract.get('error_payload_sites',())
     if not isinstance(sites,(list,tuple)) or len(sites)>32 or any(type(site) is not str for site in sites) or len(set(sites))!=len(sites):raise RuntimeError('invalid source exception payload slots')
     code=float(outputs[-((2 if contract.get('error_dynamic') else 1)+len(sites))].item())
     if code==0:return None
+    if 'exception_heap' in contract:
+        from .source_exception_heap import decode_heap
+        if not code.is_integer():raise RuntimeError('invalid native source exception status')
+        bindings=bind_source_exception_types(contract,exception_types)
+        return decode_heap(contract['exception_heap'],int(code),contract,outputs,bindings)
     table=contract.get('error_table',())
     if not code.is_integer() or not 1<=code<=len(table):raise RuntimeError('invalid native source exception status')
     allowed={'Exception','ValueError','RuntimeError','AssertionError','TypeError','IndexError','KeyError','OverflowError','ZeroDivisionError'}
+    bindings=dict(exception_types or {})
+    if any(type(name) is not str or name in allowed or not isinstance(kind,type) or not issubclass(kind,Exception) for name,kind in bindings.items()):
+        raise ValueError('invalid explicit source exception class binding')
+    # Validate the whole selected graph before running any user constructor.
+    # A valid root must not execute host effects before a malformed child or
+    # location is rejected. This is the bounded wire graph, not a Python heap.
+    pending=[(table[int(code)-1],0)]
+    nodes=0
+    while pending:
+        edge,depth=pending.pop()
+        nodes+=1
+        if depth>32 or nodes>4096 or not isinstance(edge,(list,tuple)) or not 2<=len(edge)<=6:
+            raise RuntimeError('invalid native source exception graph')
+        kind,payload,*extra=edge
+        if type(kind) is not str or kind not in allowed and kind not in bindings or not isinstance(payload,(list,tuple)) or any(type(v) is not str for v in payload):
+            raise RuntimeError('invalid native source exception payload')
+        if len(payload)==2 and payload[0]=='@tensor':
+            if not contract.get('error_dynamic') or sites and payload[1] not in sites:
+                raise RuntimeError('missing source exception payload slot')
+        if extra and extra[0] is not None:
+            cause=extra[0]
+            if not isinstance(cause,(list,tuple)) or len(cause)!=2 or type(cause[0]) is not str:
+                raise RuntimeError('invalid native source exception cause')
+            if cause[0]=='edge':pending.append((cause[1],depth+1))
+            elif cause[0]!='suppress':pending.append((cause,depth+1))
+        if len(extra)>1:
+            location=extra[1]
+            if not isinstance(location,(list,tuple)) or len(location)!=2 or type(location[0]) is not str or type(location[1]) is not int or location[1]<1:
+                raise RuntimeError('invalid source exception location')
+        if len(extra)>2 and extra[2] is not None:pending.append((extra[2],depth+1))
+        if len(extra)>3 and type(extra[3]) is not str:
+            raise RuntimeError('invalid source exception occurrence')
     memo: dict[str,Exception]={}
     def build(edge,depth=0):
         if depth>32 or not isinstance(edge,(list,tuple)) or len(edge)<2:raise RuntimeError('invalid native source exception graph')
         key=json.dumps(edge,sort_keys=True)
         if key in memo:return memo[key]
         kind,payload,*extra=edge
-        if kind not in allowed or not isinstance(payload,(list,tuple)) or any(type(v) is not str for v in payload):raise RuntimeError('invalid native source exception payload')
+        if kind not in allowed and kind not in bindings or not isinstance(payload,(list,tuple)) or any(type(v) is not str for v in payload):raise RuntimeError('invalid native source exception payload')
         args=payload
         if len(payload)==2 and payload[0]=='@tensor' and contract.get('error_dynamic'):
             if sites and payload[1] not in sites:raise RuntimeError('missing source exception payload slot')
             index=sites.index(payload[1])-len(sites) if sites else -1
             args=(outputs[index].copy(),)
-        error=getattr(builtins,kind)(*args);memo[key]=error
+        error=(bindings[kind] if kind in bindings else getattr(builtins,kind))(*args);memo[key]=error
         if extra and extra[0] is not None:
             cause_kind,cause_args=extra[0]
             error.__suppress_context__=True
@@ -167,8 +232,9 @@ def decode_source_exception(contract,outputs):
 
 
 class NativeSourceStateProgram:
-    def __init__(self,native_ir):
+    def __init__(self,native_ir,*,exception_types=None):
         from tessera import _jit_boundary as jit
+        self._exception_types=dict(exception_types or {})
         self._ir=native_ir
         self._digest=hashlib.sha256(native_ir.encode()).hexdigest()
         self._lock=threading.RLock()
@@ -237,7 +303,7 @@ class NativeSourceStateProgram:
             for group,result in zip(contract['groups'],outputs[count:count+len(contract['groups'])],strict=True):
                 np.copyto(arrays[group[0]],result,casting='no')
             if contract.get('error_specs'):
-                error=decode_source_exception(contract,outputs)
+                error=decode_source_exception(contract,outputs,exception_types=self._exception_types)
                 if error is not None:raise error
             values=tuple(outputs[:count])
             return values[0] if len(values)==1 else values
@@ -267,7 +333,7 @@ def compile_source_state(fn,*arrays,mutable,max_steps=None,error_specs=(),object
     contract['mutable']=mutable
     new=json.dumps(json.dumps(contract,sort_keys=True,separators=(',',':')))
     if native.count(old)!=1:raise ValueError('source state contract is not unique')
-    return NativeSourceStateProgram(native.replace(old,new,1))
+    return NativeSourceStateProgram(native.replace(old,new,1),exception_types=traced.source_exception_types)
 
 
 class NativeSourceJit:
@@ -368,7 +434,7 @@ class NativeSourceJit:
                 snapshots=[a.copy() for a in arrays]
                 jit.invoke(handles[0],contracts[0]['entry'],snapshots,outputs)
                 if self.error_specs:
-                    error=decode_source_exception(state_contract,outputs[:count])
+                    error=decode_source_exception(state_contract,outputs[:count],exception_types=traced.source_exception_types)
                     if error is not None:raise error
                 seeds=[c.copy() for c in cotangents]+[np.zeros_like(o) for o in outputs[public_count:count]]
                 derivatives=allocate(contracts[1]['results'])

@@ -74,6 +74,28 @@
 namespace tessera {
 
 namespace {
+// A gather generator is deliberately narrower than an arbitrary tensor.generate:
+// index-only arithmetic followed by one scalar read from an enclosing tensor.
+static mlir::tensor::ExtractOp gatherRead(mlir::Operation *op) {
+  using namespace mlir;
+  auto generate = dyn_cast<tensor::GenerateOp>(op);
+  if (!generate || !llvm::hasSingleElement(generate.getBody())) return {};
+  auto &body = generate.getBody().front();
+  auto yield = dyn_cast<tensor::YieldOp>(body.getTerminator());
+  if (!yield || yield->getNumOperands() != 1) return {};
+  auto read = yield->getOperand(0).getDefiningOp<tensor::ExtractOp>();
+  if (!read || read->getBlock() != &body ||
+      !isa<FloatType>(read.getType()) ||
+      generate->isAncestor(read.getTensor().getParentRegion()->getParentOp())) return {};
+  for (Operation &nested : body.without_terminator()) {
+    if (&nested == read.getOperation()) continue;
+    if (nested.getName().getDialectNamespace() != "arith" || nested.getNumRegions() ||
+        !llvm::all_of(nested.getResultTypes(), [](Type t) { return t.isIndex() || t.isInteger(); }))
+      return {};
+  }
+  return read;
+}
+
 
 constexpr const char *kAutodiffMarker = "tessera.autodiff";
 
@@ -563,7 +585,7 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
         return mlir::failure();
       }
       if (auto yield = mlir::dyn_cast<mlir::scf::YieldOp>(terminator);
-          yield && yield.getNumOperands() != execute.getNumResults()) {
+          yield && yield->getNumOperands() != execute.getNumResults()) {
         execute.emitError() << "native CFG yield/result cardinality mismatch";
         return mlir::failure();
       }
@@ -1579,9 +1601,9 @@ static void normalizeCountedTapeWhiles(mlir::func::FuncOp fn) {
     auto yield=dyn_cast<scf::YieldOp>(after.getTerminator());
     if (!condition || !yield || before.getOperations().size()!=2 ||
         condition.getArgs()!=before.getArguments() ||
-        yield.getNumOperands()!=loop.getInits().size()) continue;
+        yield->getNumOperands()!=loop.getInits().size()) continue;
     auto cmp=condition.getCondition().getDefiningOp<arith::CmpIOp>();
-    auto inc=yield.getOperand(0).getDefiningOp<arith::AddIOp>();
+    auto inc=yield->getOperand(0).getDefiningOp<arith::AddIOp>();
     if (!cmp || cmp.getPredicate()!=arith::CmpIPredicate::slt ||
         cmp.getLhs()!=before.getArgument(0) || !inc || inc.getLhs()!=after.getArgument(0)) continue;
     llvm::APInt lo,hi,step;
@@ -1638,9 +1660,9 @@ static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
     auto condition=dyn_cast<scf::ConditionOp>(before.getTerminator());
     auto yield=dyn_cast<scf::YieldOp>(after.getTerminator());
     if (!condition || !yield || condition.getArgs()!=before.getArguments() ||
-        yield.getNumOperands()!=loop.getInits().size()) return;
+        yield->getNumOperands()!=loop.getInits().size()) return;
     for (auto &op:before.without_terminator()) if (!isReplayableCFGBodyOperation(op)) return;
-    auto inc=yield.getOperand(0).getDefiningOp<arith::AddIOp>();
+    auto inc=yield->getOperand(0).getDefiningOp<arith::AddIOp>();
     APInt initial,step;
     if (!inc || inc.getLhs()!=after.getArgument(0) ||
         !matchPattern(loop.getInits()[0],m_ConstantInt(&initial)) || !initial.isSignedIntN(64) ||
@@ -1660,8 +1682,8 @@ static void normalizeDataDependentTapeWhiles(mlir::func::FuncOp fn) {
         if (branch.getNumResults()!=1 || !branch.getElseRegion().hasOneBlock()) return std::nullopt;
         auto yield=dyn_cast<scf::YieldOp>(branch.getElseRegion().front().getTerminator());
         APInt fallback;
-        if (!yield || yield.getNumOperands()!=1 ||
-            !matchPattern(yield.getOperand(0),m_ConstantInt(&fallback)) || !fallback.isZero()) return std::nullopt;
+        if (!yield || yield->getNumOperands()!=1 ||
+            !matchPattern(yield->getOperand(0),m_ConstantInt(&fallback)) || !fallback.isZero()) return std::nullopt;
         return cap(branch.getCondition());
       }
       if (auto select=v.getDefiningOp<arith::SelectOp>()) {
@@ -2020,7 +2042,7 @@ private:
       if (!activeOps.contains(op))
         continue;
       if (op->getNumRegions() != 0 &&
-          !RegionAdjointInterface::supports(op)) {
+          !RegionAdjointInterface::supports(op) && !gatherRead(op)) {
         op->emitError() << "[AUTODIFF_NESTED_REGION] active paired reverse-mode "
                            "path contains unsupported nested-region op ('"
                         << op->getName().getStringRef() << "')";
@@ -2403,7 +2425,7 @@ private:
       return mlir::failure();
     auto yield = mlir::dyn_cast<mlir::scf::YieldOp>(
         region.front().getTerminator());
-    if (!yield || yield.getNumOperands() != outputCotangents.size())
+    if (!yield || yield->getNumOperands() != outputCotangents.size())
       return mlir::failure();
 
     mlir::IRMapping mapping;
@@ -2520,8 +2542,57 @@ private:
   mlir::LogicalResult differentiateOperation(
       mlir::Operation *op, mlir::ValueRange outputCotangents,
       mlir::OpBuilder &builder, CotangentMap &cotangents) {
+    if (auto read = gatherRead(op)) {
+      using namespace mlir;
+      auto generate = cast<tensor::GenerateOp>(op);
+      if (outputCotangents.size() != 1 || !outputCotangents.front()) return failure();
+      Value seed = outputCotangents.front();
+      auto loc = op->getLoc();
+      auto type = cast<RankedTensorType>(generate.getType());
+      SmallVector<Value> sizes, indices;
+      unsigned dynamicIndex = 0;
+      for (int64_t axis = 0; axis < type.getRank(); ++axis) {
+        Value size = type.isDynamicDim(axis) ? generate.getDynamicExtents()[dynamicIndex++] :
+            arith::ConstantIndexOp::create(builder, loc, type.getDimSize(axis)).getResult();
+        sizes.push_back(size);
+        Value actual = tensor::DimOp::create(builder, loc, seed, axis);
+        Value equal = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, actual, size);
+        cf::AssertOp::create(builder, loc, equal, builder.getStringAttr("gather cotangent shape mismatch"));
+      }
+      Value zero = arith::ConstantIndexOp::create(builder, loc, 0);
+      Value one = arith::ConstantIndexOp::create(builder, loc, 1);
+      std::function<Value(unsigned, Value)> scatter = [&](unsigned axis, Value dest) -> Value {
+        if (axis == sizes.size()) {
+          IRMapping mapping;
+          mapping.map(generate.getBody().front().getArguments(), indices);
+          for (Operation &nested : generate.getBody().front().without_terminator()) {
+            if (&nested == read.getOperation()) continue;
+            builder.clone(nested, mapping);
+          }
+          SmallVector<Value> coordinates;
+          for (Value index : read.getIndices()) coordinates.push_back(mapping.lookupOrDefault(index));
+          Value old = tensor::ExtractOp::create(builder, loc, dest, coordinates);
+          Value incoming = tensor::ExtractOp::create(builder, loc, seed, indices);
+          Value sum = arith::AddFOp::create(builder, loc, old, incoming);
+          return tensor::InsertOp::create(builder, loc, sum, dest, coordinates);
+        }
+        auto loop = scf::ForOp::create(builder, loc, zero, sizes[axis], one, ValueRange{dest});
+        {
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointToStart(loop.getBody());
+          indices.push_back(loop.getInductionVar());
+          Value updated = scatter(axis + 1, loop.getRegionIterArgs().front());
+          indices.pop_back();
+          scf::YieldOp::create(builder, loc, updated);
+        }
+        return loop.getResult(0);
+      };
+      Value result = scatter(0, buildZeroLike(builder, read.getTensor()));
+      accumulateCotangent(builder, cotangents, read.getTensor(), result);
+      return success();
+    }
     if (op->getNumRegions() != 0) {
-      if (!RegionAdjointInterface::supports(op)) {
+      if (!RegionAdjointInterface::supports(op) && !gatherRead(op)) {
         op->emitError() << "[AUTODIFF_NESTED_REGION] no registered "
                            "RegionAdjointInterface model for "
                         << op->getName();

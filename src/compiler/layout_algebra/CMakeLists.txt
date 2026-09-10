@@ -18,7 +18,7 @@ endif()
 
 install(TARGETS tessera_layout_algebra
   ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
+  LIBRARY DESTINATION lib COMPONENT compiler-tools
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)

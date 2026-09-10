@@ -30,9 +30,9 @@ the bootstrap row can go.
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 30 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 13 |
-| Lines in those modules | 10467 |
-| Classified family/target candidates (shape admission not implied) | 53 |
-| — covered by a compiled route | 5 |
+| Lines in those modules | 10485 |
+| Classified family/target candidates (shape admission not implied) | 54 |
+| — covered by a compiled route | 6 |
 | — **gap (no declared family route)** | 48 |
 | Packagers matching no family | 9 |
 
@@ -42,7 +42,7 @@ the bootstrap row can go.
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 11 | 12 | 3822 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 0 | 5 | 2901 |
-| `x86` | `x86_native.py` | 7 | 4 | 1 | 7 | 1717 |
+| `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1735 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1812 |
 
@@ -88,6 +88,7 @@ queues own.
 | `x86` | `reduction` | — | 🔴 **gap** |
 | `x86` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `x86` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
+| `x86` | `attention_backward` | `scheduled_attention_backward.supports_scheduled_attention_backward` | ✅ compiled |
 | `x86` | `cohort2` | — | 🔴 **gap** |
 | `x86` | `breadth` | — | 🔴 **gap** |
 | `x86` | `elementwise` | — | 🔴 **gap** |

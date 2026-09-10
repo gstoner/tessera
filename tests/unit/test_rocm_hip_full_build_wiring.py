@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-_FULL_TOOLCHAIN_GUARD = (
+_HARDWARE_FREE_GUARD = (
     "TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA "
     "AND NOT TESSERA_ENABLE_HIP"
 )
@@ -19,14 +19,30 @@ def test_hip_is_enabled_as_a_cmake_language() -> None:
 
 def test_real_hip_build_is_not_classified_as_hardware_free() -> None:
     """HIP-on builds must retain full compiler components and examples."""
+    top = (ROOT / "CMakeLists.txt").read_text()
+    assert _HARDWARE_FREE_GUARD in top
+    assert "if(TESSERA_FORCE_FULL_COMPILER_DRIVER)" in top
+    assert "set(TESSERA_HARDWARE_FREE_TARGET_BUILD OFF)" in top
     for relative in (
-        "CMakeLists.txt",
         "src/CMakeLists.txt",
         "tools/tessera-opt/CMakeLists.txt",
         "tools/tessera-translate/CMakeLists.txt",
     ):
-        text = (ROOT / relative).read_text()
-        assert _FULL_TOOLCHAIN_GUARD in text, relative
+        assert "TESSERA_HARDWARE_FREE_TARGET_BUILD" in (
+            ROOT / relative
+        ).read_text(), relative
+
+
+def test_ci_lit_lane_requests_full_portable_target_matrix() -> None:
+    workflow = (ROOT / ".github/workflows/validate.yml").read_text()
+    for option in (
+        "-DTESSERA_BUILD_APPLE_BACKEND=ON",
+        "-DTESSERA_BUILD_X86_BACKEND=ON",
+        "-DTESSERA_BUILD_NVIDIA_BACKEND=ON",
+        "-DTESSERA_BUILD_ROCM_BACKEND=ON",
+        "-DTESSERA_FORCE_FULL_COMPILER_DRIVER=ON",
+    ):
+        assert option in workflow
 
 
 def test_real_hip_build_keeps_neighbors_solvers_and_tpp() -> None:
@@ -37,6 +53,16 @@ def test_real_hip_build_keeps_neighbors_solvers_and_tpp() -> None:
     opt = (ROOT / "tools/tessera-opt/CMakeLists.txt").read_text()
     assert "TESSERA_HAVE_NEIGHBORS" in opt
     assert "TESSERA_HAVE_TPP" in opt
+
+
+def test_rocm_serialization_registration_tracks_linked_libraries() -> None:
+    cmake = (ROOT / "tools/tessera-opt/CMakeLists.txt").read_text()
+    driver = (ROOT / "tools/tessera-opt/tessera-opt.cpp").read_text()
+    assert "TESSERA_HAVE_ROCM_SERIALIZATION" in cmake
+    assert (
+        "#ifdef TESSERA_HAVE_ROCM_SERIALIZATION\n"
+        "  // Stage L3: LLVM-IR translations"
+    ) in driver
 
 
 def test_lean_rocm_driver_excludes_ambient_fa4_targets() -> None:

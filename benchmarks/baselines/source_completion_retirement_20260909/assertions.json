@@ -1,0 +1,20 @@
+{
+  "discovered": 474,
+  "passed": 474,
+  "unsupported": 0,
+  "failed": 0,
+  "failures": [],
+  "unsupported_by_required_feature": {},
+  "build": "Super-Bear assertions-enabled LLVM 23.1.1; hardware-free full compiler driver; Apple, NVIDIA, ROCm and x86 compiler backends ON; CUDA and HIP runtime integration OFF",
+  "fixed": "AutodiffForwardPass declares TesseraTileDialect; ScheduleToTilePass declares the NVIDIA Target dialect; hardware-free validation can explicitly retain the full compiler driver; ROCm serialization registration follows linked translation libraries; 15 target-owned fixtures declare their backend features; the data-only x86 execution input lives outside lit discovery",
+  "performance_promotion": false,
+  "compiler_sha256": "e6c1ef065c1e49662ab329406613ce6b96d6da1458f4d6d6a1cb55b3f5877448",
+  "source_sha256": {
+    "src/transforms/lib/AutodiffForwardPass.cpp": "d901bb9eb5fc626839718f0cd724bf0de68d3f61c0690810a7381e88af8553c0",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "6c1e43c2fb5801f71bda9f38592489f9607648762c35ea0e9ce55f4219895730",
+    "CMakeLists.txt": "38842cb814fb094fc6467bbd06b9427d8ae6b730a9ad68ce1f4d28f631cf75cf",
+    "tools/tessera-opt/CMakeLists.txt": "f233483664d3886a14ff6310992bf67f0d0d672c9cc5893565d1843fad26e299",
+    "tools/tessera-opt/tessera-opt.cpp": "e9f6c67c684d706078e36768eebc516e641385f672bf51ab5cc196a9173d9a3f"
+  },
+  "command": "cmake -S . -B build-assertions-x86-nvidia -DTESSERA_FORCE_FULL_COMPILER_DRIVER=ON -DTESSERA_BUILD_APPLE_BACKEND=ON -DTESSERA_BUILD_NVIDIA_BACKEND=ON -DTESSERA_BUILD_ROCM_BACKEND=ON -DTESSERA_BUILD_X86_BACKEND=ON -DTESSERA_ENABLE_CUDA=OFF -DTESSERA_ENABLE_HIP=OFF ... && PATH=/usr/lib/llvm-23/bin:$PATH TESSERA_OPT=$PWD/build-assertions-x86-nvidia/tools/tessera-opt/tessera-opt timeout 180s .venv/bin/python -c \"from lit.main import main; main()\" -j4 -o /tmp/tessera-assertions-all-hostfree.json tests/tessera-ir"
+}

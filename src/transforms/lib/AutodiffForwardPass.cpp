@@ -3,6 +3,7 @@
 #include "tessera/Dialect/Attn/AttnDialect.h"
 #include "Tessera/Transforms/Passes.h"
 #include "Tessera/IR/TesseraOps.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -520,7 +521,8 @@ class AutodiffForwardPass
     return "Emit a paired Graph IR JVP through TangentInterface";
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<tessera::attn::TesseraAttnDialect>();
+    registry.insert<tessera::attn::TesseraAttnDialect,
+                    tessera::tile::TesseraTileDialect>();
     registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
                     mlir::scf::SCFDialect, mlir::tensor::TensorDialect,
                     mlir::math::MathDialect, mlir::gpu::GPUDialect, mlir::LLVM::LLVMDialect, mlir::memref::MemRefDialect>();

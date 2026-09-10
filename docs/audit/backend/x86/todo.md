@@ -4674,3 +4674,99 @@ VJP over retained snapshots. Runtime gather adjoints, arbitrary exception heaps,
 full CPython frames, runtime-shaped source roots and fully asynchronous teardown
 remain open. Block AttnRes kernel/promotion obligations are unchanged.
 Evidence: `benchmarks/baselines/source_nested_async_20260909/`.
+
+
+### Gather transpose and scoped source retirement (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1`.
+Sync: `SOURCE-GATHER-SCOPED-2026-09-09`.
+Native CPU validates signed/nested and repeated-index gather transposes and explicitly bound host exception constructors; GPU retirement proof does not transfer.
+Shared contract: index-only accumulating gather adjoints, explicit CPU exception
+class ownership, scoped source VJP readers and ordered asynchronous retirement.
+Arbitrary exception heaps, full CPython frames and fully asynchronous unload or
+failure recovery remain open. Evidence: `benchmarks/baselines/source_scoped_ad_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Exception bindings and unload recovery (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1`.
+Sync: `SOURCE-EXCEPTION-BINDINGS-2026-09-09`.
+CPU tests validate per-generation literal exception identity and failure-phase retry. Driver failure injection is an ownership test, not GPU physical proof.
+Shared contracts: raise occurrence identity, explicit host class bindings, cached
+completion exceptions, and retry only after confirmed unload/context exit.
+Arbitrary exception heaps, handled custom-constructor effects, CPython frames
+and uncertain driver recovery remain open. No performance promotion.
+Evidence: `benchmarks/baselines/source_exception_bindings_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Architecture sweep and failure boundaries (2026-09-09)
+
+Owners: `FRONTEND-IR-MEDIUM-1`, `DIST-NATIVE-1`, `W4-PRODUCT-1`, `W2.4a`.
+Sync: `ARCH-SWEEP-FAILURE-2026-09-09`.
+Host WSL regression coverage exercises shared shape, plan and exception contracts; no hardware promotion.
+Shared changes: structural dimension equality, contiguous pipeline-stage
+validation, constructor-free exception graph preflight and preservation of both
+unload/context-exit failures. Unknown driver outcomes retain owners and refuse
+retry. Arbitrary exception heaps and native CPython frame reconstruction remain
+open; no device reset/recovery or performance claim.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Indexed exception completion and one-shot unload (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`. Sync: `SOURCE-HEAP-RETIRE-2026-09-09`.
+Host WSL tests cover indexed chains/cycles and one-shot uncertain unload retention; GPU proof does not transfer.
+Shared contract: indexed source exception objects, pre-constructor graph/payload
+snapshot, explicit bindings, and retention of synchronous uncertain driver
+outcomes. Arbitrary native heap allocation, full CPython frames and confirmed
+isolation teardown/replacement remain open. No performance promotion.
+Evidence: `benchmarks/baselines/source_exception_heap_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Completion roots and broader assertions corpus (2026-09-09)
+
+Owners: `COMPILER-DEVEX-1`, `E2E-REAL-6F`, `W4-PRODUCT-1`, `W2.4a`.
+Sync: `COMPLETION-CORPUS-2026-09-09`.
+The x86 Target IR now participates in Super-Bear's assertions-enabled
+all-target compiler lane; all 21 x86-owned fixtures pass and the 474-fixture
+union is complete. The Python-driven composed-layout input now lives under
+`tests/fixtures/`, outside lit discovery.
+Shared changes: forward AD declares Tile dependency, completed frames release
+cached host exception roots, uncertain synchronous frees retain owners and
+refuse retry. General native heap allocation/reclamation, full CPython frames
+and isolation-based driver recovery remain open.
+Evidence: `benchmarks/baselines/source_completion_retirement_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Four canonicalization legality improvements (2026-09-09)
+
+Owners: `W5.5`, `W4-PRODUCT-1`. Sync: `CANONICAL-LEGALITY-2026-09-09`.
+Native CPU tests validate square identity-permutation matmul through three lowering paths; the assertions build still lacks the optional x86 Target dialect.
+Shared contracts: actual permutation composition, matrix-swap-only matmul flags,
+preserved epilogue operands, policy/metadata cast guards and conservative fusion
+admission. Failed exception reconstruction releases private unpublished roots.
+General native allocation/collection, full CPython frames and isolated driver
+recovery remain open. Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Native exception arena and isolation boundary (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6`, `W5.2f`. Sync: `NATIVE-HEAP-ISOLATION-2026-09-09`.
+Host contract is applicable; exact CPython traceback frames still require an
+interpreter deoptimization path. x86 remains the host companion and does not
+inherit CUDA/HIP isolation or device-heap proof. No performance promotion.
+
+### Backward-attention package caller migration (2026-09-09)
+
+Owner: `E2E-REAL-6`. Sync: `F2-X86-ATTN-BWD-2026-09-09`.
+Parity validated: the production selector recognizes the bounded x86 backward
+attention Graph contract and lowers it immediately to the existing scheduled
+artifact/package consumer, retaining saved-LSE and artifact ancestry checks.
+Non-f32 matmul, cohort and breadth package roots remain; no performance promotion.
+
+
+### Installed drivers and device measurements (2026-09-10)
+
+Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2026-09-10`.
+Installed driver and LLVM translation parity validated on Super-Bear. The compiler-tools component survives prefix relocation without loader overrides. CUDA/HIP and Metal measurements do not establish x86 kernel performance.
+Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).

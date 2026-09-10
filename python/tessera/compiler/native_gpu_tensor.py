@@ -211,6 +211,11 @@ class NativeTensorCall:
             self._inflight.append((ticket, accesses))
             return TensorSubmission(ticket, outputs)
 
+    def retry_retirement_cleanup(self):
+        with self._lock:
+            if self._bound is None:raise ValueError('native tensor binding is closed')
+            self._bound.retry_retirement_cleanup()
+
     def close_if_complete(self, *, defer_unload=False):
         with self._lock:
             if self._bound is not None:

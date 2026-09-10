@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt --pass-pipeline='builtin.module(tessera-lower-to-x86)' %s -split-input-file -verify-diagnostics | FileCheck %s
 //
 // 2026-06-17: LayoutLegalityPass is now wired into the named lowering pipelines

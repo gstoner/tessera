@@ -17,6 +17,9 @@ from .native_storage_contract import attach_tensor_contract, generate_tensor_bin
 from .native_persistent_tape import _attribute
 from .native_device_tape import _Buffer
 
+# Unknown synchronous free outcomes cannot authorize retry or collection.
+_QUARANTINED_PUBLIC_FRAMES: set = set()
+
 
 def _prepare(source, compiler, backend, capacity=0, input_capacity=0):
     gpu = _run(compiler, '--tessera-native-tape-to-gpu=backend='+backend+' status-buffer=true public-result-capacity='+str(capacity)+' public-input-capacity='+str(input_capacity), source=source)
@@ -50,6 +53,7 @@ class NativePublicResult:
     package: NativeGPUStoragePackage
     capacity: int = 0
     input_capacity: int = 0
+    exception_types: tuple = ()
 
     def validate(self):
         self.package.validate()
@@ -182,11 +186,18 @@ class PublicResultFrame:
                     self.check(self.copy_out(array.ctypes.data,view.pointer,array.nbytes))
                     outputs.append(array)
                 if not hasattr(self,'_source_exception'):
-                    self._source_exception=decode_source_exception(contract,outputs)
+                    try:
+                        self._source_exception=decode_source_exception(contract,outputs,
+                            exception_types=dict(self.program.exception_types))
+                    except BaseException as error:
+                        # Constructor failures are completion failures too.
+                        # Preserve identity and never invoke user code twice.
+                        self._source_exception=error
+                        self._source_exception_traceback=error.__traceback__.tb_next if error.__traceback__ else None
                 if self._source_exception is not None:
                     # Polling the same failed frame must not retain every prior
                     # caller and its locals in an ever-growing traceback chain.
-                    raise self._source_exception.with_traceback(None)
+                    raise self._source_exception.with_traceback(getattr(self,'_source_exception_traceback',None))
         self._results=tuple(results)
         if self._scoped:
             assert self._owner is not None
@@ -254,6 +265,12 @@ class PublicResultFrame:
                 self._retiring = self._owner.retiring
         return self
 
+    def retry_retirement_cleanup(self):
+        with self._lock:
+            if self.closed or not self._retiring:
+                raise ValueError('public result has no pending retirement')
+            self.binding.retry_retirement_cleanup()
+
     def poll_retired(self):
         with self._lock:
             if self.closed:
@@ -263,10 +280,24 @@ class PublicResultFrame:
                 return False
             if not self.binding.close_if_complete(defer_unload=True):
                 return False
+            self._snapshot_borrows=()
+            self._release_completion()
             self.closed = True
             return True
 
+    def _release_completion(self):
+        # Drop only our roots. Exceptions already handed to callers keep their
+        # identity, cause/context links and tracebacks unchanged.
+        self.__dict__.pop('_source_exception',None)
+        self.__dict__.pop('_source_exception_traceback',None)
+
     def close(self):
+        with self._lock:
+            if getattr(self,'_synchronous_close_error',None) is not None:
+                raise RuntimeError('public frame close outcome is uncertain; owner retained') from self._synchronous_close_error
+            self._close_owned()
+
+    def _close_owned(self):
         if self.closed:
             return
         if self._scoped and self._owner is not None:
@@ -279,12 +310,19 @@ class PublicResultFrame:
         context = self.context_type(); self.check(self.current(ct.byref(context)))
         if context.value != self.context.value:
             raise ValueError('public result requires its owning device context')
-        self.check(self.sync())
-        while self.buffers:
-            buffer = self.buffers[-1]
-            self.check(self.free(buffer.pointer)); buffer.pointer=ct.c_void_p(); self.buffers.pop()
+        try:
+            self.check(self.sync())
+            while self.buffers:
+                buffer = self.buffers[-1]
+                self.check(self.free(buffer.pointer)); buffer.pointer=ct.c_void_p(); self.buffers.pop()
+        except BaseException as error:
+            self._synchronous_close_error=error
+            self._retirement_poisoned=True
+            _QUARANTINED_PUBLIC_FRAMES.add(self)
+            raise
         self.binding.close()
         self._snapshot_borrows=()
+        self._release_completion()
         self.closed=True
 
     def __enter__(self):
@@ -354,11 +392,14 @@ class NativeSourceVJP:
         zero.argtypes=[ct.c_void_p,ct.c_ubyte if cuda else ct.c_int,ct.c_size_t]+([] if stream is None else [ct.c_void_p])
         zero.restype=ct.c_int
         seeds=list(cotangents)
-        for result in forward.results[public_count:primal_count]:
+        results=forward._results if forward._scoped else forward.results
+        for result in results[public_count:primal_count]:
             buffer=_Buffer(forward,result._shape,result._buffer.dtype,stream=stream)
             forward.check(zero(buffer.pointer,0,buffer.nbytes,*(() if stream is None else (ct.c_void_p(stream),))))
             seeds.append(buffer)
-        return (*forward._snapshot_inputs,*seeds,*forward.results[primal_count:])
+            if forward._scoped:
+                forward._owner._buffers=(*forward._owner._buffers,buffer)
+        return (*forward._snapshot_inputs,*seeds,*results[primal_count:])
 
     def run(self,*inputs,cotangents):
         abi,public_count=self._validate_pair(cotangents)
@@ -370,10 +411,10 @@ class NativeSourceVJP:
             forward.close()
             raise
 
-    def submit(self,stream,*inputs,cotangents):
+    def submit(self,stream,*inputs,cotangents,scoped=False):
         if type(stream) is not int or not 0<stream<(1<<64):
             raise ValueError('source VJP requires a non-null stream')
-        return AsyncSourceVJPFrame(self,stream,inputs,cotangents)
+        return AsyncSourceVJPFrame(self,stream,inputs,cotangents,scoped=scoped)
 
 
 class AsyncSourceVJPFrame:
@@ -383,33 +424,89 @@ class AsyncSourceVJPFrame:
     Snapshot, zero fills and both launches use that stream. No backward is
     enqueued until the forward's device status and exception completion pass.
     """
-    def __init__(self,program,stream,inputs,cotangents):
+    def __init__(self,program,stream,inputs,cotangents,*,scoped=False):
+        if type(scoped) is not bool:raise ValueError("scoped must be boolean")
+        self._scoped,self._retiring,self._complete=scoped,False,False
         self._abi,self._public_count=program._validate_pair(cotangents)
         self._program,self._stream=program,stream
         self._cotangents=cotangents
         self._lock=threading.RLock()
         self._backward=None
         self._error=None
+        self._error_traceback=None
         self.closed=False
-        self._forward=PublicResultFrame(program._forward,inputs,stream=stream,snapshot=True)
+        self._forward=PublicResultFrame(program._forward,inputs,stream=stream,snapshot=True,scoped=scoped)
 
     def poll(self):
         with self._lock:
-            if self.closed:raise ValueError('source VJP frame is closed')
-            if self._error is not None:raise self._error.with_traceback(None)
-            if hasattr(self,'derivatives'):return True
+            if self.closed or self._retiring:raise ValueError('source VJP frame is closed or retiring')
+            if self._error is not None:raise self._error.with_traceback(self._error_traceback)
+            if self._complete:return True
             try:
                 if self._backward is None:
                     if not self._forward.poll():return False
-                    args=self._program._backward_inputs(self._forward,self._cotangents,self._abi['primal_results'],self._public_count,self._stream)
-                    self._backward=self._program._backward.submit(self._stream,*args)
+                    from contextlib import nullcontext
+                    with self._forward.read(self._stream) if self._scoped else nullcontext():
+                        args=self._program._backward_inputs(self._forward,self._cotangents,self._abi['primal_results'],self._public_count,self._stream)
+                        self._backward=self._program._backward.submit(self._stream,*args,**({'scoped':True} if self._scoped else {}))
                 if not self._backward.poll():return False
-                self.primals=self._forward.results[:self._public_count]
-                self.derivatives=self._backward.results
+                if not self._scoped:
+                    self.primals=self._forward.results[:self._public_count]
+                    self.derivatives=self._backward.results
+                self._complete=True
                 return True
             except BaseException as error:
                 self._error=error
+                self._error_traceback=error.__traceback__.tb_next if error.__traceback__ else None
                 raise
+
+    def read(self,stream):
+        from contextlib import contextmanager
+        @contextmanager
+        def lease():
+            with self._lock:
+                if not self._scoped or not self._complete or self.closed or self._retiring:
+                    raise ValueError('source VJP readers require completed scoped results')
+                assert self._backward is not None
+                with self._forward.read(stream) as primals, self._backward.read(stream) as derivatives:
+                    yield primals[:self._public_count],derivatives
+        return lease()
+
+    def retire(self,stream):
+        from .native_reader_retirement import _stream
+        stream=_stream(stream)
+        with self._lock:
+            if not self._scoped or self.closed or self._retiring:
+                raise ValueError('source VJP retirement requires an open scoped frame')
+            # Check both owners before queuing any free, avoiding partial
+            # teardown when a reader scope still owns either product.
+            frames=[self._forward]+([self._backward] if self._backward is not None else [])
+            if any(frame._owner._active for frame in frames):
+                raise ValueError('source VJP retirement requires closed reader scopes')
+            self._retiring=True
+            for frame in reversed(frames):frame.retire(stream)
+        return self
+
+    def retry_retirement_cleanup(self,product):
+        with self._lock:
+            if self.closed or not self._retiring or product not in ('forward','backward'):
+                raise ValueError('source cleanup requires a retiring forward or backward product')
+            frame=self._forward if product=='forward' else self._backward
+            if frame is None:raise ValueError('source backward was never submitted')
+            frame.retry_retirement_cleanup()
+
+    def poll_retired(self):
+        with self._lock:
+            if self.closed:return True
+            if not self._retiring:return False
+            backward=self._backward is None or self._backward.poll_retired()
+            forward=self._forward.poll_retired()
+            if not backward or not forward:return False
+            self._cotangents=()
+            self._error=None
+            self._error_traceback=None
+            self.closed=True
+            return True
 
     def close(self):
         with self._lock:
@@ -417,6 +514,8 @@ class AsyncSourceVJPFrame:
             if self._backward is not None:self._backward.close()
             self._forward.close()
             self._cotangents=()
+            self._error=None
+            self._error_traceback=None
             self.closed=True
 
     def __enter__(self):return self
@@ -437,7 +536,7 @@ class SourceVJPFrame:
     def __exit__(self,*exc):self.close()
 
 
-def materialize_source_vjp(source, *, compiler, llvm_bin, backend, chip, capacity):
+def materialize_source_vjp(source, *, compiler, llvm_bin, backend, chip, capacity, exception_types=None):
     """Bind native exception products; standalone backward admission stays closed."""
     if type(capacity) is not int or not 1<=capacity<=1024:
         raise ValueError('source VJP requires capacity from one through 1024')
@@ -446,6 +545,10 @@ def materialize_source_vjp(source, *, compiler, llvm_bin, backend, chip, capacit
         raise ValueError('source VJP requires a serialized source exception contract')
     if len(contract.get('arguments',()))!=1 or contract.get('groups') not in ([],[[0]]) or contract.get('state_views') or contract.get('object_fields'):
         raise ValueError('source VJP currently requires one input without projected aliases or object fields')
+    from .native_source_state import bind_source_exception_types
+    from dataclasses import replace
+    bindings=bind_source_exception_types(contract,exception_types)
     programs=[_materialize_ad_product(source,compiler=Path(compiler),llvm_bin=Path(llvm_bin),
         backend=backend,chip=chip,capacity=capacity,role=role) for role in ('forward','backward')]
+    programs[0]=replace(programs[0],exception_types=tuple(bindings.items()))
     return NativeSourceVJP(*programs)

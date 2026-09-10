@@ -1,4 +1,7 @@
 // RUN: tessera-opt --tessera-lower-to-x86 %s -split-input-file -verify-diagnostics
+// BACKEND-FEATURE-WAIVER: tessera-x86-target-ir
+// This negative fixture exits in symbolic-dimension validation before the
+// optional x86 Target IR boundary, so it intentionally remains a core test.
 
 // Sprint V6b (2026-05-22) — `--tessera-symdim-equality` integrated into
 // the `tessera-lower-to-x86` and `tessera-lower-to-gpu` named pipelines.

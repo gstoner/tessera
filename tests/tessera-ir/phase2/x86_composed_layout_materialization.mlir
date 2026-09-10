@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: tessera-opt --tessera-tile-to-x86='architecture=base prefer-amx=false' %s | FileCheck %s
 
 module {

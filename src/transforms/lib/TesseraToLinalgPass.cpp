@@ -32,6 +32,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/IR/TransposeUtils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -2987,7 +2988,8 @@ struct UnaryActLowering : public RewritePattern {
   }
 };
 
-// tessera.transpose (rank-2; the result type fixes the permutation as [1,0]).
+// tessera.transpose (rank-2; explicit permutations remain authoritative even
+// when a square tensor's input and output types happen to be equal).
 struct TransposeLowering : public RewritePattern {
   TransposeLowering(MLIRContext *ctx)
       : RewritePattern("tessera.transpose", /*benefit=*/1, ctx) {}
@@ -3003,6 +3005,12 @@ struct TransposeLowering : public RewritePattern {
     if (inTy.getRank() != 2)
       return rewriter.notifyMatchFailure(
           op, "Phase 1 transpose is rank-2 only (op has no permutation attr)");
+    auto permutation = tessera::plainTransposePermutation(op);
+    if (!permutation) return failure();
+    if ((*permutation)[0] == 0 && (*permutation)[1] == 1 && inTy == outTy) {
+      rewriter.replaceOp(op, op->getOperand(0));
+      return success();
+    }
     if (outTy.getDimSize(0) != inTy.getDimSize(1) ||
         outTy.getDimSize(1) != inTy.getDimSize(0))
       return rewriter.notifyMatchFailure(op, "result must be the [1,0] transpose");

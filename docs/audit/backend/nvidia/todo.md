@@ -7009,3 +7009,88 @@ VJP over retained snapshots. Runtime gather adjoints, arbitrary exception heaps,
 full CPython frames, runtime-shaped source roots and fully asynchronous teardown
 remain open. Block AttnRes kernel/promotion obligations are unchanged.
 Evidence: `benchmarks/baselines/source_nested_async_20260909/`.
+
+
+### Gather transpose and scoped source retirement (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1`.
+Sync: `SOURCE-GATHER-SCOPED-2026-09-09`.
+SM120 scoped source VJP validated independently (19 correctness cases); native gather adjoints currently have CPU proof, not a CUDA promotion.
+Shared contract: index-only accumulating gather adjoints, explicit CPU exception
+class ownership, scoped source VJP readers and ordered asynchronous retirement.
+Arbitrary exception heaps, full CPython frames and fully asynchronous unload or
+failure recovery remain open. Evidence: `benchmarks/baselines/source_scoped_ad_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+
+### Exception bindings and unload recovery (2026-09-09)
+
+Owners: `W4-PRODUCT-1` / `AD-RESIDUAL-EVAL-1`.
+Sync: `SOURCE-EXCEPTION-BINDINGS-2026-09-09`.
+SM120 validates custom host-class reconstruction following GPU failure and scoped retirement; no performance promotion.
+Shared contracts: raise occurrence identity, explicit host class bindings, cached
+completion exceptions, and retry only after confirmed unload/context exit.
+Arbitrary exception heaps, handled custom-constructor effects, CPython frames
+and uncertain driver recovery remain open. No performance promotion.
+Evidence: `benchmarks/baselines/source_exception_bindings_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Architecture sweep and failure boundaries (2026-09-09)
+
+Owners: `FRONTEND-IR-MEDIUM-1`, `DIST-NATIVE-1`, `W4-PRODUCT-1`, `W2.4a`.
+Sync: `ARCH-SWEEP-FAILURE-2026-09-09`.
+Follow-up required: WSL fault injection is not SM120 driver-failure recovery proof.
+Shared changes: structural dimension equality, contiguous pipeline-stage
+validation, constructor-free exception graph preflight and preservation of both
+unload/context-exit failures. Unknown driver outcomes retain owners and refuse
+retry. Arbitrary exception heaps and native CPython frame reconstruction remain
+open; no device reset/recovery or performance claim.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Indexed exception completion and one-shot unload (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`. Sync: `SOURCE-HEAP-RETIRE-2026-09-09`.
+SM120 completion-carrier correctness is measured independently; driver failure recovery remains host fault injection only.
+Shared contract: indexed source exception objects, pre-constructor graph/payload
+snapshot, explicit bindings, and retention of synchronous uncertain driver
+outcomes. Arbitrary native heap allocation, full CPython frames and confirmed
+isolation teardown/replacement remain open. No performance promotion.
+Evidence: `benchmarks/baselines/source_exception_heap_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Completion roots and broader assertions corpus (2026-09-09)
+
+Owners: `COMPILER-DEVEX-1`, `E2E-REAL-6F`, `W4-PRODUCT-1`, `W2.4a`.
+Sync: `COMPLETION-CORPUS-2026-09-09`.
+SM120 validates source completion independently; uncertain free outcomes use host fault injection, not destructive device recovery. The Super-Bear assertions-enabled all-target compiler lane passes all four NVIDIA-owned fixtures and the 474-fixture union is complete. This structural result does not replace CUDA device execution or performance proof.
+Shared changes: forward AD declares Tile dependency, completed frames release
+cached host exception roots, uncertain synchronous frees retain owners and
+refuse retry. General native heap allocation/reclamation, full CPython frames
+and isolation-based driver recovery remain open.
+Evidence: `benchmarks/baselines/source_completion_retirement_20260909/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Four canonicalization legality improvements (2026-09-09)
+
+Owners: `W5.5`, `W4-PRODUCT-1`. Sync: `CANONICAL-LEGALITY-2026-09-09`.
+Host assertions build and CPU semantics pass; CUDA physical schedule/performance promotion is not established.
+Shared contracts: actual permutation composition, matrix-swap-only matmul flags,
+preserved epilogue operands, policy/metadata cast guards and conservative fusion
+admission. Failed exception reconstruction releases private unpublished roots.
+General native allocation/collection, full CPython frames and isolated driver
+recovery remain open. Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).
+
+### Native exception arena and isolation boundary (2026-09-09)
+
+Owners: `W4-PRODUCT-1`, `W2.4a`, `E2E-REAL-6`, `W5.2f`. Sync: `NATIVE-HEAP-ISOLATION-2026-09-09`.
+Parity validated for the host contract on Super-Bear; process death is not yet
+wired to the CUDA package launcher, so no poisoned-context recovery or device
+heap claim is made. ReplaySSM kernels do not substitute for the missing shared Schedule SSD producer.
+
+
+### Installed drivers and device measurements (2026-09-10)
+
+Owners: `COMPILER-DEVEX-1`, `EVIDENCE-PACKET-1`. Sync: `INSTALLED-DEVICE-GATES-2026-09-10`.
+Native 16x8 ANN numerical validation and independent repeated package measurements run on RTX 5070 SM120. Nine independent runs retain the incumbent: median speedup 0.999666x and lower bound 0.977299x fail the 1.02 margin; no global route is promoted. Device-clock attribution and broader workloads remain open.
+Shared tooling: both compiler drivers and the layout library install through the compiler-tools component; CI consumes relocated-prefix smoke and the lit union. Evidence: `benchmarks/baselines/installed_device_gates_20260910/`.
+Sequencing: [live plan](../../compiler/INTEGRATED_COMPILER_PLAN.md).

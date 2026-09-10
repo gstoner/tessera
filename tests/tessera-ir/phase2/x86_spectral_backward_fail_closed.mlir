@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: not tessera-opt %s --tessera-tile-to-x86 --split-input-file 2>&1 \
 // RUN:   | FileCheck %s
 

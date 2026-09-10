@@ -1,3 +1,4 @@
+// REQUIRES: tessera-x86-target-ir
 // RUN: not tessera-opt --tessera-tile-to-x86 %s 2>&1 | FileCheck %s
 //
 // Two silent-wrong-answer paths in the x86 lowering, both now fail closed.

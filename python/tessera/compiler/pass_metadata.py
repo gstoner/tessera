@@ -439,6 +439,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(
+            "Index-only tensor.generate gathers transpose to serial accumulating scatters with exact cotangent-shape guards; nonlinear generator bodies remain unsupported. "
             "Optional normalize-counted-while converts proven counted whiles; normalize-data-while freezes data-dependent state after exit when an SSA counter guard proves the capacity, including nonnegative initial counters, positive constant strides, signed inclusive/exclusive upper bounds and false-else short-circuit scf.if/arith.select guards. box-product-scalars projects index/predicate residuals into i64/i8 tensor storage. "
             "Bounded pure native CFG replay accepts execute regions or bounded multi-block function bodies, supports typed cf.br, cf.cond_br and cf.switch edges, and promotes cross-block SSA definitions to distinct state slots. "
             "Optional export-product preserves full typed nested residual forward/backward ABIs and paired lineage without scalarization. Rank-preserving dynamic slice pullbacks assert exact cotangent extents before scatter. "
@@ -498,7 +499,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-canonicalize",
         cpp_class="Canon",
-        summary="Canonicalizes native Tessera patterns; opt-in ann-reassociate composes single-use affine chains with finite frozen fp32 constants, bounded folding work, and no intervening activation or numeric-policy overrides.",
+        summary="Canonicalizes native Tessera patterns with checked permutation composition, matrix-transpose-only flag folding, epilogue operand preservation, attribute-free identity casts, and fail-closed fusion policy handling; opt-in ann-reassociate composes single-use affine chains with finite frozen fp32 constants, bounded folding work, and no intervening activation or numeric-policy overrides.",
         input_dialects=("tessera", "arith"),
         output_dialects=("tessera", "arith"),
         sprint="MSW-9",

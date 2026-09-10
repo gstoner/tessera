@@ -532,3 +532,67 @@ def test_native_exception_does_not_fabricate_python_execution_frames():
         tb=tb.tb_next
     assert frames and native_failure.__code__ not in frames
     assert any('Native source raise' in note for note in error.__notes__)
+
+
+def test_explicit_custom_exception_binding_preserves_host_constructor():
+    from tessera.compiler.native_source_state import decode_source_exception
+    class DomainError(Exception):
+        def __init__(self,message):
+            super().__init__(message)
+            self.domain='solver'
+    contract={'error_table':[['DomainError',['bad state']]]}
+    values=[np.array([1],np.float32)]
+    with pytest.raises(RuntimeError,match='payload'):
+        decode_source_exception(contract,values)
+    error=decode_source_exception(contract,values,exception_types={'DomainError':DomainError})
+    assert type(error) is DomainError
+    assert error.domain=='solver'
+    assert error.args==('bad state',)
+
+
+def test_native_custom_exception_runs_constructor_only_at_completion():
+    calls=[]
+    class DomainError(Exception):
+        def __init__(self,message):
+            calls.append(message)
+            super().__init__(message)
+            self.domain='solver'
+    def source(x):
+        if x<x-x:raise DomainError('bad state')
+        return x*x
+    with jit(source_control_flow=True,source_error_specs=(((1,),'f32'),))(source) as program:
+        np.testing.assert_array_equal(program(np.array([2],np.float32)),[4])
+        assert not calls
+        with pytest.raises(DomainError) as caught:program(np.array([-2],np.float32))
+        assert caught.value.domain=='solver'
+        assert calls==['bad state']
+
+
+def test_equal_literal_exceptions_in_distinct_iterations_keep_identity():
+    def source(x):
+        limit=x+x+x+x
+        saved=None
+        while x<limit:
+            try:raise ValueError('same payload')
+            except ValueError as error:
+                if saved is None:saved=error
+                else:
+                    if saved is error:raise RuntimeError('collapsed generations')
+            x=x+x
+        return x
+    with jit(source_control_flow=True,source_max_steps=2,source_error_specs=(((1,),'f32'),))(source) as program:
+        np.testing.assert_array_equal(program(np.ones(1,np.float32)),[4])
+
+
+def test_handled_custom_constructor_effects_refuse():
+    from tessera.compiler.trace import trace
+    from tessera.compiler.source_control_flow import SourceControlFlowError
+    calls=[]
+    class DomainError(Exception):
+        def __init__(self,message):calls.append(message)
+    def source(x):
+        try:raise DomainError('effect')
+        except Exception:return x*x
+    with pytest.raises(SourceControlFlowError,match='handled native paths'):
+        trace(source,np.ones(1,np.float32),source_control_flow=True)
+    assert not calls

@@ -1,0 +1,11 @@
+{
+  "active": 474,
+  "covered": 474,
+  "lanes": {
+    "lit-all-targets.json": {
+      "PASS": 474
+    }
+  },
+  "uncovered": [],
+  "unexpected": []
+}

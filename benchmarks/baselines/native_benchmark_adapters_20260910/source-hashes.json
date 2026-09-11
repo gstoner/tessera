@@ -1,0 +1,13 @@
+{
+  "benchmarks/native_ann_adapter.py": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+  "benchmarks/autodiff/benchmark_public_ssd.py": "3e9ef9cf3e27f25b0f36f8ef667e21191b4416e1e7be58769b80a81698d66a82",
+  "benchmarks/dlop_longtail_core/benchmark_native_dispatch.py": "67af15d1b48d1cc3cc2462db7ff382bf74e047b523901fdd2e0c0651cb98916d",
+  "benchmarks/Tessera_SuperBench/benches/kernel/ann_native.py": "7b25551ce239052130708a0698d53a29edbc8fee853afbf12aa1f6a986e381f6",
+  "python/tessera/compiler/native_ann_gpu.py": "c0e40cf70f41e77e9d5953fbf532ad87af57a0078bb1dd4f939f2a40ec04a829",
+  "python/tessera/compiler/native_ann.py": "420f6b838e77c17894a1b72fedb283dcb3a459d34035c11558360dfcabd59bfe",
+  "python/tessera/compiler/native_gpu_storage.py": "ac133f7ac225ab2d2e7310bb736b73f61b1c32bc454d087d6de4172995445576",
+  "python/tessera/compiler/native_ssd.py": "ff24f9f35ac348e62035c1d7c309caae952fabde9dfc7f3ef0a832263b67776f",
+  "python/tessera/compiler/resident_ssd.py": "be04c9c8217fb45cced11070cf0a920ec32baee2f952bad3e330041c691937bf",
+  "python/tessera/control.py": "cca27196554a60237370f73299f77df5c79a9cb9904a31c195d3ea7cc6c1a033",
+  "src/transforms/lib/NativeTapeToGPUPass.cpp": "9fdb051d4eccbe8e5641edd76f7dcb05025239955922d9a7e674a639f281c19a"
+}

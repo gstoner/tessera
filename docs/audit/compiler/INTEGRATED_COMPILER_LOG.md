@@ -3288,3 +3288,179 @@ Evidence: `tests/unit/test_native_exception_producer.py`, `tests/unit/test_atten
 <!-- entry-fields:end -->
 
 Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1).
+
+### 2026-09-10 — Heap IR, raised attention and cooperative SSD
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Static source exception tables emit checked native allocation/root/edge calls through MLIR/LLVM, with a native source-state decoder consumer and explicit generated-library lifetime. Native attention buckets project their Schedule descriptor and bind NVIDIA execution without Graph reconstruction. Cooperative SSD uses block-owned head/value columns, lane-owned state, shared-memory barriers and an ordered leader reduction. CUDA and ROCm correctness covers immutable inputs, outputs, final carry and chunk checkpoints; profiling separates resident event windows, checked-call preparation and API/kernel traces. The assertions build caught a missing Tessera dialect dependency in Schedule-to-Tile, now declared.
+
+Remaining: Runtime-valued/iteration-site exception allocation, GPU heaps and full CPython frames; broader attention patterns, sibling-device bindings and arbiter promotion; SSD public integration, checkpoint AD, more efficient reduction/tiling, ReplaySSM comparison and selector-grade measurements. ROCProfiler exposed HIP API records but no GPU kernel/copy trace records on this host, so hardware-counter attribution remains open. No promotion claim.
+
+Evidence: `tests/unit/test_native_exception_producer.py`, `tests/unit/test_attention_loop_idiom.py`, `tests/unit/test_native_ssd.py`, `benchmarks/record_ssd_gpu.py` and `benchmarks/baselines/heap_attention_cooperative_ssd_20260910/`. Backend queue historical increments are marked superseded rather than left as competing current obligations.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Dynamic heap payloads, checkpoint AD and paired measurements
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Runtime numeric exception payloads are copied through native pointer/size operands into a fresh bounded heap; changing shapes and failed allocations preserve ownership and retryability. The native source-state exception decoder consumes the same path. Raised attention now projects x86 and Apple parents, with executable x86 proof on Princess-Luna and no Graph reconstruction. The SSD native CPU checkpoint VJP accepts cotangents for output, final carry and checkpoints, produces all five input gradients, and recomputes from chunk boundaries. Its scoped forward/VJP owner keeps checkpoints private to the corresponding forward call. Nine fixed independent process pairs on each GPU compare exact serial/cooperative artifacts in alternating order.
+
+Remaining: In-kernel/iteration-site heap allocation, GPU exception heaps and general objects; broader attention recognition, Apple owning-device validation and ROCm low-precision binding; automatic public mixer AD, GPU checkpoint backward, persistent/asynchronous checkpoint ownership and ReplaySSM comparison. Paired resident event windows include submission gaps; they do not supply calibrated device clocks or selector admission. No route promotion.
+
+Evidence: `tests/unit/test_native_exception_producer.py`, `tests/unit/test_attention_loop_idiom.py`, `tests/unit/test_scheduled_ssd.py`, `tests/unit/test_ssd_comparison.py`, `benchmarks/compare_ssd_variants.py`, and `benchmarks/baselines/ssd_paired_process_20260910/`. Numerical VJP checks use finite differences of every input with nonzero seeds for every result, including partial chunks.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — GPU payload frames, mixer AD and artifact selection
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Native GPU exception-payload producers consume serialized numeric-site metadata and allocate bounded frames transactionally, publishing generation/offset/length records only on success. CUDA and ROCm prove overflow/negative-length refusal, unchanged storage on failure, empty payloads, subsequent success and stale-generation decoder rejection. The native SSD checkpoint VJP now packages for both GPUs, consumes actual cooperative-forward checkpoints and matches finite differences for all five inputs with nonzero output/carry/checkpoint cotangents. SSDCheckpointProgram also connects native CPU Y to automatic host-tape grad with private forward snapshots. Attention recognition accepts one positive f32-exact post-dot literal scale while retaining full AST matching; two CUDA buckets execute scaled/unscaled variants. Explicit measured SSD binding replays both packages, recomputes paired bounds, binds calibration to exact images/durations, and rebuilds the existing ROCm policy instead of trusting eligibility flags.
+
+Remaining: GPU frames are preallocated single-writer numeric storage with caller-supplied generations, not arbitrary allocation or a concurrent object collector. Automatic source throw-site integration and reader-aware frame reclamation remain open. Automatic GPU-resident mixer AD, tuned backward/cooperative checkpoint kernels, higher-order products and public mixer family wiring remain open. Attention masks/GQA/broader recognition and sibling exact-device scaled proof remain open. The actual CUDA and ROCm selector calls retain incumbents: CUDA lacks a typed native calibration adapter, and ROCm lacks per-process eligible calibration (the current policy also requires bare metal). No promotion.
+
+Evidence: `tests/unit/test_gpu_exception_heap.py`, `tests/unit/test_scheduled_ssd.py`, `tests/unit/test_native_ssd.py`, `tests/unit/test_attention_loop_idiom.py`, `tests/unit/test_ssd_comparison.py`, `benchmarks/record_gpu_heap_ssd_ad.py`, `benchmarks/check_ssd_admission.py`, and `benchmarks/baselines/gpu_heap_ssd_ad_20260910/`. Production package identities still match the prior nine-pair measurements.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Reusable GPU pools, resident AD and window calibration
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Bounded native GPU pools allocate fixed payload slots and run stop-the-world mark/sweep with runtime root/edge graphs, generation checks, partial reuse and unrooted cycle collection. CUDA SM120 and ROCm gfx1151 execute the same semantic regressions with independent packages. ResidentSSDProgram generates paired forward/VJP packages, owns device snapshots and checkpoints, differentiates Y into all five resident gradients, and closes scoped buffers after synchronous completion. CUDA attention recognition now proves explicit GQA indexing and end-aligned causal masks for both longer-Q and longer-K buckets; native recipe instantiation enforces positive divisible head counts. CUDA SSD admission rebuilds a per-process Nsight/event-window calibration instead of requiring an absent adapter.
+
+Remaining: Pools are bounded, fixed-width, single-writer numeric storage with two outgoing edges and quiescent readers; concurrent collection, automatic throw-site integration and arbitrary object/payload allocation remain open. Resident AD is synchronous first-order family integration, not general public tape composition, external-reader retirement or tuned GPU backward. General additive/padding masks, broader attention idioms and sibling device admission remain open. The measured CUDA calibration agrees within 2.26% but has 1.957x profiler overhead, dirty source and WSL execution, so promotion refuses. Eighteen eligible per-process calibrations and renewed exact-artifact comparisons remain required; prior packets retain their original compiler identities. ROCm bare-metal dispatch/counter calibration remains open.
+
+Evidence: `tests/unit/test_gpu_heap_collection.py`, `tests/unit/test_attention_loop_idiom.py`, `tests/unit/test_cuda_window_calibration.py`, `benchmarks/record_pool_resident_ssd.py`, `benchmarks/calibrate_ssd_cuda.py`, and `benchmarks/baselines/pool_resident_gqa_calibration_20260910/`.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Stream-owned object graphs, asynchronous AD and window legality
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: ResidentObjectPool stores bounded opaque byte records with configurable generation-checked reference edges. NativeStreamEpoch permits scoped readers on multiple streams and serializes graph updates/allocation/collection after their events. Open reader scopes refuse mutation; failed event recording retains an eventless dependency until explicit completion. CUDA/HIP validate cyclic graphs, fourth-edge reachability, partial collection, byte payload preservation and generation reuse. SSD asynchronous VJPs now compose through projected scoped gradients and stream-ordered derivative retirement on both devices. Capture still snapshots synchronously. Windowed GQA recognizes bounded asymmetric slices and carries a mandatory Presburger nonempty-row condition through native recipe instantiation. SSD packaging no longer imports the 1024-element persistent-tape shape parser; its checked f32 storage bound is 64 MiB per buffer, validated with a 512x2x32x8 cooperative workload on both GPUs. CUDA calibration now binds process nonces and the Nsight PID, and a nine-pair collector preflights clean/bare-metal eligibility.
+
+Remaining: Collection is reader-coordinated stop-the-world mutation, not simultaneous mutator/collector execution or arbitrary CPython graph discovery. Variable-size allocation, automatic exception producer integration and general object semantics remain open. AD is an explicit first-order SSD family API; general public tape integration, asynchronous capture/whole-frame teardown, higher-order products and optimized backward remain open. Additive/padding/general masks and sibling-device window admission remain open. The new CUDA capture passes clock agreement (0.51%) and overhead (0.24%) gates but remains dirty/WSL evidence. Eighteen eligible independent calibrations plus renewed exact-artifact comparison are still required for promotion; ROCm needs bare-metal profiler evidence. No promotion claimed.
+
+Evidence: `tests/unit/test_native_stream_epoch.py`, `tests/unit/test_gpu_heap_collection.py`, `tests/unit/test_attention_loop_idiom.py`, `tests/unit/test_cuda_window_calibration.py`, `benchmarks/record_async_pool_ad.py`, `benchmarks/record_ssd_calibrated_pairs.py`, and `benchmarks/baselines/async_objects_windows_20260910/`.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Snapshot marking, public VJP and additive bias
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Private GPU graph snapshots permit marking on a separate stream while active graph updates continue. Final seeded remark/sweep is exclusive and retains snapshot survivors conservatively; malformed seeds fail closed. Hook-free discovery handles exact builtin containers and plain instance dictionaries with cycles/aliases. Public vjp dispatches an explicitly owned resident SSD program; asynchronous capture retains inputs through copy completion, backward composes scoped gradients, and whole-frame retirement orders all forward/derivative readers before frees. Failed event dependencies keep retirement retryable. Full-shape finite additive attention bias now survives recognition, native recipe instantiation, Schedule projection and NVIDIA execution.
+
+Remaining: Concurrent sweeping, lock-free producers, arbitrary extension heaps, concurrent Python discovery, variable-size storage and automatic exception-site fusion remain open. Public AD integration is first-order SSD protocol dispatch, not arbitrary traced GPU programs or higher-order AD. Program/module close may synchronize. General Boolean/padding/broadcast masks and fully masked-row semantics need further contracts. CUDA/HIP tests run on owning GPUs under WSL: they do not establish physical overlap or eligible performance. Clean bare-metal per-process evidence remains required; no promotion.
+
+Evidence: `tests/unit/test_object_discovery.py`, `tests/unit/test_resident_ssd_ownership.py`, `tests/unit/test_gpu_heap_collection.py`, `tests/unit/test_attention_loop_idiom.py`, `benchmarks/record_snapshot_public_ad.py`, and `benchmarks/baselines/snapshot_public_ad_20260910/`.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1), [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Benchmark compiler alignment
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Reviewed math, linalg, energy/Clifford compositions, eight AD scripts and the operator harness against their actual callers. Consolidated navigation in benchmarks/COMPILER_ALIGNMENT.md; registered the missing math/autodiff manifest entries with syntax-only compile_only checks. New physical-math results require observed native execution and finite correctly shaped outputs; linalg enforces residual bounds and emits clean JSON stdout. GA/EBM rows now label unattributed library execution instead of claiming CPU reference placement despite optional Apple fast paths. New math and selected AD packets do not inherit performance eligibility from target names or historical packet paths. Historical evidence is unchanged; no executable suite is archived because each retains consumers or a distinct oracle.
+
+Remaining: Shared evidence adapters, exact-package math ancestry, per-call GA/EBM route attribution, target-aware operator harness adapters, and public frontend counterparts for direct-IR AD probes. No fresh performance measurements or promotion. Clean bare-metal exact-artifact comparisons remain required.
+
+Evidence: `benchmarks/COMPILER_ALIGNMENT.md`, `tests/unit/test_physical_math_evidence.py`, `tests/unit/test_benchmark_surface_repair.py`, `tests/unit/test_clifford_core_benchmark.py`, `tests/unit/test_solver_ift_evidence.py`, and `tests/unit/test_operator_benchmarks_contract.py`.
+
+<!-- entry-fields:end -->
+
+Additional owner: [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Extended benchmark alignment
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Extended the benchmark alignment review across autodiff, DLOP, SuperBench, DeepScholar, grid-AI, lattice reasoning, visual-complex, RL and E2E spine. Retired the synthetic attention timer without removing compatibility wrappers. DLOP dispatch counts are explicitly static estimates; lattice Apple-call durations now populate host-wall rather than kernel timing. Grid/visual compositions report unattributed library execution. Every timed Apple policy submission now requires native execution and finite output. Four missing manifest entries now have syntax-only CI checks. E2E recorders, historical packets and distinct reference oracles remain intact.
+
+Remaining: Profiler-backed dispatch receipts, native SuperBench package adapters, automatic public AD counterparts and full model/distributed execution proof. No device packet was re-sealed, no hardware speedup measured and no performance promoted.
+
+Evidence: `benchmarks/COMPILER_ALIGNMENT.md`, `tests/unit/test_benchmark_alignment_extended.py`, `tests/unit/test_rl_policy_loss_benchmark.py`, and the affected core/schema/orchestration tests.
+
+<!-- entry-fields:end -->
+
+Additional owner: [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+### 2026-09-10 — Native benchmark adapters
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Added native CUDA/HIP SuperBench ANN adapters and a separate DLOP observed-dispatch lane sharing checked package execution. Three ANN workloads pass on RTX 5070 and gfx1151; original and transformed variants each produce one accepted driver launch per measured call. Added public resident SSD VJP comparisons for three shapes, two cotangents and all five inputs against independent float64 central differences; maximum gradient error is below 1.2e-8 on both hosts.
+
+Remaining: Driver API receipts are not profiler kernel records. Broader GEMM/attention adapters, native mappings for the original DLOP catalog, general public frontend AD and clean bare-metal performance promotion remain open. Instrumented WSL host-wall timings are diagnostic only; no promotion or dispatch-reduction claim.
+
+Evidence: `benchmarks/baselines/native_benchmark_adapters_20260910/`, `benchmarks/native_ann_adapter.py`, `benchmarks/autodiff/benchmark_public_ssd.py`, `tests/unit/test_native_benchmark_receipts.py`.
+
+<!-- entry-fields:end -->
+
+Additional owners: [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1), [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### 2026-09-10 — Broader adapters and kernel attribution
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Expanded native SuperBench configs to baseline/larger ANN and serial/cooperative SSD; all four execute correctly on SM120 and gfx1151. Preserved separate host-call and device-event timing domains. A dedicated CUDA SSD capture has 701 profiler kernels matched one-to-one to successful owning-process launch API records, tied to the packet's artifact/image identity. Attribution tests reject wrong processes, failed launches, wrong kernel names and missing/duplicate correlations.
+
+Remaining: General mixed-artifact range attribution, native GEMM/attention adapters and clean performance promotion. ROCm's fresh kernel/copy-enabled trace still provides only HIP API and agent records on WSL, so owning-device kernel attribution remains open. No timing or execution evidence transfers to Apple/x86.
+
+Evidence: `benchmarks/baselines/broader_adapters_20260910/`, `benchmarks/attribute_ssd_cuda.py`, `tests/unit/test_ssd_profiler_attribution.py`, and both native SuperBench suite results.
+
+<!-- entry-fields:end -->
+
+Additional owners: [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1), [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### 2026-09-10 — Matrix adapters and mixed attribution
+
+Owner: [EVIDENCE-PACKET-1](INTEGRATED_COMPILER_PLAN.md#evidence-packet-1)
+
+PRs: Uncommitted continuation after #741.
+
+Outcome: Added scheduled native GEMM/attention adapters with descriptor-projected input layout and independent NumPy oracles. CUDA executes both. Mixed profiler ranges bind run, artifact and native image identities and correlate successful launch APIs to kernels. Tests reject wrong image identity, missing/duplicate correlations, overlapping ranges, failed APIs and escaping completion.
+
+Remaining: ROCm GEMM/attention both abort at LLVM GPUFuncOpLowering's duplicate DictionaryAttr assertion with the installed assertions-enabled compiler; no ROCm execution result claimed. Asynchronous/multi-thread attribution, broader matrix envelopes and clean performance promotion remain open. Native ROCm config retains failing rows rather than silently demoting.
+
+Evidence: `benchmarks/baselines/matrix_mixed_20260910/`, `benchmarks/native_matrix_adapter.py`, `benchmarks/attribute_mixed_cuda.py`, `tests/unit/test_mixed_profiler_attribution.py`.
+
+<!-- entry-fields:end -->
+
+Additional owner: [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).

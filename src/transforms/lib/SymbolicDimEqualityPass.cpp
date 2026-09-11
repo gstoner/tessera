@@ -1106,15 +1106,31 @@ struct SymbolicDimEquality
     for (Operation &op : fn.getBody().front()) {
       if (isa<func::ReturnOp>(op)) continue;
       if (op.getName().getStringRef() == "tessera.flash_attn" && !op.getNumRegions() &&
-          op.getNumOperands() == 3 && op.getNumResults() == 1) {
+          (op.getNumOperands() == 3 || op.getNumOperands() == 4) && op.getNumResults() == 1) {
         auto q = names.find(op.getOperand(0)), k = names.find(op.getOperand(1)),
              v = names.find(op.getOperand(2));
         if (q == names.end() || k == names.end() || v == names.end() ||
             q->second.size() != 4 || k->second.size() != 4 || v->second.size() != 4 ||
             q->second[0] != k->second[0] || q->second[0] != v->second[0] ||
-            q->second[1] != k->second[1] || q->second[1] != v->second[1] ||
+            k->second[1] != v->second[1] ||
             q->second[3] != k->second[3] || k->second[2] != v->second[2])
           return op.emitError("SYMDIM_BINDING_MALFORMED: attention requires matching rank-four batch/head/key/contraction names");
+        if (op.getNumOperands() == 4) {
+          auto bias = names.find(op.getOperand(3));
+          if (bias == names.end() || bias->second !=
+              DimNameList{q->second[0], q->second[1], q->second[2], k->second[2]})
+            return op.emitError("SYMDIM_BINDING_MALFORMED: attention bias requires full batch/head/query/key names");
+        }
+        auto headExtent = [&](const std::string &name) -> int64_t {
+          int64_t extent;
+          if (!StringRef(name).getAsInteger(10, extent)) return extent;
+          auto bound = sizes.find(name);
+          return bound == sizes.end() ? 0 : bound->second;
+        };
+        int64_t queryHeads = headExtent(q->second[1]);
+        int64_t keyHeads = headExtent(k->second[1]);
+        if (queryHeads <= 0 || keyHeads <= 0 || queryHeads % keyHeads != 0)
+          return op.emitError("SYMDIM_BINDING_MALFORMED: attention query heads must be a positive multiple of key heads");
         int64_t width;
         if (StringRef(q->second[3]).getAsInteger(10, width)) {
           auto bound = sizes.find(q->second[3]);

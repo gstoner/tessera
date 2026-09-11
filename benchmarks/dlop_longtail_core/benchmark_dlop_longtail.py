@@ -1,6 +1,6 @@
 """Run the DLOP-Bench-style long-tail operator fusion benchmark.
 
-Emits per-composite dispatch-count / decomposition-factor / fusion-reduction
+Emits estimated per-composite dispatch-count / decomposition-factor / fusion-reduction
 rows (fused ≡ eager-decomposed, metamorphically gated). See core.py.
 """
 
@@ -16,7 +16,7 @@ for p in (REPO_ROOT, REPO_ROOT / "python"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from benchmarks.dlop_longtail_core import build_report, run_core, telemetry
+from benchmarks.dlop_longtail_core import DlopLongtailConfig, build_report, run_core, telemetry
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,8 +27,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", type=str, default=None, help="Optional output JSON path")
     args = parser.parse_args(argv)
 
-    rows = run_core()
-    out: dict[str, object] = {"report": build_report(rows)}
+    rows = run_core(DlopLongtailConfig(seed=args.seed))
+    out: dict[str, object] = {"seed": args.seed, "report": build_report(rows)}
     if args.rows:
         out["rows"] = [r.flat_dict() for r in rows]
     if args.telemetry:

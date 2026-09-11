@@ -154,3 +154,14 @@ def test_nvidia_dense_krylov_performance_packet_ratchets_scaling_matrix() -> Non
         )
         assert [row["reduction_ctas"] for row in device_rows] == [3, 5, 9]
         assert all(row["max_latency_ms"] > row["median_ms"] > 0 for row in device_rows)
+
+
+def test_new_dense_krylov_run_does_not_inherit_old_performance(monkeypatch):
+    from types import SimpleNamespace
+    from benchmarks.autodiff import benchmark_solver_dense_krylov as benchmark
+    monkeypatch.setattr(benchmark, 'find_tessera_opt', lambda: Path(__file__))
+    monkeypatch.setattr(benchmark, '_case', lambda *args: {'numerical': {'passed': True}})
+    monkeypatch.setattr(benchmark.subprocess, 'run', lambda *args, **kwargs: SimpleNamespace(stdout='test-tool'))
+    packet = benchmark.run()
+    assert packet['promotion']['correctness_eligible'] is True
+    assert packet['promotion']['performance_eligible'] is False

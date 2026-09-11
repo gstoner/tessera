@@ -8428,12 +8428,16 @@ Shared reader API assessed; no Apple row-private GPU lowering or Metal execution
 
 ### Shared SSD and retryable completion (2026-09-10)
 
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
+
 Owners: W5.2f / W2.4a / W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1.
 Sync: `SSD-RETRY-COMPLETION-2026-09-10`.
 
-Follow-up required: apple target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. Native heap producers, full CPython deoptimization and attention raising remain open. See [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+Follow-up required: apple target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. At that increment, native heap producers, full CPython deoptimization and attention raising remained open; see the superseding entry below and [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 ### Native heap, attention recipes and SSD device proof (2026-09-10)
+
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
 
 Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f.
 Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
@@ -8441,3 +8445,75 @@ Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
 Shared contracts reviewed; no Metal SSD package or device validation is supplied. Native host allocation does not establish Metal allocation. Apple needs its own executable SSD materialization and owning-device proof. Exact dense f32 attention recognition and native bucket instantiation are shared artifact contracts, not sibling-device certificates. Automatic heap IR producers, full CPython frames and broader attention remain follow-ups. Evidence: `benchmarks/baselines/native_heap_attention_ssd_20260910/`; [current owner](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 PR #741 review follow-up (`NATIVE-HEAP-ATTENTION-SSD-2026-09-10`): the GPU pass now declares `tessera.ssd.source` in both metadata inventories. Expanded copies already narrow their outer loops to the owning thread row; new NVIDIA/ROCm lowering regressions pin global/private/output indexing. Shared contract validation only; no new device performance evidence. Apple and x86 execution claims remain unchanged.
+
+### Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `HEAP-IR-ATTENTION-COOPERATIVE-SSD-2026-09-10`.
+
+Follow-up required: no Metal heap allocation, raised-attention device binding or cooperative SSD package is supplied. Shared host contracts do not establish Apple GPU execution. Evidence: `benchmarks/baselines/heap_attention_cooperative_ssd_20260910/`. The SSD candidate remains opt-in; single-session measurements do not promote it. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Dynamic heap payloads, checkpoint AD and paired measurements (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `DYNAMIC-HEAP-SSD-CHECKPOINT-PAIRS-2026-09-10`.
+
+Shared host contracts assessed. Apple attention parents now pass native replay and use the existing status-returning package consumer; new owning-Metal execution remains unvalidated. GPU heap allocation and SSD backward remain follow-ups. No Apple performance claim. Evidence: `benchmarks/baselines/ssd_paired_process_20260910/` and focused native tests. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### GPU payload frames, mixer AD and artifact selection (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-HEAP-SSD-AD-ADMISSION-2026-09-10`.
+
+Shared contracts assessed; no Metal GPU heap or SSD backward package is supplied. Literal-scale recognition is shared, but new owning-Metal proof is absent. No timing or promotion evidence transfers from CUDA/HIP. Follow-up required. Evidence: `benchmarks/baselines/gpu_heap_ssd_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Reusable GPU pools, resident AD and window calibration (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-POOL-RESIDENT-AD-CALIBRATION-2026-09-10`.
+
+Follow-up required: the shared symbolic attention instantiator accepts divisible GQA head counts, but this increment provides no Apple GQA/mask device proof. GPU pool and resident SSD packages currently use CUDA/HIP global storage; Apple needs its own MSL storage/ownership consumer. Nsight calibration is not applicable to Metal; no promotion. Evidence: `benchmarks/baselines/pool_resident_gqa_calibration_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f). General concurrent/object collection and public asynchronous resident AD remain open.
+
+### Stream-owned object graphs and asynchronous AD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `STREAM-OBJECTS-ASYNC-AD-WINDOWS-2026-09-10`.
+
+Shared window witnesses and ownership contracts assessed. Follow-up required: MSL object-pool storage, Metal reader retirement and resident SSD adjoints have no new execution consumer here. The existing Apple window ABI remains incompatible and refuses. CUDA/HIP event ownership and timing do not prove Metal support. Evidence: `benchmarks/baselines/async_objects_windows_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Snapshot marking and public asynchronous VJP (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `SNAPSHOT-PUBLIC-AD-BIAS-2026-09-10`.
+
+Follow-up required: the shared discovery and public ownership protocol need MSL object-pool and resident SSD execution consumers. Additive-bias recognition supplies no new Metal proof. CUDA/HIP ordering and timing do not transfer. Final sweep is exclusive; arbitrary heaps, general public traced AD and general masks remain open. Evidence: `benchmarks/baselines/snapshot_public_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Benchmark/compiler alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10`.
+
+Follow-up required: collect per-call Metal/CPU route receipts for public GA/EBM compositions; their old fixed cpu labels were not placement proof. No new Metal measurement. [Shared review](../../../../benchmarks/COMPILER_ALIGNMENT.md); [sequencing](../../compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1). No cross-backend performance transfer or promotion.
+
+### Extended benchmark alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-ALIGNMENT-EXTENDED-2026-09-10`.
+
+Lattice and RL timing remains host-wall. RL now refuses failed/reference/nonfinite submissions. Grid/visual composition needs per-call placement receipts; no fresh Metal proof or packet re-seal. [Review and follow-ups](../../../../benchmarks/COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).
+
+### Native benchmark adapters (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `NATIVE-BENCHMARK-ADAPTERS-2026-09-10`.
+
+Follow-up required: Metal needs its own checked native adapter and public resident AD comparison. CUDA/HIP package receipts do not prove Apple execution; no runtime change or packet re-seal. [Evidence](../../../../benchmarks/baselines/native_benchmark_adapters_20260910/README.md). Instrumented host-wall timing is diagnostic only.
+
+### Broader adapters and kernel attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `BROADER-ADAPTERS-PROFILING-2026-09-10`.
+
+Follow-up required: Metal-native broader adapters and profiler correlation. CUDA/HIP SSD schedules and captures do not establish Metal execution; no Apple runtime change or packet re-seal. [Evidence](../../../../benchmarks/baselines/broader_adapters_20260910/README.md). WSL diagnostics do not qualify for performance promotion.
+
+### Matrix adapters and mixed attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `MATRIX-MIXED-ATTRIBUTION-2026-09-10`.
+
+Follow-up required: native Metal matrix adapters and profiler range attribution. CUDA NVTX and CUDA/HIP package signatures do not establish Apple execution. No Apple runtime change or re-seal. [Evidence](../../../../benchmarks/baselines/matrix_mixed_20260910/README.md). No promotion.

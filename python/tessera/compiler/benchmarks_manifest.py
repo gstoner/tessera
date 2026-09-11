@@ -95,6 +95,48 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "row pair for fused vs sequential tiny shapes."
         ),
     ),
+    SurfaceEntry(
+        directory="benchmarks/math",
+        entry_point="benchmarks/math/benchmark_physical_math.py",
+        status="compile_only",
+        command="python -m py_compile benchmarks/math/benchmark_physical_math.py",
+        notes="Hardware-gated metadata runtime probes for x86/ROCm. CI checks syntax only; host-wall diagnostics do not prove package ancestry or promotion. See benchmarks/COMPILER_ALIGNMENT.md.",
+    ),
+    SurfaceEntry(
+        directory="benchmarks/autodiff",
+        entry_point="benchmarks/autodiff/benchmark_native_jvp.py",
+        status="compile_only",
+        command="python -m compileall -q benchmarks/autodiff",
+        notes="Eight JIT/native solver and explicit-IR probes indexed in benchmarks/autodiff/README.md. CI checks syntax only; owning-device runs remain separate from public frontend and performance proof.",
+    ),
+    SurfaceEntry(
+        directory="benchmarks/dlop_longtail_core",
+        entry_point="benchmarks/dlop_longtail_core/benchmark_dlop_longtail.py",
+        status="compile_only",
+        command="python -m compileall -q benchmarks/dlop_longtail_core",
+        notes="CI checks syntax only. Static decomposition estimates and metamorphic fusion checks; not measured dispatch reduction. See benchmarks/COMPILER_ALIGNMENT.md.",
+    ),
+    SurfaceEntry(
+        directory="benchmarks/lattice_reasoning_core",
+        entry_point="benchmarks/lattice_reasoning_core/benchmark_lattice_reasoning.py",
+        status="compile_only",
+        command="python -m compileall -q benchmarks/lattice_reasoning_core",
+        notes="CI checks syntax only. Reference, public primitive and optional Apple-marker rows; integrated LDT remains artifact-only. See benchmarks/COMPILER_ALIGNMENT.md.",
+    ),
+    SurfaceEntry(
+        directory="benchmarks/rl",
+        entry_point="benchmarks/rl/benchmark_policy_losses.py",
+        status="compile_only",
+        command="python -m compileall -q benchmarks/rl",
+        notes="CI checks syntax only. Policy reference/optional Apple probes and scaled CPU serving pressure; no production throughput proof. See benchmarks/COMPILER_ALIGNMENT.md.",
+    ),
+    SurfaceEntry(
+        directory="benchmarks/e2e_spine",
+        entry_point="benchmarks/e2e_spine/benchmark_packet_validation.py",
+        status="compile_only",
+        command="python -m compileall -q benchmarks/e2e_spine",
+        notes="CI checks syntax only. Validation-overhead probe and architecture-specific sealed packet recorders; syntax checks never remeasure or reseal packets. See benchmarks/COMPILER_ALIGNMENT.md.",
+    ),
     # ── Linalg reference benchmark ───────────────────────────────────
     SurfaceEntry(
         directory="benchmarks/linalg",
@@ -107,11 +149,9 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
         notes=(
             "Linalg reference benchmark — cholesky / qr / svd / "
             "tri_solve.  CPU numpy/scipy-backed; the numerical "
-            "contract matches numpy to ~1e-14 (rel err).  Native "
-            "backend lowering (Apple GPU MSL kernels, NVIDIA cuSOLVER "
-            "bindings, ROCm hipSOLVER bindings) is a future M-series "
-            "milestone — the benchmark stays useful as a correctness "
-            "+ regression-bound for the reference path."
+            "contract enforces reconstruction/solve residuals. This "
+            "entry point exercises no native package; it remains a "
+            "correctness/regression probe for the reference path."
         ),
     ),
     # ── Apple CPU execution-kind microbench (Apple plan B, 2026-05-20) ──

@@ -1,3 +1,5 @@
+> Research integration roadmap, not current compiler execution evidence. See [STATUS.md](STATUS.md) for the runnable CPU smoke and optional-dependency boundary.
+
 # DeepScholar-Bench Implementation Roadmap with Tessera Integration
 
 ## Executive Summary

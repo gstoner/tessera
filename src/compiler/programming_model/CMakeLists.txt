@@ -67,6 +67,8 @@ target_link_libraries(TesseraPM
     PUBLIC
         TesseraScheduleIR
         TesseraIR
+        MLIRGPUDialect
+        MLIRParser
         MLIRArithDialect
         MLIRBufferizationDialect
         MLIRLLVMDialect

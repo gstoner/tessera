@@ -1,0 +1,25 @@
+Generating SQLite file /tmp/ssd-final-cooperative.sqlite from /tmp/ssd-final-cooperative.nsys-rep
+Processing [/tmp/ssd-final-cooperative.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,4752827,701,6780.1,6784.0,6751,7968,75.9,product
+
+Processing [/tmp/ssd-final-cooperative.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_mem_time_sum.py]...
+Time (%),Total Time (ns),Count,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Operation
+61.9,4256,8,532.0,384.0,320,1280,322.2,[CUDA memcpy Device-to-Host]
+38.1,2624,8,328.0,288.0,256,576,107.8,[CUDA memcpy Host-to-Device]
+
+Processing [/tmp/ssd-final-cooperative.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_api_sum.py]...
+Time (%),Total Time (ns),Num Calls,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+93.8,234225624,1,234225624.0,234225624.0,234225624,234225624,0.0,cuCtxCreate_v2
+4.3,10649628,701,15192.1,9420.0,6430,1021345,41003.9,cuLaunchKernel
+0.4,1098435,8,137304.4,2510.0,2110,1075995,379292.0,cuMemAlloc_v2
+0.4,918484,8,114810.5,87350.5,54140,269781,73238.1,cuMemcpyDtoH_v2
+0.2,481448,1,481448.0,481448.0,481448,481448,0.0,cuModuleLoadData
+0.2,470108,14,33579.1,8765.0,6110,330187,85516.1,cuEventRecord
+0.2,450116,8,56264.5,19785.0,16170,296766,97522.0,cuMemcpyHtoD_v2
+0.2,400227,2,200113.5,200113.5,1140,399087,281391.0,cuEventCreate
+0.2,396327,8,49540.9,2090.0,1640,375417,131698.7,cuMemFree_v2
+0.1,303321,1,303321.0,303321.0,303321,303321,0.0,cuModuleUnload
+0.1,214051,7,30578.7,16850.0,12250,101741,32184.4,cuEventSynchronize
+0.0,38641,3,12880.3,8970.0,4510,25161,10866.6,cuCtxSynchronize
+0.0,1210,2,605.0,605.0,260,950,487.9,cuEventDestroy_v2

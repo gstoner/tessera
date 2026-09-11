@@ -1,0 +1,240 @@
+{
+  "schema": 1,
+  "rows": [
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_relu",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "rocm",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "bfcc23f21567a07728cceda9f02c2e22d7ad4ca7719a36547fec9aba164b12de",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.546611,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "39d716de5b4751a853e749a174f9e761a9a843aa6dbe6bde0c1b0bfab44f2ee7",
+          "samples_ms": [
+            0.663248,
+            0.546611,
+            0.543061
+          ],
+          "latency_ms": 0.546611,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "f2324bb6807b949a2616539ac29e3525d5276fc40afb9495d3085e16643015f5",
+          "samples_ms": [
+            0.545201,
+            0.505618,
+            0.51515
+          ],
+          "latency_ms": 0.51515,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_abs",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "rocm",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "6604d52a58a676ccc765bfee4a4547968fd759f3e091fea89393a95e652fc534",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.709081,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "ccfcf418de98d1bb1df49b6e606552d827d72db3c1f5ca678d0f441d78e5f80c",
+          "samples_ms": [
+            0.826207,
+            0.709081,
+            0.513589
+          ],
+          "latency_ms": 0.709081,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "b0930812ce50842687d438b0a018d88cd9a093db40761268bfc84e6d43eb9338",
+          "samples_ms": [
+            0.556342,
+            0.582923,
+            0.508399
+          ],
+          "latency_ms": 0.556342,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_square",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "rocm",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "1ca7c09b943baeb2ace7b0a96058d086352ee673bcee34f1a28cf6aca54a7dfc",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.556512,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "9055f72842c499c69897e5eb39636f23bc5a98a9de73add16d0aa768f40e42d1",
+          "samples_ms": [
+            0.556512,
+            0.593264,
+            0.505539
+          ],
+          "latency_ms": 0.556512,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "2d438fc159d92d25fcca1e927ab8323d4f83e117d144ad5ac6cc14eabf84558f",
+          "samples_ms": [
+            0.497349,
+            0.541161,
+            0.508609
+          ],
+          "latency_ms": 0.508609,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "promotion_eligible": false
+}

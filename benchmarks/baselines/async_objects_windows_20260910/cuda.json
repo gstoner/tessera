@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution": "native_gpu",
+  "compiler_sha256": "ff5c064adcde74e349452d9810f7ed8084e6a12e7d6a43d78dde5fa13cfed51d",
+  "heap_binding": "709458cd3d1ce939e5df4a911ea3ca149ba75d75893a6abe6486403323500c5f",
+  "heap_allocation_binding": "499b7cc58fb520d0bb734fe6ec8aad293a6c52b7960654f055327c06c900eca4",
+  "heap_graph_binding": "83c0134eca4a98ca41e555a369c7835a694977af0189a2195f5c7a6ce10f0d57",
+  "forward_binding": "67fce6069a6cbb1d0a35153196e6df37922aa0e784ab761c01dd7db830eccaa5",
+  "backward_binding": "ff154c27ffb0cb63d11a41375d72ff6a2426b43fa683385760a9c21e63d5724f",
+  "byte_record_graph": true,
+  "reader_ordered_collection": true,
+  "async_composed_gradient_max_errors": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "promotion_eligible": false
+}

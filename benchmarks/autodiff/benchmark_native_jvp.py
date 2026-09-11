@@ -140,7 +140,7 @@ def main() -> None:
             "device_clock_calibrated": False,
             "profiler_activity_available": False,
         },
-        "timing_promotion_eligible": not is_wsl and args.target == "x86",
+        "timing_promotion_eligible": False,
         "correctness_promotion_eligible": args.target == "rocm" or not is_wsl,
         "warm_state": True,
         "shape": [7, 64],

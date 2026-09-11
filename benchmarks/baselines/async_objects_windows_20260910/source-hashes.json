@@ -1,0 +1,14 @@
+{
+  "python/tessera/compiler/native_stream_epoch.py": "aa836da71e08b40399c509bd0e6aa7e727d7ff376e18fa244281f2240a6d2dac",
+  "python/tessera/compiler/resident_object_pool.py": "d150c23b26512d2b923f884d85b64c921ac9c2cda043b85d2a5cc34da8cf334f",
+  "python/tessera/compiler/gpu_heap_collection.py": "f4041c668c80fe0a98b1cb97ca60797884935ddc3d8fa0f590a547f26489c4a0",
+  "python/tessera/compiler/resident_ssd.py": "b01d018e9df48597ce1f8d154a5abbc7d90da31293b5aca17fce312b65739464",
+  "python/tessera/compiler/native_reader_retirement.py": "3b556c9f8241375685bea8d5f49a4ae86ddbe14805516062c70116bed33ace23",
+  "python/tessera/compiler/native_ssd.py": "ff24f9f35ac348e62035c1d7c309caae952fabde9dfc7f3ef0a832263b67776f",
+  "python/tessera/compiler/loop_idioms.py": "1790d488b6dbebc80e6708e4ae0b48e76552f18df2f80ff3833b58920342114c",
+  "python/tessera/compiler/profiler_cuda_window.py": "c8e4749b15c003f4177d14fa786f297f9bc533ff1d107d0fdde581af46cd9100",
+  "python/tessera/compiler/ssd_performance.py": "57271c4ad7ef107dcd04d66cc37776bca31988e9f99c15fe3253f4befbd75fad",
+  "benchmarks/record_async_pool_ad.py": "3df13919408888664fa010a8fc6fb28ae0a10fa89d3a989a50fc16723627d65a",
+  "benchmarks/record_ssd_gpu.py": "0fb9f6db0212605439dc87ac436c0a6501a7ec53c1ed787e235c228ef8ae928f",
+  "benchmarks/record_ssd_calibrated_pairs.py": "feddd9644fd78bac919314e4c454384f9cd9689abdc9ee1044883d1c084437bb"
+}

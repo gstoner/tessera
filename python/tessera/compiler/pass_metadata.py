@@ -779,6 +779,16 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="Phase 5",
     ),
     PassMetadata(
+        name="tessera-schedule-to-tile",
+        cpp_class="ScheduleToTilePass",
+        summary="Replays registered Schedule decisions into Tile carriers and structured SSD loops. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        input_dialects=("schedule", "func", "tessera"),
+        output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
+        required_attrs=("chunk_size", "artifact_hash"),
+        preserved_attrs=("tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes"),
+        pass_kind="lowering", sprint="W5.2f",
+    ),
+    PassMetadata(
         name="tessera-storage-legalize",
         cpp_class="StorageLegalize",
         summary=(
@@ -822,11 +832,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "through MLIR integer Presburger analysis; verifies compatibility "
             "`tessera.dim_bindings` equations + "
             "per-op dim-name contracts (reshape / transpose / matmul), "
-            "with bounded native instantiation for rank-four attention and matmul recipes, with SSA-value propagation seeded by frontend argument-local "
+            "with bounded native instantiation for rank-four attention (including divisible grouped heads) and matmul recipes, with SSA-value propagation seeded by frontend argument-local "
             "tessera.dim_names or legacy tessera.arg_dim_names, concrete sum-of-products witness "
             "checking, interprocedural cross-checks via func.call, and "
             "scf.for/scf.if/scf.while region recursion. Optional instantiate bindings "
-            "specialize straight-line matmul recipes only after complete shape "
+            "specialize straight-line matmul/attention recipes only after complete shape "
             "transfer and concrete Presburger witness checks."
         ),
         input_dialects=("tessera", "func", "scf"),

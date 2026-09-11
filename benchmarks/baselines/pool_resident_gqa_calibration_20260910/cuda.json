@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution": "native_gpu",
+  "compiler_sha256": "ff5c064adcde74e349452d9810f7ed8084e6a12e7d6a43d78dde5fa13cfed51d",
+  "allocation_binding": "fca7eb9a0304e6170c73cc1eb09c77aa51ca65f8e537e166b35dc3c523d51660",
+  "collection_binding": "2b8c93d441ef9208db40cc36fc1d23fa6efa1f73e227fc59b58ea5761d32d411",
+  "forward_binding": "67fce6069a6cbb1d0a35153196e6df37922aa0e784ab761c01dd7db830eccaa5",
+  "backward_binding": "ff154c27ffb0cb63d11a41375d72ff6a2426b43fa683385760a9c21e63d5724f",
+  "heap_checks": [
+    "cycle reachability and partial payload-slot reuse",
+    "stale edge refuses before sweep",
+    "unrooted cycles and repeated generation reuse",
+    "invalid live generation refuses transactionally"
+  ],
+  "resident_gradient_max_abs_errors": [
+    6.402842700481415e-10,
+    9.313225746154785e-10,
+    1.862645149230957e-09,
+    1.862645149230957e-09,
+    9.313225746154785e-10
+  ],
+  "promotion_eligible": false
+}

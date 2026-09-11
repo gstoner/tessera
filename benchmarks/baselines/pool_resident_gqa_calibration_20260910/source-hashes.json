@@ -1,0 +1,10 @@
+{
+  "python/tessera/compiler/gpu_heap_collection.py": "b1a038979a64f8896551b9f579c9ddd5d0be8db25f22ad72cde24663f67c6079",
+  "python/tessera/compiler/resident_ssd.py": "e4c36bfa4c493ed569e885df119a02a9d91ef09ecc7bd789c98fcf51d618e5cb",
+  "python/tessera/compiler/profiler_cuda_window.py": "e4155ddd7aa331c6441a032184f58c781ffa483a6de3a9db51bff883bb33f0ea",
+  "python/tessera/compiler/loop_idioms.py": "45b11269be116960c11fd9e424d76f60c9b25d236468e00198863a5cf542f9ac",
+  "src/transforms/lib/SymbolicDimEqualityPass.cpp": "2aff51496abbbed24931fdf28e5058c24a23ff9dd4138cf334d97f757d28806e",
+  "python/tessera/compiler/ssd_performance.py": "534d29aa97dc79171aacc2dd9c02e39ea0c1c02542a173b378d3e632d268eeed",
+  "benchmarks/record_pool_resident_ssd.py": "c5ef5fb05dc746f5644325fafb744476b0c8cd0d9f4242ecff9a94121599b6b2",
+  "benchmarks/calibrate_ssd_cuda.py": "74827e4e495b1f7a378e3d4ac327b601ea1323c460c4e426d7a22949bbba5ae4"
+}

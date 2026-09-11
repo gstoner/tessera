@@ -1,0 +1,355 @@
+{
+  "suite": {
+    "name": "native_rocm",
+    "description": "Native ANN and SSD packages; diagnostic timing domains kept separate",
+    "repeat": 1,
+    "warmup": 0
+  },
+  "env": {
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python_version": "3.14.4",
+    "hostname": "Princess-Luna",
+    "cpu": "",
+    "env_vars": {
+      "CUDA_VISIBLE_DEVICES": "",
+      "HIP_VISIBLE_DEVICES": ""
+    },
+    "tools": {
+      "nvidia_smi": false,
+      "amd_smi": true
+    },
+    "amd_smi": "error: Command '['amd-smi', 'list', '--json']' returned non-zero exit status 255."
+  },
+  "probes": {
+    "gpu_links": {
+      "nvidia_smi": null,
+      "nvlink_topo": null,
+      "amd_smi": "error: Command '['amd-smi', 'list', '--json']' returned non-zero exit status 255.",
+      "lspci_gpu": null
+    },
+    "nic": {
+      "ibv_devinfo": null,
+      "ibstat": null,
+      "ethtool": "Settings for eth0:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: yes\nSettings for eth1:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: no\nSettings for eth2:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: no\nSettings for eth3:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: no\nSettings for lo:\n\tLink detected: yes\nSettings for loopback0:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: yes\n"
+    }
+  },
+  "timestamp": 1789099625.4740286,
+  "rows": [
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_relu",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "rocm",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "bfcc23f21567a07728cceda9f02c2e22d7ad4ca7719a36547fec9aba164b12de",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.53317,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "39d716de5b4751a853e749a174f9e761a9a843aa6dbe6bde0c1b0bfab44f2ee7",
+          "samples_ms": [
+            0.789744,
+            0.53317,
+            0.513419,
+            0.51338,
+            0.549591
+          ],
+          "latency_ms": 0.53317,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "f2324bb6807b949a2616539ac29e3525d5276fc40afb9495d3085e16643015f5",
+          "samples_ms": [
+            0.512019,
+            0.506459,
+            0.535141,
+            0.556721,
+            0.512499
+          ],
+          "latency_ms": 0.512499,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ],
+      "bench_id": "kernel.ann_native",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_square",
+      "shape": [
+        64,
+        8
+      ],
+      "backend": "rocm",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "54e4eed0767fae2ce0ae15dda10e71da21fe68a1d5f8489ddce503a66fffab4b",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.536851,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "31ec62626275e6aa5a498baf093079de724657609d13d66f7485a2a596fce3a2",
+          "samples_ms": [
+            0.691909,
+            0.585983,
+            0.513909,
+            0.53245,
+            0.536851
+          ],
+          "latency_ms": 0.536851,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "5e6c6c27ef5fd988c1048f63102fb31952c69c073cf30083d7a874876d63fc8e",
+          "samples_ms": [
+            0.608405,
+            0.510949,
+            0.52605,
+            0.52537,
+            0.52991
+          ],
+          "latency_ms": 0.52605,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ],
+      "bench_id": "kernel.ann_native_large",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "backend": "rocm",
+      "process_id": 97522,
+      "run_id": "441ef5b53d9345b0b1c53fa93e5e253d",
+      "architecture": "gfx1151",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "shape": [
+        32,
+        2,
+        8,
+        4
+      ],
+      "clock": "HIP events",
+      "execution": "native_gpu",
+      "cooperative": false,
+      "rows": [
+        {
+          "chunk": 8,
+          "binding_ms": 340.860172000248,
+          "checked_call_ms": 5.038476985646412,
+          "device_event_ms": [
+            0.036152620315551755,
+            0.03642232894897461,
+            0.03625322103500366,
+            0.036282219886779786,
+            0.03632421970367432,
+            0.03622391939163208,
+            0.03616520881652832
+          ],
+          "device_event_median_ms": 0.03625322103500366,
+          "max_abs_errors": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "binding_digest": "1c5202c6628d9d5c07f8df33cf4dc137e0f817354c5bdd92df7fef019edd19fc",
+          "image_sha256": "d158187adefdea9b17604095b3baeb36f9e84b2f3a981de5e3876894c284c3e9"
+        }
+      ],
+      "promotion_eligible": false,
+      "ok": true,
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "latency_ms": 5.038476985646412,
+      "timing_domain": "checked_resident_host_call",
+      "device_event_ms": 0.03625322103500366,
+      "device_timing_domain": "resident_100_launch_event_window_per_call",
+      "bench_id": "kernel.ssd_serial",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "backend": "rocm",
+      "process_id": 97608,
+      "run_id": "83b0151de155461ab3cba423b70dd3d2",
+      "architecture": "gfx1151",
+      "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+      "shape": [
+        32,
+        2,
+        8,
+        4
+      ],
+      "clock": "HIP events",
+      "execution": "native_gpu",
+      "cooperative": true,
+      "rows": [
+        {
+          "chunk": 8,
+          "binding_ms": 310.7323930016719,
+          "checked_call_ms": 2.906635985709727,
+          "device_event_ms": [
+            0.011447800397872925,
+            0.011122289896011352,
+            0.011043490171432494,
+            0.011591399908065797,
+            0.011160789728164673,
+            0.01115048050880432,
+            0.010974489450454712
+          ],
+          "device_event_median_ms": 0.01115048050880432,
+          "max_abs_errors": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "binding_digest": "0da191fbd7dffdb4f00a18063b0357f17f0b91ae51aaf7a4c112e0c28f3581e2",
+          "image_sha256": "6f79645c3bcd6e0d56b0e8e62370f98bc3011e8be2ff437325bd18c21472224d"
+        }
+      ],
+      "promotion_eligible": false,
+      "ok": true,
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "latency_ms": 2.906635985709727,
+      "timing_domain": "checked_resident_host_call",
+      "device_event_ms": 0.01115048050880432,
+      "device_timing_domain": "resident_100_launch_event_window_per_call",
+      "bench_id": "kernel.ssd_cooperative",
+      "variant": "default"
+    }
+  ],
+  "telemetry": [],
+  "telemetry_summary": {
+    "schema": "tessera.telemetry.v1",
+    "event_count": 0,
+    "bottlenecks": {}
+  }
+}

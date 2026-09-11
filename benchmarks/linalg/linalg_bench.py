@@ -5,8 +5,8 @@ Hardware-free CPU reference path.  For each op the script:
 
   * Builds a deterministic well-conditioned matrix.
   * Calls the Tessera op via ``tessera.ops.*``.
-  * Verifies correctness against the numpy / scipy reference within
-    a tolerance derived from the matrix size.
+  * Enforces reconstruction/solve residuals within a tolerance derived
+    from the matrix size. This is not an independent implementation oracle.
   * Times N repetitions (default: 5 warmup + 25 timed).
   * Emits one row per (op, size) in the canonical benchmark schema.
 
@@ -19,10 +19,9 @@ Run from the repo root::
     PYTHONPATH=.:python python benchmarks/linalg/linalg_bench.py \\
         --sizes 16,64,128 --reps 5 --output /tmp/linalg_smoke.json
 
-Status: **reference / artifact**.  The numerical contract is locked
-(matches numpy to ~1e-12 / ~1e-14 depending on op + dtype).  Native
-backend lowering (Apple GPU MSL kernels, NVIDIA cuSOLVER bindings,
-ROCm hipSOLVER bindings) is a future M-series milestone.
+Status: **reference**. This entry point exercises no native package.
+Consult the compiler route census for backend capabilities; this suite
+does not establish their absence.
 """
 
 from __future__ import annotations
@@ -63,6 +62,8 @@ def _general_matrix(n: int, seed: int = 0) -> np.ndarray:
 def _time_op(fn, warmup: int, reps: int) -> tuple[float, float]:
     """Return (median_ms, min_ms) over ``reps`` timed runs."""
 
+    if warmup < 0 or reps <= 0:
+        raise ValueError("warmup must be nonnegative and reps positive")
     for _ in range(warmup):
         fn()
     times: list[float] = []
@@ -77,6 +78,10 @@ def _row_envelope(
     op: str, n: int, median_ms: float, min_ms: float, err: float
 ) -> dict:
     """Match the schema in benchmarks/benchmark_gemm.py."""
+
+    tolerance = max(1e-12, 100 * n * np.finfo(np.float64).eps)
+    if not np.isfinite(err) or err > tolerance:
+        raise RuntimeError(f"{op} residual {err} exceeds {tolerance}")
 
     return {
         "backend": "cpu_reference",
@@ -95,9 +100,11 @@ def _row_envelope(
             "median_ms": median_ms,
             "min_ms": min_ms,
             "correctness_residual": err,
+            "correctness_tolerance": tolerance,
+            "correctness_passed": True,
+            "promotion_eligible": False,
             "notes": (
-                "CPU numpy/scipy-backed reference.  Native backend "
-                "lowering is a future M-series milestone."
+                "CPU numpy/scipy-backed reference; no native package is exercised."
             ),
         },
     }
@@ -178,8 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--smoke", action="store_true",
         help=(
-            "CI smoke mode: small sizes, low reps, no correctness "
-            "tolerance assert.  Used by the validate.sh smoke."
+            "CI smoke mode: small sizes and low reps; correctness remains enforced."
         ),
     )
     args = parser.parse_args(argv)
@@ -192,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
         args.warmup = 1
         args.reps = 3
 
+    if not sizes or any(n <= 0 for n in sizes) or not ops or args.warmup < 0 or args.reps <= 0:
+        parser.error("positive sizes/reps, nonempty ops and nonnegative warmup required")
     runs: list[dict] = []
     for op in ops:
         if op not in _OPS:
@@ -201,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"  [linalg_bench] {row['op']:24s}  n={n:4d}  "
                 f"median={row['latency_ms']:8.3f}ms  "
-                f"err={row['metadata']['correctness_residual']:.2e}"
+                f"err={row['metadata']['correctness_residual']:.2e}", file=sys.stderr
             )
             runs.append(row)
 
@@ -216,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
         "notes": (
             "Linalg reference benchmark (cholesky / qr / svd / "
             "tri_solve).  CPU numpy/scipy-backed reference path; "
-            "native backend lowering is a future M-series milestone."
+            "this entry point does not exercise native backend packages."
         ),
     }
 

@@ -457,6 +457,8 @@ class LatticeReasoningBenchmark:
     def __init__(self, *, warmup: int = 1, reps: int = 3):
         self.warmup = int(warmup)
         self.reps = int(reps)
+        if self.warmup < 0 or self.reps <= 0:
+            raise ValueError("warmup must be nonnegative and reps positive")
 
     def run_lattice_step(self, cfg: LatticeReasoningConfig) -> tuple[StepResult, float]:
         lattice, logits, solutions, mask = _make_lattice_case(cfg)
@@ -1020,10 +1022,12 @@ def _apple_gpu_metric_row(
             compiler_path=CompilerPath.TESSERA_JIT_APPLE_GPU,
             runtime_status=RuntimeStatus.EXECUTABLE if executable else RuntimeStatus.SKIPPED,
             correctness=Correctness(max_error=max_error, tolerance=1.0e-3, passed=passed),
-            profile=Profile(kernel_elapsed_ms=elapsed_ms, memory_bytes=int(arr.size * max(arr.itemsize, 1))),
+            profile=Profile(cpu_wall_ms=elapsed_ms, memory_bytes=int(arr.size * max(arr.itemsize, 1))),
             metrics={
                 "execution_mode": execution_mode,
                 "observed_native_execution": executable,
+                "timing_domain": "host_wall_call",
+                "promotion_eligible": False,
                 "output_shape": list(arr.shape),
                 "output_checksum": float(np.sum(arr, dtype=np.float64)),
                 **metrics,

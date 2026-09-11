@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "execution": "native_gpu",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "heap_binding": "e63b9d3d309a43c11bc6d567aeb021afe9e968ff95597e1ae61a33530ef505a3",
+  "heap_allocation_binding": "5e4311f2fa99437dc9b6c184f1daca61408842fb5d5cb858da10442811dfdf0c",
+  "heap_graph_binding": "342ed329b0be72bce4425d741cabae2c0ca27a84b84a61a237934d1d86a25dcc",
+  "forward_binding": "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+  "backward_binding": "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179",
+  "byte_record_graph": true,
+  "reader_ordered_collection": true,
+  "async_composed_gradient_max_errors": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "promotion_eligible": false
+}

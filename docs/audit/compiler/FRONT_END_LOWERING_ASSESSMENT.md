@@ -282,3 +282,27 @@ the Decision #28 arbiter.
 ## Native heap, attention and SSD follow-through (2026-09-10)
 
 `recognize_attention_loop` accepts one exact dense unmasked f32 loop recurrence, retains its source oracle, and refuses altered normalization or effects. All dimensions except the positive static head width may be symbolic. The native instantiator derives output dimensions from Q/V and validates the head-width witness. Two buckets from one optimized recipe lower through Graph-to-Schedule and Schedule-to-Tile. This is bounded recognition and artifact proof: broader source patterns, executable candidate binding and exact-device arbiter admission remain open.
+
+## Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+`bind_attention_bucket` re-instantiates the exact retained recipe witness before extracting native Schedule fields and binding the existing NVIDIA package. Two f32 dense buckets execute on SM120 while a test forbids GraphIRModule construction during binding. The source-loop oracle remains independent. This is an opt-in executable candidate, not automatic arbiter admission or sibling-device proof.
+
+## Dynamic payload and checkpoint continuation (2026-09-10)
+
+Raised dense f32 attention buckets now support target-specific x86 and Apple parent projection. Zen 5 execution is proven without Graph reconstruction; Apple has replay proof and the existing status ABI consumer, with device validation still open. ROCm f32 refuses rather than converting to its low-precision envelope. These bindings remain opt-in and are not measured selector candidates. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--dynamic-heap-payloads-checkpoint-ad-and-paired-measurements).
+
+## GPU frame and mixer AD continuation (2026-09-10)
+
+Attention recognition now admits a positive exactly representable f32 post-dot literal scale, with complete AST comparison preserving all other statements. Scaled/unscaled native CUDA buckets pass the source oracle. Mask/GQA recognition and sibling-device scaled proof remain open. Native binding is still opt-in. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--gpu-payload-frames-mixer-ad-and-artifact-selection).
+
+## Reusable pools and resident AD continuation (2026-09-10)
+
+Complete AST recognition now admits explicit GQA head division and end-aligned causal masking, including ragged Q/K lengths. Native instantiation checks Hq is a positive multiple of Hkv, retaining the exact witness. CUDA executes both ragged directions; arbitrary/additive masks and sibling device envelopes remain open. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--reusable-gpu-pools-resident-ad-and-window-calibration).
+
+## Stream-owned graphs and asynchronous composition (2026-09-10)
+
+Asymmetric bounded window masks now retain exact source syntax and execute with GQA on CUDA. Mandatory typed Presburger constraints reject shapes producing entirely masked rows; callers cannot remove these constraints by supplying their own. Arbitrary additive/padding masks and sibling-device window execution remain follow-ups. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--stream-owned-object-graphs-asynchronous-ad-and-window-legality).
+
+### Snapshot/public-AD follow-through (2026-09-10)
+
+[Current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--snapshot-marking-public-vjp-and-additive-bias): explicit resident SSD programs now enter public `vjp` with asynchronous capture and reader-aware whole-frame retirement. This is first-order protocol dispatch, not arbitrary traced public AD. Program unloading, higher-order products and broader mixer integration remain open. Snapshot marking overlaps active graph updates by using private storage; final sweep is exclusive. Full-shape finite additive attention bias is recognized and bound on NVIDIA; Boolean/padding/broadcast masks and fully masked rows remain open. Exact-device correctness under WSL does not satisfy clean bare-metal promotion.

@@ -113,7 +113,7 @@ def run(target: str, shape: tuple[int, ...], warmup: int, samples: int) -> dict:
         },
         "promotion": {
             "correctness_eligible": max(errors) <= 1e-6,
-            "performance_eligible": target == "x86",
+            "performance_eligible": False,
             "reason": (
                 "native AVX-512 synchronized host timing"
                 if target == "x86"

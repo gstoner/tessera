@@ -4,6 +4,13 @@ Generic GA / Clifford-algebra benchmark — sister surface to
 `benchmarks/grid_ai_core`.  Domain-neutral; exercises the GA primitives the
 Apple GPU MSL kernels back, without baking in any specific application.
 
+The benchmark is a Python library composition. Individual public primitives may
+opportunistically dispatch to Apple GPU, but this harness does not collect their
+route receipts. Results therefore report `tessera-library`, device
+`unattributed`, host-wall timing and no promotion eligibility. Logical-byte
+bandwidth is an estimate, not a hardware counter. See the
+[compiler alignment review](../COMPILER_ALIGNMENT.md).
+
 ## Composition
 
 | Piece                          | Source                                                 |
@@ -16,7 +23,7 @@ Apple GPU MSL kernels back, without baking in any specific application.
 | Grade projection               | `tessera.ga.grade_projection`                          |
 | Scalar invariant               | `tessera.ga.norm_squared`                              |
 
-Forward (Cl(3, 0) — 8 blades, Apple GPU MSL fast path):
+Forward (Cl(3, 0), 8 blades; primitive dispatch is environment-dependent):
 
 ```
 x : (B, 8) multivector coefficients

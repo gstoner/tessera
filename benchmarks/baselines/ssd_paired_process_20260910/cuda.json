@@ -1,0 +1,789 @@
+{
+  "schema": 1,
+  "objective": "resident device event window including submission gaps",
+  "paired_run_speedups": [
+    6.76992337234754,
+    7.998660423112461,
+    6.744013519316608,
+    7.076220327683662,
+    6.674826879961005,
+    6.769435848669133,
+    6.878846086567931,
+    6.943085412130689,
+    7.003696991468856
+  ],
+  "median_speedup": 6.878846086567931,
+  "median_speedup_lower_bound": 6.744013519316608,
+  "confidence": 0.98046875,
+  "run_count": 9,
+  "variants": {
+    "serial": [
+      8,
+      "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+      "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+    ],
+    "cooperative": [
+      8,
+      "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+      "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+    ]
+  },
+  "promotion_eligible": false,
+  "missing_gates": [
+    "device clock calibration",
+    "production selector exact-artifact admission"
+  ],
+  "identity": [
+    "nvidia",
+    "sm_120",
+    "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+    [
+      32,
+      2,
+      16,
+      4
+    ],
+    "CUDA events"
+  ],
+  "pairs": [
+    {
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 507.59589899826096,
+            "checked_call_ms": 10.239700000965968,
+            "device_event_ms": [
+              0.10016639709472656,
+              0.09980192184448242,
+              0.09936191558837891,
+              0.09938464164733887,
+              0.09936479568481445,
+              0.09938688278198242,
+              0.09936032295227051
+            ],
+            "device_event_median_ms": 0.09938464164733887,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 369.234983001661,
+            "checked_call_ms": 3.592741006286815,
+            "device_event_ms": [
+              0.016079039573669435,
+              0.013495680093765259,
+              0.013002560138702393,
+              0.015697599649429322,
+              0.01492095947265625,
+              0.013556799888610839,
+              0.014680320024490356
+            ],
+            "device_event_median_ms": 0.014680320024490356,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 374.8675570022897,
+            "checked_call_ms": 3.8974669951130636,
+            "device_event_ms": [
+              0.012632639408111572,
+              0.012666879892349244,
+              0.011948159933090209,
+              0.011074880361557007,
+              0.013012479543685913,
+              0.0113264000415802,
+              0.01242303967475891
+            ],
+            "device_event_median_ms": 0.01242303967475891,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 431.9743739979458,
+            "checked_call_ms": 9.729407000122592,
+            "device_event_ms": [
+              0.10063615798950196,
+              0.09935584068298339,
+              0.09936063766479492,
+              0.09942144393920899,
+              0.0993280029296875,
+              0.09936767578125,
+              0.09937952041625976
+            ],
+            "device_event_median_ms": 0.09936767578125,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 409.4464469962986,
+            "checked_call_ms": 9.91485200211173,
+            "device_event_ms": [
+              0.1001411247253418,
+              0.09982303619384765,
+              0.09966976165771485,
+              0.09937727928161622,
+              0.09976608276367188,
+              0.09935968399047851,
+              0.0997708797454834
+            ],
+            "device_event_median_ms": 0.09976608276367188,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 412.0448280009441,
+            "checked_call_ms": 3.7565710008493625,
+            "device_event_ms": [
+              0.014793280363082886,
+              0.014580800533294677,
+              0.01669376015663147,
+              0.037847359180450436,
+              0.013935040235519409,
+              0.015493439435958862,
+              0.013500800132751465
+            ],
+            "device_event_median_ms": 0.014793280363082886,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 384.29800100129796,
+            "checked_call_ms": 3.7068879973958246,
+            "device_event_ms": [
+              0.014734079837799072,
+              0.014047679901123046,
+              0.014841279983520507,
+              0.014027520418167114,
+              0.014488320350646972,
+              0.012454400062561035,
+              0.013983680009841919
+            ],
+            "device_event_median_ms": 0.014047679901123046,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 400.28785100003006,
+            "checked_call_ms": 10.09327000065241,
+            "device_event_ms": [
+              0.10065952301025391,
+              0.09938624382019043,
+              0.0994108772277832,
+              0.09939711570739745,
+              0.09940447807312011,
+              0.09942111968994141,
+              0.09937088012695312
+            ],
+            "device_event_median_ms": 0.09940447807312011,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 400.97318200423615,
+            "checked_call_ms": 10.061793997010682,
+            "device_event_ms": [
+              0.10043423652648925,
+              0.09939968109130859,
+              0.09936448097229005,
+              0.09934368133544921,
+              0.09938336372375488,
+              0.09937952041625976,
+              0.09939104080200195
+            ],
+            "device_event_median_ms": 0.09938336372375488,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 371.37691200041445,
+            "checked_call_ms": 3.9305989994318224,
+            "device_event_ms": [
+              0.0157750403881073,
+              0.014965759515762329,
+              0.013767360448837281,
+              0.015471680164337158,
+              0.01488927960395813,
+              0.013216639757156373,
+              0.013182400465011597
+            ],
+            "device_event_median_ms": 0.01488927960395813,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 490.38204299722565,
+            "checked_call_ms": 3.684827002871316,
+            "device_event_ms": [
+              0.014727040529251098,
+              0.015025279521942138,
+              0.014722559452056885,
+              0.015068479776382447,
+              0.014697920083999633,
+              0.013852800130844117,
+              0.015569599866867066
+            ],
+            "device_event_median_ms": 0.014727040529251098,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 400.5069060003734,
+            "checked_call_ms": 9.714701998746023,
+            "device_event_ms": [
+              0.10045023918151856,
+              0.09980607986450195,
+              0.0996611213684082,
+              0.09967264175415039,
+              0.09969375610351562,
+              0.09934880256652832,
+              0.09971424102783204
+            ],
+            "device_event_median_ms": 0.09969375610351562,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 409.2874039997696,
+            "checked_call_ms": 9.968624006432947,
+            "device_event_ms": [
+              0.10028672218322754,
+              0.09937312126159668,
+              0.09938336372375488,
+              0.09939071655273438,
+              0.09935135841369629,
+              0.09938976287841797,
+              0.09934880256652832
+            ],
+            "device_event_median_ms": 0.09938336372375488,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 368.86091100313934,
+            "checked_call_ms": 3.4478759989724495,
+            "device_event_ms": [
+              0.015092159509658814,
+              0.01444767951965332,
+              0.015318399667739869,
+              0.014509760141372681,
+              0.014111679792404175,
+              0.014442239999771117,
+              0.0142576003074646
+            ],
+            "device_event_median_ms": 0.01444767951965332,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 372.85564999911,
+            "checked_call_ms": 3.7848569991183467,
+            "device_event_ms": [
+              0.021796159744262696,
+              0.0141212797164917,
+              0.014320319890975952,
+              0.013816959857940674,
+              0.013947839736938477,
+              0.016282559633255006,
+              0.01555008053779602
+            ],
+            "device_event_median_ms": 0.014320319890975952,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 411.2847489959677,
+            "checked_call_ms": 9.948659004294313,
+            "device_event_ms": [
+              0.10070303916931152,
+              0.0994438362121582,
+              0.09942720413208007,
+              0.09981247901916504,
+              0.09941439628601074,
+              0.09939328193664551,
+              0.09938464164733887
+            ],
+            "device_event_median_ms": 0.09942720413208007,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    },
+    {
+      "serial": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": false,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 406.49455299717374,
+            "checked_call_ms": 9.79676700080745,
+            "device_event_ms": [
+              0.10043904304504395,
+              0.09963071823120118,
+              0.09989248275756836,
+              0.0993455982208252,
+              0.09935296058654786,
+              0.0994048023223877,
+              0.09942560195922852
+            ],
+            "device_event_median_ms": 0.09942560195922852,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+            "image_sha256": "aad88424e6bedf57809aefe293e5bb30edc1206bff1ca172c0b19c4953d2ce96"
+          }
+        ],
+        "promotion_eligible": false
+      },
+      "cooperative": {
+        "schema": 1,
+        "backend": "nvidia",
+        "architecture": "sm_120",
+        "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+        "shape": [
+          32,
+          2,
+          16,
+          4
+        ],
+        "clock": "CUDA events",
+        "execution": "native_gpu",
+        "cooperative": true,
+        "rows": [
+          {
+            "chunk": 8,
+            "binding_ms": 374.4225140035269,
+            "checked_call_ms": 3.6042620049556717,
+            "device_event_ms": [
+              0.014858239889144897,
+              0.013276480436325074,
+              0.013684159517288208,
+              0.016339520215988158,
+              0.01280608057975769,
+              0.014368640184402466,
+              0.014196159839630127
+            ],
+            "device_event_median_ms": 0.014196159839630127,
+            "max_abs_errors": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "binding_digest": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d",
+            "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+          }
+        ],
+        "promotion_eligible": false
+      }
+    }
+  ],
+  "recorder_sha256": "d4eb3cfd2e0debc145c418236d3890560e65ce1db07154145da32da6a4f72bf4"
+}

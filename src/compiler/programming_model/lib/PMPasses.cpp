@@ -13,10 +13,13 @@
 #include "tessera/ProgrammingModel/PMPasses.h"
 #include "tessera/ProgrammingModel/ScheduleDialect.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/IR/Dialects.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -2767,6 +2770,9 @@ struct ScheduleToTilePass
 
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ScheduleToTilePass)
 
+  ScheduleToTilePass() = default;
+  ScheduleToTilePass(const ScheduleToTilePass &other) : PassWrapper(other) {}
+  Option<std::string> ssdGPU{*this, "ssd-gpu", llvm::cl::desc("Cooperative SSD GPU backend (nvidia or rocm)"), llvm::cl::init("")};
   StringRef getArgument() const override { return "tessera-schedule-to-tile"; }
   StringRef getDescription() const override {
     return "Revalidate registered content-addressed Schedule decisions against "
@@ -2775,10 +2781,11 @@ struct ScheduleToTilePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
+    registry.insert<gpu::GPUDialect, arith::ArithDialect, bufferization::BufferizationDialect,
                     func::FuncDialect, LLVM::LLVMDialect, memref::MemRefDialect,
                     NVVM::NVVMDialect, scf::SCFDialect,
                     schedule::ScheduleDialect, tensor::TensorDialect>();
+    registerTesseraDialects(registry);
     tile::registerTileDialect(registry);
 #ifdef TESSERA_HAVE_NVIDIA_TARGET_IR
     registry.insert<tessera::nvidia::TesseraNVIDIADialect>();
@@ -2787,6 +2794,10 @@ struct ScheduleToTilePass
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    if (!ssdGPU.empty()) {
+      if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
+      return;
+    }
     OpBuilder builder(mod.getContext());
     if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();

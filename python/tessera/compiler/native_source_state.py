@@ -157,7 +157,7 @@ def bind_source_exception_types(contract, supplied=None):
     return bindings
 
 
-def decode_source_exception(contract,outputs,*,exception_types=None):
+def decode_source_exception(contract,outputs,*,exception_types=None,heap_program=None):
     """Decode checked completion data; logical source locations are not Python frames."""
     import builtins
     sites=contract.get('error_payload_sites',())
@@ -168,6 +168,8 @@ def decode_source_exception(contract,outputs,*,exception_types=None):
         from .source_exception_heap import decode_heap
         if not code.is_integer():raise RuntimeError('invalid native source exception status')
         bindings=bind_source_exception_types(contract,exception_types)
+        if heap_program is not None:
+            return heap_program.decode(int(code),contract,outputs,bindings)
         return decode_heap(contract['exception_heap'],int(code),contract,outputs,bindings)
     table=contract.get('error_table',())
     if not code.is_integer() or not 1<=code<=len(table):raise RuntimeError('invalid native source exception status')
@@ -239,6 +241,7 @@ class NativeSourceStateProgram:
         self._digest=hashlib.sha256(native_ir.encode()).hexdigest()
         self._lock=threading.RLock()
         self._result_abi=None
+        self._heap_program=None
         contract=json.loads(_attribute(native_ir,'tessera.source_state'))
         if any('?' in ty for ty in contract['outputs']):
             from .scheduled_matmul import find_tessera_opt
@@ -303,10 +306,23 @@ class NativeSourceStateProgram:
             for group,result in zip(contract['groups'],outputs[count:count+len(contract['groups'])],strict=True):
                 np.copyto(arrays[group[0]],result,casting='no')
             if contract.get('error_specs'):
-                error=decode_source_exception(contract,outputs,exception_types=self._exception_types)
+                error=decode_source_exception(contract,outputs,exception_types=self._exception_types,
+                    heap_program=self._heap_program)
                 if error is not None:raise error
             values=tuple(outputs[:count])
             return values[0] if len(values)==1 else values
+
+    def enable_native_exception_heap(self, *, runtime, llvm_bin):
+        from .native_exception_ir import NativeExceptionIRProgram
+        with self._lock:
+            if self._handle is None:
+                raise ValueError('native source state program is closed')
+            producer=NativeExceptionIRProgram(self._ir,llvm_bin=llvm_bin,runtime=runtime,
+                exception_types=self._exception_types)
+            if self._heap_program is not None:
+                self._heap_program.close()
+            self._heap_program=producer
+        return self
 
     def close(self):
         from tessera import _jit_boundary as jit
@@ -314,6 +330,9 @@ class NativeSourceStateProgram:
             if self._handle is not None:
                 jit.destroy(self._handle)
                 self._handle=None
+            if self._heap_program is not None:
+                self._heap_program.close()
+                self._heap_program=None
 
     def __enter__(self):return self
 

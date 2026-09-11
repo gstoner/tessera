@@ -7425,12 +7425,16 @@ gfx1151 independently executes 64x8 square ANN after compaction. No new ROCm har
 
 ### Shared SSD and retryable completion (2026-09-10)
 
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
+
 Owners: W5.2f / W2.4a / W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1.
 Sync: `SSD-RETRY-COMPLETION-2026-09-10`.
 
-Follow-up required: rocm target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. Native heap producers, full CPython deoptimization and attention raising remain open. See [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+Follow-up required: rocm target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. At that increment, native heap producers, full CPython deoptimization and attention raising remained open; see the superseding entry below and [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 ### Native heap, attention recipes and SSD device proof (2026-09-10)
+
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
 
 Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f.
 Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
@@ -7438,3 +7442,75 @@ Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
 gfx1151 executes the replay-bound serial SSD package for chunks 1, 2 and 5 with immutable-input, output, carry and checkpoint checks. This is correctness evidence; cooperative scheduling, hardware-counter attribution and promotion remain open. Exact dense f32 attention recognition and native bucket instantiation are shared artifact contracts, not sibling-device certificates. Automatic heap IR producers, full CPython frames and broader attention remain follow-ups. Evidence: `benchmarks/baselines/native_heap_attention_ssd_20260910/`; [current owner](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 PR #741 review follow-up (`NATIVE-HEAP-ATTENTION-SSD-2026-09-10`): the GPU pass now declares `tessera.ssd.source` in both metadata inventories. Expanded copies already narrow their outer loops to the owning thread row; new NVIDIA/ROCm lowering regressions pin global/private/output indexing. Shared contract validation only; no new device performance evidence. Apple and x86 execution claims remain unchanged.
+
+### Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `HEAP-IR-ATTENTION-COOPERATIVE-SSD-2026-09-10`.
+
+Parity validated for cooperative SSD correctness on gfx1151. HIP event windows and ROCProfiler HIP API traces are recorded separately. ROCProfiler produced no kernel-dispatch or memory-copy trace files, and no hardware-counter attribution is claimed. Raised f32 attention binding remains NVIDIA-only. Evidence: `benchmarks/baselines/heap_attention_cooperative_ssd_20260910/`. The SSD candidate remains opt-in; single-session measurements do not promote it. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Dynamic heap payloads, checkpoint AD and paired measurements (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `DYNAMIC-HEAP-SSD-CHECKPOINT-PAIRS-2026-09-10`.
+
+ROCm SSD now has nine independent paired process runs on gfx1151. Median resident-window speedup is 9.77x; the conservative population-median lower bound is 9.73x. Kernel/copy counter attribution and clock calibration remain unavailable in the prior WSL trace. No promotion. Raised attention still refuses the unsupported f32 ROCm envelope; GPU heap and checkpoint backward remain follow-ups. Evidence: `benchmarks/baselines/ssd_paired_process_20260910/` and focused native tests. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### GPU payload frames, mixer AD and artifact selection (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-HEAP-SSD-AD-ADMISSION-2026-09-10`.
+
+Parity validated on gfx1151 for bounded transactional f32 payload frames and native SSD checkpoint VJP. Exact measured binding selected the serial incumbent because eligible per-process HIP calibration is absent. The existing promotion policy requires bare metal; WSL runtime proof does not retire that gate. Scaled attention remains outside this ROCm f32 package envelope. General GPU object collection and resident automatic mixer AD remain follow-ups. Evidence: `benchmarks/baselines/gpu_heap_ssd_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Reusable GPU pools, resident AD and window calibration (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-POOL-RESIDENT-AD-CALIBRATION-2026-09-10`.
+
+Parity validated independently on gfx1151 for fixed-slot mark/sweep, cyclic reachability, stale-edge refusal, reuse and resident SSD forward/VJP snapshots. Follow-up required: concurrent/external-reader ownership, public resident tape composition, attention storage admission and bare-metal rocprofiler dispatch/counter calibration. CUDA calibration does not authorize HIP promotion. Evidence: `benchmarks/baselines/pool_resident_gqa_calibration_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f). General concurrent/object collection and public asynchronous resident AD remain open.
+
+### Stream-owned object graphs and asynchronous AD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `STREAM-OBJECTS-ASYNC-AD-WINDOWS-2026-09-10`.
+
+Parity validated independently on gfx1151 for opaque byte graphs, reader-ordered collection and asynchronous projected SSD VJP composition/retirement. Larger cooperative SSD forward passes the oracle under the new family storage envelope. Follow-up required for bare-metal rocprofiler dispatch/counter calibration and low-precision attention window admission. CUDA timing does not transfer. Evidence: `benchmarks/baselines/async_objects_windows_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Snapshot marking and public asynchronous VJP (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `SNAPSHOT-PUBLIC-AD-BIAS-2026-09-10`.
+
+gfx1151 validates snapshot retention during mutation, discovered cyclic objects, public asynchronous SSD VJP and whole-frame retirement. Follow-up required for raised additive-bias attention admission. WSL supplies no eligible overlap/counter attribution; bare-metal calibration remains required. Final sweep is exclusive; arbitrary heaps, general public traced AD and general masks remain open. Evidence: `benchmarks/baselines/snapshot_public_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Benchmark/compiler alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10`.
+
+Math probes now require observed native_gpu execution and finite correct-shape output. Follow-up required: serialized package ancestry and bare-metal device-clock/counter attribution; host-wall diagnostics remain regression-only. [Shared review](../../../../benchmarks/COMPILER_ALIGNMENT.md); [sequencing](../../compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1). No cross-backend performance transfer or promotion.
+
+### Extended benchmark alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-ALIGNMENT-EXTENDED-2026-09-10`.
+
+Shared benchmark labels and manifest coverage are updated; no ROCm schedules or packets changed. Native adapters and bare-metal timing/counter proof remain follow-up work. [Review and follow-ups](../../../../benchmarks/COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).
+
+### Native benchmark adapters (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `NATIVE-BENCHMARK-ADAPTERS-2026-09-10`.
+
+Owning-device correctness validated on Radeon 8060S (gfx1151), WSL: three ANN workloads, one accepted launch per variant/call, six public SSD VJP comparisons against independent finite differences. Follow-up required: kernel/counter correlation, broader workloads and bare-metal promotion. [Evidence](../../../../benchmarks/baselines/native_benchmark_adapters_20260910/README.md). Instrumented host-wall timing is diagnostic only.
+
+### Broader adapters and kernel attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `BROADER-ADAPTERS-PROFILING-2026-09-10`.
+
+Validated all four native SuperBench workloads on gfx1151. Fresh rocprofv3 kernel/copy-enabled tracing emitted HIP API and agent data only; kernel/copy attribution still needs a supported owning-host environment. [Evidence](../../../../benchmarks/baselines/broader_adapters_20260910/README.md). WSL diagnostics do not qualify for performance promotion.
+
+### Matrix adapters and mixed attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `MATRIX-MIXED-ATTRIBUTION-2026-09-10`.
+
+Follow-up required: both scheduled fp16 GEMM and attention hit DictionaryAttr duplicate-name assertion in LLVM GPUFuncOpLowering during the native executable pipeline, before execution. Preserve assertions and repair the toolchain/lowering boundary; no native matrix result claimed. Existing four ANN/SSD tasks remain validated. Kernel tracing remains separately unavailable on this WSL host. [Evidence](../../../../benchmarks/baselines/matrix_mixed_20260910/README.md). No promotion.

@@ -1,0 +1,68 @@
+Traceback (most recent call last):
+  File "/home/gstoner/programming/tessera-wave-740/benchmarks/Tessera_SuperBench/benches/kernel/matrix_native.py", line 56, in <module>
+    main()
+    ~~~~^^
+  File "/home/gstoner/programming/tessera-wave-740/benchmarks/Tessera_SuperBench/benches/kernel/matrix_native.py", line 30, in main
+    prepared = [prepare(args.backend,w) for w in workloads]
+                ~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/gstoner/programming/tessera-wave-740/benchmarks/native_matrix_adapter.py", line 41, in prepare
+    package = package_fn(scheduled, pipeline_name=pipeline)
+  File "/home/gstoner/programming/tessera-wave-740/python/tessera/compiler/rocm_native.py", line 1627, in package_scheduled_attention
+    ) = _compile_scheduled_attention_tile_ir(artifact.tile_ir)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/home/gstoner/programming/tessera-wave-740/python/tessera/compiler/rocm_native.py", line 1369, in _compile_scheduled_attention_tile_ir
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.flash_attn",
+        family="attention",
+    )
+  File "/home/gstoner/programming/tessera-wave-740/python/tessera/compiler/rocm_native.py", line 1302, in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+  File "/home/gstoner/programming/tessera-wave-740/python/tessera/compiler/rocm_native.py", line 352, in _run_opt
+    raise RuntimeError(
+        "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+    )
+RuntimeError: ROCm native packaging failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+Stack dump:
+0.	Program arguments: /home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt - "--pass-pipeline=builtin.module(tessera-rocm-executable{family=attention input=tile output=binary arch=gfx1151 staging=register tile-q=64 tile-kv=64})"
+ #0 0x0000562f152f2fec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x83d4fec)
+ #1 0x0000562f152efd94 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+ #2 0x000079b3a3045cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+ #3 0x000079b3a30a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+ #4 0x000079b3a3045b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+ #5 0x000079b3a30288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+ #6 0x000079b3a3029979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+ #7 0x000079b3a303bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+ #8 0x0000562f0d2cde0e mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+ #9 0x0000562f0dbceeea mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xcb0eea)
+#10 0x0000562f0dbc5054 mlir::Operation::create(mlir::OperationState const&) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xca7054)
+#11 0x0000562f0db27745 mlir::OpBuilder::create(mlir::OperationState const&) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xc09745)
+#12 0x0000562f0e1736df mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x12556df)
+#13 0x0000562f111b7048 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x4299048)
+#14 0x0000562f0f3bdd8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x249fd8c)
+#15 0x0000562f14ba02f4 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x7c822f4)
+#16 0x0000562f14c02ac5 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+#17 0x0000562f14c0407f mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x7ce607f)
+#18 0x0000562f14ba3a4b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+#19 0x0000562f14bac1c1 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x7c8e1c1)
+#20 0x0000562f14badcd2 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+#21 0x0000562f14badee2 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x7c8fee2)
+#22 0x0000562f0f3df21e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+#23 0x0000562f0dc5e781 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd40781)
+#24 0x0000562f0dc5eab6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd40ab6)
+#25 0x0000562f0dc5c15d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd3e15d)
+#26 0x0000562f0dc5e644 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd40644)
+#27 0x0000562f0dc5eab6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd40ab6)
+#28 0x0000562f0dc5f20e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd4120e)
+#29 0x0000562f0dc609c8 mlir::PassManager::run(mlir::Operation*) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xd429c8)
+#30 0x0000562f0f3fbee7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+#31 0x0000562f0f3fcd6f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+#32 0x0000562f14e9047b mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x7f7247b)
+#33 0x0000562f0f3f873d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+#34 0x0000562f0f3fd44c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x24df44c)
+#35 0x0000562f0f3fd6ae mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0x24df6ae)
+#36 0x0000562f0da95c4f main (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xb77c4f)
+#37 0x000079b3a302a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+#38 0x000079b3a302a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+#39 0x0000562f0da95145 _start (/home/gstoner/programming/tessera-wave-740/compiler-tool/tessera-opt+0xb77145)

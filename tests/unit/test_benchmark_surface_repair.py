@@ -259,3 +259,27 @@ def test_benchmark_rows_have_execution_runtime_and_compiler_fields() -> None:
         assert row.get("compiler_path")
         assert row.get("runtime_status")
         assert row.get("execution_kind")
+
+
+def test_linalg_residual_gate_rejects_bad_and_nonfinite_results():
+    from benchmarks.linalg.linalg_bench import _row_envelope
+    for residual in (1.0, float('nan'), float('inf')):
+        with pytest.raises(RuntimeError, match='residual'):
+            _row_envelope('qr', 16, 1.0, 1.0, residual)
+
+
+def test_linalg_stdout_is_machine_readable(tmp_path):
+    output = subprocess.check_output([
+        sys.executable, str(ROOT / 'benchmarks/linalg/linalg_bench.py'),
+        '--sizes', '4', '--ops', 'cholesky', '--warmup', '0', '--reps', '1'
+    ], cwd=ROOT, env=_env(), text=True)
+    row = json.loads(output)['runs'][0]
+    assert row['metadata']['correctness_passed'] is True
+    assert row['metadata']['promotion_eligible'] is False
+
+
+def test_native_benchmark_directories_have_honest_smoke_entries():
+    for directory in ('benchmarks/math', 'benchmarks/autodiff'):
+        entry = benchmarks_manifest.find_by_directory(directory)
+        assert entry is not None and entry.status == 'compile_only'
+        assert 'compile' in entry.command

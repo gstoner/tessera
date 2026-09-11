@@ -1,0 +1,10 @@
+{
+  "decision": {
+    "admitted": false,
+    "reason": "each measured process requires native HIP clock calibration",
+    "lower_bound": 9.729474232188707
+  },
+  "selected_binding": "d8f3596f99f89a9f6c18af68b40b88935652f28863eb809797ac0350694a21b2",
+  "incumbent_binding": "d8f3596f99f89a9f6c18af68b40b88935652f28863eb809797ac0350694a21b2",
+  "candidate_binding": "01cd68dca6da0d0b7acd17580940dbdc4d5ac9491560aa3a420a252aa4b93442"
+}

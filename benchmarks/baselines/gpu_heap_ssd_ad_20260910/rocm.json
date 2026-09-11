@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "execution": "native_gpu",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "heap_binding": "0b57a8270e2996b818706a67684ce093440399583a07a836c74e249b747290eb",
+  "forward_binding": "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+  "backward_binding": "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179",
+  "heap_cases": [
+    {
+      "lengths": [
+        2,
+        3
+      ],
+      "status": [
+        0,
+        5
+      ],
+      "generation": 1
+    },
+    {
+      "lengths": [
+        -1,
+        3
+      ],
+      "status": [
+        1,
+        0
+      ],
+      "generation": 2
+    },
+    {
+      "lengths": [
+        8,
+        1
+      ],
+      "status": [
+        1,
+        0
+      ],
+      "generation": 3
+    },
+    {
+      "lengths": [
+        0,
+        0
+      ],
+      "status": [
+        0,
+        0
+      ],
+      "generation": 4
+    },
+    {
+      "lengths": [
+        9223372036854775807,
+        1
+      ],
+      "status": [
+        1,
+        0
+      ],
+      "generation": 5
+    },
+    {
+      "lengths": [
+        3,
+        1
+      ],
+      "status": [
+        0,
+        4
+      ],
+      "generation": 6
+    }
+  ],
+  "gradient_max_abs_errors": [
+    1.4901161193847656e-08,
+    1.862645149230957e-09,
+    1.4901161193847656e-08,
+    3.725290298461914e-09,
+    1.862645149230957e-09
+  ],
+  "promotion_eligible": false
+}

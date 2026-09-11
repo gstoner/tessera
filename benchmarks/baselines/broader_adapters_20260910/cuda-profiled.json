@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "process_id": 67355,
+  "run_id": "9feddb9a1115479ab1609c04b18e0d64",
+  "architecture": "sm_120",
+  "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+  "shape": [
+    32,
+    2,
+    8,
+    4
+  ],
+  "clock": "CUDA events",
+  "execution": "native_gpu",
+  "cooperative": true,
+  "rows": [
+    {
+      "chunk": 8,
+      "binding_ms": 810.5783479986712,
+      "checked_call_ms": 3.686233001644723,
+      "device_event_ms": [
+        0.0191539204120636,
+        0.01511199951171875,
+        0.01855072021484375,
+        0.015375360250473022,
+        0.018095680475234986,
+        0.019915519952774047,
+        0.01609055995941162
+      ],
+      "device_event_median_ms": 0.018095680475234986,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "5af38d79ea5ef64cadaa168e89e839ecad69c1dc199695ece951f23b24a8b2db",
+      "image_sha256": "dab9351579f845015fb3d59562106428c322f65c07c2f092196950ba3bb7cfed"
+    }
+  ],
+  "promotion_eligible": false
+}

@@ -286,8 +286,13 @@ def value_and_grad(fn: Callable, argnums: int | Sequence[int] = 0) -> Callable:
     return wrapped
 
 
-def vjp(fn: Callable, *primals: Any):
+def vjp(fn: Callable, *primals: Any, stream=None):
     """Return ``(value, pullback)`` for a single-output numpy/tessera function."""
+    native_vjp = getattr(fn, "__tessera_vjp__", None)
+    if native_vjp is not None:
+        return native_vjp(*primals, stream=stream)
+    if stream is not None:
+        raise ValueError("asynchronous vjp requires an explicitly owned native program")
     with tape() as t:
         value = fn(*primals)
 

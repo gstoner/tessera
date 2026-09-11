@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "requested_traces": [
+    "kernel",
+    "memory-copy",
+    "hip"
+  ],
+  "available_files": [
+    "ssd_hip_api_trace.csv",
+    "ssd_agent_info.csv"
+  ],
+  "missing_evidence": [
+    "kernel_dispatch_trace",
+    "memory_copy_trace",
+    "hardware_counters"
+  ],
+  "agents": [
+    {
+      "Node_Id": "0",
+      "Logical_Node_Id": "0",
+      "Agent_Type": "GPU",
+      "Cpu_Cores_Count": "0",
+      "Simd_Count": "0",
+      "Cpu_Core_Id_Base": "0",
+      "Simd_Id_Base": "0",
+      "Max_Waves_Per_Simd": "0",
+      "Lds_Size_In_Kb": "0",
+      "Gds_Size_In_Kb": "0",
+      "Num_Gws": "0",
+      "Wave_Front_Size": "0",
+      "Num_Xcc": "1",
+      "Cu_Count": "0",
+      "Array_Count": "0",
+      "Num_Shader_Banks": "0",
+      "Simd_Arrays_Per_Engine": "0",
+      "Cu_Per_Simd_Array": "0",
+      "Simd_Per_Cu": "0",
+      "Max_Slots_Scratch_Cu": "0",
+      "Gfx_Target_Version": "0",
+      "Vendor_Id": "4098",
+      "Device_Id": "5510",
+      "Location_Id": "50432",
+      "Domain": "0",
+      "Drm_Render_Minor": "0",
+      "Num_Sdma_Engines": "0",
+      "Num_Sdma_Xgmi_Engines": "0",
+      "Num_Sdma_Queues_Per_Engine": "0",
+      "Num_Cp_Queues": "0",
+      "Max_Engine_Clk_Ccompute": "0",
+      "Max_Engine_Clk_Fcompute": "0",
+      "Sdma_Fw_Version": "0",
+      "Fw_Version": "0",
+      "Capability": "0",
+      "Cu_Per_Engine": "0",
+      "Max_Waves_Per_Cu": "0",
+      "Family_Id": "0",
+      "Workgroup_Max_Size": "0",
+      "Grid_Max_Size": "0",
+      "Local_Mem_Size": "68535640064",
+      "Hive_Id": "0",
+      "Gpu_Id": "0",
+      "Workgroup_Max_Dim_X": "0",
+      "Workgroup_Max_Dim_Y": "0",
+      "Workgroup_Max_Dim_Z": "0",
+      "Grid_Max_Dim_X": "0",
+      "Grid_Max_Dim_Y": "0",
+      "Grid_Max_Dim_Z": "0",
+      "Name": "AMD Radeon(TM) 8060S Graphics",
+      "Vendor_Name": "AMD",
+      "Product_Name": "AMD Radeon(TM) 8060S Graphics",
+      "Model_Name": ""
+    }
+  ],
+  "hip_api": {
+    "hipDeviceSynchronize": {
+      "calls": 3,
+      "total_ns": 269066,
+      "median_ns": 95216
+    },
+    "hipEventCreateWithFlags": {
+      "calls": 2,
+      "total_ns": 3190,
+      "median_ns": 1595.0
+    },
+    "hipEventDestroy": {
+      "calls": 2,
+      "total_ns": 2210,
+      "median_ns": 1105.0
+    },
+    "hipEventElapsedTime": {
+      "calls": 7,
+      "total_ns": 103477,
+      "median_ns": 1441
+    },
+    "hipEventRecord": {
+      "calls": 14,
+      "total_ns": 182169,
+      "median_ns": 12280.5
+    },
+    "hipEventSynchronize": {
+      "calls": 7,
+      "total_ns": 7999397,
+      "median_ns": 1141025
+    },
+    "hipFree": {
+      "calls": 8,
+      "total_ns": 151717,
+      "median_ns": 1415.0
+    },
+    "hipGetDevice": {
+      "calls": 3,
+      "total_ns": 2780,
+      "median_ns": 540
+    },
+    "hipInit": {
+      "calls": 1,
+      "total_ns": 72742481,
+      "median_ns": 72742481
+    },
+    "hipMalloc": {
+      "calls": 8,
+      "total_ns": 53316016,
+      "median_ns": 3891.0
+    },
+    "hipMemGetAddressRange": {
+      "calls": 16,
+      "total_ns": 7031,
+      "median_ns": 70.0
+    },
+    "hipMemcpy": {
+      "calls": 16,
+      "total_ns": 50116737,
+      "median_ns": 129637.0
+    },
+    "hipModuleGetFunction": {
+      "calls": 1,
+      "total_ns": 2360,
+      "median_ns": 2360
+    },
+    "hipModuleLaunchKernel": {
+      "calls": 701,
+      "total_ns": 910681,
+      "median_ns": 1150
+    },
+    "hipModuleLoadData": {
+      "calls": 1,
+      "total_ns": 1330391,
+      "median_ns": 1330391
+    },
+    "hipModuleUnload": {
+      "calls": 1,
+      "total_ns": 3660,
+      "median_ns": 3660
+    },
+    "hipPointerGetAttributes": {
+      "calls": 16,
+      "total_ns": 11612,
+      "median_ns": 230.0
+    }
+  }
+}

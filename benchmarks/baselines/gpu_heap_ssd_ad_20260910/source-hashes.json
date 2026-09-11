@@ -1,0 +1,9 @@
+{
+  "python/tessera/compiler/gpu_exception_heap.py": "362612564b7ec1bc4f5021820edcafb6709058d39f572ca7c9b97d4637fda4d8",
+  "python/tessera/compiler/native_ssd.py": "a13cec4e619289905a06ef8974e5c0cf61314ce0cbe1128941036e23a0c6dbeb",
+  "python/tessera/compiler/ssd_checkpoint_ad.py": "0842d787030014441d082247816501ee17d85fbb36e7a76f685d88330b736aea",
+  "python/tessera/compiler/ssd_performance.py": "dbbd857be0643a5cd972935e97d0e438e1d985e0788e446395b99f782a1c7969",
+  "python/tessera/compiler/loop_idioms.py": "a7184ace8c09c32fc91858dd459e0fb65a6ab847b5475622b55bf81a6a8c57fe",
+  "benchmarks/record_gpu_heap_ssd_ad.py": "4bdeb36f7bf2ab0c61cc1bc28bc32833e5bddf64c7645e9782c0801a676f4565",
+  "benchmarks/check_ssd_admission.py": "8321b55ad5659a1a79d16e99300b58565313490d21c96bcc0f403afdea17d023"
+}

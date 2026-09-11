@@ -1,0 +1,10 @@
+{
+  "decision": {
+    "admitted": false,
+    "reason": "native CUDA calibration adapter is missing",
+    "lower_bound": 6.744013519316608
+  },
+  "selected_binding": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+  "incumbent_binding": "7263af4876480a1418379c4ccd7988084146bcfe6aaa41030ed0598e565dfad9",
+  "candidate_binding": "7a625ccc9a2d309d6533b1b1dfae91b635a7fd02e5a7816725cecd3357c7ad4d"
+}

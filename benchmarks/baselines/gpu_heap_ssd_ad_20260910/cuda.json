@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution": "native_gpu",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "heap_binding": "1aa48b9a8516c77d3cde09d2dee0fa5f1d05bf06f107756cf038a3ee8792991a",
+  "forward_binding": "07156f894d545b01aa233ad1e7b3707bf8e55430387f85245c7b14cb527cd621",
+  "backward_binding": "f4021c6da79e2860aaff3abec4647701d8e54d27cae0f4d48733489ad394dbb4",
+  "heap_cases": [
+    {
+      "lengths": [
+        2,
+        3
+      ],
+      "status": [
+        0,
+        5
+      ],
+      "generation": 1
+    },
+    {
+      "lengths": [
+        -1,
+        3
+      ],
+      "status": [
+        1,
+        0
+      ],
+      "generation": 2
+    },
+    {
+      "lengths": [
+        8,
+        1
+      ],
+      "status": [
+        1,
+        0
+      ],
+      "generation": 3
+    },
+    {
+      "lengths": [
+        0,
+        0
+      ],
+      "status": [
+        0,
+        0
+      ],
+      "generation": 4
+    },
+    {
+      "lengths": [
+        9223372036854775807,
+        1
+      ],
+      "status": [
+        1,
+        0
+      ],
+      "generation": 5
+    },
+    {
+      "lengths": [
+        3,
+        1
+      ],
+      "status": [
+        0,
+        4
+      ],
+      "generation": 6
+    }
+  ],
+  "gradient_max_abs_errors": [
+    1.4901161193847656e-08,
+    1.862645149230957e-09,
+    1.4901161193847656e-08,
+    3.725290298461914e-09,
+    1.862645149230957e-09
+  ],
+  "promotion_eligible": false
+}

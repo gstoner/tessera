@@ -19,3 +19,11 @@ The matching compiler fixture is
 `tests/tessera-ir/phase7/grid_ai_core_ir_visible.mlir`.  It keeps the stencil,
 2D attention, conv/fused block, RNG, and halo transport path visible in one
 `schedule.mesh.region`.
+
+## Execution evidence
+
+Result rows describe an unattributed library composition with host-wall timing.
+Public primitives can choose environment-dependent implementations; this harness
+does not collect per-call route receipts. Logical-byte bandwidth is an estimate,
+and promotion is disabled. Compiler-visible fixtures remain separate evidence.
+See the [alignment review](../COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).

@@ -486,3 +486,27 @@ Do not infer discrete stability from continuous-time eigenvalues alone.
 ## Native heap, attention and SSD follow-through (2026-09-10)
 
 `native_ssd.py` projects immutable Schedule inputs before bufferization and binds a replay-checked serial CUDA/HIP package. The SM120 and gfx1151 recorders verify all five input buffers, Y, final carry and partial-chunk checkpoints for chunks 1, 2 and 5. These independent device correctness packets are in `benchmarks/baselines/native_heap_attention_ssd_20260910/`. Cooperative kernels, public mixer integration, checkpoint adjoints and ReplaySSM comparison remain open; no performance promotion is claimed.
+
+## Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+`tessera-schedule-to-tile=ssd-gpu=nvidia|rocm` now accepts one isolated verified SSD entry. Each block owns a head/value column and up to 256 state lanes; padded lanes participate in barriers but do not access state. Active lanes update register-carried state and chunk checkpoints; lane zero reduces shared weighted values in original state-index order. Both owning devices execute the replay-bound package. Event-window timing includes submission gaps; Nsight kernel timing is separately recorded. Public mixer wiring, checkpoint adjoints, broader cooperative tuning and promotion remain open.
+
+## Dynamic payload and checkpoint continuation (2026-09-10)
+
+SSDCheckpointProgram now pairs the native CPU forward with a replay-bound checkpoint VJP. It differentiates X, decay, B, C and initial carry, consuming cotangents for Y, final carry and chunk checkpoints. Scalar recomputation starts at the prior checkpoint and avoids a full-time state tape. Public mixer automatic AD and GPU backward remain open. Nine independent CUDA/HIP process pairs support resident-window comparison only; no calibrated-clock or selector promotion is claimed. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--dynamic-heap-payloads-checkpoint-ad-and-paired-measurements).
+
+## GPU frame and mixer AD continuation (2026-09-10)
+
+The chunk-recomputing SSD VJP now packages through the shared native GPU path and executes on CUDA/HIP using actual cooperative-forward checkpoints. All five gradients are checked against finite differences with all three output cotangents. Native CPU automatic grad of Y owns private checkpoints, while GPU-resident automatic mixer AD and optimized backward remain open. Explicit measured package selection now binds images, shapes and policy to existing pairs; both actual host decisions retain the incumbent for missing calibration. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--gpu-payload-frames-mixer-ad-and-artifact-selection).
+
+## Reusable pools and resident AD continuation (2026-09-10)
+
+ResidentSSDProgram generates GPU forward/VJP packages and keeps inputs, checkpoints, seeds and gradients on-device until scoped close. CUDA and HIP independently pass all five finite-difference gradients after caller-input mutation. This is a synchronous first-order family API, not general public tape integration or optimized backward. CUDA admission now consumes seven-window Nsight calibration; observed 1.957x instrumentation overhead and dirty/WSL source prevent promotion. Fresh per-process evidence is required after compiler changes. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--reusable-gpu-pools-resident-ad-and-window-calibration).
+
+## Stream-owned graphs and asynchronous composition (2026-09-10)
+
+SSD has a family-owned checked 64 MiB buffer envelope rather than the persistent-tape pilot's 1024-element parser cap. Both GPUs execute the larger cooperative forward. Scoped resident gradients compose across streams and retire after external consumers; automatic general tape capture and asynchronous whole-frame teardown remain open. New CUDA process-bound calibration meets the 5% clock and overhead limits, but dirty/WSL evidence still cannot promote. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--stream-owned-object-graphs-asynchronous-ad-and-window-legality).
+
+### Snapshot/public-AD follow-through (2026-09-10)
+
+[Current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--snapshot-marking-public-vjp-and-additive-bias): explicit resident SSD programs now enter public `vjp` with asynchronous capture and reader-aware whole-frame retirement. This is first-order protocol dispatch, not arbitrary traced public AD. Program unloading, higher-order products and broader mixer integration remain open. Snapshot marking overlaps active graph updates by using private storage; final sweep is exclusive. Full-shape finite additive attention bias is recognized and bound on NVIDIA; Boolean/padding/broadcast masks and fully masked rows remain open. Exact-device correctness under WSL does not satisfy clean bare-metal promotion.

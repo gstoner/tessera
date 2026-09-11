@@ -151,13 +151,19 @@ class TrackedDerivativeGeneration:
         with self.read(stream) as outputs:
             return binding.submit(stream, *outputs, *args, **kwargs)
 
-    def backward_into(self, frame, stream, *, tracked=True):
+    def backward_into(self, frame, stream, *, tracked=True, indices=None):
         """Consume this generation as another persistent frame's cotangents."""
         from .native_persistent_tape import PersistentTapeFrame
-        if not isinstance(frame, PersistentTapeFrame):
+        from .resident_ssd import ResidentSSDFrame
+        if not isinstance(frame, (PersistentTapeFrame, ResidentSSDFrame)):
             raise TypeError("scoped derivative composition requires a persistent tape frame")
+        if indices is not None and (not isinstance(indices,tuple) or not indices or
+                any(type(i) is not int or not 0 <= i < len(self._reader_buffers) for i in indices)
+                or len(set(indices)) != len(indices)):
+            raise ValueError("gradient projection requires distinct valid result indices")
         with self.read(stream) as outputs:
-            return frame.backward_async(stream, *outputs, tracked=tracked)
+            selected = outputs if indices is None else tuple(outputs[i] for i in indices)
+            return frame.backward_async(stream, *selected, tracked=tracked)
 
     def retire(self, stream):
         stream = _stream(stream)
@@ -257,7 +263,7 @@ class CheckedTrackedDerivativeGeneration(TrackedDerivativeGeneration):
             raise ValueError('checked tracked derivatives require a compiler-gated reader or successful status check')
         return _ReaderLease(self, stream)
 
-    def backward_into(self, frame, stream, *, tracked=True, dependencies=()):
+    def backward_into(self, frame, stream, *, tracked=True, indices=None, dependencies=()):
         """Consume this cotangent with additional checked status prerequisites.
 
         Every prerequisite owns a reader lease through consumer submission;
@@ -267,6 +273,10 @@ class CheckedTrackedDerivativeGeneration(TrackedDerivativeGeneration):
         from .native_persistent_tape import PersistentTapeFrame, _input_status_count
         if not isinstance(frame, PersistentTapeFrame):
             raise TypeError('checked reader requires a persistent frame')
+        if indices is not None and (not isinstance(indices, tuple) or not indices or
+                any(type(i) is not int or not 0 <= i < len(self._reader_buffers) for i in indices)
+                or len(set(indices)) != len(indices)):
+            raise ValueError('gradient projection requires distinct valid result indices')
         if not isinstance(dependencies, tuple) or any(not isinstance(parent, CheckedTrackedDerivativeGeneration) for parent in dependencies):
             raise TypeError('dependencies must be a tuple of checked tracked generations')
         parents=(self,*dependencies)
@@ -287,4 +297,5 @@ class CheckedTrackedDerivativeGeneration(TrackedDerivativeGeneration):
             outputs=stack.enter_context(_ReaderLease(self,stream))
             for parent in dependencies:
                 stack.enter_context(_ReaderLease(parent,stream))
-            return frame.backward_async(stream,*outputs,tracked=tracked,_dependency=parents)
+            selected = outputs if indices is None else tuple(outputs[i] for i in indices)
+            return frame.backward_async(stream,*selected,tracked=tracked,_dependency=parents)

@@ -7,7 +7,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | Surface | Entries | Status breakdown |
 |---|--:|---|
 | examples | 22 | runnable=15, runnable_optional=1, scaffold=6 |
-| benchmarks | 18 | archived=1, compile_only=6, runnable=11 |
+| benchmarks | 24 | archived=1, compile_only=12, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
 | tests | 10 | archived=2, compile_only=3, runnable=1, scaffold=4 |
@@ -51,13 +51,19 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `benchmarks/apple_cpu` | runnable | `benchmarks/apple_cpu/benchmark_execution_kind.py` |  |
 | `benchmarks/apple_gpu` | runnable | `benchmarks/apple_gpu/benchmark_ga_ebm.py` |  |
 | `benchmarks/apple_gpu` | runnable | `benchmarks/apple_gpu/benchmark_fusion.py` |  |
+| `benchmarks/autodiff` | compile_only | `benchmarks/autodiff/benchmark_native_jvp.py` |  |
 | `benchmarks/baselines` | runnable | `benchmarks/baselines/cpu_smoke.json` |  |
 | `benchmarks/clifford_core` | compile_only | `benchmarks/clifford_core/core.py` |  |
 | `benchmarks/common` | compile_only | `benchmarks/common/__init__.py` |  |
 | `benchmarks/corrdiff` | runnable | `benchmarks/corrdiff/benchmark_corrdiff.py` |  |
+| `benchmarks/dlop_longtail_core` | compile_only | `benchmarks/dlop_longtail_core/benchmark_dlop_longtail.py` |  |
+| `benchmarks/e2e_spine` | compile_only | `benchmarks/e2e_spine/benchmark_packet_validation.py` |  |
 | `benchmarks/energy_core` | compile_only | `benchmarks/energy_core/core.py` |  |
 | `benchmarks/grid_ai_core` | compile_only | `benchmarks/grid_ai_core/core.py` |  |
+| `benchmarks/lattice_reasoning_core` | compile_only | `benchmarks/lattice_reasoning_core/benchmark_lattice_reasoning.py` |  |
 | `benchmarks/linalg` | runnable | `benchmarks/linalg/linalg_bench.py` |  |
+| `benchmarks/math` | compile_only | `benchmarks/math/benchmark_physical_math.py` |  |
+| `benchmarks/rl` | compile_only | `benchmarks/rl/benchmark_policy_losses.py` |  |
 | `benchmarks/spectral` | runnable | `benchmarks/spectral/spectral_correctness.py` |  |
 | `benchmarks/spectral` | runnable | `benchmarks/spectral/spectral_bench.py` |  |
 | `benchmarks/visual_complex_core` | compile_only | `benchmarks/visual_complex_core/core.py` |  |

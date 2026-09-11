@@ -5,12 +5,19 @@ Domain-neutral; exercises the EBM primitives the Apple GPU MSL kernels
 back: quadratic energy, stable logsumexp partition, Langevin step,
 linear annealing schedule.
 
+The benchmark is a Python library composition. Individual public primitives may
+opportunistically dispatch to Apple GPU, but this harness does not collect their
+route receipts. Results therefore report `tessera-library`, device
+`unattributed`, host-wall timing and no promotion eligibility. Logical-byte
+bandwidth is an estimate, not a hardware counter. See the
+[compiler alignment review](../COMPILER_ALIGNMENT.md).
+
 ## Composition
 
 | Piece                          | Source                                                 |
 |--------------------------------|--------------------------------------------------------|
 | Initial state sampling         | `tessera.rng.RNGKey` + `normal`                       |
-| Quadratic energy               | `tessera.ebm.energy.energy_quadratic`                  |
+| Quadratic energy               | `tessera.ebm.energy.quadratic_energy`                  |
 | Annealing schedule             | `annealing_schedule` (T_max → T_min linear)            |
 | Langevin step                  | `tessera.ebm.energy.langevin_step`                     |
 | Partition function             | `tessera.ebm.partition.partition_exact_from_energies`  |
@@ -23,7 +30,7 @@ target = normal(target_key, (D,))
 sched  = linspace(T_max, T_min, n_steps)
 for step, T in enumerate(sched):
     y_{step+1} = langevin_step(
-        y_step, lambda a: energy_quadratic(a, target),
+        y_step, lambda a: quadratic_energy(a, target),
         eta, T, chain_key.fold_in(step))
 Z      = partition_exact_from_energies(energies(y_final), T_min)
 log_Z  = log(Z)

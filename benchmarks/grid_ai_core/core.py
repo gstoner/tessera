@@ -224,7 +224,9 @@ class GridAICoreResult:
     determinism_ok: bool
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {**asdict(self), "execution_kind": "unknown",
+                "timing_domain": "host_wall_composition", "promotion_eligible": False,
+                "bandwidth_kind": "estimated_logical_bytes"}
 
 
 class GridAICoreBenchmark:
@@ -233,6 +235,8 @@ class GridAICoreBenchmark:
     def __init__(self, *, warmup: int = 1, reps: int = 3):
         self.warmup = int(warmup)
         self.reps = int(reps)
+        if self.warmup < 0 or self.reps <= 0:
+            raise ValueError("warmup must be nonnegative and reps positive")
 
     @staticmethod
     def make_input(cfg: GridAICoreConfig) -> np.ndarray:
@@ -255,7 +259,7 @@ class GridAICoreBenchmark:
         samples = cfg.B * cfg.H * cfg.W
         bytes_per_step = samples * (cfg.C_in + 2 * cfg.C_hid + cfg.C_out) * 4
         return GridAICoreResult(
-            backend="tessera-reference",
+            backend="tessera-library",
             op="grid_ai_core_forward",
             shape={
                 "B": cfg.B,
@@ -272,7 +276,7 @@ class GridAICoreBenchmark:
             latency_ms=elapsed * 1000.0,
             throughput_msps=(samples / 1e6) / max(elapsed, 1e-12),
             memory_bw_gb_s=(bytes_per_step / 1e9) / max(elapsed, 1e-12),
-            device="cpu",
+            device="unattributed",
             tessera_version="pre-alpha",
             determinism_ok=bool(np.array_equal(ref, det)),
         )

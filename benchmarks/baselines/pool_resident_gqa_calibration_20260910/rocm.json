@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "execution": "native_gpu",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "allocation_binding": "6a5d6b602f5317d716b2f253b52100e25cdba72f1461a9dede0a3f579a3ab35a",
+  "collection_binding": "cb8dd485e0f18fa7d509d64b6ab18ae101b1113feeabd5a0e9a057313e825dd3",
+  "forward_binding": "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+  "backward_binding": "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179",
+  "heap_checks": [
+    "cycle reachability and partial payload-slot reuse",
+    "stale edge refuses before sweep",
+    "unrooted cycles and repeated generation reuse",
+    "invalid live generation refuses transactionally"
+  ],
+  "resident_gradient_max_abs_errors": [
+    6.402842700481415e-10,
+    9.313225746154785e-10,
+    1.862645149230957e-09,
+    1.862645149230957e-09,
+    9.313225746154785e-10
+  ],
+  "promotion_eligible": false
+}

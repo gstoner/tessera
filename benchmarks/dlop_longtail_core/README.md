@@ -9,8 +9,13 @@ Stage-1 (eager) vs Stage-2 (graph/JIT-fused).
 
 That decomposition-overhead story **is Tessera's fusion thesis**
 (matmul→softmax→matmul, `moe_swiglu_block`). This core turns the claim into
-measured rows, reusing the dispatch-count + metamorphic-equivalence telemetry
+static decomposition estimates and measured numerical equivalence, reusing the metamorphic-equivalence telemetry
 from `long_memory_core`'s resident-vs-recompute row.
+
+Counts below are catalog estimates, not observed GPU dispatches. Rows expose
+`dispatch_count_source=static_decomposition_estimate`, `observed_dispatches=null`
+and `promotion_eligible=false`. Candidate lane names do not prove that lane ran.
+See the [alignment review](../COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).
 
 ## What each row reports
 
@@ -40,3 +45,16 @@ python benchmarks/dlop_longtail_core/benchmark_dlop_longtail.py
 ```
 
 Guarded by `tests/unit/test_dlop_longtail_core.py`.
+
+### Observed native dispatch lane
+
+Run `benchmark_native_dispatch.py --backend nvidia --compiler /path/to/tessera-opt
+--output /tmp/dlop-native.json` (or `--backend rocm`) on the owning GPU host.
+This separate bounded ANN lane compares original/transformed ReLU, abs and
+square programs using serialized native packages. Per-call receipts observe
+accepted CUDA/HIP launch API calls and only publish after checked completion
+and copyback. A single launch can contain multiple operations: fewer algebraic
+ops do not imply fewer launches. `profiler_kernel_count` stays null until a
+profiler supplies kernel records; timings are instrumented host-wall package
+latencies. These results do not replace the static catalog's decomposition
+estimates, prove its other composites, or qualify for performance promotion.

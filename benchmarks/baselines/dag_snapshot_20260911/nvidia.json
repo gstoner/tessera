@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+  "recorder_sha256": "a39818a333de95e67fd6bb3eecddfa232cb7e53b7c44c5ba2b81918978bfce1f",
+  "execution": "native_gpu",
+  "heap_binding": "5898e4e1fb125f9c37d3ef061c53a250f17052e146a7ee5ed566a8d587302bed",
+  "ssd_bindings": [
+    "8a10a474f47470a4a39644d96f6fec01545c56fb41ac2f0c81ef5e4317f83e4a",
+    "2c1b1f7d0e558d0cf760ac2d3d1c347668a1bc2afe284129195963020056bfca"
+  ],
+  "incremental_sweep_with_mutation": true,
+  "trusted_extension_cycle": true,
+  "traced_ssd_calls": 3,
+  "public_input_gradients": 5,
+  "snapshot_read_scope_during_live_sweep": true,
+  "sum_bindings": [
+    "7c48ce16febe8aaa4ccd0f5d497809a0e799b1ce9a264f50030d5243ba487b26",
+    "31e83948cd16a86bf887b5d49f75239608e8ccaa18af0d21bb2afd62ccc6064d",
+    "9a1c43517fe973939712f5594681b5d6754f90f35431ca65c97f56f27adfaf51"
+  ],
+  "gradient_max_abs_errors": [
+    8.89287254776563e-12,
+    1.952839861606853e-09,
+    1.7440632258162135e-11,
+    2.770509516247799e-09,
+    9.327645201367973e-10
+  ],
+  "asynchronous_retirement": true,
+  "promotion_eligible": false
+}

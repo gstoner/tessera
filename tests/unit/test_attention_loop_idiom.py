@@ -318,6 +318,64 @@ def test_full_shape_additive_bias_native_binding():
     rng = np.random.default_rng(873)
     values = [rng.uniform(-.5,.5,shape).astype(np.float32) for shape in [(1,2,3,4),(1,2,5,4),(1,2,5,2),(1,2,3,5)]]
     np.testing.assert_allclose(binding(*values),attention_bias(*values),rtol=1e-5,atol=1e-6)
+    values[-1][..., ::2] = -np.inf
+    np.testing.assert_allclose(binding(*values), attention_bias(*values), rtol=1e-5, atol=1e-6)
+    values[-1][0, 0, 0, :] = -np.inf
+    with pytest.raises(ValueError, match='fully masked'):
+        binding(*values)
     values[-1][0,0,0,0] = np.nan
     with pytest.raises(ValueError,match='finite'):
+        binding(*values)
+
+
+def test_additive_mask_composes_with_causal_window_and_refuses_empty_rows():
+    from types import SimpleNamespace
+    from tessera.compiler.raised_attention import validate_mask_rows
+    artifact = SimpleNamespace(dims=(1, 2, 1, 3, 5, 4, 4), causal=True, window_left=1, window_right=-1)
+    bias = np.zeros((1, 2, 3, 5), np.float32)
+    bias[..., 0] = -np.inf
+    validate_mask_rows(artifact, bias)
+    # First query can read keys 1 and 2 only; finite keys outside that range
+    # must not make an otherwise fully masked row admissible.
+    bias[..., 0, 1:3] = -np.inf
+    with pytest.raises(ValueError, match='fully masked'):
+        validate_mask_rows(artifact, bias)
+
+
+def grouped_masked_bias(q: tessera.Tensor['B','HQ','Q',4,'f32'], k: tessera.Tensor['B','HK','K',4,'f32'], v: tessera.Tensor['B','HK','K','V','f32'], bias: tessera.Tensor['B','HQ','Q','K','f32']):  # noqa: F821
+    out = np.zeros((q.shape[0], q.shape[1], q.shape[2], v.shape[3]), dtype=q.dtype)
+    for batch in range(q.shape[0]):
+        for head in range(q.shape[1]):
+            for query in range(q.shape[2]):
+                scores = np.zeros((k.shape[2],), dtype=q.dtype)
+                for key in range(k.shape[2]):
+                    for feature in range(q.shape[3]):
+                        scores[key] += q[batch, head, query, feature] * k[batch, head // (q.shape[1] // k.shape[1]), key, feature]
+                scores = scores + bias[batch, head, query, :]
+                scores[:max(query + max(k.shape[2] - q.shape[2], 0) - 2, 0)] = -np.inf
+                scores[query + max(k.shape[2] - q.shape[2], 0) + 1:] = -np.inf
+                weights = np.exp(scores - np.max(scores))
+                weights = weights / np.sum(weights)
+                for key in range(k.shape[2]):
+                    for value in range(v.shape[3]):
+                        out[batch, head, query, value] += weights[key] * v[batch, head // (q.shape[1] // k.shape[1]), key, value]
+    return out
+
+
+@pytest.mark.skipif(os.environ.get('TESSERA_TEST_RAISED_ATTENTION') != '1', reason='owning CUDA device required')
+@pytest.mark.parametrize('qsize,ksize', [(3, 5), (5, 3)])
+def test_irregular_masks_compose_with_ragged_gqa_causal_windows(qsize, ksize):
+    from tessera.compiler.raised_attention import bind_attention_bucket
+    tool = find_tessera_opt()
+    recipe = recognize_attention_loop(grouped_masked_bias).prepare(tessera_opt=str(tool))
+    bucket, = recipe.instantiate_buckets([dict(B=1,HQ=4,HK=2,Q=qsize,K=ksize,V=2)],tessera_opt=str(tool))
+    binding = bind_attention_bucket(recipe, bucket, compiler=tool)
+    rng = np.random.default_rng(745)
+    values = [rng.uniform(-.5,.5,shape).astype(np.float32) for shape in
+              [(1,4,qsize,4),(1,2,ksize,4),(1,2,ksize,2),(1,4,qsize,ksize)]]
+    values[-1][..., ksize // 2] = -np.inf
+    np.testing.assert_allclose(binding(*values), grouped_masked_bias(*values), rtol=1e-5, atol=1e-6)
+    center = max(ksize-qsize, 0)
+    values[-1][0,0,0,max(center-2,0):center+1] = -np.inf
+    with pytest.raises(ValueError, match='fully masked'):
         binding(*values)

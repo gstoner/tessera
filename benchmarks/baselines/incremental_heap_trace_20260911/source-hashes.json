@@ -1,0 +1,10 @@
+{
+  "python/tessera/compiler/object_discovery.py": "4ba5a590d90a8abe7157b1f6ea55d84081a5525059393df12436a85d936d0fb5",
+  "python/tessera/compiler/gpu_heap_collection.py": "314315d058b11410cec41d04da7b9698f93930769d9a35a8a9c1692f869e0368",
+  "python/tessera/compiler/resident_object_pool.py": "b1ae86e59ca174d2b79e0712150b0a688a16fd6aa1c02f7f18a37616bc0ef7c9",
+  "python/tessera/compiler/resident_trace.py": "dc575dc1cc9a879f2d709787ebed2ce1d9fa280dae92aaa2368be4c10fae4031",
+  "python/tessera/compiler/resident_ssd.py": "f6bf032527d9dd072d382b7bbaab77091be3889047bd6630265455452ebb240e",
+  "python/tessera/compiler/raised_attention.py": "539e287d129939e8a0f8965efea948ec967440f4cf0b7fa78e2dd1d372acb813",
+  "benchmarks/record_incremental_heap_trace.py": "78d18174a84cfef1c78a2b3afbe7da520df2fbc694f5689f19c42e1d20002c5f",
+  "tests/unit/test_attention_loop_idiom.py": "e668f8cb82c0865614d7a971fd6bf0d6f81e013d23d0623d470c7dbac09425c3"
+}

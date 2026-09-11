@@ -27,7 +27,7 @@ def test_native_pool_replay(mode):
         replace(program, width=5).validate()
 
 
-@pytest.mark.parametrize('mode',['allocate','collect','graph','mark','collect_seeded'])
+@pytest.mark.parametrize('mode',['allocate','collect','graph','mark','collect_seeded','collect_slice','graph_checked','retire','reclaim','pin','unpin','allocate_marked','graph_incremental','mark_begin','mark_step','retire_marked','reclaim_pinned','atomic_graph_incremental','atomic_retire_marked'])
 def test_byte_object_graph_native_replay(mode):
     tool = find_tessera_opt()
     if tool is None or not Path('/usr/lib/llvm-23/bin/mlir-opt').exists():

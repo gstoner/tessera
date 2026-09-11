@@ -91,7 +91,7 @@ def main():
             seed_status = memory.put(np.zeros(3, np.int64))
             # A dead slot must never be traversed through an unchecked seed.
             pool._seeded.submit(s0, pool._state, pool._roots, pool._edges,
-                                pool._marks, pool._status, bad_seed, seed_status, 1).ticket.wait()
+                                pool._marks, pool._status, bad_seed, seed_status, 0, 4, 1).ticket.wait()
             with pool.read(s0) as borrowed:
                 assert memory.get(borrowed[-1])[0] == 2
                 np.testing.assert_array_equal(memory.get(borrowed[0])[:, 2], [1, 1, 0, 0])

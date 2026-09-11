@@ -17,6 +17,8 @@ _UNCERTAIN_FRAMES: list[ResidentSSDFrame] = []
 
 class ResidentSSDProgram:
     def __init__(self, logical, **options):
+        self._options = options
+        self._sum_bindings = {}
         self.forward = materialize_ssd(logical, cooperative=True, **options)
         self.reverse = materialize_ssd(logical, adjoint=True, **options)
         self._forward = self.forward.bind()
@@ -25,6 +27,13 @@ class ResidentSSDProgram:
         self.frames = []
         self.closed = False
         self._closing = False
+
+    def __call__(self, *inputs):
+        from .resident_trace import _ACTIVE_TRACE
+        recorder = _ACTIVE_TRACE.get()
+        if recorder is None:
+            raise ValueError("resident SSD calls require an explicit ResidentSSDTrace")
+        return recorder.call(self, inputs)
 
     def capture(self, *inputs):
         with self._lock:
@@ -115,7 +124,7 @@ class ResidentSSDProgram:
                 return False
             # Poll both bindings even when one unload worker is still pending.
             complete = [binding.close_if_complete(defer_unload=True)
-                        for binding in (self._reverse, self._forward)]
+                        for binding in (self._reverse, self._forward, *getattr(self, "_sum_bindings", {}).values())]
             self.closed = all(complete)
             return self.closed
 
@@ -128,6 +137,8 @@ class ResidentSSDProgram:
             if not self.closed:
                 for frame in list(self.frames):
                     frame.close()
+                for binding in getattr(self, "_sum_bindings", {}).values():
+                    binding.close()
                 self._reverse.close()
                 self._forward.close()
                 self.closed = True
@@ -305,6 +316,50 @@ class ResidentSSDFrame:
             if self in self.owner.frames:
                 self.owner.frames.remove(self)
             return True
+
+    def sum_terms(self, stream, terms):
+        """Accumulate projected cotangents in fixed traversal order on-device."""
+        from contextlib import ExitStack
+        from .native_reader_retirement import TrackedDerivativeGeneration, _stream
+        from .resident_gradient_sum import bind_gradient_sum
+        from .native_gpu_tensor import TensorSubmission
+        from .native_reader_retirement import _record
+        stream = _stream(stream)
+        if not terms:
+            raise ValueError("cotangent accumulation requires at least one term")
+        current = terms[0]
+        with self._lock:
+            self._ready()
+            for other in terms[1:]:
+                with ExitStack() as leases:
+                    left = leases.enter_context(current[0].read(stream))[current[1]]
+                    right = leases.enter_context(other[0].read(stream))[other[1]]
+                    shape = tuple(left.__cuda_array_interface__["shape"])
+                    if shape != tuple(right.__cuda_array_interface__["shape"]):
+                        raise ValueError("cotangent sum shape disagrees")
+                    binding = self.owner._sum_bindings.get(shape)
+                    if binding is None:
+                        binding = bind_gradient_sum(shape, **self.owner._options)
+                        self.owner._sum_bindings[shape] = binding
+                    output = _Buffer(self, shape, stream=stream)
+                    try:
+                        submission = binding.submit(stream, left, right, output, 1)
+                    except BaseException:
+                        # Retain a completion dependency for an uncertain launch;
+                        # frame retirement must not free the newly allocated output.
+                        pending: list = []
+                        try:
+                            _record(self.owner._forward._bound, stream, (self,), pending)
+                        finally:
+                            if pending:
+                                failed = TrackedDerivativeGeneration(self, TensorSubmission(pending[-1], ()),
+                                                                     (output,), self.owner._forward._bound)
+                                self._submissions.append(failed)
+                        raise
+                    result = TrackedDerivativeGeneration(self, submission, (output,), binding._bound)
+                    self._submissions.append(result)
+                    current = (result, 0)
+        return current
 
     def backward(self, cotangent, *, carry_cotangent=None, checkpoint_cotangent=None):
         with self.owner._lock:

@@ -1,0 +1,8 @@
+{
+  "benchmarks/attribute_ssd_cuda.py": "1cbd37cea95137c0c80c364e7f2c64159ec0d4ee35516f191216daa24a8d0572",
+  "benchmarks/record_ssd_gpu.py": "0fb9f6db0212605439dc87ac436c0a6501a7ec53c1ed787e235c228ef8ae928f",
+  "benchmarks/Tessera_SuperBench/benches/kernel/ssd_native.py": "48b4a059d27c74d6ef965070c78604a0260098f5c5db3cfcf7ff2175f75f4e45",
+  "benchmarks/native_ann_adapter.py": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+  "python/tessera/compiler/native_ssd.py": "ff24f9f35ac348e62035c1d7c309caae952fabde9dfc7f3ef0a832263b67776f",
+  "python/tessera/compiler/profiler_cuda_window.py": "c8e4749b15c003f4177d14fa786f297f9bc533ff1d107d0fdde581af46cd9100"
+}

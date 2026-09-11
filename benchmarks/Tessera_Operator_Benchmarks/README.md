@@ -8,7 +8,7 @@ It focuses on *operator-level* kernels with controlled inputs, sweep configs, CS
 **Key goals**
 - Comparable numbers across CPU/GPU/accelerators via a unified harness.
 - Clean separation between CPU reference timing, Tessera compiler artifacts, and
-  future Tessera runtime execution.
+  CPU runtime bridge execution and future native package execution.
 - Reproducible sweeps with YAML configs and seeded RNG.
 - Reference implementations for correctness checks.
 - Shared `tessera.telemetry.v1` events in JSON rows and sweep summaries.
@@ -21,7 +21,6 @@ ops/             # individual operators (matmul, conv2d, attention, …)
 mlir/            # Tessera IR samples for each op
 scripts/         # python sweeps, Tessera bridge, CSV/HTML report tools
 docs/            # spec split into two parts (merge markers included)
-.github/workflows# CI example
 ```
 
 **Quick start**
@@ -67,6 +66,13 @@ Known gaps:
   validation now uses generated bundles.
 - CSV output keeps nested telemetry as JSON-like strings for spreadsheet
   compatibility; use `results.json` for structured telemetry analysis.
+
+**Design references**
+
+The split specs and static MLIR samples are retained design/fixture material;
+they do not certify the current compiler routes. See the
+[alignment review](../COMPILER_ALIGNMENT.md). The Python bridge currently times
+one CPU-oriented launch; it is not a native GPU performance harness.
 
 **Merging the docs**
 The spec is split into two markdowns. Merge between markers:

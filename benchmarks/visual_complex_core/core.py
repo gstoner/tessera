@@ -260,20 +260,24 @@ class VisualComplexCoreResult:
     determinism_ok: bool
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {**asdict(self), "execution_kind": "unknown",
+                "timing_domain": "host_wall_composition", "promotion_eligible": False,
+                "bandwidth_kind": "estimated_logical_bytes"}
 
 
 class VisualComplexCoreBenchmark:
     """Small CPU/reference benchmark for the cross-lane composition."""
 
-    BACKEND = "tessera-reference"
+    BACKEND = "tessera-library"
     OP = "visual_complex_core_forward"
-    DEVICE = "cpu"
+    DEVICE = "unattributed"
     VERSION = "pre-alpha"
 
     def __init__(self, *, warmup: int = 1, reps: int = 3):
         self.warmup = int(warmup)
         self.reps = int(reps)
+        if self.warmup < 0 or self.reps <= 0:
+            raise ValueError("warmup must be nonnegative and reps positive")
 
     def run_one(self, cfg: VisualComplexCoreConfig) -> VisualComplexCoreResult:
         model = VisualComplexCoreModel(cfg)

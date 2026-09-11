@@ -1,0 +1,5731 @@
+{
+  "schema": 1,
+  "sample_id": "ssd-calibration-wave",
+  "capture_sha256": "d377b8272f5227926b02ab41a1fb0e455f428ffb2298f8c167d300beaf15817b",
+  "source": {
+    "source_commit": "087e2dd438914fe0fcf107a65030e246bd2ac73b",
+    "worktree_dirty": true,
+    "execution_environment": "wsl2"
+  },
+  "capture_device": {
+    "device": 0,
+    "architecture": "sm_120",
+    "uuid": "cba12639-821a-7a10-4cd3-f918f9c0a545"
+  },
+  "clean": {
+    "schema": 1,
+    "backend": "nvidia",
+    "architecture": "sm_120",
+    "compiler_sha256": "ff5c064adcde74e349452d9810f7ed8084e6a12e7d6a43d78dde5fa13cfed51d",
+    "shape": [
+      32,
+      2,
+      16,
+      4
+    ],
+    "clock": "CUDA events",
+    "execution": "native_gpu",
+    "cooperative": true,
+    "rows": [
+      {
+        "chunk": 8,
+        "binding_ms": 384.01605899707647,
+        "checked_call_ms": 3.777336998609826,
+        "device_event_ms": [
+          0.013692480325698853,
+          0.014766720533370971,
+          0.01445855975151062,
+          0.013957439661026002,
+          0.01384384036064148,
+          0.01394495964050293,
+          0.015081280469894409
+        ],
+        "device_event_median_ms": 0.013957439661026002,
+        "max_abs_errors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "binding_digest": "a7241464fa2b59dc313cd0f3ca81c240c282f2b0d96507f937fbf4b889c785d5",
+        "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+      }
+    ],
+    "promotion_eligible": false
+  },
+  "profiled": {
+    "schema": 1,
+    "backend": "nvidia",
+    "architecture": "sm_120",
+    "compiler_sha256": "ff5c064adcde74e349452d9810f7ed8084e6a12e7d6a43d78dde5fa13cfed51d",
+    "shape": [
+      32,
+      2,
+      16,
+      4
+    ],
+    "clock": "CUDA events",
+    "execution": "native_gpu",
+    "cooperative": true,
+    "rows": [
+      {
+        "chunk": 8,
+        "binding_ms": 702.3867499956395,
+        "checked_call_ms": 5.209779003052972,
+        "device_event_ms": [
+          0.012644159793853759,
+          0.03253216028213501,
+          0.03016767978668213,
+          0.02731872081756592,
+          0.025322558879852294,
+          0.02990432024002075,
+          0.024499199390411376
+        ],
+        "device_event_median_ms": 0.02731872081756592,
+        "max_abs_errors": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "binding_digest": "a7241464fa2b59dc313cd0f3ca81c240c282f2b0d96507f937fbf4b889c785d5",
+        "image_sha256": "47ccfcefc9ce90d0fb44e1623a7147ee2a973b559914b787d6493145315e20d5"
+      }
+    ],
+    "promotion_eligible": false
+  },
+  "kernels": [
+    {
+      "start": 6526756066,
+      "end": 6526764034,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539687905,
+      "end": 6539695713,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539728416,
+      "end": 6539735424,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539739200,
+      "end": 6539746048,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539788608,
+      "end": 6539795424,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539799616,
+      "end": 6539806464,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539831903,
+      "end": 6539838751,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539842623,
+      "end": 6539849471,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539851135,
+      "end": 6539857983,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539860159,
+      "end": 6539867007,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539869535,
+      "end": 6539876383,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539877759,
+      "end": 6539884607,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539886431,
+      "end": 6539893279,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539895679,
+      "end": 6539902559,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539904351,
+      "end": 6539911231,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539913727,
+      "end": 6539920575,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539957247,
+      "end": 6539964095,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539967582,
+      "end": 6539974430,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6539976062,
+      "end": 6539982910,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540010590,
+      "end": 6540017438,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540021022,
+      "end": 6540027870,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540028798,
+      "end": 6540035646,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540058366,
+      "end": 6540065214,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540068958,
+      "end": 6540075806,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540077534,
+      "end": 6540084414,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540086654,
+      "end": 6540093502,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540115517,
+      "end": 6540122365,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540126237,
+      "end": 6540133085,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540134749,
+      "end": 6540141597,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540143805,
+      "end": 6540150653,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540153245,
+      "end": 6540160093,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540162301,
+      "end": 6540169149,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540171645,
+      "end": 6540178493,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540179837,
+      "end": 6540186685,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540188221,
+      "end": 6540195069,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540198397,
+      "end": 6540205245,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540208637,
+      "end": 6540215485,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540218749,
+      "end": 6540225597,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540226941,
+      "end": 6540233788,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540235260,
+      "end": 6540242108,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540245372,
+      "end": 6540252220,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540253692,
+      "end": 6540260540,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540265500,
+      "end": 6540272348,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540274044,
+      "end": 6540280892,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540283100,
+      "end": 6540289948,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540292508,
+      "end": 6540299356,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540300636,
+      "end": 6540307516,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540309052,
+      "end": 6540315900,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540319292,
+      "end": 6540326140,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540328828,
+      "end": 6540335676,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540337020,
+      "end": 6540343900,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540345724,
+      "end": 6540352572,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540354748,
+      "end": 6540361596,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540364347,
+      "end": 6540371195,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540374619,
+      "end": 6540381467,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540384635,
+      "end": 6540391483,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540393307,
+      "end": 6540400123,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540403099,
+      "end": 6540409947,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540411675,
+      "end": 6540418555,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540421595,
+      "end": 6540428475,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540429691,
+      "end": 6540436539,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540438011,
+      "end": 6540444859,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540448251,
+      "end": 6540455099,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540458587,
+      "end": 6540465435,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540468731,
+      "end": 6540475611,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540478331,
+      "end": 6540485179,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540513658,
+      "end": 6540520506,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540523546,
+      "end": 6540530394,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540531610,
+      "end": 6540538458,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540563450,
+      "end": 6540570298,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540574266,
+      "end": 6540581114,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540584122,
+      "end": 6540590970,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540612250,
+      "end": 6540619130,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540622874,
+      "end": 6540629721,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540631929,
+      "end": 6540638809,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540651577,
+      "end": 6540658425,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540663449,
+      "end": 6540670297,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540674041,
+      "end": 6540680889,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540682649,
+      "end": 6540689497,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540690937,
+      "end": 6540697785,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540701209,
+      "end": 6540708057,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540711289,
+      "end": 6540718137,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540719609,
+      "end": 6540726457,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540730009,
+      "end": 6540736889,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540739961,
+      "end": 6540746809,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540748345,
+      "end": 6540755193,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540758489,
+      "end": 6540765368,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540766552,
+      "end": 6540773432,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540775288,
+      "end": 6540782136,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540785176,
+      "end": 6540792024,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540795384,
+      "end": 6540802232,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540805016,
+      "end": 6540811864,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540813208,
+      "end": 6540820056,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540821368,
+      "end": 6540828248,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540847544,
+      "end": 6540854392,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540855768,
+      "end": 6540862616,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540864120,
+      "end": 6540870968,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540874296,
+      "end": 6540881144,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540883832,
+      "end": 6540890712,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540915095,
+      "end": 6540921943,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6540925495,
+      "end": 6540932343,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541239221,
+      "end": 6541246069,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541327828,
+      "end": 6541334708,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541337588,
+      "end": 6541344468,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541356500,
+      "end": 6541363348,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541435795,
+      "end": 6541442643,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541449683,
+      "end": 6541456531,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541459603,
+      "end": 6541466451,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541529139,
+      "end": 6541535987,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541549267,
+      "end": 6541556115,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541612242,
+      "end": 6541619122,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541675762,
+      "end": 6541682610,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541685810,
+      "end": 6541692658,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541714577,
+      "end": 6541721425,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541725745,
+      "end": 6541732593,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541762641,
+      "end": 6541769489,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541772785,
+      "end": 6541779633,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541782417,
+      "end": 6541789265,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541790705,
+      "end": 6541797585,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541801009,
+      "end": 6541807889,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541811089,
+      "end": 6541817969,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541819441,
+      "end": 6541826288,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541829936,
+      "end": 6541836784,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541839888,
+      "end": 6541846768,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541849488,
+      "end": 6541856304,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541857648,
+      "end": 6541864528,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541865840,
+      "end": 6541872688,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541945456,
+      "end": 6541952304,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541956144,
+      "end": 6541962991,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6541973007,
+      "end": 6541979855,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542074607,
+      "end": 6542081455,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542085327,
+      "end": 6542092174,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542096302,
+      "end": 6542103182,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542270797,
+      "end": 6542277677,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542280685,
+      "end": 6542287533,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542298861,
+      "end": 6542305709,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542391436,
+      "end": 6542398284,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542402540,
+      "end": 6542409388,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542412780,
+      "end": 6542419660,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542460108,
+      "end": 6542466956,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542489068,
+      "end": 6542495915,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542500875,
+      "end": 6542507755,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542510987,
+      "end": 6542517835,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542521995,
+      "end": 6542528843,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542530923,
+      "end": 6542537771,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542545579,
+      "end": 6542552427,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542556171,
+      "end": 6542563019,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542564715,
+      "end": 6542571563,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542583275,
+      "end": 6542590123,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542662570,
+      "end": 6542669418,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542672906,
+      "end": 6542679754,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542680970,
+      "end": 6542687818,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542755882,
+      "end": 6542762761,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542766025,
+      "end": 6542772873,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542947176,
+      "end": 6542954024,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542957576,
+      "end": 6542964456,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6542976616,
+      "end": 6542983464,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543077671,
+      "end": 6543084519,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543088647,
+      "end": 6543095495,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543098951,
+      "end": 6543105799,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543157190,
+      "end": 6543164038,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543217638,
+      "end": 6543224518,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543227942,
+      "end": 6543234822,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543238374,
+      "end": 6543245222,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543271078,
+      "end": 6543277926,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543281478,
+      "end": 6543288358,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543290501,
+      "end": 6543297349,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543299941,
+      "end": 6543306821,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543307653,
+      "end": 6543314501,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543347397,
+      "end": 6543354245,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543358181,
+      "end": 6543365061,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543366501,
+      "end": 6543373349,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543375941,
+      "end": 6543382789,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543384933,
+      "end": 6543391781,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543393093,
+      "end": 6543399973,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543400837,
+      "end": 6543407653,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543411077,
+      "end": 6543417925,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543626851,
+      "end": 6543633699,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543637475,
+      "end": 6543644355,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543646883,
+      "end": 6543653731,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543716898,
+      "end": 6543723746,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543748066,
+      "end": 6543754946,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543826145,
+      "end": 6543832993,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543837217,
+      "end": 6543844065,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543847329,
+      "end": 6543854177,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543855969,
+      "end": 6543862817,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543943233,
+      "end": 6543950081,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543953888,
+      "end": 6543960736,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6543963456,
+      "end": 6543970304,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544146015,
+      "end": 6544152863,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544156735,
+      "end": 6544163583,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544172479,
+      "end": 6544179327,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544249150,
+      "end": 6544255998,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544260542,
+      "end": 6544267390,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544271230,
+      "end": 6544278110,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544343390,
+      "end": 6544350270,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544353245,
+      "end": 6544360093,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544407837,
+      "end": 6544414685,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544418333,
+      "end": 6544425181,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544428189,
+      "end": 6544435037,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544436573,
+      "end": 6544443421,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544536572,
+      "end": 6544543420,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544546748,
+      "end": 6544553628,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544556412,
+      "end": 6544563260,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544577212,
+      "end": 6544584060,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544587676,
+      "end": 6544594556,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544595868,
+      "end": 6544602748,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544609820,
+      "end": 6544616700,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544703131,
+      "end": 6544709979,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544729403,
+      "end": 6544736283,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544808634,
+      "end": 6544815482,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544819226,
+      "end": 6544826106,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544827258,
+      "end": 6544834106,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544912025,
+      "end": 6544918873,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6544922585,
+      "end": 6544929433,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545013177,
+      "end": 6545020056,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545023000,
+      "end": 6545029848,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545033432,
+      "end": 6545040312,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545110648,
+      "end": 6545117528,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545121240,
+      "end": 6545128088,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545136728,
+      "end": 6545143576,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545214743,
+      "end": 6545221591,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545227607,
+      "end": 6545234455,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545238135,
+      "end": 6545244983,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545297142,
+      "end": 6545303990,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545327318,
+      "end": 6545334198,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545408598,
+      "end": 6545415446,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545419221,
+      "end": 6545426069,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545427797,
+      "end": 6545434645,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545438133,
+      "end": 6545444981,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545517045,
+      "end": 6545523893,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545527765,
+      "end": 6545534645,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545537941,
+      "end": 6545544789,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545598388,
+      "end": 6545605236,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545623988,
+      "end": 6545630836,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545698387,
+      "end": 6545705235,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545709043,
+      "end": 6545715891,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545726195,
+      "end": 6545733043,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545802387,
+      "end": 6545809267,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545812499,
+      "end": 6545819378,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545821554,
+      "end": 6545828402,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545849138,
+      "end": 6545855986,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545859506,
+      "end": 6545866354,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545868114,
+      "end": 6545874962,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545877138,
+      "end": 6545884018,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545886578,
+      "end": 6545893426,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545907922,
+      "end": 6545914770,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545917970,
+      "end": 6545924850,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545928434,
+      "end": 6545935282,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6545937746,
+      "end": 6545944594,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546033521,
+      "end": 6546040401,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546054897,
+      "end": 6546061777,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546119664,
+      "end": 6546126512,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546143440,
+      "end": 6546150288,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546210512,
+      "end": 6546217359,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546231407,
+      "end": 6546238255,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546295727,
+      "end": 6546302607,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546321263,
+      "end": 6546328111,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546395758,
+      "end": 6546402606,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546406926,
+      "end": 6546413806,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546417070,
+      "end": 6546423950,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546491501,
+      "end": 6546498381,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546501581,
+      "end": 6546508461,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546568557,
+      "end": 6546575437,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546594893,
+      "end": 6546601773,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546673932,
+      "end": 6546680780,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546683820,
+      "end": 6546690700,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546692972,
+      "end": 6546699820,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546766315,
+      "end": 6546773163,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546777035,
+      "end": 6546783915,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546851435,
+      "end": 6546858315,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546917418,
+      "end": 6546924266,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546927658,
+      "end": 6546934506,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546936138,
+      "end": 6546942986,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546945354,
+      "end": 6546952202,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6546993002,
+      "end": 6546999850,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547003370,
+      "end": 6547010218,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547013033,
+      "end": 6547019913,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547038505,
+      "end": 6547045353,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547048457,
+      "end": 6547055337,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547057065,
+      "end": 6547063913,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547066249,
+      "end": 6547073097,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547074537,
+      "end": 6547081385,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547085321,
+      "end": 6547092201,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547094889,
+      "end": 6547101737,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547103145,
+      "end": 6547109993,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547111209,
+      "end": 6547118089,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547119561,
+      "end": 6547126409,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547127721,
+      "end": 6547134601,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547135337,
+      "end": 6547142185,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547145704,
+      "end": 6547152552,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547210568,
+      "end": 6547217416,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547231496,
+      "end": 6547238376,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547293895,
+      "end": 6547300743,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547318983,
+      "end": 6547325831,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547389031,
+      "end": 6547395879,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547399719,
+      "end": 6547406567,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547417478,
+      "end": 6547424326,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547513766,
+      "end": 6547520646,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547525606,
+      "end": 6547532486,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547535430,
+      "end": 6547542278,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547626885,
+      "end": 6547633733,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547704580,
+      "end": 6547711428,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547725796,
+      "end": 6547732644,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547788772,
+      "end": 6547795620,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547814211,
+      "end": 6547821059,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547890435,
+      "end": 6547897315,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547900419,
+      "end": 6547907267,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547909411,
+      "end": 6547916259,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547985794,
+      "end": 6547992642,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6547995714,
+      "end": 6548002562,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548011906,
+      "end": 6548018754,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548095073,
+      "end": 6548101953,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548106721,
+      "end": 6548113569,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548117377,
+      "end": 6548124225,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548192513,
+      "end": 6548199393,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548202465,
+      "end": 6548209312,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548221248,
+      "end": 6548228096,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548297632,
+      "end": 6548304480,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548307936,
+      "end": 6548314816,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548316000,
+      "end": 6548322848,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548393535,
+      "end": 6548400415,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548404159,
+      "end": 6548411039,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548457599,
+      "end": 6548464447,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548467679,
+      "end": 6548474527,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548476734,
+      "end": 6548483614,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548506910,
+      "end": 6548513790,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548516830,
+      "end": 6548523710,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548524894,
+      "end": 6548531742,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548554142,
+      "end": 6548561022,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548564990,
+      "end": 6548571838,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548574046,
+      "end": 6548580894,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548605854,
+      "end": 6548612701,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548616157,
+      "end": 6548623005,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548624701,
+      "end": 6548631549,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548633757,
+      "end": 6548640605,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548643133,
+      "end": 6548649981,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548651421,
+      "end": 6548658301,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548659613,
+      "end": 6548666493,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548667837,
+      "end": 6548674717,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548678077,
+      "end": 6548684957,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548688285,
+      "end": 6548695133,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548696637,
+      "end": 6548703485,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548706749,
+      "end": 6548713629,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548716381,
+      "end": 6548723229,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548724541,
+      "end": 6548731421,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548732733,
+      "end": 6548739613,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548740956,
+      "end": 6548747804,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548817756,
+      "end": 6548824604,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548843292,
+      "end": 6548850140,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548919995,
+      "end": 6548926843,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6548930555,
+      "end": 6548937435,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549020826,
+      "end": 6549027674,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549030906,
+      "end": 6549037754,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549045018,
+      "end": 6549051866,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549118906,
+      "end": 6549125754,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549129434,
+      "end": 6549136314,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549147385,
+      "end": 6549154265,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549249465,
+      "end": 6549256345,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549261305,
+      "end": 6549268185,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549271417,
+      "end": 6549278264,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549331960,
+      "end": 6549338808,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549357560,
+      "end": 6549364408,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549523831,
+      "end": 6549530679,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549533655,
+      "end": 6549540502,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549582550,
+      "end": 6549589398,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549593078,
+      "end": 6549599958,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549601078,
+      "end": 6549607958,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549629910,
+      "end": 6549636790,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549640150,
+      "end": 6549646998,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549649206,
+      "end": 6549656086,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549677749,
+      "end": 6549684597,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549688277,
+      "end": 6549695157,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549698709,
+      "end": 6549705557,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549731125,
+      "end": 6549737973,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549741557,
+      "end": 6549748405,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549750005,
+      "end": 6549756885,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549759285,
+      "end": 6549766133,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549767669,
+      "end": 6549774517,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549777941,
+      "end": 6549784789,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549787989,
+      "end": 6549794837,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549796693,
+      "end": 6549803541,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549806516,
+      "end": 6549813364,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549816916,
+      "end": 6549823796,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549826900,
+      "end": 6549833780,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549835028,
+      "end": 6549841876,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549843508,
+      "end": 6549850356,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549853012,
+      "end": 6549859860,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549861172,
+      "end": 6549868052,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549924020,
+      "end": 6549930868,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6549949491,
+      "end": 6549956339,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550021491,
+      "end": 6550028371,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550031283,
+      "end": 6550038131,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550049203,
+      "end": 6550056051,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550150482,
+      "end": 6550157362,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550161330,
+      "end": 6550168210,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550171506,
+      "end": 6550178354,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550231921,
+      "end": 6550238769,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550257521,
+      "end": 6550264369,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550330321,
+      "end": 6550337168,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550340592,
+      "end": 6550347440,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550445872,
+      "end": 6550452752,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550525583,
+      "end": 6550532431,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550536143,
+      "end": 6550543023,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550547343,
+      "end": 6550554191,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550614606,
+      "end": 6550621454,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550673614,
+      "end": 6550680462,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550683630,
+      "end": 6550690510,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550691662,
+      "end": 6550698510,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550721646,
+      "end": 6550728494,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550731726,
+      "end": 6550738573,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550739789,
+      "end": 6550746637,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550773389,
+      "end": 6550780269,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550784013,
+      "end": 6550790861,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550793517,
+      "end": 6550800397,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550822509,
+      "end": 6550829357,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550833101,
+      "end": 6550839949,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550841645,
+      "end": 6550848493,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550851341,
+      "end": 6550858221,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550861389,
+      "end": 6550868237,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550871532,
+      "end": 6550878412,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550881580,
+      "end": 6550888428,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550889868,
+      "end": 6550896748,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550900236,
+      "end": 6550907084,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550910476,
+      "end": 6550917356,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550919980,
+      "end": 6550926828,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550928172,
+      "end": 6550935052,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550936396,
+      "end": 6550943244,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550944588,
+      "end": 6550951436,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6550952748,
+      "end": 6550959628,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551046827,
+      "end": 6551053707,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551057387,
+      "end": 6551064235,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551068523,
+      "end": 6551075371,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551136106,
+      "end": 6551142986,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551156746,
+      "end": 6551163594,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551221066,
+      "end": 6551227914,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551246602,
+      "end": 6551253450,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551323081,
+      "end": 6551329929,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551335177,
+      "end": 6551342057,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551345385,
+      "end": 6551352233,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551415688,
+      "end": 6551422568,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551435944,
+      "end": 6551442792,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551536583,
+      "end": 6551543431,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551546823,
+      "end": 6551553703,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551626023,
+      "end": 6551632871,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551647783,
+      "end": 6551654631,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551715430,
+      "end": 6551722278,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551778214,
+      "end": 6551785062,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551788550,
+      "end": 6551795398,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551797542,
+      "end": 6551804421,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551831589,
+      "end": 6551838469,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551841669,
+      "end": 6551848517,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551849797,
+      "end": 6551856645,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551858469,
+      "end": 6551865317,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551916581,
+      "end": 6551923461,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551927429,
+      "end": 6551934276,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551936292,
+      "end": 6551943140,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551945348,
+      "end": 6551952196,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551955396,
+      "end": 6551962276,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551965252,
+      "end": 6551972132,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551975236,
+      "end": 6551982084,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551983492,
+      "end": 6551990340,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551991684,
+      "end": 6551998564,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6551999972,
+      "end": 6552006820,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552009540,
+      "end": 6552016388,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552017700,
+      "end": 6552024580,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552025892,
+      "end": 6552032772,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552034116,
+      "end": 6552040964,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552042308,
+      "end": 6552049156,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552139907,
+      "end": 6552146755,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552149955,
+      "end": 6552156803,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552164259,
+      "end": 6552171107,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552238786,
+      "end": 6552245634,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552249250,
+      "end": 6552256130,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552264706,
+      "end": 6552271586,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552341825,
+      "end": 6552348673,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552352705,
+      "end": 6552359553,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552362817,
+      "end": 6552369697,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552435425,
+      "end": 6552442273,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552454689,
+      "end": 6552461537,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552514560,
+      "end": 6552521408,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552542112,
+      "end": 6552548960,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552621503,
+      "end": 6552628351,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552632319,
+      "end": 6552639167,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552640287,
+      "end": 6552647167,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552717951,
+      "end": 6552724831,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552728543,
+      "end": 6552735390,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552774782,
+      "end": 6552781630,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552784862,
+      "end": 6552791742,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552792862,
+      "end": 6552799742,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552825182,
+      "end": 6552832062,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552834942,
+      "end": 6552841790,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552843550,
+      "end": 6552850398,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552875197,
+      "end": 6552882077,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552885213,
+      "end": 6552892061,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552893725,
+      "end": 6552900573,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552914621,
+      "end": 6552921501,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552925085,
+      "end": 6552931933,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552933629,
+      "end": 6552940509,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552942877,
+      "end": 6552949725,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6552952093,
+      "end": 6552958941,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553068572,
+      "end": 6553075452,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553158107,
+      "end": 6553164955,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553168859,
+      "end": 6553175707,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553183291,
+      "end": 6553190171,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553256635,
+      "end": 6553263514,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553267130,
+      "end": 6553274010,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553284090,
+      "end": 6553290970,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553359738,
+      "end": 6553366618,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553372314,
+      "end": 6553379162,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553383162,
+      "end": 6553390042,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553442841,
+      "end": 6553449689,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553468281,
+      "end": 6553475129,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553539992,
+      "end": 6553546840,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553550776,
+      "end": 6553557624,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553567064,
+      "end": 6553573912,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553645016,
+      "end": 6553651864,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553655224,
+      "end": 6553662071,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553667863,
+      "end": 6553674743,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553741527,
+      "end": 6553748375,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553751511,
+      "end": 6553758391,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553822358,
+      "end": 6553829238,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553847862,
+      "end": 6553854710,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553916086,
+      "end": 6553922966,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6553926614,
+      "end": 6553933461,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554002677,
+      "end": 6554009525,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554023157,
+      "end": 6554030037,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554088852,
+      "end": 6554095732,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554112564,
+      "end": 6554119444,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554185844,
+      "end": 6554192692,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554196371,
+      "end": 6554203251,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554247987,
+      "end": 6554254835,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554258771,
+      "end": 6554265619,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554267923,
+      "end": 6554274771,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554297779,
+      "end": 6554304659,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554308531,
+      "end": 6554315411,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554318195,
+      "end": 6554325043,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554326258,
+      "end": 6554333106,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554381618,
+      "end": 6554388466,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554391538,
+      "end": 6554398386,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554400018,
+      "end": 6554406866,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554409298,
+      "end": 6554416146,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554417682,
+      "end": 6554424530,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554428466,
+      "end": 6554435346,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554437938,
+      "end": 6554444786,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554446194,
+      "end": 6554453042,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554454290,
+      "end": 6554461137,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554462577,
+      "end": 6554469425,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554470193,
+      "end": 6554477041,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554478353,
+      "end": 6554485201,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554486545,
+      "end": 6554493425,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554574993,
+      "end": 6554581873,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554585009,
+      "end": 6554591888,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554603152,
+      "end": 6554610032,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554680848,
+      "end": 6554687728,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554691600,
+      "end": 6554698480,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554699568,
+      "end": 6554706416,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554776815,
+      "end": 6554783663,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554786735,
+      "end": 6554793615,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6554811055,
+      "end": 6554817903,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555024045,
+      "end": 6555030893,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555035565,
+      "end": 6555042445,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555046317,
+      "end": 6555053165,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555055373,
+      "end": 6555062221,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555063789,
+      "end": 6555070637,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555074061,
+      "end": 6555080909,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555083533,
+      "end": 6555090413,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555091757,
+      "end": 6555098605,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555099949,
+      "end": 6555106797,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555108109,
+      "end": 6555114957,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555166060,
+      "end": 6555172940,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555176908,
+      "end": 6555183756,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555187020,
+      "end": 6555193900,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555195660,
+      "end": 6555202540,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555235212,
+      "end": 6555242092,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555245516,
+      "end": 6555252364,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555254028,
+      "end": 6555260875,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555263691,
+      "end": 6555270571,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555273483,
+      "end": 6555280363,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555281675,
+      "end": 6555288523,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555290187,
+      "end": 6555297035,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555300203,
+      "end": 6555307051,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555307787,
+      "end": 6555314667,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555318187,
+      "end": 6555325035,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555429354,
+      "end": 6555436234,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555440042,
+      "end": 6555446922,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555448586,
+      "end": 6555455434,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555540361,
+      "end": 6555547209,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555560937,
+      "end": 6555567785,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555571017,
+      "end": 6555577865,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555673480,
+      "end": 6555680360,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555683752,
+      "end": 6555690600,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555693512,
+      "end": 6555700360,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555755432,
+      "end": 6555762280,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555780808,
+      "end": 6555787656,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555859655,
+      "end": 6555866535,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555870119,
+      "end": 6555876999,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555878823,
+      "end": 6555885671,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555958086,
+      "end": 6555964934,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555968390,
+      "end": 6555975270,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6555984614,
+      "end": 6555991494,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556161765,
+      "end": 6556168613,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556240996,
+      "end": 6556247844,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556251076,
+      "end": 6556257956,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556259108,
+      "end": 6556265956,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556303332,
+      "end": 6556310180,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556313476,
+      "end": 6556320324,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556322051,
+      "end": 6556328899,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556353347,
+      "end": 6556360195,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556364003,
+      "end": 6556370851,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556371715,
+      "end": 6556378595,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556395171,
+      "end": 6556402019,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556405667,
+      "end": 6556412547,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556442243,
+      "end": 6556449091,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556452771,
+      "end": 6556459650,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556461410,
+      "end": 6556468258,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556469602,
+      "end": 6556476482,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556479938,
+      "end": 6556486786,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556490178,
+      "end": 6556497058,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556500258,
+      "end": 6556507106,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556508514,
+      "end": 6556515394,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556516802,
+      "end": 6556523650,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556527042,
+      "end": 6556533890,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556537218,
+      "end": 6556544066,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556547330,
+      "end": 6556554178,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556555522,
+      "end": 6556562370,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556563842,
+      "end": 6556570690,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556573474,
+      "end": 6556580322,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556581666,
+      "end": 6556588513,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556665953,
+      "end": 6556672769,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556686369,
+      "end": 6556693217,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556754752,
+      "end": 6556761600,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556778496,
+      "end": 6556785344,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556852064,
+      "end": 6556858943,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556861567,
+      "end": 6556868415,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556872479,
+      "end": 6556879327,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6556952543,
+      "end": 6556959423,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557029854,
+      "end": 6557036702,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557055742,
+      "end": 6557062590,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557132765,
+      "end": 6557139645,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557143741,
+      "end": 6557150589,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557154013,
+      "end": 6557160893,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557230461,
+      "end": 6557237309,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557241245,
+      "end": 6557248125,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557255260,
+      "end": 6557262140,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557330428,
+      "end": 6557337276,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557340508,
+      "end": 6557347388,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557355292,
+      "end": 6557362172,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557432059,
+      "end": 6557438939,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557478619,
+      "end": 6557485467,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557490331,
+      "end": 6557497179,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557527898,
+      "end": 6557534746,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557538234,
+      "end": 6557545114,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557547130,
+      "end": 6557553978,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557557018,
+      "end": 6557563866,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557608314,
+      "end": 6557615194,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557619098,
+      "end": 6557625946,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557627642,
+      "end": 6557634490,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557635898,
+      "end": 6557642746,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557644282,
+      "end": 6557651129,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557654489,
+      "end": 6557661337,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557664537,
+      "end": 6557671385,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557672793,
+      "end": 6557679641,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557680857,
+      "end": 6557687705,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557689177,
+      "end": 6557696025,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557696793,
+      "end": 6557703641,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557704953,
+      "end": 6557711833,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557713177,
+      "end": 6557720025,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557784344,
+      "end": 6557791192,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557809848,
+      "end": 6557816728,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557891864,
+      "end": 6557898712,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557901720,
+      "end": 6557908600,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557915192,
+      "end": 6557922071,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6557983863,
+      "end": 6557990711,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558002775,
+      "end": 6558009655,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558013239,
+      "end": 6558020087,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558113686,
+      "end": 6558120534,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558126710,
+      "end": 6558133590,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558137078,
+      "end": 6558143926,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558195029,
+      "end": 6558201877,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558220565,
+      "end": 6558227413,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558297717,
+      "end": 6558304597,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558308277,
+      "end": 6558315124,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558357172,
+      "end": 6558364020,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558367892,
+      "end": 6558374772,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558376276,
+      "end": 6558383124,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558410036,
+      "end": 6558416884,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558419860,
+      "end": 6558426740,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558428404,
+      "end": 6558435252,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558436596,
+      "end": 6558443444,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558495987,
+      "end": 6558502835,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558505843,
+      "end": 6558512723,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558514419,
+      "end": 6558521267,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558523827,
+      "end": 6558530707,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558532851,
+      "end": 6558539699,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558542099,
+      "end": 6558548947,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558550387,
+      "end": 6558557235,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558559987,
+      "end": 6558566867,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558568179,
+      "end": 6558575059,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558576403,
+      "end": 6558583250,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    },
+    {
+      "start": 6558584594,
+      "end": 6558591442,
+      "device": 0,
+      "context": 1,
+      "stream": 7,
+      "name": "product"
+    }
+  ],
+  "activity_window_ms": [
+    0.01244438,
+    0.032042,
+    0.03005706,
+    0.02720555,
+    0.02513069,
+    0.02922922,
+    0.02429677
+  ],
+  "kernel_active_ms": [
+    0.00686333,
+    0.00685499,
+    0.00685917,
+    0.00685883,
+    0.00685916,
+    0.00686106,
+    0.00685753
+  ],
+  "maximum_clock_relative_error": 0.022575341442380256,
+  "instrumentation_overhead": 1.9572874023485292,
+  "eligible_for_promotion": false,
+  "ineligibility_reasons": [
+    "profiler overhead exceeds five percent",
+    "source tree has uncommitted changes",
+    "bare-metal promotion evidence required"
+  ]
+}

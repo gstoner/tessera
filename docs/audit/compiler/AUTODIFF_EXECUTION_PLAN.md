@@ -815,3 +815,27 @@ Sync: `COMPLETION-CORPUS-2026-09-09`; live owners `W4-PRODUCT-1` / `W2.4a`.
 ## Native heap, attention and SSD follow-through (2026-09-10)
 
 `native_exception_producer.py` binds the native `tsr_exception_heap_*` C ABI. The fixed-capacity C++ heap allocates and collects actual cause/context cycles, reuses dead payload holes and rejects stale generation handles. Reads copy payload bytes; no moving storage pointer escapes. Native callers must stop using the heap before destruction. Automatic allocation/root operations from source exception IR, GPU heap execution and arbitrary Python object graphs remain open. Full CPython frames still require the native deoptimization record described above, including live SSA locals/cells, bytecode position and interpreter exception state; this allocator does not reconstruct those records.
+
+## Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+`NativeSourceStateProgram.enable_native_exception_heap(runtime=..., llvm_bin=...)` compiles its serialized static exception table to MLIR/LLVM calls into the native heap. Construction owns a fresh bounded heap; failed allocation closes it without publication. The normal exception decoder consumes copied native payloads and live cause/context edges, then releases the heap. Generated-library close is serialized against instantiation; decoded Python objects and native heap instances do not borrow that library. Runtime-valued payloads and iteration-site allocation refuse or retain their existing path; full CPython frames remain unimplemented.
+
+## Dynamic payload and checkpoint continuation (2026-09-10)
+
+Runtime numeric exception payloads now use native heap pointer/size operands with a one-MiB aggregate bound and fresh-heap failure cleanup. Source-state decoding owns the native copy before constructing host exceptions. Allocation happens at completion, not inside device loops. SSDCheckpointProgram owns a native CPU forward and chunk-recomputing VJP with cotangents for all three results; GPU backward and automatic public mixer AD remain open. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--dynamic-heap-payloads-checkpoint-ad-and-paired-measurements).
+
+## GPU frame and mixer AD continuation (2026-09-10)
+
+A native GPU payload-frame producer now executes checked numeric allocation on CUDA/HIP, with host decoding only after copied-back completion. It is preallocated single-writer frame storage with caller-provided generations; arbitrary object allocation, throw-site fusion and concurrent collection remain open. SSD checkpoint VJP now executes on both GPUs, and the native CPU owner composes Y with automatic host-tape grad. GPU-resident automatic AD and higher-order products remain open. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--gpu-payload-frames-mixer-ad-and-artifact-selection).
+
+## Reusable pools and resident AD continuation (2026-09-10)
+
+ResidentSSDProgram automatically constructs paired CUDA/HIP packages and owns private device-to-device input snapshots, checkpoints and five gradients. The synchronous first-order value_and_grad API passes finite differences on both owning GPUs, including caller mutation after capture. General tape/frontend composition, asynchronous external-reader retirement and higher-order AD remain open. Separately, the bounded numeric GPU pool now performs stop-the-world cycle collection and fixed-slot reuse; it is not a concurrent exception-object heap. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--reusable-gpu-pools-resident-ad-and-window-calibration).
+
+## Stream-owned graphs and asynchronous composition (2026-09-10)
+
+Explicit resident SSD gradients now compose asynchronously through projected read-only generations on distinct CUDA/HIP streams. Derivative retirement waits for every scoped reader; captures and whole-frame close remain synchronous. This is first-order family composition, not general public tape or higher-order AD. Resident byte-object pools now coordinate collection with readers; no arbitrary Python object traversal or concurrent mark/mutate algorithm is claimed. See [current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--stream-owned-object-graphs-asynchronous-ad-and-window-legality).
+
+### Snapshot/public-AD follow-through (2026-09-10)
+
+[Current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--snapshot-marking-public-vjp-and-additive-bias): explicit resident SSD programs now enter public `vjp` with asynchronous capture and reader-aware whole-frame retirement. This is first-order protocol dispatch, not arbitrary traced public AD. Program unloading, higher-order products and broader mixer integration remain open. Snapshot marking overlaps active graph updates by using private storage; final sweep is exclusive. Full-shape finite additive attention bias is recognized and bound on NVIDIA; Boolean/padding/broadcast masks and fully masked rows remain open. Exact-device correctness under WSL does not satisfy clean bare-metal promotion.

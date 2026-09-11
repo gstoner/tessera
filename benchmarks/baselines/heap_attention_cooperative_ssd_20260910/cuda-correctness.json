@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "architecture": "sm_120",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "shape": [
+    5,
+    2,
+    3,
+    2
+  ],
+  "clock": "CUDA events",
+  "execution": "native_gpu",
+  "cooperative": true,
+  "rows": [
+    {
+      "chunk": 1,
+      "binding_ms": 496.29401700076414,
+      "checked_call_ms": 3.8942999963182956,
+      "device_event_ms": [],
+      "device_event_median_ms": null,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "ddebd0bae1446814d56b37c9517579009da0119ff9fc592b81e82a3c41370eee",
+      "image_sha256": "758ac62952591d4ca871c39b9c3b846f5dd290da0e54fb4d606da37e55e12ee0"
+    },
+    {
+      "chunk": 2,
+      "binding_ms": 371.8059520033421,
+      "checked_call_ms": 1.2370260010357015,
+      "device_event_ms": [],
+      "device_event_median_ms": null,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "8cb5a5bbd6a8925f88435344b12d75a4832a2ead54121333c2a12f850b79bbee",
+      "image_sha256": "03f0a996cd3dd64867f80d871937cde2e44d8a113e4fd39dfb1395429116a099"
+    },
+    {
+      "chunk": 5,
+      "binding_ms": 377.32890600454994,
+      "checked_call_ms": 1.1514349971548654,
+      "device_event_ms": [],
+      "device_event_median_ms": null,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "8c7a85f28323aa79af57c54e26d08f78ebf6b23cbb38385af9cdb15ee89f0379",
+      "image_sha256": "1148253cc2afc9007cd441796dca0e77591f04256e516ddab77b8b1bc6286bfe"
+    }
+  ],
+  "promotion_eligible": false
+}

@@ -73,7 +73,8 @@ def test_generator_emits_complete_x86_packet_schema(monkeypatch) -> None:
         lambda _rt, _iterations: [{"op_name": "cumsum"}],
     )
     packet = benchmark._run("x86", "all", 4)
-    assert packet["selector_eligible"] is True
+    assert packet["selector_eligible"] is False
+    assert packet["promotion_eligible"] is False
     assert packet["storage_dtypes"] == ["f32"]
     assert len(packet["rows"]) == 7
     assert packet["scan_selector_evidence"] == [{"op_name": "cumsum"}]
@@ -106,3 +107,22 @@ def test_generator_rejects_partial_rocm_packet(monkeypatch) -> None:
     monkeypatch.setattr(benchmark, "_measure_dtype", _generated_rows)
     with pytest.raises(ValueError, match="must aggregate"):
         benchmark._run("rocm", "f32", 4)
+
+
+@pytest.mark.parametrize("kind", ["reference_cpu", None])
+def test_math_probe_rejects_unproven_native_execution(kind):
+    from types import SimpleNamespace
+    rt = SimpleNamespace(launch=lambda *args: {"ok": True, "execution_kind": kind})
+    with pytest.raises(RuntimeError, match="observed native_gpu"):
+        benchmark._checked_launch(rt, "rocm", object(), ())
+
+
+def test_math_probe_rejects_nan_and_wrong_shape(monkeypatch):
+    import numpy as np
+    from types import SimpleNamespace
+    monkeypatch.setattr(benchmark, "_cases", lambda *args: [("unary", "sqrt", (np.ones(2),), {}, lambda: np.ones(2))])
+    rt = SimpleNamespace(RuntimeArtifact=lambda **kw: kw)
+    for output in (np.array([np.nan, 1]), np.ones((1,2))):
+        rt.launch = lambda *args: {"ok": True, "execution_kind": "native_cpu", "output": output}
+        with pytest.raises(RuntimeError, match="nonfinite"):
+            benchmark._measure_dtype(rt, "x86", "f32", 1)

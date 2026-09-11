@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "execution": "native_gpu",
+  "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+  "heap_binding": "428be9b6630f2471cb86c2a2061e7672f66bfa6fcea4ad858227c55cf689637c",
+  "snapshot_marker_binding": "b13feaf6202fb18b5a6511863a80bfa855b889e5070e4639f72b1f567b48a7cd",
+  "seeded_collector_binding": "b88e1075beb6cc1aed06f1bb6db21bbadca6146a89d2ce2349b8ac49c955f8cf",
+  "discovered_collector_binding": "26063c724fe29b29033219bd86710775229017420d926772863124711113b59b",
+  "heap_allocation_binding": "9a3001cd0f717485f46df9647e0cccedf41cea6450b72f94a26df17aedea8bd9",
+  "heap_graph_binding": "224cf36b932ee64288b60f6e8b0698a7786a2d31cfd6f7cf96f68248fce971f8",
+  "forward_binding": "8a10a474f47470a4a39644d96f6fec01545c56fb41ac2f0c81ef5e4317f83e4a",
+  "backward_binding": "2c1b1f7d0e558d0cf760ac2d3d1c347668a1bc2afe284129195963020056bfca",
+  "byte_record_graph": true,
+  "reader_ordered_collection": true,
+  "snapshot_marking_with_mutation": true,
+  "public_async_vjp": true,
+  "whole_frame_async_retirement": true,
+  "async_composed_gradient_max_errors": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "promotion_eligible": false
+}

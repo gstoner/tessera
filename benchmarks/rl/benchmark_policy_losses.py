@@ -156,6 +156,14 @@ def _cispo_decomposed_loss(inputs: dict[str, np.ndarray]) -> float:
     return float(np.sum(loss * mask) / max(float(np.sum(mask)), 1.0))
 
 
+def _require_native_apple(result):
+    if not result.get("ok") or result.get("execution_kind") != "native_gpu":
+        raise RuntimeError("Apple policy benchmark requires observed native_gpu execution")
+    if not np.all(np.isfinite(np.asarray(result["output"]))):
+        raise RuntimeError("Apple policy benchmark returned nonfinite output")
+    return result
+
+
 def _apple_gpu_ppo_row(
     inputs: dict[str, np.ndarray],
     shape: tuple[int, int, int],
@@ -223,9 +231,14 @@ def _apple_gpu_ppo_row(
     }
 
     def _run():
-        return tessera_runtime.launch(artifact, args)
+        return _require_native_apple(tessera_runtime.launch(artifact, args))
 
-    first = _run()
+    try:
+        first = _run()
+    except RuntimeError as exc:
+        base["skip_reason"] = str(exc)
+        base["executor"] = None
+        return base
     base["runtime_status"] = first.get("runtime_status")
     if not first.get("ok"):
         base["skip_reason"] = str(first.get("reason", "runtime launch failed"))

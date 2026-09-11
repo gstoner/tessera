@@ -26,3 +26,7 @@ Run:
 ```bash
 PYTHONPATH=python python3 benchmarks/lattice_reasoning_core/benchmark_lattice_reasoning.py --smoke --json /tmp/tessera_lattice_reasoning_smoke.json
 ```
+
+Apple runtime-marker rows report host-wall call duration, not GPU kernel time.
+`metal_runtime` and numerical agreement do not establish calibrated clocks or
+promotion eligibility. See the [alignment review](../COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).

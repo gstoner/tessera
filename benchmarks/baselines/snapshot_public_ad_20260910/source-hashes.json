@@ -1,0 +1,13 @@
+{
+  "benchmarks/record_snapshot_public_ad.py": "385acb65f429fc4e81130df98a60a17f0c7debb727a22909db9f386c957686f8",
+  "python/tessera/control.py": "cca27196554a60237370f73299f77df5c79a9cb9904a31c195d3ea7cc6c1a033",
+  "python/tessera/compiler/object_discovery.py": "da00ed5eee13bf6de6cfcd69855498310cb85a9d4237c66e3c69159e6208a9c8",
+  "python/tessera/compiler/resident_object_pool.py": "8b42c7a43695e4e7ab1fbaf7ba6ff31533b889766c872c73d8fad69854d0b8c2",
+  "python/tessera/compiler/gpu_heap_collection.py": "c51c4e259e92c5407742a07e108023782c0e27291f7e9ce82d2f528c13e472f2",
+  "python/tessera/compiler/resident_ssd.py": "be04c9c8217fb45cced11070cf0a920ec32baee2f952bad3e330041c691937bf",
+  "python/tessera/compiler/native_reader_retirement.py": "3b556c9f8241375685bea8d5f49a4ae86ddbe14805516062c70116bed33ace23",
+  "python/tessera/compiler/native_stream_epoch.py": "aa836da71e08b40399c509bd0e6aa7e727d7ff376e18fa244281f2240a6d2dac",
+  "python/tessera/compiler/native_ssd.py": "ff24f9f35ac348e62035c1d7c309caae952fabde9dfc7f3ef0a832263b67776f",
+  "src/compiler/programming_model/lib/NativeSSD.h": "d3c4b5441aa79977aa6f29ca72a4ccfe40d8a3a9d48b99d3625e4dc810ca7255",
+  "src/transforms/lib/SymbolicDimEqualityPass.cpp": "f4b77a0ed4b93efeadf3a05292fabbc1168560b4a77f80fbb8a1a7b4cf9bed14"
+}

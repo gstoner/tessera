@@ -335,3 +335,29 @@ def test_missing_reader_event_allows_retirement_after_explicit_wait():
     assert owner.poll()
     assert sum(call[0] == 'free' for call in native.calls) == 2
     assert not owner.frame.buffers
+
+
+def test_checked_projection_keeps_status_owner(monkeypatch):
+    from tessera.compiler import native_persistent_tape as tape
+    from tessera.compiler.native_reader_retirement import CheckedTrackedDerivativeGeneration
+    base,native=setup()
+    class HashableFrame(SimpleNamespace):
+        __hash__ = object.__hash__
+    base.frame=HashableFrame(**vars(base.frame))
+    status=SimpleNamespace(pointer=ct.c_void_p(3))
+    owner=CheckedTrackedDerivativeGeneration(base.frame,base._submission,base._buffers,status,native)
+    pair=SimpleNamespace(forward=SimpleNamespace(backend='nvidia',chip='sm_120'),backward=None)
+    base.frame.pair=pair
+    frame=object.__new__(tape.PersistentTapeFrame)
+    frame.pair,frame._lock,frame._ready=pair,base.frame._lock,lambda: None
+    monkeypatch.setattr(tape,'_input_status_count',lambda _: 2)
+    def backward(stream,*values,tracked,_dependency):
+        assert stream==22 and tracked and len(values)==1
+        assert values[0]._buffer.pointer.value==2
+        assert _dependency==(owner,) and owner._active==1
+        return 'child'
+    frame.backward_async=backward
+    assert owner.backward_into(frame,22,indices=(1,))=='child'
+    assert owner._active==0 and len(owner._readers)==1
+    with pytest.raises(ValueError,match='projection'):
+        owner.backward_into(frame,22,indices=(2,))

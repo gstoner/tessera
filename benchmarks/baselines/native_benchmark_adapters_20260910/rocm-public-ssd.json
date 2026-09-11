@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+  "api": "tessera.control.vjp",
+  "execution_kind": "native_gpu",
+  "oracle": "independent_float64_central_difference",
+  "differentiated_inputs": [
+    "x",
+    "decay",
+    "b",
+    "c",
+    "initial"
+  ],
+  "rows": [
+    {
+      "shape": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "chunk": 1,
+      "seed": "ones",
+      "max_abs_errors": [
+        8.677240037613387e-10,
+        5.310359790788866e-10,
+        9.232490848221087e-10,
+        1.9722771818497797e-09,
+        4.610506247615387e-11
+      ],
+      "forward": "7d1b964374d90a4a6cf971e4d77d2234b2bf939383fcd8aa77a233b2acce2d30",
+      "reverse": "678be94c37e2a86d055dc7d1816d62756aea66d2f0c46d19fbcbc5fc7fd4fc08"
+    },
+    {
+      "shape": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "chunk": 1,
+      "seed": "signed",
+      "max_abs_errors": [
+        1.0698425131905331e-10,
+        4.08164218569651e-10,
+        1.9033219444963834e-11,
+        2.1756603853576029e-10,
+        1.7352832712425048e-11
+      ],
+      "forward": "7d1b964374d90a4a6cf971e4d77d2234b2bf939383fcd8aa77a233b2acce2d30",
+      "reverse": "678be94c37e2a86d055dc7d1816d62756aea66d2f0c46d19fbcbc5fc7fd4fc08"
+    },
+    {
+      "shape": [
+        3,
+        2,
+        2,
+        2
+      ],
+      "chunk": 2,
+      "seed": "ones",
+      "max_abs_errors": [
+        2.9368341092350647e-09,
+        2.91276198299828e-09,
+        4.436402023522135e-09,
+        6.206562262398019e-09,
+        2.1070400979539272e-09
+      ],
+      "forward": "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+      "reverse": "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179"
+    },
+    {
+      "shape": [
+        3,
+        2,
+        2,
+        2
+      ],
+      "chunk": 2,
+      "seed": "signed",
+      "max_abs_errors": [
+        2.0774674766924073e-09,
+        3.268476496398609e-09,
+        1.1066425470440677e-08,
+        4.686288988808851e-09,
+        2.7690150172787753e-09
+      ],
+      "forward": "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+      "reverse": "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179"
+    },
+    {
+      "shape": [
+        5,
+        1,
+        3,
+        2
+      ],
+      "chunk": 2,
+      "seed": "ones",
+      "max_abs_errors": [
+        1.1998603652307871e-08,
+        3.687198102397815e-09,
+        7.871179930063477e-09,
+        3.7238199190881005e-09,
+        5.641931393645175e-12
+      ],
+      "forward": "d6dbf5a17510d4c2ddb69477a359539048bdac00f92aafe50f10d8b58d9215ad",
+      "reverse": "e86ee92bb1428797decce2e30d63552928eeedffef8bf940cc1564f7511653f0"
+    },
+    {
+      "shape": [
+        5,
+        1,
+        3,
+        2
+      ],
+      "chunk": 2,
+      "seed": "signed",
+      "max_abs_errors": [
+        9.132541944900652e-09,
+        1.1775780350831155e-09,
+        9.247804619305633e-09,
+        2.1482298162567304e-09,
+        1.7455370509471616e-11
+      ],
+      "forward": "d6dbf5a17510d4c2ddb69477a359539048bdac00f92aafe50f10d8b58d9215ad",
+      "reverse": "e86ee92bb1428797decce2e30d63552928eeedffef8bf940cc1564f7511653f0"
+    }
+  ],
+  "promotion_eligible": false,
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "recorder_sha256": "3e9ef9cf3e27f25b0f36f8ef667e21191b4416e1e7be58769b80a81698d66a82"
+}

@@ -176,7 +176,9 @@ class TestCliffordCoreBenchmark:
             "tessera_version", "determinism_ok",
         ):
             assert field in d
-        assert d["backend"] == "tessera-reference"
+        assert d["backend"] == "tessera-library"
+        assert d["device"] == "unattributed"
+        assert d["promotion_eligible"] is False
         assert d["op"] == "clifford_core_forward"
         assert d["dtype"] == "fp32"
         assert d["determinism_ok"] is True

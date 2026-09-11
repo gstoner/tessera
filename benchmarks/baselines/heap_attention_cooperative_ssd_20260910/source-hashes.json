@@ -1,0 +1,9 @@
+{
+  "src/compiler/programming_model/lib/NativeSSD.h": "d3c4b5441aa79977aa6f29ca72a4ccfe40d8a3a9d48b99d3625e4dc810ca7255",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "3fce71b682295aa6eda73fd9de4738cb6dc0a03eed6abbc127add023b023dc97",
+  "python/tessera/compiler/native_ssd.py": "b0bf31f29573182e231a7d657e7671d3dd4b9644e6ad7666f8eb2ce793e981ec",
+  "python/tessera/compiler/raised_attention.py": "ce381ada86e8a630ba2347089b99c425081806fd50f912d607adf6ec8bcfbbc6",
+  "python/tessera/compiler/native_exception_ir.py": "ac1ceed0fe3ad218c43210184ef10d203c5b63ffd29a261a26a7f7d56784e98f",
+  "python/tessera/compiler/native_source_state.py": "8af42dc8f77c5c1b4c3112d0948b6f6e2fe93e77b7cf3161f7cd90930b1ead30",
+  "benchmarks/record_ssd_gpu.py": "d4eb3cfd2e0debc145c418236d3890560e65ce1db07154145da32da6a4f72bf4"
+}

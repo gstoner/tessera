@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "execution": "native_gpu",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "heap_binding": "e63b9d3d309a43c11bc6d567aeb021afe9e968ff95597e1ae61a33530ef505a3",
+  "snapshot_marker_binding": "aca38849363548e0efb5c193e2bbad12a58d68e60a43f4ade55bdcae96c47e22",
+  "seeded_collector_binding": "72aee2d1177287f28a4951a1fefed3cde1c46990d8747a7e468802e895b95f54",
+  "discovered_collector_binding": "e5f732204a9f20343d6c791b547a587eefe3839ef49f663fd10da785f4520315",
+  "heap_allocation_binding": "5e4311f2fa99437dc9b6c184f1daca61408842fb5d5cb858da10442811dfdf0c",
+  "heap_graph_binding": "342ed329b0be72bce4425d741cabae2c0ca27a84b84a61a237934d1d86a25dcc",
+  "forward_binding": "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+  "backward_binding": "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179",
+  "byte_record_graph": true,
+  "reader_ordered_collection": true,
+  "snapshot_marking_with_mutation": true,
+  "public_async_vjp": true,
+  "whole_frame_async_retirement": true,
+  "async_composed_gradient_max_errors": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "promotion_eligible": false
+}

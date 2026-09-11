@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "architecture": "gfx1151",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "shape": [
+    5,
+    2,
+    3,
+    2
+  ],
+  "clock": "HIP events",
+  "execution": "native_gpu",
+  "cooperative": true,
+  "rows": [
+    {
+      "chunk": 1,
+      "binding_ms": 300.44387398811523,
+      "checked_call_ms": 2.9136759985703975,
+      "device_event_ms": [],
+      "device_event_median_ms": null,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "6cb2f0cb85a41ceb2db44de82546174f19001c96c1b3aa8539e6728c8ecfa029",
+      "image_sha256": "82cd7220fbb99a4e8708a0009b8306bb694116bf7df83387984f0944276d6ed6"
+    },
+    {
+      "chunk": 2,
+      "binding_ms": 296.5081020083744,
+      "checked_call_ms": 3.2701500022085384,
+      "device_event_ms": [],
+      "device_event_median_ms": null,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "fe196ff8786bbecb847759d76f6255fedbfb6383943d2e322a25330b06c7fa08",
+      "image_sha256": "5c001266038405184b516ab44deffd1f6c6931f18de58dd8b544363cff7748e9"
+    },
+    {
+      "chunk": 5,
+      "binding_ms": 331.72149100573733,
+      "checked_call_ms": 3.2485950068803504,
+      "device_event_ms": [],
+      "device_event_median_ms": null,
+      "max_abs_errors": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "binding_digest": "15f19e1b367a246c899857c9d0b5ddbbc627bfa8eb060a3430fb5de4fbe31d80",
+      "image_sha256": "945a34dd31818673ad196bbb8183c2ee77bdc1747192c8b1ec2ce8b0263eb147"
+    }
+  ],
+  "promotion_eligible": false
+}

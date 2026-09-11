@@ -6,14 +6,14 @@ many basic ops, and running them unfused pays a function-call / kernel-launch
 per basic op.  It grades each in Stage-1 (eager) vs Stage-2 (graph/JIT-fused).
 
 That decomposition-overhead story *is* Tessera's fusion thesis (matmul→softmax→
-matmul, moe_swiglu_block).  This core turns that claim into measured rows: for
-each composite it reports the **dispatch count** unfused (one per primitive) vs
+matmul, moe_swiglu_block).  This core records static decomposition estimates: for
+each composite it reports the **estimated dispatch count** unfused (one per primitive) vs
 fused (one), the **decomposition factor** (primitives-per-composite), and a
 **metamorphic equivalence** check (fused ≡ eager) — the same dispatch-count +
 equivalence telemetry pattern as ``long_memory_core``'s resident-vs-recompute
 row (which proved an 8.5× build-traffic reduction).  Reference-level (numpy) so
 it is portable; the on-device fused kernels it points at (flash_attn,
-moe_swiglu_block) are real Apple-GPU lanes whose launch-count = the fused 1.
+moe_swiglu_block) are candidate Apple-GPU lanes; these rows do not observe their launches.
 """
 
 from __future__ import annotations
@@ -208,6 +208,9 @@ def _row(op: LongTailOp, *, equivalent: bool, max_err: float) -> BenchmarkRow:
         execution_kind=ExecutionKind.REFERENCE,
         metrics={
             "family": op.family,
+            "dispatch_count_source": "static_decomposition_estimate",
+            "observed_dispatches": None,
+            "promotion_eligible": False,
             "eager_dispatches": op.decomposition_factor,
             "fused_dispatches": fused_dispatches,
             "decomposition_factor": op.decomposition_factor,
@@ -238,6 +241,9 @@ def build_report(rows: list[BenchmarkRow] | None = None) -> dict[str, Any]:
     factors = [r.metrics["decomposition_factor"] for r in rows]
     return {
         "ops": len(rows),
+        "dispatch_count_source": "static_decomposition_estimate",
+        "observed_dispatches": None,
+        "promotion_eligible": False,
         "all_metamorphic_equivalent": all(r.correctness.passed for r in rows),
         "fusible_ops": len(fused),
         "mean_decomposition_factor": round(float(np.mean(factors)), 2),
@@ -292,6 +298,9 @@ def synthesized_fusion_rows(seed: int = 0) -> list[BenchmarkRow]:
             metrics={
                 "family": "synthesized_fusion",
                 "execution": execution,
+                "dispatch_count_source": "static_decomposition_estimate",
+                "observed_dispatches": None,
+                "promotion_eligible": False,
                 "eager_dispatches": eager,
                 "fused_dispatches": 1,
                 "dispatch_reduction_x": float(eager),

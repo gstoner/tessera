@@ -53,7 +53,7 @@ PYTHONPATH=.:python python benchmarks/visual_complex_core/core.py \
 |-------------------------|---------------------|--------------------------------|
 | Numerical contract      | locked, deterministic | bit-identical at fp32 |
 | Cross-lane oracle       | `composition_oracle` re-derives the full chain inline | matches model output to fp32 tolerance |
-| Backend                 | reference (CPU/numpy) | both lanes route through their Apple GPU MSL fast paths when Darwin + Cl(3, 0) + f32 |
+| Backend | unattributed library composition | optional Apple primitive paths; no whole-program placement proof |
 | IR-visible              | `tests/tessera-ir/phase7/visual_complex_core_ir_visible.mlir` | 6 GA+EBM generic ops co-located in one function |
 | JSON schema             | Architecture Decision #12 | ingestible by `tools/roofline_tools/` |
 
@@ -73,3 +73,11 @@ contract between energy and Langevin) rather than per-lane correctness.
 The lit fixture co-locates GA and EBM ops in one function body — a
 single lowering pipeline (when one ships) must handle both lanes' ops in
 one traversal.
+
+## Execution evidence
+
+Result rows describe an unattributed library composition with host-wall timing.
+Public primitives can choose environment-dependent implementations; this harness
+does not collect per-call route receipts. Logical-byte bandwidth is an estimate,
+and promotion is disabled. Compiler-visible fixtures remain separate evidence.
+See the [alignment review](../COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).

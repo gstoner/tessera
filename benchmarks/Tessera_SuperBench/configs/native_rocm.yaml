@@ -1,0 +1,36 @@
+suite:
+  name: native_rocm
+  description: Native ANN and SSD packages; diagnostic timing domains kept separate
+  repeat: 1
+  warmup: 0
+tasks:
+  - id: kernel.ann_native
+    runner: python_module
+    path: benches/kernel/ann_native.py
+    args: ["--backend=rocm", "--repeat=5"]
+    metrics: [latency_ms, execution_kind, variants]
+  - id: kernel.ann_native_large
+    runner: python_module
+    path: benches/kernel/ann_native.py
+    args: ["--backend=rocm", "--rows=64", "--width=8", "--activation=square", "--repeat=5"]
+    metrics: [latency_ms, execution_kind, variants]
+  - id: kernel.ssd_serial
+    runner: python_module
+    path: benches/kernel/ssd_native.py
+    args: ["--backend=rocm"]
+    metrics: [latency_ms, device_event_ms, execution_kind]
+  - id: kernel.ssd_cooperative
+    runner: python_module
+    path: benches/kernel/ssd_native.py
+    args: ["--backend=rocm", "--cooperative"]
+    metrics: [latency_ms, device_event_ms, execution_kind]
+  - id: kernel.gemm_native
+    runner: python_module
+    path: benches/kernel/matrix_native.py
+    args: ["--backend=rocm", "--workload=gemm"]
+    metrics: [latency_ms, execution_kind, rows]
+  - id: kernel.attention_native
+    runner: python_module
+    path: benches/kernel/matrix_native.py
+    args: ["--backend=rocm", "--workload=attention"]
+    metrics: [latency_ms, execution_kind, rows]

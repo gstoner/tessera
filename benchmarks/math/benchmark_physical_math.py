@@ -124,13 +124,21 @@ def _x86_scan_selector_evidence(rt: Any, iterations: int) -> list[dict[str, Any]
     return result
 
 
+def _checked_launch(rt, target, artifact, operands):
+    result = rt.launch(artifact, operands)
+    expected = "native_cpu" if target == "x86" else "native_gpu"
+    if not result.get("ok") or result.get("execution_kind") != expected:
+        raise RuntimeError(f"{target} benchmark requires observed {expected} execution: {result.get('reason', result.get('execution_kind'))}")
+    return result
+
+
 def _measure_dtype(rt: Any, target: str, dtype_name: str,
                    iterations: int) -> list[dict[str, Any]]:
     result_rows = []
     for family, op_name, operands, kwargs, reference_fn in _cases(target, dtype_name):
         artifact = _artifact(rt, target, family, op_name, operands, kwargs)
         start = time.perf_counter_ns()
-        cold = rt.launch(artifact, operands)
+        cold = _checked_launch(rt, target, artifact, operands)
         cold_ns = time.perf_counter_ns() - start
         if not cold.get("ok"):
             raise RuntimeError(cold.get("reason", f"{family}/{op_name} failed"))
@@ -138,12 +146,14 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
         output = None
         for _ in range(iterations):
             start = time.perf_counter_ns()
-            launched = rt.launch(artifact, operands)
+            launched = _checked_launch(rt, target, artifact, operands)
             samples.append(time.perf_counter_ns() - start)
             if not launched.get("ok"):
                 raise RuntimeError(launched.get("reason", f"{family}/{op_name} failed"))
             output = np.asarray(launched["output"])
         reference = reference_fn()
+        if output.shape != reference.shape or not np.all(np.isfinite(output)):
+            raise RuntimeError(f"{target}/{op_name} returned invalid shape or nonfinite output")
         error = np.abs(output.astype(np.float32) - reference.astype(np.float32))
         if dtype_name == "f32":
             error_limit = 5.0e-3
@@ -207,7 +217,7 @@ def _rocm_cache_comparison(rt: Any, cached_rows: list[dict[str, Any]],
             # neither the superseded per-call policy nor the retained cache.
             _clear_rocm_math_modules(rt)
             start = time.perf_counter_ns()
-            launched = rt.launch(artifact, operands)
+            launched = _checked_launch(rt, "rocm", artifact, operands)
             samples.append(time.perf_counter_ns() - start)
             if not launched.get("ok"):
                 raise RuntimeError(launched.get("reason", f"{family}/{op_name} failed"))
@@ -225,7 +235,9 @@ def _rocm_cache_comparison(rt: Any, cached_rows: list[dict[str, Any]],
 
 
 def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
-    """Produce a complete, directly committable evidence packet."""
+    """Produce diagnostic host-wrapper evidence, without promotion authority."""
+    if target not in {"x86", "rocm"} or type(iterations) is not int or iterations <= 0:
+        raise ValueError("known target and positive iterations required")
     from tessera import runtime as rt
 
     common = {
@@ -235,6 +247,9 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "host": platform.platform(),
         "processor": platform.processor(),
         "timing_domain": "synchronized_host_wall",
+        "compiler_boundary": "metadata_runtime_probe",
+        "promotion_eligible": False,
+        "eligibility_reason": "no exact-artifact clean-host paired promotion packet",
         "iterations": iterations,
         "workload_shape": [256, 1024],
     }
@@ -243,7 +258,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
             raise ValueError("the current x86 math ABI admits f32 only")
         return {
             **common,
-            "selector_eligible": True,
+            "selector_eligible": False,
             "storage_dtypes": ["f32"],
             "rows": _measure_dtype(rt, target, "f32", iterations),
             "scan_selector_evidence": _x86_scan_selector_evidence(

@@ -1,0 +1,547 @@
+{
+  "suite": {
+    "name": "native_nvidia",
+    "description": "Native ANN and SSD packages; diagnostic timing domains kept separate",
+    "repeat": 1,
+    "warmup": 0
+  },
+  "env": {
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python_version": "3.14.4",
+    "hostname": "The-Super-Bear",
+    "cpu": "",
+    "env_vars": {
+      "CUDA_VISIBLE_DEVICES": "",
+      "HIP_VISIBLE_DEVICES": ""
+    },
+    "tools": {
+      "nvidia_smi": true,
+      "amd_smi": false
+    },
+    "nvidia_smi": "GPU 0: NVIDIA GeForce RTX 5070 (UUID: GPU-cba12639-821a-7a10-4cd3-f918f9c0a545)\n"
+  },
+  "probes": {
+    "gpu_links": {
+      "nvidia_smi": "GPU 0: NVIDIA GeForce RTX 5070 (UUID: GPU-cba12639-821a-7a10-4cd3-f918f9c0a545)\n",
+      "nvlink_topo": "\t\u001b[4mGPU0\tCPU Affinity\tNUMA Affinity\tGPU NUMA ID\u001b[0m\nGPU0\t X \t\t\t\tN/A\n\nLegend:\n\n  X    = Self\n  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)\n  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node\n  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)\n  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)\n  PIX  = Connection traversing at most a single PCIe bridge\n  NV#  = Connection traversing a bonded set of # NVLinks\n",
+      "amd_smi": null,
+      "lspci_gpu": null
+    },
+    "nic": {
+      "ibv_devinfo": null,
+      "ibstat": null,
+      "ethtool": "Settings for eth0:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: yes\nSettings for eth1:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: no\nSettings for eth2:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: no\nSettings for lo:\n\tLink detected: yes\nSettings for loopback0:\n\tSupported ports: [  ]\n\tSupported link modes:   Not reported\n\tSupported pause frame use: No\n\tSupports auto-negotiation: No\n\tSupported FEC modes: Not reported\n\tAdvertised link modes:  Not reported\n\tAdvertised pause frame use: No\n\tAdvertised auto-negotiation: No\n\tAdvertised FEC modes: Not reported\n\tSpeed: 10000Mb/s\n\tDuplex: Full\n\tAuto-negotiation: off\n\tPort: Other\n\tPHYAD: 0\n\tTransceiver: internal\n        Current message level: 0x000000f7 (247)\n                               drv probe link ifdown ifup rx_err tx_err\n\tLink detected: yes\n"
+    }
+  },
+  "timestamp": 1789100573.1037126,
+  "rows": [
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_relu",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "nvidia",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "81fee5c0a1250343f50de5dc1885303706532bbeeea713f694794f9209816bae",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.228562,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "fcb038d045859af5d1dc73dc47543c8c047d0b25167dbf5437b213e58d9871ec",
+          "samples_ms": [
+            0.240962,
+            0.312242,
+            0.206281,
+            0.194201,
+            0.228562
+          ],
+          "latency_ms": 0.228562,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "5242df7f9fee88957f941c425e7c5749ea77f2a0b666197f7a2d76eb7305fba4",
+          "samples_ms": [
+            0.195111,
+            0.301642,
+            0.200331,
+            0.191801,
+            0.191121
+          ],
+          "latency_ms": 0.195111,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ],
+      "bench_id": "kernel.ann_native",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_square",
+      "shape": [
+        64,
+        8
+      ],
+      "backend": "nvidia",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "3cbc1fbf4c0ccf6380fad1652c1d0705b8c29efaf1fa283ddf952805c0029ce1",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.238751,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "d575caf6d891742a0eb23c467d1407265d6c4fdb225d69cfd9b5eb7ae4736313",
+          "samples_ms": [
+            0.238751,
+            0.216342,
+            0.194391,
+            0.318682,
+            0.498183
+          ],
+          "latency_ms": 0.238751,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "d81e783fe911462a1246d349d1f85fcf1ad8c02215a4a0b16c3088cc92f02d03",
+          "samples_ms": [
+            0.234852,
+            0.221561,
+            0.190861,
+            0.293272,
+            0.336482
+          ],
+          "latency_ms": 0.234852,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ],
+      "bench_id": "kernel.ann_native_large",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "backend": "nvidia",
+      "process_id": 70458,
+      "run_id": "68875a1aac84451eb1d0f9d3aff3ae10",
+      "architecture": "sm_120",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "shape": [
+        32,
+        2,
+        8,
+        4
+      ],
+      "clock": "CUDA events",
+      "execution": "native_gpu",
+      "cooperative": false,
+      "rows": [
+        {
+          "chunk": 8,
+          "binding_ms": 409.5109749978292,
+          "checked_call_ms": 9.07242199900793,
+          "device_event_ms": [
+            0.05826432228088379,
+            0.057507839202880856,
+            0.05763423919677734,
+            0.05745215892791748,
+            0.05748095989227295,
+            0.05748640060424805,
+            0.05748511791229248
+          ],
+          "device_event_median_ms": 0.05748640060424805,
+          "max_abs_errors": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "binding_digest": "7b1355049becf628e36085dfaece890fda66236e11b9412942faa97e29cbf485",
+          "image_sha256": "c5e7150963de0fa1dd8697fec5dd5e5f63bff003a58a14179ceee45bdd7a4283"
+        }
+      ],
+      "promotion_eligible": false,
+      "ok": true,
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "latency_ms": 9.07242199900793,
+      "timing_domain": "checked_resident_host_call",
+      "device_event_ms": 0.05748640060424805,
+      "device_timing_domain": "resident_100_launch_event_window_per_call",
+      "bench_id": "kernel.ssd_serial",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "backend": "nvidia",
+      "process_id": 70523,
+      "run_id": "729e500c17d54222a2147a7ca9babb3e",
+      "architecture": "sm_120",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "shape": [
+        32,
+        2,
+        8,
+        4
+      ],
+      "clock": "CUDA events",
+      "execution": "native_gpu",
+      "cooperative": true,
+      "rows": [
+        {
+          "chunk": 8,
+          "binding_ms": 370.53066399676027,
+          "checked_call_ms": 4.017161001684144,
+          "device_event_ms": [
+            0.02515392065048218,
+            0.025012478828430176,
+            0.027934079170227052,
+            0.021633601188659667,
+            0.02619647979736328,
+            0.025161919593811036,
+            0.02423487901687622
+          ],
+          "device_event_median_ms": 0.02515392065048218,
+          "max_abs_errors": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "binding_digest": "5af38d79ea5ef64cadaa168e89e839ecad69c1dc199695ece951f23b24a8b2db",
+          "image_sha256": "dab9351579f845015fb3d59562106428c322f65c07c2f092196950ba3bb7cfed"
+        }
+      ],
+      "promotion_eligible": false,
+      "ok": true,
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "latency_ms": 4.017161001684144,
+      "timing_domain": "checked_resident_host_call",
+      "device_event_ms": 0.02515392065048218,
+      "device_timing_domain": "resident_100_launch_event_window_per_call",
+      "bench_id": "kernel.ssd_cooperative",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "backend": "nvidia",
+      "process_id": 70595,
+      "run_id": "b7070e76f3974d7db169662c143ff44d",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "promotion_eligible": false,
+      "clock": "host_wall_checked_package_and_oracle",
+      "nvtx": false,
+      "rows": [
+        {
+          "workload": "gemm",
+          "backend": "nvidia",
+          "shape": [
+            [
+              32,
+              64
+            ],
+            [
+              64,
+              48
+            ]
+          ],
+          "dtype": "fp16",
+          "artifact": "dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7",
+          "image": "67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2",
+          "tile_sha256": "50c3cb1333650aa1b7496dcd80045430759dc0bd5375d8f50cdf9760de4ab884",
+          "label": "tessera:b7070e76f3974d7db169662c143ff44d:dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7:67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2:0",
+          "max_abs_err": 1.498265191912651e-07,
+          "latency_ms": 1.48176
+        },
+        {
+          "workload": "gemm",
+          "backend": "nvidia",
+          "shape": [
+            [
+              32,
+              64
+            ],
+            [
+              64,
+              48
+            ]
+          ],
+          "dtype": "fp16",
+          "artifact": "dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7",
+          "image": "67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2",
+          "tile_sha256": "50c3cb1333650aa1b7496dcd80045430759dc0bd5375d8f50cdf9760de4ab884",
+          "label": "tessera:b7070e76f3974d7db169662c143ff44d:dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7:67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2:1",
+          "max_abs_err": 1.498265191912651e-07,
+          "latency_ms": 1.194997
+        },
+        {
+          "workload": "gemm",
+          "backend": "nvidia",
+          "shape": [
+            [
+              32,
+              64
+            ],
+            [
+              64,
+              48
+            ]
+          ],
+          "dtype": "fp16",
+          "artifact": "dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7",
+          "image": "67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2",
+          "tile_sha256": "50c3cb1333650aa1b7496dcd80045430759dc0bd5375d8f50cdf9760de4ab884",
+          "label": "tessera:b7070e76f3974d7db169662c143ff44d:dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7:67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2:2",
+          "max_abs_err": 1.498265191912651e-07,
+          "latency_ms": 1.217083
+        }
+      ],
+      "latency_ms": 1.217083,
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "bench_id": "kernel.gemm_native",
+      "variant": "default"
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "backend": "nvidia",
+      "process_id": 70641,
+      "run_id": "2331237e19b04faaa079f79cd3919df5",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "promotion_eligible": false,
+      "clock": "host_wall_checked_package_and_oracle",
+      "nvtx": false,
+      "rows": [
+        {
+          "workload": "attention",
+          "backend": "nvidia",
+          "shape": [
+            [
+              1,
+              2,
+              8,
+              4
+            ],
+            [
+              1,
+              2,
+              12,
+              4
+            ],
+            [
+              1,
+              2,
+              12,
+              4
+            ]
+          ],
+          "dtype": "fp32",
+          "artifact": "88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf",
+          "image": "833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7",
+          "tile_sha256": "86c52c42a76ed90193e2cee82bd0dadba2635a69a18f8738747a11714197ed70",
+          "label": "tessera:2331237e19b04faaa079f79cd3919df5:88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf:833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7:0",
+          "max_abs_err": 2.276978086634962e-08,
+          "latency_ms": 1.710435
+        },
+        {
+          "workload": "attention",
+          "backend": "nvidia",
+          "shape": [
+            [
+              1,
+              2,
+              8,
+              4
+            ],
+            [
+              1,
+              2,
+              12,
+              4
+            ],
+            [
+              1,
+              2,
+              12,
+              4
+            ]
+          ],
+          "dtype": "fp32",
+          "artifact": "88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf",
+          "image": "833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7",
+          "tile_sha256": "86c52c42a76ed90193e2cee82bd0dadba2635a69a18f8738747a11714197ed70",
+          "label": "tessera:2331237e19b04faaa079f79cd3919df5:88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf:833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7:1",
+          "max_abs_err": 2.276978086634962e-08,
+          "latency_ms": 1.271498
+        },
+        {
+          "workload": "attention",
+          "backend": "nvidia",
+          "shape": [
+            [
+              1,
+              2,
+              8,
+              4
+            ],
+            [
+              1,
+              2,
+              12,
+              4
+            ],
+            [
+              1,
+              2,
+              12,
+              4
+            ]
+          ],
+          "dtype": "fp32",
+          "artifact": "88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf",
+          "image": "833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7",
+          "tile_sha256": "86c52c42a76ed90193e2cee82bd0dadba2635a69a18f8738747a11714197ed70",
+          "label": "tessera:2331237e19b04faaa079f79cd3919df5:88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf:833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7:2",
+          "max_abs_err": 2.276978086634962e-08,
+          "latency_ms": 1.040797
+        }
+      ],
+      "latency_ms": 1.271498,
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "bench_id": "kernel.attention_native",
+      "variant": "default"
+    }
+  ],
+  "telemetry": [],
+  "telemetry_summary": {
+    "schema": "tessera.telemetry.v1",
+    "event_count": 0,
+    "bottlenecks": {}
+  }
+}

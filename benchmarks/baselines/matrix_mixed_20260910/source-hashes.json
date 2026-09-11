@@ -1,0 +1,10 @@
+{
+  "benchmarks/native_matrix_adapter.py": "43ce3508d241fb30b92c0fe86b3e9dead23c02e32984b00a18d081b783fb095b",
+  "benchmarks/profile_ranges.py": "58b0d21fe9e059eed974c4a0b7a30abb50bedf09011e4cbaf21abae1d4358e0d",
+  "benchmarks/attribute_mixed_cuda.py": "de2aa40ace29b5429dc92bc07dc7bf9039bb129b9a0ef037d24a31345088271f",
+  "benchmarks/Tessera_SuperBench/benches/kernel/matrix_native.py": "20eff43bb2f91e5bb936278ad17abb6d35be670a14991a4325cde445e5194484",
+  "python/tessera/compiler/scheduled_matmul.py": "190b5b4b339b9db23063bfef1413832b1244d03617cced49d4cce5a3a8abc5c7",
+  "python/tessera/compiler/scheduled_attention.py": "547e0f5019023a0d731c1ef7418962663c5b5debbef3d9e11bfdb1b22dc6c57e",
+  "python/tessera/compiler/rocm_native.py": "e531ba5e07b6a5310c9935da298fcd42afc2b9e0644dbbf92a007348ee858942",
+  "python/tessera/compiler/nvidia_native.py": "2e225d9ab9ff757b8b455f68f62ef4a1c5fd092a3f37ee55436b98b5bba490d7"
+}

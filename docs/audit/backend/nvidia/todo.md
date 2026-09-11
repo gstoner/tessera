@@ -7137,12 +7137,16 @@ SM120 independently executes 64x8 square ANN after compaction. Nsight kernel/cop
 
 ### Shared SSD and retryable completion (2026-09-10)
 
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
+
 Owners: W5.2f / W2.4a / W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1.
 Sync: `SSD-RETRY-COMPLETION-2026-09-10`.
 
-Follow-up required: nvidia target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. Native heap producers, full CPython deoptimization and attention raising remain open. See [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+Follow-up required: nvidia target SSD tiling, runtime packaging and exact-device execution are not supplied by the shared structured-loop baseline. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. At that increment, native heap producers, full CPython deoptimization and attention raising remained open; see the superseding entry below and [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 ### Native heap, attention recipes and SSD device proof (2026-09-10)
+
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
 
 Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f.
 Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
@@ -7150,3 +7154,75 @@ Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
 RTX 5070 SM120 executes the replay-bound serial SSD package for chunks 1, 2 and 5 with immutable-input, output, carry and checkpoint checks. This is correctness evidence; cooperative scheduling, device timing and promotion remain open. Exact dense f32 attention recognition and native bucket instantiation are shared artifact contracts, not sibling-device certificates. Automatic heap IR producers, full CPython frames and broader attention remain follow-ups. Evidence: `benchmarks/baselines/native_heap_attention_ssd_20260910/`; [current owner](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 PR #741 review follow-up (`NATIVE-HEAP-ATTENTION-SSD-2026-09-10`): the GPU pass now declares `tessera.ssd.source` in both metadata inventories. Expanded copies already narrow their outer loops to the owning thread row; new NVIDIA/ROCm lowering regressions pin global/private/output indexing. Shared contract validation only; no new device performance evidence. Apple and x86 execution claims remain unchanged.
+
+### Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `HEAP-IR-ATTENTION-COOPERATIVE-SSD-2026-09-10`.
+
+Parity validated for the bounded SM120 routes: two raised dense f32 attention buckets execute through replay-bound native packages; cooperative SSD passes input/output/carry/checkpoint oracles. Nsight reports kernel and transfer/API costs separately. Broader attention and promotion remain open. Evidence: `benchmarks/baselines/heap_attention_cooperative_ssd_20260910/`. The SSD candidate remains opt-in; single-session measurements do not promote it. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Dynamic heap payloads, checkpoint AD and paired measurements (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `DYNAMIC-HEAP-SSD-CHECKPOINT-PAIRS-2026-09-10`.
+
+CUDA SSD now has nine independent paired process runs with unchanged compiler/image/binding identity. Median resident-window speedup is 6.88x; the conservative population-median lower bound is 6.74x. This objective includes host submission gaps. Missing calibration and exact-artifact selector admission prevent promotion. Dynamic heap payloads and SSD checkpoint VJP are CPU contracts; GPU implementations remain follow-ups. Evidence: `benchmarks/baselines/ssd_paired_process_20260910/` and focused native tests. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### GPU payload frames, mixer AD and artifact selection (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-HEAP-SSD-AD-ADMISSION-2026-09-10`.
+
+Parity validated on SM120 for bounded transactional f32 payload frames and native SSD checkpoint VJP fed from cooperative forward. Scaled/unscaled attention executes two buckets without Graph reconstruction. Exact measured package binding selected the serial incumbent because native CUDA calibration admission is still missing. No promotion; general heap collection and resident automatic GPU AD remain follow-ups. Evidence: `benchmarks/baselines/gpu_heap_ssd_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Reusable GPU pools, resident AD and window calibration (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-POOL-RESIDENT-AD-CALIBRATION-2026-09-10`.
+
+Parity validated on SM120: fixed-slot mark/sweep, cyclic reachability, stale-edge refusal, reuse and resident SSD forward/VJP snapshots. Causal GQA executes Q<K and Q>K buckets. Nsight/event windows agree within 2.26%, but 1.957x trace overhead, dirty source and WSL refuse promotion. Renew exact-artifact paired measurements and obtain eligible per-process calibration. Evidence: `benchmarks/baselines/pool_resident_gqa_calibration_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f). General concurrent/object collection and public asynchronous resident AD remain open.
+
+### Stream-owned object graphs and asynchronous AD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `STREAM-OBJECTS-ASYNC-AD-WINDOWS-2026-09-10`.
+
+Parity validated on SM120 for reader-ordered opaque byte graph collection, fourth-edge reachability, cyclic collection and asynchronous projected SSD VJP composition/retirement. Windowed GQA executes with mandatory nonempty-row constraints. The larger SSD case passes clock agreement and overhead gates; clean-source/bare-metal evidence and nine independently calibrated process pairs remain required. No promotion. Evidence: `benchmarks/baselines/async_objects_windows_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Snapshot marking and public asynchronous VJP (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `SNAPSHOT-PUBLIC-AD-BIAS-2026-09-10`.
+
+RTX 5070 SM120 validates snapshot retention during mutation, discovered cyclic objects, public asynchronous SSD VJP and whole-frame retirement. Full-shape finite additive attention bias passes native differential execution. WSL correctness is not measured overlap or promotion evidence; clean bare-metal calibration remains required. Final sweep is exclusive; arbitrary heaps, general public traced AD and general masks remain open. Evidence: `benchmarks/baselines/snapshot_public_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Benchmark/compiler alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10`.
+
+Shared benchmark admission now refuses inherited dense-Krylov performance eligibility. Historical SM120 packets remain unchanged. Follow-up required: exact-image native operator adapters and clean bare-metal timing. [Shared review](../../../../benchmarks/COMPILER_ALIGNMENT.md); [sequencing](../../compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1). No cross-backend performance transfer or promotion.
+
+### Extended benchmark alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-ALIGNMENT-EXTENDED-2026-09-10`.
+
+SuperBench synthetic attention timing is retired. Existing wrappers remain CPU/reference/artifact entry points; native CUDA package adapters and profiler-backed DLOP dispatch counts are follow-up work. SM120 sealed evidence is untouched. [Review and follow-ups](../../../../benchmarks/COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).
+
+### Native benchmark adapters (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `NATIVE-BENCHMARK-ADAPTERS-2026-09-10`.
+
+Owning-device correctness validated on RTX 5070 (SM120), WSL: three ANN workloads, one accepted launch per variant/call, six public SSD VJP comparisons against independent finite differences. Follow-up required: profiler correlation, broader workloads and bare-metal promotion. [Evidence](../../../../benchmarks/baselines/native_benchmark_adapters_20260910/README.md). Instrumented host-wall timing is diagnostic only.
+
+### Broader adapters and kernel attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `BROADER-ADAPTERS-PROFILING-2026-09-10`.
+
+Validated all four native SuperBench workloads on SM120. Nsight correlated all 701 dedicated SSD kernels to successful owning-process launch calls. Mixed-artifact attribution and clean performance admission remain open. [Evidence](../../../../benchmarks/baselines/broader_adapters_20260910/README.md). WSL diagnostics do not qualify for performance promotion.
+
+### Matrix adapters and mixed attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `MATRIX-MIXED-ATTRIBUTION-2026-09-10`.
+
+Validated scheduled fp16 GEMM and fp32 attention with independent NumPy oracles. Mixed NVTX capture attributes sequential synchronous calls by run/artifact/image identity and CUDA API correlation. Follow-up: asynchronous/multi-thread ranges, broader shapes/dtypes/masks and clean performance evidence. [Evidence](../../../../benchmarks/baselines/matrix_mixed_20260910/README.md). No promotion.

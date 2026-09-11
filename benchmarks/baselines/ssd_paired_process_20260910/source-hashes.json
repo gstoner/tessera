@@ -1,0 +1,11 @@
+{
+  "python/tessera/compiler/native_exception_ir.py": "36b79200749a3a1d8d3bdc1b5e92e016388a42e6b4c28d99eb7a9644eda72487",
+  "python/tessera/compiler/native_source_state.py": "8af42dc8f77c5c1b4c3112d0948b6f6e2fe93e77b7cf3161f7cd90930b1ead30",
+  "python/tessera/compiler/raised_attention.py": "a682d01d0011d29daecddb49c8413e8fafab7a2b751eab8976e042c975ed4bb7",
+  "python/tessera/compiler/ssd_checkpoint_ad.py": "3c1b3aa72c2bd1bb45e5b6e51c934172d38e43dcef403fe1d3f064bb0cd5d1f2",
+  "python/tessera/compiler/native_ssd.py": "b0bf31f29573182e231a7d657e7671d3dd4b9644e6ad7666f8eb2ce793e981ec",
+  "src/compiler/programming_model/lib/NativeSSD.h": "d3c4b5441aa79977aa6f29ca72a4ccfe40d8a3a9d48b99d3625e4dc810ca7255",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "3fce71b682295aa6eda73fd9de4738cb6dc0a03eed6abbc127add023b023dc97",
+  "benchmarks/record_ssd_gpu.py": "d4eb3cfd2e0debc145c418236d3890560e65ce1db07154145da32da6a4f72bf4",
+  "benchmarks/compare_ssd_variants.py": "4ed794d997fea2bf934847e1bc5cc73c4fa7cf55fd2205983a11710bccf1ebc8"
+}

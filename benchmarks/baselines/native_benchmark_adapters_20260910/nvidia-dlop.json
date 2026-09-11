@@ -1,0 +1,240 @@
+{
+  "schema": 1,
+  "rows": [
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_relu",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "nvidia",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "81fee5c0a1250343f50de5dc1885303706532bbeeea713f694794f9209816bae",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.258302,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "fcb038d045859af5d1dc73dc47543c8c047d0b25167dbf5437b213e58d9871ec",
+          "samples_ms": [
+            0.276921,
+            0.258302,
+            0.245992
+          ],
+          "latency_ms": 0.258302,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "5242df7f9fee88957f941c425e7c5749ea77f2a0b666197f7a2d76eb7305fba4",
+          "samples_ms": [
+            0.239872,
+            0.231951,
+            0.243922
+          ],
+          "latency_ms": 0.239872,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_abs",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "nvidia",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "bbd414d7408a0a7c3a1c7b150ad647dd53d0cc1b27b67d714feb108199737e23",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.210832,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "e9fca3a83a9003c73e93ad1b5c06f97b457bfb93de01533d6858d268867f39f9",
+          "samples_ms": [
+            0.362502,
+            0.210832,
+            0.194501
+          ],
+          "latency_ms": 0.210832,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "7ce74b2f7b0ae130a0c8cbc3b18e0a1656fc1b5789cf538070b376a73218c43f",
+          "samples_ms": [
+            0.346213,
+            0.226401,
+            0.211481
+          ],
+          "latency_ms": 0.226401,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema": 1,
+      "ok": true,
+      "workload": "two_affine_square",
+      "shape": [
+        16,
+        8
+      ],
+      "backend": "nvidia",
+      "runtime_status": "executable",
+      "execution_kind": "native_gpu",
+      "pair": "bcf0a636faf174b5bbfbadce82e12a02c494f300df71def6cd590ef61bf2c391",
+      "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+      "adapter_sha256": "05802bf1e5d0d30ad7b0a60a136468e73faf946fcfd1a10af9e045e89576aadb",
+      "host_kernel": "6.18.33.2-microsoft-standard-WSL2",
+      "numerical_verified": true,
+      "timing_domain": "instrumented_warm_package_h2d_dispatch_d2h_host_wall",
+      "dispatch_count_source": "observed_driver_launch_api",
+      "profiler_kernel_count": null,
+      "promotion_eligible": false,
+      "latency_ms": 0.403462,
+      "variants": [
+        {
+          "variant": "original",
+          "artifact": "285ff5bce069eff2b36ceed230be1c188f2ed45db21b90fb306ad368d1adfddb",
+          "samples_ms": [
+            0.403462,
+            0.491663,
+            0.295192
+          ],
+          "latency_ms": 0.403462,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        },
+        {
+          "variant": "transformed",
+          "artifact": "cf58aecf669b2e7ba76509c3548849222ece44de317aa92cccc8c064d35dd0eb",
+          "samples_ms": [
+            0.334342,
+            0.380912,
+            0.390213
+          ],
+          "latency_ms": 0.380912,
+          "receipts": [
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            },
+            {
+              "attempted": 1,
+              "accepted": 1,
+              "completed": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "promotion_eligible": false
+}

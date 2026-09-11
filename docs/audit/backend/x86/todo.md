@@ -4813,12 +4813,16 @@ WSL host tests cover heterogeneous checked-reader failure unwinding. GPU private
 
 ### Shared SSD and retryable completion (2026-09-10)
 
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
+
 Owners: W5.2f / W2.4a / W4-PRODUCT-1 / AD-RESIDUAL-EVAL-1.
 Sync: `SSD-RETRY-COMPLETION-2026-09-10`.
 
-Native CPU JIT validates the scalar SSD recurrence and partial checkpoints on Super-Bear; this is host execution, not a tuned x86 package or promotion. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. Native heap producers, full CPython deoptimization and attention raising remain open. See [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+Native CPU JIT validates the scalar SSD recurrence and partial checkpoints on Super-Bear; this is host execution, not a tuned x86 package or promotion. Late-death reconciliation and paired AD retirement are host-tested ownership changes; they do not establish driver health. Arena cycle/root operations remain host-produced, and exception source frames remain diagnostic metadata. At that increment, native heap producers, full CPython deoptimization and attention raising remained open; see the superseding entry below and [the owning queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 ### Native heap, attention recipes and SSD device proof (2026-09-10)
+
+Historical increment: its remaining-work statements are superseded by **Heap IR, raised attention and cooperative SSD** below. Retained measurements keep their original scope.
 
 Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f.
 Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
@@ -4826,3 +4830,75 @@ Sync: `NATIVE-HEAP-ATTENTION-SSD-2026-09-10`.
 The native C++ host exception allocator passes cycle, exhaustion, stale-handle and partial payload-reuse tests in WSL; the shared runtime and ABI smoke build and execute. This does not supply general CPython deoptimization or a tuned x86 SSD package. Exact dense f32 attention recognition and native bucket instantiation are shared artifact contracts, not sibling-device certificates. Automatic heap IR producers, full CPython frames and broader attention remain follow-ups. Evidence: `benchmarks/baselines/native_heap_attention_ssd_20260910/`; [current owner](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
 
 PR #741 review follow-up (`NATIVE-HEAP-ATTENTION-SSD-2026-09-10`): the GPU pass now declares `tessera.ssd.source` in both metadata inventories. Expanded copies already narrow their outer loops to the owning thread row; new NVIDIA/ROCm lowering regressions pin global/private/output indexing. Shared contract validation only; no new device performance evidence. Apple and x86 execution claims remain unchanged.
+
+### Heap IR, raised attention and cooperative SSD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `HEAP-IR-ATTENTION-COOPERATIVE-SSD-2026-09-10`.
+
+Native host source-state exceptions can opt into automatically compiled allocation/root/edge calls from their serialized static table. Repeated exception and cleanup tests exercise the native heap and decoder. Dynamic payload allocation, GPU heaps and full CPython frames remain open. Evidence: `benchmarks/baselines/heap_attention_cooperative_ssd_20260910/`. The SSD candidate remains opt-in; single-session measurements do not promote it. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Dynamic heap payloads, checkpoint AD and paired measurements (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `DYNAMIC-HEAP-SSD-CHECKPOINT-PAIRS-2026-09-10`.
+
+Native CPU heap payload allocation now accepts runtime numeric tensor bytes with owned snapshots and bounded exhaustion recovery. Native CPU SSD forward/VJP privately binds chunk checkpoints and validates all five gradients. Raised attention executes on Princess-Luna Zen 5 without Graph reconstruction. Automatic mixer AD, persistent checkpoint tapes and in-kernel heap producers remain follow-ups. Evidence: `benchmarks/baselines/ssd_paired_process_20260910/` and focused native tests. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### GPU payload frames, mixer AD and artifact selection (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-HEAP-SSD-AD-ADMISSION-2026-09-10`.
+
+Native CPU SSD Y now composes with automatic host-tape grad using private forward/checkpoint snapshots; explicit VJP still supports all three result cotangents. GPU allocation/backward proofs do not apply to x86. Higher-order AD, broader mixer/public registry integration and persistent checkpoint ownership remain follow-ups. Evidence: `benchmarks/baselines/gpu_heap_ssd_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Reusable GPU pools, resident AD and window calibration (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `GPU-POOL-RESIDENT-AD-CALIBRATION-2026-09-10`.
+
+Shared attention instantiation and host-free evidence contracts apply; new GPU pool/resident SSD execution is not applicable to x86 host allocations. Existing CPU SSD AD remains separate. Follow-up required for broader attention execution and exact-host performance evidence; CUDA/HIP proofs do not transfer. Evidence: `benchmarks/baselines/pool_resident_gqa_calibration_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f). General concurrent/object collection and public asynchronous resident AD remain open.
+
+### Stream-owned object graphs and asynchronous AD (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `STREAM-OBJECTS-ASYNC-AD-WINDOWS-2026-09-10`.
+
+Shared Presburger window guards apply; scoped CUDA/HIP stream ownership is not applicable to the host runtime. Existing native CPU SSD AD remains separate. Follow-up required for windowed attention execution and host-specific performance evidence. The larger GPU storage envelope is not a CPU execution certificate. Evidence: `benchmarks/baselines/async_objects_windows_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Snapshot marking and public asynchronous VJP (2026-09-10)
+
+Owners: W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1 / W5.2f / TPROF-NATIVE-1.
+Sync: `SNAPSHOT-PUBLIC-AD-BIAS-2026-09-10`.
+
+Hook-free discovery and public dispatch contracts apply on the host; CUDA/HIP stream allocation and retirement do not. Follow-up required for native CPU attention bias differential proof. Existing synchronous SSD host-tape integration is unchanged; no GPU evidence transfers. Final sweep is exclusive; arbitrary heaps, general public traced AD and general masks remain open. Evidence: `benchmarks/baselines/snapshot_public_ad_20260910/`. [Current queue](../../compiler/INTEGRATED_COMPILER_PLAN.md#w52f).
+
+### Benchmark/compiler alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-COMPILER-ALIGNMENT-2026-09-10`.
+
+New math, implicit-solver and JVP diagnostics no longer infer performance eligibility from the x86 target or absence of WSL alone. Host reference linalg enforces residual correctness. Follow-up required: exact-artifact matched comparison and CPU route attribution. [Shared review](../../../../benchmarks/COMPILER_ALIGNMENT.md); [sequencing](../../compiler/INTEGRATED_COMPILER_PLAN.md#evidence-packet-1). No cross-backend performance transfer or promotion.
+
+### Extended benchmark alignment (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `BENCHMARK-ALIGNMENT-EXTENDED-2026-09-10`.
+
+Host library/reference compositions and validation overhead remain separate from native ISA proof. Mock collectives and base-x86 E2E packets do not establish AVX-512 or distributed throughput. No native promotion. [Review and follow-ups](../../../../benchmarks/COMPILER_ALIGNMENT.md#additional-suite-review--2026-09-10).
+
+### Native benchmark adapters (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `NATIVE-BENCHMARK-ADAPTERS-2026-09-10`.
+
+Not applicable to CUDA/HIP launch receipts: x86 does not inherit their device execution proof. Follow-up required: native CPU package adapters and broader public-AD comparisons; existing portable SuperBench CPU lane is retained. [Evidence](../../../../benchmarks/baselines/native_benchmark_adapters_20260910/README.md). Instrumented host-wall timing is diagnostic only.
+
+### Broader adapters and kernel attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1 / W5.2f. Sync: `BROADER-ADAPTERS-PROFILING-2026-09-10`.
+
+Not applicable to GPU kernel/API correlation. Follow-up required: CPU-native workload expansion with its own timing and instruction evidence; no GPU proof transfers. [Evidence](../../../../benchmarks/baselines/broader_adapters_20260910/README.md). WSL diagnostics do not qualify for performance promotion.
+
+### Matrix adapters and mixed attribution (2026-09-10)
+
+Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `MATRIX-MIXED-ATTRIBUTION-2026-09-10`.
+
+Not applicable to NVTX/CUDA kernel attribution. Native CPU matrix evidence and CPU profiler integration require their own adapters; no GPU performance transfers. [Evidence](../../../../benchmarks/baselines/matrix_mixed_20260910/README.md). No promotion.

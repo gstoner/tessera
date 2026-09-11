@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "process_id": 69692,
+  "run_id": "e145b7b23d1346adae3278f98e09ab20",
+  "capture_sha256": "76895e2ac73f84aa4ff1f819f694e965a8f43e801de16b92ed65d624dd032815",
+  "promotion_eligible": false,
+  "scope": "synchronous_nvtx_calls",
+  "unmeasured_launches": 2,
+  "rows": [
+    {
+      "label": "tessera:e145b7b23d1346adae3278f98e09ab20:dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7:67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2:0",
+      "artifact": "dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7",
+      "image": "67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2",
+      "workload": "gemm",
+      "kernel_count": 1,
+      "kernels": [
+        {
+          "kernel": "nvidia_sm120_scheduled_matmul_benchmark_gemm_kernel",
+          "start_ns": 9543767832,
+          "end_ns": 9543768696,
+          "device": 0,
+          "context": 1,
+          "stream": 7,
+          "correlation": 39,
+          "api_start_ns": 9543684704,
+          "api_end_ns": 9543725284
+        }
+      ]
+    },
+    {
+      "label": "tessera:e145b7b23d1346adae3278f98e09ab20:88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf:833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7:0",
+      "artifact": "88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf",
+      "image": "833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7",
+      "workload": "attention",
+      "kernel_count": 1,
+      "kernels": [
+        {
+          "kernel": "tessera_tile_attention_f32_full_88d4cc9290",
+          "start_ns": 9545380813,
+          "end_ns": 9545385741,
+          "device": 0,
+          "context": 1,
+          "stream": 7,
+          "correlation": 52,
+          "api_start_ns": 9545322359,
+          "api_end_ns": 9545347880
+        }
+      ]
+    },
+    {
+      "label": "tessera:e145b7b23d1346adae3278f98e09ab20:dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7:67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2:1",
+      "artifact": "dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7",
+      "image": "67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2",
+      "workload": "gemm",
+      "kernel_count": 1,
+      "kernels": [
+        {
+          "kernel": "nvidia_sm120_scheduled_matmul_benchmark_gemm_kernel",
+          "start_ns": 9546434118,
+          "end_ns": 9546434950,
+          "device": 0,
+          "context": 1,
+          "stream": 7,
+          "correlation": 64,
+          "api_start_ns": 9546391816,
+          "api_end_ns": 9546408126
+        }
+      ]
+    },
+    {
+      "label": "tessera:e145b7b23d1346adae3278f98e09ab20:88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf:833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7:1",
+      "artifact": "88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf",
+      "image": "833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7",
+      "workload": "attention",
+      "kernel_count": 1,
+      "kernels": [
+        {
+          "kernel": "tessera_tile_attention_f32_full_88d4cc9290",
+          "start_ns": 9547499039,
+          "end_ns": 9547503967,
+          "device": 0,
+          "context": 1,
+          "stream": 7,
+          "correlation": 77,
+          "api_start_ns": 9547443313,
+          "api_end_ns": 9547458953
+        }
+      ]
+    },
+    {
+      "label": "tessera:e145b7b23d1346adae3278f98e09ab20:dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7:67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2:2",
+      "artifact": "dac18695f6619575587c3e446b11897f3dfb6427f679b621fd823195a3d146c7",
+      "image": "67227557f4066b4bad9727ec53a62487d777e3e214931482f6671139092458c2",
+      "workload": "gemm",
+      "kernel_count": 1,
+      "kernels": [
+        {
+          "kernel": "nvidia_sm120_scheduled_matmul_benchmark_gemm_kernel",
+          "start_ns": 9548621303,
+          "end_ns": 9548622199,
+          "device": 0,
+          "context": 1,
+          "stream": 7,
+          "correlation": 89,
+          "api_start_ns": 9548583500,
+          "api_end_ns": 9548603981
+        }
+      ]
+    },
+    {
+      "label": "tessera:e145b7b23d1346adae3278f98e09ab20:88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf:833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7:2",
+      "artifact": "88d4cc9290552458ac3e14c990546fcfa94e21b801c2854159e4a462a8b251bf",
+      "image": "833366a7c073222dadcac3327177d34c40f1dde5b3ab2a5eb6c3212d53218cb7",
+      "workload": "attention",
+      "kernel_count": 1,
+      "kernels": [
+        {
+          "kernel": "tessera_tile_attention_f32_full_88d4cc9290",
+          "start_ns": 9549735311,
+          "end_ns": 9549740239,
+          "device": 0,
+          "context": 1,
+          "stream": 7,
+          "correlation": 102,
+          "api_start_ns": 9549697537,
+          "api_end_ns": 9549720947
+        }
+      ]
+    }
+  ]
+}

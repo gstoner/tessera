@@ -106,7 +106,8 @@ def run() -> dict:
         "passed": all(case["numerical"]["passed"] for case in cases),
         "promotion": {
             "correctness_eligible": all(case["numerical"]["passed"] for case in cases),
-            "performance_eligible": True,
+            "performance_eligible": False,
+            "reason": "historical performance packet is not validated against this run",
             "performance_packet": "benchmarks/baselines/nvidia_sm120_solver_krylov_performance.json",
         },
     }

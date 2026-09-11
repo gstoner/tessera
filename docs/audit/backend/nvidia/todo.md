@@ -7338,3 +7338,39 @@ Parity validated on SM120 for gated metadata, copied inspection, pinned readers 
 The opt-in gated owner admits no live metadata or legacy snapshot/import bypass.
 Epochs remain for ordering/lifetimes. Eight process slots cap isolated heap owners;
 timeout and unconfirmed death retain resources. No measured overlap or promotion.
+
+
+### 2026-09-11 — Snapshot recovery-close repair after #744
+
+Owners: W2.4a / DISPATCH-BREAKER. Sync: `SNAPSHOT-RECOVERY-2026-09-11`.
+
+Owning-device follow-through: SM120 receipt-copy fault recorder checks recovery close of parent and snapshot.
+Cleanup now propagates recovery readiness through snapshot and parent epoch
+waits without bypassing completion or active-reader checks. Ordinary poisoned
+reads still refuse. [Evidence](../../../../benchmarks/baselines/snapshot_recovery_20260911/README.md).
+No performance promotion or actual driver-hang recovery claim.
+
+## Dtype and ownership reconciliation — 2026-09-11
+
+Owners: E2E-REAL-6F / E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+Sync: `DTYPE-CODEGEN-2026-09-11`.
+
+The route census now separates lexical scopes; the dtype inventory projects existing
+contracts across all canonical and planned storage names without adding support states.
+Follow-up required: join SM120 scalar/vector, Tensor Core and block-scale declarations to emitted PTX and exact-operation packets; conversion/storage is not native arithmetic.
+No new execution or performance promotion is claimed.
+
+### Dtype arithmetic execution follow-through — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+Parity validated for 24 SM120 basic scalar/vector arithmetic rows, including division and special values, with exact-image SASS witnesses. Four generic FP8 conversion rows fail LLVM translation; packed/scaled matrix routes remain separately gated.
+Evidence: [independent packets](../../../../benchmarks/baselines/dtype_arithmetic_20260911/README.md).
+No performance promotion; remaining packing, policy and layout consumers stay open.
+
+### FP8 conversion and numerical boundaries — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+SM120: four FP8 scalar/vector cases pass exhaustive 65,536 input pairs each. Bool logic and bounded complex components pass. Ten INT4/FP4/NVFP4/FP6 decode cases pass with both packing axes, varying scales, offsets and padding. This is software conversion/generic decoding, not Tensor Core or performance promotion.
+Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.

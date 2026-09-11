@@ -3645,3 +3645,38 @@ Evidence: [Independent CUDA/HIP packets and limitations](../../../benchmarks/bas
 [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns pinned readers and copied metadata;
 [DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker) owns confirmed
 process death and retained failures. Sync: `HEAP-GATED-ISOLATION-2026-09-11`.
+
+### 2026-09-11 — Mixed integer ownership and dtype arithmetic
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted engineering increment after #744.
+
+Outcome: Mixed x86 u8/s8 matmul now consumes a replay-verified Schedule/Tile artifact. Scalar reference accumulation uses defined modulo arithmetic. CUDA and HIP each execute 24 basic scalar/vector dtype rows with instruction witnesses.
+
+Remaining: Cohort/breadth constructors; FP8 generic conversion legalization; packed/scaled, complex, bool and Apple arithmetic probes; broader layout and numerical consumers; selector-grade performance evidence.
+
+Evidence: [dtype arithmetic and matrix packets](../../../benchmarks/baselines/dtype_arithmetic_20260911/README.md), `test_scheduled_matmul_consumers.py`, `test_x86_integer_wraparound.py`, `test_dtype_arithmetic_probe.py`.
+
+<!-- entry-fields:end -->
+
+Related owners: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f),
+[NUMPOL-CARRIER-1](INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1), and
+[LAYOUT-ALG-1](INTEGRATED_COMPILER_PLAN.md#layout-alg-1). The F0 caller census
+separates lexical scopes, parameter/rebinding shadowing and relative package
+imports. The dtype inventory retains all 26 canonical/planned storage names;
+missing layered declarations do not mean no operation-specific implementation.
+
+### 2026-09-11 — FP8 conversions and numerical boundaries
+
+Owner: [NUMPOL-CARRIER-1](INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1)
+
+PRs: Uncommitted engineering increment after #744.
+
+Outcome: Byte-backed scalar/vector FP8 conversions legalize to integer/f32 operations. Exhaustive CUDA/HIP arithmetic, bool logic and bounded complex probes pass. NVIDIA packed/scaled probes exercise nonzero codes and both axes. ROCm packed producers use inherent kernel properties and compiler serialization no longer depends on host runtime linkage.
+
+Remaining: Apple strict subnormal arithmetic fails three comparisons; broader storage, numerical/layout consumers, matrix admission and clean performance evidence remain open.
+
+Evidence: [independent dtype follow-through](../../../benchmarks/baselines/dtype_followthrough_20260911/README.md), `test_lowp_conversions.py`, `test_dtype_arithmetic_probe.py`, `test_packed_dtype_probe.py`.
+
+<!-- entry-fields:end -->

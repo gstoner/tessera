@@ -462,7 +462,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             **_ops(
                 "ready", ("tessera.matmul", "tessera.gemm"),
                 reason="x86 stable descriptors execute AVX-512 f32/f64, BF16-to-f32, and VNNI u8*s8-to-s32 matmul contracts",
-                dtypes=("fp32", "f32", "fp64", "bf16", "int8"),
+                dtypes=("fp32", "f32", "fp64", "bf16", "int8", "uint8"),
             ),
             **_ops(
                 "ready", ("tessera.where",),

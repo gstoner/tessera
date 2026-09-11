@@ -1183,56 +1183,8 @@ def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePac
     contract = _matmul_contract(module)
     if contract is None:
         raise ValueError("x86 native matmul requires one static rank-2 f32 matmul")
-    if contract[-1] in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64")):
-        from .scheduled_matmul import lower_scheduled_matmul
-        return package_scheduled_matmul(lower_scheduled_matmul(module,target="x86"),pipeline_name=pipeline_name)
-    a_name, b_name, output_name, (m, n, k), dtypes = contract
-    a_dtype, b_dtype, output_dtype = dtypes
-    # Floating variants now have serialized Schedule owners. Only the mixed
-    # signedness VNNI contract still needs this Graph-owned constructor.
-    variants = {
-        ("uint8", "int8", "int32"): (
-            "tessera_x86_avx512_vnni_gemm_u8s8_s32", X86_MATMUL_U8S8_S32_ABI,
-            "u8", "i8", "i32", "i32", (1, 1, 4), ("avx512bw", "avx512_vnni"),
-        ),
-    }
-    symbol, abi, a_storage, b_storage, accum, output_storage, byte_sizes, features = variants[dtypes]
-    tile_ir = emit_matmul_tile_ir(
-        entry=f"tessera_tile_x86_matmul_{a_storage}_{b_storage}_{output_storage}",
-        a_storage=a_storage, b_storage=b_storage, accum=accum, output=output_storage,
-    )
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol, "matmul")
-    image = _image(
-        target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
-        pipeline_name=pipeline_name, symbol=symbol, abi=abi,
-    )
-    descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=(
-            BufferBinding(0, a_name, "input", a_dtype, 2, "row_major", byte_sizes[0]),
-            BufferBinding(1, b_name, "input", b_dtype, 2, "row_major", byte_sizes[1]),
-            BufferBinding(2, output_name, "output", output_dtype, 2, "row_major", byte_sizes[2]),
-        ),
-        scalars=(
-            ScalarArgument(3, "M", "int64"), ScalarArgument(4, "N", "int64"),
-            ScalarArgument(5, "K", "int64"),
-        ),
-        shape_guards=(
-            ShapeGuard(a_name, 0, "eq", m), ShapeGuard(a_name, 1, "eq", k),
-            ShapeGuard(b_name, 0, "eq", k), ShapeGuard(b_name, 1, "eq", n),
-            ShapeGuard(output_name, 0, "eq", m), ShapeGuard(output_name, 1, "eq", n),
-        ),
-        geometry=LaunchGeometry(policy="x86_avx512_gemm_rows"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
-        provenance={
-            "work_item": "X86-E2E-1" if abi == X86_MATMUL_F32_ABI else "X86-E2E-2",
-            "route": "avx512_c_abi", "shape": [m, n, k],
-            "a_storage": a_storage, "b_storage": b_storage,
-            "output_storage": output_storage, "accum": accum,
-            "required_features": list(features),
-        },
-    )
-    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
+    from .scheduled_matmul import lower_scheduled_matmul
+    return package_scheduled_matmul(lower_scheduled_matmul(module, target="x86"), pipeline_name=pipeline_name)
 
 
 def package_scheduled_matmul(
@@ -1249,13 +1201,14 @@ def package_scheduled_matmul(
         artifact.target != "x86"
         or artifact.architecture != "zen5-avx512"
         or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
-        not in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64"))
+        not in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64"), ("uint8", "int8", "int32"))
     ):
-        raise ValueError("x86 scheduled matmul requires the f32/bf16/f64 Zen 5 AVX-512 contract")
+        raise ValueError("x86 scheduled matmul requires the f32/bf16/f64/u8s8 Zen 5 AVX-512 contract")
+    mixed = artifact.a_dtype == "uint8"
     bf16 = artifact.a_dtype == "bf16"
     f64 = artifact.a_dtype == "fp64"
-    symbol = "tessera_x86_avx512_gemm_bf16" if bf16 else "tessera_x86_avx512_gemm_f64" if f64 else "tessera_x86_avx512_gemm_f32"
-    abi = X86_MATMUL_BF16_F32_ABI if bf16 else X86_MATMUL_F64_ABI if f64 else X86_MATMUL_F32_ABI
+    symbol = "tessera_x86_avx512_vnni_gemm_u8s8_s32" if mixed else "tessera_x86_avx512_gemm_bf16" if bf16 else "tessera_x86_avx512_gemm_f64" if f64 else "tessera_x86_avx512_gemm_f32"
+    abi = X86_MATMUL_U8S8_S32_ABI if mixed else X86_MATMUL_BF16_F32_ABI if bf16 else X86_MATMUL_F64_ABI if f64 else X86_MATMUL_F32_ABI
     target_ir, payload, compiler, toolchain = _lower(
         artifact.tile_ir, symbol, "matmul"
     )
@@ -1273,8 +1226,8 @@ def package_scheduled_matmul(
         entry_symbol=symbol,
         abi_id=abi,
         buffers=(
-            BufferBinding(0, artifact.a_name, "input", artifact.a_dtype, 2, "row_major", 2 if bf16 else 8 if f64 else 4),
-            BufferBinding(1, artifact.b_name, "input", artifact.b_dtype, 2, "row_major", 2 if bf16 else 8 if f64 else 4),
+            BufferBinding(0, artifact.a_name, "input", artifact.a_dtype, 2, "row_major", 1 if mixed else 2 if bf16 else 8 if f64 else 4),
+            BufferBinding(1, artifact.b_name, "input", artifact.b_dtype, 2, "row_major", 1 if mixed else 2 if bf16 else 8 if f64 else 4),
             BufferBinding(2, artifact.output_name, "output", artifact.output_dtype, 2, "row_major", 8 if f64 else 4),
         ),
         scalars=(
@@ -1300,12 +1253,12 @@ def package_scheduled_matmul(
             "work_item": "E2E-REAL-3",
             "route": "canonical_scheduled_tile_consumer",
             "shape": [artifact.m, artifact.n, artifact.k],
-            "a_storage": artifact.storage,
-            "b_storage": artifact.storage,
+            "a_storage": "u8" if mixed else artifact.storage,
+            "b_storage": "i8" if mixed else artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
             "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
-            "required_features": ["avx512_bf16"] if bf16 else ["avx512f", "fma"],
+            "required_features": ["avx512bw", "avx512_vnni"] if mixed else ["avx512_bf16"] if bf16 else ["avx512f", "fma"],
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

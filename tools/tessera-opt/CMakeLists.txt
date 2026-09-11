@@ -207,8 +207,10 @@ if(TARGET TesseraROCMConversion)
   # Stage L3 — in-process MLIR -> hsaco serialization (no mlir-opt shell-out):
   # the GPU/ROCDL -> LLVM-IR translations + the #rocdl.target serializer that
   # gpu-module-to-binary drives (AMDGPU codegen from the shared libLLVM; ld.lld
-  # from the platform LLVM). Only needed in a full ROCm build (real toolchain).
-  if(TESSERA_BUILD_ROCM_BACKEND AND (TESSERA_ENABLE_HIP OR TESSERA_ENABLE_CUDA))
+  # from the platform LLVM). Compiler serialization does not require linking
+  # a HIP/CUDA host runtime: cross-compilers also need these external models.
+  # Without them gpu-module-to-binary hits a promised-interface assertion.
+  if(TARGET MLIRROCDLTarget)
     target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_ROCM_SERIALIZATION)
     target_link_libraries(tessera-opt PRIVATE
       MLIRROCDLTarget

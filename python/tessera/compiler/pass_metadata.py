@@ -561,6 +561,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="Phase 2",
     ),
     PassMetadata(
+        name="tessera-expand-lowp-conversions",
+        cpp_class="LowpConversions",
+        summary="Expands byte-backed scalar/vector E4M3FN and E5M2 conversions to f32 arithmetic and integer bit operations with nearest-even rounding, signed zero and format-specific overflow. Does not admit public dtypes or matrix instructions.",
+        input_dialects=("arith",), output_dialects=("arith",),
+        pass_kind="transform", sprint="NUMPOL-CARRIER-1",
+    ),
+    PassMetadata(
         name="tessera-gpu-collective-insertion",
         cpp_class="GPUCollectiveInsertionPass",
         summary=(
@@ -781,11 +788,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
-        summary="Replays registered Schedule decisions into Tile carriers and structured SSD loops. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        summary="Replays registered Schedule decisions into Tile carriers and structured SSD loops. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
         input_dialects=("schedule", "func", "tessera"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
-        required_attrs=("chunk_size", "artifact_hash"),
-        preserved_attrs=("tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes"),
+        required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout"),
+        preserved_attrs=("tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes", "tessera.schedule_hash", "numeric_policy"),
         pass_kind="lowering", sprint="W5.2f",
     ),
     PassMetadata(

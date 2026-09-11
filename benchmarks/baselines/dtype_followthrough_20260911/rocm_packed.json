@@ -1,0 +1,72 @@
+{
+  "evidence_eligibility": "correctness_and_regression_only",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "kernel_image_sha256": "9004d020c63e5c9bbee367a3f2d6517f49755ca81cf65051173dfa2e224857f2",
+  "packing": "signed_twos_complement_low_nibble_first",
+  "promotion_blocker": "bare-metal calibrated device timing unavailable under WSL",
+  "rows": [
+    {
+      "consumer_family": "dequant_matmul",
+      "consumer_route": "compiled_rocdl_int4_dequant_gemm",
+      "execution_kind": "native_gpu",
+      "full_weight_materialization": "prohibited",
+      "host_unpack_or_repack": false,
+      "logical_code_bytes": 1856,
+      "median_ms": 0.51266,
+      "numerical_oracle": "groupwise_dequant_then_f32_matmul",
+      "p95_ms": 0.714852,
+      "packed_code_bytes": 928,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "shape": [
+        33,
+        64,
+        29
+      ],
+      "timing_domain": "host_wall_operation_total_packed_consumer",
+      "weight_content_digest": "d8b0b1806e0a3b215a3f59857bcb0f3556cab56f1aae2ee76981bb6694283f10",
+      "weight_residency": "persistent_device",
+      "weight_upload_timing": "excluded_one_time_model_load"
+    },
+    {
+      "consumer_family": "elementwise",
+      "consumer_route": "compiled_rocdl_packed_int4_relu",
+      "host_unpack_or_repack": false,
+      "logical_elements": 65537,
+      "median_ms": 4.533609,
+      "numerical_oracle": "signed_nibblewise_max_zero",
+      "p95_ms": 4.734431,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "consumer_family": "sparse",
+      "consumer_route": "compiled_rocdl_packed_int4_sparse_gather",
+      "host_unpack_or_repack": false,
+      "logical_elements": 131071,
+      "median_ms": 2.732492,
+      "numerical_oracle": "logical_index_signed_nibble_gather",
+      "p95_ms": 2.785285,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "selected_elements": 16384,
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    },
+    {
+      "byte_offset": 37000,
+      "consumer_family": "cache",
+      "consumer_route": "compiled_rocdl_packed_int4_cache_append",
+      "host_unpack_or_repack": false,
+      "median_ms": 3.470066,
+      "numerical_oracle": "packed_byte_range_replace",
+      "p95_ms": 3.611674,
+      "packed_cache_bytes": 131072,
+      "packed_update_bytes": 8192,
+      "producer_route": "compiled_gfx1151_int4_pack",
+      "timing_domain": "host_wall_operation_total_packed_consumer"
+    }
+  ],
+  "schema": "tessera.rocm.packed-consumers.v2",
+  "target": "gfx1151",
+  "toolchain": "HIP version: 7.15.26333-0000000",
+  "work_item": "MODEL-WEIGHT-PHYS-1",
+  "wsl": true
+}

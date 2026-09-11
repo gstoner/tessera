@@ -154,6 +154,17 @@ def _check_capability(
         if op == "tessera.control_if" and result is not None
         else next((operand.rank for operand in operands if operand.rank is not None), None)
     )
+    if target == "x86" and op in ("tessera.matmul", "tessera.gemm") and any(
+        operand.dtype == "uint8" for operand in operands
+    ):
+        if (tuple(operand.dtype for operand in operands) != ("uint8", "int8")
+                or result is None or result.dtype != "int32"):
+            diagnostics.append(LegalityDiagnostic(
+                "LEGALITY_TARGET_CAPABILITY",
+                "x86 uint8 matmul requires uint8 A, int8 B and int32 output",
+                "target_capability",
+            ))
+            return
     cap = supports_op(target, op, dtype=dtype, rank=rank)
     if not cap.supported:
         diagnostics.append(LegalityDiagnostic(

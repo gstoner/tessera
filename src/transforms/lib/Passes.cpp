@@ -588,6 +588,7 @@ void registerTesseraPasses() {
   // pass ordering). --tessera-compute-legalize (early) / --tessera-storage-
   // legalize (terminal).
   ::mlir::registerPass([]() { return createComputeLegalizePass(); });
+  ::mlir::registerPass([]() { return createLowpConversionsPass(); });
   ::mlir::registerPass([]() { return createStorageLegalizePass(); });
   // 2026-06-23: the first real consumer of the C4 packing markers.
   ::mlir::registerPass([]() { return createStoragePackConsumePass(); });

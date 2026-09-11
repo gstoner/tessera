@@ -13,6 +13,7 @@ class ResidentPoolSnapshot:
         self.native = pool.native
         self.check, self.alloc, self.free = pool.check, pool.alloc, pool.free
         self.buffers, self.closed, self.epoch = [], False, None
+        self._closing = False
         with self._lock:
             pool._ready()
             epoch = pool._access()
@@ -35,7 +36,10 @@ class ResidentPoolSnapshot:
     def _ready(self):
         if self.closed:
             raise ValueError('pool snapshot is closed')
-        self.parent._ready()
+        if self._closing:
+            self.parent._ready(recovery=True)
+        else:
+            self.parent._ready()
 
     def read(self, stream):
         self._ready()
@@ -47,18 +51,22 @@ class ResidentPoolSnapshot:
         with self._lock:
             if self.closed:
                 return
-            self._ready()
-            if self.epoch is not None:
-                self.epoch.wait()
-            else:
-                self.check(self.native._sync())
-            while self.buffers:
-                buffer = self.buffers[-1]
-                self.check(self.free(buffer.pointer))
-                buffer.pointer = ct.c_void_p()
-                self.buffers.pop()
-            self.closed = True
-            self.parent._snapshots.remove(self)
+            self._closing = True
+            try:
+                self._ready()
+                if self.epoch is not None:
+                    self.epoch.wait()
+                else:
+                    self.check(self.native._sync())
+                while self.buffers:
+                    buffer = self.buffers[-1]
+                    self.check(self.free(buffer.pointer))
+                    buffer.pointer = ct.c_void_p()
+                    self.buffers.pop()
+                self.closed = True
+                self.parent._snapshots.remove(self)
+            finally:
+                self._closing = False
 
     def __enter__(self):
         self._ready()

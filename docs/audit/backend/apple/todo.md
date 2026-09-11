@@ -8629,3 +8629,39 @@ Follow-up required: Metal gate-backed metadata producers and a process-owned hea
 The opt-in gated owner admits no live metadata or legacy snapshot/import bypass.
 Epochs remain for ordering/lifetimes. Eight process slots cap isolated heap owners;
 timeout and unconfirmed death retain resources. No measured overlap or promotion.
+
+
+### 2026-09-11 — Snapshot recovery-close repair after #744
+
+Owners: W2.4a / DISPATCH-BREAKER. Sync: `SNAPSHOT-RECOVERY-2026-09-11`.
+
+Not applicable to Metal execution: this repairs the CUDA/HIP resident-pool owner; no Apple runtime change or re-seal.
+Cleanup now propagates recovery readiness through snapshot and parent epoch
+waits without bypassing completion or active-reader checks. Ordinary poisoned
+reads still refuse. [Evidence](../../../../benchmarks/baselines/snapshot_recovery_20260911/README.md).
+No performance promotion or actual driver-hang recovery claim.
+
+## Dtype and ownership reconciliation — 2026-09-11
+
+Owners: E2E-REAL-6F / E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+Sync: `DTYPE-CODEGEN-2026-09-11`.
+
+The route census now separates lexical scopes; the dtype inventory projects existing
+contracts across all canonical and planned storage names without adding support states.
+Follow-up required: project operation-specific MSL scalar/vector and simdgroup contracts into the layered inventory; absent layered rows are not unsupported-operation claims.
+No new execution or performance promotion is claimed.
+
+### Dtype arithmetic execution follow-through — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+Follow-up required: no new Metal arithmetic execution. Add MSL scalar/vector and simdgroup dtype probes with explicit storage, accumulator and layout contracts; no CUDA/HIP proof transfers.
+Evidence: [independent packets](../../../../benchmarks/baselines/dtype_arithmetic_20260911/README.md).
+No performance promotion; remaining packing, policy and layout consumers stay open.
+
+### FP8 conversion and numerical boundaries — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+Owning M1 Max status-returning MSL proof: bounded complex64 components pass; fp32 add/subtract pass, but multiply/divide flush three subnormal results. Strict gradual-underflow admission requires a policy-aware consumer or explicit refusal; FP8/packed/bool storage and vector paths remain follow-up required.
+Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.

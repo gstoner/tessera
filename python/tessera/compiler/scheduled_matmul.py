@@ -335,6 +335,12 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             16,
             16,
         )
+    elif target == "x86" and (a_dtype, b_dtype, output_dtype) == ("uint8", "int8", "int32"):
+        if max(m, n, k) > 2**31 - 1:
+            raise ValueError("x86 mixed matmul extents exceed the i32 runtime ABI")
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "x86", "zen5-avx512", "u8", "i32", 16, 16,
+        )
     elif target == "rocm_gfx1151" and (a_dtype, b_dtype, output_dtype) == (
         "fp16",
         "fp16",
@@ -537,7 +543,7 @@ def digest_text(text: str) -> str:
 
 
 def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
-    """Project floating matmul ABI fields from its native Schedule parent.
+    """Project matmul ABI fields from its native Schedule parent.
 
     The Graph text is historical provenance. Schedule replay proves the supplied
     Tile program; host binding labels remain aliases, not semantic authorities.
@@ -572,7 +578,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError('matmul native boolean field disagrees: '+key)
         return values[0] == 'true'
     def tensor(text):
-        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64)>', text)
+        match = re.fullmatch(r'tensor<((?:(?:\?|[1-9][0-9]*)x)+)(f16|bf16|f32|f64|ui8|si8|i8|i32)>', text)
         if match is None:
             raise ValueError('matmul native tensor contract is unsupported')
         return tuple(None if d == '?' else int(d) for d in match[1].split('x')[:-1]), match[2]
@@ -593,9 +599,9 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError("matmul native Tile entry is ambiguous")
         entry = entries[0]
     expected = dict(function_name=entry, m=m, n=n, k=k, storage=storage,
-        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64'}[a[1]],
-        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64'}[b[1]],
-        output_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64'}[out_storage],
+        a_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[a[1]],
+        b_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[b[1]],
+        output_dtype={'f16':'fp16','bf16':'bf16','f32':'fp32','f64':'fp64','ui8':'uint8','si8':'int8','i8':'int8','i32':'int32'}[out_storage],
         accum=string('accum'), activation=string('activation'),
         dynamic_m=a[0][0] is None or out_shape[0] is None,
         dynamic_n=b[0][1] is None or out_shape[1] is None,

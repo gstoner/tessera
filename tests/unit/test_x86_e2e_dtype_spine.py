@@ -17,7 +17,7 @@ from tessera.compiler.x86_native import (
 
 def _module(a_dtype: str, b_dtype: str, out_dtype: str, shape=(5, 7, 9)) -> GraphIRModule:
     m, n, k = shape
-    spelling = {"bf16": "bf16", "fp32": "f32", "fp64": "f64", "uint8": "i8", "int8": "i8", "int32": "i32"}
+    spelling = {"bf16": "bf16", "fp32": "f32", "fp64": "f64", "uint8": "ui8", "int8": "i8", "int32": "i32"}
     a = IRType(f"tensor<{m}x{k}x{spelling[a_dtype]}>", (str(m), str(k)), a_dtype)
     b = IRType(f"tensor<{k}x{n}x{spelling[b_dtype]}>", (str(k), str(n)), b_dtype)
     o = IRType(f"tensor<{m}x{n}x{spelling[out_dtype]}>", (str(m), str(n)), out_dtype)
@@ -47,7 +47,7 @@ def test_dtype_matmul_packages_have_distinct_abis(monkeypatch, dtypes, abi) -> N
     )
     module = _module(*dtypes)
     artifact = None
-    if dtypes in (("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64")):
+    if dtypes in (("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64"), ("uint8", "int8", "int32")):
         # This is an ABI projection unit test, not a native compiler test.
         # Model the new producer boundary; real replay and owning-CPU execution
         # remain covered by test_scheduled_matmul_consumers.
@@ -55,8 +55,8 @@ def test_dtype_matmul_packages_have_distinct_abis(monkeypatch, dtypes, abi) -> N
         from test_scheduled_matmul_consumers import _artifact
         from tessera.compiler import scheduled_matmul
         base = _artifact(target="x86")
-        storage = "bf16" if dtypes[0] == "bf16" else "f64"
-        accum = "f64" if dtypes[2] == "fp64" else "f32"
+        storage = "u8" if dtypes[0] == "uint8" else "bf16" if dtypes[0] == "bf16" else "f64"
+        accum = "i32" if dtypes[2] == "int32" else "f64" if dtypes[2] == "fp64" else "f32"
         artifact = replace(base, a_dtype=dtypes[0], b_dtype=dtypes[1], output_dtype=dtypes[2], storage=storage, accum=accum,
                            m=5, n=7, k=9,
                            tile_ir=base.tile_ir.replace('storage = "f32"', f'storage = "{storage}"').replace('accum = "f32"', f'accum = "{accum}"'))

@@ -141,6 +141,15 @@ All ops have `hasVerifier = 1` unless noted. Verifiers check shape compatibility
 
 Matrix multiply: `result = lhs @ rhs`.
 
+The bounded x86 mixed-integer schedule accepts `tensor<MxKxui8>` A,
+`tensor<KxNxi8>` (or `si8`) B, and `tensor<MxNxi32>` output. Its `u8`
+Schedule storage names the unsigned A storage; the retained B tensor type and
+replayed physical descriptor preserve the distinct signed operand contract.
+Tile projects A=`u8`, B=`i8`, accumulator/output=`i32`; VNNI accumulation
+wraps modulo 2^32 rather than saturating. M, N and K must fit positive signed
+32-bit runtime extents. This does not make unsigned dtypes generally admitted
+by the public frontend, and does not admit unsigned B or a different accumulator.
+
 ```
 tessera.matmul %lhs, %rhs : (tensor<MxKxeT>, tensor<KxNxeT>) -> tensor<MxNxeT>
 ```

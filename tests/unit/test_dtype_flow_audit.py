@@ -116,3 +116,9 @@ def test_dtype_flow_is_registered_with_generated_docs() -> None:
     doc = generated_docs.get("dtype_flow")
     assert doc.csv_path is not None
     assert doc.also_gate_md
+
+
+def test_flow_labels_operator_level_states_without_promoting_unsigned_capture():
+    text = render_markdown()
+    assert 'not dtype-specific capture or lowering certificates' in text
+    assert 'does not promote unsigned frontend storage' in text

@@ -131,10 +131,10 @@ class ResidentObjectPool:
         return result.ticket
 
     @classmethod
-    def from_objects(cls, *roots, stream, **options):
+    def from_objects(cls, *roots, stream, allow_slots=False, **options):
         from .object_discovery import discover_objects
 
-        snapshot = discover_objects(*roots)
+        snapshot = discover_objects(*roots, allow_slots=allow_slots)
         slots = len(snapshot.payloads)
         width = max(map(len, snapshot.payloads))
         references = max(1, max(map(len, snapshot.edges)))

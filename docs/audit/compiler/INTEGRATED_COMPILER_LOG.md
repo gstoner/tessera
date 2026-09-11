@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-10
+last_updated: 2026-09-11
 audit_role: reference
 ---
 
@@ -3464,3 +3464,28 @@ Evidence: `benchmarks/baselines/matrix_mixed_20260910/`, `benchmarks/native_matr
 <!-- entry-fields:end -->
 
 Additional owner: [TPROF-NATIVE-1](INTEGRATED_COMPILER_PLAN.md#tprof-native-1).
+
+
+### 2026-09-11 — Program retirement and declared-slot discovery
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: Uncommitted continuation after #742; preserves the SSD numerical-admission repair.
+
+Outcome: Resident SSD now exposes program-level retire_async/poll_close: reader preflight precedes frame frees, partially queued retirement can resume, new captures refuse, and modules unload off-thread only after frame completion. CUDA SM120 and ROCm gfx1151 validate two public-VJP frames while context synchronization is forbidden on the program path. Opt-in declared-slot discovery preserves inherited aliases/cycles through native descriptors and refuses custom descriptors, undeclared dictionaries and opaque layouts; a slotted self-cycle survives GPU collection on both hosts.
+
+Remaining: Arbitrary traced GPU tapes, extension heaps, variable-size device payloads, concurrent sweeping, asynchronous owner adoption and general masks remain open. A mutation publication barrier plus generation/reader-aware reclamation must precede concurrent sweep. Module workers bound admission and polling, not the driver's own latency or failure recovery.
+
+Evidence: `benchmarks/baselines/program_retirement_20260911/`, `benchmarks/record_program_retirement.py`, `tests/unit/test_resident_ssd_ownership.py`, `tests/unit/test_object_discovery.py`; 54 focused host tests, Ruff and zero-error mypy on WSL.
+
+<!-- entry-fields:end -->
+
+Additional owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+The requested ten-track list is reconciled to existing owners, not a new status registry:
+
+- F0/F2 retain caller/envelope certificate joins and the remaining mixed-integer/cohort/breadth constructors. Scheduled non-f32 GEMM already exists; ROCm matrix native lowering currently exposes an assertions-enabled LLVM failure. No constructor is removed by this increment.
+- Isolation recovery already launches bounded native ANN packages; actual driver-hang/device-health recovery remains separate from stopped-worker teardown proof. Scoped dynamic/external readers exist; general heterogeneous capture and failure ownership still need work.
+- Native exception allocation/root producers and bounded cycle collectors exist. Automatic throw-site integration, arbitrary heaps, concurrent reclamation and complete CPython deoptimization/frame reconstruction remain open.
+- Persistent SSD AD/checkpoints and native attention recipes/buckets exist. General traced effectful AD, heterogeneous/aliased products, Boolean/padding/broadcast masks and fully masked-row behavior remain owner-specific acceptance gates.
+- Larger ANN/SSD measurements and CUDA mixed-artifact attribution exist; they do not grant clean promotion or ROCm hardware-counter evidence. The shared registered Schedule SSD family is implemented; next work is frontend integration, tuning and selector-grade proof, not starting another SSD operation.

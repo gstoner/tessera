@@ -3,6 +3,7 @@
 Copies scalar payloads and discovers cycles/aliases in exact builtin containers
 and ordinary instance dictionaries. No imports, constructors, properties, slots,
 custom iteration, arbitrary extension heaps or concurrent host mutation.
+Declared slots are opt-in and read only through native member descriptors.
 """
 
 from dataclasses import dataclass
@@ -19,7 +20,9 @@ class ObjectSnapshot:
     roots: tuple[int, ...]
 
 
-def discover_objects(*roots, max_nodes=256, max_bytes=262144, max_edges=32):
+def discover_objects(*roots, max_nodes=256, max_bytes=262144, max_edges=32, allow_slots=False):
+    if type(allow_slots) is not bool:
+        raise ValueError("allow_slots must be boolean")
     if not roots or any(type(v) is not int or v <= 0 for v in (max_nodes, max_bytes, max_edges)):
         raise ValueError("object discovery requires roots and positive budgets")
     objects: list[Any] = []
@@ -63,7 +66,42 @@ def discover_objects(*roots, max_nodes=256, max_bytes=262144, max_edges=32):
         else:
             mro = type.__getattribute__(cls, "__mro__")
             if any("__slots__" in type.__getattribute__(base, "__dict__") for base in mro):
-                raise ValueError("slotted objects require a declared native layout")
+                if not allow_slots:
+                    raise ValueError("slotted objects require a declared native layout")
+                if any(base is not object and "__slots__" not in type.__getattribute__(base, "__dict__") for base in mro):
+                    raise ValueError("slotted discovery requires a fully declared slot hierarchy")
+                fields = []
+                for base in reversed(mro):
+                    namespace = type.__getattribute__(base, "__dict__")
+                    declared = namespace.get("__slots__", ())
+                    declared = (declared,) if type(declared) is str else declared
+                    if type(declared) not in (tuple, list) or any(type(n) is not str for n in declared):
+                        raise ValueError("slots require a plain string declaration")
+                    for name in declared:
+                        if name == '__weakref__':
+                            continue
+                        if name == '__dict__' or name.startswith('__'):
+                            raise ValueError("dictionary and private slots need an explicit layout")
+                        descriptor = namespace.get(name)
+                        if type(descriptor) is not types.MemberDescriptorType or descriptor.__objclass__ is not base:
+                            raise ValueError("slots require native member descriptors")
+                        try:
+                            value = descriptor.__get__(obj, cls)
+                        except AttributeError:
+                            continue
+                        fields.append((type.__getattribute__(base, '__qualname__') + ':' + name, value))
+                record = ['slotted_instance', type.__getattribute__(cls, '__qualname__'), [n for n,_ in fields]]
+                children = tuple(value for _,value in fields)
+                if len(children) > max_edges:
+                    raise ValueError("object graph exceeds reference budget")
+                data = json.dumps(record, ensure_ascii=True, separators=(",", ":")).encode()
+                total += len(data)
+                if total > max_bytes:
+                    raise ValueError("object graph exceeds payload budget")
+                payloads.append(data)
+                edges.append(tuple(intern(child) for child in children))
+                cursor += 1
+                continue
             descriptor = next(
                 (
                     type.__getattribute__(base, "__dict__")["__dict__"]

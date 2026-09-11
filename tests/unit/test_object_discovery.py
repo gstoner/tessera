@@ -41,3 +41,39 @@ def test_custom_descriptor_is_not_executed():
 def test_discovery_fails_closed(value, options, reason):
     with pytest.raises(ValueError, match=reason):
         discover_objects(value, **options)
+
+
+def test_declared_slots_preserve_inherited_cycles_without_hooks():
+    class Base:
+        __slots__ = ('left',)
+    class Node(Base):
+        __slots__ = ('right', 'unset')
+        def __getattribute__(self, name):
+            raise AssertionError('user hook called')
+    node = Node()
+    object.__setattr__(node, 'left', node)
+    object.__setattr__(node, 'right', node)
+    with pytest.raises(ValueError, match='declared native layout'):
+        discover_objects(node)
+    snapshot = discover_objects(node, allow_slots=True)
+    assert snapshot.edges == ((0, 0),)
+    assert json.loads(snapshot.payloads[0])[0] == 'slotted_instance'
+
+
+def test_shadowed_slot_property_is_never_called():
+    class Node:
+        __slots__ = ('value',)
+    Node.value = property(lambda _: (_ for _ in ()).throw(AssertionError('hook called')))
+    with pytest.raises(ValueError, match='native member'):
+        discover_objects(Node(), allow_slots=True)
+
+
+def test_slots_cannot_silently_drop_an_instance_dictionary():
+    class Base:
+        pass
+    class Node(Base):
+        __slots__ = ('value',)
+    node = Node()
+    node.extra = [node]
+    with pytest.raises(ValueError, match='fully declared'):
+        discover_objects(node, allow_slots=True)

@@ -6,6 +6,12 @@ import re
 from dataclasses import dataclass
 
 
+# The recorder checks rtol=1e-5, atol=1e-6. Maxima alone do not retain
+# per-element reference magnitudes, so admission uses the sufficient absolute
+# component. Do not infer a relative-error allowance from these summaries.
+SSD_MAX_ABS_ERROR = 1e-6
+
+
 def summarize(pairs):
     if len(pairs) != 9:
         raise ValueError('SSD comparison requires nine prespecified process pairs')
@@ -40,6 +46,8 @@ def summarize(pairs):
             errors = row['max_abs_errors']
             if len(errors) != 3 or any(type(v) not in (int,float) or not math.isfinite(v) or v < 0 for v in errors):
                 raise ValueError('SSD correctness evidence is malformed')
+            if any(v > SSD_MAX_ABS_ERROR for v in errors):
+                raise ValueError('SSD correctness evidence exceeds the absolute admission tolerance')
             times[name] = statistics.median(samples)
         if variants['serial'][0] != variants['cooperative'][0]:
             raise ValueError('SSD checkpoint policies disagree')

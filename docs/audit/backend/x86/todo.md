@@ -4902,3 +4902,15 @@ Not applicable to GPU kernel/API correlation. Follow-up required: CPU-native wor
 Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `MATRIX-MIXED-ATTRIBUTION-2026-09-10`.
 
 Not applicable to NVTX/CUDA kernel attribution. Native CPU matrix evidence and CPU profiler integration require their own adapters; no GPU performance transfers. [Evidence](../../../../benchmarks/baselines/matrix_mixed_20260910/README.md). No promotion.
+
+### SSD numerical admission repair (2026-09-11)
+
+Owner: EVIDENCE-PACKET-1 / W5.2f. Sync: `SSD-NUMERICAL-ADMISSION-2026-09-11`.
+
+Not applicable to an active SSD promotion route on this backend. Shared admission now requires all three maximum absolute errors <=1e-6; CUDA/HIP correctness or performance evidence does not transfer.
+
+### Program retirement and slot discovery (2026-09-11)
+
+Owner: W4-PRODUCT-1 / W5.2f. Sync: `PROGRAM-RETIREMENT-SLOTS-2026-09-11`.
+
+Follow-up required: this backend needs its own resident-program retirement integration and exact-device proof. Shared hook-free slot discovery is host logic; CUDA/HIP lifetime evidence does not establish this backend's native retirement. Concurrent sweep, arbitrary extension heaps and general traced GPU AD remain open. [Evidence](../../../../benchmarks/baselines/program_retirement_20260911/README.md).

@@ -1,0 +1,7 @@
+{
+  "python/tessera/compiler/resident_ssd.py": "648e0ffb034fa1d374839c0c87f45156ba9c8bdcc07b090e8751702521cf07f2",
+  "python/tessera/compiler/object_discovery.py": "5098d62a993ea88912c24ee7127fdf8947dd02d5adbe954b5190c8cc426462f3",
+  "python/tessera/compiler/resident_object_pool.py": "9302199c318b50df8ba3ebae120faf8a18405439df28d8521a9933a51e5051e6",
+  "python/tessera/compiler/native_module_retirement.py": "5805b6449a57ef47c6b1ac4d81c0abb4a606f36ad6e858d351b384e6829b6133",
+  "benchmarks/record_program_retirement.py": "467c7d498f3fdfb41bfa544eaa870f6291723da015a787dc1bef58553ffeafbe"
+}

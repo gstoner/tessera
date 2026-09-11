@@ -1,0 +1,198 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host": "Princess-Luna",
+  "kernel": "6.18.33.1-microsoft-standard-WSL2",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "recorder_sha256": "6fdb1b60169367ff2340f523bcc54755107a531224bd6f8d744a49d3d5e21aab",
+  "model": {
+    "states": 103,
+    "transitions": 256,
+    "counterexample": null
+  },
+  "missing_reclamation_barrier": {
+    "states": 57,
+    "transitions": 87,
+    "counterexample": [
+      "reserve",
+      "initialize",
+      "publish",
+      "root_update",
+      "retire",
+      "acquire_0",
+      "reclaim"
+    ]
+  },
+  "proofs": [
+    "stale edge rejects the entire graph transaction",
+    "new root between snapshot and final remark preserves cycle",
+    "retired slots neither allocate nor resurrect",
+    "two reader streams complete before reclaimed payload reuse"
+  ],
+  "artifacts": {
+    "_graph": {
+      "binding": "3bb367f074a1506979454b17a2910072f12d2f4e8cdfc2f46866a8653540519a",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "graph_checked",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 8
+      }
+    },
+    "_retire": {
+      "binding": "8cfb4abd87758b165b50d49a26c93e78351cb08d2811207b94f6a9ef65c1e775",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "retire",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 8
+      }
+    },
+    "_reclaim": {
+      "binding": "8ab1731f5a62948e78d98c16c2b2fe50a46c4f6e93cd9b9bebfe6b5b744fd6f8",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "reclaim",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 8
+      }
+    },
+    "measurement_collect": {
+      "binding": "ded9fd2f2826cee26f57a53846795d6b712f2e956ef5cb11a0b327fe9902f51d",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "collect",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 16,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 32
+      }
+    },
+    "measurement_retire": {
+      "binding": "d3b4eeef5d92e1129e2af21407ed3c75c6857cc75a83e8e4fd84fba8f67bd2c3",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "retire",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 16,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 32
+      }
+    },
+    "measurement_reclaim": {
+      "binding": "5730e03b1efe2c6b3f7d23c601eeba2b9b4d7b74a6041282509499ecf45d0f42",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "reclaim",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 16,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 32
+      }
+    }
+  },
+  "measurements": {
+    "exclusive_collect": [
+      {
+        "completion_wall_ms": 0.591934,
+        "submission_stream_interval_ms": 0.559831976890564
+      },
+      {
+        "completion_wall_ms": 0.402003,
+        "submission_stream_interval_ms": 0.36361101269721985
+      },
+      {
+        "completion_wall_ms": 0.367511,
+        "submission_stream_interval_ms": 0.3289780020713806
+      },
+      {
+        "completion_wall_ms": 0.364201,
+        "submission_stream_interval_ms": 0.32444900274276733
+      },
+      {
+        "completion_wall_ms": 0.364391,
+        "submission_stream_interval_ms": 0.3212290108203888
+      }
+    ],
+    "split_retire_reclaim": [
+      {
+        "completion_wall_ms": 0.763243,
+        "submission_stream_interval_ms": 0.7245410084724426
+      },
+      {
+        "completion_wall_ms": 0.674998,
+        "submission_stream_interval_ms": 0.6358159780502319
+      },
+      {
+        "completion_wall_ms": 0.8908,
+        "submission_stream_interval_ms": 0.8522689938545227
+      },
+      {
+        "completion_wall_ms": 0.643367,
+        "submission_stream_interval_ms": 0.6046239733695984
+      },
+      {
+        "completion_wall_ms": 0.629626,
+        "submission_stream_interval_ms": 0.5844339728355408
+      }
+    ]
+  },
+  "promotion_eligible": false,
+  "performance_scope": "single process; stream interval includes host submission gaps",
+  "envelope": "exclusive stream epoch; one graph writer; final remark exclusive; no racing sweep"
+}

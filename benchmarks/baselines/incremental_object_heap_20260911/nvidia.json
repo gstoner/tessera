@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host": "The-Super-Bear",
+  "kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+  "recorder_sha256": "16713f0b3a92324dc19f6be1937345807bf339b1540a51f74052e3ff9111488a",
+  "model": {
+    "states": 6690,
+    "transitions": 64536,
+    "counterexample": null,
+    "reason": null
+  },
+  "missing_barrier": {
+    "states": 84,
+    "transitions": 168,
+    "counterexample": [
+      "begin",
+      "root_1"
+    ],
+    "reason": "incremental marking invariant violated"
+  },
+  "missing_pins": {
+    "states": 1741,
+    "transitions": 9599,
+    "counterexample": [
+      "begin",
+      "scan_0",
+      "pin_1",
+      "retire",
+      "reuse_1"
+    ],
+    "reason": "reader storage reclaimed"
+  },
+  "artifacts": {
+    "mark_begin": {
+      "binding": "62da6b9001e46b0214b9f9f81251971adefe42509b3d37cdac7aa4f861291f25",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "mark_begin",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    },
+    "mark_step": {
+      "binding": "dee17fc2bc5f822a9ea43b1e2a29b1d6c56bc03782f27c8504e05c5d9263b25e",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "mark_step",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    },
+    "graph_incremental": {
+      "binding": "8ab3b3900d9446f80ea30e0fa02da9795a311c373d7114332cd49806dbea3c45",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "graph_incremental",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    },
+    "retire_marked": {
+      "binding": "db3a1b1f29dafab8b5ac7541fe83332563d2ad725c0cf0d67c4d9be406cd2b21",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "retire_marked",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    },
+    "pin": {
+      "binding": "1c5d39e38594329630ecf9967c803843a4c04c9a89076cb78ff76f8fae463cea",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "pin",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    },
+    "reclaim_pinned": {
+      "binding": "891da4c883e9e8da14e5c8b88d9d9ae174b02f35f6fa52f0628198bf95f9f35e",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "reclaim_pinned",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    },
+    "unpin": {
+      "binding": "2ffde0c0bd5ec6df556e16143b86132bbb010f72149a5dbfb3abb11c4e638b02",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive_metadata",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "unpin",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 2,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_metadata_epoch",
+        "width": 8
+      }
+    }
+  },
+  "proofs": [
+    "black-to-white edge insertion produces consumed grey work",
+    "incomplete marking refuses retirement without mutation",
+    "admitted payload reader survives logical retirement",
+    "unrelated unpinned slot reuses during active object lease",
+    "retired and stale generations reject new readers",
+    "last completed reader permits reuse; next cycle collects floating garbage"
+  ],
+  "promotion_eligible": false,
+  "envelope": "single metadata writer; immutable payload; synchronous pin admission; no measured hardware overlap"
+}

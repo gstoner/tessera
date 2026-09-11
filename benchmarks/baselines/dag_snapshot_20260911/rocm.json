@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "recorder_sha256": "a39818a333de95e67fd6bb3eecddfa232cb7e53b7c44c5ba2b81918978bfce1f",
+  "execution": "native_gpu",
+  "heap_binding": "af45aacff18b3077b888d407793876ba49d2ff01c6964650a7727dd42623e071",
+  "ssd_bindings": [
+    "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+    "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179"
+  ],
+  "incremental_sweep_with_mutation": true,
+  "trusted_extension_cycle": true,
+  "traced_ssd_calls": 3,
+  "public_input_gradients": 5,
+  "snapshot_read_scope_during_live_sweep": true,
+  "sum_bindings": [
+    "77fe74bea0dd7533f6a25807ab3818025de9c3e5feb62bef1b00309d6ce60d40",
+    "8b6d27ddd3ccd747f57ec28a7873643e95fb957b64d10c2ca218ba45479577f7",
+    "c56f3868fa0df60ba3cbd531410d6a8b69b848ab0f2c522f49dac52d507d6825"
+  ],
+  "gradient_max_abs_errors": [
+    8.89287254776563e-12,
+    1.952839861606853e-09,
+    1.7440632258162135e-11,
+    2.770509516247799e-09,
+    9.327645201367973e-10
+  ],
+  "asynchronous_retirement": true,
+  "promotion_eligible": false
+}

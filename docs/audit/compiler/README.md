@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-11
 audit_role: index
 ---
 
@@ -208,3 +208,5 @@ consolidates the five reviewed documents under existing F0–F4, AD, NUMPOL,
 layout and transport owners. All five live paths remain useful: three scoped
 landing plans and two references. The August substrate snapshot and superseded
 AD/workload status excerpts are archived; they are not additional queues.
+
+- `HEAP_BARRIER_ARCHITECTURE_REVIEW.md` — [publication, reader epochs and reclamation design](HEAP_BARRIER_ARCHITECTURE_REVIEW.md); scoped exploration under W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER, not a status queue.

@@ -8529,3 +8529,103 @@ Not applicable to an active SSD promotion route on this backend. Shared admissio
 Owner: W4-PRODUCT-1 / W5.2f. Sync: `PROGRAM-RETIREMENT-SLOTS-2026-09-11`.
 
 Follow-up required: this backend needs its own resident-program retirement integration and exact-device proof. Shared hook-free slot discovery is host logic; CUDA/HIP lifetime evidence does not establish this backend's native retirement. Concurrent sweep, arbitrary extension heaps and general traced GPU AD remain open. [Evidence](../../../../benchmarks/baselines/program_retirement_20260911/README.md).
+
+### 2026-09-11 — Slotted snapshot type identity
+
+Owner: W4-PRODUCT-1. Sync: `SLOTTED-MODULE-IDENTITY-2026-09-11`.
+Slotted records now validate and include the class module, matching ordinary
+instances; inherited slot owners also include their module. The shared host snapshot format is corrected; native binding remains a follow-up.
+
+### 2026-09-11 — Incremental heap and traced SSD
+
+Owners: W4-PRODUCT-1 / W5.2f / FRONTEND-IR-MEDIUM-1.
+Sync: `INCREMENTAL-HEAP-TRACE-2026-09-11`.
+
+Follow-up required: shared host discovery/trace contracts do not supply a Metal pool or traced SSD execution path. Negative-infinity raised attention admission stays disabled here pending native proof.
+Sweep batches still run exclusively; lifecycle 2 means logically retired, not
+reusable. Arbitrary extension discovery, simultaneous sweeping, general GPU AD
+and Boolean/broadcast/empty-row masks remain open. No performance promotion.
+[Evidence](../../../../benchmarks/baselines/incremental_heap_trace_20260911/README.md).
+
+### 2026-09-11 — DAG accumulation and snapshot readers
+
+Owners: W5.2f / W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1.
+Sync: `DAG-SNAPSHOT-2026-09-11`.
+
+Follow-up required: Metal needs its own pool snapshot, cotangent addition and traced SSD owners. Host discovery improvements apply; CUDA/HIP snapshots and DAGs are not Apple device evidence.
+Snapshot readers access immutable copied epochs; unrestricted same-storage
+concurrent sweeping still requires barriers. General-key maps/sets/bytearrays
+are discovered; undeclared builtin-subclass native payloads refuse. Canonical
+composition IR, broader AD families and Boolean/broadcast masks remain open.
+[Evidence](../../../../benchmarks/baselines/dag_snapshot_20260911/README.md). No performance promotion.
+
+### 2026-09-11 — Heap barrier architecture exploration
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-BARRIERS-2026-09-11`.
+
+Follow-up required: independent MSL publication and command-buffer reader ownership; no CUDA/HIP binding transfers.
+[Architecture review](../../compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md)
+selects a nonmoving model, reader-protected reuse and barrier-aware updates,
+retaining exclusive final remark. Design only; no new execution or promotion.
+
+### 2026-09-11 — Bounded heap protocol implementation
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-BARRIERS-2026-09-11`.
+
+Follow-up required: the shared model/manifest does not provide an MSL heap producer or Metal reader-retirement binding. No Apple runtime modification, re-seal or device/performance claim.
+[Evidence](../../../../benchmarks/baselines/heap_barriers_20260911/README.md).
+The serialized protocol requires exclusive stream epochs and kernel-completion
+publication. Per-object admission, dirty-work marking, concurrent final
+retirement and atomic scope lowering remain follow-ups; this is not concurrent
+sweeping or calibrated kernel timing.
+
+### 2026-09-11 — Per-object readers and incremental marking
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-INCREMENTAL-2026-09-11`.
+
+Follow-up required: native Metal pin/mark producers and payload-reader binding. Shared models/manifests do not transfer CUDA/HIP execution, synchronization scopes or measured evidence. No runtime edit or re-seal.
+[Evidence](../../../../benchmarks/baselines/incremental_object_heap_20260911/README.md).
+Metadata remains single-writer; final retirement can coexist with admitted
+immutable-payload readers. Admission/unpin and close still have synchronous
+boundaries. This is not unrestricted concurrent sweeping or measured overlap.
+
+
+### 2026-09-11 — Asynchronous heap receipts and marking allocation
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-ASYNC-2026-09-11`.
+
+Follow-up required: MSL allocation/mark producers and private receipt binding. CUDA/HIP packets do not validate Metal. No Apple runtime edit or re-seal.
+[Evidence](../../../../benchmarks/baselines/async_heap_20260911/README.md).
+Private statuses remain owned until completion; uncertain unpin cannot retry.
+Metadata writers remain serialized; the split-reservation model has a race.
+Finalization/teardown remain synchronous. No measured overlap or promotion.
+
+
+### 2026-09-11 — Native heap handshake and deferred destruction
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-HANDSHAKE-2026-09-11`.
+
+Follow-up required: Metal atomic transaction lowering, receipt binding and context-owning teardown. No Apple runtime modification or re-seal; CUDA/HIP evidence does not transfer.
+[Evidence](../../../../benchmarks/baselines/heap_handshake_20260911/README.md).
+Native graph/retirement transactions share a try-lock; busy status requires
+explicit retry. Resident-pool metadata remains epoch serialized until every
+user participates. Teardown is asynchronous to the caller, with bounded worker
+admission and retained uncertain failures; driver latency is unbounded.
+No measured overlap or performance promotion.
+
+
+### 2026-09-11 — Gated metadata owner and isolated recovery
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-GATED-ISOLATION-2026-09-11`.
+
+Follow-up required: Metal gate-backed metadata producers and a process-owned heap launcher. No Metal runtime edit, re-seal or transferred CUDA/HIP evidence.
+[Evidence](../../../../benchmarks/baselines/gated_heap_20260911/README.md).
+The opt-in gated owner admits no live metadata or legacy snapshot/import bypass.
+Epochs remain for ordering/lifetimes. Eight process slots cap isolated heap owners;
+timeout and unconfirmed death retain resources. No measured overlap or promotion.

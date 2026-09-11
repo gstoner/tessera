@@ -31,7 +31,7 @@ class ResidentObjectPool:
             slots, width, "collect", payload_dtype="int8", references=references, **options
         )
         self.graph_program = materialize_pool(
-            slots, width, "graph", payload_dtype="int8", references=references, **options
+            slots, width, "graph_checked", payload_dtype="int8", references=references, **options
         )
         self._graph = self.graph_program.bind()
         self._allocate, self._collect = self.allocate_program.bind(), self.collect_program.bind()
@@ -57,10 +57,13 @@ class ResidentObjectPool:
         self.check(self.current(ct.byref(self.context)))
         self._upload = bind("cuMemcpyHtoD_v2", "hipMemcpyHtoD", [P, P, S])
         self.epoch = None
+        self._snapshots = []
         self._collection = None
+        self._sweep_cursor = 0
         self._collection_uncertain = False
         self._snapshot = None
         self._marker = self._seeded = None
+        self._retire = self._reclaim = None
         try:
             self._state = _Buffer(self, (slots, 3), "int64")
             self._roots = _Buffer(self, (slots,), "int64")
@@ -97,7 +100,7 @@ class ResidentObjectPool:
         self.check(self.current(ct.byref(context)))
         if context.value != self.context.value:
             raise ValueError("object pool requires its owning context")
-        for binding in (self._allocate, self._collect, self._graph, self._marker, self._seeded):
+        for binding in (self._allocate, self._collect, self._graph, self._marker, self._seeded, self._retire, self._reclaim):
             if binding is not None and binding._bound is not None:
                 for ticket in list(binding._bound._pending):
                     ticket.poll()
@@ -110,6 +113,15 @@ class ResidentObjectPool:
 
     def read(self, stream):
         return self._access().read(stream)
+
+    def snapshot(self, stream):
+        """Copy an immutable epoch for readers that may overlap later sweeping.
+
+        The copy is ordered as a writer. Subsequent snapshot readers use separate
+        storage and do not exclude current-pool mutations or collections.
+        """
+        from .resident_pool_snapshot import ResidentPoolSnapshot
+        return ResidentPoolSnapshot(self, stream)
 
     def allocate(self, stream, payload, length):
         with self._access().write(stream):
@@ -126,15 +138,59 @@ class ResidentObjectPool:
         return result.ticket
 
     def set_graph(self, stream, roots, edges):
+        """Validate all roots/edges before publication; status[0]=2 refuses.
+
+        Inputs must remain immutable through completion. Failure leaves the
+        previous graph intact; callers inspect status before interpreting it as
+        the requested graph. Final remark always rescans the published graph.
+        """
         with self._access().write(stream):
-            result = self._graph.submit(stream, self._state, self._roots, self._edges, roots, edges, 1)
+            result = self._graph.submit(stream, self._state, self._roots, self._edges, roots, edges, self._status, 1)
         return result.ticket
 
+    def _retirement_binding(self, mode):
+        binding = getattr(self, '_' + mode)
+        if binding is None:
+            slots, width, references = self._dimensions
+            binding = materialize_pool(slots, width, mode, payload_dtype='int8',
+                                       references=references, **self._options).bind()
+            setattr(self, '_' + mode, binding)
+        return binding
+
+    def retire_unreachable(self, stream):
+        """Exclusive final remark: dead slots become retired, never reusable."""
+        with self._lock:
+            self._ready()
+            if self._collection is not None:
+                raise ValueError('finish snapshot collection before explicit retirement')
+            binding = self._retirement_binding('retire')
+            with self._access().write(stream):
+                result = binding.submit(stream, self._state, self._roots, self._edges,
+                                        self._marks, self._status, 1)
+            return result.ticket
+
+    def reclaim_retired(self, stream):
+        """Reuse only retired slots, after every admitted reader completes.
+
+        An open reader scope refuses before submission. Closed scopes contribute
+        event dependencies, including readers admitted after logical retirement.
+        No host synchronization is introduced on the healthy path.
+        """
+        with self._lock:
+            self._ready()
+            if self._collection is not None:
+                raise ValueError('finish snapshot collection before explicit reclamation')
+            binding = self._retirement_binding('reclaim')
+            with self._access().write(stream):
+                result = binding.submit(stream, self._state, self._roots, self._edges,
+                                        self._marks, self._status, 1)
+            return result.ticket
+
     @classmethod
-    def from_objects(cls, *roots, stream, allow_slots=False, **options):
+    def from_objects(cls, *roots, stream, allow_slots=False, extension_layouts=(), **options):
         from .object_discovery import discover_objects
 
-        snapshot = discover_objects(*roots, allow_slots=allow_slots)
+        snapshot = discover_objects(*roots, allow_slots=allow_slots, extension_layouts=extension_layouts)
         slots = len(snapshot.payloads)
         width = max(map(len, snapshot.payloads))
         references = max(1, max(map(len, snapshot.edges)))
@@ -180,7 +236,7 @@ class ResidentObjectPool:
                     slots, width, "mark", payload_dtype="int8", references=references, **self._options
                 ).bind()
                 self._seeded = materialize_pool(
-                    slots, width, "collect_seeded", payload_dtype="int8", references=references, **self._options
+                    slots, width, "collect_slice", payload_dtype="int8", references=references, **self._options
                 ).bind()
                 start = len(self.buffers)
                 try:
@@ -203,14 +259,26 @@ class ResidentObjectPool:
             assert self.epoch is not None and self._marker is not None
             self.epoch._submission.ticket.wait_on(marker_stream)
             try:
+                self._sweep_cursor = 0
                 self._collection = self._marker.submit(marker_stream, state, roots, edges, marks, status, 1)
             except BaseException:
                 self._collection_uncertain = True
                 raise
             return self._collection.ticket
 
-    def finish_collection(self, stream):
-        """Remark current roots/edges plus snapshot survivors, then sweep."""
+    def finish_collection(self, stream, *, sweep_budget=None):
+        """Remark and sweep a bounded slot range under exclusive ownership.
+
+        Unreachable cohorts retire logically before bounded slot reuse; readers
+        see lifecycle 2 until reclamation and cannot resurrect retired objects.
+        Mutations/readers may run between batches. Every batch revalidates and
+        remarks the current graph; this is incremental, not a racing sweeper.
+        """
+        slots = self._dimensions[0]
+        if sweep_budget is None:
+            sweep_budget = slots
+        if type(sweep_budget) is not int or not 1 <= sweep_budget <= slots:
+            raise ValueError("sweep budget must be a positive bounded slot count")
         with self._lock:
             self._ready()
             if self._collection is None:
@@ -219,14 +287,17 @@ class ResidentObjectPool:
                 self._collection.ticket.wait_on(stream)
                 assert self._snapshot is not None and self._seeded is not None
                 marks, status = self._snapshot[-2:]
+                end = min(slots, self._sweep_cursor + sweep_budget)
                 try:
                     result = self._seeded.submit(
-                        stream, self._state, self._roots, self._edges, self._marks, self._status, marks, status, 1
+                        stream, self._state, self._roots, self._edges, self._marks, self._status, marks, status, self._sweep_cursor, end, 1
                     )
                 except BaseException:
                     self._collection_uncertain = True
                     raise
-                self._collection = None
+                self._sweep_cursor = end
+                if end == slots:
+                    self._collection = None
             return result.ticket
 
     def wait(self):
@@ -248,6 +319,8 @@ class ResidentObjectPool:
             if self._collection_uncertain:
                 self.check(self.native._sync())
                 self._collection_uncertain = False
+            for snapshot in list(self._snapshots):
+                snapshot.close()
             if self.epoch is not None:
                 self.epoch.wait()
             if self._collection is not None:
@@ -262,6 +335,9 @@ class ResidentObjectPool:
                 self._marker.close()
             if self._seeded is not None:
                 self._seeded.close()
+            for binding in (self._retire, self._reclaim):
+                if binding is not None:
+                    binding.close()
             self._graph.close()
             self._allocate.close()
             self._collect.close()

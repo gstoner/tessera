@@ -64,6 +64,29 @@ def lower_attention_bucket(recipe: ParametricRecipe, instance: BucketInstance, *
     return artifact
 
 
+def validate_mask_rows(artifact, bias):
+    """Refuse empty rows after composing additive, causal and window masks.
+
+    Negative infinity is the existing additive-mask representation in native
+    attention. This gate does not convert Boolean or broadcast inputs in Python.
+    """
+    import numpy as np
+    _, _, _, sq, sk, _, _ = artifact.dims
+    if not np.any(np.isneginf(bias)):
+        return
+    query = np.arange(sq)[:, None] + max(sk - sq, 0)
+    key = np.arange(sk)[None, :]
+    valid = np.ones((sq, sk), dtype=bool)
+    if artifact.causal:
+        valid &= key <= query
+    if artifact.window_left >= 0:
+        valid &= key >= query - artifact.window_left
+    if artifact.window_right >= 0:
+        valid &= key <= query + artifact.window_right
+    if not np.all(np.any(np.isfinite(bias) & valid, axis=-1)):
+        raise ValueError('raised attention mask produces a fully masked row')
+
+
 @dataclass(frozen=True)
 class RaisedAttentionBinding:
     artifact: ScheduledAttentionArtifact
@@ -81,8 +104,11 @@ class RaisedAttentionBinding:
         arguments = dict(q=q,k=k,v=v,out=out)
         if self.artifact.bias_name is not None:
             expected = (b,h,sq,self.artifact.dims[4])
-            if not isinstance(bias,np.ndarray) or bias.dtype != np.float32 or bias.shape != expected or not np.all(np.isfinite(bias)):
-                raise ValueError('raised attention bias requires finite full-shape fp32 data')
+            if not isinstance(bias,np.ndarray) or bias.dtype != np.float32 or bias.shape != expected or np.any(np.isnan(bias)) or np.any(np.isposinf(bias)):
+                raise ValueError('raised attention bias requires full-shape fp32 finite or negative-infinity data')
+            if np.any(np.isneginf(bias)) and self.artifact.target != "nvidia_sm120":
+                raise ValueError("negative-infinity attention masks require NVIDIA device proof")
+            validate_mask_rows(self.artifact, bias)
             arguments['bias'] = bias
         elif bias is not None:
             raise ValueError('this attention artifact has no bias operand')

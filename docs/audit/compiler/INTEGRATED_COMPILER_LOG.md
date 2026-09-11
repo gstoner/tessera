@@ -3489,3 +3489,159 @@ The requested ten-track list is reconciled to existing owners, not a new status 
 - Native exception allocation/root producers and bounded cycle collectors exist. Automatic throw-site integration, arbitrary heaps, concurrent reclamation and complete CPython deoptimization/frame reconstruction remain open.
 - Persistent SSD AD/checkpoints and native attention recipes/buckets exist. General traced effectful AD, heterogeneous/aliased products, Boolean/padding/broadcast masks and fully masked-row behavior remain owner-specific acceptance gates.
 - Larger ANN/SSD measurements and CUDA mixed-artifact attribution exist; they do not grant clean promotion or ROCm hardware-counter evidence. The shared registered Schedule SSD family is implemented; next work is frontend integration, tuning and selector-grade proof, not starting another SSD operation.
+
+
+### 2026-09-11 — Incremental sweeping and traced SSD composition
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`); includes the slotted-module identity correction.
+
+Outcome: Incremental GPU collection retires a complete unreachable cohort before range reclamation, preserving generation-safe reuse and avoiding dangling dead-cycle edges between batches. Explicit exact-type extension extractors copy schema-tagged bytes/referents under caller-owned quiescence. Linear ResidentSSDTrace composition builds its call graph before GPU submission, generates reverse traversal and projects scoped gradients back to all public inputs. NVIDIA additive-mask admission now accepts negative infinity but refuses fully masked rows after causal/window intersection.
+
+Remaining: Sweep kernels still exclude writers/readers; simultaneous sweeping needs atomic publication and read barriers. Extension callbacks are explicitly trusted, not automatic arbitrary-heap discovery. GPU tracing is host orchestration of independently replayed packages; canonical composition IR/fusion remains open. It admits uniquely consumed linear SSD calls only: branches, accumulation, reused inputs, effects and additional families remain open. Boolean/broadcast masks and defined empty-row outputs need compiler/ABI work. No promotion or Apple/x86 device proof is claimed.
+
+Evidence: `benchmarks/baselines/incremental_heap_trace_20260911/`, `benchmarks/record_incremental_heap_trace.py`, `tests/unit/test_resident_trace.py`, `tests/unit/test_resident_pool_sweep.py`, `tests/unit/test_object_discovery.py`, `tests/unit/test_attention_loop_idiom.py`.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1).
+
+The ten-track reconciliation above remains the ownership map. This increment
+advances the heap, persistent-product/AD and attention tracks; it does not close
+F0/F2 census/migrations, isolated driver recovery, CPython reconstruction or
+performance admission. The shared tiled-SSD family already exists.
+
+
+### 2026-09-11 — Resident DAG accumulation and snapshot readers
+
+Owner: [W5.2f](INTEGRATED_COMPILER_PLAN.md#w52f)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`), extending the preceding incremental sweep work.
+
+Outcome: Traced SSD DAGs now admit fan-out and repeated public inputs across calls; replay-validated native f32 addition accumulates every cotangent path in a fixed order. Addition outputs and modules share frame/program retirement. CUDA/HIP validate a three-call DAG against independent float64 finite differences. Immutable pool snapshots hold copied epochs for readers while the live pool sweeps; parent close retains all snapshots through reader completion. Discovery adds exact general-key maps, sets, frozensets and bytearrays, and refuses undeclared builtin-subclass payloads and custom metaclasses before invoking user hooks. CUDA validates irregular additive masks composed with ragged GQA, causal and window masks in both Q/K size directions.
+
+Remaining: Snapshot isolation does not permit racing arbitrary readers/writers over the same storage. Unrestricted sweep still needs publication/read barriers and generation-safe reclamation. Arbitrary extension discovery still requires a declared trusted layout; opaque native storage is not guessed. Tracing remains host orchestration of native SSD packages, not canonical whole-program IR, effectful control-flow AD, general operation families, or same-call alias admission. Boolean/broadcast masks and defined empty-row outputs remain open. No promotion.
+
+Evidence: `benchmarks/baselines/dag_snapshot_20260911/`, `benchmarks/record_dag_snapshot.py`, `tests/unit/test_resident_gradient_sum.py`, `tests/unit/test_resident_trace.py`, `tests/unit/test_resident_pool_snapshot.py`, `tests/unit/test_object_discovery.py`, `tests/unit/test_attention_loop_idiom.py`.
+
+<!-- entry-fields:end -->
+
+Additional owners: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1), [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1).
+
+### 2026-09-11 — Heap publication and reader barrier exploration
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`).
+
+Outcome: Inventoried exclusive epochs, immutable snapshots, ordinary heap loads/stores and Tile completion domains; selected a staged nonmoving design for modeling.
+
+Remaining: Executable interleaving model, consumed artifact contract, epoch retirement, barrier-aware updates and independent device/performance gates remain unimplemented.
+
+Evidence: [Source-linked architecture review](HEAP_BARRIER_ARCHITECTURE_REVIEW.md); source inspection only, no new device result.
+
+<!-- entry-fields:end -->
+
+Reader ownership routes to [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a);
+uncertain completion routes to [DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker).
+Sync: `HEAP-BARRIERS-2026-09-11`. Final remark remains exclusive; memory ordering,
+reachability and reclamation are independent obligations.
+
+### 2026-09-11 — Bounded heap protocol and device comparison
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`).
+
+Outcome: Added a bounded interleaving model, consumed v1 artifact protocol, split retirement/reclamation and validated graph publication. CUDA/HIP independently execute the new boundaries.
+
+Remaining: Per-object epochs, dirty-work barriers, concurrent final retirement, atomic scope lowering and selector-grade performance remain open. Final remark and whole-pool writes remain exclusive.
+
+Evidence: [Independent packets and comparison](../../../benchmarks/baselines/heap_barriers_20260911/README.md); 69 focused host-WSL tests passed, Ruff passed and mypy ratchet remains zero.
+
+<!-- entry-fields:end -->
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns reader-protected reuse;
+[DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker) owns failure
+retention. The model finds a counterexample when reclamation dependencies are
+removed. Device packets check stale publication, newly rooted cycles and
+multi-stream payload copies before reuse. Five single-process samples show
+higher cost for split retirement; no promotion. Sync: `HEAP-BARRIERS-2026-09-11`.
+
+### 2026-09-11 — Per-object readers and incremental marking
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`).
+
+Outcome: V2 native generation-checked pins, consumed tricolor marking barriers and final retirement during immutable payload-reader scopes execute on CUDA SM120 and ROCm gfx1151. Unrelated unpinned slots reuse while another reader remains admitted.
+
+Remaining: Metadata writers are still exclusive. Asynchronous admission/unpin, allocation during marking, cooperative marking and an atomic multi-writer handshake remain open; no measured overlap or promotion.
+
+Evidence: [Independent packets and model](../../../benchmarks/baselines/incremental_object_heap_20260911/README.md); model 6,690 states / 64,536 transitions; 77 focused host-WSL tests passed.
+
+<!-- entry-fields:end -->
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns pin/completion lifetime;
+[DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker) owns uncertainty.
+Closed reader scopes remain pinned until completion; unknown decrements retain
+the pool and cannot be retried. Metadata-scope refusal before submission stays
+retryable. Sync: `HEAP-INCREMENTAL-2026-09-11`.
+
+
+### 2026-09-11 — Asynchronous heap receipts and marking allocation
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`).
+
+Outcome: Optional private polled admission/unpin receipts and grey allocation publication execute independently on CUDA SM120 and ROCm gfx1151. Cancelled admission releases its pin after completion; stale admission does not poison the pool.
+
+Remaining: Metadata writers remain serialized. The reservation model exposes the split validate/write race; native atomic reservation, retirement handshake, cooperative marking and asynchronous finalization/teardown remain open. No measured overlap or promotion.
+
+Evidence: [Device packets and limitations](../../../benchmarks/baselines/async_heap_20260911/README.md).
+
+<!-- entry-fields:end -->
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns receipt and reader lifetime;
+[DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker) owns retention
+after unknown copy/decrement outcomes. Sync: `HEAP-ASYNC-2026-09-11`.
+
+
+### 2026-09-11 — Native heap handshake and deferred destruction
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`).
+
+Outcome: Schema-3 native graph/retirement try-lock kernels, private polled mark finalization and bounded context-owning teardown workers pass independent CUDA SM120 and ROCm gfx1151 checks.
+
+Remaining: All metadata users must join the gate before removing resident-pool epoch ordering. Cooperative marking, finer transactions and isolated recovery after uncertain teardown remain open. Worker driver calls may block; no measured overlap or promotion.
+
+Evidence: [Device packets, model and limitations](../../../benchmarks/baselines/heap_handshake_20260911/README.md); 77 focused host-WSL tests passed.
+
+<!-- entry-fields:end -->
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns reader and receipt lifetimes;
+[DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker) owns retained
+teardown failures. Sync: `HEAP-HANDSHAKE-2026-09-11`.
+
+
+### 2026-09-11 — Gated metadata owner and isolated recovery
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: This change set (`codex/gated-heaps-resident-ad`).
+
+Outcome: Opt-in gated owner routes all admitted metadata operations through its owned gate and exposes copied inspection. Spawned CUDA/HIP heap workers support death-confirmed recovery with bounded retained capacity.
+
+Remaining: Legacy snapshot/import migration, broader isolated commands, health-checked replacement, actual driver-hang validation and epoch relaxation remain open. The existing incremental owner is not silently migrated. No measured overlap or promotion.
+
+Evidence: [Independent CUDA/HIP packets and limitations](../../../benchmarks/baselines/gated_heap_20260911/README.md).
+
+<!-- entry-fields:end -->
+
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a) owns pinned readers and copied metadata;
+[DISPATCH-BREAKER](INTEGRATED_COMPILER_PLAN.md#dispatch-breaker) owns confirmed
+process death and retained failures. Sync: `HEAP-GATED-ISOLATION-2026-09-11`.

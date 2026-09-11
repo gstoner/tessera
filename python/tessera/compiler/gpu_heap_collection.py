@@ -3,7 +3,10 @@
 Numeric or opaque-byte slots are bounded and nonmoving, with up to 32 explicit
 reference edges. Snapshot marking reads private copies while the single writer
 mutates the active graph; final remark/sweep excludes writers and readers.
-This is not a CPython allocator or concurrent sweeping collector.
+State columns are generation, byte/element length, and lifecycle (0 free,
+1 live, 2 logically retired). Incremental sweep retires a complete unreachable
+cohort before reclaiming a range; retired edges are not traversed and allocation
+cannot reuse retired slots. This is not a CPython allocator or concurrent sweeper.
 """
 
 from dataclasses import dataclass
@@ -16,6 +19,10 @@ from .native_storage_contract import attach_tensor_contract, generate_tensor_bin
 
 
 def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
+    protocol_mode = mode
+    atomic = mode.startswith("atomic_") and mode.removeprefix("atomic_") in ("allocate", "allocate_marked", "graph_checked", "graph_incremental", "mark_begin", "mark_step", "retire_marked", "reclaim_pinned", "pin", "unpin", "inspect")
+    if atomic:
+        mode = mode.removeprefix("atomic_")
     if (
         type(slots) is not int
         or payload_dtype not in ("fp32", "int8")
@@ -25,7 +32,7 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
         or not 1 <= slots <= 256
         or not 1 <= width
         or slots * width > 262144
-        or mode not in ("allocate", "collect", "graph", "mark", "collect_seeded")
+        or mode not in ("allocate", "collect", "graph", "mark", "collect_seeded", "collect_slice", "graph_checked", "retire", "reclaim", "pin", "unpin", "allocate_marked", "graph_incremental", "mark_begin", "mark_step", "retire_marked", "reclaim_pinned", "inspect")
     ):
         raise ValueError("GPU heap pool requires bounded slots/width and a known operation")
     specs: list[TensorSpec | IndexSpec] = [
@@ -33,22 +40,45 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
         TensorSpec("roots", "int64", (slots,), True),
         TensorSpec("edges", "int64", (slots, 2 * references), True),
     ]
-    if mode == "allocate":
+    if mode in ("allocate", "allocate_marked"):
         specs += [
             TensorSpec("payload", payload_dtype, (slots, width), True),
             TensorSpec("input", payload_dtype, (width,)),
             TensorSpec("status", "int64", (3,), True),
             IndexSpec("length", 0, width),
         ]
-    elif mode == "graph":
+    elif mode in ("graph", "graph_checked", "graph_incremental"):
         specs += [
             TensorSpec("root_input", "int64", (slots,)),
             TensorSpec("edge_input", "int64", (slots, 2 * references)),
         ]
+        if mode == "graph_incremental":
+            specs += [TensorSpec("marks", "int64", (slots,), True)]
+        if mode in ("graph_checked", "graph_incremental"):
+            specs += [TensorSpec("status", "int64", (3,), True)]
+    elif mode in ("pin", "unpin"):
+        specs += [TensorSpec("pins", "int64", (slots,), True),
+                  TensorSpec("status", "int64", (3,), True),
+                  IndexSpec("slot", 0, slots - 1), IndexSpec("generation", 1, (1 << 31) - 1)]
     else:
         specs += [TensorSpec("marks", "int64", (slots,), True), TensorSpec("status", "int64", (3,), True)]
-    if mode == "collect_seeded":
+    if mode in ("collect_seeded", "collect_slice"):
         specs += [TensorSpec("seed", "int64", (slots,)), TensorSpec("seed_status", "int64", (3,))]
+    if mode == "collect_slice":
+        specs += [IndexSpec("sweep_begin", 0, slots), IndexSpec("sweep_end", 0, slots)]
+    if mode == "reclaim_pinned":
+        specs += [TensorSpec("pins", "int64", (slots,))]
+    if mode == "allocate_marked":
+        specs += [TensorSpec("marks", "int64", (slots,), True)]
+    if mode == "mark_step":
+        specs += [IndexSpec("budget", 1, slots)]
+    if mode == "inspect":
+        specs += [TensorSpec("state_out", "int64", (slots, 3), True),
+                  TensorSpec("roots_out", "int64", (slots,), True),
+                  TensorSpec("edges_out", "int64", (slots, 2 * references), True),
+                  TensorSpec("marks_out", "int64", (slots,), True)]
+    if atomic:
+        specs += [TensorSpec("gate", "int64", (1,), True)]
     specs += [IndexSpec("scratch", 1, 1)]
     args = ", ".join("%" + s.name + ": " + ("!llvm.ptr<1>" if isinstance(s, TensorSpec) else "index") for s in specs)
     lines = [
@@ -65,6 +95,7 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
         ("W", width, "i64"),
         ("zero", 0, "i64"),
         ("unit", 1, "i64"),
+        ("retired", 2, "i64"),
         ("invalid", -1, "i64"),
         ("limit", (1 << 31) - 1, "i64"),
     ]:
@@ -108,9 +139,22 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
             ]
         )
 
-    if mode == "graph":
+    def shade(index):
+        nonlocal lines
+        value = load("marks", index)
+        tag = f"white{serial}"
+        lines += [f"%{tag} = arith.cmpi eq, {value}, %zero : i64", f"scf.if %{tag} {{"]
+        store("marks", index, "%unit")
+        lines += ["}"]
+
+    def copy_graph():
+        nonlocal lines
         lines += ["scf.for %i = %z to %N step %one {", "%ix = arith.index_cast %i : index to i64"]
         value = load("root_input", "%ix")
+        if mode == "graph_incremental":
+            lines += [f"%hasroot = arith.cmpi ne, {value}, %zero : i64", "scf.if %hasroot {"]
+            shade("%ix")
+            lines += ["}"]
         store("roots", "%ix", value)
         lines += [
             f"%edgecount = arith.constant {2 * references} : index",
@@ -121,9 +165,61 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
             "%offset = arith.addi %base, %ji : i64",
         ]
         value = load("edge_input", "%offset")
+        if mode == "graph_incremental":
+            lines += ["%pair = arith.constant 2 : i64", "%part = arith.remui %ji, %pair : i64",
+                      "%targetpart = arith.cmpi eq, %part, %zero : i64",
+                      f"%hastarget = arith.cmpi ne, {value}, %invalid : i64",
+                      "%triple = arith.constant 3 : i64", "%sb = arith.muli %ix, %triple : i64",
+                      "%sl = arith.addi %sb, %unit : i64", "%sa = arith.addi %sl, %unit : i64"]
+            alive = load("state", "%sa")
+            lines += [f"%source_live = arith.cmpi eq, {alive}, %unit : i64",
+                      "%target_exists = arith.andi %targetpart, %hastarget : i1",
+                      "%shade_target = arith.andi %target_exists, %source_live : i1", "scf.if %shade_target {"]
+            shade(value)
+            lines += ["}"]
         store("edges", "%offset", value)
         lines += ["}", "}"]
-    elif mode == "allocate":
+
+    if atomic:
+        lines += ["%reservation = llvm.cmpxchg %gate, %zero, %unit acq_rel acquire : !llvm.ptr<1>, i64",
+                  "%acquired = llvm.extractvalue %reservation[1] : !llvm.struct<(i64, i1)>",
+                  "scf.if %acquired {"]
+    if mode == "inspect":
+        for base, count in (("state", slots * 3), ("roots", slots), ("edges", slots * 2 * references), ("marks", slots)):
+            lines += [f"%{base}_count = arith.constant {count} : index",
+                      f"scf.for %i = %z to %{base}_count step %one {{",
+                      "%ix = arith.index_cast %i : index to i64"]
+            value = load(base, "%ix")
+            store(base + "_out", "%ix", value)
+            lines += ["}"]
+        store("status", "%zero", "%zero")
+    elif mode == "graph":
+        copy_graph()
+    elif mode in ("pin", "unpin"):
+        lines += ["%ix = arith.index_cast %slot : index to i64",
+                  "%requested = arith.index_cast %generation : index to i64",
+                  "%three = arith.constant 3 : i64", "%base = arith.muli %ix, %three : i64",
+                  "%len = arith.addi %base, %unit : i64", "%alive = arith.addi %len, %unit : i64"]
+        gen, length, live, pins = load("state", "%base"), load("state", "%len"), load("state", "%alive"), load("pins", "%ix")
+        lines += [f"%same = arith.cmpi eq, {gen}, %requested : i64",
+                  f"%is_live = arith.cmpi eq, {live}, %unit : i64",
+                  f"%is_retired = arith.cmpi eq, {live}, %retired : i64",
+                  "%present = arith.ori %is_live, %is_retired : i1",
+                  f"%sizeok = arith.cmpi ule, {length}, %W : i64",
+                  f"%pinroom = arith.cmpi ult, {pins}, %limit : i64",
+                  f"%haspin = arith.cmpi sgt, {pins}, %zero : i64",
+                  "%lifetime = arith.andi %same, " + ("%is_live" if mode == "pin" else "%present") + " : i1",
+                  "%bounded = arith.andi %sizeok, " + ("%pinroom" if mode == "pin" else "%haspin") + " : i1",
+                  "%valid = arith.andi %lifetime, %bounded : i1", "scf.if %valid {"]
+        lines += [f"%next = arith.{'addi' if mode == 'pin' else 'subi'} {pins}, %unit : i64"]
+        store("pins", "%ix", "%next")
+        store("status", "%zero", "%zero")
+        store("status", "%unit", length)
+        store("status", "%retired", gen)
+        lines += ["} else {", "%bad = arith.constant 2 : i64"]
+        store("status", "%zero", "%bad")
+        lines += ["}"]
+    elif mode in ("allocate", "allocate_marked"):
         lines += ["%found = scf.for %i = %z to %N step %one iter_args(%slot = %invalid) -> i64 {"]
         offsets("a")
         epoch = load("state", "%abase")
@@ -166,6 +262,8 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
                 f"%ei{offset} = arith.addi %edgebase, %eo{offset} : i64",
             ]
             store("edges", f"%ei{offset}", "%invalid" if offset % 2 == 0 else "%zero")
+        if mode == "allocate_marked":
+            store("marks", "%found", "%unit")
         store("state", "%aliveptr", "%unit")
         store("status", "%zero", "%zero")
         store("status", "%unit", "%found")
@@ -180,12 +278,14 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
         offsets("c")
         epoch = load("state", "%cbase")
         alive = load("state", "%calive")
-        root = load("roots", "%c")
+        root = load("root_input" if mode in ("graph_checked", "graph_incremental") else "roots", "%c")
         length = load("state", "%clen")
         lines += [
             f"%live = arith.cmpi eq, {alive}, %unit : i64",
             f"%dead = arith.cmpi eq, {alive}, %zero : i64",
-            "%flag = arith.ori %live, %dead : i1",
+            f"%pending = arith.cmpi eq, {alive}, %retired : i64",
+            "%notlive = arith.ori %pending, %dead : i1",
+            "%flag = arith.ori %live, %notlive : i1",
             f"%nogcroot = arith.cmpi eq, {root}, %zero : i64",
             f"%rootepoch = arith.cmpi eq, {root}, {epoch} : i64",
             "%liveroot = arith.andi %rootepoch, %live : i1",
@@ -200,7 +300,24 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
             "%start = arith.andi %recordok, %rootok : i1",
         ]
         previous = "%start"
-        if mode == "collect_seeded":
+        if mode in ("graph_incremental", "mark_step", "retire_marked"):
+            mark = load("marks", "%c")
+            lines += [f"%markzero = arith.cmpi eq, {mark}, %zero : i64",
+                      f"%markblack = arith.cmpi eq, {mark}, %retired : i64",
+                      f"%markbounded = arith.cmpi ule, {mark}, %retired : i64"]
+            if mode == "retire_marked":
+                lines += ["%finished = arith.ori %markzero, %markblack : i1",
+                          "%rootmarked = arith.ori %nogcroot, %markblack : i1",
+                          "%blacklive = arith.andi %markblack, %live : i1",
+                          "%marklive = arith.ori %markzero, %blacklive : i1",
+                          "%closedroot = arith.andi %rootmarked, %finished : i1",
+                          "%markvalid = arith.andi %closedroot, %marklive : i1"]
+            else:
+                lines += ["%marklive = arith.ori %markzero, %live : i1",
+                          "%markvalid = arith.andi %markbounded, %marklive : i1"]
+            lines += ["%markedstart = arith.andi %start, %markvalid : i1"]
+            previous = "%markedstart"
+        if mode in ("collect_seeded", "collect_slice"):
             status = load("seed_status", "%zero")
             seed = load("seed", "%c")
             lines += [
@@ -219,8 +336,8 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
                 f"%e{e}idx = arith.addi %cedge, %e{e}off : i64",
                 f"%e{e}genidx = arith.addi %e{e}idx, %unit : i64",
             ]
-            target = load("edges", f"%e{e}idx")
-            gen = load("edges", f"%e{e}genidx")
+            target = load("edge_input" if mode in ("graph_checked", "graph_incremental") else "edges", f"%e{e}idx")
+            gen = load("edge_input" if mode in ("graph_checked", "graph_incremental") else "edges", f"%e{e}genidx")
             lines += [
                 f"%edge{e}ok = scf.if %live -> i1 {{",
                 f"%empty{e} = arith.cmpi eq, {target}, %invalid : i64",
@@ -237,11 +354,17 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
             ]
             te = load("state", f"%targetbase{e}")
             ta = load("state", f"%targetalive{e}")
+            if mode == "retire_marked":
+                target_mark = load("marks", target)
+                lines += [f"%targetblack{e} = arith.cmpi eq, {target_mark}, %retired : i64",
+                          f"%sourcewhite{e} = arith.xori %markblack, %true : i1",
+                          f"%closededge{e} = arith.ori %sourcewhite{e}, %targetblack{e} : i1"]
             lines += [
                 f"%teq{e} = arith.cmpi eq, {te}, {gen} : i64",
                 f"%talive{e} = arith.cmpi eq, {ta}, %unit : i64",
                 f"%edgegood{e} = arith.andi %teq{e}, %talive{e} : i1",
-                f"scf.yield %edgegood{e} : i1",
+                (f"%edgeclosed{e} = arith.andi %edgegood{e}, %closededge{e} : i1\nscf.yield %edgeclosed{e} : i1"
+                 if mode == "retire_marked" else f"scf.yield %edgegood{e} : i1"),
                 "} else {scf.yield %false : i1}",
                 f"scf.yield %targetok{e} : i1",
                 "}",
@@ -255,61 +378,148 @@ def emit_pool(slots, width, mode, *, payload_dtype="fp32", references=2):
             "scf.yield %allok : i1",
             "}",
             "scf.if %valid {",
-            "scf.for %i = %z to %N step %one {",
-            "%ix = arith.index_cast %i : index to i64",
         ]
-        r = load("roots", "%ix")
-        if mode == "collect_seeded":
-            prior = load("seed", "%ix")
-            lines += [f"%union = arith.ori {r}, {prior} : i64"]
-            r = "%union"
-        lines += [f"%rooted = arith.cmpi ne, {r}, %zero : i64", "%mark = arith.select %rooted, %unit, %zero : i64"]
-        store("marks", "%ix", "%mark")
-        lines += [
-            "}",
-            "scf.for %round = %z to %N step %one {",
-            "scf.for %i = %z to %N step %one {",
-            "%ix = arith.index_cast %i : index to i64",
-        ]
-        m = load("marks", "%ix")
-        lines += [
-            f"%marked = arith.cmpi ne, {m}, %zero : i64",
-            "scf.if %marked {",
-            f"%four = arith.constant {2 * references} : i64",
-            "%eb = arith.muli %ix, %four : i64",
-        ]
-        for e in range(references):
-            lines += [f"%off{e} = arith.constant {e * 2} : i64", f"%ei{e} = arith.addi %eb, %off{e} : i64"]
-            target = load("edges", f"%ei{e}")
-            lines += [f"%exists{e} = arith.cmpi ne, {target}, %invalid : i64", f"scf.if %exists{e} {{"]
-            store("marks", target, "%unit")
-            lines += ["}"]
-        lines += ["}", "}", "}", "%reclaimed = scf.for %i = %z to %N step %one iter_args(%freed = %zero) -> i64 {"]
-        offsets("s")
-        alive = load("state", "%salive")
-        marked = load("marks", "%s")
-        lines += [
-            f"%live = arith.cmpi eq, {alive}, %unit : i64",
-            f"%unmarked = arith.cmpi eq, {marked}, %zero : i64",
-            "%collect = arith.constant false" if mode == "mark" else "%collect = arith.andi %live, %unmarked : i1",
-            "%next = scf.if %collect -> i64 {",
-        ]
-        store("state", "%salive", "%zero")
-        lines += [
-            "%increment = arith.addi %freed, %unit : i64",
-            "scf.yield %increment : i64",
-            "} else {scf.yield %freed : i64}",
-            "scf.yield %next : i64",
-            "}",
-        ]
+        if mode in ("graph_checked", "graph_incremental"):
+            copy_graph()
+            store("status", "%unit", "%zero")
+        elif mode in ("mark_begin", "mark_step", "retire_marked", "reclaim_pinned"):
+            if mode == "mark_begin":
+                lines += ["scf.for %i = %z to %N step %one {", "%ix = arith.index_cast %i : index to i64"]
+                root = load("roots", "%ix")
+                lines += [f"%rooted = arith.cmpi ne, {root}, %zero : i64", "%initial = arith.select %rooted, %unit, %zero : i64"]
+                store("marks", "%ix", "%initial")
+                lines += ["}"]
+            elif mode == "mark_step":
+                lines += ["%scanned = scf.for %i = %z to %N step %one iter_args(%count = %z) -> index {",
+                          "%ix = arith.index_cast %i : index to i64"]
+                mark = load("marks", "%ix")
+                lines += [f"%grey = arith.cmpi eq, {mark}, %unit : i64", "%room = arith.cmpi ult, %count, %budget : index",
+                          "%visit = arith.andi %grey, %room : i1", "%next = scf.if %visit -> index {"]
+                store("marks", "%ix", "%retired")
+                lines += [f"%stride = arith.constant {2 * references} : i64", "%eb = arith.muli %ix, %stride : i64"]
+                for e in range(references):
+                    lines += [f"%off{e} = arith.constant {2 * e} : i64", f"%ei{e} = arith.addi %eb, %off{e} : i64"]
+                    target = load("edges", f"%ei{e}")
+                    lines += [f"%exists{e} = arith.cmpi ne, {target}, %invalid : i64", f"scf.if %exists{e} {{"]
+                    shade(target)
+                    lines += ["}"]
+                lines += ["%inc = arith.addi %count, %one : index", "scf.yield %inc : index",
+                          "} else {scf.yield %count : index}", "scf.yield %next : index", "}",
+                          "%scanned64 = arith.index_cast %scanned : index to i64"]
+                store("status", "%retired", "%scanned64")
+            else:
+                lines += ["scf.for %i = %z to %N step %one {"]
+                offsets("f")
+                alive = load("state", "%falive")
+                if mode == "retire_marked":
+                    mark = load("marks", "%f")
+                    lines += [f"%white = arith.cmpi eq, {mark}, %zero : i64",
+                              f"%live = arith.cmpi eq, {alive}, %unit : i64",
+                              "%change = arith.andi %white, %live : i1"]
+                else:
+                    pins = load("pins", "%f")
+                    lines += [f"%unpinned = arith.cmpi eq, {pins}, %zero : i64",
+                              f"%dead = arith.cmpi eq, {alive}, %retired : i64",
+                              "%change = arith.andi %unpinned, %dead : i1"]
+                lines += ["scf.if %change {"]
+                store("state", "%falive", "%retired" if mode == "retire_marked" else "%zero")
+                lines += ["}", "}"]
+            if mode == "mark_step":
+                lines += ["%remaining = scf.for %i = %z to %N step %one iter_args(%count = %zero) -> i64 {",
+                          "%ix = arith.index_cast %i : index to i64"]
+                mark = load("marks", "%ix")
+                lines += [f"%grey = arith.cmpi eq, {mark}, %unit : i64", "%delta = arith.select %grey, %unit, %zero : i64",
+                          "%next = arith.addi %count, %delta : i64", "scf.yield %next : i64", "}"]
+                store("status", "%unit", "%remaining")
+            else:
+                store("status", "%unit", "%zero")
+        else:
+            lines += ["scf.for %i = %z to %N step %one {", "%ix = arith.index_cast %i : index to i64"]
+            r = load("roots", "%ix")
+            if mode in ("collect_seeded", "collect_slice"):
+                prior = load("seed", "%ix")
+                lines += [f"%union = arith.ori {r}, {prior} : i64"]
+                r = "%union"
+            lines += [f"%rooted = arith.cmpi ne, {r}, %zero : i64", "%mark = arith.select %rooted, %unit, %zero : i64"]
+            store("marks", "%ix", "%mark")
+            lines += [
+                "}",
+                "scf.for %round = %z to %N step %one {",
+                "scf.for %i = %z to %N step %one {",
+                "%ix = arith.index_cast %i : index to i64",
+            ]
+            m = load("marks", "%ix")
+            lines += [
+                f"%marked = arith.cmpi ne, {m}, %zero : i64",
+                "scf.if %marked {",
+                f"%four = arith.constant {2 * references} : i64",
+                "%eb = arith.muli %ix, %four : i64",
+            ]
+            for e in range(references):
+                lines += [f"%off{e} = arith.constant {e * 2} : i64", f"%ei{e} = arith.addi %eb, %off{e} : i64"]
+                target = load("edges", f"%ei{e}")
+                lines += [f"%exists{e} = arith.cmpi ne, {target}, %invalid : i64", f"scf.if %exists{e} {{"]
+                store("marks", target, "%unit")
+                lines += ["}"]
+            lines += ["}", "}", "}"]
+            if mode == "collect_slice":
+                # Logically retire the entire unreachable cohort before reclaiming
+                # individual slots. Otherwise an unswept dead cycle would contain
+                # dangling edges into an earlier batch and fail the next remark.
+                lines += ["scf.for %i = %z to %N step %one {"]
+                offsets("r")
+                alive = load("state", "%ralive")
+                marked = load("marks", "%r")
+                lines += [f"%r_live = arith.cmpi eq, {alive}, %unit : i64",
+                          f"%r_unmarked = arith.cmpi eq, {marked}, %zero : i64",
+                          "%r_dead = arith.andi %r_live, %r_unmarked : i1",
+                          "scf.if %r_dead {"]
+                store("state", "%ralive", "%retired")
+                lines += ["}", "}"]
+            lines += ["%reclaimed = scf.for %i = %z to %N step %one iter_args(%freed = %zero) -> i64 {"]
+            offsets("s")
+            alive = load("state", "%salive")
+            marked = load("marks", "%s")
+            lines += [
+                (f"%live = arith.cmpi eq, {alive}, %unit : i64" if mode == "retire" else
+                 f"%live = arith.cmpi ne, {alive}, %zero : i64"),
+                f"%unmarked = arith.cmpi eq, {marked}, %zero : i64",
+                ("%collect = arith.constant false" if mode == "mark" else
+                 f"%collect = arith.cmpi eq, {alive}, %retired : i64" if mode == "reclaim" else
+                 "%collect = arith.andi %live, %unmarked : i1"),
+                "%next = scf.if %collect -> i64 {",
+            ]
+            if mode == "collect_slice":
+                lines += ["%after_begin = arith.cmpi uge, %i, %sweep_begin : index",
+                          "%before_end = arith.cmpi ult, %i, %sweep_end : index",
+                          "%in_slice = arith.andi %after_begin, %before_end : i1",
+                          "scf.if %in_slice {"]
+            store("state", "%salive", "%retired" if mode == "retire" else "%zero")
+            if mode == "collect_slice":
+                lines += ["}"]
+            lines += [
+                ("%delta = arith.select %in_slice, %unit, %zero : i64" if mode == "collect_slice" else "%delta = arith.constant 1 : i64"),
+                "%increment = arith.addi %freed, %delta : i64",
+                "scf.yield %increment : i64",
+                "} else {scf.yield %freed : i64}",
+                "scf.yield %next : i64",
+                "}",
+            ]
+            store("status", "%unit", "%reclaimed")
         store("status", "%zero", "%zero")
-        store("status", "%unit", "%reclaimed")
         lines += ["} else {", "%bad = arith.constant 2 : i64"]
         store("status", "%zero", "%bad")
         store("status", "%unit", "%zero")
         lines += ["}"]
+    if atomic:
+        lines += ["%released = llvm.atomicrmw xchg %gate, %zero release : !llvm.ptr<1>, i64",
+                  "} else {", "%busy = arith.constant 3 : i64"]
+        store("status", "%zero", "%busy")
+        lines += ["}"]
     lines += ["gpu.return", "}", "}", "}"]
-    return attach_tensor_contract("\n".join(lines), specs, grid=(1, 1, 1), block=(1, 1, 1)), tuple(specs)
+    from .heap_barrier_contract import attach_heap_contract
+    source = attach_tensor_contract("\n".join(lines), specs, grid=(1, 1, 1), block=(1, 1, 1))
+    return attach_heap_contract(source, slots, width, references, protocol_mode), tuple(specs)
 
 
 @dataclass(frozen=True)
@@ -324,6 +534,12 @@ class GPUHeapPoolKernel:
 
     def validate(self):
         self.package.validate()
+        from .heap_barrier_contract import read_heap_contract
+        contract = read_heap_contract(self.package.arena_ir)
+        if (contract["slots"], contract["width"], contract["references"], contract["mode"]) != (
+            self.slots, self.width, self.references, self.mode
+        ):
+            raise ValueError("GPU heap pool disagrees with protocol replay")
         if hashlib.sha256(self.compiler.read_bytes()).hexdigest() != self.package.compiler_digest:
             raise ValueError("GPU pool compiler identity changed")
         source, specs = emit_pool(

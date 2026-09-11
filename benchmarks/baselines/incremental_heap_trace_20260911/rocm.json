@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host_kernel": "6.18.33.1-microsoft-standard-WSL2",
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "recorder_sha256": "78d18174a84cfef1c78a2b3afbe7da520df2fbc694f5689f19c42e1d20002c5f",
+  "execution": "native_gpu",
+  "heap_binding": "af45aacff18b3077b888d407793876ba49d2ff01c6964650a7727dd42623e071",
+  "ssd_bindings": [
+    "5cd1d92e2f68f4aa503ac478bc688ae77c56698d704c712ffc60a6343bd52fa6",
+    "cf52aef7b03ce1061b877a40a612498a75ed56da0b0effb51837fc4b6fadb179"
+  ],
+  "incremental_sweep_with_mutation": true,
+  "trusted_extension_cycle": true,
+  "traced_ssd_calls": 2,
+  "public_input_gradients": 9,
+  "gradient_max_abs_errors": [
+    1.9762008652765561e-10,
+    7.519450329323413e-11,
+    8.923467520460804e-11,
+    3.6541955572566565e-10,
+    4.9527659805401886e-11,
+    1.3194820791539996e-09,
+    8.095740189340006e-10,
+    7.247685511642399e-10,
+    4.401549129513793e-10
+  ],
+  "asynchronous_retirement": true,
+  "promotion_eligible": false
+}

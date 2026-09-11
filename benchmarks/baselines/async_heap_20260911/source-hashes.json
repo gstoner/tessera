@@ -1,0 +1,8 @@
+{
+  "python/tessera/compiler/gpu_heap_collection.py": "6738b3c5f6316fa71abe19c2a7e250d06e5741a7642f1bf4e3ffdd888f1ae1c6",
+  "python/tessera/compiler/heap_barrier_contract.py": "4619243ea93bbbb456da5cdfd9085e5904ceb6e73fc5e1ab2012f829f28d1995",
+  "python/tessera/compiler/resident_incremental_pool.py": "52015fbcb9985217e83594ff2276257a7b1ec89cca63d1256eb00bf9ba1ce320",
+  "python/tessera/compiler/heap_async_receipt.py": "79f053dcfa8409b0e4e63c555d85c760bf817f8a40053baeacb34dc2b190b3b3",
+  "python/tessera/compiler/heap_writer_model.py": "de35887ea03822fd1e9f9c7780484ff206998602a9a075dc1684e040537a41e2",
+  "benchmarks/record_async_heap_admission.py": "6ac9249bab2bb72393b9cabdee3470e785c8ff7c0fa9703c7ae7b595f57d2aba"
+}

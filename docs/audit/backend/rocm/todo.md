@@ -7526,3 +7526,103 @@ Shared SSD admission now rejects any forward/carry/checkpoint maximum absolute e
 Owner: W4-PRODUCT-1 / W5.2f. Sync: `PROGRAM-RETIREMENT-SLOTS-2026-09-11`.
 
 Owning-device proof passed: declared-slot self-cycle discovery/collection and two public-VJP SSD frames retiring through off-thread module unloading with context synchronization forbidden on the program path. No performance claim. Concurrent sweep, arbitrary extension heaps and general traced GPU AD remain open. [Evidence](../../../../benchmarks/baselines/program_retirement_20260911/README.md).
+
+### 2026-09-11 — Slotted snapshot type identity
+
+Owner: W4-PRODUCT-1. Sync: `SLOTTED-MODULE-IDENTITY-2026-09-11`.
+Slotted records now validate and include the class module, matching ordinary
+instances; inherited slot owners also include their module. The host snapshot producer is corrected; device collection consumes opaque payload bytes, so no device execution claim is added.
+
+### 2026-09-11 — Incremental heap and traced SSD
+
+Owners: W4-PRODUCT-1 / W5.2f / FRONTEND-IR-MEDIUM-1.
+Sync: `INCREMENTAL-HEAP-TRACE-2026-09-11`.
+
+ROCm gfx1151 validates generation reuse between sweep batches, a trusted extension cycle, and all nine gradients of two traced SSD calls. F32 raised attention remains outside the admitted ROCm storage envelope; the NVIDIA mask result does not transfer.
+Sweep batches still run exclusively; lifecycle 2 means logically retired, not
+reusable. Arbitrary extension discovery, simultaneous sweeping, general GPU AD
+and Boolean/broadcast/empty-row masks remain open. No performance promotion.
+[Evidence](../../../../benchmarks/baselines/incremental_heap_trace_20260911/README.md).
+
+### 2026-09-11 — DAG accumulation and snapshot readers
+
+Owners: W5.2f / W4-PRODUCT-1 / FRONTEND-IR-MEDIUM-1.
+Sync: `DAG-SNAPSHOT-2026-09-11`.
+
+ROCm gfx1151 validates snapshot reader scopes during live-pool collection and a three-call SSD DAG with shared cotangent accumulation. Raised f32 attention remains outside the ROCm admission envelope; NVIDIA mask proof does not transfer.
+Snapshot readers access immutable copied epochs; unrestricted same-storage
+concurrent sweeping still requires barriers. General-key maps/sets/bytearrays
+are discovered; undeclared builtin-subclass native payloads refuse. Canonical
+composition IR, broader AD families and Boolean/broadcast masks remain open.
+[Evidence](../../../../benchmarks/baselines/dag_snapshot_20260911/README.md). No performance promotion.
+
+### 2026-09-11 — Heap barrier architecture exploration
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-BARRIERS-2026-09-11`.
+
+Follow-up required: gfx1151 ISA/LLVM atomic and HIP allocation-coherence proof; other AMD architectures remain separate.
+[Architecture review](../../compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md)
+selects a nonmoving model, reader-protected reuse and barrier-aware updates,
+retaining exclusive final remark. Design only; no new execution or promotion.
+
+### 2026-09-11 — Bounded heap protocol implementation
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-BARRIERS-2026-09-11`.
+
+Parity validated independently for the bounded stream-ordered protocol on gfx1151: graph rejection, new-root final remark, retired-slot refusal and two-stream copies before reuse. Five single-process WSL samples show higher split-route cost; no promotion. Other AMD architectures remain separate.
+[Evidence](../../../../benchmarks/baselines/heap_barriers_20260911/README.md).
+The serialized protocol requires exclusive stream epochs and kernel-completion
+publication. Per-object admission, dirty-work marking, concurrent final
+retirement and atomic scope lowering remain follow-ups; this is not concurrent
+sweeping or calibrated kernel timing.
+
+### 2026-09-11 — Per-object readers and incremental marking
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-INCREMENTAL-2026-09-11`.
+
+Parity validated independently on gfx1151 for per-object payload admission, incremental graph shading, incomplete-mark refusal and retirement/reuse during a different admitted reader. Follow-up: asynchronous checked admission, cooperative marking and ISA/scope proof for multiple writers. Other AMD architectures and performance evidence remain separate.
+[Evidence](../../../../benchmarks/baselines/incremental_object_heap_20260911/README.md).
+Metadata remains single-writer; final retirement can coexist with admitted
+immutable-payload readers. Admission/unpin and close still have synchronous
+boundaries. This is not unrestricted concurrent sweeping or measured overlap.
+
+
+### 2026-09-11 — Asynchronous heap receipts and marking allocation
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-ASYNC-2026-09-11`.
+
+Parity validated for the bounded gfx1151 device recorder: private receipt cycles, cancellation, stale admission and grey allocation publication. No evidence transfers to gfx1201/gfx950 or other devices; atomic scope lowering remains open.
+[Evidence](../../../../benchmarks/baselines/async_heap_20260911/README.md).
+Private statuses remain owned until completion; uncertain unpin cannot retry.
+Metadata writers remain serialized; the split-reservation model has a race.
+Finalization/teardown remain synchronous. No measured overlap or promotion.
+
+
+### 2026-09-11 — Native heap handshake and deferred destruction
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-HANDSHAKE-2026-09-11`.
+
+Parity validated independently on gfx1151. RDNA3.5 includes GLOBAL_ATOMIC_CMPSWAP_B64; LLVM acquire/release transactions compile and execute here. Other devices, full gate integration and performance need separate evidence.
+[Evidence](../../../../benchmarks/baselines/heap_handshake_20260911/README.md).
+Native graph/retirement transactions share a try-lock; busy status requires
+explicit retry. Resident-pool metadata remains epoch serialized until every
+user participates. Teardown is asynchronous to the caller, with bounded worker
+admission and retained uncertain failures; driver latency is unbounded.
+No measured overlap or performance promotion.
+
+
+### 2026-09-11 — Gated metadata owner and isolated recovery
+
+Owners: W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER.
+Sync: `HEAP-GATED-ISOLATION-2026-09-11`.
+
+Parity validated independently on gfx1151 for gated metadata and process-death recovery. No evidence transfers to other AMD devices; actual HIP driver-hang recovery and replacement health remain open.
+[Evidence](../../../../benchmarks/baselines/gated_heap_20260911/README.md).
+The opt-in gated owner admits no live metadata or legacy snapshot/import bypass.
+Epochs remain for ordering/lifetimes. Eight process slots cap isolated heap owners;
+timeout and unconfirmed death retain resources. No measured overlap or promotion.

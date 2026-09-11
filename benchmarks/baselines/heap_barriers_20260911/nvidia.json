@@ -1,0 +1,198 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host": "The-Super-Bear",
+  "kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+  "recorder_sha256": "6fdb1b60169367ff2340f523bcc54755107a531224bd6f8d744a49d3d5e21aab",
+  "model": {
+    "states": 103,
+    "transitions": 256,
+    "counterexample": null
+  },
+  "missing_reclamation_barrier": {
+    "states": 57,
+    "transitions": 87,
+    "counterexample": [
+      "reserve",
+      "initialize",
+      "publish",
+      "root_update",
+      "retire",
+      "acquire_0",
+      "reclaim"
+    ]
+  },
+  "proofs": [
+    "stale edge rejects the entire graph transaction",
+    "new root between snapshot and final remark preserves cycle",
+    "retired slots neither allocate nor resurrect",
+    "two reader streams complete before reclaimed payload reuse"
+  ],
+  "artifacts": {
+    "_graph": {
+      "binding": "263a8f7a3a17e34ce86aa7849e8e58b72179dd21c5453cfab736480272a8f59e",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "graph_checked",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 8
+      }
+    },
+    "_retire": {
+      "binding": "d55012fb503b3190dab588aee194a11c06b4fa0855a6897d7b77aa81dd192243",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "retire",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 8
+      }
+    },
+    "_reclaim": {
+      "binding": "df98ff4376522114bf02c8fd6bdd55e9a0b646fdc0e1fe5579c665c9eebd14ec",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "reclaim",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 8
+      }
+    },
+    "measurement_collect": {
+      "binding": "0885aa5b035775ee4277104dfbf8583720f71011adc1fed81dc0160958d071db",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "collect",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 16,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 32
+      }
+    },
+    "measurement_retire": {
+      "binding": "a6a7b053de76a794d37828a074e5d471bb3aec6d4bb91b54c2b0b6a9fdc3a25f",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "retire",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 16,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 32
+      }
+    },
+    "measurement_reclaim": {
+      "binding": "fc32fd627b77df4ebf22873b258f0a94242007b0b660e51843db4131235f9abe",
+      "protocol": {
+        "address_space": 1,
+        "final_remark": "exclusive",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "mode": "reclaim",
+        "payload": "immutable_until_reuse",
+        "publication": "kernel_completion",
+        "reclamation": "all_recorded_readers",
+        "references": 1,
+        "schema": 1,
+        "slots": 16,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "exclusive_stream_epoch",
+        "width": 32
+      }
+    }
+  },
+  "measurements": {
+    "exclusive_collect": [
+      {
+        "completion_wall_ms": 0.314212,
+        "submission_stream_interval_ms": 0.25388801097869873
+      },
+      {
+        "completion_wall_ms": 0.381768,
+        "submission_stream_interval_ms": 0.3200959861278534
+      },
+      {
+        "completion_wall_ms": 0.243982,
+        "submission_stream_interval_ms": 0.23862400650978088
+      },
+      {
+        "completion_wall_ms": 0.308923,
+        "submission_stream_interval_ms": 0.23587200045585632
+      },
+      {
+        "completion_wall_ms": 0.192521,
+        "submission_stream_interval_ms": 0.17574399709701538
+      }
+    ],
+    "split_retire_reclaim": [
+      {
+        "completion_wall_ms": 0.364873,
+        "submission_stream_interval_ms": 0.3567360043525696
+      },
+      {
+        "completion_wall_ms": 0.348942,
+        "submission_stream_interval_ms": 0.32953599095344543
+      },
+      {
+        "completion_wall_ms": 0.347112,
+        "submission_stream_interval_ms": 0.3331199884414673
+      },
+      {
+        "completion_wall_ms": 0.593725,
+        "submission_stream_interval_ms": 0.5819200277328491
+      },
+      {
+        "completion_wall_ms": 0.514304,
+        "submission_stream_interval_ms": 0.4362240135669708
+      }
+    ]
+  },
+  "promotion_eligible": false,
+  "performance_scope": "single process; stream interval includes host submission gaps",
+  "envelope": "exclusive stream epoch; one graph writer; final remark exclusive; no racing sweep"
+}

@@ -63,6 +63,11 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
             calibrations.append(build_rocm_profiler_packet(timing=timing,capture=_capture(),uninstrumented=clean,instrumented=probe,source=dict(source_commit='a'*40,worktree_dirty=False)))
     bound,decision = bind_measured_ssd(incumbent,candidate,comparison,calibrations)
     assert bound == 'cooperative' and decision.admitted
+    # Even a fast, fully calibrated candidate must pass the numerical gate.
+    bad = copy.deepcopy(comparison)
+    bad['pairs'][-1]['cooperative']['rows'][0]['max_abs_errors'][2] = 1e6
+    with pytest.raises(ValueError, match='absolute admission tolerance'):
+        bind_measured_ssd(incumbent,candidate,bad,calibrations)
     # Altering the eligibility bit cannot bypass the native environment gate.
     calibrations[0]['timing']['execution_environment'] = 'wsl2'
     calibrations[0]['eligible_for_promotion'] = True
@@ -75,3 +80,17 @@ def test_native_selector_binds_actual_candidate_only_after_calibration(monkeypat
     comparison['pairs'][0]['cooperative']['rows'][0]['image_sha256'] = 'foreign'
     with pytest.raises(ValueError,match='changed'):
         bind_measured_ssd(incumbent,candidate,comparison)
+
+
+@pytest.mark.parametrize('variant', ['serial', 'cooperative'])
+@pytest.mark.parametrize('output', range(3))
+def test_ssd_absolute_correctness_gate_boundary(variant, output):
+    import math
+    from tessera.compiler.ssd_performance import SSD_MAX_ABS_ERROR
+    pairs = evidence()
+    errors = pairs[-1][variant]['rows'][0]['max_abs_errors']
+    errors[output] = SSD_MAX_ABS_ERROR
+    summarize(pairs)
+    errors[output] = math.nextafter(SSD_MAX_ABS_ERROR, math.inf)
+    with pytest.raises(ValueError, match='absolute admission tolerance'):
+        summarize(pairs)

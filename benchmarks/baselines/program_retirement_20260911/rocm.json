@@ -1,0 +1,16 @@
+{
+  "backend": "rocm",
+  "artifacts": [
+    "fba3d9b14850513bb844892e2e90c2574f627e793cbbe743c1ac0c1eba88fe27",
+    "b3dd30a499d5c105a6bef582dc73e74608243347b9fa439eb7268414cfa5ba60"
+  ],
+  "slotted_cycle_verified": true,
+  "frames": 2,
+  "public_api": "vjp",
+  "off_thread_module_retirement": true,
+  "context_sync_forbidden": true,
+  "polls": 3,
+  "promotion_eligible": false,
+  "compiler_sha256": "7c79a3c65c8bafa861b41be0fb8fbdf1a482b4f38279aa046f295287c34f142b",
+  "recorder_sha256": "467c7d498f3fdfb41bfa544eaa870f6291723da015a787dc1bef58553ffeafbe"
+}

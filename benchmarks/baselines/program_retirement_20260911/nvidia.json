@@ -1,0 +1,16 @@
+{
+  "backend": "nvidia",
+  "artifacts": [
+    "1b93eff1b6e9bcc0c87d2a775650d332f46c66662bdf772dfe69a3d2dc02f6bc",
+    "6ad69beaa701b881722c63a0c918a74be5e7f2328c74b858edfb54197a234965"
+  ],
+  "slotted_cycle_verified": true,
+  "frames": 2,
+  "public_api": "vjp",
+  "off_thread_module_retirement": true,
+  "context_sync_forbidden": true,
+  "polls": 1,
+  "promotion_eligible": false,
+  "compiler_sha256": "fcb8dcfed27a0a11af98bba472f0271bb1ad238ec1b7ecd863035cf88c972aaf",
+  "recorder_sha256": "467c7d498f3fdfb41bfa544eaa870f6291723da015a787dc1bef58553ffeafbe"
+}

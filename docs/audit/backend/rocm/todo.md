@@ -7514,3 +7514,15 @@ Validated all four native SuperBench workloads on gfx1151. Fresh rocprofv3 kerne
 Owner: EVIDENCE-PACKET-1 / TPROF-NATIVE-1. Sync: `MATRIX-MIXED-ATTRIBUTION-2026-09-10`.
 
 Follow-up required: both scheduled fp16 GEMM and attention hit DictionaryAttr duplicate-name assertion in LLVM GPUFuncOpLowering during the native executable pipeline, before execution. Preserve assertions and repair the toolchain/lowering boundary; no native matrix result claimed. Existing four ANN/SSD tasks remain validated. Kernel tracing remains separately unavailable on this WSL host. [Evidence](../../../../benchmarks/baselines/matrix_mixed_20260910/README.md). No promotion.
+
+### SSD numerical admission repair (2026-09-11)
+
+Owner: EVIDENCE-PACKET-1 / W5.2f. Sync: `SSD-NUMERICAL-ADMISSION-2026-09-11`.
+
+Shared SSD admission now rejects any forward/carry/checkpoint maximum absolute error above 1e-6 before speed or calibration gates. Summary-only evidence cannot reconstruct relative tolerance; larger errors need richer numerical evidence. No new device measurement or promotion.
+
+### Program retirement and slot discovery (2026-09-11)
+
+Owner: W4-PRODUCT-1 / W5.2f. Sync: `PROGRAM-RETIREMENT-SLOTS-2026-09-11`.
+
+Owning-device proof passed: declared-slot self-cycle discovery/collection and two public-VJP SSD frames retiring through off-thread module unloading with context synchronization forbidden on the program path. No performance claim. Concurrent sweep, arbitrary extension heaps and general traced GPU AD remain open. [Evidence](../../../../benchmarks/baselines/program_retirement_20260911/README.md).

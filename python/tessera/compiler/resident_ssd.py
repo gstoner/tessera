@@ -24,11 +24,12 @@ class ResidentSSDProgram:
         self._lock = threading.RLock()
         self.frames = []
         self.closed = False
+        self._closing = False
 
     def capture(self, *inputs):
         with self._lock:
-            if self.closed:
-                raise ValueError("resident SSD program is closed")
+            if self.closed or self._closing:
+                raise ValueError("resident SSD program is closed or retiring")
             if any(hasattr(value, "_tessera_reader_stream") for value in inputs):
                 raise ValueError("borrowed persistent view requires explicit stream ownership")
             frame = ResidentSSDFrame(self, inputs)
@@ -40,8 +41,8 @@ class ResidentSSDProgram:
 
         stream = _stream(stream)
         with self._lock:
-            if self.closed:
-                raise ValueError("resident SSD program is closed")
+            if self.closed or self._closing:
+                raise ValueError("resident SSD program is closed or retiring")
             if any(getattr(value, "_tessera_reader_stream", stream) != stream for value in inputs):
                 raise ValueError("capture requires the borrowed reader stream")
             frame = ResidentSSDFrame(self, inputs, stream=stream)
@@ -75,8 +76,55 @@ class ResidentSSDProgram:
             # completion, including a possibly failed enqueue.
             raise
 
+    def retire_async(self, stream):
+        """Retire every frame, then poll off-thread module unload completion.
+
+        A partially submitted retirement stays closed to new captures. Calling
+        this method again resumes frames whose retirement could not be queued.
+        """
+        from .native_reader_retirement import _stream
+        stream = _stream(stream)
+        with self._lock:
+            if self.closed:
+                return self
+            # Refuse live leases across all frames before freeing any frame.
+            for frame in self.frames:
+                owners = [*frame._submissions]
+                if frame._forward_epoch is not None:
+                    owners.append(frame._forward_epoch)
+                if any(owner._active for owner in owners):
+                    raise ValueError("program retirement requires closed reader scopes")
+            self._closing = True
+            for frame in list(self.frames):
+                if not frame.closed and frame._retirement is None:
+                    frame.retire_async(stream)
+        return self
+
+    def poll_close(self):
+        """Query frame completion and bounded-admission unload workers only."""
+        with self._lock:
+            if self.closed:
+                return True
+            if not self._closing:
+                raise ValueError("program retirement has not started")
+            ready = True
+            for frame in list(self.frames):
+                if frame._retirement is None or not frame.poll_close():
+                    ready = False
+            if not ready:
+                return False
+            # Poll both bindings even when one unload worker is still pending.
+            complete = [binding.close_if_complete(defer_unload=True)
+                        for binding in (self._reverse, self._forward)]
+            self.closed = all(complete)
+            return self.closed
+
     def close(self):
         with self._lock:
+            if self._closing and not self.closed:
+                if not self.poll_close():
+                    raise RuntimeError("resident SSD retirement pending; poll completion")
+                return
             if not self.closed:
                 for frame in list(self.frames):
                     frame.close()
@@ -85,8 +133,8 @@ class ResidentSSDProgram:
                 self.closed = True
 
     def __enter__(self):
-        if self.closed:
-            raise ValueError("resident SSD program is closed")
+        if self.closed or self._closing:
+            raise ValueError("resident SSD program is closed or retiring")
         return self
 
     def __exit__(self, *exc):

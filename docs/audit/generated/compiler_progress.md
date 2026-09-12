@@ -12,7 +12,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `End-to-end optimizing compiler dashboard checks` | mixed | 10 | 27 | 17 | dashboard_checks_closed=10, mixed=14, open=3, primary_open=backend_kernel, Direct test evidence, CUDA target-map native promotion | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
+| `End-to-end optimizing compiler dashboard checks` | mixed | 11 | 27 | 16 | dashboard_checks_closed=11, mixed=13, open=3, primary_open=backend_kernel, Direct test evidence, CUDA target-map native promotion | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
 
 ## Compiler Phase And IR State
 
@@ -41,7 +41,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Verifier coverage` | mixed | 240 | 241 | 1 | absent=1, real=240 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
+| `Verifier coverage` | closed | 241 | 241 | 0 | real=241 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 408 | 520 | 112 | covered_by_family=26, directly_tested=415, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 262 | 262 | 0 | apple_cpu=2, apple_gpu=24, cpu=5, nvidia_sm120=52, rocm=92, x86=87 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 565 | 888 | 323 | apple=707, nvidia=8, rocm=13, x86=160 | Reduce stub-only ABI rows where a backend claims native execution. |
@@ -71,7 +71,6 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Audited repo surfaces` | mixed | 33 | archived=4, compile_only=18, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
 | `Target IR native/fused codegen` | mixed | 24 | device_verified_abi=27, device_verified_jit=196, fused=72, no_kernel_required=8, not_applicable=26, reference=24 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 | `ROCm target-map native promotion` | mixed | 11 | artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
-| `Verifier coverage` | mixed | 1 | absent=1, real=240 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. | `docs/audit/generated/verifier_coverage.csv` |
 
 ## Dashboard Map
 

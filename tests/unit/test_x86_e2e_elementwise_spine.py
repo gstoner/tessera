@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from tessera import runtime as rt
+from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tessera.compiler.canonical_compile import canonical_compile
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.x86_native import (
@@ -76,9 +77,17 @@ def test_elementwise_package_and_canonical_selector(monkeypatch, op_name, abi) -
     module = _module(op_name, (128, 128) if op_name == "tessera.add" else (3, 17))
     assert supports_elementwise(module)
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    if op_name == "tessera.absolute" and find_tessera_opt() is None:
+        # Absolute now requires native Graph→Schedule→Tile ownership even
+        # when the final target compilation is mocked in this CPU-only lane.
+        with pytest.raises(RuntimeError, match="absolute lowering requires the native compiler"):
+            package_elementwise(module, pipeline_name="tessera-lower-to-x86")
+        return
     package = package_elementwise(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
+    assert package.descriptor.provenance["work_item"] == (
+        "E2E-REAL-6" if op_name == "tessera.absolute" else "X86-E2E-2"
+    )
     monkeypatch.setattr("tessera.compiler.x86_native.tools_available", lambda: True)
     result = canonical_compile(module, target="x86", enable_tool_validation=False)
     assert result.launch_descriptor is not None

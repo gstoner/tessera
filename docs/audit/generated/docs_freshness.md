@@ -7,15 +7,14 @@ Reference date for staleness: **2026-09-12**.
 ## Headline
 
 - **157** docs catalogued across the canonical doc tree.
-- **155** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **57** updated within the last 30 days.
+- **156** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **58** updated within the last 30 days.
 - **38** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
-- `docs/spec/APPLE_ARENA_NUMERICAL_POLICY.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -24,7 +23,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `APPLE_ARENA_NUMERICAL_POLICY.md` | - | _undated_ | - | _body_ |
+| `APPLE_ARENA_NUMERICAL_POLICY.md` | - | 2026-09-12 | 0 | ✓ |
 | `AUTODIFF_SPEC.md` | - | 2026-07-14 | 60 | ✓ |
 | `CITL_ROCM_TRACE_PROFILER_SPEC.md` | Draft | 2026-08-06 | 37 | ✓ |
 | `CLIFFORD_SPEC.md` | - | 2026-05-17 | 118 | ✓ |

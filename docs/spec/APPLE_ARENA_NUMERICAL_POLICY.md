@@ -1,3 +1,9 @@
+---
+status: Normative (bounded scalar f32 arena)
+classification: Spec
+last_updated: 2026-09-12
+---
+
 # Apple arena f32 denormal policy
 
 Owner: [NUMPOL-CARRIER-1](../audit/compiler/INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1).

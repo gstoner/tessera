@@ -5385,12 +5385,7 @@ LogicalResult PagedKVReadOp::verify() {
   return success();
 }
 
-} // namespace tessera
-
-#define GET_OP_CLASSES
-#include "TesseraOps.cpp.inc"
-
-LogicalResult tessera::AbsoluteOp::verify() {
+LogicalResult AbsoluteOp::verify() {
   auto input = cast<RankedTensorType>(getInput().getType());
   auto output = cast<RankedTensorType>(getOutput().getType());
   Type expected = input.getElementType();
@@ -5399,3 +5394,8 @@ LogicalResult tessera::AbsoluteOp::verify() {
     return emitOpError("requires unchanged shape and magnitude element type");
   return success();
 }
+
+} // namespace tessera
+
+#define GET_OP_CLASSES
+#include "TesseraOps.cpp.inc"

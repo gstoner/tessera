@@ -103,9 +103,9 @@ class RaisedAttentionBinding:
             launch_descriptor=self.package.descriptor,tile_ir=self.package.tile_ir,target_ir=self.package.target_ir)
         arguments = dict(q=q,k=k,v=v,out=out)
         if self.artifact.bias_name is not None:
-            expected = (b,h,sq,self.artifact.dims[4])
+            expected = self.artifact.bias_shape
             if not isinstance(bias,np.ndarray) or bias.dtype != np.float32 or bias.shape != expected or np.any(np.isnan(bias)) or np.any(np.isposinf(bias)):
-                raise ValueError('raised attention bias requires full-shape fp32 finite or negative-infinity data')
+                raise ValueError('raised attention bias requires native physical-shape fp32 finite or negative-infinity data')
             if np.any(np.isneginf(bias)) and self.artifact.target != "nvidia_sm120":
                 raise ValueError("negative-infinity attention masks require NVIDIA device proof")
             validate_mask_rows(self.artifact, bias)
@@ -113,6 +113,8 @@ class RaisedAttentionBinding:
         elif bias is not None:
             raise ValueError('this attention artifact has no bias operand')
         arguments.update(zip(('B','Hq','Hkv','Sq','Sk','D','Dv'),self.artifact.dims,strict=True))
+        if self.artifact.bias_name is not None and self.artifact.bias_shape != (b,h,sq,self.artifact.dims[4]):
+            arguments.update(BiasB=self.artifact.bias_shape[0], BiasH=self.artifact.bias_shape[1])
         result = rt.launch(artifact,arguments)
         expected_kind = 'native_cpu' if self.artifact.target == 'x86' else 'native_gpu'
         if not result.get('ok') or result.get('execution_kind')!=expected_kind:

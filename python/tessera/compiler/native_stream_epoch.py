@@ -60,3 +60,14 @@ class NativeStreamEpoch:
             self._submission.ticket.wait()
             for reader in self._readers:
                 reader.wait()
+
+    def poll(self):
+        """Query every recorded dependency without an implicit synchronization."""
+        with self.frame._lock:
+            self.frame._ready()
+            if self._active:
+                raise ValueError("native epoch has active readers")
+            complete = self._submission.ticket.poll()
+            for reader in self._readers:
+                complete = reader.poll() and complete
+            return complete

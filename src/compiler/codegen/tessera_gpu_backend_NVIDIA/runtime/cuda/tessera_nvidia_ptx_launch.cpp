@@ -821,7 +821,7 @@ int invokeMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
 
 int invokeAttention(CUfunction fn, const char* name, void** buffers,
                     size_t nbuf, const int64_t* dims, size_t ndim) {
-    if (ndim != 7 || !name) return 5;
+    if ((ndim != 7 && ndim != 9) || !name) return 5;
     const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
     if ((!hasSavedLse && nbuf != 4 && nbuf != 5) ||
         (hasSavedLse && nbuf != 5 && nbuf != 6)) return 5;
@@ -834,6 +834,10 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
     const size_t Hkv = (size_t)dims[2], Sq = (size_t)dims[3];
     const size_t Sk = (size_t)dims[4], D = (size_t)dims[5], Dv = (size_t)dims[6];
     if (Hq % Hkv) return 5;
+    const size_t BiasB = ndim == 9 ? (size_t)dims[7] : B;
+    const size_t BiasH = ndim == 9 ? (size_t)dims[8] : Hq;
+    if (ndim == 9 && (!hasBias || hasSavedLse ||
+        (BiasB != 1 && BiasB != B) || (BiasH != 1 && BiasH != Hq))) return 5;
     auto product = [](std::initializer_list<size_t> values, size_t& out) {
         out = 1;
         for (size_t value : values) {
@@ -848,7 +852,7 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         !product({B, Hkv, Sk, Dv}, vElements) ||
         !product({B, Hq, Sq, Dv}, oElements) ||
         (hasSavedLse && !product({B, Hq, Sq}, rowElements)) ||
-        (hasBias && !product({B, Hq, Sq, Sk}, biasElements))) return 5;
+        (hasBias && !product({BiasB, BiasH, Sq, Sk}, biasElements))) return 5;
     const bool narrow =
         std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
         std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;

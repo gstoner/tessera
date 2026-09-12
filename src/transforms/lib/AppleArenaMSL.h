@@ -4,11 +4,14 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdio>
+#include "AppleIEEEArithmetic.h"
 
 namespace tessera {
 class AppleArenaMSL {
   llvm::DenseMap<mlir::Value, std::string> names;
   unsigned serial = 0;
+  bool flushDenormals = false;
+  bool gradualDenormals = false;
   std::string text;
   llvm::raw_string_ostream os{text};
   std::string name(mlir::Value v) { return names.lookup(v); }
@@ -135,7 +138,15 @@ class AppleArenaMSL {
     else if (op.getNumOperands() == 2) {
       auto a = name(op.getOperand(0)), b = name(op.getOperand(1));
       auto token = opname == "arith.addi" || opname == "arith.addf" ? "+" : opname == "arith.muli" || opname == "arith.mulf" ? "*" : opname == "arith.subi" || opname == "arith.subf" ? "-" : opname == "arith.divf" ? "/" : "";
-      if (*token) expr = a + " " + token + " " + b;
+      if (*token) {
+        if ((gradualDenormals || flushDenormals) && op.getResult(0).getType().isF32()) {
+          std::string lhs = flushDenormals ? "tessera_ftz(" + a + ")" : a;
+          std::string rhs = flushDenormals ? "tessera_ftz(" + b + ")" : b;
+          expr = std::string(opname == "arith.mulf" ? "tessera_ieee_mul(" : opname == "arith.divf" ? "tessera_ieee_div(" : opname == "arith.addf" ? "tessera_ieee_add(" : "tessera_ieee_sub(") + lhs + ", " + rhs + ")";
+          if (flushDenormals) expr = "tessera_ftz(" + expr + ")";
+        }
+        else expr = a + " " + token + " " + b;
+      }
       else if (opname == "arith.remui" || opname == "arith.divui") expr = "(long)((ulong)" + a + (opname == "arith.remui" ? " % " : " / ") + "(ulong)" + b + ")";
       else if (opname == "arith.maxsi") expr = "max(" + a + ", " + b + ")";
       else if (opname == "arith.maxui") expr = "(long)max((ulong)" + a + ", (ulong)" + b + ")";
@@ -151,10 +162,33 @@ public:
     module.walk([&](gpu::GPUFuncOp fn) { kernels.push_back(fn); });
     if (kernels.size() != 1 || !kernels[0].isKernel()) return module.emitError("Apple arena MSL requires exactly one GPU kernel");
     auto fn = kernels[0];
+    auto policy = module->getAttrOfType<StringAttr>("tessera.denormal_mode");
+    if (module->hasAttr("tessera.denormal_mode") && !policy)
+      return module.emitError("Apple denormal policy must be a string");
+    StringRef mode = policy ? policy.getValue() : "unspecified";
+    if (mode != "unspecified" && mode != "gradual" && mode != "flush_to_zero")
+      return module.emitError("unsupported Apple denormal policy");
+    bool unsupported = false;
+    fn.walk([&](Operation *op) { if (op->hasAttr("tessera.denormal_mode")) unsupported = true; });
+    if (mode != "unspecified") fn.walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name.starts_with("math.") || name == "arith.cmpf") unsupported = true;
+      if (auto flags = op->getAttrOfType<arith::FastMathFlagsAttr>("fastmath"))
+        if (flags.getValue() != arith::FastMathFlags::none) unsupported = true;
+      if (op->hasAttr("tessera.denormal_mode")) unsupported = true;
+    });
+    if (unsupported)
+      return fn.emitError("Apple denormal policy has no proven lowering for this arithmetic");
+    flushDenormals = mode == "flush_to_zero";
+    gradualDenormals = mode == "gradual";
     if (fn.getNumArguments() > 31) return fn.emitError("Apple arena MSL exceeds Metal buffer slots");
     auto sizer = fn->getAttrOfType<FlatSymbolRefAttr>("tile.dynamic_shared_size");
     if (!sizer || !module.lookupSymbol<func::FuncOp>(sizer.getValue()) || !fn.getBody().hasOneBlock()) return fn.emitError("Apple arena MSL requires the native dynamic sizing companion");
-    os << "#include <metal_stdlib>\nusing namespace metal;\n#pragma clang fp contract(off)\nkernel void " << fn.getName() << "(\n";
+    os << "#include <metal_stdlib>\nusing namespace metal;\n#pragma clang fp contract(off)\n// tessera.denormal_mode=" << mode << "\n";
+    if (gradualDenormals || flushDenormals) os << appleIEEEArithmeticMSL;
+    if (flushDenormals)
+      os << "inline float tessera_ftz(float x) { uint u = as_type<uint>(x); return as_type<float>((u & 0x7f800000u) == 0u ? (u & 0x80000000u) : u); }\n";
+    os << "kernel void " << fn.getName() << "(\n";
     unsigned i = 0;
     for (Value arg : fn.getArguments()) {
       auto ptr = dyn_cast<LLVM::LLVMPointerType>(arg.getType());
@@ -169,6 +203,7 @@ public:
     os << "}\n";
     module->setAttr("tessera.apple.arena_msl", StringAttr::get(module.getContext(), text));
     module->setAttr("tessera.apple.arena_sizer", sizer);
+    module->setAttr("tessera.apple.denormal_mode", StringAttr::get(module.getContext(), mode));
     module->setAttr("tessera.apple.arena_slot", IntegerAttr::get(IntegerType::get(module.getContext(), 64), 0));
     return success();
   }

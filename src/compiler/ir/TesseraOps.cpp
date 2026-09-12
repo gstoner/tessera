@@ -5385,6 +5385,16 @@ LogicalResult PagedKVReadOp::verify() {
   return success();
 }
 
+LogicalResult AbsoluteOp::verify() {
+  auto input = cast<RankedTensorType>(getInput().getType());
+  auto output = cast<RankedTensorType>(getOutput().getType());
+  Type expected = input.getElementType();
+  if (auto complex = dyn_cast<ComplexType>(expected)) expected = complex.getElementType();
+  if (input.getShape() != output.getShape() || expected != output.getElementType())
+    return emitOpError("requires unchanged shape and magnitude element type");
+  return success();
+}
+
 } // namespace tessera
 
 #define GET_OP_CLASSES

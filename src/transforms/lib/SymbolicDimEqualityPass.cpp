@@ -1117,9 +1117,11 @@ struct SymbolicDimEquality
           return op.emitError("SYMDIM_BINDING_MALFORMED: attention requires matching rank-four batch/head/key/contraction names");
         if (op.getNumOperands() == 4) {
           auto bias = names.find(op.getOperand(3));
-          if (bias == names.end() || bias->second !=
-              DimNameList{q->second[0], q->second[1], q->second[2], k->second[2]})
-            return op.emitError("SYMDIM_BINDING_MALFORMED: attention bias requires full batch/head/query/key names");
+          if (bias == names.end() || bias->second.size() != 4 ||
+              (bias->second[0] != "1" && bias->second[0] != q->second[0]) ||
+              (bias->second[1] != "1" && bias->second[1] != q->second[1]) ||
+              bias->second[2] != q->second[2] || bias->second[3] != k->second[2])
+            return op.emitError("SYMDIM_BINDING_MALFORMED: attention bias requires batch/head broadcast and exact query/key names");
         }
         auto headExtent = [&](const std::string &name) -> int64_t {
           int64_t extent;

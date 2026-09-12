@@ -88,3 +88,11 @@ def test_apple_binding_cannot_silently_drop_requested_ad():
         return x
     with pytest.raises(ValueError, match='paired differentiation'):
         differentiable.bind_apple_native_arena(package())
+
+
+def test_explicit_denormal_policy_must_match_compiler_shader():
+    a = artifact()
+    native = replace(a, arena_ir='module attributes {tessera.apple.denormal_mode = "gradual"}')
+    with pytest.raises(ValueError, match='denormal policy disagrees'):
+        _apple_abi(native)
+    assert _apple_abi(replace(native, msl='// tessera.denormal_mode=gradual\n'+native.msl))

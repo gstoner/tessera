@@ -1,0 +1,48 @@
+{
+  "backend": "apple",
+  "rows": [
+    {
+      "policy": "gradual",
+      "pairs": 133376,
+      "mismatches": {
+        "add": 0,
+        "sub": 0,
+        "mul": 0,
+        "div": 0
+      },
+      "state": "passed",
+      "artifact_digest": "a017d050eec4cc917d9331e8c1a2863458ba09010e60c10ded0d5357d832c9c2",
+      "compiler_sha256": "1a8116416778d74895a772422cd1ef3566aaed2390d433bca25cb3e786d1491f",
+      "msl_sha256": "40b805c539d4a30ce9e7fed655e1237066155b39ffbdeb0d7bc4471152c7f44c",
+      "package_digest": "a66bf3ea950895a8fbce59fca439196efd45d95870361ac4c34100681bc07faa",
+      "bridge_sha256": "4b8c46cce88133cc199f3e44d19725d3790aa254ebcb9f54e528169268852335",
+      "gpu_interval": [
+        1341485.351138625,
+        1341485.3734377502
+      ],
+      "promotion_eligible": false
+    },
+    {
+      "policy": "flush_to_zero",
+      "pairs": 133376,
+      "mismatches": {
+        "add": 0,
+        "sub": 0,
+        "mul": 0,
+        "div": 0
+      },
+      "state": "passed",
+      "artifact_digest": "02521b71d1406f8f1279303e37e5b1a61573f564eea10246161c214a7875643c",
+      "compiler_sha256": "1a8116416778d74895a772422cd1ef3566aaed2390d433bca25cb3e786d1491f",
+      "msl_sha256": "9a3952bcc78e4eff6df5d0f7c064e3bc230fc77fd73e361e1659f6e64b57b89d",
+      "package_digest": "dfe6e2ef09b4d04e0293e8dcbfb55bc4559cad611b7f676c1e68ce4cb4d66c83",
+      "bridge_sha256": "4b8c46cce88133cc199f3e44d19725d3790aa254ebcb9f54e528169268852335",
+      "gpu_interval": [
+        1341486.2694232918,
+        1341486.2900691668
+      ],
+      "promotion_eligible": false
+    }
+  ],
+  "scope": "explicit scalar f32 policy; no performance promotion"
+}

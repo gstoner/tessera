@@ -1,0 +1,25 @@
+{
+  "dims": [
+    2,
+    4,
+    2,
+    3,
+    5,
+    4,
+    2
+  ],
+  "bias_shape": [
+    1,
+    1,
+    3,
+    5
+  ],
+  "max_abs_error": 4.470348358154297e-08,
+  "compiler_sha256": "1a8116416778d74895a772422cd1ef3566aaed2390d433bca25cb3e786d1491f",
+  "runtime_sha256": "c2eb0fae70f84cc5083bbbd6ee4996236efd0bb241d6a6a6f44c204b971f40ea",
+  "schedule_sha256": "e7e1ecd00dc51940e43337af52a9ee32e4a5b4ff33cf180b5b008bfa633cd42e",
+  "image_digest": "a48c718ac4d5342a1b927ac89429785db5e361cceb923000ac8cdb4d284ad97d",
+  "abi": "tessera.nvidia.attention.q_k_v_bias_o_dims_bias_shape.f32_f32acc.v2",
+  "native_execution": true,
+  "promotion_eligible": false
+}

@@ -64,6 +64,23 @@ class ScheduledAttentionArtifact:
     def tile_digest(self) -> str:
         return digest_text(self.tile_ir)
 
+    @property
+    def bias_shape(self):
+        """Physical bias shape projected from the native Schedule function ABI."""
+        if self.bias_name is None:
+            return None
+        headers = re.findall(r'func.func @\w+\(([^\n]*)\) ->', self.schedule_ir)
+        if len(headers) != 1:
+            raise ValueError('attention bias requires one native function')
+        types = re.findall(r'tensor<([0-9]+)x([0-9]+)x([0-9]+)x([0-9]+)x(?:f32|f16|bf16)>', headers[0])
+        if len(types) != 4:
+            raise ValueError('attention bias requires four physical arguments')
+        shape = tuple(map(int, types[3]))
+        b, h, _, sq, sk, _, _ = self.dims
+        if shape not in [(bb, hh, sq, sk) for bb in (1, b) for hh in (1, h)]:
+            raise ValueError('attention physical bias shape is unsupported')
+        return shape
+
     def validate(self) -> None:
         if len(re.findall(r"(?m)^\s*%[^=]+ = schedule\.attention\b", self.schedule_ir)) != 1:
             raise ValueError("scheduled attention requires one schedule.attention SSA edge")

@@ -1580,6 +1580,9 @@ def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86Nati
             "x86 native elementwise requires one static same-shape f32 unary/binary "
             "operation or f32-to-bool predicate"
         )
+    if contract[:2] == ("unary", "abs"):
+        from .scheduled_absolute import lower_absolute, package_absolute
+        return package_absolute(lower_absolute(module), pipeline_name=pipeline_name)
     family, kind, input_names, output_name, shape, input_dtypes, output_dtype = contract
     if family == "unary":
         symbol, abi = "tessera_x86_avx512_unary_f32", X86_UNARY_F32_ABI

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-11
+last_updated: 2026-09-12
 audit_role: plan
 plan_state: open
 ---
@@ -133,9 +133,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
 - Gate: F32, BF16-to-f32, FP64 and mixed uint8/int8-to-int32 x86 matmul now enter Graph-to-Schedule-to-Tile and project native ABI from replay-verified artifacts. The mixed recipe carries ui8/i8 signedness, rejects wider-than-i32 runtime extents, and has owning-CPU ragged/overflow differential proof. Cohort, elementwise and breadth Graph constructors remain. Require per-target differential proof and preserve policy before deleting each route.
+- Current increment: The selected x86 static f32 `absolute` slice now enters a native durable Schedule contract and Tile producer. Packaging replays both boundaries and projects bindings, shape, layout and numeric behavior from serialized IR; the old Python Tile constructor is bypassed for this slice. Owning Zen 5 checks cover three ragged/ranked shapes and bitwise signed-zero/subnormal/infinity/NaN magnitude. Other elementwise operations and cohort/breadth constructors remain open.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--mixed-integer-ownership-and-dtype-arithmetic)
+- Latest: [native numerical and packaging increment](INTEGRATED_COMPILER_LOG.md#2026-09-12--native-numerical-and-packaging-slices)
 
 ### W1.1
 
@@ -165,9 +166,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 
 - Owner: [FRONT_END_LOWERING_ASSESSMENT.md](FRONT_END_LOWERING_ASSESSMENT.md)
 - Gate: Exact f32 attention loops, including a positive exactly representable f32 literal post-dot scale, explicit grouped-head indexing and end-aligned causal masking, now raise to a symbolic recipe and instantiate two native buckets through Schedule/Tile. The opt-in NVIDIA binding now projects native Schedule fields, replays the recipe and executes both buckets without Graph reconstruction. Apple and x86 now project target-specific parents; the x86 package executes on Zen 5. CUDA now proves ragged Q/K causal GQA buckets, with native rejection of nondivisible head counts. Bounded asymmetric window masks now execute on CUDA; mandatory serialized Presburger constraints reject fully masked rows, including when callers supply additional constraints. Finite full-shape additive bias now crosses native instantiation and Schedule projection and passes CUDA differential execution. NVIDIA raised binding now accepts irregular full-shape additive negative-infinity masks and rejects empty rows after causal/window composition; CUDA differential execution passes, including irregular masks combined with ragged GQA, causal and left-window masking for Q>K and K>Q. Extend Boolean/padding/broadcast masks, fully masked-row semantics and recognition, Apple device proof, ROCm-compatible storage and measured candidate admission; preserve complete witnesses and IR/image-bound admission.
+- Current increment: Batch/head broadcast additive masks now pass source recognition, symbolic bucket instantiation, native Schedule/Tile replay and SM120 indexing. A v2 f32 runtime ABI carries physical bias dimensions, copies only that storage and retains all seven logical kernel extents. Two B=2 ragged causal/GQA/window cases pass device comparison and empty-row refusal. Query/key-axis broadcasting, Boolean/padding masks, sibling-target consumers and performance admission remain open.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--resident-dag-accumulation-and-snapshot-readers)
+- Latest: [native numerical and packaging increment](INTEGRATED_COMPILER_LOG.md#2026-09-12--native-numerical-and-packaging-slices)
 
 ### MSW-9
 
@@ -229,9 +231,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Owner: [AUTODIFF_EXECUTION_PLAN.md](AUTODIFF_EXECUTION_PLAN.md)
 - Gate: Late worker death can now reconcile a failed recovery ticket without repeating termination, releasing its admission slot and owner exactly once; no device-health inference follows. Isolated ANN admission now executes independent numerical probes in the fresh worker before readiness; replacement requires confirmed predecessor death. Multi-stream external readers now include checked dynamic public frames and paired source-VJP products, and record all declared completion edges, and eventless dependencies refuse implicit host synchronization. Actual wedged-driver recovery remains unproven. Bounded asynchronous isolation teardown now retains failed owners and slots, and ANN/module owners finalize only after confirmed process death. CUDA/HIP stopped-worker replacement is independently remeasured; actual driver-hang recovery and device-wide health admission remain open; bounded workload probes are implemented. Opt-in native ANN workers now own their CUDA/HIP context and return checked private host outputs; uncertain requests quarantine the worker until confirmed process death. Stopped-worker teardown/replacement is measured separately from actual driver-hang recovery. Scoped runtime-shaped public frames and asynchronous static capture now order frees after declared readers. Module unload can run off-thread with bounded admission and non-waiting polls; a stalled/failed driver retains its owner. One through eight serialized incoming statuses now support bounded fan-in with scoped readers for each prerequisite; all 256 eight-status combinations have independent SM120/gfx1151 truth-table proof. Source state can produce immutable next-state GPU generations; exclusive synchronous owned-state copyback now reuses a private allocation with independent SM120/gfx1151 proof and blocks active scoped readers. Single-stream submit/poll now gates asynchronous copyback and excludes readers until completion; failure poisons the owner and retains pending storage. External borrowed-pointer mutation and concurrent multi-writer updates remain open. Extend heterogeneous dynamic persistent capture, unbounded/heterogeneous effect joins and external-reader adoption. Driver unload itself is not cancellable or latency-bounded, and unrestricted views retain synchronous close.
 - Next architecture gate: [gated owner and isolated recovery](HEAP_BARRIER_ARCHITECTURE_REVIEW.md#gated-metadata-owner-and-isolated-recovery-2026-09-11): every admitted metadata operation in the opt-in gated owner has replay/device proof; live metadata and legacy import/snapshot paths refuse. Process-owned heap recovery requires confirmed death. Next: migrate legacy callers, health-check replacement workers and validate actual driver-failure behavior. Epoch ordering remains; no measured overlap or promotion.
+- Current increment: Snapshot retirement now closes reader admission, including previously created leases, and polls every completion edge without a wait or free. Eventless readers retain storage for explicit recovery. Allocation teardown remains synchronous; next extend allocator/module retirement only with separate completion and uncertain-driver ownership proof.
 - Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
 - Start: host-free
-- Latest: [recorded exploration](INTEGRATED_COMPILER_LOG.md#2026-09-11--gated-metadata-owner-and-isolated-recovery)
+- Latest: [reconciliation and wave start](INTEGRATED_COMPILER_LOG.md#2026-09-12--reconciliation-and-wave-start)
 
 ### NUMPOL-CARRIER-1
 
@@ -239,9 +242,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 
 - Owner: [FUNCTIONAL_ANALYSIS_TSOL_PLAN.md](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md)
 - Gate: Extend policy preservation and analytic budget consumers across missing boundaries, with induced norms, intermediate-overflow checks and explicit approximation/spectral contracts. Use `scripts/record_dtype_codegen_inventory.py` alongside the operator dtype-flow report to expose every canonical/planned dtype, scalar/vector handling and matrix accumulators. The 2026-09-11 packet verifies 24 scalar/vector basic-arithmetic rows independently on CUDA and HIP, including signedness-sensitive division; the four previously failing FP8 rows per device now have byte-conversion legalization and exhaustive input-pair proof. Bool logic and bounded complex component probes pass on both devices; ten NVIDIA packed/scaled layout probes pass. Apple native f32 multiply/divide flush three expected subnormal results, so strict gradual-underflow admission remains open. Extend remaining packed/scaled, Apple storage, general complex, numerical-policy and matrix consumers before claiming closure; TF32 remains a math mode. See [dtype follow-through](../../../benchmarks/baselines/dtype_followthrough_20260911/README.md).
+- Current increment: The Apple arena now consumes explicit gradual/FTZ policy. Integer-significand f32 add/sub/mul/div with one ties-to-even rounding step passes 133,376 input pairs per operation on M1 Max; explicit input/output FTZ around the same arithmetic also passes. Legacy unspecified arithmetic retains its historical boundary. Other floating operations, vectors/dtypes and optimized performance remain open. CUDA/HIP generic storage refuses this unconsumed policy. See the [policy contract](../../spec/APPLE_ARENA_NUMERICAL_POLICY.md).
 - Depends on: —
 - Start: host-free
-- Latest: [conversion and numerical boundary increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--fp8-conversions-and-numerical-boundaries)
+- Latest: [native numerical and packaging increment](INTEGRATED_COMPILER_LOG.md#2026-09-12--native-numerical-and-packaging-slices)
 
 ### LAYOUT-ALG-1
 

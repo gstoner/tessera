@@ -2284,6 +2284,10 @@ static LogicalResult materializeSm120AttentionKernel(
                   "accum, complete mask/dropout/LSE attrs, and the canonical ABI");
     return failure();
   }
+  auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+  if (op->hasAttr("bias_shape") && (!biasShape || !hasBias || biasShape.size() != 4 ||
+      llvm::any_of(biasShape.asArrayRef(), [](int64_t dim) { return dim <= 0; })))
+    return op->emitError("attention broadcast bias requires four positive physical dimensions");
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
@@ -2353,10 +2357,13 @@ static LogicalResult materializeSm120AttentionKernel(
       builder.setInsertionPointAfter(dot);
       Value value = arith::MulFOp::create(builder, loc, dot.getResult(0), scale);
       if (hasBias) {
+        Value bb = biasShape && biasShape[0] == 1 ? i64Constant(builder, loc, 0) : b;
+        Value bh = biasShape && biasShape[1] == 1 ? i64Constant(builder, loc, 0) : hq;
+        Value physicalHeads = biasShape ? i64Constant(builder, loc, biasShape[1]) : Hq;
         Value biasIndex = addI64(builder, loc,
             mulI64(builder, loc,
                 addI64(builder, loc, mulI64(builder, loc,
-                    addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q), Sk),
+                    addI64(builder, loc, mulI64(builder, loc, bb, physicalHeads), bh), Sq), q), Sk),
             key);
         Value biasPtr = LLVM::GEPOp::create(builder, loc, in[3].getType(), f32,
                                             in[3], ValueRange{biasIndex});

@@ -4,6 +4,20 @@ import pytest
 from tessera.compiler.native_gpu_storage import NativeGPUStoragePackage, BoundNativeGPUStorage
 
 
+def test_gpu_serialization_toolkit_is_explicit_and_cannot_inject_passes(tmp_path):
+    from tessera.compiler.native_gpu_storage import _binary_pass
+    toolkit = tmp_path / 'cuda-13.4'
+    toolkit.mkdir()
+    alias = tmp_path / 'cuda'
+    alias.symlink_to(toolkit, target_is_directory=True)
+    assert _binary_pass(alias) == f'gpu-module-to-binary{{toolkit={toolkit}}}'
+    assert _binary_pass(None) == 'gpu-module-to-binary'
+    invalid = tmp_path / 'bad},canonicalize'
+    invalid.mkdir()
+    with pytest.raises(ValueError, match='plain absolute path'):
+        _binary_pass(invalid)
+
+
 def package():
     p = NativeGPUStoragePackage('nvidia', 'sm_120', 'entry', 'size', ('pointer', 'index'),
                                 'module {}', b'image', b'host', 'c' * 64, 'd' * 64, '')
@@ -40,3 +54,11 @@ def test_native_image_escapes_preserve_ptx_and_binary_bytes():
     assert _decode_image(r".version 9.0\n\t\22quoted\22\00\FF\\") == b'.version 9.0\n\t"quoted"\x00\xff\\'
     with pytest.raises(ValueError, match='escape'):
         _decode_image(r"\q")
+
+
+def test_gpu_storage_refuses_unconsumed_denormal_policy(tmp_path):
+    from tessera.compiler.native_gpu_storage import build_native_gpu_storage
+    for backend, chip in [('nvidia','sm_120'), ('rocm','gfx1151')]:
+        with pytest.raises(ValueError, match='Apple arena consumer'):
+            build_native_gpu_storage('module attributes {tessera.denormal_mode = "gradual"} {}',
+                                     compiler=tmp_path/'missing', llvm_bin=tmp_path, backend=backend, chip=chip)

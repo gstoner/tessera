@@ -19,6 +19,11 @@ class AppleNativeArena:
     compiler_digest: str
 
     @property
+    def denormal_mode(self):
+        values = re.findall(r'tessera.apple.denormal_mode = "([^"]+)"', self.arena_ir)
+        return values[0] if len(values) == 1 else 'unspecified'
+
+    @property
     def digest(self):
         import json
         from dataclasses import asdict
@@ -93,6 +98,11 @@ class AppleArenaPackage:
 
 
 def _apple_abi(artifact):
+    mode = artifact.denormal_mode
+    if mode not in ('unspecified', 'gradual', 'flush_to_zero'):
+        raise ValueError('unsupported Apple denormal policy')
+    if mode != 'unspecified' and f'// tessera.denormal_mode={mode}\n' not in artifact.msl:
+        raise ValueError('Apple shader denormal policy disagrees with native artifact')
     # This is the native emitter's bounded ABI, not a Graph IR reconstruction.
     kernels = re.findall(r'kernel void (\w+)\(\n(.*?)threadgroup uchar\* arena \[\[threadgroup\(0\)\]\]',
                          artifact.msl, re.S)

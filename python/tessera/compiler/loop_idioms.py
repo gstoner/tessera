@@ -139,8 +139,10 @@ def recognize_attention_loop(fn: Callable) -> LoopIdiomCandidate:
         raise ValueError('attention batch/head/key/contraction dimensions must match')
     if not qs[3].isdigit() or int(qs[3]) <= 0:
         raise ValueError('attention raising currently requires a static head width')
-    if bias is not None and tuple(bias.dim_names) != (qs[0],qs[1],qs[2],ks[2]):
-        raise ValueError("attention bias requires exact batch/head/query/key dimensions")
+    if bias is not None and (bias.dim_names[0] not in ('1', qs[0]) or
+                            bias.dim_names[1] not in ('1', qs[1]) or
+                            tuple(bias.dim_names[2:]) != (qs[2], ks[2])):
+        raise ValueError("attention bias requires batch/head broadcasting and exact query/key dimensions")
     head_index = 'head' if qs[1] == ks[1] else f'head // ({q.name}.shape[1] // {k.name}.shape[1])'
     template = f'''def candidate({q.name}, {k.name}, {v.name}):
     out = np.zeros(({q.name}.shape[0], {q.name}.shape[1], {q.name}.shape[2], {v.name}.shape[3]), dtype={q.name}.dtype)
@@ -182,7 +184,7 @@ def recognize_attention_loop(fn: Callable) -> LoopIdiomCandidate:
         template = template.replace('                weights = np.exp',f'                scores = scores * {literal!r}\n                weights = np.exp')
     if bias is not None:
         template = template.replace(f"{v.name}):", f"{v.name}, {bias.name}):", 1)
-        template = template.replace("                weights = np.exp", f"                scores = scores + {bias.name}[batch, head, query, :]\n                weights = np.exp")
+        template = template.replace("                weights = np.exp", f"                scores = scores + {bias.name}[{'0' if bias.dim_names[0] == '1' else 'batch'}, {'0' if bias.dim_names[1] == '1' else 'head'}, query, :]\n                weights = np.exp")
     causal,window_left,window_right = False,-1,-1
     masks = [n for n in ast.walk(functions[0]) if isinstance(n,ast.Assign) and
         any(isinstance(t,ast.Subscript) and isinstance(t.value,ast.Name) and t.value.id=='scores' for t in n.targets)]

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-07
+last_updated: 2026-09-12
 audit_role: root
 ---
 
@@ -20,8 +20,9 @@ claims.
    primitive transform, sharding, and backend-contract state.
 4. Use [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md)
    and the applicable backend plan before claiming native execution.
-5. Use [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md) for active
-   ownership, ordering, and archived-plan provenance.
+5. Use [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md#live-queue)
+   for compiler sequencing, and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md)
+   for wider project routing and archived-plan provenance.
 
 The curated matrix in [`op_target_conformance.md`](op_target_conformance.md) is
 an exact-target representative suite. It is not the all-up compiler denominator.
@@ -58,48 +59,53 @@ Owner: [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLA
 
 Bounded `if`, counted `for`, canonical bounded `while`, and forward
 `control_scan` exist. Remaining work is general source-CFG recovery, multi-block
-regions, typed affine/Presburger constraints, scan JVP/VJP, and lowering a
-selected SAVE/RECOMPUTE/HYBRID checkpoint plan into the generated region
-product.
+regions, broader typed affine/Presburger constraints and scan JVP/VJP.
+Bounded checkpoint execution and persistent products exist; general heterogeneous
+products, effectful composition and automatic frontend integration remain open.
 
 Owners: [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md)
 and [`../spec/CONTROL_FLOW_CONTRACT.md`](../spec/CONTROL_FLOW_CONTRACT.md).
 
 ### 3. Measured scheduling
 
-The shared dataflow analysis and prune-only action-DAG ranker are real. The next
-boundary is automatic dependence-edge generation from value, alias, effect,
-memory-dependence, and ordered-collective facts. Ranked candidates then need
+The shared dataflow analysis, bounded dependence producers, native recipe
+instantiation and prune-only action-DAG ranker are real. Extend the remaining
+value, alias, effect, memory-dependence and ordered-collective consumers.
+Ranked candidates still need
 clean target calibration and selector-grade packets before a schedule can be
 promoted. Analytical or WSL-only timing remains candidate-pruning evidence.
 
-Owner: W2.1 and W5.2 in
-[`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md).
+Owners: [native recipes](compiler/INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1),
+[ANN admission](compiler/INTEGRATED_COMPILER_PLAN.md#msw-9) and
+[measured scheduling](compiler/INTEGRATED_COMPILER_PLAN.md#w52).
 
 ### 4. Native distributed execution and sharding
 
-The core collective Schedule/Tile contracts exist. Native NCCL/RCCL and
-MPI/OFI/SHMEM launchers, subgroup propagation, reshard insertion, and real
-multi-rank correctness/performance packets remain open. Sharding propagation
+The core collective Schedule/Tile contracts and a bounded two-rank MPI slice
+exist. Broader rank/subgroup participation, native NCCL/RCCL and other transports,
+reshard insertion, and wider multi-rank correctness/performance packets remain open. Sharding propagation
 must use a typed, fail-closed placement lattice and explicit incompatibilities;
 it must not infer safety across unknown effects, aliases, or regions.
 
-Owners: W5.4 in the integrated plan, the generated sharding queue, and the four
-backend plans.
+Owners: [DIST-NATIVE-1](compiler/INTEGRATED_COMPILER_PLAN.md#dist-native-1),
+the generated sharding queue, and the four backend plans.
 
 ### 5. Tiled SSD
 
-ReplaySSM established a correct resident decode-state and replay ABI, but it is
-not the shared SSD compiler family. The remaining project is a first-class
-Schedule→Tile SSD program whose chunked GEMM/reduction/recurrent actions,
-residency, checkpoint state, and mutation lineage are target-independent.
-Backend WMMA/MFMA/WGMMA/AVX-512 selection and performance evidence remain
-architecture-owned. Existing ReplaySSM kernels are candidates and oracles, not
-the semantic compiler authority.
+The internal `schedule.ssd` family now lowers through Schedule→Tile to native
+CPU and replay-bound serial/cooperative CUDA and HIP packages. Forward carry,
+chunk checkpoints and checkpoint VJP have owning-device correctness evidence.
+Resident program owners support bounded public VJP and connected acyclic SSD
+compositions with scoped reader-aware retirement.
 
-Owner: the tiled-SSD section of
-[`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md), graduating into the
-integrated compiler plan when implementation begins.
+These compositions remain host orchestration of verified packages. Canonical
+whole-program composition, broader frontend and alias/effect integration,
+uncertain-unload recovery, further schedule tuning and selector-grade performance
+admission remain open. ReplaySSM remains a separate oracle/candidate; its ABI
+is not the shared compiler authority.
+
+Owner: [W5.2f](compiler/INTEGRATED_COMPILER_PLAN.md#w52f); detailed evidence and
+remaining boundaries live in that queue and its linked engineering log.
 
 ### 6. Model-level physical closure
 
@@ -119,6 +125,20 @@ Exact-device evidence never transfers between architectures. x86/AVX-512,
 Apple, gfx1151, gfx1200/gfx1250, and individual NVIDIA SM generations retain
 separate correctness and performance gates. A fused or packaged implementation
 is not selector authority without valid target timing provenance.
+
+The assertions-enabled LLVM/MLIR compiler and installed-driver smoke are now
+validated infrastructure, not missing prerequisites. Preserve their regression
+gates; they do not replace owning-device execution or timing.
+
+PR #745 closes the bounded mixed u8×s8 x86 matmul migration and byte-backed
+FP8 scalar/vector conversion failures on SM120 and gfx1151. Generic packed
+loads and bounded bool/complex probes do not establish matrix acceleration or
+general dtype support. Apple's legacy unspecified arithmetic retains the recorded subnormal failures.
+The explicit Apple arena gradual/FTZ policies now have integer-significand
+f32 add/sub/mul/div consumers and owning-M1-Max boundary/random proof; broader
+policy consumers and performance admission remain open. See the
+[dtype follow-through evidence](../../benchmarks/baselines/dtype_followthrough_20260911/README.md)
+and [numerical-policy owner](compiler/INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1).
 
 Owners:
 [`backend/apple/todo.md`](backend/apple/todo.md),

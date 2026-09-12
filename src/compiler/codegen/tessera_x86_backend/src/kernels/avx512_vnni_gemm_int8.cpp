@@ -1,6 +1,7 @@
 #include <immintrin.h>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include "tessera/Rank2Index.h"
 
 using tessera::layout::linearIndex2D;
@@ -13,13 +14,15 @@ extern "C" void tessera_x86_reference_gemm_u8s8_s32(
         for (int n = 0; n < N; ++n) {
             const auto outputIndex =
                 linearIndex2D<Rank2Order::RowMajor>(m, n, N);
-            int32_t acc = beta == 0 ? 0 : C[outputIndex] * beta;
+            // VPDPBUSD wraps modulo 2^32. Unsigned arithmetic gives the
+            // reference the same semantics without signed-overflow UB.
+            uint32_t acc = beta == 0 ? 0 : uint32_t(C[outputIndex]) * uint32_t(beta);
             for (int k = 0; k < K; ++k)
                 acc += int32_t(
                            A[linearIndex2D<Rank2Order::RowMajor>(m, k, K)]) *
                        int32_t(
                            B[linearIndex2D<Rank2Order::RowMajor>(k, n, N)]);
-            C[outputIndex] = acc;
+            std::memcpy(C + outputIndex, &acc, sizeof(acc));
         }
     }
 }

@@ -5014,3 +5014,39 @@ Not applicable to GPU execution: host replay/ownership tests cover the shared co
 The opt-in gated owner admits no live metadata or legacy snapshot/import bypass.
 Epochs remain for ordering/lifetimes. Eight process slots cap isolated heap owners;
 timeout and unconfirmed death retain resources. No measured overlap or promotion.
+
+
+### 2026-09-11 — Snapshot recovery-close repair after #744
+
+Owners: W2.4a / DISPATCH-BREAKER. Sync: `SNAPSHOT-RECOVERY-2026-09-11`.
+
+Host validation covers published/partial snapshots, active readers and completion failure. No CPU/GPU execution equivalence is inferred.
+Cleanup now propagates recovery readiness through snapshot and parent epoch
+waits without bypassing completion or active-reader checks. Ordinary poisoned
+reads still refuse. [Evidence](../../../../benchmarks/baselines/snapshot_recovery_20260911/README.md).
+No performance promotion or actual driver-hang recovery claim.
+
+## Dtype and ownership reconciliation — 2026-09-11
+
+Owners: E2E-REAL-6F / E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+Sync: `DTYPE-CODEGEN-2026-09-11`.
+
+The route census now separates lexical scopes; the dtype inventory projects existing
+contracts across all canonical and planned storage names without adding support states.
+Follow-up required: retain mixed u8/s8 Graph packaging until Schedule carries operand signedness and replay projects it; Zen 5 vector/VNNI evidence does not establish AMX.
+No new execution or performance promotion is claimed.
+
+### Dtype arithmetic execution follow-through — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+Parity validated on Ryzen AI Max+ 395: mixed u8/s8 Schedule replay, ragged products and modulo-i32 overflow; nine BF16/mixed/FP64 matrix comparisons pass. The scalar reference passes UBSan. AMX is not validated by Zen 5 VNNI evidence.
+Evidence: [independent packets](../../../../benchmarks/baselines/dtype_arithmetic_20260911/README.md).
+No performance promotion; remaining packing, policy and layout consumers stay open.
+
+### FP8 conversion and numerical boundaries — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+Shared pass and numerical-oracle assessment: host contract validation only; no new x86 dtype execution or performance evidence. The earlier mixed u8/s8 matmul proof is unchanged. GPU FP8/packed evidence does not transfer.
+Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.

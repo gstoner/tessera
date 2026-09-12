@@ -272,8 +272,7 @@ struct GenerateROCMInt4PackKernel
       }
       auto function =
           gpu::GPUFuncOp::create(b, loc, name.getValue(), type);
-      function->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                        b.getUnitAttr());
+      function.setKernel(true); // Use the inherent property, not legacy gpu.kernel.
       OpBuilder body(function.getContext());
       if (kind.getValue() == "relu")
         emitPackedReluBody(body, loc, function);

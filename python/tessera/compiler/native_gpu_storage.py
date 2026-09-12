@@ -108,7 +108,7 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151')):
         raise ValueError('native storage target is not validated')
     arena = _run(compiler, '--allow-unregistered-dialect', '--tessera-tile-buffer-reuse',
-                 '--tessera-tile-buffer-arena', '--canonicalize', source=source)
+                 '--tessera-tile-buffer-arena', '--tessera-expand-lowp-conversions', '--canonicalize', source=source)
     device = _block(arena, r'^  gpu.module .*?^  }')
     host = _block(arena, r'^  func.func @__tessera_shared_bytes_.*?^  }')
     signatures = re.findall(r'gpu.func @([\w]+)\(([^)]*)\) kernel', device)

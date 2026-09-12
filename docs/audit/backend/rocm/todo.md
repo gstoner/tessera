@@ -7626,3 +7626,39 @@ Parity validated independently on gfx1151 for gated metadata and process-death r
 The opt-in gated owner admits no live metadata or legacy snapshot/import bypass.
 Epochs remain for ordering/lifetimes. Eight process slots cap isolated heap owners;
 timeout and unconfirmed death retain resources. No measured overlap or promotion.
+
+
+### 2026-09-11 — Snapshot recovery-close repair after #744
+
+Owners: W2.4a / DISPATCH-BREAKER. Sync: `SNAPSHOT-RECOVERY-2026-09-11`.
+
+Owning-device follow-through: gfx1151 receipt-copy fault recorder checks recovery close independently; other architectures remain separate.
+Cleanup now propagates recovery readiness through snapshot and parent epoch
+waits without bypassing completion or active-reader checks. Ordinary poisoned
+reads still refuse. [Evidence](../../../../benchmarks/baselines/snapshot_recovery_20260911/README.md).
+No performance promotion or actual driver-hang recovery claim.
+
+## Dtype and ownership reconciliation — 2026-09-11
+
+Owners: E2E-REAL-6F / E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+Sync: `DTYPE-CODEGEN-2026-09-11`.
+
+The route census now separates lexical scopes; the dtype inventory projects existing
+contracts across all canonical and planned storage names without adding support states.
+Follow-up required: join per-architecture WMMA/SWMMAC declarations to emitted instructions and exact-device packets; gfx1151 cannot inherit RDNA4 FP8 matrix evidence.
+No new execution or performance promotion is claimed.
+
+### Dtype arithmetic execution follow-through — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners E2E-REAL-6 / NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+Parity validated for 24 gfx1151 basic scalar/vector arithmetic rows with exact-image ISA witnesses. BF16 basic arithmetic expands through fp32; FP16 has packed instructions. Four generic FP8 conversion rows fail LLVM translation. No RDNA4/other-device proof transfers.
+Evidence: [independent packets](../../../../benchmarks/baselines/dtype_arithmetic_20260911/README.md).
+No performance promotion; remaining packing, policy and layout consumers stay open.
+
+### FP8 conversion and numerical boundaries — 2026-09-11
+
+Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
+
+gfx1151: four FP8 scalar/vector cases pass exhaustive 65,536 input pairs each; bool logic and bounded complex components pass. No FP8 WMMA claim on RDNA3.5. INT4/dequant generators now use the inherent kernel property; serializer models link without a host HIP runtime. The refreshed INT4 packed-consumer benchmark now completes on gfx1151, including scaled dequant-GEMM, ReLU, sparse gather and cache append. Broader FP4/FP6 scale/layout coverage remains open.
+Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.

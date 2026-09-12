@@ -39,6 +39,7 @@ class ResidentIncrementalPool(ResidentObjectPool):
             raise
 
     def _ready(self, *, recovery=False):
+        recovery = recovery or getattr(self, "_recovery_close", False)
         teardown = getattr(self, '_teardown', None)
         if teardown is not None and teardown.worker != threading.get_ident():
             raise ValueError('pool teardown has been admitted')
@@ -295,6 +296,7 @@ class ResidentIncrementalPool(ResidentObjectPool):
                 return
             if any(reader.active for reader in self._object_readers):
                 raise ValueError('object readers must close before pool close')
+            self._recovery_close = True
             try:
                 pending = getattr(self, '_pending_finalization', None)
                 if pending is not None:
@@ -315,6 +317,8 @@ class ResidentIncrementalPool(ResidentObjectPool):
             except BaseException:
                 self._poison_objects()
                 raise
+            finally:
+                self._recovery_close = False
             self._object_readers.clear()
             if self in _UNCERTAIN_POOLS:
                 _UNCERTAIN_POOLS.remove(self)

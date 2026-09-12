@@ -79,7 +79,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Route census and exact-device certificates**
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-- Gate: The expanded census includes x86 breadth packaging: 46 Graph inputs, 14 scheduled inputs and 14 raw/unclassified entries. Import-resolved caller candidates and local helper-to-emitter paths expose reconstruction paths; lexical shadowing, indirect dispatch and per-envelope certificate joins still require review. Counts do not authorize constructor deletion.
+- Gate: The expanded census includes x86 breadth packaging: 46 Graph inputs, 14 scheduled inputs and 14 raw/unclassified entries. Import-resolved caller candidates and local helper-to-emitter paths expose reconstruction paths; scope-aware import candidates now reject parameter/rebinding shadowing and sibling-scope leakage; indirect dispatch and per-envelope certificate joins still require review. Counts do not authorize constructor deletion.
 - Depends on: —
 - Start: host-free
 - Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--expanded-route-callers-and-f64-ownership)
@@ -132,10 +132,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Remaining Graph-owned packaging and frontend retirement**
 
 - Owner: [MLIR_NATIVE_FOUNDATION_SURVEY.md](MLIR_NATIVE_FOUNDATION_SURVEY.md)
-- Gate: x86 BF16-to-f32 and FP64 matmul now enter Graph-to-Schedule-to-Tile and projects its native ABI from replay-verified artifacts. F32, BF16 and FP64 share this consumer; mixed uint8/int8, cohort, elementwise and breadth Graph constructors remain. Require per-target differential proof and preserve policy before deleting each route.
+- Gate: F32, BF16-to-f32, FP64 and mixed uint8/int8-to-int32 x86 matmul now enter Graph-to-Schedule-to-Tile and project native ABI from replay-verified artifacts. The mixed recipe carries ui8/i8 signedness, rejects wider-than-i32 runtime extents, and has owning-CPU ragged/overflow differential proof. Cohort, elementwise and breadth Graph constructors remain. Require per-target differential proof and preserve policy before deleting each route.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--expanded-route-callers-and-f64-ownership)
+- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--mixed-integer-ownership-and-dtype-arithmetic)
 
 ### W1.1
 
@@ -238,17 +238,17 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Numerical policy and analytic budget consumers**
 
 - Owner: [FUNCTIONAL_ANALYSIS_TSOL_PLAN.md](FUNCTIONAL_ANALYSIS_TSOL_PLAN.md)
-- Gate: Extend policy preservation and analytic budget consumers across missing boundaries, with induced norms, intermediate-overflow checks and explicit approximation/spectral contracts.
+- Gate: Extend policy preservation and analytic budget consumers across missing boundaries, with induced norms, intermediate-overflow checks and explicit approximation/spectral contracts. Use `scripts/record_dtype_codegen_inventory.py` alongside the operator dtype-flow report to expose every canonical/planned dtype, scalar/vector handling and matrix accumulators. The 2026-09-11 packet verifies 24 scalar/vector basic-arithmetic rows independently on CUDA and HIP, including signedness-sensitive division; the four previously failing FP8 rows per device now have byte-conversion legalization and exhaustive input-pair proof. Bool logic and bounded complex component probes pass on both devices; ten NVIDIA packed/scaled layout probes pass. Apple native f32 multiply/divide flush three expected subnormal results, so strict gradual-underflow admission remains open. Extend remaining packed/scaled, Apple storage, general complex, numerical-policy and matrix consumers before claiming closure; TF32 remains a math mode. See [dtype follow-through](../../../benchmarks/baselines/dtype_followthrough_20260911/README.md).
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-07--bounded-while-recovery-and-row-parallel-ann)
+- Latest: [conversion and numerical boundary increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--fp8-conversions-and-numerical-boundaries)
 
 ### LAYOUT-ALG-1
 
 **Remaining physical layout envelopes**
 
 - Owner: [CORE_SUBSTRATE_VIEW.md](CORE_SUBSTRATE_VIEW.md)
-- Gate: Preserve proved static/dynamic layout consumers; extend only unresolved nonseparable tuple/layout envelopes with capacity, alias and lifetime proof.
+- Gate: Preserve proved static/dynamic layout consumers; extend only unresolved nonseparable tuple/layout envelopes with capacity, alias and lifetime proof. Matrix acceleration additionally needs operand packing, signedness, accumulator type, fragment shape, scale layout and target instruction witnesses; Zen 5 VNNI/vector GEMM does not establish AMX support.
 - Depends on: —
 - Start: host-free
 - Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--descriptor-projection-and-seven-program-continuation)

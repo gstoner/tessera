@@ -21,27 +21,64 @@ def _resolved_callers(root, symbols):
             continue
         module = '.'.join(path.relative_to(root / 'python').with_suffix('').parts)
         package = module.split('.')[:-1]
-        bindings = {}
-        # Import candidates include function-local imports. Lexical shadowing
-        # still requires manual review, as declared in the report scope.
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    bindings[alias.asname or alias.name.split('.')[0]] = alias.name if alias.asname else alias.name.split('.')[0]
-            elif isinstance(node, ast.ImportFrom):
-                prefix = '.'.join(package[:len(package) - node.level + 1]) if node.level else ''
-                origin = '.'.join(part for part in (prefix, node.module) if part)
-                for alias in node.names:
-                    bindings[alias.asname or alias.name] = origin + '.' + alias.name
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            spelling = ast.unparse(node.func)
-            head, *tail = spelling.split('.')
-            resolved = '.'.join([bindings.get(head, module + '.' + head), *tail])
-            if resolved in result:
-                result[resolved].append(dict(source=str(path.relative_to(root)), line=node.lineno,
-                                            spelling=spelling, resolution='module-import-or-local-name'))
+        if path.stem == '__init__':
+            module = module.removesuffix('.__init__')
+            package = module.split('.')
+
+        def scope_nodes(body):
+            for node in body:
+                yield node
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                    yield from scope_nodes(ast.iter_child_nodes(node))
+
+        def visit_scope(body, inherited, arguments=(), top=False):
+            nodes = list(scope_nodes(body))
+            bindings = dict(inherited)
+            candidates = {}
+            blocked = set(arguments)
+            for node in nodes:
+                if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                    blocked.add(node.id)
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if top:
+                        candidates.setdefault(node.name, set()).add(module + '.' + node.name)
+                    else:
+                        blocked.add(node.name)
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        name = alias.asname or alias.name.split('.')[0]
+                        candidates.setdefault(name, set()).add(alias.name if alias.asname else name)
+                elif isinstance(node, ast.ImportFrom):
+                    prefix = '.'.join(package[:len(package) - node.level + 1]) if node.level else ''
+                    origin = '.'.join(part for part in (prefix, node.module) if part)
+                    for alias in node.names:
+                        candidates.setdefault(alias.asname or alias.name, set()).add(origin + '.' + alias.name)
+                elif isinstance(node, ast.ExceptHandler) and node.name:
+                    blocked.add(node.name)
+            for name, values in candidates.items():
+                bindings[name] = next(iter(values)) if len(values) == 1 else None
+            for name in blocked:
+                bindings[name] = None
+            for node in nodes:
+                if isinstance(node, ast.Call):
+                    spelling = ast.unparse(node.func)
+                    head, *tail = spelling.split('.')
+                    origin = bindings.get(head)
+                    resolved = '.'.join([origin, *tail]) if origin else None
+                    if resolved in result:
+                        result[resolved].append(dict(source=str(path.relative_to(root)), line=node.lineno,
+                                                    spelling=spelling, resolution='lexical-candidate'))
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    args = node.args
+                    names = [arg.arg for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
+                    names += [arg.arg for arg in (args.vararg, args.kwarg) if arg is not None]
+                    visit_scope(node.body, bindings, names)
+                elif isinstance(node, ast.ClassDef):
+                    # Methods resolve enclosing module names, not class locals.
+                    for child in node.body:
+                        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            visit_scope([child], bindings)
+        visit_scope(tree.body, {}, top=True)
     return result
 
 
@@ -81,7 +118,7 @@ def record():
     for symbol, callers in _resolved_callers(ROOT, symbols).items():
         symbols[symbol]['caller_candidates'] = callers
         symbols[symbol]['certificate_status'] = 'requires per-envelope reconciliation; no certificate inferred from calls'
-    return dict(schema=2, scope='Lexical caller candidates and local emitter paths; shadowing, indirect dispatch and external callers require review; no execution proof',
+    return dict(schema=2, scope='Lexical caller candidates and local emitter paths; conservative lexical binding; indirect dispatch and external callers require review; no execution proof',
 
                 counts={kind:sum(row['boundary']==kind for row in rows) for kind in ('graph','scheduled','raw_or_unclassified')}, rows=rows)
 

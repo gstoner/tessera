@@ -1,0 +1,81 @@
+{
+  "backend": "apple",
+  "scope": "native status-returning MSL; f32 arithmetic and bounded interleaved complex components",
+  "rows": [
+    {
+      "dtype": "fp32",
+      "state": "numerical_failure",
+      "mismatches": {
+        "add": 0,
+        "sub": 0,
+        "mul": 2,
+        "div": 1
+      },
+      "failures": {
+        "add": [],
+        "sub": [],
+        "mul": [
+          {
+            "index": 8,
+            "a": "1.1754944e-38",
+            "b": "0.5",
+            "actual": "0.0",
+            "expected": "5.877472e-39"
+          },
+          {
+            "index": 9,
+            "a": "1e-45",
+            "b": "1.0",
+            "actual": "0.0",
+            "expected": "1e-45"
+          }
+        ],
+        "div": [
+          {
+            "index": 9,
+            "a": "1e-45",
+            "b": "1.0",
+            "actual": "0.0",
+            "expected": "1e-45"
+          }
+        ]
+      },
+      "artifact_digest": "5be28137cca37652d148be55f94328c37a48e864b659b4b71a1f4002cd2ac39b",
+      "compiler_sha256": "43a5e9ce88dd31a6dc8f958f99a8a762efb6b846208e78bd9e8816c422cf7a78",
+      "msl_sha256": "72cf6351ef045f2eac23122cf22ee30ab7c3be3fdc8467217b83d3e613493695",
+      "package_digest": "94f33611ed16a3239f2c4a78bed9ff596c2b389815313b88e284db1e146e1bc8",
+      "bridge_sha256": "4b8c46cce88133cc199f3e44d19725d3790aa254ebcb9f54e528169268852335",
+      "gpu_interval": [
+        1279640.591730875,
+        1279640.5917413752
+      ],
+      "promotion_eligible": false
+    },
+    {
+      "dtype": "complex64",
+      "state": "passed",
+      "mismatches": {
+        "add": 0,
+        "sub": 0,
+        "mul": 0,
+        "div": 0
+      },
+      "failures": {
+        "add": [],
+        "sub": [],
+        "mul": [],
+        "div": []
+      },
+      "artifact_digest": "c9f19b9e85d96b45312ed0c1ba78e10603e5918f02b538e55de68566f62176ce",
+      "compiler_sha256": "43a5e9ce88dd31a6dc8f958f99a8a762efb6b846208e78bd9e8816c422cf7a78",
+      "msl_sha256": "29f7c86de05337e414647516c6db829ffb2553253dee05032e08b9b0b04fa6f7",
+      "package_digest": "acd02843a06474dc09dcf181b2cd3a4bb3e150bbf9cf49d35aac1adf0293cecf",
+      "bridge_sha256": "4b8c46cce88133cc199f3e44d19725d3790aa254ebcb9f54e528169268852335",
+      "gpu_interval": [
+        1279641.3688711668,
+        1279641.368884875
+      ],
+      "promotion_eligible": false
+    }
+  ]
+}

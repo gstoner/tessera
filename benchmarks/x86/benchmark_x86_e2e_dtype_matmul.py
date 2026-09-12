@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import hashlib
 import statistics
 import sys
 import time
@@ -31,7 +32,7 @@ def _module(kind: str, shape: tuple[int, int, int]) -> GraphIRModule:
     m, n, k = shape
     contracts = {
         "bf16": ("bf16", "bf16", "fp32", "bf16", "bf16", "f32"),
-        "u8s8": ("uint8", "int8", "int32", "i8", "i8", "i32"),
+        "u8s8": ("uint8", "int8", "int32", "ui8", "i8", "i32"),
         "fp64": ("fp64", "fp64", "fp64", "f64", "f64", "f64"),
     }
     ad, bd, od, am, bm, om = contracts[kind]
@@ -99,9 +100,12 @@ def _measure(kind: str, shape: tuple[int, int, int], trials: int,
         np.testing.assert_allclose(output, reference, **tolerance)
     descriptor_output = np.zeros_like(output)
     descriptor_values = {"a": a, "b": b, "o": descriptor_output, "M": m, "N": n, "K": k}
-    result = rt.launch(artifact, descriptor_values)
-    if not result["ok"]:
-        raise RuntimeError(result.get("reason"))
+    def descriptor_call():
+        result = rt.launch(artifact, descriptor_values)
+        if not result["ok"]:
+            raise RuntimeError(result.get("reason"))
+        return result
+    descriptor_call()
     if tolerance is None:
         np.testing.assert_array_equal(descriptor_output, reference)
     else:
@@ -109,7 +113,7 @@ def _measure(kind: str, shape: tuple[int, int, int], trials: int,
     native_samples, reference_samples, descriptor_samples = [], [], []
     for trial in range(trials):
         calls = ((oracle_call, reference_samples), (native_call, native_samples),
-                 (lambda: rt.launch(artifact, descriptor_values), descriptor_samples))
+                 (descriptor_call, descriptor_samples))
         if trial & 1:
             calls = tuple(reversed(calls))
         for call, samples in calls:
@@ -117,6 +121,11 @@ def _measure(kind: str, shape: tuple[int, int, int], trials: int,
     native_median, reference_median = statistics.median(native_samples), statistics.median(reference_samples)
     return {
         "dtype": kind, "shape": list(shape), "correct": True,
+        "schedule_digest": package.descriptor.provenance["schedule_digest"],
+        "tile_ir_sha256": hashlib.sha256(package.tile_ir.encode()).hexdigest(),
+        "target_ir_sha256": hashlib.sha256(package.target_ir.encode()).hexdigest(),
+        "image_digest": package.image.image_digest,
+        "promotion_eligible": False,
         "required_features": package.descriptor.provenance["required_features"],
         "kernel": {
             "native_samples_ms": native_samples, "reference_samples_ms": reference_samples,
@@ -145,7 +154,8 @@ def run(trials: int) -> dict[str, Any]:
         "timing_policy": "serial alternating reference-kernel/native-kernel/descriptor CPU wall time",
         "rows": rows, "all_correct": True,
         "all_native_faster": all(row["kernel"]["median_speedup"] > 1.0 for row in rows),
-        "selector_changed": False,
+        "selector_changed": False, "promotion_eligible": False,
+        "scope": "Owning-CPU diagnostic comparison; all timing is host wall time, not selector-grade evidence",
     }
 
 

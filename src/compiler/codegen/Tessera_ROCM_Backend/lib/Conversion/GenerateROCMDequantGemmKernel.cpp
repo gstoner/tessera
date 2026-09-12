@@ -160,8 +160,7 @@ struct GenerateROCMDequantGemmKernelPass
       auto fnTy = b.getFunctionType(
           {fmem, imem, fmem, fmem, idxTy, idxTy, idxTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernel(true); // Use the inherent property, not legacy gpu.kernel.
       OpBuilder body(gpuFunc.getContext());
       emitDequantGemmBody(body, loc, gpuFunc);
       op->erase();

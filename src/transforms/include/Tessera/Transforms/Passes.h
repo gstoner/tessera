@@ -414,6 +414,7 @@ std::unique_ptr<mlir::Pass> createTilePipelineLegalityPass();
 // round-trip, packed matmul, or explicit conversion).
 // Registered as --tessera-compute-legalize / --tessera-storage-legalize.
 std::unique_ptr<mlir::Pass> createComputeLegalizePass();
+std::unique_ptr<mlir::Pass> createLowpConversionsPass();
 // `target` enables capability-gated terminal legalization in named pipelines
 // and is also exposed as the standalone pass's `target` option. An empty target
 // retains the explicit inspection/fixture behavior.

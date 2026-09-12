@@ -124,7 +124,12 @@ LogicalResult MatmulOp::verify() {
   bool f64 = getOutput() == "f64" && getStorage() == "f64" &&
              getAccum() == "f64" &&
              (getArch().contains("avx512") || getArch().contains("zen5"));
-  if (getOutput() != "f32" && getOutput() != "f16" && !f64 &&
+  bool u8s8 = getStorage() == "u8" && getOutput() == "i32" &&
+              getAccum() == "i32" &&
+              (getArch().contains("avx512") || getArch().contains("zen5"));
+  if (getStorage() == "u8" && !u8s8)
+    return emitOpError("u8s8 requires the x86 i32 accumulator/output contract");
+  if (getOutput() != "f32" && getOutput() != "f16" && !f64 && !u8s8 &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, or int4 with i32 accumulation/output");
   if (getALayout() != "row_major" || getBLayout() != "col_major")

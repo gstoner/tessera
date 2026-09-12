@@ -390,6 +390,20 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       schedule.arch = "x86-avx512";
     return schedule;
   }
+  // A mixed signedness recipe is not a new storage dtype. The builtin
+  // tensor element types retain unsigned A and signed/signless B explicitly.
+  if (x86 && lhsElement.isUnsignedInteger(8) &&
+      (rhsElement.isSignlessInteger(8) || rhsElement.isSignedInteger(8)) &&
+      outElement.isSignlessInteger(32)) {
+    if (std::max({schedule.m, schedule.n, schedule.k}) > INT32_MAX)
+      return failure(); // The VNNI runtime ABI uses signed 32-bit extents.
+    schedule.storage = "u8";
+    schedule.accum = "i32";
+    schedule.output = "i32";
+    if (schedule.arch.empty())
+      schedule.arch = "x86-avx512";
+    return schedule;
+  }
   if (apple_gpu && lhsElement.isF32() && rhsElement.isF32() &&
       outElement.isF32()) {
     schedule.storage = "f32";
@@ -3512,8 +3526,9 @@ struct ScheduleToTilePass
       StringRef family = selected->target == "rocm" ? "wmma" : "auto";
       auto mma = tile::TileMmaDescAttr::get(
           &getContext(), family, selected->tileM, selected->tileN,
-          selected->tileK, selected->storage,
-          selected->storage, selected->accum, "row_major", "col_major", 1);
+          selected->tileK, selected->storage == "u8" ? "u8" : selected->storage,
+          selected->storage == "u8" ? "i8" : selected->storage,
+          selected->accum, "row_major", "col_major", 1);
       auto epilogue = tile::TileEpilogueAttr::get(
           &getContext(), /*bias=*/false, "none", selected->accum);
 

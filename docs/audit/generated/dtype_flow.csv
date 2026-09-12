@@ -535,6 +535,7 @@ gemm,tessera.matmul,loop_nest,yes,fp8_e5m2,fp8_e5m2,fp16/fp32,public,registered,
 gemm,tessera.matmul,loop_nest,yes,int4,int4,int32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,artifact_only,unsupported,artifact_only,unsupported,unsupported,direct_test
 gemm,tessera.matmul,loop_nest,yes,int8,int8,int32,public,registered,complete,fused,unsupported,fused,unsupported,unsupported,artifact_only,unsupported,artifact_only,artifact_only,artifact_only,direct_test
 gemm,tessera.matmul,loop_nest,yes,nvfp4,nvfp4,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,artifact_only,unsupported,unsupported,unsupported,unsupported,direct_test
+gemm,tessera.matmul,loop_nest,yes,uint8,uint8,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,tile/physical/direct_test
 grouped_gemm,tessera.grouped_gemm,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,legal_only,unsupported,unsupported,absent,absent,absent,absent,absent,tile/physical/direct_test
 grouped_gemm,tessera.grouped_gemm,loop_nest,no,fp32,fp32,fp32,public,registered,complete,fused,reference,legal_only,reference,fused,absent,absent,absent,absent,absent,
 latent_kv_compress,tessera.latent_kv_compress,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,tile/physical/direct_test
@@ -555,6 +556,7 @@ matmul,tessera.matmul,loop_nest,yes,fp8_e5m2,fp8_e5m2,fp16/fp32,public,registere
 matmul,tessera.matmul,loop_nest,yes,int4,int4,int32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,unsupported,device_verified_abi,artifact_only,unsupported,unsupported,
 matmul,tessera.matmul,loop_nest,yes,int8,int8,int32,public,registered,complete,fused,unsupported,device_verified_jit,unsupported,unsupported,unsupported,device_verified_abi,artifact_only,artifact_only,artifact_only,
 matmul,tessera.matmul,loop_nest,yes,nvfp4,nvfp4,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,tile/physical/direct_test
+matmul,tessera.matmul,loop_nest,yes,uint8,uint8,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,unsupported,tile/physical/direct_test
 moe_swiglu_block,tessera.moe_swiglu_block,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,legal_only,unsupported,unsupported,absent,absent,absent,absent,absent,tile/physical/direct_test
 moe_swiglu_block,tessera.moe_swiglu_block,loop_nest,no,fp32,fp32,fp32,public,registered,complete,fused,reference,legal_only,reference,fused,absent,absent,absent,absent,absent,
 quantized_matmul,tessera.quantized_matmul,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,legal_only,unsupported,unsupported,absent,absent,absent,absent,absent,tile/physical/direct_test

@@ -1401,3 +1401,66 @@ def test_x86_f64_scheduled_package_executes_on_owning_cpu(shape):
     result = rt.launch(artifact, {'a':a, 'b':b, 'o':out, 'M':m, 'N':n, 'K':k})
     assert result['ok'], result
     np.testing.assert_allclose(out, a @ b, rtol=1e-13, atol=1e-13)
+
+
+def _mixed_x86_module(shape=(3, 9, 5)):
+    m, k, n = shape
+    module = _module(target='x86', shape=shape)
+    fn = module.functions[0]
+    fn.args[0].ir_type = IRType(f'tensor<{m}x{k}xui8>', (str(m), str(k)), 'uint8')
+    fn.args[1].ir_type = IRType(f'tensor<{k}x{n}xi8>', (str(k), str(n)), 'int8')
+    fn.result_types = [IRType(f'tensor<{m}x{n}xi32>', (str(m), str(n)), 'int32')]
+    fn.body[0].operand_types = [str(a.ir_type) for a in fn.args]
+    fn.body[0].result_type = str(fn.result_types[0])
+    return module
+
+
+@requires_tessera_opt
+def test_x86_mixed_schedule_preserves_signedness_and_rejects_tampering(monkeypatch):
+    from dataclasses import replace
+    artifact = scheduled_matmul.lower_scheduled_matmul(_mixed_x86_module(), target='x86')
+    assert artifact.storage == 'u8' and artifact.accum == 'i32'
+    assert 'a = "u8", b = "i8", acc = "i32"' in artifact.tile_ir
+    scheduled_matmul.verify_matmul_projection(artifact)
+    for field, value in [('a_dtype', 'int8'), ('b_dtype', 'uint8'), ('accum', 'f32')]:
+        with pytest.raises(ValueError):
+            scheduled_matmul.verify_matmul_projection(replace(artifact, **{field: value}))
+    with pytest.raises((ValueError, RuntimeError)):
+        scheduled_matmul.verify_matmul_projection(replace(
+            artifact, schedule_ir=artifact.schedule_ir.replace('xui8>', 'xi8>')))
+
+
+@pytest.mark.hardware_avx512
+@pytest.mark.skipif(not x86_native.tools_available(), reason='owning AVX-512 host required')
+@pytest.mark.parametrize('shape', [(3, 9, 5), (2, 17, 19), (1, 70001, 1)])
+def test_x86_mixed_scheduled_package_matches_modular_integer_oracle(shape, monkeypatch):
+    m, k, n = shape
+    monkeypatch.setattr(x86_native, 'emit_matmul_tile_ir',
+                        lambda **kwargs: pytest.fail('Graph-owned Tile reconstruction'))
+    package = x86_native.package_matmul(_mixed_x86_module(shape), pipeline_name='tessera-lower-to-x86')
+    assert package.descriptor.provenance['a_storage'] == 'u8'
+    assert package.descriptor.provenance['b_storage'] == 'i8'
+    assert 'call @tessera_x86_avx512_vnni_gemm_u8s8_s32' in package.target_ir
+    artifact = rt.RuntimeArtifact(metadata={'target':'x86'}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    a = np.resize(np.array([255, 128, 0, 1], np.uint8), (m, k))
+    b = np.resize(np.array([-128, 127, -1, 0, 1], np.int8), (k, n))
+    if k > 70000:
+        a.fill(255)
+        b.fill(-128)
+    out = np.zeros((m,n), np.int32)
+    result = rt.launch(artifact, {'a':a, 'b':b, 'o':out, 'M':m, 'N':n, 'K':k})
+    assert result['ok'], result
+    exact = a.astype(np.int64) @ b.astype(np.int64)
+    expected = (exact & 0xffffffff).astype(np.uint32).view(np.int32)
+    np.testing.assert_array_equal(out, expected)
+
+
+def test_x86_mixed_capability_does_not_admit_unsigned_rhs_or_wide_extents():
+    module = _mixed_x86_module()
+    fn = module.functions[0]
+    old = fn.args[1].ir_type
+    fn.args[1].ir_type = IRType(str(old).replace('xi8>', 'xui8>'), old.shape, 'uint8')
+    assert not module.verify(target='x86').ok
+    with pytest.raises(ValueError, match='i32 runtime ABI'):
+        scheduled_matmul._graph_contract(_mixed_x86_module((1, 2**31, 1)), 'x86')

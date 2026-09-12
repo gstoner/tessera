@@ -1342,7 +1342,8 @@ LogicalResult MatmulKernelOp::verify() {
       return emitOpError(
           "canonical K-loop macro tile must be a positive multiple of the physical MMA tile");
     if (desc.getAccType() != "f32" && desc.getAccType() != "s32" &&
-        desc.getAccType() != "int32" && desc.getAccType() != "f64")
+        desc.getAccType() != "int32" && desc.getAccType() != "i32" &&
+        desc.getAccType() != "f64")
       return emitOpError(
           "canonical K-loop requires FP32, INT32, or FP64 accumulation");
   }

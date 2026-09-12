@@ -10,6 +10,8 @@ def pool_setup(monkeypatch):
     owner, native = setup()
     parent = owner.frame
     parent.native, parent.closed, parent._snapshots = native, False, []
+    ready = parent._ready
+    parent._ready = lambda **kwargs: ready()
     parent.alloc = lambda *args: 0
     parent.free = lambda pointer: native.calls.append(('free', pointer.value)) or 0
     parent._copy_async = lambda *args: native.calls.append(('copy', args[-1].value)) or 0
@@ -60,3 +62,48 @@ def test_live_reader_refusal_allocates_no_snapshot_storage(monkeypatch):
         with pytest.raises(ValueError, match='closed live reader'):
             ResidentPoolSnapshot(pool, 22)
     assert not pool._snapshots
+
+
+@pytest.mark.parametrize('published', [True, False])
+def test_snapshot_cleanup_can_recover_poisoned_parent(monkeypatch, published):
+    pool, native = pool_setup(monkeypatch)
+    snap = ResidentPoolSnapshot(pool, 21)
+    if not published:
+        snap.epoch = None
+    def ready(*, recovery=False):
+        if not recovery:
+            raise RuntimeError('poisoned parent')
+    pool._ready = ready
+    with pytest.raises(RuntimeError, match='poisoned'):
+        snap.read(22)
+    snap.close()
+    assert snap.closed and not snap.buffers and not snap._closing
+    assert not pool._snapshots
+    assert sum(c[0] == 'free' for c in native.calls) == 2
+
+
+def test_recovery_close_still_refuses_active_snapshot_reader(monkeypatch):
+    pool, native = pool_setup(monkeypatch)
+    snap = ResidentPoolSnapshot(pool, 21)
+    with snap.read(22):
+        def ready(*, recovery=False):
+            if not recovery:
+                raise RuntimeError('poisoned parent')
+        pool._ready = ready
+        with pytest.raises(ValueError, match='active readers'):
+            snap.close()
+        assert not snap._closing and not snap.closed
+        assert not any(c[0] == 'free' for c in native.calls)
+    snap.close()
+    assert snap.closed
+
+
+def test_recovery_completion_failure_retains_snapshot(monkeypatch):
+    pool, native = pool_setup(monkeypatch)
+    snap = ResidentPoolSnapshot(pool, 21)
+    snap.epoch = None
+    native._sync = lambda: 1
+    with pytest.raises(RuntimeError):
+        snap.close()
+    assert snap in pool._snapshots and snap.buffers and not snap._closing
+    assert not any(c[0] == 'free' for c in native.calls)

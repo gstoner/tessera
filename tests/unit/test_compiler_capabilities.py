@@ -10,6 +10,7 @@ from tessera.compiler.capabilities import (
     supports_op,
 )
 from tessera.compiler.matmul_pipeline import normalize_target_kind
+from tessera.compiler.legality import TensorContract, check_op_legality
 
 
 def test_capability_registry_normalizes_existing_target_aliases():
@@ -107,7 +108,25 @@ def test_x86_logical_and_bitwise_dtypes_match_native_stable_abis():
 
 
 def test_x86_matmul_dtype_contract_matches_vertical_slices():
-    for dtype in ("fp32", "fp64", "bf16", "int8"):
-        assert supports_op("x86", "tessera.matmul", dtype=dtype).supported
-    assert not supports_op("x86", "tessera.matmul", dtype="uint8").supported
-    assert not supports_op("x86", "tessera.matmul", dtype="fp8_e4m3").supported
+    # The dtype inventory admits uint8 as A in u8*s8->i32, not arbitrary
+    # unsigned matmul. Full operand/result legality owns that distinction.
+    for op in ("tessera.matmul", "tessera.gemm"):
+        for dtype in ("fp32", "fp64", "bf16", "int8", "uint8"):
+            assert supports_op("x86", op, dtype=dtype).supported
+        assert not supports_op("x86", op, dtype="fp8_e4m3").supported
+        for lhs, rhs, output, allowed in (
+            ("uint8", "int8", "int32", True),
+            ("uint8", "uint8", "int32", False),
+            ("int8", "uint8", "int32", False),
+            ("uint8", "int8", "uint8", False),
+            ("uint8", "int8", "fp32", False),
+            ("uint8", "int8", None, False),
+        ):
+            result = check_op_legality(
+                op, [TensorContract((3, 5), lhs), TensorContract((5, 7), rhs)],
+                target="x86",
+                result=None if output is None else TensorContract((3, 7), output),
+            )
+            assert result.ok is allowed, (op, lhs, rhs, output, result.format())
+            if not allowed:
+                assert any(d.code == "LEGALITY_TARGET_CAPABILITY" for d in result.diagnostics)

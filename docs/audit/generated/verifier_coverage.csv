@@ -1,5 +1,6 @@
 td_file,op_class,has_verifier_declared,verify_impl_present,impl_status
 src/compiler/ir/TesseraOps.td,ALiBiOp,1,1,real
+src/compiler/ir/TesseraOps.td,AbsoluteOp,1,0,absent
 src/compiler/ir/TesseraOps.td,AdafactorOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdamBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdamOp,1,1,real

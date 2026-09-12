@@ -104,9 +104,12 @@ class NativeGPUStoragePackage:
 
 
 def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
-                             backend: str, chip: str) -> NativeGPUStoragePackage:
+                             backend: str, chip: str, toolkit: Path | None = None) -> NativeGPUStoragePackage:
     if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151')):
         raise ValueError('native storage target is not validated')
+    if re.search(r'\btessera\.denormal_mode\s*=', source):
+        raise ValueError('explicit denormal policy currently requires the Apple arena consumer')
+    binary_pass = _binary_pass(toolkit)
     arena = _run(compiler, '--allow-unregistered-dialect', '--tessera-tile-buffer-reuse',
                  '--tessera-tile-buffer-arena', '--tessera-expand-lowp-conversions', '--canonicalize', source=source)
     device = _block(arena, r'^  gpu.module .*?^  }')
@@ -127,7 +130,7 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     metadata = 'expand-strided-metadata,lower-affine,' if 'memref.subview' in device else ''
     pipeline = ('builtin.module(gpu.module(' + metadata + 'convert-nvgpu-to-nvvm,convert-scf-to-cf,'
                 f'convert-gpu-to-{target},convert-math-to-llvm,reconcile-unrealized-casts),'
-                f'{target}-attach-target{{chip={chip}}},gpu-module-to-binary)')
+                f'{target}-attach-target{{chip={chip}}},{binary_pass})')
     binary = _run(llvm_bin / 'mlir-opt', '--pass-pipeline=' + pipeline, source=device)
     if binary.count('#gpu.object<') != 1:
         raise ValueError('expected exactly one native GPU image')
@@ -148,6 +151,16 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
         arena, image, host_library, _sha(compiler.read_bytes()),
         _sha((llvm_bin / 'mlir-opt').read_bytes()), '')
     return NativeGPUStoragePackage(**{**asdict(package), 'binding_digest': package._digest()})
+
+
+def _binary_pass(toolkit: Path | None) -> str:
+    """Pin serialization to the requested toolkit without pass-option injection."""
+    if toolkit is None:
+        return 'gpu-module-to-binary'
+    path = toolkit.resolve(strict=True)
+    if not path.is_dir() or re.fullmatch(r'[/A-Za-z0-9_.+-]+', str(path)) is None:
+        raise ValueError('toolkit must be a directory with a plain absolute path')
+    return f'gpu-module-to-binary{{toolkit={path}}}'
 
 
 class BoundNativeGPUStorage:

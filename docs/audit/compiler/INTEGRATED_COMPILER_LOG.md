@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-11
+last_updated: 2026-09-12
 audit_role: reference
 ---
 
@@ -3680,3 +3680,41 @@ Remaining: Apple strict subnormal arithmetic fails three comparisons; broader st
 Evidence: [independent dtype follow-through](../../../benchmarks/baselines/dtype_followthrough_20260911/README.md), `test_lowp_conversions.py`, `test_dtype_arithmetic_probe.py`, `test_packed_dtype_probe.py`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-12 — Reconciliation and wave start
+
+Owner: [NUMPOL-CARRIER-1](INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1)
+
+PRs: Uncommitted follow-through after #745.
+
+Outcome: MASTER_AUDIT now routes sequencing to the live plan and distinguishes implemented SSD, MPI, checkpoint and assertions-enabled toolchain slices from their open boundaries. CUDA serialization now accepts an explicit toolkit path; the arithmetic recorder requires it for NVIDIA and fingerprints ptxas and the disassembler. All 34 scalar/vector rows pass on Super-Bear with CUDA SDK 13.4.1. Snapshot retirement closes admission and polls recorded readers without implicitly synchronizing or freeing.
+
+Remaining: Apple gradual-underflow policy closure, the selected x86 absolute migration and serialized broadcast attention masks are scoped, not implemented in this increment. Snapshot frees and module unload remain synchronous; no new owning-device snapshot-retirement or performance proof is claimed.
+
+Evidence: [CUDA arithmetic packet](../../../benchmarks/baselines/cuda1341_20260912/README.md); WSL tests cover toolkit selection, audit governance, reader admission, eventless retention and snapshot recovery.
+
+<!-- entry-fields:end -->
+
+Additional owners: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6),
+[FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1) and
+[W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a). The live records hold acceptance gates.
+
+### 2026-09-12 — Native numerical and packaging slices
+
+Owner: [NUMPOL-CARRIER-1](INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1)
+
+PRs: Uncommitted continuation after #745.
+
+Outcome: Explicit Apple arena gradual/FTZ policy now consumes integer-significand f32 add/sub/mul/div. Both policies pass M1 Max checks over 133,376 boundary/random input pairs per operation. x86 absolute now uses a native Schedule record and Tile producer with replay-derived descriptors and owning-Zen-5 exceptional/ragged proof. Batch/head broadcast attention masks reach native SM120 indexing; the versioned host ABI copies the physical bias extent, and two ragged causal/GQA/window cases pass.
+
+Remaining: Wider Apple floating operations/dtypes/vectors and optimized policy performance; other Graph-owned elementwise/cohort/breadth families; query/key broadcast, Boolean/padding masks and sibling attention backends. No general AD or performance closure is implied.
+
+Evidence: [native slice packets](../../../benchmarks/baselines/native_slices_20260912/README.md), [Apple numerical contract](../../spec/APPLE_ARENA_NUMERICAL_POLICY.md), focused native/compiler and registry checks, and the new absolute lit fixture.
+
+<!-- entry-fields:end -->
+
+Additional owners: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6) and
+[FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1).
+The first native-hardware FTZ experiment failed 28 multiply/divide comparisons;
+FTZ admission was corrected to use IEEE rounding before output flushing. The
+passing packet is from the corrected implementation, not a tolerance change.

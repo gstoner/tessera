@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-09
+last_updated: 2026-09-12
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -5050,3 +5050,19 @@ Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
 
 Shared pass and numerical-oracle assessment: host contract validation only; no new x86 dtype execution or performance evidence. The earlier mixed u8/s8 matmul proof is unchanged. GPU FP8/packed evidence does not transfer.
 Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.
+
+## Reconciliation and wave start — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1` / `W2.4a`.
+
+The census selects static f32 absolute in package_elementwise for the next Graph-constructor migration. Serialized opcode/ABI/policy projection and owning-CPU exceptional/ragged differential proof must precede deletion. GPU toolkit and snapshot execution are not applicable to x86; shared host contract tests do not establish CPU migration closure.
+
+See the [integrated wave record](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-12--reconciliation-and-wave-start).
+
+## Native numerical and packaging slices — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
+
+Parity validated on Princess-Luna Ryzen AI Max+ 395: three f32 absolute shapes compare bitwise, including signed zero, subnormals, infinities and NaNs. Native Graph-to-Schedule records and Schedule-to-Tile emission replace the selected Python constructor; packaging replays serialized ancestry and projects its descriptor. Follow-up required: other elementwise and cohort/breadth routes. Apple FTZ/gradual and GPU attention evidence are not CPU support claims.
+
+Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.

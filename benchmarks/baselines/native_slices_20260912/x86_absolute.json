@@ -1,0 +1,38 @@
+{
+  "backend": "x86",
+  "rows": [
+    {
+      "shape": [
+        51
+      ],
+      "state": "passed",
+      "schedule_sha256": "b5c56139538b41d8b794a0c1efec8d127806bfdaaf9a8130b67d712ddb2b318f",
+      "image_digest": "b0095b47d2f52b3d51d29f3530b88c9ef472854399db539c5e9c8d3af961a992",
+      "promotion_eligible": false
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "state": "passed",
+      "schedule_sha256": "cafb9bf733c8bf7d817ddbb7bf67f5239ed5bf91384842db370c2effcbf36a15",
+      "image_digest": "331b99b27cdc37da5ef4041774110da9090a3a341de16dc412be851d79db407c",
+      "promotion_eligible": false
+    },
+    {
+      "shape": [
+        2,
+        3,
+        17
+      ],
+      "state": "passed",
+      "schedule_sha256": "9516cc2dfecbb0c188fd8178725ca1e592cdf8bfccdb14cc33ca3c96cc88dfb4",
+      "image_digest": "416e97bcc2b8d4daa114b00e9917fc4efa53fd353067e9009d72b775d30c1807",
+      "promotion_eligible": false
+    }
+  ],
+  "compiler_sha256": "1a8116416778d74895a772422cd1ef3566aaed2390d433bca25cb3e786d1491f",
+  "runtime_sha256": "d8c9b55bfb2b4c51f73f993cf73dbc1a64937d01851de1bfcf1500b0f9dd318f",
+  "scope": "f32 absolute bitwise magnitude including ragged and exceptional inputs"
+}

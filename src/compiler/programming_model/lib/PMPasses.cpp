@@ -56,6 +56,7 @@ namespace tessera {
 #include "NativeCheckpoint.h"
 #include "NativePagedKV.h"
 #include "NativeSSD.h"
+#include "NativeAbsolute.h"
 
 // ---------------------------------------------------------------------------
 // Dialect registration
@@ -1156,6 +1157,7 @@ struct AttentionSchedule {
   double scale;
   bool causal;
   bool bias = false;
+  SmallVector<int64_t> biasShape;
   int64_t windowLeft;
   int64_t windowRight;
   double softcap;
@@ -1487,12 +1489,14 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
     return failure();
   if (op->getNumOperands() == 4) {
     auto bias = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
-    if (!bias || !bias.hasStaticShape() || !bias.getElementType().isF32() ||
-        bias.getShape() !=
-            ArrayRef<int64_t>({schedule.batch, schedule.queryHeads,
-                               schedule.queryRows, schedule.keyRows}))
+    if (!bias || !bias.hasStaticShape() || !bias.getElementType().isF32() || bias.getRank() != 4 ||
+        (bias.getDimSize(0) != schedule.batch && !(nvidia && bias.getDimSize(0) == 1)) ||
+        (bias.getDimSize(1) != schedule.queryHeads && !(nvidia && bias.getDimSize(1) == 1)) ||
+        bias.getDimSize(2) != schedule.queryRows || bias.getDimSize(3) != schedule.keyRows)
       return failure();
     schedule.bias = true;
+    if (bias.getDimSize(0) != schedule.batch || bias.getDimSize(1) != schedule.queryHeads)
+      schedule.biasShape.assign(bias.getShape().begin(), bias.getShape().end());
   }
   auto scale = op->getAttrOfType<FloatAttr>("scale");
   auto causal = op->getAttrOfType<BoolAttr>("causal");
@@ -1577,6 +1581,7 @@ static std::string attentionScheduleDigest(const AttentionSchedule &schedule) {
        ";backward_lse_policy=" + schedule.backwardLsePolicy +
        ";backward_lse_selection=" + schedule.backwardLseSelection)
           .str();
+  for (int64_t dim : schedule.biasShape) contract += ";bias_dim=" + std::to_string(dim);
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -1883,6 +1888,7 @@ struct GraphToSchedulePass
   void runOnOperation() override {
     ModuleOp mod = getOperation();
     OpBuilder builder(mod.getContext());
+    if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
 
@@ -2624,6 +2630,8 @@ struct GraphToSchedulePass
           builder.getStringAttr(selected->backwardLsePolicy),
           builder.getStringAttr(selected->backwardLseSelection));
       Operation *scheduled = scheduledOp.getOperation();
+      if (!selected->biasShape.empty())
+        scheduled->setAttr("bias_shape", builder.getDenseI64ArrayAttr(selected->biasShape));
       for (OpOperand &use : llvm::make_early_inc_range(op->getResult(0).getUses()))
         if (use.getOwner() != scheduled)
           use.set(scheduled->getResult(0));
@@ -2813,6 +2821,7 @@ struct ScheduleToTilePass
       return;
     }
     OpBuilder builder(mod.getContext());
+    if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
     if (failed(lowerNativeSSD(mod))) return signalPassFailure();
@@ -4686,6 +4695,9 @@ struct ScheduleToTilePass
           scheduled.getBackwardLsePolicy() != selected->backwardLsePolicy ||
           scheduled.getBackwardLseSelection() !=
               selected->backwardLseSelection;
+      auto biasShape = scheduled->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+      altered |= selected->biasShape.empty() ? scheduled->hasAttr("bias_shape") :
+          (!biasShape || biasShape.asArrayRef() != ArrayRef<int64_t>(selected->biasShape));
       if (altered) {
         scheduled.emitError(
             "scheduled attention policy was altered after hashing");
@@ -4790,6 +4802,8 @@ struct ScheduleToTilePass
       kernelState.addAttribute("scale", builder.getF32FloatAttr(selected->scale));
       kernelState.addAttribute("causal", builder.getBoolAttr(selected->causal));
       kernelState.addAttribute("bias", builder.getBoolAttr(selected->bias));
+      if (!selected->biasShape.empty())
+        kernelState.addAttribute("bias_shape", builder.getDenseI64ArrayAttr(selected->biasShape));
       kernelState.addAttribute("window_left",
                                builder.getI64IntegerAttr(selected->windowLeft));
       kernelState.addAttribute("window_right",

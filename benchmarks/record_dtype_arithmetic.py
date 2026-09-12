@@ -166,6 +166,17 @@ def check(actual, expected):
 
 def run(args):
     cuda = args.backend == 'nvidia'
+    toolkit = args.toolkit.resolve(strict=True) if args.toolkit else None
+    if cuda and toolkit is None:
+        raise ValueError('NVIDIA evidence requires an explicit --toolkit')
+    tool = args.disassembler or (toolkit / 'bin/cuobjdump' if cuda else args.llvm_bin / 'llvm-objdump')
+    provenance = {'disassembler': str(tool.resolve()),
+                  'disassembler_sha256': hashlib.sha256(tool.read_bytes()).hexdigest()}
+    if toolkit is not None:
+        provenance['toolkit'] = str(toolkit)
+    if cuda:
+        provenance['version'] = json.loads((toolkit / 'version.json').read_text())
+        provenance['ptxas_sha256'] = hashlib.sha256((toolkit / 'bin/ptxas').read_bytes()).hexdigest()
     driver = ct.CDLL('libcuda.so.1' if cuda else 'libamdhip64.so')
     P, S = ct.c_void_p, ct.c_size_t
     def bind(cu, hip, types):
@@ -198,7 +209,7 @@ def run(args):
                     row['arithmetic_mode'] = 'byte_storage_f32_compute_round_to_fp8'
                     row['input_pairs'] = len(a)
                 package = build_native_gpu_storage(source, compiler=args.compiler, llvm_bin=args.llvm_bin,
-                                                   backend=args.backend, chip='sm_120' if cuda else 'gfx1151')
+                                                   backend=args.backend, chip='sm_120' if cuda else 'gfx1151', toolkit=toolkit)
             except subprocess.CalledProcessError as error:
                 row.update(state='compile_failed', reason=str(error.stderr)[:2200])
                 rows.append(row)
@@ -210,7 +221,6 @@ def run(args):
             (args.artifacts / (stem + '.mlir')).write_text(source)
             (args.artifacts / (stem + '.image')).write_bytes(package.image)
             image_path = args.artifacts / (stem + '.image')
-            tool = args.disassembler or (Path('/usr/local/cuda-13.3/bin/cuobjdump') if cuda else args.llvm_bin / 'llvm-objdump')
             assembly = subprocess.check_output([str(tool), '--dump-sass' if cuda else '-d', str(image_path)], text=True)
             (args.artifacts / (stem + '.asm')).write_text(assembly)
             row['assembly_sha256'] = hashlib.sha256(assembly.encode()).hexdigest()
@@ -246,6 +256,7 @@ def run(args):
     if cuda:
         checked(bind('cuDevicePrimaryCtxRelease_v2', '', [ct.c_int])(0))
     return {'backend': args.backend, 'chip': 'sm_120' if cuda else 'gfx1151',
+            'toolchain': provenance,
             'compiler_sha256': hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
             'scope': 'Basic MLIR scalar/vector arithmetic; no public frontend or matrix closure; no performance promotion', 'rows': rows}
 
@@ -259,6 +270,7 @@ if __name__ == '__main__':
     parser.add_argument('--artifacts', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--disassembler', type=Path)
+    parser.add_argument('--toolkit', type=Path, help='Explicit GPU serialization toolkit; required for NVIDIA evidence')
     args = parser.parse_args()
     result = run(args)
     args.output.write_text(json.dumps(result, indent=2)+'\n')

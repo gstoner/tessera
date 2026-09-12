@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-09
+last_updated: 2026-09-12
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -8665,3 +8665,19 @@ Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
 
 Owning M1 Max status-returning MSL proof: bounded complex64 components pass; fp32 add/subtract pass, but multiply/divide flush three subnormal results. Strict gradual-underflow admission requires a policy-aware consumer or explicit refusal; FP8/packed/bool storage and vector paths remain follow-up required.
 Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.
+
+## Reconciliation and wave start — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1` / `W2.4a`.
+
+Apple numerical-policy closure remains open: the three subnormal failures are retained. Next consume explicit gradual-underflow/FTZ intent in serialized policy and MSL admission; do not substitute a relaxed oracle. Broadcast-mask device validation follows its compiler contract. CUDA evidence does not transfer to Metal.
+
+See the [integrated wave record](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-12--reconciliation-and-wave-start).
+
+## Native numerical and packaging slices — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
+
+Parity validated on owning M1 Max: explicit gradual and FTZ f32 add/sub/mul/div each pass 133,376 input pairs per operation. The compiler emits integer-significand arithmetic with ties-to-even packing; FTZ wraps that same core. Other floating operations and fast-math overrides refuse explicit policy. Follow-up required: vector/dtype/math consumers and performance calibration. The x86 absolute and NVIDIA mask proofs do not transfer to Apple.
+
+Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.

@@ -107,3 +107,41 @@ def test_recovery_completion_failure_retains_snapshot(monkeypatch):
         snap.close()
     assert snap in pool._snapshots and snap.buffers and not snap._closing
     assert not any(c[0] == 'free' for c in native.calls)
+
+
+def test_snapshot_retirement_closes_precreated_leases_without_wait_or_free(monkeypatch):
+    pool, native = pool_setup(monkeypatch)
+    snap = ResidentPoolSnapshot(pool, 21)
+    lease = snap.read(24)
+    with snap.read(22):
+        with pytest.raises(ValueError, match='active readers'):
+            snap.retire()
+        assert not snap.retiring
+    native.ready = False
+    snap.retire()
+    with pytest.raises(ValueError, match='admission is closed'):
+        snap.read(23)
+    with pytest.raises(ValueError, match='acquisition is closed'):
+        lease.__enter__()
+    assert not snap.poll()
+    native.ready = True
+    assert snap.poll()
+    assert snap.buffers and snap in pool._snapshots
+    assert not any(c[0] in ('free', 'event_wait', 'stream_sync', 'sync') for c in native.calls)
+    snap.close()
+    assert snap.closed and snap.poll()
+
+
+def test_snapshot_eventless_reader_cannot_poll_as_complete(monkeypatch):
+    pool, native = pool_setup(monkeypatch)
+    snap = ResidentPoolSnapshot(pool, 21)
+    native.record_failure = True
+    with pytest.raises(RuntimeError):
+        with snap.read(22):
+            pass
+    snap.retire()
+    assert not snap.poll()
+    assert snap.buffers and snap in pool._snapshots
+    assert not any(c[0] in ('free', 'stream_sync', 'sync') for c in native.calls)
+    snap.close()
+    assert snap.closed

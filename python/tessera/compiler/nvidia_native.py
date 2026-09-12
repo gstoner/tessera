@@ -120,6 +120,7 @@ SM120_ATTN_F32_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1"
 SM120_ATTN_BIAS_F16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f16_f32acc.v1"
 SM120_ATTN_BIAS_BF16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.bf16_f32acc.v2"
 SM120_ATTN_BIAS_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f32_f32acc.v1"
+SM120_ATTN_BCAST_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims_bias_shape.f32_f32acc.v2"
 SM120_ATTN_BWD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1"
 SM120_ATTN_BWD_BIAS_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.f32.v1"
 SM120_ATTN_BWD_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f16_f32acc.v2"
@@ -2943,7 +2944,7 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
     shapes = [(b, hq, sq, d), (b, hkv, sk, d), (b, hkv, sk, dv)]
     names = [artifact.q_name, artifact.k_name, artifact.v_name]
     if bias_name is not None:
-        shapes.append((b, hq, sq, sk))
+        shapes.append(artifact.bias_shape)
         names.append(bias_name)
     for index, (name, shape) in enumerate(zip(names, shapes)):
         element = storage_ir if index < 3 else "f32"
@@ -2962,6 +2963,11 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
         "bf16": SM120_ATTN_BF16_ABI,
         "fp32": SM120_ATTN_F32_ABI,
     })[storage]
+    broadcast = bias_name is not None and artifact.bias_shape != (b, hq, sq, sk)
+    if broadcast:
+        if storage != "fp32":
+            raise ValueError("broadcast attention currently requires f32 storage")
+        abi_id = SM120_ATTN_BCAST_F32_ABI
     tile_ir = artifact.tile_ir
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
@@ -2998,7 +3004,7 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
           + [BufferBinding(3 + int(bias_name is not None), output_name, "output", "fp32", 4, "row_major", 4)]),
         scalars=tuple(
             ScalarArgument(4 + int(bias_name is not None) + index, name, "int64")
-            for index, name in enumerate(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
+            for index, name in enumerate(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv") + (("BiasB", "BiasH") if broadcast else ()))
         ),
         shape_guards=tuple([
             ShapeGuard(q_name, 0, "eq", b), ShapeGuard(q_name, 1, "eq", hq),
@@ -3010,7 +3016,7 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
             ShapeGuard(output_name, 0, "eq", b), ShapeGuard(output_name, 1, "eq", hq),
             ShapeGuard(output_name, 2, "eq", sq), ShapeGuard(output_name, 3, "eq", dv),
         ] + ([
-            ShapeGuard(bias_name, 0, "eq", b), ShapeGuard(bias_name, 1, "eq", hq),
+            ShapeGuard(bias_name, 0, "eq", artifact.bias_shape[0]), ShapeGuard(bias_name, 1, "eq", artifact.bias_shape[1]),
             ShapeGuard(bias_name, 2, "eq", sq), ShapeGuard(bias_name, 3, "eq", sk),
         ] if bias_name else [])),
         geometry=LaunchGeometry(policy="sm120_attention_thread_per_output_128"),
@@ -3684,7 +3690,7 @@ __all__ = [
     "SM120_ATTN_F32_ABI",
     "SM120_ATTN_BIAS_F16_ABI",
     "SM120_ATTN_BIAS_BF16_ABI",
-    "SM120_ATTN_BIAS_F32_ABI",
+    "SM120_ATTN_BIAS_F32_ABI", "SM120_ATTN_BCAST_F32_ABI",
     "SM120_ATTN_BWD_F32_ABI",
     "SM120_ATTN_BWD_BIAS_F32_ABI",
     "SM120_ATTN_BWD_F16_ABI",

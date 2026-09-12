@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-09
+last_updated: 2026-09-12
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -7662,3 +7662,19 @@ Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
 
 gfx1151: four FP8 scalar/vector cases pass exhaustive 65,536 input pairs each; bool logic and bounded complex components pass. No FP8 WMMA claim on RDNA3.5. INT4/dequant generators now use the inherent kernel property; serializer models link without a host HIP runtime. The refreshed INT4 packed-consumer benchmark now completes on gfx1151, including scaled dequant-GEMM, ReLU, sparse gather and cache append. Broader FP4/FP6 scale/layout coverage remains open.
 Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.
+
+## Reconciliation and wave start — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1` / `W2.4a`.
+
+The shared optional serialization-toolkit argument leaves existing HIP selection unchanged. Snapshot admission/poll contracts require gfx1151 device follow-up; CUDA 13.4.1 arithmetic evidence does not transfer. Broadcast attention still needs a ROCm-compatible storage consumer before device admission.
+
+See the [integrated wave record](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-12--reconciliation-and-wave-start).
+
+## Native numerical and packaging slices — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
+
+Shared-contract assessment: the generic HIP storage builder refuses the currently unconsumed explicit denormal carrier. Follow-up required: a native ROCm numerical-policy consumer and broadcast attention storage/ABI lowering; SM120/Metal proofs do not transfer. The owning Zen 5 absolute comparison is CPU evidence only.
+
+Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.

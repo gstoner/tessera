@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-09
+last_updated: 2026-09-12
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -7374,3 +7374,19 @@ Sync: `DTYPE-CODEGEN-2026-09-11`; owners NUMPOL-CARRIER-1 / LAYOUT-ALG-1.
 
 SM120: four FP8 scalar/vector cases pass exhaustive 65,536 input pairs each. Bool logic and bounded complex components pass. Ten INT4/FP4/NVFP4/FP6 decode cases pass with both packing axes, varying scales, offsets and padding. This is software conversion/generic decoding, not Tensor Core or performance promotion.
 Evidence: [follow-through packets](../../../../benchmarks/baselines/dtype_followthrough_20260911/README.md). No performance promotion.
+
+## Reconciliation and wave start — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1` / `W2.4a`.
+
+Fresh CUDA SDK 13.4.1 / nvcc 13.4.59 / driver 610.88 on RTX 5070 passes all 34 arithmetic rows with explicit MLIR toolkit selection and matching cuobjdump. Old 13.3 packets remain historical. Serialized broadcast attention and owning-device snapshot retirement require follow-up; WSL timings do not promote candidates.
+
+See the [integrated wave record](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-12--reconciliation-and-wave-start).
+
+## Native numerical and packaging slices — 2026-09-12
+
+Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
+
+Parity validated on owning SM120 with CUDA 13.4.1: two B=2 ragged causal/GQA/window attention buckets use compact batch/head broadcast bias and match the oracle. The v2 f32 host ABI carries BiasB/BiasH and copies only physical bias storage; kernel logical dimensions remain unchanged. Follow-up required: query/key broadcast, Boolean/padding masks, wider storage and clean performance admission. The Apple-specific denormal carrier fails closed in generic CUDA storage.
+
+Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.

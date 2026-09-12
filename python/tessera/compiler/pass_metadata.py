@@ -608,6 +608,16 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="COMP-GRAPH-DATAFLOW-W2.1-2026-08-11",
     ),
     PassMetadata(
+        name="tessera-graph-to-schedule",
+        cpp_class="GraphToSchedulePass",
+        summary="Selects bounded native Schedule contracts from typed Graph IR, including replay-bound x86 absolute and physical batch/head attention bias broadcasting. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "schedule", "func"),
+        required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings"),
+        preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
+        pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
+    ),
+    PassMetadata(
         name="tessera-ir-contracts",
         cpp_class="IRContractLegality",
         summary=(
@@ -788,10 +798,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
-        summary="Replays registered Schedule decisions into Tile carriers and structured SSD loops. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        summary="Replays registered Schedule decisions into Tile carriers and structured SSD loops, including the x86 absolute contract and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
         input_dialects=("schedule", "func", "tessera"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
-        required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout"),
+        required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout", "contract", "bias_shape"),
         preserved_attrs=("tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes", "tessera.schedule_hash", "numeric_policy"),
         pass_kind="lowering", sprint="W5.2f",
     ),
@@ -908,10 +918,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-tile-buffer-arena",
         cpp_class="TileBufferArena",
-        summary="Recheck path-sensitive reuse lifetimes, GPU kernel scalar uniformity and private-call ownership before materializing workgroup arenas; uniform nested dynamic GPU arenas reserve group maxima and export a recoverable checked native host sizer and wire gpu.launch_func byte counts. Propagate view/cast address space and preserve call ABIs. NVGPU completion accepts unanimous branch and identity loop token forwarding; loop-external generation replacement requires a proven nonempty loop or a matching zero-trip seed; fixed-slot rotating generations require a seed, per-iteration wait/publication/read/release/refill recurrence and final drain. Bijective N-slot memref carries fully release each iteration; N-slot carries can retain one destination-matched pending token with seed, read/release/refill and final-drain proofs. Optional emit-apple-msl consumes a bounded typed dynamic arena and preserves the native sizing companion.",
+        summary="Recheck path-sensitive reuse lifetimes, GPU kernel scalar uniformity and private-call ownership before materializing workgroup arenas; uniform nested dynamic GPU arenas reserve group maxima and export a recoverable checked native host sizer and wire gpu.launch_func byte counts. Propagate view/cast address space and preserve call ABIs. NVGPU completion accepts unanimous branch and identity loop token forwarding; loop-external generation replacement requires a proven nonempty loop or a matching zero-trip seed; fixed-slot rotating generations require a seed, per-iteration wait/publication/read/release/refill recurrence and final drain. Bijective N-slot memref carries fully release each iteration; N-slot carries can retain one destination-matched pending token with seed, read/release/refill and final-drain proofs. Optional emit-apple-msl consumes a bounded typed dynamic arena and preserves the native sizing companion. Module-owned tessera.denormal_mode selects unspecified legacy behavior, integer-significand IEEE f32 add/sub/mul/div with gradual underflow and ties-to-even rounding, or explicit input/output FTZ around the same arithmetic core. Other floating operations and fast-math overrides refuse explicit policy.",
         input_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf", "dlti", "nvgpu"),
         output_dialects=("tile", "func", "memref", "arith", "gpu", "scf", "cf", "nvgpu"),
-        required_attrs=("tile.buffer_group", "stage", "tile.barrier_id", "callee", "sym_visibility", "kernel", "gpu.kernel", "sym_name", "dlti.dl_spec", "dynamicSharedMemorySize", "numGroups", "unsignedCmp"),
+        required_attrs=("tile.buffer_group", "stage", "tile.barrier_id", "callee", "sym_visibility", "kernel", "gpu.kernel", "sym_name", "dlti.dl_spec", "dynamicSharedMemorySize", "numGroups", "unsignedCmp", "tessera.denormal_mode"),
+        preserved_attrs=("tessera.denormal_mode", "tessera.apple.denormal_mode"),
         diagnostic_codes=("TILE_BARRIER_REUSE_MISSING_BARRIER",),
         can_run_after=("tessera-tile-buffer-reuse",),
         sprint="W2.4a / CAKE / SO-2",

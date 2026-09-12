@@ -1,0 +1,28 @@
+{
+  "parent": "145b32777413e93d256a36860529b8060f167d26",
+  "sha256": {
+    "src/transforms/lib/AppleIEEEArithmetic.h": "4fdc7a30e63e725fac7b874d909374d709e2de5ab9dfd662305225c2259fa9fa",
+    "src/transforms/lib/AppleArenaMSL.h": "5fb185199f41826a4c7730e61050b42db1a4df43bbed8c735f016353bb466efb",
+    "src/compiler/programming_model/lib/NativeAbsolute.h": "a6a1261899f4c36f671b0cd4b04fb05698f29d57751da65d9bc4570ad8605dff",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "417181bef626558740d5387377c2da0140a87b1ab7e225c28b318712ce714556",
+    "src/compiler/ir/TesseraOps.td": "1d85d3b9439ee68265c396d355143a87ce362fb21b73d5766329022d119a8449",
+    "src/compiler/ir/TesseraOps.cpp": "4f00d76846a974f4329eb3df4b71f9266c9fd7fbfeba6a5ac74c3931a38eae73",
+    "src/transforms/lib/SymbolicDimEqualityPass.cpp": "92d38d01da315a6290da72137f3c734e23dd5f94992c5b09938ae66e9e013f2a",
+    "python/tessera/compiler/apple_native_arena.py": "37f5eb84734cf18d13de78a921413db1b63159c55e0414c004feea05eea9052d",
+    "python/tessera/compiler/scheduled_absolute.py": "8c09137f336655bbbc2c42ba7c823870d96ef8f37ffd27feae396edce7821399",
+    "python/tessera/compiler/scheduled_attention.py": "42cf436b8ce5fcc06b5fa0c684a457ff84ccf5aa2a71f919f19e9a4e897639e3",
+    "python/tessera/compiler/raised_attention.py": "aa9ecc796d7f6e5a859ae8727e487601e42ef23ff6af57003f99e48b551adb1f",
+    "python/tessera/compiler/loop_idioms.py": "813798a9d9cb0cf3cf7a365ecb56df61e73000fe70b80feaf829d55e7e3d513a",
+    "python/tessera/compiler/nvidia_native.py": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+    "python/tessera/compiler/x86_native.py": "9a55ea7dabfe543901565d9c81d61a3b626362ef50f51b90d61071649f02e820",
+    "python/tessera/compiler/native_gpu_storage.py": "6fa837c4f7c2c2495d9529488898371fa172407d713b8dbda32c2b97510140d9",
+    "python/tessera/runtime.py": "5b2401e7225a63effbac77f0f930ecd5a02fa6bd436dae05fc002b273de90258",
+    "benchmarks/apple_gpu/denormal_inputs.py": "9276f9a5b65adacfadc9b3e8c12c2313ecb0cc10d3a555c2f9350a5b80eec3fd",
+    "benchmarks/apple_gpu/record_denormal_policy.py": "53d61d5c2404812f4e80c30377fca546d6f36f5003e24c6fabc4d22207de5a36",
+    "benchmarks/record_absolute_migration.py": "1dec504397c8e7a84b44c0426798c1f2fccc4405d5a4180d7dc464966de80fdb",
+    "tests/unit/test_attention_broadcast.py": "38bf17eac9480ad1b663770f16e97cbf62b1a712dbbe53ef152ba88090fada93",
+    "tests/unit/test_apple_ieee_arithmetic.py": "6ef3ccc135cac702b6a09079779e244493f98acc26b0209970017586bd383968",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "c0356b44b9ed022cbc985e77257e84bd34b3e27d121e4f07dc82ec28d4c605d3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "76cb8438f7da376852c37e8e2c5509b1df33eb168c987805b3c1d18d7670a8e3"
+  }
+}

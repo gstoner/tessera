@@ -14,6 +14,7 @@ class ResidentPoolSnapshot:
         self.check, self.alloc, self.free = pool.check, pool.alloc, pool.free
         self.buffers, self.closed, self.epoch = [], False, None
         self._closing = False
+        self.retiring = False
         with self._lock:
             pool._ready()
             epoch = pool._access()
@@ -43,9 +44,36 @@ class ResidentPoolSnapshot:
 
     def read(self, stream):
         self._ready()
+        if self.retiring:
+            raise ValueError('pool snapshot reader admission is closed')
         if self.epoch is None:
             raise ValueError('pool snapshot copy did not publish completion')
         return self.epoch.read(stream)
+
+    def retire(self):
+        """Close admission; poll completion before explicit allocation teardown.
+
+        Polling does not free allocations or unload modules. Those driver calls
+        retain the existing synchronous close contract.
+        """
+        with self._lock:
+            self._ready()
+            if self.epoch is None:
+                raise ValueError('pool snapshot requires explicit recovery close')
+            if self.epoch._active:
+                raise ValueError('native epoch has active readers')
+            self.retiring = self.epoch.retiring = True
+
+    def poll(self):
+        with self._lock:
+            if self.closed:
+                return True
+            self._ready()
+            if not self.retiring:
+                raise ValueError('pool snapshot retirement has not started')
+            if self.epoch is None:
+                raise ValueError('pool snapshot requires explicit recovery close')
+            return self.epoch.poll()
 
     def close(self):
         with self._lock:

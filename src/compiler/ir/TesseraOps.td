@@ -3400,3 +3400,12 @@ def Tessera_PagedKVReadOp : Op<Tessera_Dialect, "paged_kv_read", [MemoryEffects<
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+// Public shape-preserving absolute. Native x86 Schedule owns the first
+// physical consumer; other dtypes/backends retain their existing admission.
+def Tessera_AbsoluteOp : Op<Tessera_Dialect, "absolute", [Pure]> {
+  let hasVerifier = 1;
+  let arguments = (ins AnyRankedTensor:$input);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}

@@ -5066,3 +5066,5 @@ Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
 Parity validated on Princess-Luna Ryzen AI Max+ 395: three f32 absolute shapes compare bitwise, including signed zero, subnormals, infinities and NaNs. Native Graph-to-Schedule records and Schedule-to-Tile emission replace the selected Python constructor; packaging replays serialized ancestry and projects its descriptor. Follow-up required: other elementwise and cohort/breadth routes. Apple FTZ/gradual and GPU attention evidence are not CPU support claims.
 
 Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.
+
+PR #746 review follow-through (E2E-REAL-6): native absolute admission accepts explicit `tessera.layout = "row_major"` alongside dimension names; incompatible or malformed layouts still fail closed. The serialized row-major contract is unchanged. This x86-only admission correction does not change Apple, NVIDIA or ROCm consumers or transfer device evidence.

@@ -14,6 +14,12 @@ static FailureOr<DictionaryAttr> absoluteContract(Operation *op) {
       ty.getEncoding() || op->getResult(0).getType() != ty || fn.getResultTypes()[0] != ty)
     return op->emitError("absolute requires plain static shape-preserving f32 tensors"), failure();
   if (auto attrs = fn.getArgAttrDict(0)) for (NamedAttribute attr : attrs) {
+    if (attr.getName() == "tessera.layout") {
+      auto layout = dyn_cast<StringAttr>(attr.getValue());
+      if (!layout || layout.getValue() != "row_major")
+        return op->emitError("absolute requires row_major argument layout"), failure();
+      continue;
+    }
     auto names = dyn_cast<ArrayAttr>(attr.getValue());
     if (attr.getName() != "tessera.dim_names" || !names || names.size() != static_cast<size_t>(ty.getRank()))
       return op->emitError("absolute argument policy is unsupported"), failure();

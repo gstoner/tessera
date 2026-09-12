@@ -45,3 +45,26 @@ def test_absolute_accepts_frontend_dimension_names():
     module = absolute_module()
     module.functions[0].args[0].dim_names = ('3','17')
     assert lower_absolute(module).project()[1] == (3,17)
+
+
+def test_absolute_preserves_explicit_row_major_packaging(monkeypatch):
+    from tessera.compiler import x86_native
+    module = absolute_module()
+    module.functions[0].args[0].layout = 'row_major'
+    module.functions[0].args[0].dim_names = ('3', '17')
+    artifact = lower_absolute(module)
+    assert 'tessera.layout = "row_major"' in artifact.graph_ir
+    assert artifact.project()[1] == (3, 17)
+    monkeypatch.setattr(x86_native, 'emit_elementwise_tile_ir', lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr(x86_native, '_lower', lambda *a: ('target', b'image', 'compiler', 'toolchain'))
+    packet = x86_native.package_elementwise(module, pipeline_name='tessera-lower-to-x86')
+    assert packet.descriptor.provenance['numeric_policy'] == 'ieee_abs_clear_sign'
+
+
+@pytest.mark.parametrize('layout', ['"col_major"', '42'])
+def test_absolute_rejects_incompatible_or_malformed_argument_layout(layout):
+    module = absolute_module()
+    module.functions[0].args[0].layout = 'row_major'
+    graph = lower_absolute(module).graph_ir.replace('tessera.layout = "row_major"', f'tessera.layout = {layout}')
+    with pytest.raises(RuntimeError, match='row_major argument layout'):
+        run_tessera_opt(find_tessera_opt(), graph, '--tessera-graph-to-schedule')

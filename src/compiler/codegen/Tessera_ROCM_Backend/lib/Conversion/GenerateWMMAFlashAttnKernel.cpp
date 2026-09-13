@@ -48,7 +48,8 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        Type storeTy, bool viaTile = false, bool gqa = false,
                        bool window = false, bool softcap = false,
                        bool dropout = false, bool bias = false,
-                       bool twoWave = false, bool saveLse = false) {
+                       bool twoWave = false, bool saveLse = false, bool rdna4 = false,
+                       bool halfFragmentLoads = false) {
   MLIRContext *ctx = b.getContext();
   // Full 16-wide head-dim chunks, plus a ragged remainder. `head_dim` is a
   // COMPILE-TIME attribute here, which is what makes the tail cheap: the
@@ -58,7 +59,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   int64_t DTail = D % 16;
   Type f32 = b.getF32Type();
   Type idxTy = b.getIndexType();
-  auto fragTy = VectorType::get({16}, storeTy);
+  auto fragTy = VectorType::get({rdna4 ? 8 : 16}, storeTy);
   auto accTy = VectorType::get({8}, f32);
   StringRef fragmentElem = storeTy.isF16() ? "f16" : "bf16";
   auto aFragmentTy = tessera::tile::FragmentType::get(
@@ -233,9 +234,31 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // Build a vector<16xstore> fragment from a per-element value lambda.
   auto buildFrag = [&](OpBuilder &bb, Location l,
                        function_ref<Value(int64_t)> elt) {
+    if (halfFragmentLoads) {
+      // RDNA4 splits each operand across the two 16-lane halves. Predicate
+      // loads only; reconverge before WMMA/barriers (full-EXEC requirement).
+      Value upper = bb.create<arith::CmpIOp>(l, ne, half, c0);
+      auto choose = bb.create<scf::IfOp>(l, TypeRange{fragTy}, upper, true);
+      for (int h = 0; h < 2; ++h) {
+        OpBuilder::InsertionGuard guard(bb);
+        bb.setInsertionPointToStart(h == 0 ? choose.thenBlock() : choose.elseBlock());
+        Value part = fragZero;
+        for (int64_t i = 0; i < 8; ++i)
+          part = bb.create<vector::InsertOp>(l, elt(i + (h == 0 ? 8 : 0)), part,
+                                            ArrayRef<int64_t>{i});
+        bb.create<scf::YieldOp>(l, part);
+      }
+      return choose.getResult(0);
+    }
     Value fr = fragZero;
-    for (int64_t i = 0; i < 16; ++i)
-      fr = bb.create<vector::InsertOp>(l, elt(i), fr, ArrayRef<int64_t>{i});
+    for (int64_t i = 0; i < (rdna4 ? 8 : 16); ++i) {
+      Value element = elt(i);
+      if (rdna4) {
+        Value upper = bb.create<arith::CmpIOp>(l, ne, half, c0);
+        element = bb.create<arith::SelectOp>(l, upper, elt(i + 8), element);
+      }
+      fr = bb.create<vector::InsertOp>(l, element, fr, ArrayRef<int64_t>{i});
+    }
     return fr;
   };
   // Fork A (via-tile): emit tile.mma at the Tile-IR seam so the QK^T / P@V
@@ -326,7 +349,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         cs = qkChunk(b, ci(DC * 16), cs, DTail);
     }
     auto emitScore = [&](int64_t e, Value csv) {
-      Value qi = add(ci(2 * e), half);
+      Value qi = rdna4 ? add(ci(e), mul(half, ci(8))) : add(ci(2 * e), half);
       Value gk = add(k0, l15);
       Value v0 = b.create<arith::MulFOp>(loc, csv, scale);
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
@@ -371,7 +394,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     if (twoWave) {
       Value partialBase = mul(wave, ci(16 * 16));
       for (int64_t e = 0; e < 8; ++e) {
-        Value qi = add(ci(2 * e), half);
+        Value qi = rdna4 ? add(ci(e), mul(half, ci(8))) : add(ci(2 * e), half);
         Value pidx = add(partialBase, add(mul(qi, c16), l15));
         Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
         b.create<memref::StoreOp>(loc, csv, sPartial, ValueRange{pidx});
@@ -384,7 +407,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         OpBuilder::InsertionGuard mg(b);
         b.setInsertionPointToStart(merge.thenBlock());
         for (int64_t e = 0; e < 8; ++e) {
-          Value qi = add(ci(2 * e), half);
+          Value qi = rdna4 ? add(ci(e), mul(half, ci(8))) : add(ci(2 * e), half);
           Value pidx = add(mul(qi, c16), l15);
           Value p0 = b.create<memref::LoadOp>(loc, sPartial, ValueRange{pidx});
           Value p1 = b.create<memref::LoadOp>(
@@ -507,7 +530,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value cpv = wmma(b, loc, apFrag, bvFrag, accZero);
       auto emitAccum = [&](OpBuilder &sb) {
         for (int64_t e = 0; e < 8; ++e) {
-          Value qi = add(ci(2 * e), half);
+          Value qi = rdna4 ? add(ci(e), mul(half, ci(8))) : add(ci(2 * e), half);
           Value cpe = sb.create<vector::ExtractOp>(loc, cpv, ArrayRef<int64_t>{e});
           Value idx = add(mul(qi, cD), dCol);
           Value cur = sb.create<memref::LoadOp>(loc, sAcc, ValueRange{idx});
@@ -633,6 +656,19 @@ struct GenerateWMMAFlashAttnKernelPass
         op->emitError("tessera_rocm.flash_attn missing name/head_dim");
         return signalPassFailure();
       }
+      auto archAttr = op->getAttrOfType<StringAttr>("arch");
+      StringRef arch = archAttr ? archAttr.getValue() : "gfx1151";
+      if (arch != "gfx1151" && arch != "gfx1201") {
+        op->emitError("attention forward fragment architecture is unsupported");
+        return signalPassFailure();
+      }
+      bool halfFragmentLoads = false;
+      if (auto flag = op->getAttrOfType<BoolAttr>("half_fragment_loads"))
+        halfFragmentLoads = flag.getValue();
+      if (halfFragmentLoads && arch != "gfx1201") {
+        op->emitError("half fragment loads require exact gfx1201");
+        return signalPassFailure();
+      }
       int64_t D = dAttr.getInt();
       // A ragged head_dim is served by a predicated remainder chunk: the
       // Q@K^T fragments zero-pad past D (exact -- D is the contraction there)
@@ -725,11 +761,10 @@ struct GenerateWMMAFlashAttnKernelPass
         argTys.push_back(of);     // finalized LSE checkpoint [bh,Sq]
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernel(true); // LLVM 23 inherent property, not legacy gpu.kernel.
       OpBuilder body(gpuFunc.getContext());
       emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
-                        softcap, dropout, bias, twoWave, saveLse);
+                        softcap, dropout, bias, twoWave, saveLse, arch == "gfx1201", halfFragmentLoads);
       op->erase();
     }
   }

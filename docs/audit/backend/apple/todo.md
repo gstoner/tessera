@@ -3,10 +3,81 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-12
+last_updated: 2026-09-13
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## Saved LSE and sparse Schedule handoff — 2026-09-13
+
+Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Not applicable to Metal physical execution: the new sparse fragment operations are gfx1201-only and the explicit LSE policy is ROCm-owned. Follow-up required for independent Metal ownership/clock proof.
+
+Evidence: [saved/sparse Schedule packet](../../../../benchmarks/baselines/gfx1201_saved_sparse_schedule_20260913/README.md).
+
+## GFX1201 streams, readers and sparse Target IR — 2026-09-13
+
+Sync: `GFX1201-STREAM-SPARSE-IR-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Metal uses its own command-buffer/event and resource-retention contracts; HIP streams and RDNA4 SWMMAC are not applicable. Shared-contract assessment: no public operation or dtype was added; the sparse op is an internal ROCm Target primitive. Sibling device validation is not claimed. Follow-up required for any adoption of the external-reader lifetime interface.
+
+Evidence: [stream/sparse IR packet](../../../../benchmarks/baselines/gfx1201_stream_sparse_ir_20260913/README.md).
+
+## GFX1201 resident ownership and sparse packing — 2026-09-13
+
+Sync: `GFX1201-RESIDENT-SPARSE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared runtime ownership and bounded-dynamic Schedule admission assessed. ROCm worker ownership and SWMMAC register layout are not applicable to apple; its device ownership and numerical proof remain independent. No sibling parity or performance closure is claimed.
+
+Evidence: [resident/sparse packet](../../../../benchmarks/baselines/gfx1201_resident_sparse_20260913/README.md).
+
+## GFX1201 public attention AD — 2026-09-13
+
+Sync: `GFX1201-PUBLIC-AD-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared attention package/certificate identity changes assessed. ROCm WMMA and HIP backward admission are not applicable to this backend; its paired AD, tape ownership and physical proof remain independent. No sibling device or performance closure is claimed.
+
+Evidence: [public AD packet](../../../../benchmarks/baselines/gfx1201_public_attention_ad_20260913/README.md).
+
+## GFX1201 scheduled package integration — 2026-09-13
+
+Sync: `GFX1201-PACKAGES-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared driver/Tile contracts assessed. The new gfx1201 profiles and ROCm launch ABIs are not applicable to this backend; its numerical, physical scheduling and runtime evidence remain independent. No sibling performance or device closure is claimed.
+
+Evidence: [package packet](../../../../benchmarks/baselines/gfx1201_scheduled_packages_20260913/README.md).
+
+## RDNA4 WMMA datatype audit — 2026-09-13
+
+Sync `GFX1201-WMMA-DTYPES-2026-09-13`.
+
+RDNA4 operand pairs, compact accumulators and IU sign modifiers do not
+apply to Metal matrix intrinsics. The ISA-driven table does not widen Apple
+dtype/Graph admission. No Metal runtime or numeric policy changes; independent
+Apple dtype and paired-AD evidence remains required.
+
+Evidence: [dtype packet](../../../../benchmarks/baselines/gfx1201_wmma_dtypes_20260913/README.md).
+
+## Attention pairing and loading experiment — 2026-09-13
+
+Sync `GFX1201-ATTENTION-PAIR-2026-09-13`.
+
+Shared attention descriptor projection keeps the Apple result-storage
+contract; the ROCm f32-output exception is target-specific. Host projection
+regressions pass; no new Metal execution was attempted. HIP resident O/LSE
+and RDNA4 loading do not establish Apple tape ownership or paired AD parity.
+
+Evidence: [paired attention packet](../../../../benchmarks/baselines/gfx1201_attention_pair_20260913/README.md).
+
+## gfx1201 integration sibling assessment — 2026-09-13
+
+Sync `GFX1201-INTEGRATION-2026-09-13` (F0/F2/EVIDENCE-PACKET-1).
+Shared unary ancestry verification now handles ROCm workgroups and interior
+reduction axes without widening Apple's admission envelope. Host contract
+regressions pass; the Metal device tests remain Darwin-only and are skipped
+on Tajasarus. No Apple device parity or performance is claimed. RDNA4 kernel
+properties, fragment maps and HIP launchers are not applicable to MSL.
+
+Evidence: [integration packet](../../../../benchmarks/baselines/gfx1201_integration_20260913/README.md).
+
+## gfx1201 sibling assessment — 2026-09-13
+
+Cross-backend sync `GFX1201-FOUNDATION-2026-09-13` (ROCM-2 / F0 / F2).
+RDNA4 fragment/HIPRTC changes and CUDA/HIP native-storage chip admission are
+not applicable to Apple's MSL/dynamic-threadgroup binding. No Metal ABI or
+numerical-policy change. Apple exact-device policy, AD and performance gates
+remain independent; this host commissioning provides no Apple proof.
 
 ## Current integrated-plan handoff
 

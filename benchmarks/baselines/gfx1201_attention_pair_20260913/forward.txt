@@ -1,0 +1,4 @@
+.....s                                                                   [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/unit/test_rocm_flash_attn_compiled.py:198: optimized package remains exact-gfx1151 gated
+5 passed, 1 skipped in 0.89s

@@ -227,6 +227,9 @@ def test_x86_packages_exact_attention_tile(monkeypatch) -> None:
 
 
 def test_rocm_packages_exact_attention_tile(monkeypatch) -> None:
+    # Synthetic packaging fixture; real replay checks have separate regressions.
+    from tessera.compiler import native_attention_contract
+    monkeypatch.setattr(native_attention_contract, "verify_attention_ancestry", lambda *a, **k: None)
     artifact = _artifact(target="rocm")
     monkeypatch.setattr(
         rocm_native,

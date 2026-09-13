@@ -1234,6 +1234,7 @@ def _compile_native_tile_ir(
     tile_kv: int = 64,
     staging: str = "register",
     depth_cooperative: bool = False,
+    architecture: str = "gfx1151",
 ) -> tuple[
     str,
     str,
@@ -1246,13 +1247,13 @@ def _compile_native_tile_ir(
     tool = _tessera_opt()
     if tool is None:
         raise RuntimeError("tessera-opt is required for ROCm native packaging")
-    device_libraries = _driver_selected_device_libraries()
+    device_libraries = _driver_selected_device_libraries(arch=architecture)
     library_identity = "|".join(
         f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
     )
     key = hashlib.sha256(
         (
-            f"{tile_ir}|{directive}|{family}|{input_level.value}|"
+            f"{architecture}|{tile_ir}|{directive}|{family}|{input_level.value}|"
             f"{tile_q}|{tile_kv}|{staging}|{library_identity}|{depth_cooperative}|{hashlib.sha256(tool.read_bytes()).hexdigest()}"
         ).encode()
     ).hexdigest()
@@ -1271,6 +1272,7 @@ def _compile_native_tile_ir(
 
     config = ROCMExecutablePipeline(
         family=family,
+        arch=architecture,
         input_level=input_level,
         tile_q=tile_q,
         tile_kv=tile_kv,
@@ -1304,7 +1306,7 @@ def _compile_native_tile_ir(
     compiler_fp = _version_fingerprint(tool)
     clang = _rocm_clang(_rocm_path())
     driver_fp = _version_fingerprint(clang) if clang is not None else "missing"
-    toolchain_fp = hashlib.sha256(f"{compiler_fp}|{driver_fp}|gfx1151|{library_identity}".encode()).hexdigest()
+    toolchain_fp = hashlib.sha256(f"{compiler_fp}|{driver_fp}|{architecture}|{library_identity}".encode()).hexdigest()
     _cache[key] = (
         target_ir,
         backend_ir,
@@ -1433,11 +1435,12 @@ def package_scheduled_matmul(
     verify_matmul_projection(artifact)
     if (
         artifact.target != "rocm"
-        or artifact.architecture != "gfx1151"
+        or artifact.architecture not in {"gfx1151", "gfx1201"}
         or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
         != ("fp16", "fp16", "fp32")
     ):
-        raise ValueError("ROCm scheduled matmul requires the gfx1151 f16/f32 contract")
+        raise ValueError("ROCm scheduled matmul requires an exact gfx1151/gfx1201 f16/f32 contract")
+    arch = artifact.architecture
     (
         target_ir,
         backend_ir,
@@ -1446,11 +1449,13 @@ def package_scheduled_matmul(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_scheduled_matmul_tile_ir(artifact.tile_ir)
+    ) = (_compile_scheduled_matmul_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
+         _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
+                                 family="matmul", architecture=arch, staging="register"))
     entry = artifact.function_name
     image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
+        target=f"rocm_{arch}",
+        architecture=arch,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
@@ -1494,7 +1499,7 @@ def package_scheduled_matmul(
             "work_item": "E2E-REAL-3",
             "sync_key": "E2E-REAL-2026-08-05",
             "route": "canonical_scheduled_tile_consumer",
-            "physical_route": "gfx1151_multiwave_lds_wmma_2x4",
+            "physical_route": "gfx1151_multiwave_lds_wmma_2x4" if arch == "gfx1151" else "gfx1201_register_wmma_1x1",
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
             "a_storage": artifact.storage,
@@ -1525,33 +1530,40 @@ def package_scheduled_kernel(
     artifact.validate()
     if (
         artifact.target != "rocm"
-        or artifact.architecture != "gfx1151"
+        or artifact.architecture not in {"gfx1151", "gfx1201"}
         or artifact.dtype != "fp32"
         or artifact.storage != "f32"
         or artifact.accum != "f32"
     ):
         raise ValueError("ROCm scheduled semantic kernel requires the gfx1151 f32 contract")
+    from .native_unary_contract import verify_unary_ancestry
+    verify_unary_ancestry(artifact, target="rocm", architecture=artifact.architecture)
+    arch = artifact.architecture
     scalars: tuple[ScalarArgument, ...]
     if artifact.family == "softmax":
         abi = GFX1151_SOFTMAX_F32_ABI
-        compile_result = _compile_tile_ir(artifact.tile_ir)
+        compile_result = (_compile_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
+                          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.softmax",
+                                                  family="softmax", architecture=arch))
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
-        geometry = "gfx1151_softmax_workgroup_per_row_256"
+        geometry = f"{arch}_softmax_workgroup_per_row_256"
     elif artifact.family == "reduce":
         abi = GFX1151_REDUCE_F32_ABI
-        compile_result = _compile_reduction_tile_ir(artifact.tile_ir)
+        compile_result = (_compile_reduction_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
+                          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.reduce",
+                                                  family="reduction", architecture=arch))
         scalars = (
             ScalarArgument(2, "Outer", "int64"),
             ScalarArgument(3, "AxisExtent", "int64"),
             ScalarArgument(4, "Inner", "int64"),
         )
-        geometry = "gfx1151_reduce_workgroup_per_output_256"
+        geometry = f"{arch}_reduce_workgroup_per_output_256"
     else:
         raise ValueError("unsupported ROCm scheduled semantic-kernel family")
     target_ir, backend_ir, payload, compiler_fp, toolchain_fp, device_libraries, compile_state = compile_result
     entry = artifact.function_name
     image = NativeImageArtifact(
-        target="rocm_gfx1151", architecture="gfx1151", pipeline_name=pipeline_name,
+        target=f"rocm_{arch}", architecture=arch, pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco", payload=payload,
@@ -1607,15 +1619,18 @@ def package_scheduled_attention(
     """Package the exact E2E-REAL-5A Tile artifact without Graph re-entry."""
 
     artifact.validate()
+    arch = artifact.architecture
     if (
         artifact.target != "rocm"
-        or artifact.architecture != "gfx1151"
+        or arch not in {"gfx1151", "gfx1201"}
         or artifact.dtype not in {"fp16", "bf16"}
         or artifact.storage not in {"f16", "bf16"}
         or artifact.accum != "f32"
-        or artifact.backward_lse_policy != "gfx1151_auto_128"
+        or artifact.backward_lse_policy != ("gfx1201_explicit_lse" if arch == "gfx1201" else "gfx1151_auto_128")
     ):
         raise ValueError("ROCm scheduled attention requires the gfx1151 policy")
+    from .native_attention_contract import verify_attention_ancestry
+    verify_attention_ancestry(artifact, target="rocm", architecture=arch)
     (
         target_ir,
         backend_ir,
@@ -1624,12 +1639,13 @@ def package_scheduled_attention(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_scheduled_attention_tile_ir(artifact.tile_ir)
+    ) = (_compile_scheduled_attention_tile_ir(artifact.tile_ir) if arch == "gfx1151" else
+         _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.flash_attn", family="attention", architecture=arch))
     abi = GFX1151_ATTN_F16_ABI if artifact.dtype == "fp16" else GFX1151_ATTN_BF16_ABI
     entry = artifact.function_name
     image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
+        target=f"rocm_{arch}",
+        architecture=arch,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
@@ -1722,7 +1738,7 @@ def package_scheduled_attention(
             for name, shape in shapes.items()
             for axis, extent in enumerate(shape)
         ),
-        geometry=LaunchGeometry(policy="gfx1151_attention_wmma_query_tile_wave32"),
+        geometry=LaunchGeometry(policy=f"{arch}_attention_wmma_query_tile_wave32"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
@@ -2355,8 +2371,10 @@ def package_attention_backward(
     if _scheduled_artifact is not None:
         artifact = _scheduled_artifact
         artifact.validate()
-        if artifact.target != "rocm" or artifact.architecture != "gfx1151":
+        if artifact.target != "rocm" or artifact.architecture not in {"gfx1151", "gfx1201"}:
             raise ValueError("scheduled ROCm attention backward requires gfx1151")
+        from .native_attention_contract import verify_attention_ancestry
+        verify_attention_ancestry(artifact, target="rocm", architecture=artifact.architecture)
         dtype = artifact.dtype
         names = artifact.input_names
         bias_name = artifact.bias_name
@@ -2393,6 +2411,7 @@ def package_attention_backward(
         selected_checkpoint = _select_graph_lse_checkpoint(
             requested_checkpoint, dims[3], dims[4]
         )
+    arch = _scheduled_artifact.architecture if _scheduled_artifact is not None else "gfx1151"
     do_name, q_name, k_name, v_name = names
     dq_name, dk_name, dv_name = (name.removeprefix("%") for name in result_names)
     storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
@@ -2472,7 +2491,9 @@ def package_attention_backward(
         device_libraries,
         compile_state,
     ) = (
-        _compile_attention_backward_tile_ir(tile_ir)
+        (_compile_attention_backward_tile_ir(tile_ir) if arch == "gfx1151" else
+         _compile_native_tile_ir(tile_ir, directive="tessera_rocm.flash_attn_bwd",
+                                 family="attention_backward", architecture=arch))
         if _scheduled_artifact is not None
         else _compile_attention_backward_graph_ir(tile_ir, tile_q=sq, tile_kv=16)
     )
@@ -2489,8 +2510,8 @@ def package_attention_backward(
             "forward and tensor-valued backward Graph-IR consumers"
         )
     image = NativeImageArtifact(
-        target="rocm_gfx1151",
-        architecture="gfx1151",
+        target=f"rocm_{arch}",
+        architecture=arch,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
@@ -2665,17 +2686,17 @@ def package_attention_backward(
         ),
     )
     stage_policies = (
-        "gfx1151_attention_bwd_forward_recompute_wave32",
-        "gfx1151_attention_bwd_pre_query_tile_wave32",
-        "gfx1151_attention_bwd_dkdv_two_split_wave32",
-        "gfx1151_attention_bwd_reduce_256",
-        "gfx1151_attention_bwd_dq_query_tile_wave32",
+        f"{arch}_attention_bwd_forward_recompute_wave32",
+        f"{arch}_attention_bwd_pre_query_tile_wave32",
+        f"{arch}_attention_bwd_dkdv_two_split_wave32",
+        f"{arch}_attention_bwd_reduce_256",
+        f"{arch}_attention_bwd_dq_query_tile_wave32",
     )
     stage_names = ("forward_recompute", "pre", "dkdv_split", "dkdv_reduce", "dq")
     base_provenance = {
         "work_item": "ROCM-E2E-ATTENTION",
         "sync_key": "ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26",
-        "schedule": "gfx1151_wmma_backward_split_reduced",
+        "schedule": f"{arch}_wmma_backward_split_reduced",
         "semantic_route": "canonical_tensor_backward_scf_for",
         "route": "deterministic_split_reduced",
         "deterministic": True,
@@ -2767,7 +2788,7 @@ def package_scheduled_attention_backward(
 ) -> ROCMNativeProgram:
     """Package the exact E2E-REAL-5B Tile program without Graph lowering."""
     artifact.validate()
-    if artifact.target != "rocm" or artifact.architecture != "gfx1151":
+    if artifact.target != "rocm" or artifact.architecture not in {"gfx1151", "gfx1201"}:
         raise ValueError("scheduled ROCm attention backward requires gfx1151")
     return package_attention_backward(
         None, pipeline_name=pipeline_name, _scheduled_artifact=artifact

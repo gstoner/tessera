@@ -13,8 +13,8 @@ A `device_verified_jit` or `device_verified_abi` row requires a checked-in numer
 |---|---|---|---|---|---|---:|
 | `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 4 |
 | `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 1 |
-| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon AI PRO R9700 | `current_workstation` | exact-device proof required | 1 |
-| `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 XT / Radeon RX 9070 XT | `current_consumer` | exact-device proof required | 1 |
+| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 XT / Radeon AI PRO R9700 | `current_workstation` | exact-device proof required | 1 |
+| `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 XT | `current_consumer` | exact-device proof required | 1 |
 | `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 36 |
 | `rocm_gfx1152` | `gfx1152` | Wave32 development bridge | development ISA | `compiler_bridge` | no execution inheritance | 0 |
 | `rocm_gfx942` | `gfx942` | CDNA 3 | MI300X / MI325X | `compatibility` | exact-device proof required | 4 |
@@ -79,13 +79,13 @@ The rollup reports where proof exists; it does not promote the family alias.
 |---|---|---|---|---|---|---|---|
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,int8 |
 
-### `rocm_gfx1201` — Radeon AI PRO R9700
+### `rocm_gfx1201` — Radeon RX 9070 XT / Radeon AI PRO R9700
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 
-### `rocm_gfx1200` — Radeon RX 9060 XT / Radeon RX 9070 XT
+### `rocm_gfx1200` — Radeon RX 9060 XT
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|

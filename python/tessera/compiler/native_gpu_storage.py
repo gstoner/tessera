@@ -75,8 +75,8 @@ class NativeGPUStoragePackage:
         return _sha(json.dumps(self._payload(), sort_keys=True, separators=(',', ':')).encode())
 
     def validate(self) -> None:
-        if self.backend not in ('nvidia', 'rocm') or not self.image or not self.host_library:
-            raise ValueError('invalid native storage package')
+        if (self.backend, self.chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151'), ('rocm', 'gfx1201')) or not self.image or not self.host_library:
+            raise ValueError('invalid native storage package binding')
         if not self.abi or any(t not in ('pointer', 'index') for t in self.abi):
             raise ValueError('unsupported native storage ABI')
         if self._digest() != self.binding_digest:
@@ -105,7 +105,7 @@ class NativeGPUStoragePackage:
 
 def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
                              backend: str, chip: str, toolkit: Path | None = None) -> NativeGPUStoragePackage:
-    if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151')):
+    if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151'), ('rocm', 'gfx1201')):
         raise ValueError('native storage target is not validated')
     if re.search(r'\btessera\.denormal_mode\s*=', source):
         raise ValueError('explicit denormal policy currently requires the Apple arena consumer')

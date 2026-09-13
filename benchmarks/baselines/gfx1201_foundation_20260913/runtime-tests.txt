@@ -1,0 +1,5 @@
+........ssssssssss.............                                          [100%]
+=========================== short test summary info ============================
+SKIPPED [5] tests/unit/test_rocm_wmma_runtime_symbol.py:139: no usable AMD GPU / HIPRTC (LDS symbol returned rc=2)
+SKIPPED [5] tests/unit/test_rocm_wmma_runtime_symbol.py:162: no usable AMD GPU / HIPRTC (pipe symbol returned rc=2)
+21 passed, 10 skipped, 1 deselected in 1.81s

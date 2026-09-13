@@ -1,0 +1,56 @@
+{
+  "target": "gfx1201",
+  "route": "native_llvm_sparse_probe",
+  "production_admission": false,
+  "performance_eligible": false,
+  "rows": [
+    {
+      "dtype": "f16",
+      "seed": 0,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_f16",
+      "image_sha256": "12b5b18a4ff7ec13d746fc321ec891d9c1fe75c7c1fab6ab57ca2158987e29e0",
+      "source_sha256": "cb09fa1094ec7d843877ca2b6e0582f2ba8955e6c9475bdc99ed48485e9e8aea"
+    },
+    {
+      "dtype": "f16",
+      "seed": 1,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_f16",
+      "image_sha256": "12b5b18a4ff7ec13d746fc321ec891d9c1fe75c7c1fab6ab57ca2158987e29e0",
+      "source_sha256": "cb09fa1094ec7d843877ca2b6e0582f2ba8955e6c9475bdc99ed48485e9e8aea"
+    },
+    {
+      "dtype": "f16",
+      "seed": 2,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_f16",
+      "image_sha256": "12b5b18a4ff7ec13d746fc321ec891d9c1fe75c7c1fab6ab57ca2158987e29e0",
+      "source_sha256": "cb09fa1094ec7d843877ca2b6e0582f2ba8955e6c9475bdc99ed48485e9e8aea"
+    },
+    {
+      "dtype": "bf16",
+      "seed": 0,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_bf16",
+      "image_sha256": "2c0705fb524644b7b2414972515475a85c95f56d2bcb6d955b2f233c48675026",
+      "source_sha256": "a7eed63c7b985d161dd45f84cc3c8c475b9e878b60d94490bc03834b3bdeea31"
+    },
+    {
+      "dtype": "bf16",
+      "seed": 1,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_bf16",
+      "image_sha256": "2c0705fb524644b7b2414972515475a85c95f56d2bcb6d955b2f233c48675026",
+      "source_sha256": "a7eed63c7b985d161dd45f84cc3c8c475b9e878b60d94490bc03834b3bdeea31"
+    },
+    {
+      "dtype": "bf16",
+      "seed": 2,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_bf16",
+      "image_sha256": "2c0705fb524644b7b2414972515475a85c95f56d2bcb6d955b2f233c48675026",
+      "source_sha256": "a7eed63c7b985d161dd45f84cc3c8c475b9e878b60d94490bc03834b3bdeea31"
+    }
+  ]
+}

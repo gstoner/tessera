@@ -1,0 +1,169 @@
+{
+  "target": "gfx1201",
+  "image_sha256": "29a0a351c6d1662e113e0b91bf42a6e1642cd67e05664097999cec7b2325c46a",
+  "schedule_sha256": "f3efb5df1372c68ee916be2ff3888b9c092aa1ca13cc4d46f06a5a17ba90b0be",
+  "rows": [
+    {
+      "variant": "per_call",
+      "iteration": 0,
+      "host_total_ms": 47.74419,
+      "ordered_program_host_ms": [
+        0.533126
+      ],
+      "hip_event_ms": [
+        0.48128700256347656
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "resident",
+      "iteration": 0,
+      "host_total_ms": 1.606133,
+      "ordered_program_host_ms": [
+        0.589205
+      ],
+      "hip_event_ms": [
+        0.4675000011920929
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "resident",
+      "iteration": 1,
+      "host_total_ms": 1.123854,
+      "ordered_program_host_ms": [
+        0.4985
+      ],
+      "hip_event_ms": [
+        0.4363830089569092
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "per_call",
+      "iteration": 1,
+      "host_total_ms": 46.782127,
+      "ordered_program_host_ms": [
+        0.582883
+      ],
+      "hip_event_ms": [
+        0.5246599912643433
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "per_call",
+      "iteration": 2,
+      "host_total_ms": 48.45021,
+      "ordered_program_host_ms": [
+        0.596299
+      ],
+      "hip_event_ms": [
+        0.44676798582077026
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "resident",
+      "iteration": 2,
+      "host_total_ms": 1.073407,
+      "ordered_program_host_ms": [
+        0.498971
+      ],
+      "hip_event_ms": [
+        0.4348190128803253
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "resident",
+      "iteration": 3,
+      "host_total_ms": 1.224488,
+      "ordered_program_host_ms": [
+        0.492899
+      ],
+      "hip_event_ms": [
+        0.4311800003051758
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "per_call",
+      "iteration": 3,
+      "host_total_ms": 46.937526,
+      "ordered_program_host_ms": [
+        0.691883
+      ],
+      "hip_event_ms": [
+        0.6336640119552612
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "per_call",
+      "iteration": 4,
+      "host_total_ms": 47.607267,
+      "ordered_program_host_ms": [
+        0.48807
+      ],
+      "hip_event_ms": [
+        0.4310489892959595
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    },
+    {
+      "variant": "resident",
+      "iteration": 4,
+      "host_total_ms": 1.073858,
+      "ordered_program_host_ms": [
+        0.500023
+      ],
+      "hip_event_ms": [
+        0.4409489929676056
+      ],
+      "max_abs_errors": [
+        2.704095095396042e-06,
+        4.510628059506416e-06,
+        0.00010022521018981934
+      ]
+    }
+  ],
+  "performance_eligible": false,
+  "reason": "single process, uncalibrated device clocks, no runtime kernel attribution; resident capture and teardown excluded"
+}

@@ -206,6 +206,20 @@ hipFunction_t kernelFor(FlashKernel* k, int D) {
   src = substitute(src, "%WMMA%", k->wmma);
   src = substitute(src, "%NAME%", name);
   src = substitute(src, "%D%", std::to_string(D));
+  hipDeviceProp_t props{};
+  if (hipGetDeviceProperties(&props, 0) != hipSuccess) return nullptr;
+  if (std::string(props.gcnArchName).compare(0, 7, "gfx1201") == 0) {
+    src = substitute(src, "_w32(", "_w32_gfx12(");
+    src = substitute(src, "ext_vector_type(16)", "ext_vector_type(8)");
+    src = substitute(src, "i < 16; ++i) a[i]", "i < 8; ++i) a[i]");
+    src = substitute(src, "i < 16; ++i)\n        b[i]", "i < 8; ++i)\n        b[i]");
+    src = substitute(src, "dc * 16 + i", "dc * 16 + i + 8 * half");
+    src = substitute(src, "qi = 2 * e + half, ki = l15", "qi = 8 * half + e, ki = l15");
+    src = substitute(src, "i < 16; ++i) ap[i]", "i < 8; ++i) ap[i]");
+    src = substitute(src, "sS[l15 * 16 + i]", "sS[l15 * 16 + i + 8 * half]");
+    src = substitute(src, "i < 16; ++i) {\n        int kr = k0 + i;", "i < 8; ++i) {\n        int kr = k0 + i + 8 * half;");
+    src = substitute(src, "qi = 2 * e + half, d = dc * 16 + l15", "qi = 8 * half + e, d = dc * 16 + l15");
+  }
   hipModule_t mod = nullptr;
   hipFunction_t fn = nullptr;
   if (!compileSrc(src, name, &mod, &fn)) return nullptr;

@@ -91,3 +91,28 @@ ninja check-tessera-rocm
 
 ## CK Bridge
 Enable with `-DTESSERA_ROCM_ENABLE_CK=ON`. If `composable_kernels` is discoverable, the bridge uses it; else it logs a stub.
+
+### Internal RDNA4 sparse fragment boundary
+
+`tessera_rocm.swmmac` is an internal physical Target op for gfx1201 wave32
+f16/bf16 A[8], B[16], C/result[8] f32 and i32 compression indices, OPSEL=0.
+Its verifier refuses other architectures and fragment types. The existing
+`lower-tessera-target-to-rocdl` pass consumes it into an LLVM SWMMAC intrinsic;
+`rocm_sparse_packing.sparse_wmma_target_ir` produces the four-buffer kernel
+paired with immutable packed A/B/index bytes. Native MLIR-to-HSACO probe tests
+cover six 2:4 numerical comparisons and exact emitted instruction signatures.
+
+Registry scope: this is not a new public operation or Graph storage dtype.
+Public op/runtime catalog, batching/transpose/autodiff and Graph ODS mappings
+are not applicable to this internal fragment. Public sparse matmul selection,
+Schedule/Tile integration, sparse AD and performance admission remain open.
+No gfx1151 or sibling-backend execution is inferred. See
+`test/rocm/swmmac_fragments.mlir` and the ROCm architecture queue.
+
+The bounded packed fragment producer now enters `schedule.sparse_mma`, lowers
+through `tessera-schedule-to-tile` to `tile.sparse_mma`, then through
+`lower-tile-to-rocm` to `tessera_rocm.swmmac`. Each upstream verifier enforces
+gfx1201 wave32 A[8]/B[16] f16 or bf16 and C/result[8] f32. This is a physical
+fragment Schedule, not automatic logical dense/CSR capture, a public sparse
+package ABI, or general sparse AD. Existing public operation/dtype registries
+are unchanged; these internal operations have real producers and consumers.

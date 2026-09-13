@@ -62,3 +62,20 @@ def test_gpu_storage_refuses_unconsumed_denormal_policy(tmp_path):
         with pytest.raises(ValueError, match='Apple arena consumer'):
             build_native_gpu_storage('module attributes {tessera.denormal_mode = "gradual"} {}',
                                      compiler=tmp_path/'missing', llvm_bin=tmp_path, backend=backend, chip=chip)
+
+
+@pytest.mark.parametrize('backend,chip', [('rocm', 'gfx1151'), ('rocm', 'gfx1201')])
+def test_rocm_storage_roundtrip_pins_architecture(backend, chip):
+    original = replace(package(), backend=backend, chip=chip)
+    original = replace(original, binding_digest=original._digest())
+    restored = NativeGPUStoragePackage.from_json(
+        original.to_json(), expected_digest=original.binding_digest)
+    assert restored == original
+    with pytest.raises(ValueError, match='binding'):
+        replace(restored, chip='gfx1151' if chip == 'gfx1201' else 'gfx1201').validate()
+
+
+def test_rehashed_incompatible_backend_architecture_is_refused():
+    original = replace(package(), backend='nvidia', chip='gfx1201')
+    with pytest.raises(ValueError, match='binding'):
+        replace(original, binding_digest=original._digest()).validate()

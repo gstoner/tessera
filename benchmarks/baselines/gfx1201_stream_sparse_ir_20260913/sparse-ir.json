@@ -1,0 +1,56 @@
+{
+  "target": "gfx1201",
+  "route": "target_mlir_sparse_probe",
+  "production_admission": false,
+  "performance_eligible": false,
+  "rows": [
+    {
+      "dtype": "f16",
+      "seed": 0,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_f16",
+      "image_sha256": "131a27b114f7d02a2786e04bdb61554b5653965b97ae31678f5d9e8ac292e7b7",
+      "source_sha256": "1c3db3fbdbca5c82fa3627a02262db89f8b03b600b683ab5d45073559681aa9b"
+    },
+    {
+      "dtype": "f16",
+      "seed": 1,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_f16",
+      "image_sha256": "131a27b114f7d02a2786e04bdb61554b5653965b97ae31678f5d9e8ac292e7b7",
+      "source_sha256": "1c3db3fbdbca5c82fa3627a02262db89f8b03b600b683ab5d45073559681aa9b"
+    },
+    {
+      "dtype": "f16",
+      "seed": 2,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_f16",
+      "image_sha256": "131a27b114f7d02a2786e04bdb61554b5653965b97ae31678f5d9e8ac292e7b7",
+      "source_sha256": "1c3db3fbdbca5c82fa3627a02262db89f8b03b600b683ab5d45073559681aa9b"
+    },
+    {
+      "dtype": "bf16",
+      "seed": 0,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_bf16",
+      "image_sha256": "51bf083319bda01e79700801fc0ea9ff3cbfb4062143c8579fabb3d6c684a848",
+      "source_sha256": "6a600af960b5d7989525229141620d2c384ba177c3f767a2bfc69bcf0cd59e99"
+    },
+    {
+      "dtype": "bf16",
+      "seed": 1,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_bf16",
+      "image_sha256": "51bf083319bda01e79700801fc0ea9ff3cbfb4062143c8579fabb3d6c684a848",
+      "source_sha256": "6a600af960b5d7989525229141620d2c384ba177c3f767a2bfc69bcf0cd59e99"
+    },
+    {
+      "dtype": "bf16",
+      "seed": 2,
+      "max_abs_error": 0.0,
+      "instruction": "v_swmmac_f32_16x16x32_bf16",
+      "image_sha256": "51bf083319bda01e79700801fc0ea9ff3cbfb4062143c8579fabb3d6c684a848",
+      "source_sha256": "6a600af960b5d7989525229141620d2c384ba177c3f767a2bfc69bcf0cd59e99"
+    }
+  ]
+}

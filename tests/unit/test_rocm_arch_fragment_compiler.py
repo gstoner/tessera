@@ -179,9 +179,11 @@ def test_fragment_resource_ratchet_keeps_family_proofs_compact(compiler_toolchai
     # gfx1151 needs one extra live value versus the historical one-wave-only
     # path because lane identity is now reduced modulo wave_size, making the
     # materializer correct inside multi-wave workgroups.
+    # Correct gfx12 row-strided accumulator stores use 25 VGPRs; the old
+    # 24-register baseline stored the transposed matrix (owning-device proof).
     limits = {
         "gfx1100": 28, "gfx1151": 28,
-        "gfx1200": 24, "gfx1201": 24,
+        "gfx1200": 25, "gfx1201": 25,
         "gfx90a": 16, "gfx942": 16, "gfx950": 16,
     }
     for arch, limit in limits.items():
@@ -214,7 +216,9 @@ def test_rdna4_dtype_fragment_forms_lower_and_assemble(
     assert "vgpr_spill_count = 0 : i64" in binary
     vgpr = re.search(r"vgpr_count = (\d+) : i64", binary)
     assert vgpr
-    assert int(vgpr.group(1)) <= (36 if dtype == "int4" else 24)
+    # Rebaseline the corrected row-strided output map, retaining zero spills.
+    # The old 24/36 limits measured a numerically incorrect transpose.
+    assert int(vgpr.group(1)) <= (40 if dtype == "int4" else 25)
 
 
 @pytest.mark.parametrize("arch", ["gfx90a", "gfx942", "gfx950"])

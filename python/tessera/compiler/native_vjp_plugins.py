@@ -153,6 +153,8 @@ def validate_native_vjp_execution_certificate(
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(str(body.get("target", "")))
+    if body.get("target") == "rocm" and body.get("evidence_target") == "rocm_gfx1201":
+        expected_arch = "gfx1201"
     expected_scope = (
         "exact_device"
         if isinstance(attestation, Mapping)
@@ -193,6 +195,8 @@ def _record_execution_certificate(
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(target)
+    if target == "rocm" and execution.get("evidence_target") == "rocm_gfx1201":
+        expected_arch = "gfx1201"
     identities = {
         key: str(execution[key])
         for key in (
@@ -211,7 +215,7 @@ def _record_execution_certificate(
         "graph_consumer": str(source.op_name),
         "schedule_consumer": declaration.schedule_consumer,
         "tile_consumer": declaration.tile_consumer,
-        "target_consumer": declaration.target_consumers[target],
+        "target_consumer": str(execution.get("target_consumer", declaration.target_consumers[target])),
         "target": target,
         "execution_kind": str(execution.get("execution_kind", "")),
         "execution_mode": str(execution.get("execution_mode", "")),
@@ -1130,14 +1134,15 @@ def _execute_attention(
             "compiler_path": f"{target}_flash_attn_bwd_compiled",
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
             "execution_mode": execution_mode,
-            "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
+            "evidence_target": "x86_avx512" if target == "x86" else "rocm_" + package.scheduled.architecture,
             "implementation": "family_plugin",
             "residual_policy": package.scheduled.lse_checkpoint_selection,
             "family": declaration.family,
             "graph_consumer": source.op_name,
             "schedule_consumer": declaration.schedule_consumer,
             "tile_consumer": declaration.tile_consumer,
-            "target_consumer": declaration.target_consumers[target],
+            "target_consumer": (declaration.target_consumers[target] if target == "x86" else
+                                f"rocm.{package.scheduled.architecture}_attention_backward_program"),
             "source_graph_ir_digest": package.source_graph_ir_digest,
             "schedule_artifact_hash": package.schedule_artifact_hash,
             "tile_program_digest": package.tile_program_digest,

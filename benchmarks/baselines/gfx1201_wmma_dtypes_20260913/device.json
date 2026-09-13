@@ -1,0 +1,1909 @@
+{
+  "chip": "gfx1201",
+  "promotion_eligible": false,
+  "board": "RX 9070 XT",
+  "compiler_sha256": "b1bdecbde86e8e8b5ee61f77846d04d76eb37c4b0befb7c63cae64e752da7610",
+  "rows": [
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "expected_instruction": "v_wmma_f32_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_f16"
+      ],
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "expected_instruction": "v_wmma_f32_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_f16"
+      ],
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "expected_instruction": "v_wmma_f32_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_f16"
+      ],
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "expected_instruction": "v_wmma_f32_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_f16"
+      ],
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "expected_instruction": "v_wmma_f32_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_f16"
+      ],
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "f32",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f16",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "native_accumulator_gamma_k",
+      "max_error_bound": 0.4498031496062992,
+      "classification_matches": true,
+      "image_sha256": "a01806c8d8e3197e36c3dea51b5c323d60acfb42374413103be094744786d17b",
+      "expected_instruction": "v_wmma_f16_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f16_16x16x16_f16"
+      ],
+      "tile_source_sha256": "93b440e945a6e67d1ac48178086741c15d7a49433625873eb91bcdf37ced4dcd"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f16",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "native_accumulator_gamma_k",
+      "max_error_bound": 0.3449803149606299,
+      "classification_matches": true,
+      "image_sha256": "a01806c8d8e3197e36c3dea51b5c323d60acfb42374413103be094744786d17b",
+      "expected_instruction": "v_wmma_f16_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f16_16x16x16_f16"
+      ],
+      "tile_source_sha256": "93b440e945a6e67d1ac48178086741c15d7a49433625873eb91bcdf37ced4dcd"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f16",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "native_accumulator_gamma_k",
+      "max_error_bound": 0.12696850393700787,
+      "classification_matches": true,
+      "image_sha256": "a01806c8d8e3197e36c3dea51b5c323d60acfb42374413103be094744786d17b",
+      "expected_instruction": "v_wmma_f16_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f16_16x16x16_f16"
+      ],
+      "tile_source_sha256": "93b440e945a6e67d1ac48178086741c15d7a49433625873eb91bcdf37ced4dcd"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f16",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a01806c8d8e3197e36c3dea51b5c323d60acfb42374413103be094744786d17b",
+      "expected_instruction": "v_wmma_f16_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f16_16x16x16_f16"
+      ],
+      "tile_source_sha256": "93b440e945a6e67d1ac48178086741c15d7a49433625873eb91bcdf37ced4dcd"
+    },
+    {
+      "dtype": "f16",
+      "b_dtype": "f16",
+      "accum": "f16",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a01806c8d8e3197e36c3dea51b5c323d60acfb42374413103be094744786d17b",
+      "expected_instruction": "v_wmma_f16_16x16x16_f16",
+      "emitted_wmma_instructions": [
+        "v_wmma_f16_16x16x16_f16"
+      ],
+      "tile_source_sha256": "93b440e945a6e67d1ac48178086741c15d7a49433625873eb91bcdf37ced4dcd"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "bf16",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.25,
+      "passed": true,
+      "reference_model": "native_accumulator_gamma_k",
+      "max_error_bound": 3.808333333333333,
+      "classification_matches": true,
+      "image_sha256": "b778eb889f9935f4fa29e0b47402d19c13d449ba73a9d38942b3114bc933882a",
+      "expected_instruction": "v_wmma_bf16_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_bf16_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "34533a7a995bbfca73a45ffe6ffe165090fc4d32a88edacece6fe8df3fc0ff7f"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "bf16",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.125,
+      "passed": true,
+      "reference_model": "native_accumulator_gamma_k",
+      "max_error_bound": 2.9208333333333334,
+      "classification_matches": true,
+      "image_sha256": "b778eb889f9935f4fa29e0b47402d19c13d449ba73a9d38942b3114bc933882a",
+      "expected_instruction": "v_wmma_bf16_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_bf16_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "34533a7a995bbfca73a45ffe6ffe165090fc4d32a88edacece6fe8df3fc0ff7f"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "bf16",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "native_accumulator_gamma_k",
+      "max_error_bound": 1.075,
+      "classification_matches": true,
+      "image_sha256": "b778eb889f9935f4fa29e0b47402d19c13d449ba73a9d38942b3114bc933882a",
+      "expected_instruction": "v_wmma_bf16_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_bf16_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "34533a7a995bbfca73a45ffe6ffe165090fc4d32a88edacece6fe8df3fc0ff7f"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "bf16",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "b778eb889f9935f4fa29e0b47402d19c13d449ba73a9d38942b3114bc933882a",
+      "expected_instruction": "v_wmma_bf16_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_bf16_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "34533a7a995bbfca73a45ffe6ffe165090fc4d32a88edacece6fe8df3fc0ff7f"
+    },
+    {
+      "dtype": "bf16",
+      "b_dtype": "bf16",
+      "accum": "bf16",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "b778eb889f9935f4fa29e0b47402d19c13d449ba73a9d38942b3114bc933882a",
+      "expected_instruction": "v_wmma_bf16_16x16x16_bf16",
+      "emitted_wmma_instructions": [
+        "v_wmma_bf16_16x16x16_bf16"
+      ],
+      "tile_source_sha256": "34533a7a995bbfca73a45ffe6ffe165090fc4d32a88edacece6fe8df3fc0ff7f"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a07a462374d6595ef7554958e5489d0253e417cdc839bafd093fd7575113a854",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "9f5ab62d74d7190e02dd45667dc0aac9e0cd4a9f9740ea655e8eeb95380e0a2f"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a07a462374d6595ef7554958e5489d0253e417cdc839bafd093fd7575113a854",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "9f5ab62d74d7190e02dd45667dc0aac9e0cd4a9f9740ea655e8eeb95380e0a2f"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a07a462374d6595ef7554958e5489d0253e417cdc839bafd093fd7575113a854",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "9f5ab62d74d7190e02dd45667dc0aac9e0cd4a9f9740ea655e8eeb95380e0a2f"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a7a0b112bfcf57e01c5d9d20d1e217387d1511cd909589544746ad0962eecc1e",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "5e87a5585a8142fbc51b1433c2bbbcd35241a32ef56d39cb0eefc38d1f794b55"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a7a0b112bfcf57e01c5d9d20d1e217387d1511cd909589544746ad0962eecc1e",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "5e87a5585a8142fbc51b1433c2bbbcd35241a32ef56d39cb0eefc38d1f794b55"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "a7a0b112bfcf57e01c5d9d20d1e217387d1511cd909589544746ad0962eecc1e",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "5e87a5585a8142fbc51b1433c2bbbcd35241a32ef56d39cb0eefc38d1f794b55"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "3f9381115002ad7d30338dc595b230fa7c917852c9f56b669161ef83fc7bce64",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "60f1b8fde8329bb5afa939016705c5378d9c34d3c9a57716fa10c4f1bc18fd0c"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "3f9381115002ad7d30338dc595b230fa7c917852c9f56b669161ef83fc7bce64",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "60f1b8fde8329bb5afa939016705c5378d9c34d3c9a57716fa10c4f1bc18fd0c"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "3f9381115002ad7d30338dc595b230fa7c917852c9f56b669161ef83fc7bce64",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "60f1b8fde8329bb5afa939016705c5378d9c34d3c9a57716fa10c4f1bc18fd0c"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "5a0aae0bbec81cc44ca7c0afaddd0357eacc01139d76d5aa7f5d47bef6f903de",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "8cdb0065a148cda8cea71d2d930760ae22b12e9870d4c18c209f8d7ddc43260a"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "5a0aae0bbec81cc44ca7c0afaddd0357eacc01139d76d5aa7f5d47bef6f903de",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "8cdb0065a148cda8cea71d2d930760ae22b12e9870d4c18c209f8d7ddc43260a"
+    },
+    {
+      "dtype": "int8",
+      "b_dtype": "int8",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "5a0aae0bbec81cc44ca7c0afaddd0357eacc01139d76d5aa7f5d47bef6f903de",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu8",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu8"
+      ],
+      "tile_source_sha256": "8cdb0065a148cda8cea71d2d930760ae22b12e9870d4c18c209f8d7ddc43260a"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "1892441be51d4fdeaa9794340977b0fdd9d857d0936da0ca1b1cf1264a519173",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "de1190f37321d476dae6423db9010edb340b5831c287ceb5a77e46130ab1c656"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "1892441be51d4fdeaa9794340977b0fdd9d857d0936da0ca1b1cf1264a519173",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "de1190f37321d476dae6423db9010edb340b5831c287ceb5a77e46130ab1c656"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "1892441be51d4fdeaa9794340977b0fdd9d857d0936da0ca1b1cf1264a519173",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "de1190f37321d476dae6423db9010edb340b5831c287ceb5a77e46130ab1c656"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "53aab591009ebeced51d90890e3879e5344fd99f819fc4ef134240dd43aed910",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "bed0efba0e346524544fe80cbacdceda5acbe8611bf354bd08d907345f8074de"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "53aab591009ebeced51d90890e3879e5344fd99f819fc4ef134240dd43aed910",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "bed0efba0e346524544fe80cbacdceda5acbe8611bf354bd08d907345f8074de"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "53aab591009ebeced51d90890e3879e5344fd99f819fc4ef134240dd43aed910",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "bed0efba0e346524544fe80cbacdceda5acbe8611bf354bd08d907345f8074de"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "b63bf10177307d6e8a456d507b50a67769490ecd199d5784b9e7aacab1478321",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "cebf8b3c6bd3b070f047744809dda7b4e5ab1c8d8b2c7306c95f72659122ac03"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "b63bf10177307d6e8a456d507b50a67769490ecd199d5784b9e7aacab1478321",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "cebf8b3c6bd3b070f047744809dda7b4e5ab1c8d8b2c7306c95f72659122ac03"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "b63bf10177307d6e8a456d507b50a67769490ecd199d5784b9e7aacab1478321",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "cebf8b3c6bd3b070f047744809dda7b4e5ab1c8d8b2c7306c95f72659122ac03"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "980c90acec5e64072a313983c0e18af790a93fa3363e9a0124bec1c8c5b3896b",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "274d3683bde77968912d66795b990a12e080af7f3aa50e78a020bfe842cc1c5d"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "980c90acec5e64072a313983c0e18af790a93fa3363e9a0124bec1c8c5b3896b",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "274d3683bde77968912d66795b990a12e080af7f3aa50e78a020bfe842cc1c5d"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "980c90acec5e64072a313983c0e18af790a93fa3363e9a0124bec1c8c5b3896b",
+      "expected_instruction": "v_wmma_i32_16x16x16_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x16_iu4"
+      ],
+      "tile_source_sha256": "274d3683bde77968912d66795b990a12e080af7f3aa50e78a020bfe842cc1c5d"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        32
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "5f9133d1c75e7160f8e7584a7da93db3bb5403338450a34a2b1b59b1e8f98d44",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "8d326b7ad2e14d4db7247d7209fcba9b7a8e3841f18878141d9af241dd4b6e7d"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        29
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "5f9133d1c75e7160f8e7584a7da93db3bb5403338450a34a2b1b59b1e8f98d44",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "8d326b7ad2e14d4db7247d7209fcba9b7a8e3841f18878141d9af241dd4b6e7d"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "5f9133d1c75e7160f8e7584a7da93db3bb5403338450a34a2b1b59b1e8f98d44",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "8d326b7ad2e14d4db7247d7209fcba9b7a8e3841f18878141d9af241dd4b6e7d"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        16,
+        16,
+        32
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "e4dbd42180c6a7216f44872b3096a9473986a664c24763eb163cc01dec4fbb3e",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "35d854c24693f6024c7d7a3de2b28d2bf280e9bea3d8683976f87bcb2bd1712b"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        13,
+        11,
+        29
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "e4dbd42180c6a7216f44872b3096a9473986a664c24763eb163cc01dec4fbb3e",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "35d854c24693f6024c7d7a3de2b28d2bf280e9bea3d8683976f87bcb2bd1712b"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": false,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "e4dbd42180c6a7216f44872b3096a9473986a664c24763eb163cc01dec4fbb3e",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "35d854c24693f6024c7d7a3de2b28d2bf280e9bea3d8683976f87bcb2bd1712b"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        32
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "416afb8e03a8c5222cd61a721f4e1cf68eac7a55c80dd9e02c0ff7c99554ef05",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "3181861f65e7c1872cbec26024fd75921bbdf195d3216bbd118a2d4d08cfb1d9"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        29
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "416afb8e03a8c5222cd61a721f4e1cf68eac7a55c80dd9e02c0ff7c99554ef05",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "3181861f65e7c1872cbec26024fd75921bbdf195d3216bbd118a2d4d08cfb1d9"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "416afb8e03a8c5222cd61a721f4e1cf68eac7a55c80dd9e02c0ff7c99554ef05",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "3181861f65e7c1872cbec26024fd75921bbdf195d3216bbd118a2d4d08cfb1d9"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        16,
+        16,
+        32
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "3fdb4d71fdad6d6938e4ce710950bed4df376c923fffd7c4a70aaa95e5822845",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "9762db90bc6101783f6feba92fb9938a80f7883eb03b321034a39214d16900d9"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        13,
+        11,
+        29
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "3fdb4d71fdad6d6938e4ce710950bed4df376c923fffd7c4a70aaa95e5822845",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "9762db90bc6101783f6feba92fb9938a80f7883eb03b321034a39214d16900d9"
+    },
+    {
+      "dtype": "int4",
+      "b_dtype": "int4",
+      "accum": "i32",
+      "k": 32,
+      "probe": "dyadic",
+      "signed_a": false,
+      "signed_b": false,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "3fdb4d71fdad6d6938e4ce710950bed4df376c923fffd7c4a70aaa95e5822845",
+      "expected_instruction": "v_wmma_i32_16x16x32_iu4",
+      "emitted_wmma_instructions": [
+        "v_wmma_i32_16x16x32_iu4"
+      ],
+      "tile_source_sha256": "9762db90bc6101783f6feba92fb9938a80f7883eb03b321034a39214d16900d9"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_fp8"
+      ],
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_fp8"
+      ],
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_fp8"
+      ],
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_fp8"
+      ],
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_fp8"
+      ],
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "ca9c9440d20d46bd51b6862daf44f8b64a4ad9d08fe076a8cd5531c8763778ab",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_bf8"
+      ],
+      "tile_source_sha256": "36b31b7d4cee5b5979bd48d370794db7391872ba1d2db75ff273e3caace8e7a1"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "ca9c9440d20d46bd51b6862daf44f8b64a4ad9d08fe076a8cd5531c8763778ab",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_bf8"
+      ],
+      "tile_source_sha256": "36b31b7d4cee5b5979bd48d370794db7391872ba1d2db75ff273e3caace8e7a1"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "ca9c9440d20d46bd51b6862daf44f8b64a4ad9d08fe076a8cd5531c8763778ab",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_bf8"
+      ],
+      "tile_source_sha256": "36b31b7d4cee5b5979bd48d370794db7391872ba1d2db75ff273e3caace8e7a1"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "ca9c9440d20d46bd51b6862daf44f8b64a4ad9d08fe076a8cd5531c8763778ab",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_bf8"
+      ],
+      "tile_source_sha256": "36b31b7d4cee5b5979bd48d370794db7391872ba1d2db75ff273e3caace8e7a1"
+    },
+    {
+      "dtype": "e4m3",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "ca9c9440d20d46bd51b6862daf44f8b64a4ad9d08fe076a8cd5531c8763778ab",
+      "expected_instruction": "v_wmma_f32_16x16x16_fp8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_fp8_bf8"
+      ],
+      "tile_source_sha256": "36b31b7d4cee5b5979bd48d370794db7391872ba1d2db75ff273e3caace8e7a1"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "21c585deb27df775025b3cb2c7f425162cd9c3a2abdca9b38c03d70f147d900e",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_fp8"
+      ],
+      "tile_source_sha256": "60a4de5793f3dc241e5f874fbc3e9ef7bb3628bb591647bffc40c79e3bf50afb"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "21c585deb27df775025b3cb2c7f425162cd9c3a2abdca9b38c03d70f147d900e",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_fp8"
+      ],
+      "tile_source_sha256": "60a4de5793f3dc241e5f874fbc3e9ef7bb3628bb591647bffc40c79e3bf50afb"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "21c585deb27df775025b3cb2c7f425162cd9c3a2abdca9b38c03d70f147d900e",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_fp8"
+      ],
+      "tile_source_sha256": "60a4de5793f3dc241e5f874fbc3e9ef7bb3628bb591647bffc40c79e3bf50afb"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "21c585deb27df775025b3cb2c7f425162cd9c3a2abdca9b38c03d70f147d900e",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_fp8"
+      ],
+      "tile_source_sha256": "60a4de5793f3dc241e5f874fbc3e9ef7bb3628bb591647bffc40c79e3bf50afb"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e4m3",
+      "accum": "f32",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "21c585deb27df775025b3cb2c7f425162cd9c3a2abdca9b38c03d70f147d900e",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_fp8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_fp8"
+      ],
+      "tile_source_sha256": "60a4de5793f3dc241e5f874fbc3e9ef7bb3628bb591647bffc40c79e3bf50afb"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_bf8"
+      ],
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_bf8"
+      ],
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "dyadic",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_bf8"
+      ],
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "finite_range",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_bf8"
+      ],
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "e5m2",
+      "b_dtype": "e5m2",
+      "accum": "f32",
+      "k": 16,
+      "probe": "nonfinite",
+      "signed_a": true,
+      "signed_b": true,
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "reference_model": "exact_result_and_nonfinite_classification",
+      "max_error_bound": 0.0,
+      "classification_matches": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "expected_instruction": "v_wmma_f32_16x16x16_bf8_bf8",
+      "emitted_wmma_instructions": [
+        "v_wmma_f32_16x16x16_bf8_bf8"
+      ],
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    }
+  ],
+  "scope": "one native WMMA tile, externally zero-padded ragged inputs; no arbitrary-size GEMM or performance promotion"
+}

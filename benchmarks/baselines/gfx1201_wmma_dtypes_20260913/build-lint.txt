@@ -1,0 +1,3 @@
+All checks passed!
+[mypy ratchet] errors=0  baseline=0  (mypy rc=0)
+[1/1] Linking CXX executable src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt

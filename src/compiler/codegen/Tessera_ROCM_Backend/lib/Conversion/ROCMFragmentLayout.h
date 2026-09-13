@@ -139,16 +139,22 @@ inline std::optional<FragmentLayoutDescriptor>
 resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
                       llvm::StringRef arch) {
   if (!desc || desc.getM() != 16 || desc.getN() != 16 ||
-      desc.getAType() != desc.getBType() ||
       desc.getALayout() != "row_major" ||
       desc.getBLayout() != "col_major" || desc.getKBlocks() != 1)
     return std::nullopt;
 
+  bool mixedFp8 = (arch == "gfx1200" || arch == "gfx1201") &&
+      isAnyOf(desc.getAType(), {"e4m3", "e5m2", "fp8", "bf8"}) &&
+      isAnyOf(desc.getBType(), {"e4m3", "e5m2", "fp8", "bf8"});
+  if (desc.getAType() != desc.getBType() && !mixedFp8)
+    return std::nullopt;
   llvm::StringRef dtype = desc.getAType();
   int64_t bits = dtypeBits(dtype);
   bool integer = dtype == "int8" || dtype == "int4";
+  bool lowAccum = (arch == "gfx1200" || arch == "gfx1201") &&
+      isAnyOf(dtype, {"f16", "bf16"}) && dtype == desc.getBType() && dtype == desc.getAccType();
   if (bits == 0 || (integer ? !isAnyOf(desc.getAccType(), {"i32", "int32"})
-                            : desc.getAccType() != "f32"))
+                            : (desc.getAccType() != "f32" && !lowAccum)))
     return std::nullopt;
 
   auto make = [&](FragmentFamily family, llvm::StringRef familyName,
@@ -166,7 +172,7 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
             inputElements,
             (inputElements * bits + 31) / 32,
             256 / waveSize,
-            256 / waveSize,
+            lowAccum ? 128 / waveSize : 256 / waveSize,
             inputFormat,
             accumulatorFormat,
             replication,
@@ -187,7 +193,7 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
   }
 
   if (arch == "gfx1200" || arch == "gfx1201") {
-    int64_t expectedK = dtype == "int4" ? 32 : 16;
+    int64_t expectedK = dtype == "int4" && desc.getK() == 32 ? 32 : 16;
     if (desc.getK() != expectedK ||
         !isAnyOf(dtype,
                  {"f16", "bf16", "e4m3", "e5m2", "fp8", "bf8",
@@ -198,8 +204,19 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
     FragmentRegisterFormat inputFormat =
         bits >= 16 ? FragmentRegisterFormat::SOA
                    : FragmentRegisterFormat::SOAInt;
+    llvm::StringRef instruction = denseMatrixInstruction(arch, dtype, desc.getK());
+    if (lowAccum)
+      instruction = dtype == "f16" ? "V_WMMA_F16_16X16X16_F16"
+                                    : "V_WMMA_BF16_16X16X16_BF16";
+    if (mixedFp8) {
+      bool aFp8 = isAnyOf(dtype, {"e4m3", "fp8"});
+      bool bFp8 = isAnyOf(desc.getBType(), {"e4m3", "fp8"});
+      if (aFp8 != bFp8)
+        instruction = aFp8 ? "V_WMMA_F32_16X16X16_FP8_BF8"
+                           : "V_WMMA_F32_16X16X16_BF8_FP8";
+    }
     return make(FragmentFamily::RDNA4WMMA, "rdna4_wmma", "wmma",
-                denseMatrixInstruction(arch, dtype, desc.getK()), 32,
+                instruction, 32,
                 inputElements, inputFormat,
                 integer ? FragmentRegisterFormat::SOAInt
                         : FragmentRegisterFormat::SOA,

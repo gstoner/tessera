@@ -98,11 +98,11 @@ def test_public_x86_attention_vjp_consumes_exact_scheduled_package() -> None:
 
 @pytest.mark.compiler_rocm
 @pytest.mark.hardware_rocm
-def test_public_gfx1151_attention_vjp_consumes_prebuilt_program() -> None:
+def test_public_rocm_attention_vjp_consumes_prebuilt_program() -> None:
     from tessera import runtime as rt
 
     if find_tessera_opt() is None or not rt._rocm_wmma_runtime_available():
-        pytest.skip("production tessera-opt and a WSL-visible gfx1151 are required")
+        pytest.skip("production tessera-opt and a WSL-visible ROCm WMMA device are required")
     q, key, value, dout = _inputs(np.float16)
     actual = _rocm_attention.native_backward(
         q, key, value, out_cotangents=dout
@@ -120,7 +120,7 @@ def test_public_gfx1151_attention_vjp_consumes_prebuilt_program() -> None:
         np.testing.assert_allclose(observed, reference, rtol=3e-2, atol=4e-3)
     _assert_authority(
         _rocm_attention.last_backward_execution,
-        target_consumer="rocm.gfx1151_attention_backward_program",
+        target_consumer=f"rocm.{rt._rocm_live_arch()}_attention_backward_program",
     )
     assert _rocm_attention.last_frontend_differential.contract[
         "permitted_effect_ops"

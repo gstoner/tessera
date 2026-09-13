@@ -173,6 +173,8 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
     experiment reported bit-identical output while the injection silently never
     applied, so the production lane simply ran twice.
     """
+    if rt._rocm_live_arch() != "gfx1151":
+        pytest.skip("requires the exact gfx1151 physical schedule")
     monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
     real_run = subprocess.run
 

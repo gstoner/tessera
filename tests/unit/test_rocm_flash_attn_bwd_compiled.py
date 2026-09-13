@@ -37,7 +37,7 @@ def _directive(head_dim, dtype="f16"):
     return (
         'module {\n'
         '  "tessera_rocm.flash_attn_bwd"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}", arch = "{CHIP}"}} : () -> ()\n'
         '}\n'
     )
 
@@ -74,12 +74,24 @@ def _extract_hsaco(text: str) -> bytes:
     return bytes(out)
 
 
-def _build_hsaco(head_dim: int) -> bytes:
+def _build_hsaco(head_dim: int, dtype="f16", resident_forward=False, half_fragment_loads=False) -> bytes:
     tool = tessera_opt_path()
     if tool is None:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
-    r = subprocess.run([str(tool), "-", f"--pass-pipeline={_pipeline()}"],
-                       input=_directive(head_dim), capture_output=True, text=True)
+    source = _directive(head_dim, dtype)
+    pipeline = _pipeline()
+    if resident_forward:
+        source = source.replace('name = "fa",', 'name = "fa", saved_lse = true,')
+        forward = ('  "tessera_rocm.flash_attn"() {name = "fa_fwd", save_lse = true, '
+                   f'head_dim = {head_dim} : i64, dtype = "{dtype}", arch = "{CHIP}", '
+                   f'half_fragment_loads = {str(half_fragment_loads).lower()}'
+                   '} : () -> ()\n')
+        source = source.replace('module {\n', 'module {\n' + forward)
+        pipeline = pipeline.replace('builtin.module(', 'builtin.module(generate-wmma-flash-attn-kernel,', 1)
+    r = subprocess.run([str(tool), "-", f"--pass-pipeline={pipeline}"],
+                       input=source, capture_output=True, text=True)
+    if CHIP == "gfx1201":
+        assert r.returncode == 0 and "gpu.binary" in r.stdout, r.stderr
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         pytest.skip(f"flash_attn_bwd serialize unavailable (rc={r.returncode}): "
                     f"{r.stderr[:300]}")
@@ -146,8 +158,13 @@ def _arr(args):
     (16, 1, 1, 20, 40, 0),     # ragged Sq/Sk
     (64, 1, 2, 32, 32, 1),     # causal, D=64
 ])
-def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
-    hsaco = _build_hsaco(D)
+@pytest.mark.parametrize("resident_forward,half_fragment_loads", [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal, dtype, resident_forward, half_fragment_loads):
+    if half_fragment_loads and CHIP != "gfx1201":
+        pytest.skip("half fragment load experiment requires gfx1201")
+    hsaco = _build_hsaco(D, dtype, resident_forward, half_fragment_loads)
+    storage = np.float16 if dtype == "f16" else pytest.importorskip("ml_dtypes").bfloat16
     hip = _hip()
     if hip is None:
         pytest.skip("libamdhip64.so not loadable — no ROCm host")
@@ -157,16 +174,17 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         pytest.skip("no usable AMD GPU (module load failed)")
     fns = {}
-    for nm in (b"fa_pre", b"fa_dkdv", b"fa_dq"):
+    names = (b"fa_pre", b"fa_dkdv", b"fa_dq") + ((b"fa_fwd",) if resident_forward else ())
+    for nm in names:
         fn = ctypes.c_void_p()
         assert hip.hipModuleGetFunction(ctypes.byref(fn), mod, nm) == 0
         fns[nm] = fn
 
     rng = np.random.default_rng(11 + D + Sq + Sk + causal)
-    Q = (rng.standard_normal((B, H, Sq, D)) * 0.3).astype(np.float16)
-    K = (rng.standard_normal((B, H, Sk, D)) * 0.3).astype(np.float16)
-    Vv = (rng.standard_normal((B, H, Sk, D)) * 0.3).astype(np.float16)
-    dOv = (rng.standard_normal((B, H, Sq, D)) * 0.3).astype(np.float16)
+    Q = (rng.standard_normal((B, H, Sq, D)) * 0.3).astype(storage)
+    K = (rng.standard_normal((B, H, Sk, D)) * 0.3).astype(storage)
+    Vv = (rng.standard_normal((B, H, Sk, D)) * 0.3).astype(storage)
+    dOv = (rng.standard_normal((B, H, Sq, D)) * 0.3).astype(storage)
     scale = 1.0 / np.sqrt(D)
     O_ref, dQ_ref, dK_ref, dV_ref = _fwd_bwd_ref(Q, K, Vv, dOv, scale, causal)
 
@@ -185,7 +203,8 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
     hip.hipMemcpy(bufs["K"], K.ctypes.data_as(ctypes.c_void_p), 2 * nKV, 1)
     hip.hipMemcpy(bufs["V"], Vv.ctypes.data_as(ctypes.c_void_p), 2 * nKV, 1)
     hip.hipMemcpy(bufs["dO"], dOv.ctypes.data_as(ctypes.c_void_p), 2 * nQ, 1)
-    hip.hipMemcpy(bufs["O"], O_f32.ctypes.data_as(ctypes.c_void_p), 4 * nQ, 1)
+    if not resident_forward:
+        hip.hipMemcpy(bufs["O"], O_f32.ctypes.data_as(ctypes.c_void_p), 4 * nQ, 1)
 
     Sqc, Skc = ctypes.c_int64(Sq), ctypes.c_int64(Sk)
     sc, cau = ctypes.c_float(scale), ctypes.c_int64(causal)
@@ -196,6 +215,10 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
     gyt = B * H
     gqt, gkt = (Sq + 15) // 16, (Sk + 15) // 16
 
+    if resident_forward:
+        args = (_mr(bufs["Q"], nQ) + _mr(bufs["K"], nKV) + _mr(bufs["V"], nKV)
+                + _mr(bufs["O"], nQ) + [Sqc, Skc, sc, cau] + _mr(bufs["L"], nL))
+        assert launch(fns[b"fa_fwd"], gqt, gyt, 1, 32, 1, 1, 0, None, _arr(args), None) == 0
     # fa_pre : (Q,K,dO, O,L,Dd, Sq,Sk, scale, causal)
     pre_args = (_mr(bufs["Q"], nQ) + _mr(bufs["K"], nKV) + _mr(bufs["dO"], nQ)
                 + _mr(bufs["O"], nQ) + _mr(bufs["L"], nL) + _mr(bufs["Dd"], nL)
@@ -223,8 +246,21 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
     hip.hipMemcpy(dQ.ctypes.data_as(ctypes.c_void_p), bufs["dQ"], 4 * nQ, 2)
     hip.hipMemcpy(dK.ctypes.data_as(ctypes.c_void_p), bufs["dK"], 4 * nKV, 2)
     hip.hipMemcpy(dV.ctypes.data_as(ctypes.c_void_p), bufs["dV"], 4 * nKV, 2)
+    if resident_forward:
+        actual_o = np.empty_like(O_f32)
+        assert hip.hipMemcpy(actual_o.ctypes.data_as(ctypes.c_void_p), bufs["O"], 4*nQ, 2) == 0
+        np.testing.assert_allclose(actual_o, O_f32, rtol=5e-3, atol=5e-4)
+        actual_l = np.empty(nL, np.float32)
+        assert hip.hipMemcpy(actual_l.ctypes.data_as(ctypes.c_void_p), bufs["L"], 4*nL, 2) == 0
+        scores = scale * np.einsum("bhqd,bhkd->bhqk", Q.astype(np.float32), K.astype(np.float32))
+        if causal:
+            allowed = np.arange(Sk)[None, :] <= np.arange(Sq)[:, None] + max(Sk-Sq, 0)
+            scores = np.where(allowed[None, None], scores, -np.inf)
+        expected_l = np.logaddexp.reduce(scores, axis=-1)
+        np.testing.assert_allclose(actual_l.reshape(B,H,Sq), expected_l, rtol=2e-4, atol=2e-4)
     for d in bufs.values():
-        hip.hipFree(d)
+        assert hip.hipFree(d) == 0
+    assert hip.hipModuleUnload(mod) == 0
 
     def err(got, ref):
         return float(np.max(np.abs(got - ref)) / (np.max(np.abs(ref)) + 1e-6))

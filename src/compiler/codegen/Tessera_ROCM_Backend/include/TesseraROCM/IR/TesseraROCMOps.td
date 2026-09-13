@@ -369,6 +369,21 @@ def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let assemblyFormat = "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
 }
 
+def ROCM_SWMMACOp : TesseraROCM_Op<"swmmac"> {
+  let summary = "RDNA4 wave32 sparse f16/bf16 matrix accumulate with explicit indices";
+  let description = [{
+    Internal physical primitive: compressed A is 16x16 representing 16x32,
+    B is dense 32x16, C/result are f32 16x16. Per-lane vectors use the
+    RDNA4 wave32 OPSEL=0 register layout; each i32 index contains four ordered
+    pairs of 2-bit indices in its low 16 bits. A/B/index producers must retain
+    this packing together. This is not a public Graph sparse-matmul operation.
+  }];
+  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc, I32:$indices, StrAttr:$arch);
+  let results = (outs AnyType:$res);
+  let hasVerifier = 1;
+  let assemblyFormat = "$a `,` $b `,` $acc `,` $indices attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
+}
+
 def ROCM_ActivationKernelOp : TesseraROCM_Op<"activation"> {
   let summary = "Elementwise pointwise activation (gelu / silu / relu) kernel";
   let description = [{

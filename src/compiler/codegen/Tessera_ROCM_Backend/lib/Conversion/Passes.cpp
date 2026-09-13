@@ -124,7 +124,8 @@ struct DeclareROCMPipelineContractPass
     // gfx1200/gfx1250 remain fail-closed until their family plugins have exact
     // device evidence. This prevents a gfx1151 physical schedule being
     // relabelled at the serialization boundary.
-    if (arch != "gfx1151") {
+    if (arch != "gfx1151" &&
+        !(arch == "gfx1201" && (family == "softmax" || family == "reduction" || family == "matmul" || family == "attention" || family == "attention_backward"))) {
       getOperation().emitError(kExecutablePipeline)
           << ": architecture '" << arch
           << "' has no promoted family-plugin profile";

@@ -25,12 +25,12 @@ dropped) and Decision #21a (a semantic key never defaults), violated
 by construction rather than by mistake. Such an op satisfies #19's
 membership test on paper and carries nothing in practice.
 
-**45 of 149 ops require the contract they carry.**
+**46 of 150 ops require the contract they carry.**
 
 | Backend | requires | optional-only | no contract |
 |---|---|---|---|
 | `nvidia` | 5 | 21 | 2 |
-| `rocm` | 31 | 49 | 0 |
+| `rocm` | 32 | 49 | 0 |
 | `x86` | 5 | 0 | 8 |
 | `apple` | 4 | 12 | 12 |
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-12
+last_updated: 2026-09-13
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,78 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## Saved LSE and sparse Schedule handoff — 2026-09-13
+
+Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared Schedule/Tile registration assessed; the new sparse fragment verifier admits only gfx1201. Host packing and parser checks do not establish x86 physical execution. No x86 policy or native ABI change.
+
+Evidence: [saved/sparse Schedule packet](../../../../benchmarks/baselines/gfx1201_saved_sparse_schedule_20260913/README.md).
+
+## GFX1201 streams, readers and sparse Target IR — 2026-09-13
+
+Sync: `GFX1201-STREAM-SPARSE-IR-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Host execution does not consume HIP streams or RDNA4 fragment operations; CPU sparse packing tests are contract evidence only. Shared-contract assessment: no public operation or dtype was added; the sparse op is an internal ROCm Target primitive. Sibling device validation is not claimed. Follow-up required for any adoption of the external-reader lifetime interface.
+
+Evidence: [stream/sparse IR packet](../../../../benchmarks/baselines/gfx1201_stream_sparse_ir_20260913/README.md).
+
+## GFX1201 resident ownership and sparse packing — 2026-09-13
+
+Sync: `GFX1201-RESIDENT-SPARSE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared runtime ownership and bounded-dynamic Schedule admission assessed. x86 LLVM/ABI remains unchanged; no AVX-512 owning-device validation in this wave. No sibling parity or performance closure is claimed.
+
+Evidence: [resident/sparse packet](../../../../benchmarks/baselines/gfx1201_resident_sparse_20260913/README.md).
+
+## GFX1201 public attention AD — 2026-09-13
+
+Sync: `GFX1201-PUBLIC-AD-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared attention package/certificate identity changes assessed. The x86 package and certificate target remain unchanged; AVX-512 device execution was not revalidated in this ROCm run. No sibling device or performance closure is claimed.
+
+Evidence: [public AD packet](../../../../benchmarks/baselines/gfx1201_public_attention_ad_20260913/README.md).
+
+## GFX1201 scheduled package integration — 2026-09-13
+
+Sync: `GFX1201-PACKAGES-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared driver/Tile contracts assessed. The new gfx1201 profiles and ROCm launch ABIs are not applicable to this backend; its numerical, physical scheduling and runtime evidence remain independent. No sibling performance or device closure is claimed.
+
+Evidence: [package packet](../../../../benchmarks/baselines/gfx1201_scheduled_packages_20260913/README.md).
+
+## RDNA4 WMMA datatype audit — 2026-09-13
+
+Sync `GFX1201-WMMA-DTYPES-2026-09-13`.
+
+ROCm integer sign modifiers and low-precision accumulators are target-owned;
+no CPU vector/dot lowering changes. Public uint4 remains unregistered and the
+new ISA table cannot make planned unsigned Graph storage first-class. CPU
+numerical/error-budget consumers require separate validation.
+
+Evidence: [dtype packet](../../../../benchmarks/baselines/gfx1201_wmma_dtypes_20260913/README.md).
+
+## Attention pairing and loading experiment — 2026-09-13
+
+Sync `GFX1201-ATTENTION-PAIR-2026-09-13`.
+
+The shared projection retains x86 f32 result behavior. Compiler/contract
+checks pass; native x86 execution is outside the ROCm-only validation lane.
+No CPU package admission or performance promotion follows from HIP saved-LSE
+composition. Broader automatic paired-AD ownership remains a separate gate.
+
+Evidence: [paired attention packet](../../../../benchmarks/baselines/gfx1201_attention_pair_20260913/README.md).
+
+## gfx1201 integration sibling assessment — 2026-09-13
+
+Sync `GFX1201-INTEGRATION-2026-09-13` (F0/F2/EVIDENCE-PACKET-1).
+Shared unary ancestry projection retains x86 keepdims/layout policy while
+adding the bounded ROCm workgroup/reduction envelope. Host contract regressions
+pass; two native x86 package executions are unavailable in the ROCm-only
+Tajasarus build. Follow-up required for independent x86 device execution;
+HIP/WMMA evidence does not promote CPU kernels.
+
+Evidence: [integration packet](../../../../benchmarks/baselines/gfx1201_integration_20260913/README.md).
+
+## gfx1201 sibling assessment — 2026-09-13
+
+Cross-backend sync `GFX1201-FOUNDATION-2026-09-13` (ROCM-2 / F0 / F2).
+The x86 host companion remains part of the serialized GPU storage identity;
+gfx1201 admission does not establish x86 numerical or vector performance.
+RDNA4 register maps/HIPRTC are not applicable to x86 code generation.
+Assertions-enabled LLVM on Tajasarus adds a compiler validation host; CPU
+package migration and native performance still require their own evidence.
 
 ## Current integrated-plan handoff
 

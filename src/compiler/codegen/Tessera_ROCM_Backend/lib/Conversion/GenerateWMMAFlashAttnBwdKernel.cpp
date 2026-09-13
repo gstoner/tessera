@@ -54,12 +54,24 @@ struct Emit {
   VectorType fragTy, accTy;
   Value fragZero, accZero, storeZero, zerof, negInf;
   int64_t D, DC;
+  bool rdna4;
+  Value fragmentHalf;
 
   Emit(OpBuilder &b, Location loc, Type storeTy, int64_t D)
       : b(b), loc(loc), storeTy(storeTy), D(D), DC(D / 16) {
     f32 = b.getF32Type();
     idxTy = b.getIndexType();
-    fragTy = VectorType::get({16}, storeTy);
+    auto arch = b.getInsertionBlock()->getParentOp()->getAttrOfType<StringAttr>(
+        "tessera.rocm.fragment_arch");
+    rdna4 = arch && arch.getValue() == "gfx1201";
+    fragTy = VectorType::get({rdna4 ? 8 : 16}, storeTy);
+    if (rdna4) {
+      Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+      Value half = b.create<arith::AndIOp>(loc, tid,
+          b.create<arith::ConstantIndexOp>(loc, 16));
+      fragmentHalf = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, half,
+          b.create<arith::ConstantIndexOp>(loc, 0));
+    }
     accTy = VectorType::get({8}, f32);
     APFloat zAP = cast<FloatAttr>(b.getFloatAttr(storeTy, 0.0)).getValue();
     storeZero =
@@ -96,9 +108,17 @@ struct Emit {
 
   Value buildFrag(function_ref<Value(int64_t)> elt) {
     Value fr = fragZero;
-    for (int64_t i = 0; i < 16; ++i)
-      fr = b.create<vector::InsertOp>(loc, elt(i), fr, ArrayRef<int64_t>{i});
+    for (int64_t i = 0; i < (rdna4 ? 8 : 16); ++i) {
+      // Both addresses are inside the logical K16 tile; each callback retains
+      // its own ragged-bound guards. No gfx11 lane replication on RDNA4.
+      Value element = rdna4 ? sel(fragmentHalf, elt(i + 8), elt(i)) : elt(i);
+      fr = b.create<vector::InsertOp>(loc, element, fr, ArrayRef<int64_t>{i});
+    }
     return fr;
+  }
+  Value accumulatorRow(int64_t element, Value half) {
+    return rdna4 ? add(ci(element), mul(half, ci(8)))
+                 : add(ci(2 * element), half);
   }
   Value wmma(Value a, Value bf, Value acc) {
     OperationState st(loc, "tessera_rocm.wmma");
@@ -284,7 +304,7 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     // mask + scale -> sS[qi*16 + l15], qi = 2e+half.
     Value gk = e.add(k0, l15);
     for (int64_t el = 0; el < 8; ++el) {
-      Value qi = e.add(e.ci(2 * el), half);
+      Value qi = e.accumulatorRow(el, half);
       Value v0 = e.mulf(e.ext(cs, el), scale);
       // The shared modifier order is scale -> additive bias -> soft-cap.
       // Bounds-guard the bias read against the [bh,Sq,Sk] buffer.
@@ -429,7 +449,7 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
   // For each of this lane's 8 elements: q = 2e+half, k = l15.
   Value gk = e.add(x.k0, x.l15);
   for (int64_t el = 0; el < 8; ++el) {
-    Value qi = e.add(e.ci(2 * el), x.half);
+    Value qi = e.accumulatorRow(el, x.half);
     Value gqi = e.add(x.q0, qi);
     Value gqSafe = e.sel(e.lt(gqi, x.Sq), gqi, c0);
     Value Lidx = e.add(e.mul(x.bh, x.Sq), gqSafe);
@@ -661,7 +681,7 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value rV = e.wmma(aP, bdO, e.accZero);
       Value rK = e.wmma(aDS, bQ, e.accZero);
       for (int64_t el = 0; el < 8; ++el) {
-        Value krow = e.add(e.ci(2 * el), half);      // key within tile
+        Value krow = e.accumulatorRow(el, half);      // key within tile
         Value d = e.add(dc16, l15);
         Value idx = e.add(e.mul(krow, cD), d);
         Value curV = e.f32load(dVacc, idx);
@@ -871,7 +891,7 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       });
       Value rQ = e.wmma(aDS, bK, e.accZero);
       for (int64_t el = 0; el < 8; ++el) {
-        Value qi = e.add(e.ci(2 * el), half);
+        Value qi = e.accumulatorRow(el, half);
         Value d = e.add(dc16, l15);
         Value idx = e.add(e.mul(qi, cD), d);
         Value cur = e.f32load(dQacc, idx);
@@ -933,6 +953,12 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       auto dAttr = op->getAttrOfType<IntegerAttr>("head_dim");
       if (!nameAttr || !dAttr) {
         op->emitError("tessera_rocm.flash_attn_bwd missing name/head_dim");
+        return signalPassFailure();
+      }
+      auto archAttr = op->getAttrOfType<StringAttr>("arch");
+      StringRef arch = archAttr ? archAttr.getValue() : "gfx1151";
+      if (arch != "gfx1151" && arch != "gfx1201") {
+        op->emitError("attention backward fragment architecture is unsupported");
         return signalPassFailure();
       }
       int64_t D = dAttr.getInt();
@@ -1013,7 +1039,8 @@ struct GenerateWMMAFlashAttnBwdKernelPass
                     function_ref<void(OpBuilder &, Location, gpu::GPUFuncOp)> body) {
         auto fnTy = b.getFunctionType(args, {});
         auto fn = b.create<gpu::GPUFuncOp>(loc, kname + suffix.str(), fnTy);
-        fn->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+        fn.setKernel(true); // LLVM 23 inherent property, not legacy gpu.kernel.
+        fn->setAttr("tessera.rocm.fragment_arch", b.getStringAttr(arch));
         OpBuilder bb(fn.getContext());
         body(bb, loc, fn);
       };

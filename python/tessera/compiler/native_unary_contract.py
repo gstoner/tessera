@@ -39,7 +39,9 @@ def verify_unary_projection(artifact, parent: str) -> None:
     if len(ops) != 1 or not input_shape:
         raise ValueError('Native unary descriptor requires one native unary schedule')
     family, attrs = ops[0]
-    required = ['accum = "f32"', f'storage = "{storage}"', 'workgroup_size = 1 : i64']
+    rocm = artifact.target == "rocm" and artifact.architecture in {"gfx1151", "gfx1201"}
+    workgroup = 256 if rocm else 1
+    required = ['accum = "f32"', f'storage = "{storage}"', f'workgroup_size = {workgroup} : i64']
     if family == 'softmax':
         required += ['exp_mode = "accurate"', 'ftz = false']
     if any(re.search(r'(?:^|, )' + re.escape(value) + r'(?:,|$)', attrs) is None
@@ -52,7 +54,7 @@ def verify_unary_projection(artifact, parent: str) -> None:
     expected = dict(function_name=name, input_shape=input_shape,
                     output_shape=output_shape, family=family, dtype={'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage],
                     storage=storage, accum='f32', keepdims=False,
-                    workgroup_size=1, schedule='serial', epsilon=0.0)
+                    workgroup_size=workgroup, schedule='serial', epsilon=0.0)
     if family == 'softmax':
         if axis != -1 or output_shape != input_shape:
             raise ValueError('Native native softmax shape/axis is unsupported')
@@ -60,17 +62,20 @@ def verify_unary_projection(artifact, parent: str) -> None:
                         columns=input_shape[-1], outer=1, axis_extent=1, inner=1)
     else:
         axis = axis + len(input_shape) if axis < 0 else axis
-        kind = re.search(r'(?:^|, )kind = "(sum|mean|max)"(?:,|$)', attrs)
+        kind_pattern = "sum|mean|max|min" if rocm else "sum|mean|max"
+        kind = re.search(r'(?:^|, )kind = "(' + kind_pattern + r')"(?:,|$)', attrs)
         keep = re.search(r'(?:^|, )keepdims = (true|false)(?:,|$)', attrs)
         keepdims = keep is not None and keep[1] == 'true'
         if keepdims and artifact.target != 'x86':
             raise ValueError('native keepdims projection requires x86')
         expected['keepdims'] = keepdims
-        expected_shape = input_shape[:-1] + ((1,) if keepdims else ())
-        if axis != len(input_shape)-1 or output_shape != expected_shape or kind is None:
+        expected_shape = input_shape[:axis] + ((1,) if keepdims else ()) + input_shape[axis+1:]
+        if (not 0 <= axis < len(input_shape) or (not rocm and axis != len(input_shape)-1)
+                or output_shape != expected_shape or kind is None):
             raise ValueError('Native native reduction shape/axis/kind is unsupported')
         expected.update(kind=kind[1], axis=axis, rows=1, columns=1,
-                        outer=math.prod(input_shape[:-1]), axis_extent=input_shape[-1], inner=1)
+                        outer=math.prod(input_shape[:axis]), axis_extent=input_shape[axis],
+                        inner=math.prod(input_shape[axis+1:]))
     for field, value in expected.items():
         actual = getattr(artifact, field)
         if type(actual) is not type(value) or actual != value:

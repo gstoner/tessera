@@ -1,0 +1,11 @@
+{
+  "assertions": "ON",
+  "version": "23.1.1",
+  "binaries": {
+    "/home/angstorms/programming/tessera/build-assertions/tools/tessera-opt/tessera-opt": "b6da83cc69c3e870dde9cfde3f911b7637f1abf7eca0145240b7fd81a768f09c",
+    "/home/angstorms/programming/tessera/build-assertions/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "a78d4b5fa94a0de4f17ef8edc8e7264c47df291e28fd624623c4bd035078b1c9",
+    "/home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1-assertions/bin/mlir-opt": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271",
+    "/home/angstorms/programming/tessera/build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_gemm.so": "2a049e3f23b00fa89ff2edf0e0762c9f0853fa335701d2785982d38196e9707f",
+    "/home/angstorms/programming/tessera/build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_flash_attn.so": "7a37931e3806e2269f54559dc96ae545d5cf0836cbd736e4dabe2beda411a3dc"
+  }
+}

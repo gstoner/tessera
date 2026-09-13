@@ -1,7 +1,7 @@
 ---
 status: Proposal
 classification: Architecture / Tile IR
-last_updated: 2026-07-19
+last_updated: 2026-09-13
 ---
 
 # Portable Tile Fragment ABI
@@ -334,3 +334,36 @@ also hoists each per-column bias load outside the accumulator-element loop.
 Other ROCm architecture families now resolve their own WMMA-v2 or MFMA fragment
 maps. Forms whose physical materialization is not yet proven—gfx125x FP8 and
 additional CDNA low-precision variants—retain named readiness guards.
+
+## RDNA4 dtype closure — 2026-09-13
+
+Owner ROCM-2 / DTYPE-CODEGEN; `GFX1201-WMMA-DTYPES-2026-09-13`.
+The ISA operand catalog is `wmma_dtype_forms` in `rocm_target.py`; it separates
+A type, B type, accumulator, K, and dense/sparse instruction. A shape or the
+architecture's broad dtype set is not a matrix-input admission contract.
+
+The gfx1201 dense fragment path now admits all eleven RDNA4 WMMA signatures:
+f16/bf16 to f32 or matching low-precision accumulators, all four E4M3/E5M2
+pairings, IU8 K16, and IU4 K16/K32. A/B storage loads use their own descriptor
+dtypes; mixed FP8 provenance names both inputs and the actual instruction.
+Low-precision accumulators use eight 16-bit elements (four VGPRs), rather than
+f32 storage or gfx11's padded sixteen-element/OPSEL map.
+
+`tile.mma` integer forms may carry Boolean `signed_a` and `signed_b`; absent
+means signed. These modifiers propagate into the IU intrinsic independently.
+Logical int4 values occupy one i8 container each at the portable memory seam
+and are compacted into low nibbles by the materializer. Unsigned four-bit
+values use the same containers and an explicit unsigned modifier; no public
+uint4 dtype or general unsigned Graph route is registered by this contract.
+
+Native f16/bf16 accumulation is numerically distinct from f32 accumulation
+rounded once. The device corpus checks its gamma-K fused-rounding bound on
+finite dyadic inputs and exact classification/rounding on one-product range
+and nonfinite probes. No general error-budget consumer or performance promotion
+is implied. The dense f32/i32 probes retain exact comparison.
+
+Sparse SWMMAC's eleven RDNA4 signatures exist in both the archive and LLVM23,
+but need a compiler-owned 2:4 index, packing and validation contract. They are
+not executable Tile/package admissions. General GEMM/attention packaging,
+scaled MX formats and selector-grade measurements remain separate gates.
+Evidence: [dtype packet](../../../benchmarks/baselines/gfx1201_wmma_dtypes_20260913/README.md).

@@ -254,7 +254,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     dynamic = dynamic_m or dynamic_n or dynamic_k
     raw_bounds = op.kwargs.get("shape_bounds")
     if dynamic:
-        if target not in {"nvidia_sm120", "rocm_gfx1151"} or not isinstance(raw_bounds, (list, tuple)) or len(raw_bounds) != 3:
+        if target not in {"nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"} or not isinstance(raw_bounds, (list, tuple)) or len(raw_bounds) != 3:
             raise ValueError(
                 "dynamic scheduled matmul requires an SM120 or gfx1151 "
                 "shape_bounds=[M,N,K] contract"
@@ -340,6 +340,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("x86 mixed matmul extents exceed the i32 runtime ABI")
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "x86", "zen5-avx512", "u8", "i32", 16, 16,
+        )
+    elif target == "rocm_gfx1201" and (a_dtype, b_dtype, output_dtype) == ("fp16", "fp16", "fp32"):
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "rocm", "gfx1201", "f16", "f32", 16, 16,
         )
     elif target == "rocm_gfx1151" and (a_dtype, b_dtype, output_dtype) == (
         "fp16",

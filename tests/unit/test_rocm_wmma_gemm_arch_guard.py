@@ -2,8 +2,9 @@
 
 The compiler-generated GEMM emits the RDNA WMMA **16x16x16** f16/bf16 fragment
 layout, which the ROCDL backend selects only on the **gfx11 family** (RDNA3 /
-RDNA3.5 — hardware-verified on gfx1151). RDNA4 gfx12xx uses a 16x16x32 WMMA
-layout and CDNA uses MFMA (32x32x8); neither selects this intrinsic. Per
+RDNA3.5 — hardware-verified on gfx1151). RDNA4 gfx12xx uses different input/accumulator lane maps for the same
+16x16x16 f16/bf16 shape; CDNA uses MFMA. This legacy generator does not
+select their architecture-owned layouts. Per
 Decision #21 the build must raise a *stable, arch-naming* diagnostic for those
 targets rather than letting the backend emit a raw "Cannot select" crash.
 

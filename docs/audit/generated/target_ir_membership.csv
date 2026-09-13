@@ -42,6 +42,7 @@ rocm,coalition_butterfly,requires,accum arch dtype stage_order,dst_space src_spa
 rocm,solver_ift,requires,dtype,dst_space src_space
 rocm,spectral_backward,requires,storage,dst_space src_space
 rocm,wmma,optional-only,,dst_space src_space
+rocm,swmmac,requires,arch,dst_space src_space
 rocm,activation,requires,dtype,dst_space src_space
 rocm,silu_mul,requires,dtype,dst_space src_space
 rocm,pointwise_loss,requires,dtype,dst_space src_space

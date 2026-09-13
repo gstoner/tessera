@@ -2981,8 +2981,8 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="ROCM_FRAGMENT_STORE_TYPE", pass_origin="LowerTileToROCMPass",
         severity="error",
-        summary="The fragment store destination type does not match the selected f32 or i32 accumulator contract.",
-        fix_hint="Store floating matrix results to rank-one f32 memrefs and integer WMMA results to rank-one i32 memrefs, or add an explicit epilogue conversion.",
+        summary="The fragment store destination type does not match the declared architecture accumulator contract.",
+        fix_hint="Use rank-one output memrefs matching the declared f32/f16/bf16 or i32 accumulator; low-precision accumulation requires its exact architecture form.",
         spec="docs/architecture/proposals/tile_fragment_abi.md", sprint="ROCM-5",
     ),
     DiagnosticCode(

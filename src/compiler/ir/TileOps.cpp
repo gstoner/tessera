@@ -2838,3 +2838,17 @@ void FragmentType::print(AsmPrinter &printer) const {
 
 } // namespace tile
 } // namespace tessera
+
+mlir::LogicalResult tessera::tile::SparseMMAOp::verify() {
+  auto a = mlir::dyn_cast<mlir::VectorType>(getA().getType());
+  auto b = mlir::dyn_cast<mlir::VectorType>(getB().getType());
+  auto c = mlir::dyn_cast<mlir::VectorType>(getAcc().getType());
+  if (getArch() != "gfx1201" || !a || !b || !c ||
+      a.getRank() != 1 || b.getRank() != 1 || c.getRank() != 1 ||
+      a.getNumElements() != 8 || b.getNumElements() != 16 || c.getNumElements() != 8 ||
+      !(a.getElementType().isF16() || a.getElementType().isBF16()) ||
+      b.getElementType() != a.getElementType() || !c.getElementType().isF32() ||
+      getRes().getType() != c)
+    return emitOpError("requires gfx1201 wave32 packed A[8], B[16] f16/bf16 and C/result[8] f32");
+  return mlir::success();
+}

@@ -217,7 +217,7 @@ def _shape(module: GraphIRModule, name: str) -> tuple[int, ...]:
 
 
 def _graph_contract(module: GraphIRModule, target: str) -> tuple:
-    if target not in {"x86", "rocm_gfx1151", "apple_gpu"}:
+    if target not in {"x86", "rocm_gfx1151", "rocm_gfx1201", "apple_gpu"}:
         raise ValueError(
             "scheduled attention backward supports only x86, rocm_gfx1151, and "
             "apple_gpu; gfx1200/gfx1250 require architecture-owned profiles and "
@@ -253,7 +253,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     dtype = dtypes.pop()
     if target == "x86" and dtype != "fp32":
         raise ValueError("Zen 5 attention backward requires fp32")
-    if target == "rocm_gfx1151" and (dtype not in {"fp16", "bf16"} or d % 16):
+    if target in {"rocm_gfx1151", "rocm_gfx1201"} and (dtype not in {"fp16", "bf16"} or d % 16):
         raise ValueError("gfx1151 attention backward requires fp16/bf16 D%16=0")
     if target == "apple_gpu" and (dtype not in {"fp32", "fp16", "bf16"} or d > 256):
         raise ValueError("Apple GPU attention backward requires f32/f16/bf16 with D<=256")
@@ -275,7 +275,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     causal = bool(op.kwargs.get("causal", False))
     if target == "x86" and left != right:
         raise ValueError("Zen 5 attention backward requires a symmetric window")
-    if target == "rocm_gfx1151" and not (
+    if target in {"rocm_gfx1151", "rocm_gfx1201"} and not (
         (left == -1 and right == -1) or (causal and left >= 0 and right == 0)
     ):
         raise ValueError("gfx1151 attention backward window is unsupported")
@@ -320,7 +320,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         storage_by_dtype = {"fp16": "f16", "bf16": "bf16"}
         if dtype is None or dtype not in storage_by_dtype:
             raise ValueError("gfx1151 attention backward requires fp16 or bf16")
-        architecture, storage = "gfx1151", storage_by_dtype[dtype]
+        architecture, storage = target.removeprefix("rocm_"), storage_by_dtype[dtype]
+        if architecture == "gfx1201":
+            selection = "saved" if requested == "saved" else "recompute"
+            policy = "gfx1201_explicit_lse"
     compiler_targets = {"x86": "x86", "apple_gpu": "apple_gpu"}
     return (
         compiler_targets.get(target, "rocm"), architecture, function.name,

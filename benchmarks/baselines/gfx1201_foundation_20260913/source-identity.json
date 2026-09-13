@@ -1,0 +1,15 @@
+{
+  "base_revision": "ca0e0c7263a443ea62974dffb7a33e6f786cff66",
+  "state": "uncommitted increment",
+  "performance_eligible": false,
+  "sources": {
+    "python/tessera/compiler/native_gpu_storage.py": "2e286826965a223330639d17f9a30aabedea468b20b49a7f48927d8ac67b6085",
+    "benchmarks/record_dtype_arithmetic.py": "557f9b1318908290a55a91cbff84e33a74e428591aca19483b6ddf8d612d3c4c",
+    "benchmarks/rocm/benchmark_rocm_arch_fragments.py": "c80346e890c6ceabc1f8a8b3c6e089e696fd75edcb289601bbf5b13e4656e944",
+    "benchmarks/rocm/record_gfx1201_fragments.py": "0ae10af2ff71d13a6ff5ddef1b128c34325c49bc07467b3e6ab2716ba078de05",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "7e15fb60f7906064d36950d20083d2352e0fe245b4718f05605fdd4d7a4038f1",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "1cb4eb7fb3b40be0a8375c1a9b1c47864ae17b70e92f4d11f52ce461b3f66cb2",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp": "ced09d1752a83a5c1954f91358c7875f2c588cfe5e65d5234263365a37d1a124",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp": "8bcc3065d75833ff617c69f47d8fdca026b703303e06bec627caf3827be1970c"
+  }
+}

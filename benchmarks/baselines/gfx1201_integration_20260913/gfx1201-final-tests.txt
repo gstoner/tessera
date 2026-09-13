@@ -1,0 +1,10 @@
+....................ssss.sssssssssssss.........s........................ [ 25%]
+........................................................................ [ 50%]
+........................................................................ [ 76%]
+....................................................................     [100%]
+=========================== short test summary info ============================
+SKIPPED [2] tests/unit/test_scheduled_kernel_consumers.py:344: x86 compiler/image unavailable
+SKIPPED [2] tests/unit/test_scheduled_kernel_consumers.py:378: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [13] tests/_support/apple.py:34: hardware_apple_gpu requires a Darwin host
+SKIPPED [1] tests/unit/test_rocm_pipeline_tile_lowering.py:177: requires the exact gfx1151 physical schedule
+266 passed, 18 skipped in 2.29s

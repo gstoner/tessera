@@ -8,6 +8,10 @@ last_updated: 2026-09-13
 
 # Apple compiler, exact-device, and performance plan
 
+## PR 747 review follow-through — 2026-09-13
+
+Owner ROCM-2; sync `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`. Not applicable to this backend runtime: the correction is confined to HIP attention module identity and selected-device compilation. No sibling device proof or ABI change is claimed. The CPU CI test double now accepts and verifies the architecture passed to ROCm device-library selection.
+
 ## Saved LSE and sparse Schedule handoff — 2026-09-13
 
 Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Not applicable to Metal physical execution: the new sparse fragment operations are gfx1201-only and the explicit LSE policy is ROCm-owned. Follow-up required for independent Metal ownership/clock proof.

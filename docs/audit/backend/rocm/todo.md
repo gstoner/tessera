@@ -7,6 +7,10 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## PR 747 review follow-through — 2026-09-13
+
+Owner ROCM-2; sync `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`. The shipped attention HIPRTC runtime now captures the current HIP device, specializes from its full architecture string, and caches modules by device/architecture/head dimension. A compiled fake-HIP regression covers mixed architectures, two devices with the same architecture, switching back, and failed device lookup. The mock-device result is not mixed-device hardware proof. The CPU CI test double now accepts and verifies the architecture passed to ROCm device-library selection.
+
 ## Saved LSE and sparse Schedule handoff — 2026-09-13
 
 Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Explicit saved-LSE gfx1201 programs now retain forward O/LSE inside immutable resident attention ownership across repeated cotangents. Auto remains recompute; the new gfx1201_explicit_lse policy does not inherit gfx1151 timing thresholds. Readers delay frame retirement. Registered internal schedule.sparse_mma and tile.sparse_mma now connect the packed f16/bf16 producer to Target SWMMAC and native HSACO; six exact comparisons pass. Public logical sparse Graph capture/package binding and broader formats remain open. Fresh rocprofv3 still has zero kernel/code-object/counter records; calibrated attribution and promotion remain blocked. Positive HIP samples no longer imply selector eligibility.

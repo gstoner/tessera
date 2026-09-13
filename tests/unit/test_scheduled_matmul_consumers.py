@@ -607,13 +607,18 @@ def test_apple_gpu_scheduled_matmul_rejects_non_apple_contract(monkeypatch, tmp_
         )
 
 
-def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("architecture", ["gfx1151", "gfx1201"])
+def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch, tmp_path, architecture) -> None:
     pipelines: list[str] = []
     tool=tmp_path/"tessera-opt"
     tool.write_bytes(b"compiler-v1")
     monkeypatch.setattr(rocm_native, "_tessera_opt", lambda: tool)
     monkeypatch.setattr(rocm_native, "_cache", {})
-    monkeypatch.setattr(rocm_native, "_driver_selected_device_libraries", lambda: ())
+    library_arches = []
+    def libraries(*, arch):
+        library_arches.append(arch)
+        return ()
+    monkeypatch.setattr(rocm_native, "_driver_selected_device_libraries", libraries)
     monkeypatch.setattr(rocm_native, "_extract_hsaco", lambda text: b"hsaco")
     monkeypatch.setattr(rocm_native, "_version_fingerprint", lambda tool: "fingerprint")
     monkeypatch.setattr(rocm_native, "_rocm_clang", lambda path: None)
@@ -631,15 +636,15 @@ def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch, tmp_path)
     rocm_native._compile_native_tile_ir(
         "legacy-tile",
         directive="tessera_rocm.test",
-        family="softmax",
+        family="softmax", architecture=architecture,
     )
     softmax_target, softmax_native = pipelines
     # Same binary reuses the image; replacing a compiler at the same path
     # must not recycle an image produced by its previous contents.
-    rocm_native._compile_native_tile_ir("legacy-tile",directive="tessera_rocm.test",family="softmax")
+    rocm_native._compile_native_tile_ir("legacy-tile",directive="tessera_rocm.test",family="softmax",architecture=architecture)
     assert len(pipelines)==2
     tool.write_bytes(b"compiler-v2")
-    rocm_native._compile_native_tile_ir("legacy-tile",directive="tessera_rocm.test",family="softmax")
+    rocm_native._compile_native_tile_ir("legacy-tile",directive="tessera_rocm.test",family="softmax",architecture=architecture)
     assert len(pipelines)==4
     assert "tessera-rocm-executable{" in softmax_target
     assert "family=softmax" in softmax_target
@@ -650,13 +655,15 @@ def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch, tmp_path)
     rocm_native._compile_native_tile_ir(
         "scheduled-matmul-tile",
         directive="tessera_rocm.test",
-        family="matmul",
+        family="matmul", architecture=architecture,
     )
     for pipeline in pipelines:
         assert "family=matmul" in pipeline
         assert "input=tile" in pipeline
         assert "generate-wmma-gemm-kernel" not in pipeline
         assert "lower-tile-to-rocm" not in pipeline
+
+    assert library_arches and set(library_arches) == {architecture}
 
 
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151", "apple_gpu"])

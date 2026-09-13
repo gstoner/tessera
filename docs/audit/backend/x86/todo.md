@@ -9,6 +9,10 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 # x86 backend TODO
 
+## PR 747 review follow-through — 2026-09-13
+
+Owner ROCM-2; sync `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`. Not applicable to this backend runtime: the correction is confined to HIP attention module identity and selected-device compilation. No sibling device proof or ABI change is claimed. The CPU CI test double now accepts and verifies the architecture passed to ROCm device-library selection.
+
 ## Saved LSE and sparse Schedule handoff — 2026-09-13
 
 Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared Schedule/Tile registration assessed; the new sparse fragment verifier admits only gfx1201. Host packing and parser checks do not establish x86 physical execution. No x86 policy or native ABI change.

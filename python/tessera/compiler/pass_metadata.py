@@ -115,7 +115,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="LowerTileToROCMPass",
         summary=(
             "Lowers Tessera Tile IR matmul/attention movement contracts to "
-            "ROCm Target IR. Typed `!tile.fragment` values go through a "
+            "ROCm Target IR, including verified gfx1201 packed sparse MMA fragments. Typed `!tile.fragment` values go through a "
             "dialect conversion (fragment -> physical per-lane vector) so a "
             "K-loop accumulator, chained MMAs, and a non-zero accumulator all "
             "compose; the legacy bare `!tile.fragment` spelling still takes "
@@ -798,7 +798,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
-        summary="Replays registered Schedule decisions into Tile carriers and structured SSD loops, including the x86 absolute contract and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments, into Tile carriers and structured SSD loops, including the x86 absolute contract and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
         input_dialects=("schedule", "func", "tessera"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
         required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout", "contract", "bias_shape"),

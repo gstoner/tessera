@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import atexit
 import collections
+from contextlib import contextmanager
 import ctypes
 import ctypes.util
 import functools
@@ -3603,12 +3604,20 @@ def _submit_nvidia_sm120_native(
 
 
 def _submit_rocm_gfx1151_attention_backward_program(
+    program: Any, buffers: Mapping[str, Any], *, warmup: int = 0, iterations: int = 1,
+) -> dict[str, Any]:
+    with _bind_rocm_attention_backward_program(program, buffers) as execute:
+        return execute(warmup=warmup, iterations=iterations)
+
+
+_UNCERTAIN_ROCM_ATTENTION_RESOURCES: list[dict[str, Any]] = []
+
+
+@contextmanager
+def _bind_rocm_attention_backward_program(
     program: Any,
     buffers: Mapping[str, Any],
-    *,
-    warmup: int = 0,
-    iterations: int = 1,
-) -> dict[str, Any]:
+) -> Any:
     """Run one resident compiler-owned gfx1151 attention-backward program.
 
     The HSACO, user buffers, and one launch-owned workspace allocation stay
@@ -3632,8 +3641,10 @@ def _submit_rocm_gfx1151_attention_backward_program(
 
     if not isinstance(program, ROCMNativeProgram):
         raise TypeError("gfx1151 attention backward requires ROCMNativeProgram")
-    if warmup < 0 or iterations <= 0:
-        raise ValueError("warmup must be nonnegative and iterations positive")
+    if (program.image.architecture not in {"gfx1151", "gfx1201"} or
+            program.image.target != "rocm_" + program.image.architecture or
+            _rocm_live_arch() != program.image.architecture):
+        raise ValueError("attention backward requires its exact owning ROCm device")
     expected_abis = (
         GFX1151_ATTN_F16_ABI if program.image.entry_points[0].abi_id == GFX1151_ATTN_F16_ABI else GFX1151_ATTN_BF16_ABI,
         GFX1151_ATTN_BWD_PRE_ABI,
@@ -3713,7 +3724,15 @@ def _submit_rocm_gfx1151_attention_backward_program(
     if hip.hipModuleLoadData(ctypes.byref(module), ctypes.cast(image_storage, ctypes.c_void_p)) != 0:
         raise RuntimeError("gfx1151 attention backward HSACO module load failed")
     allocations: list[ctypes.c_void_p] = []
+    stream = ctypes.c_void_p()
+    hip.hipStreamCreateWithFlags.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint]
+    hip.hipStreamSynchronize.argtypes = [ctypes.c_void_p]
+    hip.hipStreamDestroy.argtypes = [ctypes.c_void_p]
+    hip.hipMemcpyAsync.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int, ctypes.c_void_p]
+    hip.hipMemsetAsync.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_size_t, ctypes.c_void_p]
     try:
+        if hip.hipStreamCreateWithFlags(ctypes.byref(stream), 1) != 0:
+            raise RuntimeError("attention nonblocking stream creation failed")
         functions: list[ctypes.c_void_p] = []
         for descriptor in program.descriptors:
             function = ctypes.c_void_p()
@@ -3759,11 +3778,11 @@ def _submit_rocm_gfx1151_attention_backward_program(
         slices = {item.name: ctypes.c_void_p(workspace_address + item.offset) for item in program.workspace_slices}
         for name, array in host_inputs.items():
             if (
-                hip.hipMemcpy(
+                hip.hipMemcpyAsync(
                     device[name],
                     array.ctypes.data_as(ctypes.c_void_p),
                     int(array.nbytes),
-                    1,
+                    1, stream,
                 )
                 != 0
             ):
@@ -3869,102 +3888,150 @@ def _submit_rocm_gfx1151_attention_backward_program(
                 1,
                 1,
                 0,
-                None,
+                stream,
                 array,
                 None,
             )
             if rc != 0:
                 raise RuntimeError(f"gfx1151 attention backward kernel launch failed rc={rc}")
 
+        forward_resident = False
+        forward_launches = 0
+
         def enqueue_program() -> None:
+            nonlocal forward_resident, forward_launches
             for name in (dk_name, dv_name):
-                hip.hipMemset(device[name], 0, nkv * 4)
+                if hip.hipMemsetAsync(device[name], 0, nkv * 4, stream) != 0:
+                    raise RuntimeError("attention backward output reset failed")
             for name in ("partial_dk", "partial_dv"):
-                hip.hipMemset(slices[name], 0, nkv * 4)
-            for function, arguments, grid in zip(functions, argument_sets, grids, strict=True):
+                if hip.hipMemsetAsync(slices[name], 0, nkv * 4, stream) != 0:
+                    raise RuntimeError("attention backward workspace reset failed")
+            for stage, (function, arguments, grid) in enumerate(zip(functions, argument_sets, grids, strict=True)):
+                if stage == 0 and forward_resident:
+                    continue
                 launch(function, arguments, grid)
+                if stage == 0:
+                    forward_launches += 1
+            if provenance.get("lse_checkpoint") == "saved":
+                forward_resident = True
 
         def run_program() -> None:
             enqueue_program()
-            if hip.hipDeviceSynchronize() != 0:
+            if hip.hipStreamSynchronize(stream) != 0:
                 raise RuntimeError("gfx1151 attention backward synchronization failed")
 
-        for _ in range(warmup):
-            run_program()
-        wall_samples: list[float] = []
-        event_samples: list[float] = []
-        event_start = ctypes.c_void_p()
-        event_stop = ctypes.c_void_p()
-        events_ready = (
-            hip.hipEventCreate(ctypes.byref(event_start)) == 0
-            and hip.hipEventCreate(ctypes.byref(event_stop)) == 0
-        )
-        try:
-            for _ in range(iterations):
-                if events_ready and hip.hipEventRecord(event_start, None) != 0:
-                    raise RuntimeError(
-                        "gfx1151 attention backward start-event record failed"
-                    )
-                started_ns = time.perf_counter_ns()
-                enqueue_program()
-                if events_ready and hip.hipEventRecord(event_stop, None) != 0:
-                    raise RuntimeError(
-                        "gfx1151 attention backward stop-event record failed"
-                    )
-                if hip.hipDeviceSynchronize() != 0:
-                    raise RuntimeError(
-                        "gfx1151 attention backward synchronization failed"
-                    )
-                wall_samples.append(
-                    (time.perf_counter_ns() - started_ns) / 1_000_000.0
-                )
-                if events_ready:
-                    elapsed = ctypes.c_float()
-                    if (
-                        hip.hipEventElapsedTime(
-                            ctypes.byref(elapsed), event_start, event_stop
-                        )
-                        != 0
-                    ):
+        def execute(*, cotangent=None, warmup=0, iterations=1):
+            if warmup < 0 or iterations <= 0:
+                raise ValueError("warmup must be nonnegative and iterations positive")
+            if cotangent is not None:
+                update = np.asarray(cotangent)
+                if update.shape != do.shape or update.dtype != do.dtype or not update.flags.c_contiguous:
+                    raise ValueError("resident attention cotangent shape/storage must match capture")
+                if hip.hipMemcpyAsync(device[do_name], update.ctypes.data_as(ctypes.c_void_p), int(update.nbytes), 1, stream) != 0:
+                    raise RuntimeError("resident attention cotangent upload failed")
+            for _ in range(warmup):
+                run_program()
+            wall_samples: list[float] = []
+            event_samples: list[float] = []
+            event_start = ctypes.c_void_p()
+            event_stop = ctypes.c_void_p()
+            events_ready = (
+                hip.hipEventCreate(ctypes.byref(event_start)) == 0
+                and hip.hipEventCreate(ctypes.byref(event_stop)) == 0
+            )
+            try:
+                for _ in range(iterations):
+                    if events_ready and hip.hipEventRecord(event_start, stream) != 0:
                         raise RuntimeError(
-                            "gfx1151 attention backward event timing failed"
+                            "gfx1151 attention backward start-event record failed"
                         )
-                    event_samples.append(float(elapsed.value))
-        finally:
-            if event_start.value:
-                hip.hipEventDestroy(event_start)
-            if event_stop.value:
-                hip.hipEventDestroy(event_stop)
-        for name, output in ((dq_name, dq), (dk_name, dk), (dv_name, dv_out)):
-            if (
-                hip.hipMemcpy(
-                    output.ctypes.data_as(ctypes.c_void_p),
-                    device[name],
-                    int(output.nbytes),
-                    2,
-                )
-                != 0
-            ):
-                raise RuntimeError("gfx1151 attention backward device-to-host copy failed")
-        return {
-            "outputs": (dq, dk, dv_out),
-            "kernel_wall_samples_ms": wall_samples,
-            "device_event_samples_ms": event_samples,
-            "device_event_available": events_ready,
-            "device_event_selector_eligible": (
-                events_ready
-                and len(event_samples) == iterations
-                and all(sample > 0.0 for sample in event_samples)
-            ),
-            "workspace_bytes": program.workspace.bytes,
-            "entry_symbols": tuple(descriptor.entry_symbol for descriptor in program.descriptors),
-        }
+                    started_ns = time.perf_counter_ns()
+                    enqueue_program()
+                    if events_ready and hip.hipEventRecord(event_stop, stream) != 0:
+                        raise RuntimeError(
+                            "gfx1151 attention backward stop-event record failed"
+                        )
+                    if hip.hipStreamSynchronize(stream) != 0:
+                        raise RuntimeError(
+                            "gfx1151 attention backward synchronization failed"
+                        )
+                    wall_samples.append(
+                        (time.perf_counter_ns() - started_ns) / 1_000_000.0
+                    )
+                    if events_ready:
+                        elapsed = ctypes.c_float()
+                        if (
+                            hip.hipEventElapsedTime(
+                                ctypes.byref(elapsed), event_start, event_stop
+                            )
+                            != 0
+                        ):
+                            raise RuntimeError(
+                                "gfx1151 attention backward event timing failed"
+                            )
+                        event_samples.append(float(elapsed.value))
+            finally:
+                if event_start.value:
+                    hip.hipEventDestroy(event_start)
+                if event_stop.value:
+                    hip.hipEventDestroy(event_stop)
+            for name, output in ((dq_name, dq), (dk_name, dk), (dv_name, dv_out)):
+                if (
+                    hip.hipMemcpyAsync(
+                        output.ctypes.data_as(ctypes.c_void_p),
+                        device[name],
+                        int(output.nbytes),
+                        2, stream,
+                    )
+                    != 0
+                ):
+                    raise RuntimeError("gfx1151 attention backward device-to-host copy failed")
+            if hip.hipStreamSynchronize(stream) != 0:
+                raise RuntimeError("attention copyback completion failed")
+            return {
+                "outputs": (dq.copy(), dk.copy(), dv_out.copy()),
+                "kernel_wall_samples_ms": wall_samples,
+                "device_event_samples_ms": event_samples,
+                "device_event_available": events_ready,
+                "device_event_samples_valid": (
+                    events_ready
+                    and len(event_samples) == iterations
+                    and all(sample > 0.0 for sample in event_samples)
+                ),
+                "resident_forward_launches": forward_launches,
+                # Positive HIP durations are not independent clock calibration.
+                "device_event_selector_eligible": False,
+                "workspace_bytes": program.workspace.bytes,
+                "entry_symbols": tuple(descriptor.entry_symbol for descriptor in program.descriptors),
+            }
+        setattr(execute, "stream", stream)
+        if any(device[name].value is None for name in (dq_name, dk_name, dv_name)):
+            raise RuntimeError("attention output allocation is null")
+        setattr(execute, "device_outputs", {
+            name: (int(cast(int, device[name].value)), tuple(array.shape), str(array.dtype))
+            for name, array in ((dq_name, dq), (dk_name, dk), (dv_name, dv_out))
+        })
+        yield execute
+
     finally:
-        for pointer in reversed(allocations):
-            hip.hipFree(pointer)
-        unload = getattr(hip, "hipModuleUnload", None)
-        if unload is not None and module.value:
-            unload(module)
+        # Never release a module or storage after uncertain completion. The
+        # quarantine owns both until an explicit recovery path can prove safety.
+        remaining = list(allocations)
+        failed = bool(stream.value) and hip.hipStreamSynchronize(stream) != 0
+        if not failed:
+            while remaining:
+                if hip.hipFree(remaining[-1]) != 0:
+                    failed = True
+                    break
+                remaining.pop()
+        if not failed and stream.value:
+            failed = hip.hipStreamDestroy(stream) != 0
+        if not failed and module.value:
+            failed = hip.hipModuleUnload(module) != 0
+        if failed:
+            _UNCERTAIN_ROCM_ATTENTION_RESOURCES.append(
+                dict(driver=hip, module=module, stream=stream, allocations=remaining, image=image_storage))
+            raise RuntimeError("attention teardown is uncertain; resources retained for isolated recovery")
 
 
 def _submit_rocm_gfx1151_native(
@@ -3991,6 +4058,12 @@ def _submit_rocm_gfx1151_native(
         GFX1151_SOFTMAX_F16_ABI,
         GFX1151_SOFTMAX_F32_ABI,
     )
+
+    if image.target == "rocm_gfx1201" and (
+        image.architecture != "gfx1201"
+        or descriptor.abi_id not in {GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI, GFX1151_MATMUL_F16_F32_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}
+    ):
+        raise ValueError("gfx1201 scheduled launch requires a proved unary, matmul or attention ABI")
 
     if descriptor.abi_id not in {
         GFX1151_SOFTMAX_F16_ABI,
@@ -5133,6 +5206,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         return
 
     from tessera.compiler.rocm_native import (
+        GFX1151_ATTN_F16_ABI,
+        GFX1151_ATTN_BF16_ABI,
         GFX1151_DEPTH_ATTN_F32_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
@@ -5145,7 +5220,9 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     )
 
     if (
-        target == "rocm_gfx1151"
+        (target == "rocm_gfx1151" or (target == "rocm_gfx1201" and abi_id in {
+            GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI,
+            GFX1151_MATMUL_F16_F32_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}))
         and abi_id
         in {
             GFX1151_SOFTMAX_F16_ABI,
@@ -5157,6 +5234,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX1151_MOE_DISPATCH_F32_ABI,
             GFX1151_MATMUL_F16_F32_ABI,
             GFX1151_DEPTH_ATTN_F32_ABI,
+            GFX1151_ATTN_F16_ABI,
+            GFX1151_ATTN_BF16_ABI,
         }
         and target not in _native_launchers
     ):
@@ -8757,6 +8836,7 @@ def _execute_native_attention_vjp_package(
             execution_kind="native_gpu",
             execution_mode="hip_runtime",
             artifact_hash=package.artifact_hash,
+            expected_device_arch=package.native.image.architecture,
         )
 
     if package.target != "x86" or not isinstance(package.native, X86NativePackage):
@@ -33187,7 +33267,8 @@ def _launch_native_descriptor(
 
 
 def _physical_execution_attestation(
-    *, target: str, execution_kind: str, execution_mode: str, artifact_hash: str
+    *, target: str, execution_kind: str, execution_mode: str, artifact_hash: str,
+    expected_device_arch: str | None = None,
 ) -> dict[str, Any] | None:
     """Describe the live device that completed a physical runtime launch.
 
@@ -33203,7 +33284,9 @@ def _physical_execution_attestation(
         expected_arch = "x86_avx512"
     elif target == "rocm" and execution_kind == "native_gpu":
         device_arch = _rocm_device_name()
-        expected_arch = "gfx1151"
+        expected_arch = expected_device_arch or "gfx1151"
+        if expected_arch not in {"gfx1151", "gfx1201"}:
+            return None
     elif target == "nvidia_sm120" and execution_kind == "native_gpu":
         device_arch = _nvidia_device_name()
         expected_arch = "sm_120"

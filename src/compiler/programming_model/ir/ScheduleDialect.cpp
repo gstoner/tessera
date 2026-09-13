@@ -417,6 +417,7 @@ LogicalResult AttentionOp::verify() {
   // (APPLE-ATTN-STREAM-1).
   if (getBackwardLsePolicy() != "save_lse" &&
       getBackwardLsePolicy() != "gfx1151_auto_128" &&
+      getBackwardLsePolicy() != "gfx1201_explicit_lse" &&
       getBackwardLsePolicy() != "apple7_recompute" &&
       getBackwardLsePolicy() != "sm120_recompute")
     return emitOpError("requires an architecture-owned backward LSE policy");
@@ -483,6 +484,7 @@ LogicalResult AttentionBackwardOp::verify() {
   // backward recomputes m/l per query row and its ABI takes no LSE buffer.
   if (getLseCheckpointPolicy() != "save_lse" &&
       getLseCheckpointPolicy() != "gfx1151_auto_128" &&
+      getLseCheckpointPolicy() != "gfx1201_explicit_lse" &&
       getLseCheckpointPolicy() != "apple7_recompute")
     return emitOpError("requires an architecture-owned LSE policy");
   if (getLseCheckpointSelection() != "saved" &&
@@ -845,4 +847,18 @@ LogicalResult SSDOp::verify() {
       types[7] != tensor({(t - 1) / chunkSize + 1,h,n,p}))
     return emitOpError("SSD input, carry or checkpoint shapes disagree");
   return success();
+}
+
+mlir::LogicalResult SparseMMAOp::verify() {
+  auto a = mlir::dyn_cast<mlir::VectorType>(getA().getType());
+  auto b = mlir::dyn_cast<mlir::VectorType>(getB().getType());
+  auto c = mlir::dyn_cast<mlir::VectorType>(getAcc().getType());
+  if (getArch() != "gfx1201" || !a || !b || !c ||
+      a.getRank() != 1 || b.getRank() != 1 || c.getRank() != 1 ||
+      a.getNumElements() != 8 || b.getNumElements() != 16 || c.getNumElements() != 8 ||
+      !(a.getElementType().isF16() || a.getElementType().isBF16()) ||
+      b.getElementType() != a.getElementType() || !c.getElementType().isF32() ||
+      getRes().getType() != c)
+    return emitOpError("requires gfx1201 wave32 packed A[8], B[16] f16/bf16 and C/result[8] f32");
+  return mlir::success();
 }

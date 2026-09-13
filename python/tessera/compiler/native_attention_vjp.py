@@ -93,12 +93,18 @@ class NativeAttentionVJPPackage:
         return _digest(identity)
 
     def validate(self) -> None:
+        if self.target not in {"x86", "rocm"}:
+            raise ValueError("native attention VJP target has no physical owner")
         if _digest(self.source_graph_ir) != self.source_graph_ir_digest:
             raise ValueError("native attention VJP source Graph digest is stale")
         self.scheduled.validate()
         expected_target = "x86" if self.target == "x86" else "rocm"
         if self.scheduled.target != expected_target:
             raise ValueError("native attention VJP Schedule target is stale")
+        if (self.target == "rocm" and
+                (self.native.image.architecture != self.scheduled.architecture or
+                 self.native.image.target != "rocm_" + self.scheduled.architecture)):
+            raise ValueError("native attention VJP image architecture is stale")
         if self.native.tile_ir != self.scheduled.tile_ir:
             raise ValueError("native attention VJP package did not consume the exact Tile artifact")
         descriptors = (
@@ -202,6 +208,7 @@ def build_native_attention_vjp_package(
     arg_names: Sequence[str],
     source_arg_names: Sequence[str],
     out_cotangent: Any,
+    architecture: str | None = None,
 ) -> NativeAttentionVJPPackage:
     """Lower and package one bounded public attention reverse request."""
 
@@ -217,7 +224,13 @@ def build_native_attention_vjp_package(
         source_arg_names=source_arg_names,
         out_cotangent=out_cotangent,
     )
-    scheduled_target = "x86" if target == "x86" else "rocm_gfx1151"
+    if target == "rocm":
+        if architecture is None:
+            from tessera.runtime import _rocm_live_arch
+            architecture = _rocm_live_arch()
+        if architecture not in {"gfx1151", "gfx1201"}:
+            raise ValueError("native attention VJP requires a supported exact ROCm architecture")
+    scheduled_target = "x86" if target == "x86" else f"rocm_{architecture}"
     scheduled = lower_scheduled_attention_backward(module, target=scheduled_target)
     if target == "x86":
         native: X86NativePackage | ROCMNativeProgram = package_x86(

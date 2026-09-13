@@ -86,6 +86,10 @@ def _source(case: Case) -> str:
             'a = "f16", b = "f16", acc = "f32"',
             f'a = "{case.dtype}", b = "{case.dtype}", acc = "i32"',
         )
+    if case.dtype in ("e4m3", "e5m2", "int8", "int4"):
+        source = source.replace('elem = "f16"', f'elem = "{case.dtype}"')
+    if case.dtype in ("int8", "int4"):
+        source = source.replace('elem = "f32"', 'elem = "i32"').replace('acc = "f32"', 'acc = "i32"')
     if case.family == "gfx125x_wmma_v2" or case.dtype == "int4":
         input_type = {
             "f16": "f16", "bf16": "bf16", "int4": "i8",

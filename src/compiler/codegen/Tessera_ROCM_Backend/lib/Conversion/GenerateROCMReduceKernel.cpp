@@ -408,8 +408,7 @@ struct GenerateROCMReduceKernelPass
         arguments.push_back(idxTy);
       auto fnTy = b.getFunctionType(arguments, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernel(true); // LLVM 23 inherent property, not legacy gpu.kernel.
       OpBuilder body(gpuFunc.getContext());
       if (red == Red::Var || red == Red::Std) {
         if (outerAxisInner) {

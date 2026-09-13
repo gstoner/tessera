@@ -295,6 +295,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   bool rocm_gfx1151 =
       (schedule.target == "rocm" || schedule.target == "rocm_gfx1151") &&
       (schedule.arch.empty() || schedule.arch.contains("gfx1151"));
+  bool rocm_gfx1201 = schedule.target == "rocm" && schedule.arch == "gfx1201";
   SmallVector<int64_t> bounds;
   if (auto attr = op->getAttrOfType<ArrayAttr>("shape_bounds")) {
     for (Attribute value : attr) {
@@ -309,7 +310,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     dynamic = ShapedType::isDynamic(extent);
     if (!dynamic)
       return extent;
-    if ((!nvidia_sm120 && !rocm_gfx1151) || bounds.size() != 3 ||
+    if ((!nvidia_sm120 && !rocm_gfx1151 && !rocm_gfx1201) || bounds.size() != 3 ||
         bounds[boundIndex] <= 0)
       return failure();
     return bounds[boundIndex];
@@ -426,6 +427,15 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.macroTileN = 32;
     if (schedule.arch.empty())
       schedule.arch = "apple7";
+    return schedule;
+  }
+  if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
+      lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
+    // Independent conservative RDNA4 profile; no gfx11 panel inheritance.
+    schedule.storage = "f16";
+    schedule.accum = "f32";
+    schedule.macroTileM = 16;
+    schedule.macroTileN = 16;
     return schedule;
   }
   if (rocm && lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
@@ -613,7 +623,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   schedule.outputShape.assign(output.getShape().begin(), output.getShape().end());
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
-  bool rocm = schedule.arch.contains("gfx1151");
+  bool rocm = schedule.target == "rocm" &&
+              (schedule.arch == "gfx1151" || schedule.arch == "gfx1201");
   // Apple GPU consumes the shared softmax launch tile through its f32 MSL ABI.
   // It has no scheduled reduction consumer yet, so it is admitted for softmax
   // only below.  The launch tile does not prescribe a workgroup for Apple (the
@@ -1434,7 +1445,7 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
-  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  bool rocm = schedule.target == "rocm" && (schedule.arch == "gfx1151" || schedule.arch == "gfx1201");
   // Apple GPU consumes the shared rank-4 FORWARD attention launch tile through
   // its status-returning GQA MSL ABI
   // (tessera_apple_gpu_flash_attn_variant_f32_status).  That ABI is f32-only,
@@ -1546,9 +1557,9 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   // policy rather than inheriting x86's save_lse or the gfx1151 threshold.
   schedule.backwardLsePolicy = nvidia ? "sm120_recompute" : apple_gpu   ? "apple7_recompute"
                                : x86       ? "save_lse"
-                                           : "gfx1151_auto_128";
+                                           : schedule.arch == "gfx1201" ? "gfx1201_explicit_lse" : "gfx1151_auto_128";
   schedule.backwardLseSelection =
-      (apple_gpu || nvidia) ? "recompute"
+      (apple_gpu || nvidia || schedule.arch == "gfx1201") ? "recompute"
                 : (x86 || schedule.queryRows >= 128) ? "saved" : "recompute";
   schedule.qShape.assign(q.getShape().begin(), q.getShape().end());
   schedule.kShape.assign(k.getShape().begin(), k.getShape().end());
@@ -1667,7 +1678,7 @@ getAttentionBackwardSchedule(Operation *op) {
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
-  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  bool rocm = schedule.target == "rocm" && (schedule.arch == "gfx1151" || schedule.arch == "gfx1201");
   // Apple GPU consumes the shared rank-4 BACKWARD launch tile through its
   // status-returning MSL VJP ABI (tessera_apple_gpu_flash_attn_bwd_variant_*
   // _status), which owns dQ / split-dK/dV / fixed-order reduction routes.
@@ -1771,9 +1782,9 @@ getAttentionBackwardSchedule(Operation *op) {
   // inheriting x86's save_lse or the gfx1151 threshold.
   schedule.lseCheckpointPolicy = apple_gpu ? "apple7_recompute"
                                  : x86     ? "save_lse"
-                                           : "gfx1151_auto_128";
+                                           : schedule.arch == "gfx1201" ? "gfx1201_explicit_lse" : "gfx1151_auto_128";
   schedule.lseCheckpointSelection =
-      apple_gpu ? "recompute"
+      (apple_gpu || schedule.arch == "gfx1201") ? "recompute"
       : (x86 || std::max(schedule.queryRows, schedule.keyRows) >= 128)
           ? "saved"
           : "recompute";
@@ -1781,6 +1792,9 @@ getAttentionBackwardSchedule(Operation *op) {
   auto checkpoint = function
       ? function->getAttrOfType<StringAttr>("tessera.lse_checkpoint")
       : StringAttr();
+  if (schedule.arch == "gfx1201" && checkpoint &&
+      (checkpoint.getValue() == "saved" || checkpoint.getValue() == "recompute"))
+    schedule.lseCheckpointSelection = checkpoint.getValue();
   if (!checkpoint || checkpoint.getValue() != schedule.lseCheckpointSelection)
     return failure();
   schedule.workspaceBytes = attentionBackwardWorkspaceBytes(schedule);
@@ -2821,6 +2835,18 @@ struct ScheduleToTilePass
       return;
     }
     OpBuilder builder(mod.getContext());
+    SmallVector<schedule::SparseMMAOp> sparseFragments;
+    mod.walk([&](schedule::SparseMMAOp op) { sparseFragments.push_back(op); });
+    for (auto op : sparseFragments) {
+      builder.setInsertionPoint(op);
+      OperationState state(op.getLoc(), "tile.sparse_mma");
+      state.addOperands(op->getOperands());
+      state.addTypes(op->getResultTypes());
+      state.addAttributes(op->getAttrs());
+      Operation *lowered = builder.create(state);
+      op->getResult(0).replaceAllUsesWith(lowered->getResult(0));
+      op.erase();
+    }
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();

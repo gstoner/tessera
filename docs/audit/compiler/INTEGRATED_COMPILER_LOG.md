@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-12
+last_updated: 2026-09-13
 audit_role: reference
 ---
 
@@ -3718,3 +3718,134 @@ Additional owners: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6) and
 The first native-hardware FTZ experiment failed 28 multiply/divide comparisons;
 FTZ admission was corrected to use IEEE rounding before output flushing. The
 passing packet is from the corrected implementation, not a tolerance change.
+
+### 2026-09-13 — gfx1201 foundation and assertions
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Assertions-enabled LLVM/MLIR and Tessera tools on Tajasarus; exact-chip storage binding, corrected RDNA4 fragment store and gfx12 HIPRTC GEMM/forward-attention specialization.
+
+Remaining: General scheduled/Graph route and AD architecture admission, compiler-owned ragged/K-loop matrix proof, LDS/pipelined variants and native-Linux performance attribution. No constructor retirement or performance promotion.
+
+Evidence: [gfx1201 commissioning](../../../benchmarks/baselines/gfx1201_foundation_20260913/README.md); [ROCm owner](../backend/rocm/todo.md#gfx1201-commissioning--2026-09-13).
+
+<!-- entry-fields:end -->
+
+### 2026-09-13 — gfx1201 scheduled integration and fleet validation
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: Uncommitted engineering increment.
+
+Outcome: Replay-derived gfx1201 f32 unary packages execute; standalone FP16/BF16 backward passes ten cases on each of gfx1201 and gfx1151. Five generators use the LLVM 23 inherent kernel property. LDS/pipelined runtime variants pass correctness but lose the three-shape diagnostic comparison. Super-Bear and Princess-Luna retain clean main checkouts and working rebuilt compilers; candidate gfx1151 tests use an isolated compiler binary.
+
+Remaining: General scheduled matrix/attention and paired public AD, resident saved-LSE, broader masks, emitted-kernel attribution, tuned schedules and native-Linux performance promotion. No Graph constructor retirement or cross-architecture performance transfer.
+
+Evidence: [integration and fleet packet](../../../benchmarks/baselines/gfx1201_integration_20260913/README.md); [ROCm owner](../backend/rocm/todo.md#gfx1201-scheduled-integration--2026-09-13).
+
+<!-- entry-fields:end -->
+
+### 2026-09-13 — Attention ancestry and resident LSE proof
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation.
+
+Outcome: ROCm scheduled attention forward/backward now replay native parents and project the actual f32-output ABI. gfx1201 forward and backward compose using resident O/LSE; baseline/resident/optional half-load cases pass independently of the host-output oracle. The gfx1151 native composition remains validated. Static half-load evidence shows higher VGPR usage, not a promotion win.
+
+Remaining: General gfx1201 matrix/attention package admission; automatic paired public AD, mixed-precision cotangent conversion and resident tape ownership; broader masks and runtime kernel attribution. WSL /dev/kfd blocks profiler capability enumeration. No Graph constructor deletion or performance promotion.
+
+Evidence: [paired attention and loading packet](../../../benchmarks/baselines/gfx1201_attention_pair_20260913/README.md).
+
+<!-- entry-fields:end -->
+
+### 2026-09-13 — RDNA4 WMMA operand and accumulator audit
+
+Owner: [NUMPOL-CARRIER-1](INTEGRATED_COMPILER_PLAN.md#numpol-carrier-1)
+
+PRs: Uncommitted continuation.
+
+Outcome: ISA-total RDNA operand signatures; all eleven dense gfx1201 WMMA forms lower with correct A/B provenance, signedness and accumulator storage. The 76-case device corpus includes finite range/subnormals and nonfinite classification; native low-precision accumulation has a distinct rounding oracle. Existing f32/i32 exact checks are preserved.
+
+Remaining: Sparse SWMMAC metadata/packing and native producers, general matrix/Graph packaging, scaled-format consumers, error-budget integration and performance admission. gfx1200 has no inherited device proof; gfx1151 does not acquire FP8 or K32 forms.
+
+Evidence: [WMMA dtype packet](../../../benchmarks/baselines/gfx1201_wmma_dtypes_20260913/README.md).
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-13 — GFX1201 scheduled package ancestry
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation.
+
+Outcome: Static f16 matmul and f16/bf16 forward attention have exact gfx1201 driver/Schedule/Tile/package lineage and twenty device/contract checks. Fixed architecture loss in the direct attention adapter, missing half-wave K partitions in precomputed addresses, and cold-start family registration.
+
+Remaining: General dynamic/epilogue matrix envelopes, automatic public paired AD, resident LSE and reusable asynchronous tapes, backward package admission, sparse SWMMAC storage/index producers. rocprofv3 records API activity but zero dispatch/code-object rows; runtime kernel attribution and clean performance evidence remain open.
+
+Evidence: [scheduled package packet](../../../benchmarks/baselines/gfx1201_scheduled_packages_20260913/README.md).
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-13 — GFX1201 public attention AD
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation.
+
+Outcome: gfx1201 scheduled backward programs retain architecture through direct Tile lowering and native packaging. Public fp16/bf16 GQA Q/K/V native_backward selects its owning architecture, executes the exact package and records artifact-bound physical certificates. The gfx1201 policy remains recompute-only; saved-LSE and unknown architecture requests fail closed. Device tests cover paired public AD and explicit bias/window/softcap/dropout programs.
+
+Remaining: Reusable HIP resident-LSE tapes and asynchronous readers/teardown, sparse SWMMAC packing/index/native producers, broader matrix envelopes and runtime kernel attribution. No performance promotion or sibling device proof.
+
+Evidence: [public AD packet](../../../benchmarks/baselines/gfx1201_public_attention_ad_20260913/README.md).
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-13 — GFX1201 resident ownership and sparse packing
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation.
+
+Outcome: Reusable HIP recompute workspace snapshots inputs, owns queued host calls through retirement and returns independent host results. fp16/bf16 device checks and host failure/interleaving tests pass. Dynamic f16 matmul reuses one image across three runtime shapes and refuses over-bound calls. Immutable fp16/bf16 2:4 packing/index bytes pass six native LLVM SWMMAC probe comparisons with exact disassembly checks. Compiler subprocess profiler injection is excluded after reproducing a linker crash.
+
+Remaining: Saved-LSE admission remains closed; GPU-stream overlap, external device readers, isolated recovery, broader matrix dtypes/epilogues and production sparse Schedule/Tile producers remain open. Raw one-process host timing is diagnostic only. Profiler has API events but no kernel dispatch/code-object/counter rows; no performance promotion.
+
+Evidence: [resident/sparse packet](../../../benchmarks/baselines/gfx1201_resident_sparse_20260913/README.md).
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-13 — GFX1201 streams readers and sparse Target IR
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation.
+
+Outcome: Resident attention uses private nonblocking HIP streams. Explicit same-device read-only output leases order publication, external reads, reuse and retirement; release failures retain retryable ownership. Two gfx1201 owners have intersecting ordered-program event windows in four of five trials with correct gradients. Registered internal f16/bf16 `tessera_rocm.swmmac` validates fragments and lowers through the production Target pass; six MLIR-to-HSACO numerical comparisons are exact. This is an internal physical primitive, not a new public Graph operation, dtype, batching or AD rule.
+
+Remaining: Saved-LSE admission stays closed. General public sparse Schedule/Tile packaging, additional sparse forms, generic reader adoption, isolated uncertain-teardown recovery, calibrated clocks and per-kernel/counter attribution remain open. Event-window intersection is not proof of simultaneous individual kernels. No performance promotion or sibling-device proof.
+
+Evidence: [stream/sparse IR packet](../../../benchmarks/baselines/gfx1201_stream_sparse_ir_20260913/README.md).
+
+<!-- entry-fields:end -->
+
+
+### 2026-09-13 — Saved LSE and sparse Schedule handoff
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted continuation.
+
+Outcome: Explicit gfx1201 saved-LSE retains forward O/LSE in the resident owner's immutable frame across repeated cotangents and external-reader retirement. Auto remains recompute. Internal packed f16/bf16 Schedule and Tile sparse MMA producers verify and lower to Target SWMMAC; six exact native comparisons pass. Valid HIP timing samples are distinguished from independently calibrated selector evidence.
+
+Remaining: Public logical sparse Graph/package integration and additional sparse forms, generic reader adoption, uncertain teardown recovery and calibrated per-kernel attribution remain open. Fresh rocprofv3 records API regions but zero dispatch/code-object/symbol/counter samples. No performance promotion or sibling device proof.
+
+Evidence: [saved/sparse Schedule packet](../../../benchmarks/baselines/gfx1201_saved_sparse_schedule_20260913/README.md).
+
+<!-- entry-fields:end -->

@@ -52,7 +52,7 @@ def test_rocm_flash_backward_binds_paired_inputs_to_verified_lane(monkeypatch):
 
     package = SimpleNamespace(
         operand_names=("q", "k", "v"),
-        scheduled=SimpleNamespace(lse_checkpoint_selection="recompute"),
+        scheduled=SimpleNamespace(lse_checkpoint_selection="recompute", architecture="gfx1151"),
         source_graph_ir_digest="1" * 64,
         schedule_artifact_hash="2" * 64,
         tile_program_digest="3" * 64,

@@ -1,0 +1,11 @@
+Owning host: Tajasarus gfx1201, LLVM 23.1.1 assertions enabled, ROCm 10.0/HIP 7.15 WSL2.
+Assertions-enabled tessera-opt and tessera-rocm-opt build: passed.
+Focused ownership/device/registry suite: 313 passed (tests.txt).
+Audit/governance suite: 25 passed.
+Generated documentation drift: 30 in sync.
+Focused Ruff: passed. Mypy runtime.py and rocm_sparse_packing.py: no issues.
+Sparse Schedule-to-Tile-to-Target-to-HSACO: 6 exact comparisons, repeated under profiling.
+Saved f16/bf16 resident owner: 3 cotangents, one forward launch, immutable capture, reused allocations.
+Reader retirement: same-device external D2D copies ordered before saved-frame teardown.
+Clock calibration and runtime kernel attribution: blocked; no dispatch/code-object/counter rows.
+Public logical sparse Graph/package integration: incomplete; internal physical fragment chain only.

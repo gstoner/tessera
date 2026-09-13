@@ -393,7 +393,7 @@ parseContract(Operation *op, OpBuilder &builder, unsigned dimStart,
 
 LogicalResult
 materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
-                               OpBuilder &builder) {
+                               OpBuilder &builder, StringRef arch) {
   Operation *op = kernel.getOperation();
   auto biasAttr = op->getAttrOfType<BoolAttr>("bias");
   bool hasBias = biasAttr && biasAttr.getValue();
@@ -447,6 +447,7 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
     }
     OperationState state(op->getLoc(), "tessera_rocm.flash_attn");
     state.addAttribute("name", symbol);
+    state.addAttribute("arch", builder.getStringAttr(arch));
     state.addAttribute("head_dim", headDim);
     state.addAttribute("dtype", storage);
     state.addAttribute("gqa", builder.getBoolAttr(
@@ -467,7 +468,7 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
     state.addAttribute("source",
                        builder.getStringAttr("tile.attention_kernel"));
     state.addAttribute("schedule",
-                       builder.getStringAttr("gfx1151_wmma_streaming"));
+                       builder.getStringAttr((Twine(arch) + "_wmma_streaming").str()));
     builder.create(state);
     op->erase();
     return success();
@@ -550,7 +551,7 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
 }
 
 LogicalResult materializeROCMDirectAttentionBackward(
-    tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder) {
+    tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder, StringRef arch) {
   Operation *op = kernel.getOperation();
   auto biasAttr = op->getAttrOfType<BoolAttr>("bias");
   bool hasBias = biasAttr && biasAttr.getValue();
@@ -629,6 +630,7 @@ LogicalResult materializeROCMDirectAttentionBackward(
       return failure();
     }
     OperationState state(op->getLoc(), "tessera_rocm.flash_attn_bwd");
+    state.addAttribute("arch", builder.getStringAttr(arch));
     state.addAttribute("name", symbol);
     state.addAttribute("head_dim", headDim);
     state.addAttribute("dtype", storage);
@@ -655,7 +657,7 @@ LogicalResult materializeROCMDirectAttentionBackward(
         "source", builder.getStringAttr("tile.attention_backward_kernel"));
     state.addAttribute(
         "schedule",
-        builder.getStringAttr("gfx1151_wmma_backward_split_reduced"));
+        builder.getStringAttr((Twine(arch) + "_wmma_backward_split_reduced").str()));
     builder.create(state);
     op->erase();
     return success();

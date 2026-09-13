@@ -1,0 +1,31 @@
+wrote compiler_progress: docs/audit/generated/compiler_progress.csv, docs/audit/generated/compiler_progress.md
+wrote target_ir_membership: docs/audit/generated/target_ir_membership.csv, docs/audit/generated/target_ir_membership.md
+wrote bootstrap_prune: docs/audit/generated/bootstrap_prune_gap.csv, docs/audit/generated/bootstrap_prune_gap.md
+wrote primitive_route_map: docs/audit/generated/primitive_route_map.csv, docs/audit/generated/primitive_route_map.md
+wrote support_table: docs/audit/generated/support_table.csv, docs/audit/generated/support_table.md
+wrote single_gpu_closeout: docs/audit/generated/single_gpu_closeout.csv, docs/audit/generated/single_gpu_closeout.md
+wrote contract_consumers: docs/audit/generated/contract_consumers.csv, docs/audit/generated/contract_consumers.md
+wrote op_target_conformance: docs/audit/op_target_conformance.csv, docs/audit/op_target_conformance.md
+wrote e2e_op_coverage: docs/audit/generated/e2e_op_coverage.md
+wrote s_series_status: docs/audit/generated/s_series_status.md
+wrote s_series_accelerator_proof: docs/audit/generated/s_series_accelerator_proof.md
+wrote autodiff_connection_ledger: docs/audit/generated/autodiff_connection_ledger.csv, docs/audit/generated/autodiff_connection_ledger.md
+wrote manifest_runtime_reconciliation: docs/audit/generated/manifest_runtime_reconciliation.md
+wrote runtime_abi: docs/audit/generated/runtime_abi.csv, docs/audit/generated/runtime_abi.md
+wrote runtime_execution_matrix: docs/audit/generated/runtime_execution_matrix.csv, docs/audit/generated/runtime_execution_matrix.md
+wrote compilation_spine_inventory: docs/audit/generated/compilation_spine_inventory.csv, docs/audit/generated/compilation_spine_inventory.md
+wrote e2e_fleet: docs/audit/generated/e2e_fleet.csv, docs/audit/generated/e2e_fleet.md
+wrote verifier_coverage: docs/audit/generated/verifier_coverage.csv, docs/audit/generated/verifier_coverage.md
+wrote apple_target_map: docs/audit/generated/apple_target_map.csv, docs/audit/generated/apple_target_map.md
+wrote apple_execution_inventory: docs/audit/generated/apple_execution_inventory.csv, docs/audit/generated/apple_execution_inventory.md
+wrote nvidia_sm90_target_map: docs/audit/generated/nvidia_sm90_target_map.csv, docs/audit/generated/nvidia_sm90_target_map.md
+wrote rocm_target_map: docs/audit/generated/rocm_target_map.csv, docs/audit/generated/rocm_target_map.md
+wrote test_coverage: docs/audit/generated/test_coverage.csv, docs/audit/generated/test_coverage.md
+wrote tsol_coverage: docs/audit/generated/tsol_coverage.csv, docs/audit/generated/tsol_coverage.md
+wrote dtype_flow: docs/audit/generated/dtype_flow.csv, docs/audit/generated/dtype_flow.md
+wrote autodiff_law_audit: docs/audit/generated/autodiff_law_audit.csv, docs/audit/generated/autodiff_law_audit.md
+wrote frontend_authority: docs/audit/generated/frontend_authority_coverage.csv, docs/audit/generated/frontend_authority_coverage.md
+wrote effect_lattice_audit: docs/audit/generated/effect_lattice_audit.csv, docs/audit/generated/effect_lattice_audit.md
+wrote docs_freshness: docs/audit/generated/docs_freshness.md
+wrote surface_status: docs/audit/generated/surface_status.csv, docs/audit/generated/surface_status.md
+ok: 30 generated doc(s) in sync

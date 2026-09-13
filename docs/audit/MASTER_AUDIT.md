@@ -121,6 +121,12 @@ the applicable backend plan.
 
 ### 7. Architecture promotion
 
+RX 9070 XT gfx1201 correctness commissioning now has an owning host, Tajasarus;
+R9700-specific performance and native-Linux counter evidence remain open.
+Bounded scheduled unary and standalone backward execute on gfx1201; paired AD,
+general matrix packaging and performance promotion remain open.
+See the [ROCm queue](backend/rocm/todo.md#gfx1201-scheduled-integration--2026-09-13).
+
 Exact-device evidence never transfers between architectures. x86/AVX-512,
 Apple, gfx1151, gfx1200/gfx1250, and individual NVIDIA SM generations retain
 separate correctness and performance gates. A fused or packaged implementation

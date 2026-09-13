@@ -1,0 +1,29 @@
+{
+  "databases": 1,
+  "counts": {
+    "rocpd_metadata_0000012c_3096_7096_806b_faf7e9a69356": 7,
+    "rocpd_string_0000012c_3096_7096_806b_faf7e9a69356": 1068,
+    "rocpd_info_node_0000012c_3096_7096_806b_faf7e9a69356": 1,
+    "rocpd_info_process_0000012c_3096_7096_806b_faf7e9a69356": 1,
+    "rocpd_info_thread_0000012c_3096_7096_806b_faf7e9a69356": 1,
+    "rocpd_info_agent_0000012c_3096_7096_806b_faf7e9a69356": 2,
+    "rocpd_info_queue_0000012c_3096_7096_806b_faf7e9a69356": 1,
+    "rocpd_info_stream_0000012c_3096_7096_806b_faf7e9a69356": 1,
+    "rocpd_info_pmc_0000012c_3096_7096_806b_faf7e9a69356": 8,
+    "rocpd_info_code_object_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_info_kernel_symbol_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_track_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_event_0000012c_3096_7096_806b_faf7e9a69356": 98,
+    "rocpd_arg_0000012c_3096_7096_806b_faf7e9a69356": 246,
+    "rocpd_pmc_event_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_region_0000012c_3096_7096_806b_faf7e9a69356": 98,
+    "rocpd_sample_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_kernel_dispatch_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_memory_copy_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_memory_allocate_0000012c_3096_7096_806b_faf7e9a69356": 0,
+    "rocpd_graph_launch_0000012c_3096_7096_806b_faf7e9a69356": 0
+  },
+  "kfd_present": false,
+  "clock_calibrated": false,
+  "performance_eligible": false
+}

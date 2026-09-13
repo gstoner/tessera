@@ -37,6 +37,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -152,16 +153,14 @@ std::string substitute(const std::string& tmpl, const std::string& from,
   return out;
 }
 
-// HIPRTC-compile a fully-substituted kernel for device 0's arch; caller owns mod.
-bool compileSrc(const std::string& src, const std::string& name,
+// Compile for the selected device architecture captured by kernelFor; caller owns mod.
+bool compileSrc(const std::string& src, const std::string& name, const std::string& arch,
                 hipModule_t* outMod, hipFunction_t* outFn) {
-  hipDeviceProp_t props;
-  if (hipGetDeviceProperties(&props, 0) != hipSuccess) return false;
   hiprtcProgram prog;
   if (hiprtcCreateProgram(&prog, src.c_str(), "tessera_rocm_flash_attn.hip",
                           0, nullptr, nullptr) != HIPRTC_SUCCESS)
     return false;
-  std::string archOpt = std::string("--offload-arch=") + props.gcnArchName;
+  std::string archOpt = std::string("--offload-arch=") + arch;
   const char* opts[] = {archOpt.c_str()};
   hiprtcResult cr = hiprtcCompileProgram(prog, 1, opts);
   if (cr != HIPRTC_SUCCESS) { hiprtcDestroyProgram(&prog); return false; }
@@ -179,14 +178,14 @@ bool compileSrc(const std::string& src, const std::string& name,
 }
 
 // A flash kernel is specialized per (storage dtype, head_dim) because head_dim
-// sizes the LDS tiles + unroll. Cache compiled functions keyed by head_dim so a
+// sizes the LDS tiles + unroll. Module handles belong to a device, so a
 // repeated call (the common case — head_dim is fixed per model) compiles once.
 struct FlashKernel {
   const char* type;   // device element type
   const char* wmma;   // WMMA builtin
   const char* tag;    // unique kernel-name stem
   std::mutex mu;
-  std::map<int, hipFunction_t> fns;   // head_dim -> function
+  std::map<std::tuple<int, std::string, int>, hipFunction_t> fns; // device, arch, D
   std::vector<hipModule_t> mods;      // owned modules (freed at process exit)
 };
 
@@ -199,18 +198,36 @@ FlashKernel g_bf16{"__bf16", "__builtin_amdgcn_wmma_f32_16x16x16_bf16_w32",
 // Returns nullptr if HIPRTC compile / module load failed (no device, etc.).
 hipFunction_t kernelFor(FlashKernel* k, int D) {
   std::lock_guard<std::mutex> lock(k->mu);
-  auto it = k->fns.find(D);
+  int device = -1;
+  hipDeviceProp_t props{};
+  if (hipGetDevice(&device) != hipSuccess ||
+      hipGetDeviceProperties(&props, device) != hipSuccess) return nullptr;
+  const std::string arch(props.gcnArchName);
+  const auto key = std::make_tuple(device, arch, D);
+  auto it = k->fns.find(key);
   if (it != k->fns.end()) return it->second;
   std::string name = std::string(k->tag) + "_d" + std::to_string(D);
   std::string src = substitute(kFlashTemplate, "%TYPE%", k->type);
   src = substitute(src, "%WMMA%", k->wmma);
   src = substitute(src, "%NAME%", name);
   src = substitute(src, "%D%", std::to_string(D));
+  if (arch == "gfx1201" || arch.compare(0, 8, "gfx1201:") == 0) {
+    src = substitute(src, "_w32(", "_w32_gfx12(");
+    src = substitute(src, "ext_vector_type(16)", "ext_vector_type(8)");
+    src = substitute(src, "i < 16; ++i) a[i]", "i < 8; ++i) a[i]");
+    src = substitute(src, "i < 16; ++i)\n        b[i]", "i < 8; ++i)\n        b[i]");
+    src = substitute(src, "dc * 16 + i", "dc * 16 + i + 8 * half");
+    src = substitute(src, "qi = 2 * e + half, ki = l15", "qi = 8 * half + e, ki = l15");
+    src = substitute(src, "i < 16; ++i) ap[i]", "i < 8; ++i) ap[i]");
+    src = substitute(src, "sS[l15 * 16 + i]", "sS[l15 * 16 + i + 8 * half]");
+    src = substitute(src, "i < 16; ++i) {\n        int kr = k0 + i;", "i < 8; ++i) {\n        int kr = k0 + i + 8 * half;");
+    src = substitute(src, "qi = 2 * e + half, d = dc * 16 + l15", "qi = 8 * half + e, d = dc * 16 + l15");
+  }
   hipModule_t mod = nullptr;
   hipFunction_t fn = nullptr;
-  if (!compileSrc(src, name, &mod, &fn)) return nullptr;
+  if (!compileSrc(src, name, arch, &mod, &fn)) return nullptr;
   k->mods.push_back(mod);
-  k->fns[D] = fn;
+  k->fns[key] = fn;
   return fn;
 }
 

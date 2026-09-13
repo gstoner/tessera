@@ -1,0 +1,14 @@
+........ssss..................................sssssssssssssssssss.ss.s.. [ 66%]
+.....................................                                    [100%]
+=========================== short test summary info ============================
+SKIPPED [2] tests/unit/test_rocm_e2e_spine.py:621: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [2] tests/unit/test_rocm_e2e_spine.py:676: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [3] tests/unit/test_rocm_e2e_spine.py:1167: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [4] tests/unit/test_rocm_e2e_spine.py:1216: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [3] tests/unit/test_rocm_e2e_spine.py:1259: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [8] tests/unit/test_rocm_e2e_spine.py:1289: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [1] tests/unit/test_rocm_e2e_spine.py:1327: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host
+SKIPPED [1] tests/unit/test_paged_kv_rocm_native.py:60: requires live ROCm FA/HIP lane
+SKIPPED [1] tests/unit/test_paged_kv_rocm_native.py:90: requires live ROCm FA/HIP lane
+SKIPPED [1] tests/unit/test_paged_kv_rocm_native.py:138: device_verified_jit ROCm FA lane not available — rung not earnable here
+83 passed, 26 skipped in 1.13s

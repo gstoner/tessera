@@ -45,6 +45,9 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
   StringRef inputDType;
   if (auto attr = op->getAttrOfType<StringAttr>("input_dtype"))
     inputDType = attr.getValue();
+  StringRef inputBType = inputDType;
+  if (auto attr = op->getAttrOfType<StringAttr>("input_b_dtype"))
+    inputBType = attr.getValue();
   StringRef fragmentFamily;
   if (auto attr = op->getAttrOfType<StringAttr>("fragment_family"))
     fragmentFamily = attr.getValue();
@@ -87,7 +90,7 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
       return true;
     }
     int64_t bf16Elements = isVec(a.getType(), 16, bf16) ? 16 : 8;
-    if ((bf16Elements == 16 || bf16Elements == 8) &&
+    if ((isVec(a.getType(), 16, bf16) || isVec(a.getType(), 8, bf16)) &&
         isVec(b.getType(), bf16Elements, bf16)) {
       // RDNA bf16 WMMA takes the bf16 bit-pattern as <16 x i16>.
       Type i16Vec =
@@ -102,18 +105,44 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
     if (fragmentFamily == "rdna4_wmma" &&
         isVec(a.getType(), 2, i32) && isVec(b.getType(), 2, i32)) {
       Operation *real = nullptr;
-      if (inputDType == "e4m3" || inputDType == "fp8")
-        real = rewriter.create<ROCDL::wmma_f32_16x16x16_fp8_fp8>(
-            loc, resTy, ValueRange{a, b, c});
-      else if (inputDType == "e5m2" || inputDType == "bf8")
-        real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf8_bf8>(
-            loc, resTy, ValueRange{a, b, c});
+      bool aFp8 = inputDType == "e4m3" || inputDType == "fp8";
+      bool bFp8 = inputBType == "e4m3" || inputBType == "fp8";
+      bool aBf8 = inputDType == "e5m2" || inputDType == "bf8";
+      bool bBf8 = inputBType == "e5m2" || inputBType == "bf8";
+      if (aFp8 && bFp8)
+        real = rewriter.create<ROCDL::wmma_f32_16x16x16_fp8_fp8>(loc, resTy, ValueRange{a,b,c});
+      else if (aFp8 && bBf8)
+        real = rewriter.create<ROCDL::wmma_f32_16x16x16_fp8_bf8>(loc, resTy, ValueRange{a,b,c});
+      else if (aBf8 && bFp8)
+        real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf8_fp8>(loc, resTy, ValueRange{a,b,c});
+      else if (aBf8 && bBf8)
+        real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf8_bf8>(loc, resTy, ValueRange{a,b,c});
       if (real) {
         rewriter.replaceOp(op, real->getResults());
         return true;
       }
     }
     return false;
+  }
+
+  // RDNA4 has compact eight-element low-precision accumulators; opsel=0.
+  if (fragmentFamily == "rdna4_wmma") {
+    Type half = rewriter.getF16Type(), bf = rewriter.getBF16Type();
+    if (isVec(a.getType(),8,half) && isVec(b.getType(),8,half) &&
+        isVec(c.getType(),8,half) && isVec(resTy,8,half)) {
+      auto real = rewriter.create<ROCDL::wmma_f16_16x16x16_f16>(loc,resTy,a,b,c,false);
+      rewriter.replaceOp(op,real->getResults()); return true;
+    }
+    if (isVec(a.getType(),8,bf) && isVec(b.getType(),8,bf) &&
+        isVec(c.getType(),8,bf) && isVec(resTy,8,bf)) {
+      Type bits = VectorType::get({8}, rewriter.getI16Type());
+      Value ai = rewriter.create<LLVM::BitcastOp>(loc,bits,a);
+      Value bi = rewriter.create<LLVM::BitcastOp>(loc,bits,b);
+      Value ci = rewriter.create<LLVM::BitcastOp>(loc,bits,c);
+      auto real = rewriter.create<ROCDL::wmma_bf16_16x16x16_bf16>(loc,bits,ai,bi,ci,false);
+      Value result = rewriter.create<LLVM::BitcastOp>(loc,resTy,real.getResult());
+      rewriter.replaceOp(op,result); return true;
+    }
   }
 
   // --- explicitly admitted f16-accumulate family (gfx11) ---
@@ -134,9 +163,18 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
     // signA/signB/clamp are immarg attributes (the IU intrinsic class). Signed
     // inputs (signA=signB=1); clamp=0 = no i32 saturation (wrap), matching a
     // plain integer matmul against numpy's int32 accumulate.
+    bool signedA = true, signedB = true;
+    for (auto [name, value] : {std::pair<StringRef, bool *>("signed_a", &signedA),
+                               std::pair<StringRef, bool *>("signed_b", &signedB)}) {
+      if (Attribute raw = op->getAttr(name)) {
+        auto attr = dyn_cast<BoolAttr>(raw);
+        if (!attr) return false;
+        *value = attr.getValue();
+      }
+    }
     SmallVector<NamedAttribute> attrs = {
-        rewriter.getNamedAttr("signA", rewriter.getBoolAttr(true)),
-        rewriter.getNamedAttr("signB", rewriter.getBoolAttr(true)),
+        rewriter.getNamedAttr("signA", rewriter.getBoolAttr(signedA)),
+        rewriter.getNamedAttr("signB", rewriter.getBoolAttr(signedB)),
         rewriter.getNamedAttr("clamp", rewriter.getBoolAttr(false)),
     };
     if ((isVec(a.getType(), 4, i32) && isVec(b.getType(), 4, i32)) ||
@@ -144,6 +182,17 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
          isVec(a.getType(), 2, i32) && isVec(b.getType(), 2, i32))) {
       Operation *real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu8>(
           loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+      rewriter.replaceOp(op, real->getResults());
+      return true;
+    }
+    if (fragmentFamily == "rdna4_wmma" && inputDType == "int4" &&
+        isVec(a.getType(), 1, i32) && isVec(b.getType(), 1, i32)) {
+      Value ai = rewriter.create<LLVM::ExtractElementOp>(loc, a,
+          rewriter.create<LLVM::ConstantOp>(loc, i32, rewriter.getI32IntegerAttr(0)));
+      Value bi = rewriter.create<LLVM::ExtractElementOp>(loc, b,
+          rewriter.create<LLVM::ConstantOp>(loc, i32, rewriter.getI32IntegerAttr(0)));
+      auto real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu4>(
+          loc, TypeRange{resTy}, ValueRange{ai, bi, c}, attrs);
       rewriter.replaceOp(op, real->getResults());
       return true;
     }
@@ -204,6 +253,9 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
 }
 
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<LLVM::LLVMDialect, ROCDL::ROCDLDialect>();
+  }
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LoweringPass)
 
   StringRef getArgument() const final { return "lower-tessera-target-to-rocdl"; }
@@ -214,7 +266,6 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   }
 
   void runOnOperation() override {
-    getContext().loadDialect<LLVM::LLVMDialect, ROCDL::ROCDLDialect>();
     ModuleOp module = getOperation();
     SmallVector<Operation *> waitOps;
     SmallVector<Operation *> rocmOps;
@@ -225,6 +276,7 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
         waitOps.push_back(op);
       else if (name == "tessera_rocm.mfma" ||
                name == "tessera_rocm.wmma" ||
+               name == "tessera_rocm.swmmac" ||
                name == "tessera_rocm.async_copy" ||
                name == "tessera_rocm.buffer_load" ||
                name == "tessera_rocm.ds_read_tr")
@@ -238,6 +290,30 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
       rewriter.setInsertionPoint(op);
 
       StringRef opName = op->getName().getStringRef();
+
+      if (opName == "tessera_rocm.swmmac") {
+        auto arch = op->getAttrOfType<StringAttr>("arch");
+        auto aTy = dyn_cast<VectorType>(op->getOperand(0).getType());
+        if (!arch || arch.getValue() != "gfx1201" || !aTy) {
+          op->emitError("sparse WMMA requires its verified gfx1201 contract");
+          signalPassFailure();
+          return;
+        }
+        SmallVector<Value> args(op->getOperands());
+        bool bf16 = aTy.getElementType().isBF16();
+        if (bf16) {
+          args[0] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+              VectorType::get({8}, rewriter.getI16Type()), args[0]);
+          args[1] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+              VectorType::get({16}, rewriter.getI16Type()), args[1]);
+        }
+        auto intrinsic = rewriter.create<LLVM::CallIntrinsicOp>(op->getLoc(),
+            op->getResult(0).getType(), rewriter.getStringAttr(bf16
+                ? "llvm.amdgcn.swmmac.f32.16x16x32.bf16"
+                : "llvm.amdgcn.swmmac.f32.16x16x32.f16"), args);
+        rewriter.replaceOp(op, intrinsic->getResults());
+        continue;
+      }
 
       // A matrix op carrying real fragment vectors lowers to the real ROCDL
       // intrinsic. Abstract/scalar contracts fail closed below.

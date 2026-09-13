@@ -22,7 +22,7 @@ The gfx1151 (RDNA 3.5) entry is grounded in the "RDNA3.5" Instruction Set
 Architecture Reference Guide (AMD, 23-July-2024), §7.9 Wave Matrix Multiply
 Accumulate: WMMA is VOP3P, tile 16x16x16, dtype combos F32<-F16, F32<-BF16,
 F16<-F16, BF16<-BF16, I32<-IU8, I32<-IU4 — **no FP8/FP4 WMMA on RDNA 3.5**
-(that is CDNA 4 / RDNA 4 only).
+(FP8 is available on RDNA 4; FP4 is not an RDNA 4 WMMA input).
 """
 
 from __future__ import annotations
@@ -832,6 +832,49 @@ def naive_block_xcd(
     return global_block % num_xcds
 
 
+@dataclass(frozen=True)
+class WMMADtypeForm:
+    """ISA operand signature, not Graph admission or package/device proof.
+
+    IU forms use signless byte containers plus independent signed_a/signed_b
+    instruction modifiers. They do not register a public uint4 dtype.
+    """
+    a: str
+    b: str
+    accum: str
+    k: int
+    instruction: str
+    sparse: bool = False
+
+
+def wmma_dtype_forms(arch: AMDArch, *, sparse: bool = False) -> tuple[WMMADtypeForm, ...]:
+    """Exact RDNA ISA signatures; sparse records still require an index producer.
+
+    Matrix input eligibility cannot be inferred from dtype_set or a shape alone.
+    This table intentionally covers RDNA only; CDNA uses separate contracts.
+    """
+    rdna4 = arch in {AMDArch.GFX_1200, AMDArch.GFX_1201}
+    if arch not in {AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200, AMDArch.GFX_1201}:
+        return ()
+    if sparse and not rdna4:
+        return ()
+    rows = [("fp16","fp16","fp32",16,"F32","F16"),
+            ("bf16","bf16","fp32",16,"F32","BF16"),
+            ("fp16","fp16","fp16",16,"F16","F16"),
+            ("bf16","bf16","bf16",16,"BF16","BF16"),
+            ("int8","int8","int32",16,"I32","IU8"),
+            ("int4","int4","int32",16,"I32","IU4")]
+    if rdna4:
+        rows += [("int4","int4","int32",32,"I32","IU4")]
+        rows += [(a,b,"fp32",16,"F32",aa+"_"+bb)
+                 for a,aa in [("fp8_e4m3","FP8"),("fp8_e5m2","BF8")]
+                 for b,bb in [("fp8_e4m3","FP8"),("fp8_e5m2","BF8")]]
+    family = "SWMMAC" if sparse else "WMMA"
+    return tuple(WMMADtypeForm(a,b,c,k*(2 if sparse else 1),
+                 f"V_{family}_{out}_16X16X{k*(2 if sparse else 1)}_{inputs}", sparse)
+                 for a,b,c,k,out,inputs in rows)
+
+
 def wmma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int]]:
     """Return WMMA instruction shapes (M, N, K) for an RDNA ``arch`` (empty on CDNA)."""
     return _WMMA_VARIANTS[arch]
@@ -998,6 +1041,8 @@ __all__ = [
     "rocm_arch_string",
     "mfma_variants",
     "wmma_variants",
+    "WMMADtypeForm",
+    "wmma_dtype_forms",
     "mfma_accumulator_regs",
     "rank_mfma_shapes_by_footprint",
     "cheapest_mfma_shape",

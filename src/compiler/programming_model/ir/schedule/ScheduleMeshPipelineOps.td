@@ -651,3 +651,12 @@ def Schedule_SSDOp : Op<ScheduleDialect, "ssd", [Pure]> {
                       AnyRankedTensor:$checkpoints);
   let hasVerifier = 1;
 }
+
+// Bounded RDNA4 physical 2:4 fragment contract; not a dense matmul alias.
+def Schedule_SparseMMAOp : Op<ScheduleDialect, "sparse_mma"> {
+  let summary = "gfx1201 wave32 packed 2:4 f16/bf16 MMA";
+  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc, I32:$indices, StrAttr:$arch);
+  let results = (outs AnyType:$res);
+  let hasVerifier = 1;
+  let assemblyFormat = "$a `,` $b `,` $acc `,` $indices attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
+}

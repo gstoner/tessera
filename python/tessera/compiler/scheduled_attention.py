@@ -240,7 +240,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture = "x86", "zen5-avx512"
         workgroup_size = 1
         backward_lse_policy, backward_lse_selection = "save_lse", "saved"
-    elif target == "rocm_gfx1151":
+    elif target in {"rocm_gfx1151", "rocm_gfx1201"}:
         from .rocm_native import _attention_contract as _rocm_attention_contract
 
         rocm_physical = _rocm_attention_contract(module)
@@ -261,10 +261,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         ) = rocm_physical
         output_name = module.functions[0].body[0].result or "output"
         storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
-        compiler_target, architecture = "rocm", "gfx1151"
+        compiler_target, architecture = "rocm", target.removeprefix("rocm_")
         workgroup_size = 256
-        backward_lse_policy = "gfx1151_auto_128"
-        backward_lse_selection = "saved" if dims[3] >= 128 else "recompute"
+        backward_lse_policy = "gfx1201_explicit_lse" if architecture == "gfx1201" else "gfx1151_auto_128"
+        backward_lse_selection = "saved" if architecture == "gfx1151" and dims[3] >= 128 else "recompute"
     elif target == "nvidia_sm120":
         from .nvidia_native import _attention_contract as _nvidia_attention_contract
 

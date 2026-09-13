@@ -1,0 +1,41 @@
+{
+  "baseline": "ca0e0c7263a443ea62974dffb7a33e6f786cff66",
+  "uncommitted": true,
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_rocm_arch_fragments.py": "c80346e890c6ceabc1f8a8b3c6e089e696fd75edcb289601bbf5b13e4656e944",
+    "benchmarks/rocm/record_gfx1201_fragments.py": "0ae10af2ff71d13a6ff5ddef1b128c34325c49bc07467b3e6ab2716ba078de05",
+    "benchmarks/rocm/record_gfx1201_staged.py": "b6519ba4a4e33d6bca695796b0d638adba94009e88a8a23d6b78803991339a08",
+    "python/tessera/compiler/gpu_target_map.py": "e377045ee9f1d0f92154592d4f23a52c44678494d3f360e2a9217eec470b4aa4",
+    "python/tessera/compiler/native_gpu_storage.py": "2e286826965a223330639d17f9a30aabedea468b20b49a7f48927d8ac67b6085",
+    "python/tessera/compiler/native_unary_contract.py": "3395466d6470ca7273c2e93c7ade288dfac6c4cd723fab78935b37eff3e37a99",
+    "python/tessera/compiler/rocm_native.py": "5e46d33fca193e6f9898d75941f332ab99b34cde946fe7c0631be1bbb9bdaa1b",
+    "python/tessera/compiler/rocm_pipeline.py": "fafca1db682f8348586eec8bbe71a67e870ed9aa2256e61a23235f45c64ad71e",
+    "python/tessera/compiler/scheduled_kernel.py": "619d55b2a9070bb547c8392be5a92988e82f98284a821589ab8d8749e7272560",
+    "python/tessera/runtime.py": "6f51c8389a446c36553c7af2d6340502424d1dd0013fc99728e1025d69e30bb8",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMReduceKernel.cpp": "5426dcadad59713d87b7c6da3b1925708530eaeb47a9785e80afc96f02344ef2",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMSoftmaxKernel.cpp": "10730726a33a74f17ec477cf3cb292cbaf93d20afd623e67042770b8100a871b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAFlashAttnBwdKernel.cpp": "5e3aa58e1f2be64caebef78239661a316a75fdb62938604df4dfcf440961e6b3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAFlashAttnKernel.cpp": "d7d05a4551b66da0c435c4bb32040e1662b35357bad7f0752a081e542139433e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "64d6ec8545a71d2c6602c915c59fe776cdd681182c669c1f7782daec5b59212f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "c48245a6a22dcef0c78285b7c2def65e541d7738b58e9592ff6b141285a84bd6",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "1cb4eb7fb3b40be0a8375c1a9b1c47864ae17b70e92f4d11f52ce461b3f66cb2",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "7e15fb60f7906064d36950d20083d2352e0fe245b4718f05605fdd4d7a4038f1",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp": "8bcc3065d75833ff617c69f47d8fdca026b703303e06bec627caf3827be1970c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp": "df5792918aa2af8a4aad98f425f6bde8658e98c34d5a83a9edf861b13d8c43b6",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "77eb744befd415da9bdb41e19ff9f394363d3f47c81385582a248693241f23f9",
+    "tests/unit/test_gfx1201_device_fragments.py": "b70c3516f1b1b455b26a240c2bed476337c3832931a7a9c01353a54767a73b10",
+    "tests/unit/test_gpu_target_maps.py": "af4b3f5a83dc71dc90807a4bce35a1e99d1127f79e869cf7f850fb767bbe13a8",
+    "tests/unit/test_native_gpu_storage.py": "de930b746de4809990427343c239f42116f4ffbfc903632aef2685f28b79b6b0",
+    "tests/unit/test_rocm_arch_fragment_compiler.py": "5b236b467526e8facf191a7d44ce06c1090566aac9183ef9219da8591423f4be",
+    "tests/unit/test_rocm_flash_attn_bwd_compiled.py": "9b559b658645c49fff439f54c1325b1123669762858804e8dc0ad3707b8f47c5",
+    "tests/unit/test_rocm_gfx1201_scheduled.py": "88bb021a93c27cf43cc3bfbb4f3925944a491ba43c30e0108a4a46169fed6abc",
+    "tests/unit/test_rocm_pipeline_tile_lowering.py": "5219dd6cd8a359329141576bfd026554a805feeb2d7ce37c7e81f59b1edcad51",
+    "tests/unit/test_rocm_wmma_gemm_arch_guard.py": "18dba7f737e356ae1553d78e782693ffa5766c2484974f06ff5b3d4a82fb7a8f",
+    "tests/unit/test_scheduled_kernel_consumers.py": "d5b12c757cf6f5658635147e3016d14656e006b38b5f66a9ab9bcb3cf7e657d9"
+  },
+  "binary_sha256": {
+    "build-assertions/tools/tessera-opt/tessera-opt": "dd0e3dbd43f69c8e8c7f1b8b1365631cc4050cc8fa9421428052463000de992d",
+    "build-assertions/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "65abf9ca12bb36a80e49409e5d6cbd8be56b2b2f2431d4478f6152566eebbcf3",
+    "build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_gemm.so": "e8edffbd5aec0b07b5c4c533219845f48244cc35cf8f1e14d8932071e34b5ad5"
+  }
+}

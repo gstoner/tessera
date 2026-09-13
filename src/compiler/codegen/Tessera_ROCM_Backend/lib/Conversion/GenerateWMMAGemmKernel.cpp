@@ -1520,8 +1520,7 @@ struct GenerateWMMAGemmKernelPass
         argTys.push_back(biasTy); // legacy directive ABI: trailing bias
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernel(true);
       if (viaTile && mt == 2 && nt == 4 && T.pack == 0 && !hasBias &&
           activation == "none" && outputTy == T.accElem) {
         gpuFunc->setAttr("tessera.rocm.typed_gfx11_gemm_contract",

@@ -1,0 +1,25 @@
+W0913 16:41:27.999440  101470 simple_timer.cpp:55] [rocprofv3] tool initialization ::     0.002037 sec
+W0913 16:41:27.999639  101470 simple_timer.cpp:55] [rocprofv3] 'python benchmarks/rocm/record_gfx1201_sparse_wmma.py --output /tmp/gfx1201-sparse-profiled.json' ::     0.000000 sec
+W0913 16:41:29.092177  101470 tool.cpp:3348] HIP (runtime) version 7.15.0 initialized (instance=0)
+W0913 16:41:29.240876  101470 simple_timer.cpp:55] [rocprofv3] 'python benchmarks/rocm/record_gfx1201_sparse_wmma.py --output /tmp/gfx1201-sparse-profiled.json' ::     1.241235 sec
+W0913 16:41:29.261982  101470 generateRocpd.cpp:1062] writing SQL database for process 101470 on node 823646488
+E0913 16:41:29.263449  101470 generateRocpd.cpp:1086] Opened result file: /tmp/gfx1201-sparse-profiler-clean-tools/tajasarus/101470_results.db (UUID=000000e9-3bf4-7bf4-9672-1064614b2708)
+W0913 16:41:29.272899  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_string             ::     0.000977 sec
+W0913 16:41:29.272908  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_info_node          ::     0.000002 sec
+W0913 16:41:29.273180  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_info_process       ::     0.000270 sec
+W0913 16:41:29.273223  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_info_agent         ::     0.000033 sec
+W0913 16:41:29.273227  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_info_pmc           ::     0.000002 sec
+W0913 16:41:29.273231  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd kernel info        ::     0.000002 sec
+W0913 16:41:29.282762  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_region             ::     0.009528 sec
+W0913 16:41:29.282773  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_kernel_dispatch    ::     0.000001 sec
+W0913 16:41:29.282778  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_pmc_event          ::     0.000002 sec
+W0913 16:41:29.282781  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_memory_copy        ::     0.000001 sec
+W0913 16:41:29.282783  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_graph_launch       ::     0.000001 sec
+W0913 16:41:29.282787  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_memory_allocate    ::     0.000002 sec
+W0913 16:41:29.282897  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_info_pmc: kfd      ::     0.000108 sec
+W0913 16:41:29.282900  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_pmc_event: kfd     ::     0.000000 sec
+W0913 16:41:29.283418  101470 simple_timer.cpp:55] SQLite3 generation :: rocpd_flush_pending      ::     0.000515 sec
+W0913 16:41:29.283971  101470 simple_timer.cpp:55] SQLite3 generation :: SQL indexing             ::     0.000549 sec
+W0913 16:41:29.284445  101470 simple_timer.cpp:55] SQLite3 generation :: total                    ::     0.022469 sec
+W0913 16:41:29.286350  101470 simple_timer.cpp:55] [rocprofv3] output generation ::     0.044348 sec
+W0913 16:41:29.286368  101470 simple_timer.cpp:55] [rocprofv3] tool finalization ::     0.045388 sec

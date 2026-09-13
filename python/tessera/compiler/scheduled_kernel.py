@@ -192,8 +192,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     output_name = op.result or function.return_values[0].removeprefix("%")
     if target == "x86":
         compiler_target, architecture, workgroup_size = "x86", "zen5-avx512", 1
-    elif target == "rocm_gfx1151":
-        compiler_target, architecture, workgroup_size = "rocm", "gfx1151", 256
+    elif target in {"rocm_gfx1151", "rocm_gfx1201"}:
+        compiler_target, architecture, workgroup_size = "rocm", target.removeprefix("rocm_"), 256
     elif target == "nvidia_sm120":
         compiler_target, architecture, workgroup_size = "nvidia_sm120", "sm_120", 128
     elif target == "apple_gpu":

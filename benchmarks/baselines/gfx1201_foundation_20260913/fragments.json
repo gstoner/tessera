@@ -1,0 +1,224 @@
+{
+  "chip": "gfx1201",
+  "board": "RX 9070 XT",
+  "compiler_sha256": "b6da83cc69c3e870dde9cfde3f911b7637f1abf7eca0145240b7fd81a768f09c",
+  "rows": [
+    {
+      "dtype": "f16",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "11646d17a9815abb91f636148cfb11a9842aaf4d654137602d5a9fe3cae4855e",
+      "tile_source_sha256": "bc541a2c0cecadb4554fb25117303119283eb891fe9dbc2b9a45d97780ad9a46"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "7978d55ff0d01d277891a31fce41e8529198ca1f368afe9e3da3e0b0a785a3d7",
+      "tile_source_sha256": "b545206e901f7213616409d47cb7016d3dd242c93b77f59eabe4e52bc1c5a58b"
+    },
+    {
+      "dtype": "e4m3",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e4m3",
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "6d68002aa1f9c6b34075e34128bf15cddb861f59f3c5c909a0ee8ecf86569498",
+      "tile_source_sha256": "18370ebe3cc37e461e206d84e6aa646ce3822229e0f2261b90f12f431ca33568"
+    },
+    {
+      "dtype": "e5m2",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "e5m2",
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "e5m2",
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "6618b0fb7350e6cd93f8b3f9a44e98de0a108d7d58c90246c46c8c82d064de75",
+      "tile_source_sha256": "712a327a494d6c10fe367f27d244b689d8591cc66336942cdfbf71d311328222"
+    },
+    {
+      "dtype": "int8",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "a07a462374d6595ef7554958e5489d0253e417cdc839bafd093fd7575113a854",
+      "tile_source_sha256": "0d97975efe4f8027803371034d7165a9ca051c35790d0ad8996f6e80f30a2d45"
+    },
+    {
+      "dtype": "int8",
+      "shape": [
+        13,
+        11,
+        13
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "a07a462374d6595ef7554958e5489d0253e417cdc839bafd093fd7575113a854",
+      "tile_source_sha256": "0d97975efe4f8027803371034d7165a9ca051c35790d0ad8996f6e80f30a2d45"
+    },
+    {
+      "dtype": "int8",
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "a07a462374d6595ef7554958e5489d0253e417cdc839bafd093fd7575113a854",
+      "tile_source_sha256": "0d97975efe4f8027803371034d7165a9ca051c35790d0ad8996f6e80f30a2d45"
+    },
+    {
+      "dtype": "int4",
+      "shape": [
+        16,
+        16,
+        32
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "5f9133d1c75e7160f8e7584a7da93db3bb5403338450a34a2b1b59b1e8f98d44",
+      "tile_source_sha256": "d2af4759739f660971fc9391c41504e68fd7169415739cbffebef66b40511f46"
+    },
+    {
+      "dtype": "int4",
+      "shape": [
+        13,
+        11,
+        29
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "5f9133d1c75e7160f8e7584a7da93db3bb5403338450a34a2b1b59b1e8f98d44",
+      "tile_source_sha256": "d2af4759739f660971fc9391c41504e68fd7169415739cbffebef66b40511f46"
+    },
+    {
+      "dtype": "int4",
+      "shape": [
+        1,
+        7,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "passed": true,
+      "image_sha256": "5f9133d1c75e7160f8e7584a7da93db3bb5403338450a34a2b1b59b1e8f98d44",
+      "tile_source_sha256": "d2af4759739f660971fc9391c41504e68fd7169415739cbffebef66b40511f46"
+    }
+  ],
+  "scope": "one native WMMA tile, externally zero-padded ragged inputs; no arbitrary-size GEMM or performance promotion"
+}

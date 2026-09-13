@@ -1,0 +1,14 @@
+{
+  "baseline": "ca0e0c7263a443ea62974dffb7a33e6f786cff66",
+  "state": "baseline plus uncommitted source files",
+  "sha256": {
+    "benchmarks/rocm/record_gfx1201_wmma_types.py": "1c9c637f9de7996ace2bfab816653d51bb83f9c903b566a20386c11572df91cc",
+    "benchmarks/rocm/benchmark_rocm_arch_fragments.py": "c80346e890c6ceabc1f8a8b3c6e089e696fd75edcb289601bbf5b13e4656e944",
+    "python/tessera/compiler/rocm_target.py": "909dc840c994feb533b38dd1824187b70b73b838dfb8f83338777ab91d76bcd9",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFragmentLayout.h": "c478dea5ee6c3a4ce67dc83df7a3e9fa3393e9fc7cc6909d26c24fcfce2bdd32",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "e4f58a77933329126410a17d96c7b1f4ae13c756af8187b41cf64d6aedce5c62",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "f8d58a1010bc9f0ff4261f95f7bbfe9e40d16ad77e6e88bf9da08f092959a4e6",
+    "docs/reference/isa/rdna/rdna4/instructions.json": "cc7b84862e42092f9ba2d2d4794ff08ad351d2e9fd44fd22e483d05bc32cd981",
+    "docs/reference/isa/rdna/rdna35/instructions.json": "ced0e7932093b4181ed18021318a86b34c56e572b58aebbfa6a3f467a792a3b9"
+  }
+}

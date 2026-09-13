@@ -160,15 +160,16 @@ static FailureOr<Value> materializeFragmentPack(
                   "a rank-1 memref source");
     return failure();
   }
-  bool integer = desc.getAType() == "int8" || desc.getAType() == "int4";
+  StringRef inputDType = role == "b" ? desc.getBType() : desc.getAType();
+  bool integer = inputDType == "int8" || inputDType == "int4";
   Type elementTy;
   if (integer)
     elementTy = builder.getIntegerType(8);
-  else if (desc.getAType() == "bf16")
+  else if (inputDType == "bf16")
     elementTy = builder.getBF16Type();
-  else if (desc.getAType() == "e4m3" || desc.getAType() == "fp8")
+  else if (inputDType == "e4m3" || inputDType == "fp8")
     elementTy = Float8E4M3FNType::get(builder.getContext());
-  else if (desc.getAType() == "e5m2" || desc.getAType() == "bf8")
+  else if (inputDType == "e5m2" || inputDType == "bf8")
     elementTy = Float8E5M2Type::get(builder.getContext());
   else
     elementTy = builder.getF16Type();
@@ -261,6 +262,17 @@ static FailureOr<Value> materializeFragmentPack(
                            builder, loc,
                            arith::MulIOp::create(builder, loc, col, leadingDim),
                            row);
+
+  // The producer's precomputed address contains the logical origin and lane,
+  // but not the architecture-owned K partition. GFX11 replicates operands
+  // (kBase=0); GFX12's upper half-wave must advance by eight K elements.
+  if (precomputedLinearBase) {
+    Value partitionOffset = kIsContiguous
+                                ? kBase
+                                : Value(arith::MulIOp::create(
+                                      builder, loc, kBase, leadingDim));
+    linear = arith::AddIOp::create(builder, loc, linear, partitionOffset);
+  }
 
   if (!kIsContiguous || haveBounds) {
     // A bounded fragment is scalarized even when K is contiguous. The ROCm
@@ -370,19 +382,21 @@ static LogicalResult materializeFragmentStore(
       storeLayout.getShardExtents() != ArrayRef<int64_t>(outputShape)) {
     op->emitError("ROCM_FRAGMENT_STORE_LAYOUT: architecture accumulator store "
                   "requires unswizzled 16x16 row-major gmem output with "
-                  "f32/i32 accumulation");
+                  "matching declared accumulation");
     return failure();
   }
   Value base = store.getInputs()[1];
   auto memrefTy = dyn_cast<MemRefType>(base.getType());
   bool integer = desc.getAType() == "int8" || desc.getAType() == "int4";
   Type outputTy = integer ? Type(builder.getIntegerType(32))
+                          : desc.getAccType() == "f16" ? Type(builder.getF16Type())
+                          : desc.getAccType() == "bf16" ? Type(builder.getBF16Type())
                           : Type(builder.getF32Type());
   if (!memrefTy || memrefTy.getRank() != 1 ||
       memrefTy.getElementType() != outputTy) {
     op->emitError("ROCM_FRAGMENT_STORE_TYPE: accumulator store requires a "
                   "rank-1 memref whose "
-                  "element type matches the f32/i32 accumulator");
+                  "element type matches the declared accumulator");
     return failure();
   }
   Location loc = op->getLoc();
@@ -412,6 +426,14 @@ static LogicalResult materializeFragmentStore(
       Value rowOffset = arith::AddIOp::create(
           builder, loc, arith::MulIOp::create(builder, loc, ci, two),
           laneGroup);
+      row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
+      col = arith::AddIOp::create(builder, loc, colOrigin, lane);
+    } else if (physical.family == tessera_rocm::FragmentFamily::RDNA4WMMA) {
+      // gfx12 distributes output rows across registers and half-waves;
+      // the low four lane bits select the column, not the row.
+      Value rowOffset = arith::AddIOp::create(
+          builder, loc,
+          arith::MulIOp::create(builder, loc, laneGroup, groupStride), ci);
       row = arith::AddIOp::create(builder, loc, rowOrigin, rowOffset);
       col = arith::AddIOp::create(builder, loc, colOrigin, lane);
     } else {
@@ -481,6 +503,8 @@ static Type accumulatorElementType(MLIRContext *ctx, StringRef acc) {
     return IntegerType::get(ctx, 32);
   if (acc == "f32")
     return Float32Type::get(ctx);
+  if (acc == "f16") return Float16Type::get(ctx);
+  if (acc == "bf16") return BFloat16Type::get(ctx);
   return {};
 }
 
@@ -563,6 +587,8 @@ descriptorFromFragment(tessera::tile::FragmentType f, StringRef input) {
 static SmallVector<StringRef> accumulatorProbeDtypes(StringRef acc) {
   if (acc == "i32" || acc == "int32")
     return {"int8", "int4"};
+  if (acc == "f16") return {"f16"};
+  if (acc == "bf16") return {"bf16"};
   if (acc == "f32")
     return {"f16", "bf16", "e4m3", "e5m2", "f32", "fp4"};
   return {};
@@ -1034,17 +1060,13 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
     physical = converter->layoutFor(aTy);
     if (!physical || !physical->materializationReady)
       return emitUnresolvableFragment(op, aTy, converter->getArch());
-    // `MMAOp::verify` deliberately does NOT require A and B to agree on `elem`
-    // -- `#tile.mma_desc` has always carried aType/bType separately, so a mixed
-    // pair is well-formed Tile IR. ROCm cannot execute one:
-    // `resolveFragmentLayout` only admits descriptors with aType == bType. Each
-    // fragment resolving INDIVIDUALLY (its own descriptor uses its own dtype on
-    // both sides) hid that, and the emitted wmma recorded A's dtype alone.
-    if (aTy.getElem() != bTy.getElem())
-      return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: ")
-             << converter->getArch() << " has no mixed-input matrix form; A "
-             << "states elem \"" << aTy.getElem() << "\" and B states \""
-             << bTy.getElem() << "\"";
+    auto pairDesc = tessera::tile::TileMmaDescAttr::get(
+        op.getContext(), aTy.getFamily(), aTy.getM(), aTy.getN(), aTy.getK(),
+        aTy.getElem(), bTy.getElem(), aTy.getAcc(), aTy.getLayout(), bTy.getLayout(), 1);
+    auto pairPhysical = tessera_rocm::resolveFragmentLayout(pairDesc, converter->getArch());
+    if (!pairPhysical)
+      return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: unsupported mixed-input matrix form");
+    physical = pairPhysical;
     // The accumulator resolving does NOT imply the inputs did: an `acc`
     // fragment names no input dtype, so it resolves via a representative one
     // (see `descriptorFromFragment`). On gfx1151 an e4m3 A/B pair is
@@ -1071,8 +1093,16 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
     state.addAttribute(
         "shape", rewriter.getStringAttr(("m16n16k" + Twine(aTy.getK())).str()));
     state.addAttribute("accum",
-                       rewriter.getStringAttr(integer ? "i32" : "f32"));
+                       rewriter.getStringAttr(accTy.getAcc()));
     state.addAttribute("input_dtype", rewriter.getStringAttr(aTy.getElem()));
+    state.addAttribute("input_b_dtype", rewriter.getStringAttr(bTy.getElem()));
+    for (StringRef name : {"signed_a", "signed_b"}) {
+      if (Attribute attr = op->getAttr(name)) {
+        if (!integer || !isa<BoolAttr>(attr))
+          return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: integer signedness must be Boolean");
+        state.addAttribute(name, attr);
+      }
+    }
     state.addAttribute("source", rewriter.getStringAttr("tile.fragment_pack"));
     state.addAttribute("fragment_family",
                        rewriter.getStringAttr(physical->familyName));
@@ -1290,10 +1320,10 @@ static Value tileBufferRoot(Operation *op) {
 // the AMD physical schedule, packaging, and launch ABI.
 static LogicalResult materializeCanonicalStreamingAttention(
     ModuleOp module, func::FuncOp function, StringRef arch) {
-  if (arch != "gfx1151") {
+  if (arch != "gfx1151" && arch != "gfx1201") {
     function.emitError(
         "ROCm canonical streaming-attention consumption is currently "
-        "exact-device gated to gfx1151");
+        "exact-device gated to gfx1151/gfx1201");
     return failure();
   }
 
@@ -1553,7 +1583,7 @@ static LogicalResult materializeCanonicalStreamingAttention(
                      builder.getStringAttr("canonical_rank4_kv_scf_for"));
   state.addAttribute(
       "schedule",
-      builder.getStringAttr("gfx1151_wmma_streaming_attention"));
+      builder.getStringAttr((Twine(arch) + "_wmma_streaming_attention").str()));
   state.addAttribute("canonical_kv_loop", builder.getBoolAttr(true));
   // A training package explicitly selects saved-LSE or recompute. Inference
   // forward has no checkpoint attribute and retains the existing ABI.
@@ -2112,7 +2142,7 @@ struct LowerTileToROCMPass
     SmallVector<Operation *> worklist;
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
-      if (name == "tile.mma" || name == "tile.matmul_kernel" ||
+      if (name == "tile.sparse_mma" || name == "tile.mma" || name == "tile.matmul_kernel" ||
           name == "tile.materialize_composed_layout" ||
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
@@ -2222,7 +2252,7 @@ struct LowerTileToROCMPass
 
       if (name == "tile.attention_kernel") {
         if (failed(tessera_rocm::materializeROCMDirectAttention(
-                cast<tessera::tile::AttentionKernelOp>(op), builder))) {
+                cast<tessera::tile::AttentionKernelOp>(op), builder, arch))) {
           signalPassFailure();
           return;
         }
@@ -2446,7 +2476,7 @@ struct LowerTileToROCMPass
       if (name == "tile.attention_backward_kernel") {
         if (failed(tessera_rocm::materializeROCMDirectAttentionBackward(
                 cast<tessera::tile::AttentionBackwardKernelOp>(op),
-                builder))) {
+                builder, arch))) {
           signalPassFailure();
           return;
         }
@@ -2863,6 +2893,7 @@ struct LowerTileToROCMPass
           return;
         }
         OperationState state(op->getLoc(), "tessera_rocm.wmma_gemm");
+        state.addAttribute("arch", builder.getStringAttr(arch));
         state.addAttribute("name", builder.getStringAttr(parent.getSymName()));
         state.addAttribute("m", builder.getI64IntegerAttr(16));
         state.addAttribute("n", builder.getI64IntegerAttr(16));
@@ -2881,6 +2912,17 @@ struct LowerTileToROCMPass
           if (Attribute attr = op->getAttr(attrName))
             state.addAttribute(attrName, attr);
         builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.sparse_mma") {
+        OperationState state(op->getLoc(), "tessera_rocm.swmmac");
+        state.addOperands(op->getOperands());
+        state.addTypes(op->getResultTypes());
+        state.addAttributes(op->getAttrs());
+        Operation *lowered = builder.create(state);
+        op->getResult(0).replaceAllUsesWith(lowered->getResult(0));
         op->erase();
         continue;
       }
@@ -2982,8 +3024,7 @@ struct LowerTileToROCMPass
           }
           bool integer =
               desc.getAType() == "int8" || desc.getAType() == "int4";
-          Type accElem = integer ? Type(builder.getIntegerType(32))
-                                 : Type(builder.getF32Type());
+          Type accElem = accumulatorElementType(builder.getContext(), desc.getAccType());
           auto accTy =
               VectorType::get({physical->accumulatorElementsPerLane}, accElem);
           Value zero = arith::ConstantOp::create(
@@ -2998,9 +3039,19 @@ struct LowerTileToROCMPass
               "shape",
               builder.getStringAttr(("m16n16k" + Twine(desc.getK())).str()));
           state.addAttribute("accum",
-                             builder.getStringAttr(integer ? "i32" : "f32"));
+                             builder.getStringAttr(desc.getAccType()));
           state.addAttribute("input_dtype",
                              builder.getStringAttr(desc.getAType()));
+          state.addAttribute("input_b_dtype", builder.getStringAttr(desc.getBType()));
+          for (StringRef name : {"signed_a", "signed_b"}) {
+            if (Attribute attr = op->getAttr(name)) {
+              if (!integer || !isa<BoolAttr>(attr)) {
+                op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: integer signedness must be Boolean");
+                signalPassFailure(); return;
+              }
+              state.addAttribute(name, attr);
+            }
+          }
           state.addAttribute("source",
                              builder.getStringAttr("tile.fragment_pack"));
           state.addAttribute("fragment_family",

@@ -3,10 +3,87 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-12
+last_updated: 2026-09-13
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## PR 747 review follow-through — 2026-09-13
+
+Owner ROCM-2; sync `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`. Not applicable to this backend runtime: the correction is confined to HIP attention module identity and selected-device compilation. No sibling device proof or ABI change is claimed. The CPU CI test double now accepts and verifies the architecture passed to ROCm device-library selection.
+
+## Saved LSE and sparse Schedule handoff — 2026-09-13
+
+Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Not applicable to CUDA physical execution: gfx1201 sparse fragment layouts and saved-LSE evidence do not establish sparse MMA or CUDA ownership proof. Follow-up required for any shared reader/calibration adoption.
+
+Evidence: [saved/sparse Schedule packet](../../../../benchmarks/baselines/gfx1201_saved_sparse_schedule_20260913/README.md).
+
+## GFX1201 streams, readers and sparse Target IR — 2026-09-13
+
+Sync: `GFX1201-STREAM-SPARSE-IR-2026-09-13`; owner E2E-REAL-6 / ROCM-2. CUDA requires its own stream/reader device proof and sparse MMA storage/index contracts; HIP/SWMMAC evidence does not transfer. Shared-contract assessment: no public operation or dtype was added; the sparse op is an internal ROCm Target primitive. Sibling device validation is not claimed. Follow-up required for any adoption of the external-reader lifetime interface.
+
+Evidence: [stream/sparse IR packet](../../../../benchmarks/baselines/gfx1201_stream_sparse_ir_20260913/README.md).
+
+## GFX1201 resident ownership and sparse packing — 2026-09-13
+
+Sync: `GFX1201-RESIDENT-SPARSE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared runtime ownership and bounded-dynamic Schedule admission assessed. ROCm worker ownership and SWMMAC register layout are not applicable to nvidia; its device ownership and numerical proof remain independent. No sibling parity or performance closure is claimed.
+
+Evidence: [resident/sparse packet](../../../../benchmarks/baselines/gfx1201_resident_sparse_20260913/README.md).
+
+## GFX1201 public attention AD — 2026-09-13
+
+Sync: `GFX1201-PUBLIC-AD-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared attention package/certificate identity changes assessed. ROCm WMMA and HIP backward admission are not applicable to this backend; its paired AD, tape ownership and physical proof remain independent. No sibling device or performance closure is claimed.
+
+Evidence: [public AD packet](../../../../benchmarks/baselines/gfx1201_public_attention_ad_20260913/README.md).
+
+## GFX1201 scheduled package integration — 2026-09-13
+
+Sync: `GFX1201-PACKAGES-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Shared driver/Tile contracts assessed. The new gfx1201 profiles and ROCm launch ABIs are not applicable to this backend; its numerical, physical scheduling and runtime evidence remain independent. No sibling performance or device closure is claimed.
+
+Evidence: [package packet](../../../../benchmarks/baselines/gfx1201_scheduled_packages_20260913/README.md).
+
+## RDNA4 WMMA datatype audit — 2026-09-13
+
+Sync `GFX1201-WMMA-DTYPES-2026-09-13`.
+
+ROCm's operand-pair inventory and compact accumulator map do not change
+SM120 MMA/WMMA packing or NVVM selection. Unsigned byte/nibble modifiers are
+ROCm Tile consumers, not new public unsigned dtypes or CUDA admissions.
+No NVIDIA execution or performance proof is inferred from the RDNA4 corpus.
+
+Evidence: [dtype packet](../../../../benchmarks/baselines/gfx1201_wmma_dtypes_20260913/README.md).
+
+## Attention pairing and loading experiment — 2026-09-13
+
+Sync `GFX1201-ATTENTION-PAIR-2026-09-13`.
+
+Shared attention projection preserves NVIDIA's existing result contract.
+The new ROCm replay checks and gfx1201 native composition do not change NVVM
+or resident CUDA tape behavior. Follow-up required for any shared public AD
+change; no CUDA performance evidence is inherited from these experiments.
+
+Evidence: [paired attention packet](../../../../benchmarks/baselines/gfx1201_attention_pair_20260913/README.md).
+
+## gfx1201 integration sibling check — 2026-09-13
+
+Sync `GFX1201-INTEGRATION-2026-09-13` (F0/F2/EVIDENCE-PACKET-1).
+Super-Bear's main checkout remains clean at ca0e0c7263a443ea62974dffb7a33e6f786cff66.
+Its assertions-enabled compiler rebuild and 253 focused tests pass. All 34
+scalar/vector arithmetic probes execute on SM120 with CUDA SDK 13.4.1.
+RDNA4 fragment mapping and HIP launch admission are not applicable to NVVM;
+this independently verifies the existing main compiler, not the uncommitted
+ROCm increment or NVIDIA performance promotion.
+
+Evidence: [integration packet](../../../../benchmarks/baselines/gfx1201_integration_20260913/README.md).
+
+## gfx1201 sibling assessment — 2026-09-13
+
+Cross-backend sync `GFX1201-FOUNDATION-2026-09-13` (ROCM-2 / F0 / F2).
+The native storage package target check now admits the exact ROCm gfx1201 pair
+and still rejects incompatible backend/chip pairs, including NVIDIA/gfx1201.
+NVIDIA remains SM120 in this package envelope. RDNA4 accumulator and HIPRTC
+changes are not applicable to NVVM/PTX. Follow-up: preserve CUDA 13.4.1 owning-
+device validation; no NVIDIA performance or execution evidence is transferred.
 
 ## Current integrated-plan handoff
 

@@ -40,7 +40,7 @@ def _directive(head_dim, dtype="f16"):
     return (
         'module {\n'
         '  "tessera_rocm.flash_attn"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        f'head_dim = {head_dim} : i64, arch = "{CHIP}", dtype = "{dtype}"}} : () -> ()\n'
         '}\n'
     )
 
@@ -83,6 +83,8 @@ def _build_hsaco(head_dim: int) -> bytes:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     r = subprocess.run([str(tool), "-", f"--pass-pipeline={_pipeline()}"],
                        input=_directive(head_dim), capture_output=True, text=True)
+    if CHIP == "gfx1201":
+        assert r.returncode == 0 and "gpu.binary" in r.stdout, r.stderr
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         pytest.skip(f"flash_attn serialize unavailable (rc={r.returncode}): "
                     f"{r.stderr[:300]}")
@@ -192,6 +194,8 @@ def test_compiled_flash_attn_matches_numpy(D, B, H, Sq, Sk, causal):
 def test_optimized_gqa_bias_softcap_window_dropout_matches_counter_oracle():
     """The optimized route composes every forward semantic feature and replays
     the scalar carrier's exact deterministic dropout counter."""
+    if tessera_runtime._rocm_live_arch() != "gfx1151":
+        pytest.skip("optimized package remains exact-gfx1151 gated")
     B, Hq, Hkv, Sq, Sk, D = 1, 4, 2, 17, 19, 64
     scale, cap, window, dropout_p, seed = 0.125, 4.0, 8, 0.125, 17
     rng = np.random.default_rng(20260726)

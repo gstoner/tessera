@@ -1,11 +1,151 @@
 ---
-last_updated: 2026-09-12
+last_updated: 2026-09-13
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## PR 747 review follow-through — 2026-09-13
+
+Owner ROCM-2; sync `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`. The shipped attention HIPRTC runtime now captures the current HIP device, specializes from its full architecture string, and caches modules by device/architecture/head dimension. A compiled fake-HIP regression covers mixed architectures, two devices with the same architecture, switching back, and failed device lookup. The mock-device result is not mixed-device hardware proof. The CPU CI test double now accepts and verifies the architecture passed to ROCm device-library selection.
+
+## Saved LSE and sparse Schedule handoff — 2026-09-13
+
+Sync: `GFX1201-SAVED-SPARSE-SCHEDULE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Explicit saved-LSE gfx1201 programs now retain forward O/LSE inside immutable resident attention ownership across repeated cotangents. Auto remains recompute; the new gfx1201_explicit_lse policy does not inherit gfx1151 timing thresholds. Readers delay frame retirement. Registered internal schedule.sparse_mma and tile.sparse_mma now connect the packed f16/bf16 producer to Target SWMMAC and native HSACO; six exact comparisons pass. Public logical sparse Graph capture/package binding and broader formats remain open. Fresh rocprofv3 still has zero kernel/code-object/counter records; calibrated attribution and promotion remain blocked. Positive HIP samples no longer imply selector eligibility.
+
+Evidence: [saved/sparse Schedule packet](../../../../benchmarks/baselines/gfx1201_saved_sparse_schedule_20260913/README.md).
+
+## GFX1201 streams, readers and sparse Target IR — 2026-09-13
+
+Sync: `GFX1201-STREAM-SPARSE-IR-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Private nonblocking HIP streams replace device-wide synchronization for resident attention. Read-only same-device output leases publish and release through events; reuse and retirement wait for all leases, and failed release remains retryable. Two independent gfx1201 owners show overlapping ordered-program event windows in four of five trials. The registered internal `tessera_rocm.swmmac` op verifies f16/bf16 wave32 fragments and lowers through the native Target-to-ROCDL pass; six Target-MLIR-to-HSACO comparisons are exact. Public sparse Schedule/Tile packaging, saved-LSE reuse, general device-reader interfaces, isolated uncertain-teardown recovery and calibrated per-kernel attribution remain open. No performance promotion.
+
+Evidence: [stream/sparse IR packet](../../../../benchmarks/baselines/gfx1201_stream_sparse_ir_20260913/README.md).
+
+## GFX1201 resident ownership and sparse packing — 2026-09-13
+
+Sync: `GFX1201-RESIDENT-SPARSE-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Reusable recompute workspace with queued host submission/retirement passes fp16/bf16 device checks. Dynamic f16 matmul passes three shapes through one image. Sparse fp16/bf16 packing passes six native SWMMAC probe comparisons; production sparse IR integration remains open. Saved-LSE, external device readers, GPU overlap, recovery and promotion remain gated. rocprofv3 records API events but zero dispatch/code-object/counter events.
+
+Evidence: [resident/sparse packet](../../../../benchmarks/baselines/gfx1201_resident_sparse_20260913/README.md).
+
+## GFX1201 public attention AD — 2026-09-13
+
+Sync: `GFX1201-PUBLIC-AD-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Scheduled gfx1201 backward programs and public fp16/bf16 GQA Q/K/V native_backward now execute with exact artifact/device architecture and a recompute-only policy. Unknown architectures and explicit saved-LSE requests refuse. Reusable HIP resident-LSE tapes, sparse SWMMAC packing/index producers, broader matrix envelopes and runtime kernel attribution remain open. No performance promotion.
+
+Evidence: [public AD packet](../../../../benchmarks/baselines/gfx1201_public_attention_ad_20260913/README.md).
+
+## GFX1201 scheduled package integration — 2026-09-13
+
+Sync: `GFX1201-PACKAGES-2026-09-13`; owner E2E-REAL-6 / ROCM-2. Static f16 matmul and f16/bf16 forward-attention scheduled packages now retain gfx1201 through the driver and native image. Fixed half-wave offsets in precomputed fragment addresses and cold-start launcher admission. Twenty device/lineage checks pass. Automatic paired AD, reusable resident-LSE tapes, backward-program admission and sparse SWMMAC remain open. rocprofv3 API tracing runs but has zero kernel-dispatch/code-object records; no attribution or performance promotion.
+
+Evidence: [package packet](../../../../benchmarks/baselines/gfx1201_scheduled_packages_20260913/README.md).
+
+## RDNA4 WMMA datatype audit — 2026-09-13
+
+Sync `GFX1201-WMMA-DTYPES-2026-09-13`.
+
+Owner ROCM-2 / F0 / F2 / DTYPE-CODEGEN. `wmma_dtype_forms` inventories all
+11 dense and 11 sparse RDNA4 signatures against the ISA JSON, without treating
+ISA availability as package admission. Mixed FP8/BF8 A/B storage and intrinsic
+selection, IU4 K16, independent IU signedness, compact f16/bf16 accumulation,
+and malformed BF16 operand refusal are now plumbed through native fragments.
+
+Tajasarus passes 76 comparisons across all 11 dense signatures, signedness
+combinations, padded shapes, finite extremes/subnormals and NaN/Inf cases.
+Native BF16 accumulation differs from f32 rounded once (up to 0.25 in this
+corpus); its declared low-precision rounding bound is checked explicitly.
+The f32/i32 comparisons remain exact. No general package or performance claim.
+
+Still open: sparse SWMMAC index/packing/verifier/producer and device proof;
+general matrix package/Graph consumers; scaled formats and native-Linux
+attribution. gfx1151 keeps FP8/BF8 and K32 integer forms refused. Shared gfx1200
+lowering has compiler evidence only; it does not inherit gfx1201 device proof.
+
+Evidence: [dtype packet](../../../../benchmarks/baselines/gfx1201_wmma_dtypes_20260913/README.md).
+
+## Attention pairing and loading experiment — 2026-09-13
+
+Sync `GFX1201-ATTENTION-PAIR-2026-09-13`.
+
+Owner ROCM-2 / F2 / EVIDENCE-PACKET-1. Scheduled forward/backward packages
+now require native Schedule replay and descriptor projection. The shared
+verifier models ROCm's f32 forward result independently of f16/bf16 inputs.
+General gfx1201 matrix/attention package admission remains closed: neither
+these guards nor automatic public AD may inherit standalone kernel proof.
+
+The gfx1201 forward generator now has the RDNA4 operand/accumulator layout.
+Thirty f16/bf16 tests compare oracle-fed backward, resident forward O/LSE-fed
+backward, and the optional half-fragment-load variant. O, LSE and gradients
+are checked; the resident variants never upload oracle O. Twenty baseline and
+resident cases pass independently on gfx1151 (ten gfx1201-only experiments
+skip). This is direct native composition, not automatic grad/JVP/VJP integration,
+reusable tape lifetime/reader ownership, or asynchronous retirement proof.
+
+ISA-guided predicated fragment loading reconverges before WMMA/barriers, but
+D=64 static VGPR usage rises 119 to 148, with 5312 LDS bytes and eight WMMA
+instructions unchanged. Keep the experiment opt-in. rocprofv3 cannot enumerate
+PC-sampling capabilities because WSL lacks /dev/kfd; static image attribution
+is not kernel timing/counter attribution. Promotion remains refused.
+
+Evidence: [paired attention packet](../../../../benchmarks/baselines/gfx1201_attention_pair_20260913/README.md).
+
+## gfx1201 scheduled integration — 2026-09-13
+
+Owner: ROCM-2; sync `GFX1201-INTEGRATION-2026-09-13` (F0/F2/EVIDENCE-PACKET-1).
+Compiler-owned f32 softmax and interior-axis reduction now package gfx1201
+HSACOs from replay-verified Schedule/Tile artifacts. Architecture, workgroup,
+shape and numerical policy are projected from IR; the cached runtime launcher
+still rejects other gfx1201 ABIs. Matrix/attention scheduled plugins remain
+explicitly gated, and no Graph constructor was deleted.
+
+Standalone native attention backward now has gfx12 operand/accumulator maps.
+Ten f16/bf16 causal/ragged/head-size cases match dQ/dK/dV on Tajasarus;
+the same ten pass on gfx1151. These tests supply forward O from the oracle:
+automatic paired AD, resident forward/LSE, general masks and public packaging
+remain separate missing gates. LLVM 23 inherent kernel properties replace
+legacy discarded attributes in the GEMM, forward/backward attention and unary
+generators, eliminating their duplicate-attribute assertion.
+
+LDS and double-buffered runtime variants pass ten correctness tests. Five fresh
+processes compare three shapes, preserving every run and timer modality. Both
+variants are slower than the conservative register baseline at every shape;
+retain the incumbent. WSL HIP-event checks against wall time are diagnostic,
+not independent clock/counter attribution or production candidate admission.
+
+Princess-Luna's RDNA4 manual matches the archive's source SHA256 exactly.
+Use RDNA4 §7.12.2 for fragment layout, §7.12.1 for WMMA hazards, §11.6.2 for
+load-transpose full-EXEC requirements, and §5.6 for barrier semantics. Next
+optimization: inspect emitted LDS traffic, register occupancy and waits before
+changing the schedule; retain guarded ragged loads, and do not replace them
+with full-wave transpose loads without an interior/tail proof.
+
+Evidence: [integration packet](../../../../benchmarks/baselines/gfx1201_integration_20260913/README.md).
+
+## gfx1201 commissioning — 2026-09-13
+
+Owner: ROCM-2; cross-backend sync `GFX1201-FOUNDATION-2026-09-13`.
+Tajasarus provides an RX 9070 XT (`gfx1201`) under Ubuntu 26.04 WSL2,
+ROCm 10.0. This removes the access blocker for this architecture's correctness
+work, not Radeon AI PRO R9700 board-specific measurements or native-Linux
+profiling. LLVM/MLIR 23.1.1 assertions are enabled; the assertion subprocess
+aborts as required, and Tessera opt/ROCm opt/translate were rebuilt against it.
+
+The portable Tile fragment store had a transposed RDNA4 accumulator mapping.
+The corrected map passes aligned and externally zero-padded matrix comparisons
+for f16/bf16/E4M3/E5M2/int8/int4. HIPRTC GEMM and forward attention now select
+8-element gfx12 operands, gfx12 builtins and the matching output map. The
+conservative 1x1 GEMM tile carries no inherited gfx1151 tuning claim.
+Native storage packages bind `gfx1201` in their serialized digest. The subsequent
+[integration increment](#gfx1201-scheduled-integration--2026-09-13) adds scheduled
+f32 unary and standalone backward proof; matrix/attention package guards and
+constructors remain until architecture-owned migration/proof.
+
+Next: compiler-owned ragged/K-loop GEMM and package/AD admission; tuned
+LDS/pipelined schedules; resident saved-LSE and broader mask/backward proofs. Generic packed/scaled
+matrix formats, sparse matrix instructions and selector-grade timings remain
+open. WSL profiler API receipts are not kernel/counter attribution.
+Evidence: [commissioning packet](../../../../benchmarks/baselines/gfx1201_foundation_20260913/README.md).
 
 ## Current integrated-plan handoff
 
@@ -3126,7 +3266,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-REPLAY-1 | complete on gfx1151 | Persistent state, flush/rollback, block submission, asynchronous ring, lifetime proof, and the wider performance matrix are committed. |
 | ROCM-6 | open revalidation; timing blocked | LLVM/MLIR 23 + ROCm 7.14 correctness is green for G6-A/B/C, but WSL HIP events return invalid zero durations. Existing production choices stay in force pending valid paired device timing. |
 | ROCM-8 | blocked | Bare-metal gfx1151 access is required; WSL characterization cannot close it. |
-| ROCM-1/2/3 | open, access-gated | P0 exact-device execution on gfx950, gfx1201, and gfx1250 is the active release frontier. |
+| ROCM-1/2/3 | open | gfx1201 correctness commissioning now has RX 9070 XT access; gfx950/gfx1250 access and R9700-specific promotion remain gated. |
 | ROCM-4a/4b | open, access-gated | P1 compatibility execution on gfx1200 and gfx942 follows the P0 packet. |
 | ROCM-5 | landing, exact-device closure open | Architecture-owned descriptors and cross-assembly exist; numerical and performance closure depends on ROCM-1 through ROCM-4b. |
 | ROCM-E2E-1 | complete on gfx1151 | The f16/f32 pilot lowers typed Tile IR to `tessera_rocm.softmax`, packages an ELF HSACO and descriptor, executes across the exact-device boundary/aligned/ragged matrix, rejects invalid contracts, retains driver-selected device-library plus cold/warm identity, and passes isolated device and end-to-end non-regression. |
@@ -3150,7 +3290,7 @@ named exact device can satisfy an execution gate.
 |---:|---|---|---|---|
 | 1 | ROCM-COSTMODEL-T1 | Validate T1 reuse/cache pruning on gfx1151; keep step-distance rejected | Strix Halo `gfx1151`; committed retune and hot-path corpus | Rank correlations over the retune corpus and hot-path ratchet establish a retain/reject verdict; failure ends T1 rather than triggering coefficient tuning. |
 | 2 | ROCM-RASTER-1B | Collect promotion evidence for the implemented shared raster contract | bare-metal or profiler-supported Strix Halo `gfx1151`; 24/24 WSL correctness rows already pass | Valid device-event timing and `rocprofv3` MALL/L2 counters establish any architecture-owned raster-order/group decision; row-major remains selected until then. |
-| 3 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 3 | ROCM-2 | Complete gfx1201 packet and separate R9700-specific promotion | RX 9070 XT available on Tajasarus; R9700 reservation still required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
 | 4 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
 | 5 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
 | 6 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |

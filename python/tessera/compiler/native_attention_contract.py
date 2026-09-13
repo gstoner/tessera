@@ -47,7 +47,8 @@ def project_attention_descriptor(artifact, parent) -> None:
     bk, hkv, sk, dk, ks = k
     bv, hv, sv, dv, vs = v
     out = (b, hq, sq, dv, storage)
-    expected_outputs = [q[:-1] + ('f32',), k[:-1] + ('f32',), v[:-1] + ('f32',)] if backward else [out]
+    forward_out = out[:-1] + ('f32',) if artifact.target == 'rocm' else out
+    expected_outputs = [q[:-1] + ('f32',), k[:-1] + ('f32',), v[:-1] + ('f32',)] if backward else [forward_out]
     if (b != bk or b != bv or hkv != hv or sk != sv or d != dk
             or storage != ks or storage != vs or outputs != expected_outputs
             or (backward and inputs[0] != out)

@@ -1,0 +1,10 @@
+Owning host: Tajasarus gfx1201, Ubuntu WSL2, LLVM 23.1.1 assertions enabled.
+Focused device/ownership/registry suite: 322 passed, 1 skipped (tests.txt).
+Audit/governance suite: 25 passed.
+Generated documentation: 30 in sync.
+C++ tessera-opt and tessera-rocm-opt assertions build: passed.
+Sparse Target lowering FileCheck fixture: passed.
+Ruff focused seven Python files: passed.
+Mypy runtime.py, resident_rocm_attention.py, rocm_sparse_packing.py: no issues.
+Sparse numerical comparisons: six exact.
+GPU overlap: four of five ordered-program event windows intersect; clocks uncalibrated; performance ineligible.

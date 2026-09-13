@@ -148,6 +148,10 @@ def test_x86_packages_exact_scheduled_softmax(monkeypatch) -> None:
 
 
 def test_rocm_packages_exact_scheduled_reduction(monkeypatch) -> None:
+    from tessera.compiler import native_unary_contract
+    # Synthetic fixture isolates packaging; real replay/tamper tests live in
+    # test_rocm_gfx1201_scheduled.py.
+    monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
     artifact = _artifact(family="reduce", target="rocm")
 
     def fake_compile(tile_ir: str):
@@ -310,6 +314,9 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, tmp_path, 
             lambda tile_ir, symbol, family: (f"module {{ call @{symbol} }}", b"x86", "compiler", "toolchain"),
         )
     elif target == "rocm_gfx1151":
+        # This synthetic fixture isolates driver lineage; native replay has its own tests.
+        from tessera.compiler import native_unary_contract
+        monkeypatch.setattr(native_unary_contract, "verify_unary_ancestry", lambda *args, **kwargs: None)
         monkeypatch.setattr(
             rocm_native, "_compile_reduction_tile_ir",
             lambda tile_ir: ("target", "backend", b"hsaco", "compiler", "toolchain", (), "cold"),

@@ -545,6 +545,7 @@ def compile_graph_module(
     if bool(options.get("package_native", False)) and target_kind in {
         "x86",
         "rocm_gfx1151",
+        "rocm_gfx1201",
         "nvidia_sm120",
     }:
         from . import scheduled_matmul
@@ -899,7 +900,7 @@ def compile_graph_module(
                 },
             )
         )
-    elif target_kind == "rocm_gfx1151" and bool((options or {}).get("package_native", False)):
+    elif target_kind in {"rocm_gfx1151", "rocm_gfx1201"} and bool((options or {}).get("package_native", False)):
         from . import rocm_native
 
         resolution = target_pipeline_lookup(target_kind)
@@ -964,6 +965,8 @@ def compile_graph_module(
                 rocm_package.backend_ir,
             )
         else:
+            if target_kind == "rocm_gfx1201":
+                raise ValueError("gfx1201 native packaging requires a supported scheduled artifact")
             package_kind = rocm_native.native_package_kind(module)
             rocm_package = rocm_native.package_native(
                 module,

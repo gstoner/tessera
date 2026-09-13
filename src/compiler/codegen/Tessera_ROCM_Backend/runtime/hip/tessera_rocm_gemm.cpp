@@ -340,6 +340,14 @@ bool compileSrc(const std::string& src, const std::string& name,
   return true;
 }
 
+// gfx1201 uses nonduplicated 8-element inputs and row-major accumulator lanes.
+// Keep its initial tile conservative until independent performance promotion.
+bool isGfx1201() {
+  hipDeviceProp_t props{};
+  return hipGetDeviceProperties(&props, 0) == hipSuccess &&
+         std::string(props.gcnArchName).compare(0, 7, "gfx1201") == 0;
+}
+
 // Compile a rung-1 register-blocked variant for (type, wmma builtin, MT, NT).
 bool compileVariant(const char* type, const char* wmma, int mt, int nt,
                     const std::string& name, hipModule_t* outMod,
@@ -349,6 +357,15 @@ bool compileVariant(const char* type, const char* wmma, int mt, int nt,
   src = substitute(src, "%NAME%", name);
   src = substitute(src, "%MT%", std::to_string(mt));
   src = substitute(src, "%NT%", std::to_string(nt));
+  // gfx12 halves input registers and uses contiguous output rows per half-wave.
+  // Keep gfx11 and its measured production tiling unchanged.
+  if (isGfx1201()) {
+    src = substitute(src, "_w32(", "_w32_gfx12(");
+    src = substitute(src, "ext_vector_type(16)", "ext_vector_type(8)");
+    src = substitute(src, "i < 16", "i < 8");
+    src = substitute(src, "k0 + i", "k0 + i + 8 * (l >> 4)");
+    src = substitute(src, "baseRow + mi * 16 + e * 2 + (l >> 4)", "baseRow + mi * 16 + 8 * (l >> 4) + e");
+  }
   return compileSrc(src, name, outMod, outFn);
 }
 
@@ -367,6 +384,19 @@ bool compileVariantKU(const char* type, const char* wmma, int mt, int nt, int ku
 
 // Compile a rung-2 LDS-staged variant for (type, wmma, WM, WN waves, MT, NT
 // register tiles/wave).
+// Staging retains the workgroup barriers; only the wave register layout
+// changes on RDNA4. This does not select either variant for production.
+std::string specializeStagedGfx1201(std::string src) {
+  if (!isGfx1201()) return src;
+  src = substitute(src, "_w32(", "_w32_gfx12(");
+  src = substitute(src, "ext_vector_type(16)", "ext_vector_type(8)");
+  src = substitute(src, "i < 16", "i < 8");
+  src = substitute(src, "i * WG_N + bcol", "(i + 8 * (lane >> 4)) * WG_N + bcol");
+  src = substitute(src, "arow * 16 + i", "arow * 16 + i + 8 * (lane >> 4)");
+  src = substitute(src, "e * 2 + (lane >> 4)", "e + 8 * (lane >> 4)");
+  return src;
+}
+
 bool compileVariantLDS(const char* type, const char* wmma, int wm, int wn,
                        int mt, int nt, const std::string& name,
                        hipModule_t* outMod, hipFunction_t* outFn) {
@@ -377,7 +407,7 @@ bool compileVariantLDS(const char* type, const char* wmma, int wm, int wn,
   src = substitute(src, "%WN%", std::to_string(wn));
   src = substitute(src, "%MT%", std::to_string(mt));
   src = substitute(src, "%NT%", std::to_string(nt));
-  return compileSrc(src, name, outMod, outFn);
+  return compileSrc(specializeStagedGfx1201(src), name, outMod, outFn);
 }
 
 // Compile a rung-3 2-stage software-pipelined (double-buffered LDS) variant.
@@ -391,7 +421,7 @@ bool compileVariantPipe(const char* type, const char* wmma, int wm, int wn,
   src = substitute(src, "%WN%", std::to_string(wn));
   src = substitute(src, "%MT%", std::to_string(mt));
   src = substitute(src, "%NT%", std::to_string(nt));
-  return compileSrc(src, name, outMod, outFn);
+  return compileSrc(specializeStagedGfx1201(src), name, outMod, outFn);
 }
 
 // A shipped GEMM kernel caches its register-blocked variants per (MT,NT) — the
@@ -433,6 +463,7 @@ hipFunction_t prodKernelFor(Kernel* k, int mt, int nt) {
 // tiles/wave) wins on large problems but trails on small ones (the occupancy
 // sweep — STRIX Stage H). Crossover at min(M,N,K) = kBigTileMinDim.
 void prodTile(int M, int N, int K, int* mt, int* nt) {
+  if (isGfx1201()) { *mt = 1; *nt = 1; return; }
   int mn = M < N ? M : N;
   int mnk = mn < K ? mn : K;
   if (mnk >= kBigTileMinDim) { *mt = kBigMT; *nt = kBigNT; }

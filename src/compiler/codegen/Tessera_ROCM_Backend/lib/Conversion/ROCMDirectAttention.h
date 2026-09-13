@@ -9,10 +9,10 @@ namespace mlir::tessera_rocm {
 
 LogicalResult
 materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
-                               OpBuilder &builder);
+                               OpBuilder &builder, StringRef arch);
 
 LogicalResult materializeROCMDirectAttentionBackward(
-    tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder);
+    tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder, StringRef arch);
 
 } // namespace mlir::tessera_rocm
 

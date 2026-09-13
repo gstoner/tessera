@@ -133,7 +133,8 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
-        if self.arch != "gfx1151":
+        if self.arch != "gfx1151" and not (
+                self.arch == "gfx1201" and self.family in {"softmax", "reduction", "matmul", "attention", "attention_backward"}):
             raise ValueError(
                 f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
                 "gfx1200/gfx1250 remain fail-closed pending exact-device evidence"

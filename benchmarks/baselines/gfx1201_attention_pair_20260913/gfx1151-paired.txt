@@ -1,0 +1,4 @@
+..........sssss..........sssss                                           [100%]
+=========================== short test summary info ============================
+SKIPPED [10] ../../../../tmp/test_rocm_paired_wave.py:165: half fragment load experiment requires gfx1201
+20 passed, 10 skipped, 4 deselected in 15.44s

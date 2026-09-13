@@ -230,8 +230,7 @@ struct GenerateROCMSoftmaxKernelPass
       // (X, O : memref<?xstore>, M, K : index)
       auto fnTy = b.getFunctionType({memTy, memTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernel(true); // LLVM 23 inherent property, not legacy gpu.kernel.
       OpBuilder body(gpuFunc.getContext());
       emitSoftmaxBody(body, loc, gpuFunc, storeTy);
       op->erase();

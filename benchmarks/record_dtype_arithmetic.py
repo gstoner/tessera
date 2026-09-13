@@ -209,7 +209,7 @@ def run(args):
                     row['arithmetic_mode'] = 'byte_storage_f32_compute_round_to_fp8'
                     row['input_pairs'] = len(a)
                 package = build_native_gpu_storage(source, compiler=args.compiler, llvm_bin=args.llvm_bin,
-                                                   backend=args.backend, chip='sm_120' if cuda else 'gfx1151', toolkit=toolkit)
+                                                   backend=args.backend, chip=getattr(args, 'chip', None) or ('sm_120' if cuda else 'gfx1151'), toolkit=toolkit)
             except subprocess.CalledProcessError as error:
                 row.update(state='compile_failed', reason=str(error.stderr)[:2200])
                 rows.append(row)
@@ -255,7 +255,7 @@ def run(args):
             rows.append(row)
     if cuda:
         checked(bind('cuDevicePrimaryCtxRelease_v2', '', [ct.c_int])(0))
-    return {'backend': args.backend, 'chip': 'sm_120' if cuda else 'gfx1151',
+    return {'backend': args.backend, 'chip': getattr(args, 'chip', None) or ('sm_120' if cuda else 'gfx1151'),
             'toolchain': provenance,
             'compiler_sha256': hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
             'scope': 'Basic MLIR scalar/vector arithmetic; no public frontend or matrix closure; no performance promotion', 'rows': rows}
@@ -266,6 +266,7 @@ if __name__ == '__main__':
     parser.add_argument('--backend', choices=('nvidia','rocm'), required=True)
     parser.add_argument('--compiler', type=Path, required=True)
     parser.add_argument('--llvm-bin', type=Path, required=True)
+    parser.add_argument('--chip', choices=('sm_120','gfx1151','gfx1201'), help='Exact code-generation target; backend pairing is validated')
     parser.add_argument('--dtypes', default=','.join(DTYPES))
     parser.add_argument('--artifacts', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import tessera as ts
 
@@ -100,9 +101,12 @@ def _matmul(a, b):
     return ts.ops.matmul(a, b)
 
 
-def test_rocm_matmul_backward_is_two_forward_gemm_launches(monkeypatch):
+@pytest.mark.parametrize("architecture", ["gfx1151", "gfx1201"])
+def test_rocm_matmul_backward_is_two_forward_gemm_launches(monkeypatch, architecture):
     import tessera.runtime as runtime
 
+    # This is a binding test: both the launch and its owning device are mocked.
+    monkeypatch.setattr(runtime, "_rocm_live_arch", lambda: architecture)
     calls = []
 
     def fake_launch(artifact, args):
@@ -123,3 +127,16 @@ def test_rocm_matmul_backward_is_two_forward_gemm_launches(monkeypatch):
     assert _matmul.last_backward_execution["implementation"] == (
         "family_plugin_composition"
     )
+
+
+@pytest.mark.parametrize("architecture", [None, "gfx900"])
+def test_rocm_matmul_backward_rejects_unavailable_or_unsupported_device(monkeypatch, architecture):
+    import tessera.runtime as runtime
+    from tessera.compiler.jit import TesseraJitError
+    monkeypatch.setattr(runtime, "_rocm_live_arch", lambda: architecture)
+    def forbidden(*args):
+        pytest.fail("unadmitted device reached a GPU launch")
+    monkeypatch.setattr(runtime, "launch", forbidden)
+    with pytest.raises(TesseraJitError, match="selected supported device"):
+        _matmul.native_backward(np.ones((3, 4), np.float16), np.ones((4, 5), np.float16),
+                                out_cotangents=np.ones((3, 5), np.float16))

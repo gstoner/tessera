@@ -3,10 +3,20 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-09-13
+last_updated: 2026-09-14
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## Logical sparse matrices, reader release and floor migration — 2026-09-13
+
+Owner E2E-REAL-6 / ROCM-2; sync `LOGICAL-SPARSE-OWNERSHIP-FLOOR-2026-09-13`. Shared floor Graph registration preserves the public unary shape/type contract; its new physical Schedule producer is x86-only. Logical sparse packing/accumulation is gfx1201-only and establishes no NVIDIA sparse layout or execution proof. Isolated ANN now carries an explicit CUDA device ordinal into worker context selection and replacement; host IPC tests verify ordinal preservation, confirmed death and fresh health-probe admission. Exact selected-device CUDA execution/recovery remains a follow-up. HIP attention reader futures do not establish CUDA ownership parity.
+
+Evidence: [bounded compiler/device packet](../../../../benchmarks/baselines/sparse_ownership_migration_20260913/README.md).
+
+## Selected HIP device follow-through — 2026-09-13
+
+Owner ROCM-2; sync `HIP-SELECTED-DEVICE-2026-09-13`. Shared runtime change assessed: selected-device discovery and GEMM specialization are HIP-only. No nvidia ABI, device execution or numerical policy change; no sibling execution proof is inferred.
 
 ## PR 747 review follow-through — 2026-09-13
 
@@ -7467,3 +7477,75 @@ Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
 Parity validated on owning SM120 with CUDA 13.4.1: two B=2 ragged causal/GQA/window attention buckets use compact batch/head broadcast bias and match the oracle. The v2 f32 host ABI carries BiasB/BiasH and copies only physical bias storage; kernel logical dimensions remain unchanged. Follow-up required: query/key broadcast, Boolean/padding masks, wider storage and clean performance admission. The Apple-specific denormal carrier fails closed in generic CUDA storage.
 
 Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.
+
+## Sparse runtime and isolated attention — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-RESIDENT-2026-09-14`.
+
+Follow-up required for CUDA resident attention composition and isolated recovery. Shared process-boundary refactoring retains existing isolated ANN semantics; host tests are not CUDA recovery proof. RDNA4 sparse formats and HIP execution evidence do not transfer to NVIDIA. Registered ceil Graph contract does not change NVIDIA packaging.
+
+Evidence: [bounded validation](../../../../benchmarks/baselines/sparse_runtime_20260914/README.md). No performance promotion; general Graph sparse capture, additional packing formats and actual driver-hang recovery remain open.
+
+## Sparse capture, byte formats and scan — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-CAPTURE-2026-09-14`.
+
+Follow-up required for CUDA public AD composition and isolated admission. RDNA4 sparse byte packing and HIP execution do not confer NVIDIA sparse support; shared cumsum registration changes no NVIDIA package route.
+
+[Evidence](../../../../benchmarks/baselines/sparse_capture_20260914/README.md). Actual driver-hang recovery and calibrated promotion remain open.
+
+### 2026-09-14 — Mixed sparse operands
+
+Sync key: `SPARSE-MIXED-2026-09-14`; owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+
+Sparse package identity now includes B storage. Schedule/Tile/Target preserve independent integer signs and mixed FP8 types through native lowering. Not applicable to nvidia physical lowering: these SWMMAC contracts are gfx1201-only. No sibling device or performance evidence transfers. Automatic selection/native Graph lowering, INT4, general AD and actual driver-hang recovery remain separate work.
+
+### 2026-09-14 — INT4 logical packing
+
+Sync `SPARSE-INT4-2026-09-14`, owner E2E-REAL-6. Shared sparse IR carries a verified 4/8-bit integer interpretation; byte storage is range-checked and native lowering packs nibbles. Not applicable to nvidia execution: this physical lowering targets gfx1201 only. No sibling support or device proof is inferred. Logical AD must precede packing; automatic sparse selection/native Graph lowering and general AD remain open.
+
+### 2026-09-14 — Native sparse Graph and logical AD
+
+Sync `SPARSE-GRAPH-AD-2026-09-14`; owner E2E-REAL-6. C++ now owns declared checked-2:4 half Graph lowering and the emitted ABI. AD remains on logical matrices, with operand-order/repeated-edge correctness fixes. Not applicable to nvidia physical execution: no sparse consumer changes on this backend. Shared AD/IR contracts confer no sibling device proof.
+
+### 2026-09-14 — Automatic native sparse selection
+
+Sync `SPARSE-AUTO-2026-09-14`; owner E2E-REAL-6. The explicit auto_2to4 Graph policy selects per K tile using wave-uniform agreement, with a native dense branch. Not applicable to nvidia execution: only gfx1201 emits this policy; no sibling schedule is transferred. Default promotion, broader regions and arbitrary AD remain open; no measured speedup claimed.
+
+
+### Native composed HVP execution — 2026-09-14
+
+Sync: `AD-HVP-2026-09-14`; owner: AD-HIGHER-1 / W4-PRODUCT-1.
+Shared changes: tracer-to-SCF counted regions, scalar extraction tangents, passive
+comparison predicates, signature-owned CPU outputs and ownership-clone lowering.
+Follow-up required: CUDA higher-order package binding and exact SM120 execution remain open.
+
+
+### Saved-product HVP and GPU export — 2026-09-14
+
+Sync: `AD-HVP-SAVE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Shared compiler captures continuous residual tangents; typed export reuses GPU
+tape lowering without rebuilding derivative formulas in Python.
+Bounded CUDA execution is now covered by the AD-HVP-DEVICE follow-through below; broader products remain open.
+
+Shared follow-through: native GPU tape copies require bounded extents even when
+source and destination use identical shape SSA. Constant-bounded views remain
+admitted; unbounded loaded sizes refuse. This changes CUDA/HIP admission; Apple
+and x86 do not consume that GPU pass.
+
+
+### HVP product identity and device breadth — 2026-09-14
+
+Sync `AD-HVP-DEVICE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Parity validated on Super-Bear RTX 5070 / SM120: composed cubic and counted-loop
+HVPs execute for rank-one and rank-two inputs, checking gradients and curvature
+at numerical zero as well as nonzero inputs. The test verifies the current
+CUDA context architecture and retires that context after buffers and bindings.
+`test_native_hvp_execution.py`: 7 passed, 10 skipped; four passing cases are
+CUDA device executions. WSL2, CUDA compiler 13.4.59, assertions LLVM 23.1.1;
+Ubuntu clang 23.1.1 compiles the host sizing helper because the assertions
+bundle lacks clang. The isolated source build uses LLVM's matching -fno-rtti.
+Super-Bear main remains clean at origin/main; validation used /tmp/tessera-ad-wave.
+Export now selects products generated by the pass, not arbitrary __hvp symbols.
+Effectful CFG, dynamic outputs, higher orders and asynchronous HVP frames remain
+open. No performance promotion or Metal/gfx1151 execution is inferred.

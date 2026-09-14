@@ -1,11 +1,21 @@
 ---
-last_updated: 2026-09-13
+last_updated: 2026-09-14
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## Logical sparse matrices, reader release and floor migration — 2026-09-13
+
+Owner E2E-REAL-6 / ROCM-2; sync `LOGICAL-SPARSE-OWNERSHIP-FLOOR-2026-09-13`. Logical row-major f16/bf16 matrices now enter an internal sparse Schedule producer whose compiled GPU code packs values/indices, loops over K, and reports invalid 2:4 groups per lane. gfx1201 verifies six dtype/shape cases through 48x32x128, with exact outputs and emitted SWMMAC instructions. This is not public Graph sparse admission or a production runtime package: consuming validity words, descriptor projection and uncertain teardown ownership remain prerequisites. Reader release now has a non-cancellable asynchronous future; failures retain retryable leases. Four gfx1201 checks verify external-copy retirement under saved/recompute and synchronous/asynchronous release, rejecting device-wide synchronization. Isolated ANN replacement preserves an explicit device ordinal and requires confirmed process death plus fresh numerical health probes; new ordinal/retry tests are host IPC evidence, not gfx1201 recovery proof. Additional sparse formats, mixed-precision cotangents, general public tape composition and calibrated profiling remain open.
+
+Evidence: [bounded compiler/device packet](../../../../benchmarks/baselines/sparse_ownership_migration_20260913/README.md).
+
+## Selected HIP device follow-through — 2026-09-13
+
+Owner ROCM-2; sync `HIP-SELECTED-DEVICE-2026-09-13`. Python live architecture now queries hipGetDevice plus versioned HIP properties on the selected thread device, with no enumerator fallback. GEMM source specialization and HIPRTC compilation query that device; production cache keys include device, full architecture and tile dimensions. Mixed-device behavior is exercised through a compiled fake-HIP regression; real gfx1201 GEMM and resident attention validation remain distinct from mixed-device hardware proof.
 
 ## PR 747 review follow-through — 2026-09-13
 
@@ -7818,3 +7828,67 @@ Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
 Shared-contract assessment: the generic HIP storage builder refuses the currently unconsumed explicit denormal carrier. Follow-up required: a native ROCm numerical-policy consumer and broadcast attention storage/ABI lowering; SM120/Metal proofs do not transfer. The owning Zen 5 absolute comparison is CPU evidence only.
 
 Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.
+
+## Sparse runtime and isolated attention — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-RESIDENT-2026-09-14`.
+
+gfx1201: eight explicit sparse runtime cases pass with f32 or matching f16/bf16 accumulation, two matrix shapes through 64x48x128, and invalid-group rejection. Direct attention lowering now preserves paired saved LSE; seven isolated/reuse tests pass, including zero-first cotangents, worker termination and fresh replacement. Host-future composition and lossless mixed-precision cotangent conversion are bounded interfaces. gfx1151 requires separate device follow-up; sparse SWMMAC is RDNA4-only.
+
+Evidence: [bounded validation](../../../../benchmarks/baselines/sparse_runtime_20260914/README.md). No performance promotion; general Graph sparse capture, additional packing formats and actual driver-hang recovery remain open.
+
+## Sparse capture, byte formats and scan — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-CAPTURE-2026-09-14`.
+
+gfx1201 now executes signed i8/i32 and same-format FP8 sparse kernels with native byte packing and all six index pairs. Explicit JIT sparse capture preserves source output storage; ordinary dispatch remains unchanged. Wider cotangents reach public attention AD only when exactly representable. Zero/nonzero workload probes guard isolated admission. gfx1151 does not support SWMMAC and needs its own attention checks.
+
+[Evidence](../../../../benchmarks/baselines/sparse_capture_20260914/README.md). Actual driver-hang recovery and calibrated promotion remain open.
+
+### 2026-09-14 — Mixed sparse operands
+
+Sync key: `SPARSE-MIXED-2026-09-14`; owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+
+Sparse package identity now includes B storage. Schedule/Tile/Target preserve independent integer signs and mixed FP8 types through native lowering. Follow-up required: gfx1201 owns mixed FP8 and signed/unsigned sparse execution; gfx1151 does not inherit SWMMAC admission. Automatic selection/native Graph lowering, INT4, general AD and actual driver-hang recovery remain separate work.
+
+### 2026-09-14 — INT4 logical packing
+
+Sync `SPARSE-INT4-2026-09-14`, owner E2E-REAL-6. Shared sparse IR carries a verified 4/8-bit integer interpretation; byte storage is range-checked and native lowering packs nibbles. gfx1201 validates all four signedness pairs at K=64 using repeated K=32 instructions. gfx1151 is not applicable to SWMMAC; broader envelopes and promotion require follow-up. Logical AD must precede packing; automatic sparse selection/native Graph lowering and general AD remain open.
+
+### 2026-09-14 — Native sparse Graph and logical AD
+
+Sync `SPARSE-GRAPH-AD-2026-09-14`; owner E2E-REAL-6. C++ now owns declared checked-2:4 half Graph lowering and the emitted ABI. AD remains on logical matrices, with operand-order/repeated-edge correctness fixes. gfx1201 owns forward and backward numerical checks; gfx1151 parity requires its own follow-up. Default sparse selection and arbitrary AD remain open.
+
+### 2026-09-14 — Automatic native sparse selection
+
+Sync `SPARSE-AUTO-2026-09-14`; owner E2E-REAL-6. The explicit auto_2to4 Graph policy selects per K tile using wave-uniform agreement, with a native dense branch. gfx1201 owns fp16/bf16 density-change and mixed-tile checks. gfx1151 does not support SWMMAC and receives no admission. Default promotion, broader regions and arbitrary AD remain open; no measured speedup claimed.
+
+
+### Native composed HVP execution — 2026-09-14
+
+Sync: `AD-HVP-2026-09-14`; owner: AD-HIGHER-1 / W4-PRODUCT-1.
+Shared changes: tracer-to-SCF counted regions, scalar extraction tangents, passive
+comparison predicates, signature-owned CPU outputs and ownership-clone lowering.
+Follow-up required: HIP higher-order package binding remains open. Princess-Luna CPU execution is not gfx1151 evidence. Tajasarus assertions compiler can transform the product but its CPU ExecutionEngine archive is absent.
+
+
+### Saved-product HVP and GPU export — 2026-09-14
+
+Sync: `AD-HVP-SAVE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Shared compiler captures continuous residual tangents; typed export reuses GPU
+tape lowering without rebuilding derivative formulas in Python.
+gfx1201 validates composed cubic and counted-loop resident HVPs. gfx1151 needs its own GPU evidence. Static serial execution only; no performance promotion.
+
+Shared follow-through: native GPU tape copies require bounded extents even when
+source and destination use identical shape SSA. Constant-bounded views remain
+admitted; unbounded loaded sizes refuse. This changes CUDA/HIP admission; Apple
+and x86 do not consume that GPU pass.
+
+
+### HVP product identity and device breadth — 2026-09-14
+
+Sync `AD-HVP-DEVICE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Export selects only products generated by the current pass, not symbol suffixes.
+Parity validated on gfx1201: composed cubic and counted-loop HVPs execute for rank-one and rank-two inputs. gfx1151 GPU execution remains a separate gate.
+No performance promotion. Effectful CFG, dynamic outputs and higher derivative
+orders remain with the scoped AD execution plan.

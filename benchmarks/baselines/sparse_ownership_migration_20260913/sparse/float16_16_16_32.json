@@ -1,0 +1,17 @@
+{
+  "target": "gfx1201",
+  "shape": [
+    16,
+    16,
+    32
+  ],
+  "dtype": "float16",
+  "source_sha256": "03a2aae1eba8eb80572a2f140e03f1756b7a12d6cc58145e46aeaeb0e61f8f38",
+  "image_sha256": "cd1279b53af4b5926976561468bdc743f735534b5767d06d08489c42e53c0ca0",
+  "compiler_sha256": "e54e91d5b2551d550b443906da09bf5ecb1ea728927443273b8b3ad8dc9e757e",
+  "max_abs_error": 0.0,
+  "invalid_group_rejected": true,
+  "packing": "logical_row_major_to_SWMMAC_in_compiled_IR",
+  "production_admission": false,
+  "performance_eligible": false
+}

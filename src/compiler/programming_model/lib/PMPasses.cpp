@@ -25,6 +25,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -57,6 +58,7 @@ namespace tessera {
 #include "NativePagedKV.h"
 #include "NativeSSD.h"
 #include "NativeAbsolute.h"
+#include "NativeSparse.h"
 
 // ---------------------------------------------------------------------------
 // Dialect registration
@@ -1896,11 +1898,16 @@ struct GraphToSchedulePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<schedule::ScheduleDialect>();
+    registry.insert<schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect,
+                    scf::SCFDialect, memref::MemRefDialect, vector::VectorDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    if (mod->hasAttr("tessera.sparse_policy")) {
+      if (failed(scheduleNativeSparse(mod))) signalPassFailure();
+      return;
+    }
     OpBuilder builder(mod.getContext());
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeCheckpoints(mod))) return signalPassFailure();

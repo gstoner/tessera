@@ -3,10 +3,20 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-13
+last_updated: 2026-09-14
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## Logical sparse matrices, reader release and floor migration — 2026-09-13
+
+Owner E2E-REAL-6 / ROCM-2; sync `LOGICAL-SPARSE-OWNERSHIP-FLOOR-2026-09-13`. Shared floor Graph registration preserves unary shape/type equality; its new physical consumer is x86-only. The logical sparse GPU producer and asynchronous attention reader release are HIP/gfx1201-specific, and process-isolated ANN device selection is CUDA/HIP-only. No MSL, Metal ABI or Apple execution policy changes; no sparse, recovery or performance proof transfers to Apple.
+
+Evidence: [bounded compiler/device packet](../../../../benchmarks/baselines/sparse_ownership_migration_20260913/README.md).
+
+## Selected HIP device follow-through — 2026-09-13
+
+Owner ROCM-2; sync `HIP-SELECTED-DEVICE-2026-09-13`. Shared runtime change assessed: selected-device discovery and GEMM specialization are HIP-only. No apple ABI, device execution or numerical policy change; no sibling execution proof is inferred.
 
 ## PR 747 review follow-through — 2026-09-13
 
@@ -8756,3 +8766,67 @@ Sync `NUMPOL-CARRIER-1` / `E2E-REAL-6` / `FRONTEND-IR-MEDIUM-1`.
 Parity validated on owning M1 Max: explicit gradual and FTZ f32 add/sub/mul/div each pass 133,376 input pairs per operation. The compiler emits integer-significand arithmetic with ties-to-even packing; FTZ wraps that same core. Other floating operations and fast-math overrides refuse explicit policy. Follow-up required: vector/dtype/math consumers and performance calibration. The x86 absolute and NVIDIA mask proofs do not transfer to Apple.
 
 Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.
+
+## Sparse runtime and isolated attention — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-RESIDENT-2026-09-14`.
+
+Follow-up required for equivalent future/reader and isolated recovery integration. HIP selected-device, saved-LSE and SWMMAC execution evidence does not transfer to Metal. Shared sparse verifier extensions declare matching low-precision accumulation; no Apple sparse consumer is admitted. Registered ceil Graph contract does not change Apple packaging.
+
+Evidence: [bounded validation](../../../../benchmarks/baselines/sparse_runtime_20260914/README.md). No performance promotion; general Graph sparse capture, additional packing formats and actual driver-hang recovery remain open.
+
+## Sparse capture, byte formats and scan — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-CAPTURE-2026-09-14`.
+
+Follow-up required for Metal public AD composition and isolated admission. No Metal sparse consumer or execution change; shared byte-format sparse verifier additions and cumsum registration do not confer Apple support.
+
+[Evidence](../../../../benchmarks/baselines/sparse_capture_20260914/README.md). Actual driver-hang recovery and calibrated promotion remain open.
+
+### 2026-09-14 — Mixed sparse operands
+
+Sync key: `SPARSE-MIXED-2026-09-14`; owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+
+Sparse package identity now includes B storage. Schedule/Tile/Target preserve independent integer signs and mixed FP8 types through native lowering. Not applicable to apple physical lowering: these SWMMAC contracts are gfx1201-only. No sibling device or performance evidence transfers. Automatic selection/native Graph lowering, INT4, general AD and actual driver-hang recovery remain separate work.
+
+### 2026-09-14 — INT4 logical packing
+
+Sync `SPARSE-INT4-2026-09-14`, owner E2E-REAL-6. Shared sparse IR carries a verified 4/8-bit integer interpretation; byte storage is range-checked and native lowering packs nibbles. Not applicable to apple execution: this physical lowering targets gfx1201 only. No sibling support or device proof is inferred. Logical AD must precede packing; automatic sparse selection/native Graph lowering and general AD remain open.
+
+### 2026-09-14 — Native sparse Graph and logical AD
+
+Sync `SPARSE-GRAPH-AD-2026-09-14`; owner E2E-REAL-6. C++ now owns declared checked-2:4 half Graph lowering and the emitted ABI. AD remains on logical matrices, with operand-order/repeated-edge correctness fixes. Not applicable to apple physical execution: no sparse consumer changes on this backend. Shared AD/IR contracts confer no sibling device proof.
+
+### 2026-09-14 — Automatic native sparse selection
+
+Sync `SPARSE-AUTO-2026-09-14`; owner E2E-REAL-6. The explicit auto_2to4 Graph policy selects per K tile using wave-uniform agreement, with a native dense branch. Not applicable to apple execution: only gfx1201 emits this policy; no sibling schedule is transferred. Default promotion, broader regions and arbitrary AD remain open; no measured speedup claimed.
+
+
+### Native composed HVP execution — 2026-09-14
+
+Sync: `AD-HVP-2026-09-14`; owner: AD-HIGHER-1 / W4-PRODUCT-1.
+Shared changes: tracer-to-SCF counted regions, scalar extraction tangents, passive
+comparison predicates, signature-owned CPU outputs and ownership-clone lowering.
+Follow-up required: Metal higher-order package binding is not proven by CPU execution.
+
+
+### Saved-product HVP and GPU export — 2026-09-14
+
+Sync: `AD-HVP-SAVE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Shared compiler captures continuous residual tangents; typed export reuses GPU
+tape lowering without rebuilding derivative formulas in Python.
+Follow-up required: no Metal HVP binding; CPU/HIP evidence does not transfer.
+
+Shared follow-through: native GPU tape copies require bounded extents even when
+source and destination use identical shape SSA. Constant-bounded views remain
+admitted; unbounded loaded sizes refuse. This changes CUDA/HIP admission; Apple
+and x86 do not consume that GPU pass.
+
+
+### HVP product identity and device breadth — 2026-09-14
+
+Sync `AD-HVP-DEVICE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Export selects only products generated by the current pass, not symbol suffixes.
+Follow-up required: this CUDA/HIP HVP binding does not emit Metal; no Apple device evidence is inferred.
+No performance promotion. Effectful CFG, dynamic outputs and higher derivative
+orders remain with the scoped AD execution plan.

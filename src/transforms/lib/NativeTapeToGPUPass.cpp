@@ -564,6 +564,16 @@ struct NativeTapeToGPUPass : mlir::PassWrapper<NativeTapeToGPUPass, mlir::Operat
           auto a=logicalShape(copy.getSource()), b=logicalShape(copy.getTarget());
           if (!a || !b || a->size()!=b->size()) bad=true;
           else for (auto [left,right]:llvm::zip(*a,*b)) {
+            // Equal SSA extents establish shape agreement, not a finite loop
+            // bound. An untrusted loaded size must not bypass the range proof
+            // merely because source and destination use the same view.
+            for (auto extent : {left, right}) {
+              if (auto value = dyn_cast<Value>(extent)) {
+                auto bounds = range(value, 0);
+                if (!bounds || bounds->first < 0 || bounds->second > 1024)
+                  bad = true;
+              }
+            }
             if (left==right) continue;
             auto lhs=dyn_cast<Value>(left), rhs=dyn_cast<Value>(right);
             bool proved=false;

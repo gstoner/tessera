@@ -152,6 +152,10 @@ class RegionTangentBuilder {
     }
     current_ = saved;
 
+    // Predicates select the primal path; comparisons have no continuous
+    // tangent and must not make an integer/bool result active.
+    if (mlir::isa<mlir::arith::CmpFOp, mlir::arith::CmpIOp>(primal))
+      active = false;
     llvm::SmallVector<mlir::Value> resultTangents;
     if (active) {
       if (!isAllowedStochasticTangent(primal)) {
@@ -161,10 +165,10 @@ class RegionTangentBuilder {
             "operation");
         return mlir::failure();
       }
-      if (mlir::isa<mlir::tensor::ExtractSliceOp,
+      if (mlir::isa<mlir::tensor::ExtractOp, mlir::tensor::ExtractSliceOp,
                     mlir::tensor::InsertSliceOp>(primal)) {
         llvm::SmallVector<mlir::Value> operands(primal->getOperands());
-        if (mlir::isa<mlir::tensor::ExtractSliceOp>(primal)) {
+        if (mlir::isa<mlir::tensor::ExtractOp, mlir::tensor::ExtractSliceOp>(primal)) {
           if (inputTangents.empty() || !inputTangents[0])
             return mlir::failure();
           operands[0] = inputTangents[0];
@@ -509,6 +513,7 @@ class AutodiffForwardPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffForwardPass)
   AutodiffForwardPass() = default;
   AutodiffForwardPass(const AutodiffForwardPass &other) : PassWrapper(other) {}
+  mlir::Pass::Option<bool> exportHVP{*this, "export-hvp", llvm::cl::desc("Export the exact native HVP product and its typed ABI"), llvm::cl::init(false)};
   mlir::Pass::Option<bool> exportAttentionJVP{*this, "export-attention-jvp",
       llvm::cl::desc("Export a verified isolated attention JVP physical binding contract"), llvm::cl::init(false)};
   mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
@@ -531,6 +536,7 @@ class AutodiffForwardPass
   void runOnOperation() override {
     mlir::ModuleOp module = getOperation();
     llvm::SmallVector<mlir::func::FuncOp> forwards;
+    llvm::SmallVector<mlir::func::FuncOp> emittedHVPs;
     module.walk([&](mlir::func::FuncOp func) {
       auto mode = func->getAttrOfType<mlir::StringAttr>("tessera.autodiff");
       if (mode && mode.getValue() == "forward")
@@ -706,6 +712,111 @@ class AutodiffForwardPass
       module.push_back(jvp);
       forward->setAttr("tessera.autodiff.jvp",
                        mlir::FlatSymbolRefAttr::get(&getContext(), jvpName));
+      // Export a tensor-only native HVP entry. Saved branch predicates must
+      // be produced by the same primal execution, never supplied by Python.
+      if (auto parentRef = forward->getAttrOfType<mlir::FlatSymbolRefAttr>(
+              "tessera.autodiff.hvp_parent")) {
+        auto parent = module.lookupSymbol<mlir::func::FuncOp>(parentRef.getValue());
+        if (!parent || parent.isDeclaration() || !parent.getBody().hasOneBlock()) {
+          forward.emitError("native HVP export requires a defined single-block parent");
+          return signalPassFailure();
+        }
+        auto sources = parent->getAttrOfType<mlir::ArrayAttr>("tessera.autodiff.residual_sources");
+        unsigned residuals = sources ? sources.size() : 0;
+        unsigned primals = parent.getNumArguments();
+        if (residuals > parent.getNumResults() ||
+            forward.getNumArguments() != primals + parent.getNumResults()) {
+          parent.emitError("native HVP residual ABI disagrees with its forward parent");
+          return signalPassFailure();
+        }
+        unsigned outputs = parent.getNumResults() - residuals;
+        llvm::SmallVector<mlir::Type> types(parent.getArgumentTypes());
+        types.append(parent.getResultTypes().begin(), parent.getResultTypes().begin() + outputs);
+        for (unsigned i : wrtIndices)
+          if (i < primals) types.push_back(forward.getArgumentTypes()[i]);
+        std::string name = (parent.getName() + "__hvp").str();
+        if (module.lookupSymbol(name)) {
+          parent.emitError("native HVP entry symbol already exists");
+          return signalPassFailure();
+        }
+        auto entry = mlir::func::FuncOp::create(parent.getLoc(), name,
+            mlir::FunctionType::get(&getContext(), types, jvp.getResultTypes()));
+        auto *block = entry.addEntryBlock();
+        mlir::OpBuilder emit(block, block->begin());
+        ForwardState capture;
+        unsigned direction = primals + outputs;
+        for (unsigned i = 0; i < primals; ++i)
+          capture.primals.map(parent.getArgument(i), block->getArgument(i));
+        for (unsigned i : wrtIndices) {
+          if (i >= primals) continue;
+          capture.tangents[parent.getArgument(i)] = block->getArgument(direction++);
+          capture.active.insert(parent.getArgument(i));
+        }
+        if (residuals) {
+          RegionTangentBuilder captureBuilder;
+          for (auto &op : parent.getBody().front().without_terminator())
+            if (mlir::failed(captureBuilder.buildOperation(op, emit, capture)))
+              return signalPassFailure();
+        }
+        mlir::IRMapping mapping;
+        for (unsigned i = 0; i < primals + outputs; ++i)
+          mapping.map(jvp.getArgument(i), block->getArgument(i));
+        auto *ret = parent.getBody().front().getTerminator();
+        for (unsigned i = 0; i < residuals; ++i)
+          mapping.map(jvp.getArgument(primals + outputs + i),
+                      capture.primals.lookup(ret->getOperand(outputs + i)));
+        for (auto [ordinal, i] : llvm::enumerate(wrtIndices)) {
+          mlir::Value tangent;
+          if (i < primals) {
+            tangent = capture.tangents.lookup(parent.getArgument(i));
+          } else {
+            unsigned residual = i - primals - outputs;
+            auto value = ret->getOperand(outputs + residual);
+            tangent = capture.tangents.lookup(value);
+            if (!tangent) tangent = buildStaticZero(emit, parent.getLoc(), value.getType());
+          }
+          if (!tangent) {
+            parent.emitError("native HVP cannot capture a saved-product tangent");
+            return signalPassFailure();
+          }
+          mapping.map(jvp.getArgument(forward.getNumArguments() + ordinal), tangent);
+        }
+        for (auto &op : jvp.getBody().front()) emit.clone(op, mapping);
+        module.push_back(entry);
+        emittedHVPs.push_back(entry);
+      }
+    }
+    if (exportHVP) {
+      mlir::func::FuncOp selected;
+      // Export only products constructed by this invocation. A symbol suffix
+      // is not proof that a function came from HVP differentiation.
+      for (auto fn : emittedHVPs) {
+        if (selected) {
+          module.emitError("native HVP export requires exactly one product");
+          return signalPassFailure();
+        }
+        selected = fn;
+      }
+      if (!selected) {
+        module.emitError("native HVP export requires an HVP preparation pass");
+        return signalPassFailure();
+      }
+      std::string lineage; llvm::raw_string_ostream os(lineage); module.print(os); os.flush();
+      auto typeText=[](mlir::Type t) { std::string s; llvm::raw_string_ostream out(s); t.print(out); out.flush(); return s; };
+      llvm::json::Array inputs, results;
+      for (auto t : selected.getArgumentTypes()) inputs.push_back(typeText(t));
+      for (auto t : selected.getResultTypes()) results.push_back(typeText(t));
+      llvm::json::Object abi{{"schema",1},{"role","hvp"},{"entry",selected.getName().str()},
+                            {"inputs",std::move(inputs)},{"results",std::move(results)}};
+      std::string json; llvm::raw_string_ostream out(json); out << llvm::json::Value(std::move(abi)); out.flush();
+      llvm::SmallVector<mlir::func::FuncOp> dead;
+      for (auto fn : module.getOps<mlir::func::FuncOp>()) if (fn != selected) dead.push_back(fn);
+      for (auto fn : dead) fn.erase();
+      mlir::Builder b(module.getContext());
+      for (unsigned i = 0; i < selected.getNumArguments(); ++i)
+        selected.setArgAttr(i, "bufferization.writable", b.getBoolAttr(false));
+      module->setAttr("tessera.autodiff.product_abi", b.getStringAttr(json));
+      module->setAttr("tessera.autodiff.product_pair", b.getStringAttr(lineage));
     }
     if (exportAttentionJVP) {
       llvm::SmallVector<mlir::Operation *> products;
@@ -793,6 +904,21 @@ class AutodiffHvpPreparePass
         forward.emitError(
             "tessera-autodiff-hvp-prepare: no differentiable primal arguments");
         return signalPassFailure();
+      }
+
+      // Saved continuous products depend on primals. Differentiate the
+      // backward with respect to them as well; the native entry captures their
+      // tangents from the same forward execution. Cotangent seeds stay fixed.
+      auto sources = forward->getAttrOfType<mlir::ArrayAttr>("tessera.autodiff.residual_sources");
+      unsigned residuals = sources ? sources.size() : 0;
+      if (residuals > forward.getNumResults()) {
+        forward.emitError("HVP saved-product arity is invalid");
+        return signalPassFailure();
+      }
+      unsigned first = forward.getNumArguments() + forward.getNumResults() - residuals;
+      for (unsigned i = first; i < backward.getNumArguments(); ++i) {
+        if (carriesDifferentiableTangent(backward.getArgument(i)))
+          wrt.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(&getContext(), 64), i));
       }
 
       backward->setAttr("tessera.autodiff",

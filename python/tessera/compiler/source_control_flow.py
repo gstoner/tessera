@@ -921,9 +921,10 @@ def to_native_source_ir(traced, *, name='source_program', autodiff=None):
             types.update(zip(op.result_names, result_types))
             if op.kwargs.get('_region') == 'if':
                 collect(op.kwargs['_then_body']); collect(op.kwargs['_else_body'])
-            elif op.kwargs.get('_region') == 'while':
+            elif op.kwargs.get('_region') in ('while', 'for'):
                 types[op.kwargs['_carry_ssa']] = op.operand_types[0]
-                collect(op.kwargs['_body']); collect(op.kwargs['_cond'])
+                collect(op.kwargs['_body'])
+                if op.kwargs.get('_region') == 'while': collect(op.kwargs['_cond'])
     collect(traced.body)
     count = [0]
     def fresh():
@@ -954,6 +955,18 @@ def to_native_source_ir(traced, *, name='source_program', autodiff=None):
                     outputs = kw[f'_{side}_ssas']
                     lines.append(f'{indent}  scf.yield '+', '.join('%'+v for v in outputs)+' : '+result_types)
                 lines.append(f'{indent}}}')
+            elif kw.get('_region') == 'for':
+                trip = kw['_trip']
+                if type(trip) is not int or trip < 0:
+                    raise SourceControlFlowError('native for requires a nonnegative integer trip count')
+                carry, ty = kw['_carry_ssa'], types[op.result]
+                zero, limit, step, iv = fresh(), fresh(), fresh(), fresh()
+                lines.extend([f'{indent}{zero} = arith.constant 0 : index',
+                              f'{indent}{limit} = arith.constant {trip} : index',
+                              f'{indent}{step} = arith.constant 1 : index',
+                              f'{indent}%{op.result} = scf.for {iv} = {zero} to {limit} step {step} iter_args(%{carry} = {op.operands[0]}) -> ({ty}) {{'])
+                lines.extend(emit(kw['_body'], indent+'  '))
+                lines.extend([f'{indent}  scf.yield %{kw["_next_ssa"]} : {ty}', f'{indent}}}'])
             elif kw.get('_region') == 'while':
                 carry, ty = kw['_carry_ssa'], types[op.result]
                 zero, limit, iteration, final_iteration = fresh(), fresh(), fresh(), fresh()
@@ -1036,3 +1049,39 @@ def to_native_source_ir(traced, *, name='source_program', autodiff=None):
     lines = ['module attributes {'+attributes+'} {', f'  func.func @{name}({args}) -> {signature}{function_attrs} {{', *emit(traced.body, '    '),
              '    return '+', '.join('%'+ssa for ssa in traced.outputs)+' : '+outputs, '  }', '}']
     return '\n'.join(lines)+'\n'
+
+
+def to_native_autodiff_ir(module):
+    """Project an owned Graph module's nested trace regions into native SCF.
+
+    Preserve argument, function and module contracts while reusing the source
+    serializer. No source re-execution and no derivative recipes live here.
+    """
+    from .trace import TracedFunction
+    if len(module.functions) != 1:
+        raise SourceControlFlowError('native region AD requires one source function')
+    fn = module.functions[0]
+    if (module.module_attrs.get('tessera.frontend.authority') or
+            fn.fn_attrs.get('tessera.frontend.authority')) != '"tracer"':
+        raise SourceControlFlowError('native region AD requires tracer-owned source')
+    verification = module.verify()
+    if not verification.ok:
+        raise SourceControlFlowError(verification.format())
+    args = []
+    for arg in fn.args:
+        shape = arg.ir_type.shape
+        if shape is None or any(not str(d).isdigit() for d in shape):
+            raise SourceControlFlowError('native region AD requires static tensor arguments')
+        args.append((arg.name.lstrip('%'), tuple(int(d) for d in shape), arg.ir_type.dtype))
+    traced = TracedFunction(args, fn.body, [v.lstrip('%') for v in fn.return_values])
+    text = to_native_source_ir(traced, name=fn.name)
+    lines = text.splitlines()
+    attrs = {k: v for k, v in module._emitted_module_attrs().items()
+             if k != 'tessera.frontend.authority'}
+    if attrs:
+        lines[0] = lines[0][:-3] + ', ' + ', '.join(f'{k} = {v}' for k, v in attrs.items()) + '} {'
+    # The serializer owns regions; the original Graph function owns the ABI.
+    results = ', '.join(str(t) for t in fn.result_types)
+    fn_attrs = ' attributes {' + ', '.join(f'{k} = {v}' for k, v in fn.fn_attrs.items()) + '}' if fn.fn_attrs else ''
+    lines[1] = f'  func.func @{fn.name}(' + ', '.join(a.to_mlir() for a in fn.args) + ') -> (' + results + ')' + fn_attrs + ' {'
+    return '\n'.join(lines) + '\n'

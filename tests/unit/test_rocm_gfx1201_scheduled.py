@@ -208,7 +208,8 @@ def test_gfx1201_backward_program(dtype, dropout):
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
 @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
-def test_gfx1201_public_attention_native_backward(dtype):
+@pytest.mark.parametrize("cotangent_storage", ["captured", "float32"])
+def test_gfx1201_public_attention_native_backward(dtype, cotangent_storage):
     import ml_dtypes
     import tessera as ts
     from tessera.compiler.native_vjp_plugins import validate_native_vjp_execution_certificate
@@ -221,7 +222,7 @@ def test_gfx1201_public_attention_native_backward(dtype):
     storage = np.float16 if dtype == "fp16" else ml_dtypes.bfloat16
     q, k, v, dout = [(rng.normal(size=shape)*0.2).astype(storage) for shape in
                     [(1,4,17,64),(1,2,19,64),(1,2,19,64),(1,4,17,64)]]
-    actual = attention.native_backward(q, k, v, out_cotangents=dout)
+    actual = attention.native_backward(q, k, v, out_cotangents=dout if cotangent_storage == "captured" else dout.astype(np.float32))
     qf, kf, vf, df = [x.astype(np.float64) for x in (q,k,v,dout)]
     kr, vr = [np.repeat(x,2,axis=1) for x in (kf,vf)]
     score = qf @ kr.swapaxes(-1,-2) / 8
@@ -350,7 +351,8 @@ def test_gfx1201_dynamic_matmul_reuses_one_image():
 @pytest.mark.hardware_rocm
 @pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 owning-device gate")
 @pytest.mark.parametrize("checkpoint", ["recompute", "saved"])
-def test_gfx1201_external_reader_orders_reuse_and_retirement(checkpoint, monkeypatch):
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_gfx1201_external_reader_orders_reuse_and_retirement(checkpoint, asynchronous, monkeypatch):
     import ctypes as ct
     from tessera import runtime as rt
     from tessera.compiler.resident_rocm_attention import ResidentROCmAttentionTape
@@ -392,7 +394,12 @@ def test_gfx1201_external_reader_orders_reuse_and_retirement(checkpoint, monkeyp
             assert hip.hipMemcpyAsync(dest,P(address),want.nbytes,3,consumer)==0
         retirement=tape.retire()
         assert not retirement.done()
-        reader.close()
+        if asynchronous:
+            released = reader.release_async()
+            assert not released.cancel()
+            released.result(timeout=30)
+        else:
+            reader.close()
         retirement.result(timeout=30)
         with pytest.raises(ValueError,match="released"):
             _=reader.outputs

@@ -34,7 +34,7 @@ def _rocm_hip_live() -> bool:
         return False
     try:
         from tessera import runtime as rt
-        return rt._rocm_wmma_runtime_available()
+        return rt._rocm_live_arch() == "gfx1151" and rt._rocm_wmma_runtime_available()
     except Exception:
         return False
 

@@ -6888,25 +6888,35 @@ def _rocm_chip() -> str:
 
 
 def _rocm_live_arch() -> Optional[str]:
-    """The *actual* live GPU gfx arch (``"gfx1151"`` / ``"gfx1100"`` / ``"gfx942"``)
-    read from ``rocm_agent_enumerator`` / ``amdgpu-arch`` — the real device, not a
-    compile default. Returns the first real GPU agent (``gfx000`` is the CPU agent),
-    or ``None`` if no tool/agent is present. Never raises."""
-    for exe in (
-        "rocm_agent_enumerator",
-        "/opt/rocm/bin/rocm_agent_enumerator",
-        "amdgpu-arch",
-        "/opt/rocm/llvm/bin/amdgpu-arch",
-    ):
-        try:
-            res = subprocess.run([exe], capture_output=True, text=True, timeout=10)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        for tok in res.stdout.split():
-            tok = tok.strip()
-            if tok.startswith("gfx") and tok != "gfx000":
-                return tok
-    return None
+    """Architecture of the calling thread's selected HIP device, never an enumerator.
+
+    HIP's versioned R0600 property ABI is 1472 bytes, aligned to eight bytes,
+    with gcnArchName[256] at offset 1160 on the supported 64-bit Linux ABI.
+    The header-layout regression verifies these constants against HIP headers.
+    Missing versioned ABI or failed device queries fail closed.
+    """
+    import re
+    try:
+        hip = _load_hip_for_launch()
+        if hip is None or ctypes.sizeof(ctypes.c_void_p) != 8:
+            return None
+        get_device = hip.hipGetDevice
+        properties = hip.hipGetDevicePropertiesR0600
+        get_device.argtypes = [ctypes.POINTER(ctypes.c_int)]
+        get_device.restype = ctypes.c_int
+        properties.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        properties.restype = ctypes.c_int
+        device = ctypes.c_int()
+        if get_device(ctypes.byref(device)) != 0:
+            return None
+        storage = (ctypes.c_uint64 * 184)()
+        if properties(ctypes.byref(storage), device.value) != 0:
+            return None
+        raw = ctypes.string_at(ctypes.addressof(storage) + 1160, 256)
+        arch = raw.split(b"\0", 1)[0].decode("ascii").split(":", 1)[0]
+        return arch if re.fullmatch(r"gfx[0-9a-f]+", arch) and arch != "gfx000" else None
+    except (AttributeError, OSError, UnicodeError):
+        return None
 
 
 _rocm_device_name_probe: Any = False  # False = unprobed; None/str after
@@ -8825,6 +8835,12 @@ def _execute_native_attention_vjp_package(
     if package.target == "rocm":
         if not isinstance(package.native, ROCMNativeProgram):
             raise TypeError("gfx1151 attention VJP requires a resident native program")
+        from tessera.compiler.resident_rocm_attention import prepare_attention_cotangent
+        # Package construction checked the original sample; execution must also
+        # check the actual cotangent before any device allocation or submission.
+        buffers[do_name] = prepare_attention_cotangent(
+            dout, q.shape[:-1] + (value.shape[-1],), q.dtype, "exact"
+        )
         result = _submit_rocm_gfx1151_attention_backward_program(
             package.native, buffers, warmup=0, iterations=1
         )

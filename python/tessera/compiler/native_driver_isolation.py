@@ -126,3 +126,23 @@ class IsolationRecovery:
                 raise RuntimeError('isolation teardown unconfirmed; owner retained') from self.error
             self._release_owner()
         return True
+
+
+class SpawnedProcessBoundary:
+    def __init__(self, process):
+        self.process = process
+
+    def poll(self):
+        return self.process.exitcode
+
+    def terminate(self):
+        self.process.terminate()
+
+    def kill(self):
+        self.process.kill()
+
+    def wait(self, timeout=None):
+        self.process.join(timeout)
+        if self.process.exitcode is None:
+            raise subprocess.TimeoutExpired('native device worker', timeout)
+        return self.process.exitcode

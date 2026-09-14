@@ -1,0 +1,3247 @@
+{
+  "schema": 2,
+  "scope": "Lexical caller candidates and local emitter paths; conservative lexical binding; indirect dispatch and external callers require review; no execution proof",
+  "counts": {
+    "graph": 46,
+    "scheduled": 14,
+    "raw_or_unclassified": 14
+  },
+  "rows": [
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_native",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "native_package_kind",
+        "package_attention",
+        "package_attention_backward",
+        "package_attention_backward_lse",
+        "package_attention_lse",
+        "package_int4_matmul",
+        "package_matmul",
+        "package_mx_matmul",
+        "package_norm",
+        "package_nvfp4_matmul",
+        "package_paged_kv_read",
+        "package_reduction",
+        "package_softmax",
+        "resolved.get",
+        "str"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_native",
+          "package_attention_backward",
+          "emit_attention_backward_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_matmul",
+          "emit_matmul_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_mx_matmul",
+          "emit_mx_matmul_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_nvfp4_matmul",
+          "emit_nvfp4_matmul_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 842,
+          "spelling": "nvidia_native.package_native",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_cuda_intrinsic",
+      "input": "",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_cuda_intrinsic_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "emit_cuda_intrinsic_tile_ir",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "kind.rsplit",
+        "kind.startswith",
+        "lowered.encode",
+        "ptx.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_cuda_intrinsic",
+          "emit_cuda_intrinsic_tile_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_packed_decode",
+      "input": "",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_packed_decode_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "any",
+        "emit_packed_decode_tile_ir",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "len",
+        "list",
+        "logical.startswith",
+        "lowered.encode",
+        "ptx.encode",
+        "tile_ir.encode",
+        "type"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_packed_decode",
+          "emit_packed_decode_tile_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_matmul_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "_matmul_storage",
+        "_shape",
+        "_static_shape",
+        "bool",
+        "buffer_rows.append",
+        "emit_matmul_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "int",
+        "isinstance",
+        "len",
+        "lowered.encode",
+        "op.kwargs.get",
+        "operand.removeprefix",
+        "ptx.encode",
+        "str",
+        "str(op.kwargs['bias']).removeprefix",
+        "str(op.kwargs['residual']).removeprefix",
+        "tile_ir.encode",
+        "tuple",
+        "value.startswith"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_matmul",
+          "emit_matmul_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 315,
+          "spelling": "package_matmul",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2430,
+          "spelling": "package_matmul",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2441,
+          "spelling": "package_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_scheduled_matmul",
+      "input": "Any",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [
+        "package_scheduled_int4_matmul"
+      ],
+      "direct_ir_calls": [
+        "_compile_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "arg.split",
+        "arg.split(':', 1)[-1].strip",
+        "artifact.validate",
+        "bool",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "len",
+        "lowered.encode",
+        "package_scheduled_int4_matmul",
+        "ptx.encode",
+        "re.escape",
+        "re.search",
+        "rows.append",
+        "schedule_op.group",
+        "signature.group",
+        "signature.group(1).split",
+        "str",
+        "str(present).lower",
+        "tuple",
+        "verify_matmul_projection"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 831,
+          "spelling": "nvidia_native.package_scheduled_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_f16_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_matmul",
+        "supports_f16_matmul"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_f16_matmul",
+          "package_matmul",
+          "emit_matmul_tile_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_bf16_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_matmul",
+        "supports_bf16_matmul"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_bf16_matmul",
+          "package_matmul",
+          "emit_matmul_tile_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_nvfp4_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_nvfp4_matmul_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "_matrix_names",
+        "_scale_names",
+        "_static_shape",
+        "emit_nvfp4_matmul_tile_ir",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "lowered.encode",
+        "ptx.encode",
+        "supports_nvfp4_matmul",
+        "tile_ir.encode"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_nvfp4_matmul",
+          "emit_nvfp4_matmul_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 310,
+          "spelling": "package_nvfp4_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_int4_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_matmul",
+        "package_scheduled_int4_matmul"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "lower_scheduled_matmul",
+        "package_scheduled_int4_matmul",
+        "supports_int4_matmul"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 312,
+          "spelling": "package_int4_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_scheduled_int4_matmul",
+      "input": "Any",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "RuntimeError",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "any",
+        "artifact.validate",
+        "find_tessera_opt",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "lowered.encode",
+        "ptx.encode",
+        "run_tessera_opt",
+        "tile_ir.encode",
+        "type"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2270,
+          "spelling": "package_scheduled_int4_matmul",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2552,
+          "spelling": "package_scheduled_int4_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_mx_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_mx_matmul_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "_matrix_names",
+        "_scale_names",
+        "_static_shape",
+        "emit_mx_matmul_tile_ir",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "lowered.encode",
+        "ptx.encode",
+        "storage.startswith",
+        "supports_mx_matmul",
+        "tile_ir.encode"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_mx_matmul",
+          "emit_mx_matmul_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 314,
+          "spelling": "package_mx_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_scheduled_kernel",
+      "input": "Any",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir"
+      ],
+      "calls": [
+        "''.join",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "RuntimeError",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "_mlir_f32_bits",
+        "a.split",
+        "a.split(':', 1)[-1].strip",
+        "any",
+        "artifact.validate",
+        "enumerate",
+        "find_tessera_opt",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "len",
+        "list",
+        "lowered.encode",
+        "math.isfinite",
+        "ptx.encode",
+        "re.escape",
+        "re.search",
+        "required.items",
+        "required.update",
+        "run_tessera_opt",
+        "signature.group",
+        "signature.group(1).split",
+        "str",
+        "str(artifact.keepdims).lower",
+        "struct.pack",
+        "tuple",
+        "type",
+        "{'fp16': 'f16', 'bf16': 'bf16', 'fp32': 'f32'}.get"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 838,
+          "spelling": "nvidia_native.package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2886,
+          "spelling": "package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2897,
+          "spelling": "package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3652,
+          "spelling": "package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_reduction",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "package_scheduled_kernel",
+        "scheduled_kernel.lower_scheduled_kernel",
+        "scheduled_kernel.supports_scheduled_kernel"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_scheduled_kernel",
+        "requests_reduction",
+        "scheduled_kernel.lower_scheduled_kernel",
+        "scheduled_kernel.supports_scheduled_kernel"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 304,
+          "spelling": "package_reduction",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_norm",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_kernel",
+        "package_scheduled_kernel"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "lower_scheduled_kernel",
+        "package_scheduled_kernel",
+        "requests_norm"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 302,
+          "spelling": "package_norm",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_attention",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_attention",
+        "package_scheduled_attention"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "lower_scheduled_attention",
+        "package_scheduled_attention"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 298,
+          "spelling": "package_attention",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_scheduled_attention",
+      "input": "ScheduledAttentionArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir"
+      ],
+      "calls": [
+        "''.join",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "RuntimeError",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "_mlir_f32_bits",
+        "any",
+        "artifact.validate",
+        "enumerate",
+        "find_tessera_opt",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "int",
+        "json.dumps",
+        "len",
+        "list",
+        "lowered.encode",
+        "names.append",
+        "ptx.encode",
+        "re.escape",
+        "re.search",
+        "run_tessera_opt",
+        "shapes.append",
+        "str",
+        "str(bias_name is not None).lower",
+        "str(causal).lower",
+        "struct.pack",
+        "tile_ir.encode",
+        "tuple",
+        "type",
+        "zip",
+        "{'causal': str(causal).lower(), 'bias': str(bias_name is not None).lower(), 'window_left': f'{window_left} : i64', 'window_right': f'{window_right} : i64', 'dropout_seed': f'{dropout_seed} : i64'}.items",
+        "{'fp16': 'f16', 'bf16': 'bf16', 'fp32': 'f32'}.get",
+        "{'scale': scale, 'softcap': softcap, 'dropout_p': dropout_p}.items"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 836,
+          "spelling": "nvidia_native.package_scheduled_attention",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 2904,
+          "spelling": "package_scheduled_attention",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/raised_attention.py",
+          "line": 133,
+          "spelling": "nvidia_package",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_attention_backward",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_attention_backward_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "WorkspaceRequirement",
+        "_attention_backward_contract",
+        "_compile_tile_ir",
+        "bool",
+        "emit_attention_backward_tile_ir",
+        "enumerate",
+        "f'{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}:deterministic_direct'.encode",
+        "guards.extend",
+        "hashlib.sha256",
+        "hashlib.sha256(f'{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}:deterministic_direct'.encode()).hexdigest",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "input_bindings.append",
+        "int",
+        "len",
+        "list",
+        "lowered.encode",
+        "ptx.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_attention_backward",
+          "emit_attention_backward_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 294,
+          "spelling": "package_attention_backward",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_attention_lse",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_checkpoint",
+        "package_scheduled_checkpoint"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_attention_lse_contract",
+        "lower_scheduled_checkpoint",
+        "package_scheduled_checkpoint"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 292,
+          "spelling": "package_attention_lse",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3342,
+          "spelling": "package_attention_lse",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_attention_backward_lse",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_checkpoint",
+        "package_scheduled_checkpoint"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_attention_backward_lse_contract",
+        "lower_scheduled_checkpoint",
+        "package_scheduled_checkpoint"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 290,
+          "spelling": "package_attention_backward_lse",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3343,
+          "spelling": "package_attention_backward_lse",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_scheduled_checkpoint",
+      "input": "Any",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [
+        "scheduled.validate"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "package",
+        "scheduled.validate"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 824,
+          "spelling": "nvidia_native.package_scheduled_checkpoint",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3175,
+          "spelling": "package_scheduled_checkpoint",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3243,
+          "spelling": "package_scheduled_checkpoint",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3826,
+          "spelling": "package_scheduled_checkpoint",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3827,
+          "spelling": "package_scheduled_checkpoint",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_attention_checkpoint_pair",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "AttentionCheckpointPair",
+        "ValueError",
+        "_attention_backward_lse_contract",
+        "_attention_lse_contract",
+        "_checkpoint_identity",
+        "package_attention_backward_lse",
+        "package_attention_lse"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_paged_kv_read",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_paged_kv",
+        "package_scheduled_paged_kv"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_paged_kv_contract",
+        "lower_scheduled_paged_kv",
+        "package_scheduled_paged_kv"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 296,
+          "spelling": "package_paged_kv_read",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_scheduled_paged_kv",
+      "input": "Any",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ResourceRecord",
+        "ScalarArgument",
+        "ShapeGuard",
+        "_compile_tile_ir",
+        "artifact.validate",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(lowered.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "list",
+        "lowered.encode",
+        "ptx.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 826,
+          "spelling": "nvidia_native.package_scheduled_paged_kv",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3360,
+          "spelling": "package_scheduled_paged_kv",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_paged_attention",
+      "input": "",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_paged_attention_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_package_direct_image",
+        "emit_paged_attention_tile_ir",
+        "enumerate",
+        "f'{scale:.17g}:{causal}:{causal_offset}'.encode",
+        "hashlib.sha256",
+        "hashlib.sha256(f'{scale:.17g}:{causal}:{causal_offset}'.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "list",
+        "min",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_paged_attention",
+          "emit_paged_attention_tile_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_replay_ssm_kernels",
+      "input": "",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_replay_ssm_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "ScalarArgument",
+        "_package_direct_image",
+        "emit_replay_ssm_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "len",
+        "packages.append",
+        "replay_state_descriptor",
+        "state.as_metadata_dict",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_replay_ssm_kernels",
+          "emit_replay_ssm_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/emit/nvidia_cuda.py",
+          "line": 2809,
+          "spelling": "package_replay_ssm_kernels",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_moe_kernels",
+      "input": "",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_moe_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NVIDIANativePackage",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ValueError",
+        "_package_direct_image",
+        "any",
+        "emit_moe_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "len",
+        "list",
+        "min",
+        "packages.append",
+        "tile_ir.encode",
+        "tuple",
+        "zip"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_moe_kernels",
+          "emit_moe_tile_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "package_scheduled_kernel",
+        "scheduled_kernel.lower_scheduled_kernel",
+        "scheduled_kernel.supports_scheduled_kernel"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_scheduled_kernel",
+        "requests_softmax",
+        "scheduled_kernel.lower_scheduled_kernel",
+        "scheduled_kernel.supports_scheduled_kernel"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 300,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3663,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3673,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/nvidia_native.py",
+          "line": 3683,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_f32_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_softmax",
+        "supports_f32_softmax"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_f16_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_softmax",
+        "supports_f16_softmax"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_bf16_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "package_softmax",
+        "supports_bf16_softmax"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "nvidia_sm120",
+      "source": "python/tessera/compiler/nvidia_native.py",
+      "source_sha256": "e60e60ae9e146808898c559e0df336a89fadf1ceeaee70b2b67595df9011f8e7",
+      "function": "package_generated_attention_checkpoint_pair",
+      "input": "str",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [
+        "package_scheduled_checkpoint"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "AttentionCheckpointPair",
+        "ValueError",
+        "_checkpoint_identity",
+        "lower_generated_checkpoint",
+        "package_scheduled_checkpoint"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/native_attention_program.py",
+          "line": 79,
+          "spelling": "package_generated_attention_checkpoint_pair",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_native",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "native_package_kind",
+        "package_attention",
+        "package_moe_dispatch",
+        "package_paged_kv_read",
+        "package_reduction",
+        "package_softmax"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_native",
+          "package_attention",
+          "emit_attention_graph_ir"
+        ],
+        [
+          "package_native",
+          "package_attention",
+          "emit_attention_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_moe_dispatch",
+          "emit_moe_dispatch_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_paged_kv_read",
+          "emit_paged_kv_read_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_reduction",
+          "emit_reduce_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_softmax",
+          "emit_softmax_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 971,
+          "spelling": "rocm_native.package_native",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_scheduled_matmul",
+      "input": "ScheduledMatmulArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [
+        "_compile_scheduled_matmul_tile_ir"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_native_tile_ir",
+        "_compile_scheduled_matmul_tile_ir",
+        "artifact.validate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "target_ir.encode",
+        "verify_matmul_projection"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 927,
+          "spelling": "rocm_native.package_scheduled_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_scheduled_kernel",
+      "input": "ScheduledKernelArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_native_tile_ir",
+        "_compile_reduction_tile_ir",
+        "_compile_tile_ir",
+        "artifact.validate",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "len",
+        "list",
+        "target_ir.encode",
+        "tuple",
+        "verify_unary_ancestry"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 955,
+          "spelling": "rocm_native.package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/native_jvp_plugins.py",
+          "line": 158,
+          "spelling": "package_rocm_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_scheduled_attention",
+      "input": "ScheduledAttentionArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [
+        "_compile_scheduled_attention_tile_ir"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_native_tile_ir",
+        "_compile_scheduled_attention_tile_ir",
+        "artifact.validate",
+        "bindings.append",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "int",
+        "len",
+        "list",
+        "scalars.append",
+        "scalars.extend",
+        "shapes.items",
+        "target_ir.encode",
+        "tuple",
+        "verify_attention_ancestry"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 941,
+          "spelling": "rocm_native.package_scheduled_attention",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_scheduled_depth_attention",
+      "input": "ScheduledDepthAttentionArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [
+        "_compile_scheduled_depth_attention_tile_ir"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_scheduled_depth_attention_tile_ir",
+        "artifact.validate",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "len",
+        "target_ir.encode",
+        "tuple",
+        "type"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 913,
+          "spelling": "rocm_native.package_scheduled_depth_attention",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "_compile_tile_ir",
+        "emit_softmax_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_tile_ir",
+        "_softmax_contract",
+        "emit_softmax_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "len",
+        "list",
+        "math.prod",
+        "target_ir.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_softmax",
+          "emit_softmax_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/rocm_native.py",
+          "line": 222,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_reduction",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_reduce_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_reduction_tile_ir",
+        "_reduction_contract",
+        "emit_reduce_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "len",
+        "list",
+        "math.prod",
+        "target_ir.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_reduction",
+          "emit_reduce_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/rocm_native.py",
+          "line": 224,
+          "spelling": "package_reduction",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_paged_kv_read",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_paged_kv_read_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_paged_kv_tile_ir",
+        "_paged_kv_contract",
+        "emit_paged_kv_read_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "list",
+        "target_ir.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_paged_kv_read",
+          "emit_paged_kv_read_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/rocm_native.py",
+          "line": 226,
+          "spelling": "package_paged_kv_read",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_attention",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_attention_graph_ir",
+        "emit_attention_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_attention_contract",
+        "_compile_attention_graph_ir",
+        "_compile_attention_tile_ir",
+        "bool",
+        "descriptor_buffers.append",
+        "emit_attention_graph_ir",
+        "emit_attention_tile_ir",
+        "f'{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}'.encode",
+        "guards.extend",
+        "hashlib.sha256",
+        "hashlib.sha256(f'{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}'.encode()).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "int",
+        "list",
+        "scalars.append",
+        "scalars.extend",
+        "target_ir.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_attention",
+          "emit_attention_graph_ir"
+        ],
+        [
+          "package_attention",
+          "emit_attention_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/rocm_native.py",
+          "line": 228,
+          "spelling": "package_attention",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_attention_backward",
+      "input": "GraphIRModule | None",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_attention_backward_graph_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativeProgram",
+        "ROCMWorkspaceSlice",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "WorkspaceRequirement",
+        "_attention_backward_contract",
+        "_compile_attention_backward_graph_ir",
+        "_compile_attention_backward_tile_ir",
+        "_compile_native_tile_ir",
+        "_select_graph_lse_checkpoint",
+        "artifact.validate",
+        "bindings",
+        "bool",
+        "emit_attention_backward_graph_ir",
+        "enumerate",
+        "f'{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}:split_reduced:{selected_checkpoint}'.encode",
+        "guards_for",
+        "hashlib.sha256",
+        "hashlib.sha256(f'{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}:split_reduced:{selected_checkpoint}'.encode()).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "list",
+        "module.functions[0].body[0].kwargs.get",
+        "name.removeprefix",
+        "plan_attention_backward_workspace",
+        "result.append",
+        "target_ir.encode",
+        "tile_ir.encode",
+        "tuple",
+        "verify_attention_ancestry",
+        "zip"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_attention_backward",
+          "emit_attention_backward_graph_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/rocm_native.py",
+          "line": 2793,
+          "spelling": "package_attention_backward",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_scheduled_attention_backward",
+      "input": "ScheduledAttentionBackwardArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "artifact.validate",
+        "package_attention_backward"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_scheduled_attention_backward",
+          "package_attention_backward",
+          "emit_attention_backward_graph_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/native_attention_vjp.py",
+          "line": 240,
+          "spelling": "package_rocm",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "rocm_gfx1151",
+      "source": "python/tessera/compiler/rocm_native.py",
+      "source_sha256": "73825ebeaeb97215f77c6fd506291e84b0772217959fe77b7242cadd3e086a86",
+      "function": "package_moe_dispatch",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_moe_dispatch_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "ROCMNativePackage",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_compile_moe_dispatch_tile_ir",
+        "_moe_dispatch_contract",
+        "emit_moe_dispatch_tile_ir",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "hashlib.sha256(tile_ir.encode()).hexdigest",
+        "list",
+        "target_ir.encode",
+        "tile_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_moe_dispatch",
+          "emit_moe_dispatch_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/rocm_native.py",
+          "line": 230,
+          "spelling": "package_moe_dispatch",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_native",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_attention_backward",
+        "package_scheduled_attention_backward"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "lower_scheduled_attention_backward",
+        "native_package_kind",
+        "package_attention",
+        "package_cohort2",
+        "package_elementwise",
+        "package_graph_breadth",
+        "package_matmul",
+        "package_reduction",
+        "package_scheduled_attention_backward",
+        "package_softmax"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_native",
+          "package_cohort2",
+          "emit_cohort2_tile_ir"
+        ],
+        [
+          "package_native",
+          "package_elementwise",
+          "emit_elementwise_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1067,
+          "spelling": "x86_native.package_native",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_attention_backward_semantics",
+      "input": "",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_attention_backward_graph_ir"
+      ],
+      "calls": [
+        "RuntimeError",
+        "ValueError",
+        "_lower_attention_semantics",
+        "any",
+        "emit_attention_backward_graph_ir"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_attention_backward_semantics",
+          "emit_attention_backward_graph_ir"
+        ]
+      ],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_cohort2",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_cohort2_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_cohort2_contract",
+        "_image",
+        "_lower",
+        "bindings.append",
+        "cast",
+        "contract.get",
+        "emit_cohort2_tile_ir",
+        "enumerate",
+        "float",
+        "int",
+        "len",
+        "list",
+        "scalars.append",
+        "shapes.items",
+        "str",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_cohort2",
+          "emit_cohort2_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 303,
+          "spelling": "package_cohort2",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_package_unary",
+        "_softmax_contract"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 289,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_reduction",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_package_unary",
+        "_reduction_contract"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 291,
+          "spelling": "package_reduction",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_matmul",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_matmul",
+        "package_scheduled_matmul"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_matmul_contract",
+        "lower_scheduled_matmul",
+        "package_scheduled_matmul"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 293,
+          "spelling": "package_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_scheduled_matmul",
+      "input": "ScheduledMatmulArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_image",
+        "_lower",
+        "artifact.validate",
+        "verify_matmul_projection"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1025,
+          "spelling": "x86_native.package_scheduled_matmul",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 1187,
+          "spelling": "package_scheduled_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_scheduled_kernel",
+      "input": "ScheduledKernelArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_image",
+        "_lower",
+        "artifact.validate",
+        "enumerate",
+        "len",
+        "list",
+        "tuple",
+        "verify_unary_ancestry"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1053,
+          "spelling": "x86_native.package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/native_jvp_plugins.py",
+          "line": 153,
+          "spelling": "package_x86_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 1177,
+          "spelling": "package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_scheduled_attention",
+      "input": "ScheduledAttentionArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_image",
+        "_lower",
+        "artifact.validate",
+        "bindings.append",
+        "enumerate",
+        "len",
+        "list",
+        "shapes.items",
+        "tuple",
+        "verify_attention_ancestry"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1039,
+          "spelling": "x86_native.package_scheduled_attention",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/raised_attention.py",
+          "line": 136,
+          "spelling": "x86_package",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 1572,
+          "spelling": "package_scheduled_attention",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_scheduled_attention_backward",
+      "input": "ScheduledAttentionBackwardArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_image",
+        "_lower",
+        "artifact.validate",
+        "enumerate",
+        "len",
+        "list",
+        "shapes.items",
+        "specs.append",
+        "specs.extend",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/native_attention_vjp.py",
+          "line": 236,
+          "spelling": "package_x86",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 298,
+          "spelling": "package_scheduled_attention_backward",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_attention",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_attention",
+        "package_scheduled_attention"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_attention_contract",
+        "lower_scheduled_attention",
+        "package_scheduled_attention"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 295,
+          "spelling": "package_attention",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_native.py",
+      "source_sha256": "2f1aa2773b06aa1c6ac51cbe67a62e34d2f98f33f748770b191eb10520b31a45",
+      "function": "package_elementwise",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_elementwise_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_elementwise_contract",
+        "_image",
+        "_lower",
+        "bindings.append",
+        "emit_elementwise_tile_ir",
+        "enumerate",
+        "len",
+        "list",
+        "lower",
+        "lower_absolute",
+        "math.prod",
+        "package_absolute",
+        "package_unary",
+        "tuple",
+        "zip"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_elementwise",
+          "emit_elementwise_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 309,
+          "spelling": "package_elementwise",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_cpu",
+      "source": "python/tessera/compiler/apple_cpu_native.py",
+      "source_sha256": "42f0cc436f518e7fea8511340b9a71a920272615420edd59b564be54ec355c6a",
+      "function": "package_native",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_cpu|' + digest).encode",
+        "AppleCPUNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_entry_for",
+        "_runtime_library_path",
+        "cast",
+        "dict",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_cpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "int",
+        "len",
+        "library.read_bytes",
+        "list",
+        "name.removeprefix",
+        "native_package_kind",
+        "shapes.items",
+        "target_ir.encode",
+        "tuple",
+        "value.removeprefix",
+        "zip"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1124,
+          "spelling": "apple_cpu_native.package_native",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_native",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_VALUE_SYMBOLS.get",
+        "_runtime_library_path",
+        "any",
+        "dict",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "int",
+        "len",
+        "library.read_bytes",
+        "list",
+        "native_package_kind",
+        "package_batched_gemm",
+        "package_dynamic_count_nonzero",
+        "package_dynamic_gelu",
+        "package_dynamic_popcount",
+        "package_dynamic_softmax",
+        "package_dynamic_topk",
+        "package_gelu",
+        "package_softmax",
+        "package_svd",
+        "package_transpose",
+        "shapes.items",
+        "target_ir.encode",
+        "tuple",
+        "value.removeprefix",
+        "value_kwargs.update"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1216,
+          "spelling": "apple_native.package_native",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_batched_gemm",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_contract",
+        "_runtime_library_path",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "library.read_bytes",
+        "target_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 507,
+          "spelling": "package_batched_gemm",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_scheduled_matmul",
+      "input": "ScheduledMatmulArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [
+        "_package_scheduled_simdgroup_f16"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_package_scheduled_simdgroup_f16",
+        "_runtime_library_path",
+        "_verify_matmul_schedule_ancestry",
+        "artifact.validate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "library.read_bytes",
+        "target_ir.encode"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1170,
+          "spelling": "apple_native.package_scheduled_matmul",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_scheduled_kernel",
+      "input": "ScheduledKernelArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [
+        "_package_scheduled_reduce"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_package_scheduled_reduce",
+        "_runtime_library_path",
+        "_verify_kernel_schedule_ancestry",
+        "artifact.validate",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "len",
+        "library.read_bytes",
+        "list",
+        "target_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 1426,
+          "spelling": "package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1200,
+          "spelling": "apple_native.package_scheduled_kernel",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_scheduled_attention",
+      "input": "ScheduledAttentionArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_runtime_library_path",
+        "_verify_attention_schedule_ancestry",
+        "artifact.validate",
+        "guards.extend",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "inputs.append",
+        "len",
+        "library.read_bytes",
+        "list",
+        "target_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/driver.py",
+          "line": 1185,
+          "spelling": "apple_native.package_scheduled_attention",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/raised_attention.py",
+          "line": 139,
+          "spelling": "apple_package",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_scheduled_attention_backward",
+      "input": "ScheduledAttentionBackwardArtifact",
+      "boundary": "scheduled",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_runtime_library_path",
+        "_verify_attention_schedule_ancestry",
+        "artifact.validate",
+        "guards.extend",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "inputs.append",
+        "len",
+        "library.read_bytes",
+        "list",
+        "target_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [
+        "lower_scheduled_kernel",
+        "package_scheduled_kernel"
+      ],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_softmax_contract",
+        "lower_scheduled_kernel",
+        "package_scheduled_kernel"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 509,
+          "spelling": "package_softmax",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_dynamic_softmax",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ScalarArgument",
+        "ValueError",
+        "_dynamic_softmax_contract",
+        "_runtime_library_path",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "library.read_bytes",
+        "target_ir.encode"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 511,
+          "spelling": "package_dynamic_softmax",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_transpose",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ShapeGuard",
+        "ValueError",
+        "_runtime_library_path",
+        "_transpose_contract",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "len",
+        "library.read_bytes",
+        "list",
+        "target_ir.encode",
+        "tuple"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 513,
+          "spelling": "package_transpose",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_gelu",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "lower_gelu_artifact",
+        "package_gelu_artifact"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 515,
+          "spelling": "package_gelu",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_gelu_artifact",
+      "input": "AppleGeluArtifact",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_runtime_library_path",
+        "any",
+        "enumerate",
+        "find_tessera_opt",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(native.encode()).hexdigest",
+        "hashlib.sha256(parent.encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "int",
+        "library.read_bytes",
+        "list",
+        "match.groups",
+        "n.isidentifier",
+        "native.encode",
+        "parent.encode",
+        "re.fullmatch",
+        "run_tessera_opt",
+        "target_ir.encode",
+        "tuple",
+        "type"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 1541,
+          "spelling": "package_gelu_artifact",
+          "resolution": "lexical-candidate"
+        },
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 1620,
+          "spelling": "package_gelu_artifact",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_dynamic_gelu",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "_dynamic_gelu_contract",
+        "lower_gelu_artifact",
+        "package_gelu_artifact"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 517,
+          "spelling": "package_dynamic_gelu",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_dynamic_popcount",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ScalarArgument",
+        "ValueError",
+        "_dynamic_popcount_contract",
+        "_runtime_library_path",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "library.read_bytes",
+        "target_ir.encode"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 519,
+          "spelling": "package_dynamic_popcount",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_dynamic_count_nonzero",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ScalarArgument",
+        "ValueError",
+        "_dynamic_count_nonzero_contract",
+        "_runtime_library_path",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "library.read_bytes",
+        "target_ir.encode"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 521,
+          "spelling": "package_dynamic_count_nonzero",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_dynamic_topk",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ScalarArgument",
+        "ValueError",
+        "_dynamic_topk_contract",
+        "_runtime_library_path",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "library.read_bytes",
+        "target_ir.encode"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 523,
+          "spelling": "package_dynamic_topk",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "apple_gpu",
+      "source": "python/tessera/compiler/apple_native.py",
+      "source_sha256": "555e346d98c2297a231c20740022db7f166eee2ffb449e898e909f6f7a9d5f93",
+      "function": "package_svd",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "('apple_gpu|' + digest).encode",
+        "AppleNativePackage",
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "NativeEntryPoint",
+        "NativeImageArtifact",
+        "OrderingSemantics",
+        "RuntimeError",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "_runtime_library_path",
+        "_svd_contract",
+        "enumerate",
+        "hashlib.sha256",
+        "hashlib.sha256(('apple_gpu|' + digest).encode()).hexdigest",
+        "hashlib.sha256(payload).hexdigest",
+        "hashlib.sha256(target_ir.encode()).hexdigest",
+        "len",
+        "library.read_bytes",
+        "target_ir.encode",
+        "tuple",
+        "zip"
+      ],
+      "local_emitter_paths": [],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/apple_native.py",
+          "line": 525,
+          "spelling": "package_svd",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_breadth.py",
+      "source_sha256": "49327d1d3ba20b30f66744144b688bf4da72e3d127a9426fd4a2facbe6df12d2",
+      "function": "package_abi",
+      "input": "str",
+      "boundary": "raw_or_unclassified",
+      "scheduled_calls": [],
+      "direct_ir_calls": [
+        "emit_abi_tile_ir"
+      ],
+      "calls": [
+        "BufferBinding",
+        "LaunchDescriptor",
+        "LaunchGeometry",
+        "OrderingSemantics",
+        "ScalarArgument",
+        "ShapeGuard",
+        "ValueError",
+        "X86NativePackage",
+        "_image",
+        "_lower",
+        "buffer_shapes.items",
+        "dict",
+        "emit_abi_tile_ir",
+        "enumerate",
+        "len",
+        "public_names.get",
+        "set",
+        "sorted",
+        "tuple"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_abi",
+          "emit_abi_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_breadth.py",
+          "line": 465,
+          "spelling": "package_abi",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    },
+    {
+      "target": "x86",
+      "source": "python/tessera/compiler/x86_breadth.py",
+      "source_sha256": "49327d1d3ba20b30f66744144b688bf4da72e3d127a9426fd4a2facbe6df12d2",
+      "function": "package_graph_breadth",
+      "input": "GraphIRModule",
+      "boundary": "graph",
+      "scheduled_calls": [],
+      "direct_ir_calls": [],
+      "calls": [
+        "ValueError",
+        "cast",
+        "float",
+        "graph_breadth_contract",
+        "int",
+        "package_abi",
+        "replace",
+        "str"
+      ],
+      "local_emitter_paths": [
+        [
+          "package_graph_breadth",
+          "package_abi",
+          "emit_abi_tile_ir"
+        ]
+      ],
+      "caller_candidates": [
+        {
+          "source": "python/tessera/compiler/x86_native.py",
+          "line": 307,
+          "spelling": "package_graph_breadth",
+          "resolution": "lexical-candidate"
+        }
+      ],
+      "certificate_status": "requires per-envelope reconciliation; no certificate inferred from calls"
+    }
+  ]
+}

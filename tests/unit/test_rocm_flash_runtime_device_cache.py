@@ -6,7 +6,8 @@ import subprocess
 import pytest
 
 
-def test_attention_cache_follows_current_device_and_architecture(tmp_path):
+@pytest.mark.parametrize("family", ["flash_attn", "gemm"])
+def test_attention_cache_follows_current_device_and_architecture(tmp_path, family):
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires host C++ compiler")
@@ -33,6 +34,18 @@ inline int hipMalloc(void** p,size_t) { *p=nullptr; return 0; }
 inline int hipFree(void*) { return 0; }
 inline int hipMemcpy(void*,const void*,size_t,int) { return 0; }
 inline int hipDeviceSynchronize() { return 0; }
+using hipEvent_t=void*;
+constexpr int hipHostRegisterMapped=1;
+inline int hipModuleUnload(void*) { return 0; }
+inline int hipEventCreate(void** p) { *p=nullptr; return 0; }
+inline int hipEventDestroy(void*) { return 0; }
+inline int hipEventRecord(void*,void*) { return 0; }
+inline int hipEventSynchronize(void*) { return 0; }
+inline int hipEventElapsedTime(float* p,void*,void*) { *p=1; return 0; }
+inline int hipMemset(void*,int,size_t) { return 0; }
+inline int hipHostRegister(void*,size_t,unsigned) { return 0; }
+inline int hipHostUnregister(void*) { return 0; }
+inline int hipHostGetDevicePointer(void** p,void* v,unsigned) { *p=v; return 0; }
 inline int hipModuleLaunchKernel(hipFunction_t,unsigned,unsigned,unsigned,unsigned,unsigned,unsigned,unsigned,void*,void**,void**) { return 0; }
 ''')
     (hip / "hiprtc.h").write_text(r'''
@@ -45,7 +58,7 @@ inline int hiprtcGetCodeSize(int,size_t* n) { *n=1; return 0; }
 inline int hiprtcGetCode(int,char* p) { *p=0; return 0; }
 inline int hiprtcDestroyProgram(int*) { return 0; }
 ''')
-    runtime = Path(__file__).resolve().parents[2] / "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp"
+    runtime = Path(__file__).resolve().parents[2] / f"src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_{family}.cpp"
     source = tmp_path / "probe.cpp"
     source.write_text('#include "' + str(runtime) + '"\n' + r'''
 #include <cassert>
@@ -62,6 +75,8 @@ int main() {
  failDevice=true; assert(kernelFor(&g_f16,64)==nullptr); assert(serial==3);
 }
 ''')
+    if family == "gemm":
+        source.write_text(source.read_text().replace("kernelFor(&g_f16,64)", "prodKernelFor(&g_f16,1,1)"))
     binary = tmp_path / "probe"
     subprocess.run([compiler, "-std=c++17", "-pthread", "-I", str(tmp_path), str(source), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

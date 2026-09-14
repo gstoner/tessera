@@ -68,3 +68,22 @@ def test_absolute_rejects_incompatible_or_malformed_argument_layout(layout):
     graph = lower_absolute(module).graph_ir.replace('tessera.layout = "row_major"', f'tessera.layout = {layout}')
     with pytest.raises(RuntimeError, match='row_major argument layout'):
         run_tessera_opt(find_tessera_opt(), graph, '--tessera-graph-to-schedule')
+
+
+@pytest.mark.parametrize('family', ['floor', 'ceil'])
+def test_rounding_unary_projects_and_replays_without_graph_constructor(family, monkeypatch):
+    from tessera.compiler import x86_native
+    from tessera.compiler.scheduled_absolute import lower_floor, lower_ceil, package_unary
+    module = absolute_module()
+    module.functions[0].body[0].op_name = 'tessera.' + family
+    module.functions[0].args[0].layout = 'row_major'
+    artifact = (lower_floor if family == 'floor' else lower_ceil)(module)
+    assert artifact.project()[1] == (3,17)
+    monkeypatch.setattr(x86_native,'emit_elementwise_tile_ir',lambda **kw: pytest.fail('Graph constructor'))
+    monkeypatch.setattr(x86_native,'_lower',lambda *a: ('target',b'image','compiler','toolchain'))
+    packet = x86_native.package_elementwise(module,pipeline_name='tessera-lower-to-x86')
+    assert packet.descriptor.provenance['numeric_policy'] == 'ieee_' + family
+    altered = artifact.tile_ir.replace('tile.elementwise_kernel %arg0, %arg1','tile.elementwise_kernel %arg1, %arg0')
+    assert altered != artifact.tile_ir
+    with pytest.raises(ValueError,match='replay'):
+        package_unary(replace(artifact,tile_ir=altered),pipeline_name='tessera-lower-to-x86')

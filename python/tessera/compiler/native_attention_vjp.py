@@ -144,8 +144,13 @@ def _backward_module(
     )
     bias_name = public_names[graph_bias] if graph_bias is not None else None
     q, key, value = (values[name] for name in (graph_q, graph_key, graph_value))
-    do_type = _tensor_type(out_cotangent)
     q_type, key_type, value_type = (_tensor_type(item) for item in (q, key, value))
+    if target == "rocm":
+        from .resident_rocm_attention import prepare_attention_cotangent
+        out_cotangent = prepare_attention_cotangent(
+            out_cotangent, tuple(q.shape[:-1]) + (value.shape[-1],), q.dtype, "exact"
+        )
+    do_type = _tensor_type(out_cotangent)
     if do_type.dtype != q_type.dtype:
         raise ValueError("native attention VJP cotangent storage must match Q storage")
     args = [

@@ -1080,6 +1080,9 @@ def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
     contract = _cohort2_contract(module)
     if contract is None:
         raise ValueError("x86 native cohort 2 requires one supported static f32 operation")
+    if contract["family"] == "scan" and contract["kind"] == "sum":
+        from .scheduled_absolute import lower_cumsum, package_cumsum
+        return package_cumsum(lower_cumsum(module),pipeline_name=pipeline_name)
     family, kind = str(contract["family"]), str(contract["kind"])
     variants = {
         "argreduce": ("tessera_x86_avx512_argreduce_f32", X86_ARGREDUCE_F32_ABI),
@@ -1583,6 +1586,10 @@ def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86Nati
     if contract[:2] == ("unary", "abs"):
         from .scheduled_absolute import lower_absolute, package_absolute
         return package_absolute(lower_absolute(module), pipeline_name=pipeline_name)
+    if contract[:2] in (("unary", "floor"), ("unary", "ceil")):
+        from .scheduled_absolute import lower_floor, lower_ceil, package_unary
+        lower = lower_floor if contract[1] == "floor" else lower_ceil
+        return package_unary(lower(module), pipeline_name=pipeline_name)
     family, kind, input_names, output_name, shape, input_dtypes, output_dtype = contract
     if family == "unary":
         symbol, abi = "tessera_x86_avx512_unary_f32", X86_UNARY_F32_ABI

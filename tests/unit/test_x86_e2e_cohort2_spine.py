@@ -73,6 +73,12 @@ def test_cohort2_carriers_are_backend_neutral(family, kind, carrier) -> None:
 def test_cohort2_contract_and_package(monkeypatch, op_name, abi) -> None:
     module = _module(op_name)
     assert supports_cohort2(module)
+    if op_name == "tessera.cumsum":
+        # This family now consumes native Graph-to-Schedule output before _lower.
+        # Keep its contract check above host-free; packaging needs the compiler.
+        from tessera.compiler.scheduled_matmul import find_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("cumsum Schedule packaging requires the native compiler")
 
     def fake_lower(tile_ir: str, symbol: str, family: str):
         assert "tile." in tile_ir
@@ -82,7 +88,12 @@ def test_cohort2_contract_and_package(monkeypatch, op_name, abi) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)
     package = package_cohort2(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
+    if op_name == "tessera.cumsum":
+        assert package.descriptor.provenance["work_item"] == "E2E-REAL-6"
+        assert len(package.descriptor.provenance["schedule_digest"]) == 64
+        assert package.descriptor.provenance["inclusive"] is True
+    else:
+        assert package.descriptor.provenance["work_item"] == "X86-E2E-2"
 
 
 def _launch(op_name: str, inputs: tuple[np.ndarray, ...]) -> np.ndarray:

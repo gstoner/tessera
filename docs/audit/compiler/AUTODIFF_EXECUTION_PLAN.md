@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-09
+last_updated: 2026-09-14
 audit_role: plan
 plan_state: landing
 ---
@@ -839,3 +839,103 @@ Explicit resident SSD gradients now compose asynchronously through projected rea
 ### Snapshot/public-AD follow-through (2026-09-10)
 
 [Current increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--snapshot-marking-public-vjp-and-additive-bias): explicit resident SSD programs now enter public `vjp` with asynchronous capture and reader-aware whole-frame retirement. This is first-order protocol dispatch, not arbitrary traced public AD. Program unloading, higher-order products and broader mixer integration remain open. Snapshot marking overlaps active graph updates by using private storage; final sweep is exclusive. Full-shape finite additive attention bias is recognized and bound on NVIDIA; Boolean/padding/broadcast masks and fully masked rows remain open. Exact-device correctness under WSL does not satisfy clean bare-metal promotion.
+
+## Sparse selection and AD ordering — 2026-09-14
+
+Owner: AD-SPARSE-1 / W6.2 for derivative semantics; E2E-REAL-6 for packaging.
+Automatic sparse candidate selection must retain the logical matrix operation
+through differentiation. The GPU packing/index producer is a physical lowering,
+not the mathematical program to differentiate. In particular, a zero-valued
+stored entry may have a nonzero derivative; observing a numerical zero does not
+prove a structural zero. A fixed structural-mask API would need its own explicit
+parameterization and tangent contract before projecting adjoints onto that mask.
+
+The explicit sparse capture API now accepts an AD-configured JIT parent while
+leaving native_backward attached to the original logical source. A gfx1201
+public forward/backward regression checks nonzero derivatives at numerical zeros.
+This is a bounded matmul slice: general closure still requires public grad/JVP
+composition, composed consumers, repeated backward ownership, and exact-backend
+execution. Integer INT4 packing adds no differentiability claim. Native Graph-to-Schedule sparse lowering now owns the isolated checked-2:4 half
+matmul recipe. Automatic default/arbiter selection remains implementation work.
+
+The `compile_sparse_auto` forward specialization now chooses sparse or dense
+K tiles on device. Its branch predicate and packing are physical decisions, not
+AD nodes. The fp16 public native_backward regression uses the same logical JIT
+parent after forward data changes. This does not close arbitrary composed
+Graph-region AD or make the selection predicate differentiable.
+
+
+## Native composed HVP execution (2026-09-14)
+
+Owner: AD-HIGHER-1 / W4-PRODUCT-1. `JitFn.native_hvp` executes the
+compiler forward-over-reverse product on CPU and returns gradients plus
+Hessian-vector products in requested `wrt` order. Cotangents are held constant;
+inactive input directions are zero. The compiled signature owns result
+allocation and validates every incoming array. This is a static f32 input
+contract, not a claim of arbitrary higher-order closure.
+
+Nested tracer regions use the existing source-to-SCF serializer, now including
+counted `for` regions. Argument/function/module attributes are retained. Forward
+AD propagates scalar tensor extraction and treats comparisons as primal-only
+predicates. CPU ownership joins lower their generated clones before LLVM.
+Acceptance: composed cubic and coupled products, zero-valued inputs with nonzero
+curvature, counted loops, and nested branch/loop products whose predicate changes
+between calls. Native CPU evidence must not be transferred to CUDA/HIP/Metal.
+
+Open: arbitrary Python CFG and effects, dynamic public HVP result shapes,
+third and higher derivative execution, general dynamic saved-product tangent capture, and broader native GPU packaging. Static continuous saved residuals now capture tangents through the same RegionTangentBuilder as the forward program; the saved nested-loop HVP has a native CPU oracle.
+Tajasarus's assertions build lacks the ExecutionEngine archive required by the
+CPU JIT; its compiler-transform evidence is separate from Princess-Luna CPU
+execution. Differentiation continues to precede sparse packing.
+
+
+### Saved-product tangents and resident HVP export (2026-09-14)
+
+AD-HIGHER-1 / W4-PRODUCT-1 now differentiates the backward with respect to
+continuous residual slots, holding output cotangents fixed. The tensor HVP entry
+captures primal residuals and their tangents in one structured program; callers
+cannot substitute an unrelated tape. A nested SAVE example checks both gradient
+components and both Hessian-vector components against closed forms, including
+zero inputs with nonzero cross-curvature.
+
+`export-hvp` projects the compiler product to the existing typed product ABI.
+`JitFn.compile_native_hvp` binds that export through the shared bufferized tape
+lowering and native GPU storage contract. gfx1201 executes composed cubic and
+counted-loop HVPs with caller-owned resident inputs/outputs. This is bounded
+serial GPU execution, without performance promotion. The CUDA follow-through below adds SM120 proof; other ROCm
+architectures need separate device evidence. Metal has no binding here.
+
+Public HVP capture now requires the tracer. Unsupported effectful while capture
+cannot silently use an empty AST candidate. The source serializer's exhaustion
+assertion still prevents replayable while normalization; it remains a named
+refusal. Arbitrary/effectful CFG, dynamic result allocation, higher derivative
+orders and general asynchronous HVP frames remain open.
+
+
+The shared dynamic-copy gate also now requires an independently bounded extent:
+identical source/destination SSA sizes are shape evidence, not a termination
+bound. The regression admits a constant-bounded dynamic view and refuses a
+loaded, unbounded extent before GPU loop expansion.
+
+
+### HVP export identity and cross-device validation (2026-09-14)
+
+Owner AD-HIGHER-1 / W4-PRODUCT-1; sync `AD-HVP-DEVICE-2026-09-14`.
+The forward pass exports only HVP functions generated in that invocation. An
+unrelated function named `*__hvp` is not product ancestry and is refused.
+The device regression covers composed cubic and counted-loop products with
+rank-one and rank-two inputs; each target has its own explicit proof gate.
+CUDA checks the current context's compute capability and releases the test
+context after bindings and resident buffers retire.
+
+Remaining implementation order: preserve exhaustion/failure status while
+normalizing effectful loops; carry runtime result shapes and capacities into
+checked output exposure; then generalize derivative-product order with fixed
+seed semantics. These are open obligations, not inferred from static HVP tests.
+No asynchronous-frame or performance promotion is claimed.
+
+Owning-device evidence: `tests/unit/test_native_hvp_execution.py` reports
+7 passed, 10 skipped on each of Super-Bear (SM120) and Tajasarus (gfx1201).
+Each run executes its own four device cases; CPU JIT and the sibling GPU cases
+skip. Tajasarus additionally passes 243 tests with 10 skips when combined with
+pass metadata and diagnostic registry gates. No device timing was collected.

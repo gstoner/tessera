@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 241 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 244 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 241 | |
+| **Total** | 244 | |
 
 ## Per-dialect details
 
@@ -52,6 +52,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `CachePageLookupOp` | `real` |
 | `CacheRollbackOp` | `real` |
 | `CastOp` | `real` |
+| `CeilOp` | `real` |
 | `CholeskyOp` | `real` |
 | `CholeskySolveOp` | `real` |
 | `CliffordGeometricProductOp` | `real` |
@@ -69,6 +70,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `Conv2DNHWCOp` | `real` |
 | `CrossEntropyLossBackwardOp` | `real` |
 | `CrossEntropyLossOp` | `real` |
+| `CumsumOp` | `real` |
 | `CustomAdjointCallOp` | `real` |
 | `DCTOp` | `real` |
 | `DeepSeekSparseAttentionOp` | `real` |
@@ -99,6 +101,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `FFTOp` | `real` |
 | `FlashAttnOp` | `real` |
 | `FlattenOp` | `real` |
+| `FloorOp` | `real` |
 | `FusedEpilogueOp` | `real` |
 | `GQAAttentionOp` | `real` |
 | `GameSubsetMobiusOp` | `real` |

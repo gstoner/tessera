@@ -1,0 +1,38 @@
+{
+  "backend": "x86",
+  "rows": [
+    {
+      "shape": [
+        51
+      ],
+      "state": "passed",
+      "schedule_sha256": "de15c8f1ba928d7a8fc831aae3c1e642e57c4c0cc3058db073cdcab973ed2cbb",
+      "image_digest": "397e63f6afdb9ee8d9724b9f2ebf618af1a44ae92e2436d36159e77c161b2e25",
+      "promotion_eligible": false
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "state": "passed",
+      "schedule_sha256": "e2fcadde883aedd334ade762d4e1a830390b675a8997137e36fb789370a76199",
+      "image_digest": "3db2e8076389f3a1258c74a751c53477155bfe301d3666b141db5046bbc126b1",
+      "promotion_eligible": false
+    },
+    {
+      "shape": [
+        2,
+        3,
+        17
+      ],
+      "state": "passed",
+      "schedule_sha256": "c11041e140d62bc55a1f1438657208db6601f74d2fb74584efd74c710ba4abdd",
+      "image_digest": "ebb458cc6c7f863f0d1da5d3e6b49787de1f79a4adff4d780ab3455d45b34033",
+      "promotion_eligible": false
+    }
+  ],
+  "compiler_sha256": "e54e91d5b2551d550b443906da09bf5ecb1ea728927443273b8b3ad8dc9e757e",
+  "runtime_sha256": "31e27565e5b55603b75d189704cfb1e3d29666d101ad884ed589e90d32f04c54",
+  "scope": "f32 floor including ragged, signed-zero, subnormal and exceptional inputs"
+}

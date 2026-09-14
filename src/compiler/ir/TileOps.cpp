@@ -2846,9 +2846,19 @@ mlir::LogicalResult tessera::tile::SparseMMAOp::verify() {
   if (getArch() != "gfx1201" || !a || !b || !c ||
       a.getRank() != 1 || b.getRank() != 1 || c.getRank() != 1 ||
       a.getNumElements() != 8 || b.getNumElements() != 16 || c.getNumElements() != 8 ||
-      !(a.getElementType().isF16() || a.getElementType().isBF16()) ||
-      b.getElementType() != a.getElementType() || !c.getElementType().isF32() ||
+      !(a.getElementType().isF16() || a.getElementType().isBF16() ||
+        a.getElementType().isInteger(8) || mlir::isa<mlir::Float8E4M3FNType, mlir::Float8E5M2Type>(a.getElementType())) ||
+      (b.getElementType() != a.getElementType() &&
+       !(mlir::isa<mlir::Float8E4M3FNType, mlir::Float8E5M2Type>(a.getElementType()) &&
+         mlir::isa<mlir::Float8E4M3FNType, mlir::Float8E5M2Type>(b.getElementType()))) ||
+      !(a.getElementType().isInteger(8) ? c.getElementType().isInteger(32) :
+        (c.getElementType().isF32() || ((a.getElementType().isF16() || a.getElementType().isBF16()) && c.getElementType() == a.getElementType()))) ||
       getRes().getType() != c)
-    return emitOpError("requires gfx1201 wave32 packed A[8], B[16] f16/bf16 and C/result[8] f32");
+    return emitOpError("requires gfx1201 wave32 packed A[8], B[16] matching f16/bf16/FP8 or signed i8, with C/result[8] matching supported accumulation");
+  if (!a.getElementType().isInteger(8) && (!getASigned() || !getBSigned()))
+    return emitOpError("integer signedness flags require i8 operands");
+  if ((getIntegerBits() != 4 && getIntegerBits() != 8) ||
+      (getIntegerBits() != 8 && !a.getElementType().isInteger(8)))
+    return emitOpError("sparse integer width requires i8 operands and 4 or 8 bits");
   return mlir::success();
 }

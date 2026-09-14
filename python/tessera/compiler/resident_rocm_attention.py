@@ -15,6 +15,27 @@ from typing import Any, Mapping
 import numpy as np
 
 
+def prepare_attention_cotangent(cotangent, shape, dtype, casting="no"):
+    if casting not in {'no', 'exact'}:
+        raise ValueError("cotangent casting must be no or exact")
+    value = np.asarray(cotangent)
+    if value.shape != shape:
+        raise ValueError("resident attention cotangent shape/storage must match capture")
+    if value.dtype != dtype:
+        if casting != 'exact' or value.dtype not in (np.dtype('float32'),np.dtype('float64')):
+            raise ValueError("resident attention cotangent shape/storage must match capture")
+        if not np.all(np.isfinite(value)):
+            raise ValueError("exact cotangent conversion requires finite values")
+        with np.errstate(over='ignore',invalid='ignore'):
+            converted = value.astype(dtype)
+            restored = converted.astype(value.dtype)
+        bits = np.uint32 if value.dtype == np.float32 else np.uint64
+        if not np.array_equal(restored.view(bits),value.view(bits)):
+            raise ValueError("cotangent conversion would lose information")
+        value = converted
+    return np.array(value,copy=True,order='C')
+
+
 class ResidentROCmAttentionTape:
     """Own one compiled backward program and immutable Q/K/V/bias snapshots."""
 
@@ -30,6 +51,7 @@ class ResidentROCmAttentionTape:
         self._has_result = False
         self._retirement: Future | None = None
         self._readers = 0
+        self._pending_inputs = 0
         self._release_scheduled = False
         self._context: Any = None
         self._execute: Any = None
@@ -67,16 +89,61 @@ class ResidentROCmAttentionTape:
         do = snapshots[do_names[0]]
         self._shape, self._dtype = do.shape, do.dtype
 
-    def submit(self, cotangent) -> Future:
+    def _cotangent(self, cotangent, casting):
+        return prepare_attention_cotangent(cotangent,self._shape,self._dtype,casting)
+
+    def submit(self, cotangent, *, casting='no') -> Future:
         """Queue a backward call, retaining the frame until it completes."""
         with self._lock:
             if self._closing or self._failed or self._readers:
                 raise ValueError("resident attention is retiring, failed or has active readers")
-            value = np.asarray(cotangent)
-            if value.shape != self._shape or value.dtype != self._dtype:
-                raise ValueError("resident attention cotangent shape/storage must match capture")
-            snapshot = np.array(value, copy=True, order="C")
+            snapshot = self._cotangent(cotangent,casting)
             return self._executor.submit(self._run, snapshot)
+
+    def submit_after(self, cotangent: Future, *, casting='no') -> Future:
+        """Reserve this frame for a future host cotangent without blocking its worker.
+
+        Retirement waits for admitted inputs and their GPU work. Input failure
+        exposes no derivative and releases the reservation without poisoning HIP.
+        Device-pointer futures are not supported by this host-array interface.
+        Ready inputs enqueue in completion order, not reservation order.
+        """
+        if not isinstance(cotangent,Future):
+            raise TypeError("cotangent dependency must be a concurrent Future")
+        if casting not in {'no','exact'}:
+            raise ValueError("cotangent casting must be no or exact")
+        result: Future = Future()
+        result.set_running_or_notify_cancel()
+        with self._lock:
+            if self._closing or self._failed or self._readers:
+                raise ValueError("resident attention is retiring, failed or has active readers")
+            self._pending_inputs += 1
+        def ready(upstream):
+            work = None
+            error = None
+            with self._lock:
+                try:
+                    if self._failed:
+                        raise RuntimeError("resident attention previous submission failed")
+                    snapshot = self._cotangent(upstream.result(),casting)
+                    work = self._executor.submit(self._run,snapshot)
+                except BaseException as exc:
+                    error = exc
+                finally:
+                    self._pending_inputs -= 1
+                    self._schedule_release()
+            if error is not None:
+                result.set_exception(error)
+            else:
+                assert work is not None
+                def complete(done):
+                    try:
+                        result.set_result(done.result())
+                    except BaseException as exc:
+                        result.set_exception(exc)
+                work.add_done_callback(complete)
+        cotangent.add_done_callback(ready)
+        return result
 
     def _run(self, snapshot):
         if self._failed:
@@ -90,8 +157,8 @@ class ResidentROCmAttentionTape:
                 self._failed = True
             raise
 
-    def backward(self, cotangent):
-        return self.submit(cotangent).result()["outputs"]
+    def backward(self, cotangent, *, casting='no'):
+        return self.submit(cotangent,casting=casting).result()["outputs"]
 
     def reader(self, stream: int):
         """Lease outputs read-only on an explicit same-device HIP stream.
@@ -104,7 +171,7 @@ class ResidentROCmAttentionTape:
         if type(stream) is not int or stream <= 0:
             raise ValueError("reader requires an explicit non-default HIP stream")
         with self._lock:
-            if self._closing or self._failed:
+            if self._closing or self._failed or self._pending_inputs:
                 raise ValueError("resident attention is retiring or failed")
             self._readers += 1
             future = self._executor.submit(_AttentionReader, self, stream)
@@ -117,7 +184,7 @@ class ResidentROCmAttentionTape:
             raise
 
     def _schedule_release(self):
-        if self._retirement is None or self._readers or self._release_scheduled:
+        if self._retirement is None or self._readers or self._pending_inputs or self._release_scheduled:
             return
         self._release_scheduled = True
         retirement = self._retirement
@@ -147,6 +214,8 @@ class ResidentROCmAttentionTape:
 
     def close(self):
         with self._lock:
+            if self._pending_inputs:
+                raise ValueError("resolve or cancel pending cotangents before blocking close; retire is nonblocking")
             if self._readers:
                 raise ValueError("release external readers before blocking close; retire is nonblocking")
         if threading.get_ident() == self._worker_ident:
@@ -176,6 +245,7 @@ class _AttentionReader:
         self._owner = owner
         self._stream = ct.c_void_p(stream)
         self._released = False
+        self._release_future: Future | None = None
         self._lock = threading.Lock()
         self._event = ct.c_void_p()
         hip = owner._hip
@@ -204,7 +274,7 @@ class _AttentionReader:
 
     @property
     def outputs(self):
-        if self._released:
+        if self._released or (self._release_future is not None and not self._release_future.done()):
             raise ValueError("attention reader is released")
         return self._outputs
 
@@ -221,13 +291,41 @@ class _AttentionReader:
             self._owner._readers -= 1
             self._owner._schedule_release()
 
-    def close(self):
+    def release_async(self) -> Future:
+        """Enqueue the consumer fence; retain ownership until it is accepted.
+
+        The returned future cannot be cancelled. A failed enqueue retains the
+        reader and permits a new release attempt. After calling this method the
+        caller must stop using the exported pointers, including on other streams.
+        """
         with self._lock:
-            if not self._released:
-                if threading.get_ident() == self._owner._worker_ident:
+            prior = self._release_future
+            if prior is not None and (not prior.done() or self._released):
+                return prior
+            future: Future = Future()
+            future.set_running_or_notify_cancel()
+            self._release_future = future
+            def release():
+                try:
                     self._finish()
+                except BaseException as exc:
+                    future.set_exception(exc)
                 else:
-                    self._owner._executor.submit(self._finish).result()
+                    future.set_result(None)
+            if threading.get_ident() == self._owner._worker_ident:
+                release()
+            else:
+                try:
+                    self._owner._executor.submit(release)
+                except BaseException as exc:
+                    future.set_exception(exc)
+            return future
+
+    def close(self):
+        future = self.release_async()
+        if threading.get_ident() == self._owner._worker_ident and not future.done():
+            raise RuntimeError("blocking reader close on the owning worker is invalid; use release_async")
+        future.result()
 
     def __enter__(self):
         return self

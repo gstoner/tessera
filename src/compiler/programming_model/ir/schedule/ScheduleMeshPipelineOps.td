@@ -654,8 +654,11 @@ def Schedule_SSDOp : Op<ScheduleDialect, "ssd", [Pure]> {
 
 // Bounded RDNA4 physical 2:4 fragment contract; not a dense matmul alias.
 def Schedule_SparseMMAOp : Op<ScheduleDialect, "sparse_mma"> {
-  let summary = "gfx1201 wave32 packed 2:4 f16/bf16 MMA";
-  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc, I32:$indices, StrAttr:$arch);
+  let summary = "gfx1201 wave32 packed 2:4 half, mixed FP8 or signed/unsigned INT4/i8 MMA";
+  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc, I32:$indices, StrAttr:$arch,
+                       DefaultValuedAttr<BoolAttr, "true">:$a_signed,
+                       DefaultValuedAttr<BoolAttr, "true">:$b_signed,
+                       DefaultValuedAttr<I64Attr, "8">:$integer_bits);
   let results = (outs AnyType:$res);
   let hasVerifier = 1;
   let assemblyFormat = "$a `,` $b `,` $acc `,` $indices attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";

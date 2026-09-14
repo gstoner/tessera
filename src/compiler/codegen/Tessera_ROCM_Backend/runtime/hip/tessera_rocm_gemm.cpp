@@ -35,10 +35,12 @@
 #include <hip/hiprtc.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <map>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -309,13 +311,15 @@ std::string substitute(const std::string& tmpl, const std::string& from,
   return out;
 }
 
-// HIPRTC-compile a fully-substituted kernel source for device 0's arch and hand
+// HIPRTC-compile a fully-substituted kernel source for the selected device's arch and hand
 // back the module + named function (caller owns the module). Shared by the
 // register-blocked (rung 1) and LDS-staged (rung 2) variants.
 bool compileSrc(const std::string& src, const std::string& name,
                 hipModule_t* outMod, hipFunction_t* outFn) {
-  hipDeviceProp_t props;
-  if (hipGetDeviceProperties(&props, 0) != hipSuccess) return false;
+  int device = -1;
+  hipDeviceProp_t props{};
+  if (hipGetDevice(&device) != hipSuccess ||
+      hipGetDeviceProperties(&props, device) != hipSuccess) return false;
 
   hiprtcProgram prog;
   if (hiprtcCreateProgram(&prog, src.c_str(), "tessera_rocm_wmma_gemm.hip",
@@ -344,8 +348,11 @@ bool compileSrc(const std::string& src, const std::string& name,
 // Keep its initial tile conservative until independent performance promotion.
 bool isGfx1201() {
   hipDeviceProp_t props{};
-  return hipGetDeviceProperties(&props, 0) == hipSuccess &&
-         std::string(props.gcnArchName).compare(0, 7, "gfx1201") == 0;
+  int device = -1;
+  if (hipGetDevice(&device) != hipSuccess ||
+      hipGetDeviceProperties(&props, device) != hipSuccess) return false;
+  const std::string arch(props.gcnArchName);
+  return arch == "gfx1201" || arch.compare(0, 8, "gfx1201:") == 0;
 }
 
 // Compile a rung-1 register-blocked variant for (type, wmma builtin, MT, NT).
@@ -426,14 +433,14 @@ bool compileVariantPipe(const char* type, const char* wmma, int wm, int wn,
 
 // A shipped GEMM kernel caches its register-blocked variants per (MT,NT) — the
 // production lane now picks the tile by problem size (size-adaptive occupancy),
-// so more than one variant can be live. Keyed by mt*100+nt; compiled on first
+// so more than one variant can be live. Keyed by device, arch, MT and NT; compiled on first
 // use (head_dim-style on-demand HIPRTC), guarded by a mutex.
 struct Kernel {
   const char* tag;    // unique kernel-name stem
   const char* type;   // device element type
   const char* wmma;   // WMMA builtin
   std::mutex mu;
-  std::map<int, hipFunction_t> fns;   // mt*100+nt -> function
+  std::map<std::tuple<int, std::string, int, int>, hipFunction_t> fns; // device, arch, MT, NT
   std::vector<hipModule_t> mods;      // owned modules
 };
 
@@ -446,7 +453,11 @@ Kernel g_bf16{"tessera_rocm_wmma_gemm_bf16_kernel", "__bf16",
 // (mt,nt). Returns nullptr if HIPRTC compile / module load failed.
 hipFunction_t prodKernelFor(Kernel* k, int mt, int nt) {
   std::lock_guard<std::mutex> lock(k->mu);
-  int key = mt * 100 + nt;
+  int device = -1;
+  hipDeviceProp_t props{};
+  if (hipGetDevice(&device) != hipSuccess ||
+      hipGetDeviceProperties(&props, device) != hipSuccess) return nullptr;
+  const auto key = std::make_tuple(device, std::string(props.gcnArchName), mt, nt);
   auto it = k->fns.find(key);
   if (it != k->fns.end()) return it->second;
   std::string name = std::string(k->tag) + "_" + std::to_string(mt) + "x"

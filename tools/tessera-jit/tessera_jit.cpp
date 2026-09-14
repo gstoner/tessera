@@ -29,6 +29,7 @@
 
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
@@ -761,6 +762,9 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   retirement.addPass(bufferization::createOwnershipBasedBufferDeallocationPass());
   retirement.addPass(bufferization::createBufferDeallocationSimplificationPass());
   retirement.addPass(bufferization::createLowerDeallocationsPass());
+  // Ownership joins can create bufferization.clone for a branch result.
+  // Materialize those copies before the memref-to-LLVM conversion.
+  retirement.addPass(createConvertBufferizationToMemRefPass());
   if (failed(retirement.run(module)))
     return failure();
 

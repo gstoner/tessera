@@ -1489,11 +1489,16 @@ class JitFn:
         opt = find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt not built; cannot emit exact HVP")
-        graph_text = re.sub(
-            r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir()
-        )
+        if any(op.kwargs.get('_region') for fn in module.functions for op in fn.body):
+            from .source_control_flow import to_native_autodiff_ir
+            graph_text = to_native_autodiff_ir(module)
+        else:
+            graph_text = re.sub(
+                r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir()
+            )
         transformed = subprocess.run(
-            [str(opt), "--tessera-autodiff-hvp-pipeline", "/dev/stdin"],
+            [str(opt), "--tessera-autodiff-paired=normalize-counted-while=true normalize-data-while=true",
+             "--tessera-autodiff-hvp-prepare", "--tessera-autodiff-forward", "/dev/stdin"],
             input=graph_text,
             capture_output=True,
             text=True,
@@ -1516,6 +1521,34 @@ class JitFn:
         module = self._specialized_autodiff_module(args, kwargs)
         source = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
         return materialize_persistent_tape(source, compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
+
+    def compile_sparse_2to4(self, *args, compiler=None, llvm_bin=None, toolkit=None, **kwargs):
+        """Trace a single product and compile a checked gfx1201 2:4 specialization.
+
+        This explicit sparse contract returns a reusable compiled package. It
+        does not alter ordinary JIT dispatch or silently prune input values.
+        AD requests remain attached to the logical JIT function; native_backward
+        differentiates that source, never the emitted packing program.
+        """
+        from .sparse_capture import compile_sparse_graph
+        if normalize_target_kind(self.target) != "rocm":
+            raise TesseraJitError("sparse capture requires a ROCm function")
+        module = self._traced_autodiff_module(args, kwargs)
+        return compile_sparse_graph(module, compiler=compiler, llvm_bin=llvm_bin, toolkit=toolkit)
+
+    def compile_sparse_auto(self, *args, compiler=None, llvm_bin=None, toolkit=None, **kwargs):
+        """Compile native per-K-tile sparse/dense selection for one half matmul.
+
+        Both branches execute on gfx1201; dense data is never pruned. This
+        explicit policy does not promote the artifact into default dispatch.
+        AD stays attached to this function's logical source.
+        """
+        from .sparse_capture import compile_sparse_graph
+        if normalize_target_kind(self.target) != "rocm":
+            raise TesseraJitError("sparse selection requires a ROCm function")
+        module = self._traced_autodiff_module(args, kwargs)
+        return compile_sparse_graph(module, selection="auto_2to4", compiler=compiler,
+                                    llvm_bin=llvm_bin, toolkit=toolkit)
 
     def compile_native_attention_jvp(self, *args, compiler, llvm_bin, **kwargs):
         """Compile an isolated Q/K attention JVP from this JIT function's trace.
@@ -1583,9 +1616,10 @@ class JitFn:
         """Return the exact compiler-owned forward-over-reverse product IR.
 
         The generated ``@f__bwd__jvp`` ABI takes backward primals (including
-        the output-cotangent seed) followed by tangents for the original
-        differentiable inputs.  Its tangent results are Hessian-vector
-        products. Unsupported second-order operations fail in the compiler;
+        the output-cotangent seed and saved residuals) followed by tangents
+        for differentiable inputs and continuous residuals. The tensor-only
+        ``@f__hvp`` entry captures residuals and their tangents internally.
+        Its tangent results are Hessian-vector products. Unsupported second-order operations fail in the compiler;
         this method never substitutes finite differences.
         """
         request = self.differentiation_request
@@ -1593,8 +1627,94 @@ class JitFn:
             raise TesseraJitError(
                 "compiled_hvp_ir requires @jit(autodiff='reverse')"
             )
-        module = self._specialized_autodiff_module(args, kwargs)
+        module = self._traced_autodiff_module(args, kwargs)
         return self._compile_hvp_module(module)
+
+    def compile_native_hvp(self, *args: Any, compiler, llvm_bin,
+                           backend, chip, **kwargs: Any):
+        """Materialize a compiler-owned bounded resident CUDA/HIP HVP product."""
+        from .native_hvp import materialize_native_hvp
+        from .source_control_flow import to_native_autodiff_ir
+        request = self.differentiation_request
+        if request is None or request.mode != "reverse":
+            raise TesseraJitError("compile_native_hvp requires reverse autodiff")
+        module = self._traced_autodiff_module(args, kwargs)
+        source = (to_native_autodiff_ir(module)
+                  if any(op.kwargs.get('_region') for fn in module.functions for op in fn.body)
+                  else module.to_mlir(canonical=True))
+        return materialize_native_hvp(source, compiler=compiler, llvm_bin=llvm_bin,
+                                      backend=backend, chip=chip)
+
+    def native_hvp(self, *args: Any, tangents: Any,
+                   out_cotangents: Any, **kwargs: Any) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        """Execute exact forward-over-reverse AD on the native CPU compiler.
+
+        Returns (gradients, Hessian-vector products), ordered by ``wrt``.
+        The output cotangent is held constant: vector-valued functions compute
+        the Hessian of that seeded scalarization. Directions for inactive
+        arguments are zero. Only static f32 input signatures are admitted;
+        compiler rejection never falls back to numerical differentiation.
+        """
+        import hashlib
+        import numpy as np
+        from .. import _jit_boundary as boundary
+
+        request = self.differentiation_request
+        if request is None or request.mode != "reverse":
+            raise TesseraJitError("native_hvp requires @jit(autodiff='reverse')")
+        if normalize_target_kind(self.target) != "cpu":
+            raise TesseraJitError("native_hvp currently requires target='cpu'")
+        self.last_hvp_execution: dict[str, Any] | None = None
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None:
+            raise TesseraJitError("native_hvp requires every forward argument")
+        inputs = [np.ascontiguousarray(np.asarray(v)) for v in ordered]
+        if any(v.dtype != np.dtype('float32') for v in inputs):
+            raise TesseraJitError("native_hvp requires f32 tensor inputs")
+        directions = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
+        if len(directions) != len(request.wrt_indices):
+            raise TesseraJitError("native_hvp requires one tangent per active input")
+        seeds = [np.zeros_like(v) for v in inputs]
+        for index, direction in zip(request.wrt_indices, directions):
+            value = np.ascontiguousarray(np.asarray(direction))
+            if value.shape != inputs[index].shape or value.dtype != inputs[index].dtype:
+                raise TesseraJitError("native_hvp tangent shape and dtype must match its primal")
+            seeds[index] = value
+        cots = out_cotangents if isinstance(out_cotangents, (tuple, list)) else (out_cotangents,)
+        values = inputs + [np.ascontiguousarray(np.asarray(v)) for v in cots] + seeds
+        module = self._traced_autodiff_module(args, kwargs)
+        product = self._compile_hvp_module(module)
+        symbol = module.functions[0].name + "__hvp"
+        handle = boundary.compile_module(product)
+        try:
+            signature = boundary._function_signature(handle, symbol)
+            if signature is None:
+                raise TesseraJitError("native_hvp requires the compiler signature ABI")
+            arguments, results = signature
+            if len(arguments) != len(values) or len(results) != 2 * len(inputs):
+                raise TesseraJitError("native_hvp compiler product ABI disagrees with the request")
+            # Validate before allocating outputs or entering native code. Shapes
+            # and dtypes are projections of the compiled signature, not guesses
+            # from the first primal (mixed-precision products need distinct slots).
+            for index, (value, entry) in enumerate(zip(values, arguments)):
+                boundary._check_array_against_sig("input", index, value, entry)
+            outputs = []
+            for shape, elem in results:
+                if shape is None or any(d is None for d in shape) or elem not in ('f32', 'f64'):
+                    raise TesseraJitError("native_hvp requires static f32/f64 tensor results")
+                outputs.append(np.empty(shape, dtype='float32' if elem == 'f32' else 'float64'))
+            boundary.invoke(handle, symbol, values, outputs)
+        finally:
+            boundary.destroy(handle)
+        self.last_hvp_execution = {
+            "execution_kind": "native_cpu", "execution_mode": "mlir_llvm_jit",
+            "product_symbol": symbol,
+            "product_ir_digest": hashlib.sha256(product.encode()).hexdigest(),
+            "differentiation": "exact_forward_over_reverse",
+        }
+        count = len(inputs)
+        return (tuple(outputs[i] for i in request.wrt_indices),
+                tuple(outputs[count + i] for i in request.wrt_indices))
 
     def native_jvp(
         self, *args: Any, tangents: Any, **kwargs: Any

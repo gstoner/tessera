@@ -3409,3 +3409,28 @@ def Tessera_AbsoluteOp : Op<Tessera_Dialect, "absolute", [Pure]> {
   let results = (outs AnyRankedTensor:$output);
   let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }
+
+// Existing public unary floor contract. Physical Schedule admission remains
+// the isolated static f32 x86 envelope; registration is not backend evidence.
+def Tessera_FloorOp : Op<Tessera_Dialect, "floor", [Pure]> {
+  let hasVerifier = 1;
+  let arguments = (ins AnyRankedTensor:$input);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_CeilOp : Op<Tessera_Dialect, "ceil", [Pure]> {
+  let hasVerifier = 1;
+  let arguments = (ins AnyRankedTensor:$input);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}
+
+// Existing public inclusive scan. Native scheduling currently accepts the
+// trailing-axis static f32 envelope only.
+def Tessera_CumsumOp : Op<Tessera_Dialect, "cumsum", [Pure]> {
+  let hasVerifier = 1;
+  let arguments = (ins AnyRankedTensor:$input, DefaultValuedAttr<I64Attr, "-1">:$axis);
+  let results = (outs AnyRankedTensor:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
+}

@@ -9,16 +9,15 @@ import math
 import os
 import ctypes as ct
 import multiprocessing as mp
-import subprocess
 import threading
 import time
 
 import numpy as np
 
-from .native_driver_isolation import DriverIsolationLease, IsolationRecovery
+from .native_driver_isolation import DriverIsolationLease, IsolationRecovery, SpawnedProcessBoundary as _ProcessBoundary
 
 
-def _ann_worker(connection, pair, input_bound, absolute_budget):
+def _ann_worker(connection, pair, input_bound, absolute_budget, device):
     try:
         backend = pair.original.backend
         driver = ct.CDLL('libcuda.so.1' if backend == 'nvidia' else 'libamdhip64.so')
@@ -30,12 +29,14 @@ def _ann_worker(connection, pair, input_bound, absolute_budget):
                 raise RuntimeError(f'isolated worker context initialization failed: {name} {status}')
         if backend == 'nvidia':
             call('cuInit', [ct.c_uint], 0)
+            handle = ct.c_int()
+            call('cuDeviceGet', [ct.POINTER(ct.c_int), ct.c_int], ct.byref(handle), device)
             context = ct.c_void_p()
-            call('cuDevicePrimaryCtxRetain', [ct.POINTER(ct.c_void_p), ct.c_int], ct.byref(context), 0)
+            call('cuDevicePrimaryCtxRetain', [ct.POINTER(ct.c_void_p), ct.c_int], ct.byref(context), handle)
             call('cuCtxSetCurrent', [ct.c_void_p], context)
         elif backend == 'rocm':
             call('hipInit', [ct.c_uint], 0)
-            call('hipSetDevice', [ct.c_int], 0)
+            call('hipSetDevice', [ct.c_int], device)
         else:
             raise ValueError('isolated worker requires CUDA or HIP')
         _serve(connection, pair, input_bound, absolute_budget)
@@ -84,24 +85,6 @@ def _serve(connection, pair, input_bound, absolute_budget):
         connection.close()
 
 
-class _ProcessBoundary:
-    def __init__(self, process):
-        self.process = process
-
-    def poll(self):
-        return self.process.exitcode
-
-    def terminate(self):
-        self.process.terminate()
-
-    def kill(self):
-        self.process.kill()
-
-    def wait(self, timeout=None):
-        self.process.join(timeout)
-        if self.process.exitcode is None:
-            raise subprocess.TimeoutExpired('native ANN worker', timeout)
-        return self.process.exitcode
 
 
 # Retain uncertain channels/process owners even if the caller loses its handle.
@@ -109,11 +92,14 @@ _UNCERTAIN_WORKERS: set[IsolatedNativeANN] = set()
 
 
 class IsolatedNativeANN:
-    """Device zero, one outstanding request; only confirmed host results escape."""
-    def __init__(self, pair, *, input_bound, absolute_budget, timeout_seconds=30.0):
+    """Explicit device ordinal, one request; only confirmed host results escape."""
+    def __init__(self, pair, *, input_bound, absolute_budget, timeout_seconds=30.0, device=0):
+        if type(device) is not int or not 0 <= device < 2**31:
+            raise ValueError('isolated ANN device requires a nonnegative signed-i32 ordinal')
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError('isolated ANN requires a finite positive timeout')
         self.pair, self.timeout = pair, float(timeout_seconds)
+        self.device = device
         self.input_bound, self.absolute_budget = input_bound, absolute_budget
         self._lock = threading.RLock()
         self._pending = None
@@ -124,7 +110,7 @@ class IsolatedNativeANN:
         context = mp.get_context('spawn')
         parent, child = context.Pipe()
         self._connection = parent
-        self._process = context.Process(target=_ann_worker, args=(child, pair, input_bound, absolute_budget), daemon=True)
+        self._process = context.Process(target=_ann_worker, args=(child, pair, input_bound, absolute_budget, device), daemon=True)
         self._process.start()
         child.close()
         self.lease = DriverIsolationLease(_ProcessBoundary(self._process),
@@ -213,7 +199,7 @@ class IsolatedNativeANN:
     def replacement(self):
         """Admit a fresh, numerically probed worker after confirmed teardown.
 
-        This tests the selected workload on device zero now; it does not prove
+        This tests the selected workload on the same device ordinal now; it does not prove
         global driver health or reset a device. Failure never reuses this worker.
         """
         with self._lock:
@@ -221,7 +207,7 @@ class IsolatedNativeANN:
                 raise ValueError('replacement requires confirmed uncertain-worker teardown')
             return type(self)(self.pair, input_bound=self.input_bound,
                               absolute_budget=self.absolute_budget,
-                              timeout_seconds=self.timeout)
+                              timeout_seconds=self.timeout, device=self.device)
 
     def recover_async(self):
         """Start bounded process teardown; poll_recovery finalizes host ownership."""

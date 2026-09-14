@@ -1,0 +1,43 @@
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+........................................................................ [ 41%]
+........................................................................ [ 55%]
+........................................................................ [ 69%]
+........................................................................ [ 83%]
+........................................................................ [ 97%]
+............                                                             [100%]
+=============================== warnings summary ===============================
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:268: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:324: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:372: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:872: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:921: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:979: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:1024: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+tests/unit/test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes[shape0]
+  /home/angstorms/programming/tessera/tests/unit/test_scheduled_matmul_consumers.py:1090: RuntimeWarning: NVIDIA device lanes are being SKIPPED on a host that appears to have an NVIDIA GPU. This is an environment problem, not an absent device, and the skips will look like a clean run. Source scripts/_nvidia_env.sh (or put the driver shim -- /usr/lib/wsl/lib under WSL2 -- and the CUDA toolkit on PATH) before treating any result from this session as device evidence.
+    not nvidia_cuda_host_ready()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+516 passed, 8 warnings in 49.58s

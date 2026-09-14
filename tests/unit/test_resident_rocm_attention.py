@@ -165,3 +165,99 @@ def test_wrong_device_reader_does_not_poison_or_pin_owner(monkeypatch):
         assert tape._readers == 0
         tape.submit(np.ones((2,2),np.float16)).result()
     assert closed.is_set()
+
+
+def test_async_reader_release_retains_frame_and_is_retryable(monkeypatch):
+    closed, entered, proceed = threading.Event(), threading.Event(), threading.Event()
+    tape = _owner(monkeypatch, lambda **kw: kw["cotangent"], closed)
+    tape.submit(np.ones((2, 2), np.float16)).result()
+    reader = tape.reader(22)
+    record = tape._hip.hipEventRecord
+    def blocked_record(*args):
+        entered.set()
+        assert proceed.wait(5)
+        return record(*args)
+    tape._hip.hipEventRecord = blocked_record
+    tape._hip.fail_record = True
+    retirement = tape.retire()
+    release = reader.release_async()
+    try:
+        assert entered.wait(5)
+        assert not release.cancel()
+        assert reader.release_async() is release
+        assert not retirement.done() and not closed.is_set()
+        with pytest.raises(ValueError, match="released"):
+            _ = reader.outputs
+    finally:
+        proceed.set()
+    with pytest.raises(RuntimeError, match="ownership retained"):
+        release.result(timeout=5)
+    assert not retirement.done()
+    tape._hip.fail_record = False
+    retry = reader.release_async()
+    assert retry is not release
+    retry.result(timeout=5)
+    retirement.result(timeout=5)
+    assert reader.release_async() is retry
+    tape.close()
+    assert closed.is_set()
+
+
+def test_worker_cannot_wait_for_reader_release_queued_behind_itself(monkeypatch):
+    closed, entered, proceed = threading.Event(), threading.Event(), threading.Event()
+    tape = _owner(monkeypatch, lambda **kw: kw["cotangent"], closed)
+    tape.submit(np.ones((2,2),np.float16)).result()
+    reader = tape.reader(22)
+    def work():
+        entered.set()
+        assert proceed.wait(5)
+        with pytest.raises(RuntimeError,match='owning worker'):
+            reader.close()
+    busy = tape._executor.submit(work)
+    try:
+        assert entered.wait(5)
+        release = reader.release_async()
+    finally:
+        proceed.set()
+    busy.result(timeout=5)
+    release.result(timeout=5)
+    tape.close()
+    assert closed.is_set()
+
+
+def test_future_cotangent_reserves_frame_until_gpu_completion(monkeypatch):
+    from concurrent.futures import Future
+    closed = threading.Event()
+    tape = _owner(monkeypatch,lambda **kw: kw['cotangent'],closed)
+    upstream = Future()
+    result = tape.submit_after(upstream,casting='exact')
+    assert not result.cancel()
+    with pytest.raises(ValueError,match='pending cotangents'):
+        tape.close()
+    retirement = tape.retire()
+    assert not retirement.done()
+    upstream.set_result(np.ones((2,2),np.float32))
+    np.testing.assert_array_equal(result.result(timeout=5),1)
+    assert result.result().dtype == np.float16
+    retirement.result(timeout=5)
+    assert closed.is_set()
+
+
+def test_failed_future_and_lossy_cast_do_not_poison_owner(monkeypatch):
+    from concurrent.futures import Future, CancelledError
+    closed = threading.Event()
+    tape = _owner(monkeypatch,lambda **kw: kw['cotangent'],closed)
+    with tape:
+        future = Future()
+        result = tape.submit_after(future)
+        future.cancel()
+        with pytest.raises(CancelledError):
+            result.result(timeout=5)
+        assert not tape._failed and tape._pending_inputs == 0
+        for value in (np.full((2,2),.1,np.float32),np.full((2,2),np.inf,np.float32)):
+            with pytest.raises(ValueError,match='information|finite'):
+                tape.submit(value,casting='exact')
+        zeros = np.full((2,2),-0.0,np.float32)
+        actual = tape.submit(zeros,casting='exact').result()
+        np.testing.assert_array_equal(actual.view(np.uint16),0x8000)
+    assert closed.is_set()

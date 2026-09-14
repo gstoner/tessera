@@ -1,5 +1,28 @@
-// Bounded absolute ownership through the existing durable Schedule record.
+// Bounded unary ownership through the existing durable Schedule record.
 namespace {
+static bool isNativeFloor(Operation *op) {
+  return op->getName().getStringRef() == "tessera.floor";
+}
+static bool isNativeUnary(Operation *op) {
+  auto name = op->getName().getStringRef();
+  return name == "tessera.absolute" || name == "tessera.abs" ||
+         name == "tessera.ceil" || name == "tessera.cumsum" || isNativeFloor(op);
+}
+static StringRef nativeUnaryFamily(Operation *op) {
+  if (op->getName().getStringRef() == "tessera.cumsum") return "cumsum";
+  if (isNativeFloor(op)) return "floor";
+  if (op->getName().getStringRef() == "tessera.ceil") return "ceil";
+  return "absolute";
+}
+static StringRef nativeUnaryKind(Operation *op) {
+  auto family = nativeUnaryFamily(op);
+  return family == "absolute" ? "abs" : family == "cumsum" ? "sum" : family;
+}
+static StringRef nativeUnaryPolicy(Operation *op) {
+  auto family = nativeUnaryFamily(op);
+  if (family == "cumsum") return "f32_inclusive_scan";
+  return family == "floor" ? "ieee_floor" : family == "ceil" ? "ieee_ceil" : "ieee_abs_clear_sign";
+}
 static FailureOr<DictionaryAttr> absoluteContract(Operation *op) {
   auto fn = op->getParentOfType<func::FuncOp>();
   auto mod = op->getParentOfType<ModuleOp>();
@@ -38,7 +61,10 @@ static FailureOr<DictionaryAttr> absoluteContract(Operation *op) {
     elements *= dim;
   }
   for (NamedAttribute attr : op->getAttrs())
-    if (attr.getName() != "schedule.artifact_hash" &&
+    if (!(nativeUnaryFamily(op) == "cumsum" && attr.getName() == "axis" &&
+          isa<IntegerAttr>(attr.getValue()) &&
+          (cast<IntegerAttr>(attr.getValue()).getInt() == -1 || cast<IntegerAttr>(attr.getValue()).getInt() == ty.getRank()-1)) &&
+        attr.getName() != "schedule.artifact_hash" &&
         !(attr.getName() == "tessera.effect_kind" && attr.getValue() == StringAttr::get(op->getContext(), "pure")))
       return op->emitError("absolute has an unsupported policy attribute"), failure();
   auto names = mod->getAttrOfType<ArrayAttr>("tessera.launch_bindings");
@@ -46,9 +72,9 @@ static FailureOr<DictionaryAttr> absoluteContract(Operation *op) {
     return op->emitError("absolute requires distinct input/output binding names"), failure();
   OpBuilder b(op);
   return b.getDictionaryAttr({b.getNamedAttr("shape", b.getDenseI64ArrayAttr(ty.getShape())),
-      b.getNamedAttr("bindings", names), b.getNamedAttr("kind", b.getStringAttr("abs")),
+      b.getNamedAttr("bindings", names), b.getNamedAttr("kind", b.getStringAttr(nativeUnaryKind(op))),
       b.getNamedAttr("storage", b.getStringAttr("f32")), b.getNamedAttr("layout", b.getStringAttr("row_major")),
-      b.getNamedAttr("numeric_policy", b.getStringAttr("ieee_abs_clear_sign")),
+      b.getNamedAttr("numeric_policy", b.getStringAttr(nativeUnaryPolicy(op))),
       b.getNamedAttr("elements", b.getI64IntegerAttr(elements))});
 }
 static std::string absoluteHash(DictionaryAttr contract) {
@@ -59,7 +85,7 @@ static LogicalResult scheduleNativeAbsolute(ModuleOp mod) {
   auto target = mod->getAttrOfType<StringAttr>("tessera.target");
   if (!target || target.getValue() != "x86") return success();
   SmallVector<Operation *> ops;
-  mod.walk([&](Operation *op) { if (op->getName().getStringRef() == "tessera.absolute" || op->getName().getStringRef() == "tessera.abs") ops.push_back(op); });
+  mod.walk([&](Operation *op) { if (isNativeUnary(op)) ops.push_back(op); });
   for (auto *op : ops) {
     auto contract = absoluteContract(op); if (failed(contract)) return failure();
     auto fn = op->getParentOfType<func::FuncOp>();
@@ -71,7 +97,7 @@ static LogicalResult scheduleNativeAbsolute(ModuleOp mod) {
     op->setAttr("schedule.artifact_hash", hash);
     OperationState state(op->getLoc(), "schedule.artifact");
     state.addAttribute("hash", hash); state.addAttribute("arch", b.getStringAttr("zen5-avx512"));
-    state.addAttribute("shape_key", b.getStringAttr("family=absolute"));
+    state.addAttribute("shape_key", b.getStringAttr(std::string("family=") + nativeUnaryFamily(op).str()));
     state.addAttribute("contract", *contract);
     b.create(state);
   }
@@ -79,31 +105,38 @@ static LogicalResult scheduleNativeAbsolute(ModuleOp mod) {
 }
 static LogicalResult lowerNativeAbsolute(ModuleOp mod) {
   SmallVector<schedule::ArtifactOp> records;
-  mod.walk([&](schedule::ArtifactOp op) { if (op.getShapeKey() == "family=absolute") records.push_back(op); });
+  mod.walk([&](schedule::ArtifactOp op) { if (op.getShapeKey() == "family=absolute" || op.getShapeKey() == "family=floor" || op.getShapeKey() == "family=ceil" || op.getShapeKey() == "family=cumsum") records.push_back(op); });
   for (auto record : records) {
     auto fn = record->getParentOfType<func::FuncOp>();
     if (!fn || !fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 3)
       return record.emitError("absolute Schedule requires its isolated Graph parent");
     auto *op = &fn.getBody().front().front();
-    if (op->getName().getStringRef() != "tessera.absolute" && op->getName().getStringRef() != "tessera.abs")
+    if (!isNativeUnary(op))
       return record.emitError("absolute Schedule lost its Graph operation");
     auto contract = absoluteContract(op);
     auto ret = dyn_cast<func::ReturnOp>(fn.getBody().front().back());
     if (failed(contract) || !ret || ret.getOperands() != op->getResults() ||
         record->getAttr("contract") != *contract || record.getHash() != absoluteHash(*contract) ||
+        record.getShapeKey() != (std::string("family=") + nativeUnaryFamily(op).str()) ||
         record.getArch() != "zen5-avx512" || op->getAttr("schedule.artifact_hash") != record->getAttr("hash"))
       return record.emitError("absolute Schedule contract was altered");
     OpBuilder b(mod.getBody(), mod.getBody()->end());
     auto ptr = LLVM::LLVMPointerType::get(mod.getContext());
-    auto type = LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(mod.getContext()), {ptr, ptr, b.getI64Type()}, false);
-    auto kernel = LLVM::LLVMFuncOp::create(b, op->getLoc(), "tessera_tile_x86_unary_abs", type);
-    kernel->setAttr("tessera.absolute_contract", *contract);
+    bool scan = nativeUnaryFamily(op) == "cumsum";
+    SmallVector<Type> params{ptr, ptr, b.getI64Type()};
+    if (scan) params.push_back(b.getI64Type());
+    auto type = LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(mod.getContext()), params, false);
+    auto kernel = LLVM::LLVMFuncOp::create(b, op->getLoc(), std::string("tessera_tile_x86_unary_") + nativeUnaryKind(op).str(), type);
+    kernel->setAttr(std::string("tessera.") + nativeUnaryFamily(op).str() + "_contract", *contract);
     kernel->setAttr("tessera.schedule_hash", record->getAttr("hash"));
     Block *entry = kernel.addEntryBlock(b); b.setInsertionPointToStart(entry);
-    OperationState tile(op->getLoc(), "tile.elementwise_kernel");
+    OperationState tile(op->getLoc(), scan ? "tile.scan_kernel" : "tile.elementwise_kernel");
     tile.addOperands(entry->getArguments());
-    tile.addAttribute("family", b.getStringAttr("unary")); tile.addAttribute("kind", b.getStringAttr("abs"));
-    tile.addAttribute("storage", b.getStringAttr("f32")); tile.addAttribute("output_storage", b.getStringAttr("f32"));
+    if (!scan) tile.addAttribute("family", b.getStringAttr("unary"));
+    tile.addAttribute("kind", b.getStringAttr(nativeUnaryKind(op)));
+    tile.addAttribute("storage", b.getStringAttr("f32"));
+    if (scan) tile.addAttribute("inclusive", b.getBoolAttr(true));
+    else tile.addAttribute("output_storage", b.getStringAttr("f32"));
     b.create(tile); LLVM::ReturnOp::create(b, op->getLoc(), ValueRange{});
     fn.erase();
   }

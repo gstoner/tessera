@@ -1357,7 +1357,7 @@ def _execute_distribution_loss(**kwargs: Any) -> NativeVJPResult:
     family="matmul_backward",
     schedule_consumer="schedule.matmul_backward",
     tile_consumer="tile.matmul",
-    target_consumers={"rocm": "rocm.gfx1151_composed_matmul_backward"},
+    target_consumers={"rocm": "rocm.selected_device_composed_matmul_backward"},
 )
 def _execute_rocm_matmul_backward(
     *,
@@ -1373,10 +1373,14 @@ def _execute_rocm_matmul_backward(
     frontend_certificate: Any | None,
 ) -> NativeVJPResult:
     """Compose dA/dB from the two target-owned forward GEMM packages."""
-    del source, source_arg_names, source_graph_ir, frontend_certificate
+    del source_graph_ir, frontend_certificate
     import numpy as np
 
-    from tessera.runtime import RuntimeArtifact, launch
+    from tessera.runtime import RuntimeArtifact, launch, _rocm_live_arch
+
+    architecture = _rocm_live_arch()
+    if architecture not in {"gfx1151", "gfx1201"}:
+        raise TesseraJitError("ROCm matmul VJP requires its selected supported device")
 
     if target != "rocm" or len(ordered_inputs) != 2 or len(arg_names) != 2:
         raise TesseraJitError("ROCm matmul VJP requires exactly A and B")
@@ -1387,7 +1391,18 @@ def _execute_rocm_matmul_backward(
     )
     if len(cotangents) != 1:
         raise TesseraJitError("ROCm matmul VJP requires one output cotangent")
-    a, b = (np.ascontiguousarray(np.asarray(value)) for value in ordered_inputs)
+    # Differentiate logical operand order, not the function argument order.
+    policies = getattr(source, "kwargs", {})
+    if any(key not in {"activation", "epilogue", "transposeA", "transposeB"} or
+           (value not in (None, "none") if key in {"activation", "epilogue"} else value is not False)
+           for key,value in policies.items()):
+        raise TesseraJitError("ROCm matmul VJP cannot discard matrix policies")
+    operands = [name.removeprefix("%") for name in source.operands]
+    if len(operands) != 2 or any(name not in source_arg_names for name in operands):
+        raise TesseraJitError("ROCm matmul VJP requires direct logical operands")
+    operand_indices = [source_arg_names.index(name) for name in operands]
+    arrays = [np.ascontiguousarray(np.asarray(value)) for value in ordered_inputs]
+    a,b = [arrays[index] for index in operand_indices]
     dout = np.ascontiguousarray(np.asarray(cotangents[0]))
 
     def launch_gemm(lhs: Any, rhs: Any) -> tuple[Any, Any]:
@@ -1422,7 +1437,9 @@ def _execute_rocm_matmul_backward(
 
     da, da_attestation = launch_gemm(dout, b.T)
     db, db_attestation = launch_gemm(a.T, dout)
-    gradients = (da, db)
+    gradients: list[Any] = [np.zeros_like(value) for value in arrays]
+    for index,gradient in zip(operand_indices,(da,db),strict=True):
+        gradients[index] = gradients[index] + gradient
     physical_attestation = _compose_physical_attestations(
         (da_attestation, db_attestation)
     )
@@ -1433,7 +1450,7 @@ def _execute_rocm_matmul_backward(
             "compiler_path": "rocm_compiled+rocm_compiled",
             "execution_kind": "native_gpu",
             "execution_mode": "hip_runtime",
-            "evidence_target": "rocm_gfx1151",
+            "evidence_target": "rocm_" + architecture,
             "implementation": "family_plugin_composition",
             "residual_policy": "save_inputs",
             "family": declaration.family,

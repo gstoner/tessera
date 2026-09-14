@@ -1,4 +1,5 @@
 #include "TesseraROCM/Passes.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
@@ -300,6 +301,66 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
           return;
         }
         SmallVector<Value> args(op->getOperands());
+        auto width = op->getAttrOfType<IntegerAttr>("integer_bits");
+        bool int4 = width && width.getInt() == 4;
+        bool integer = aTy.getElementType().isInteger(8) || int4;
+        bool fp8 = isa<Float8E4M3FNType>(aTy.getElementType());
+        bool bf8 = isa<Float8E5M2Type>(aTy.getElementType());
+        if (integer || fp8 || bf8) {
+          if (!integer) {
+            args[0] = rewriter.create<arith::BitcastOp>(op->getLoc(), VectorType::get({8}, rewriter.getI8Type()), args[0]);
+            args[1] = rewriter.create<arith::BitcastOp>(op->getLoc(), VectorType::get({16}, rewriter.getI8Type()), args[1]);
+          }
+          if (int4) {
+            // Pack explicitly in i32: avoid sub-byte vector truncation in the
+            // target legalizer and retain the byte-addressable logical ABI.
+            auto i32 = rewriter.getI32Type();
+            auto constant = [&](int value) -> Value {
+              return rewriter.create<LLVM::ConstantOp>(op->getLoc(), i32, rewriter.getI32IntegerAttr(value));
+            };
+            for (unsigned side = 0; side != 2; ++side) {
+              unsigned words = side == 0 ? 1 : 2;
+              auto packedTy = VectorType::get({static_cast<int64_t>(words)}, i32);
+              Value packed = rewriter.create<LLVM::UndefOp>(op->getLoc(), packedTy);
+              for (unsigned word = 0; word != words; ++word) {
+                Value bits = constant(0);
+                for (unsigned nibble = 0; nibble != 8; ++nibble) {
+                  Value byte = rewriter.create<LLVM::ExtractElementOp>(op->getLoc(), args[side], constant(word * 8 + nibble));
+                  Value wide = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i32, byte);
+                  Value low = rewriter.create<LLVM::AndOp>(op->getLoc(), wide, constant(15));
+                  Value shifted = rewriter.create<LLVM::ShlOp>(op->getLoc(), low, constant(nibble * 4));
+                  bits = rewriter.create<LLVM::OrOp>(op->getLoc(), bits, shifted);
+                }
+                packed = rewriter.create<LLVM::InsertElementOp>(op->getLoc(), packedTy, packed, bits, constant(word));
+              }
+              if (side == 0)
+                args[side] = rewriter.create<LLVM::ExtractElementOp>(op->getLoc(), packed, constant(0));
+              else
+                args[side] = packed;
+            }
+          } else {
+            args[0] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+                VectorType::get({2}, rewriter.getI32Type()), args[0]);
+            args[1] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+                VectorType::get({4}, rewriter.getI32Type()), args[1]);
+          }
+          if (integer) {
+            auto sign = [&](StringRef name) {
+              auto attr = op->getAttrOfType<BoolAttr>(name);
+              return rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getBoolAttr(!attr || attr.getValue()));
+            };
+            auto no = rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getBoolAttr(false));
+            args = {sign("a_signed"), args[0], sign("b_signed"), args[1], args[2], args[3], no};
+          }
+          bool rhsFP8 = isa<Float8E4M3FNType>(cast<VectorType>(op->getOperand(1).getType()).getElementType());
+          StringRef intrinsicName = integer ? (int4 ? "llvm.amdgcn.swmmac.i32.16x16x32.iu4" : "llvm.amdgcn.swmmac.i32.16x16x32.iu8") :
+              (fp8 ? (rhsFP8 ? "llvm.amdgcn.swmmac.f32.16x16x32.fp8.fp8" : "llvm.amdgcn.swmmac.f32.16x16x32.fp8.bf8")
+                   : (rhsFP8 ? "llvm.amdgcn.swmmac.f32.16x16x32.bf8.fp8" : "llvm.amdgcn.swmmac.f32.16x16x32.bf8.bf8"));
+          auto call = rewriter.create<LLVM::CallIntrinsicOp>(op->getLoc(),
+              op->getResult(0).getType(), rewriter.getStringAttr(intrinsicName), args);
+          rewriter.replaceOp(op, call.getResult(0));
+          continue;
+        }
         bool bf16 = aTy.getElementType().isBF16();
         if (bf16) {
           args[0] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
@@ -307,11 +368,22 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
           args[1] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
               VectorType::get({16}, rewriter.getI16Type()), args[1]);
         }
+        auto resultTy = cast<VectorType>(op->getResult(0).getType());
+        bool lowAcc = !resultTy.getElementType().isF32();
+        Type intrinsicTy = resultTy;
+        if (bf16 && lowAcc) {
+          intrinsicTy = VectorType::get({8}, rewriter.getI16Type());
+          args[2] = rewriter.create<LLVM::BitcastOp>(op->getLoc(), intrinsicTy, args[2]);
+        }
+        StringRef name = bf16
+            ? (lowAcc ? "llvm.amdgcn.swmmac.bf16.16x16x32.bf16" : "llvm.amdgcn.swmmac.f32.16x16x32.bf16")
+            : (lowAcc ? "llvm.amdgcn.swmmac.f16.16x16x32.f16" : "llvm.amdgcn.swmmac.f32.16x16x32.f16");
         auto intrinsic = rewriter.create<LLVM::CallIntrinsicOp>(op->getLoc(),
-            op->getResult(0).getType(), rewriter.getStringAttr(bf16
-                ? "llvm.amdgcn.swmmac.f32.16x16x32.bf16"
-                : "llvm.amdgcn.swmmac.f32.16x16x32.f16"), args);
-        rewriter.replaceOp(op, intrinsic->getResults());
+            intrinsicTy, rewriter.getStringAttr(name), args);
+        Value result = intrinsic.getResult(0);
+        if (bf16 && lowAcc)
+          result = rewriter.create<LLVM::BitcastOp>(op->getLoc(), resultTy, result);
+        rewriter.replaceOp(op, result);
         continue;
       }
 

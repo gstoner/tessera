@@ -370,15 +370,23 @@ def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
 }
 
 def ROCM_SWMMACOp : TesseraROCM_Op<"swmmac"> {
-  let summary = "RDNA4 wave32 sparse f16/bf16 matrix accumulate with explicit indices";
+  let summary = "RDNA4 wave32 sparse typed matrix accumulate with explicit indices";
   let description = [{
     Internal physical primitive: compressed A is 16x16 representing 16x32,
-    B is dense 32x16, C/result are f32 16x16. Per-lane vectors use the
+    B is dense 32x16, C/result are 16x16: f32 or matching f16/bf16 for half operands,
+    f32 for independently typed E4M3FN/E5M2, and i32 for signed/unsigned i8.
+    Integer signs are explicit per operand; accumulation is unclamped.
+    With integer_bits=4, A/B retain byte-addressable logical fragments and
+    native lowering packs each low nibble into the K=32 instruction payload.
+    Logical producers must validate the declared signed/unsigned range. Per-lane vectors use the
     RDNA4 wave32 OPSEL=0 register layout; each i32 index contains four ordered
     pairs of 2-bit indices in its low 16 bits. A/B/index producers must retain
     this packing together. This is not a public Graph sparse-matmul operation.
   }];
-  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc, I32:$indices, StrAttr:$arch);
+  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc, I32:$indices, StrAttr:$arch,
+                       DefaultValuedAttr<BoolAttr, "true">:$a_signed,
+                       DefaultValuedAttr<BoolAttr, "true">:$b_signed,
+                       DefaultValuedAttr<I64Attr, "8">:$integer_bits);
   let results = (outs AnyType:$res);
   let hasVerifier = 1;
   let assemblyFormat = "$a `,` $b `,` $acc `,` $indices attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";

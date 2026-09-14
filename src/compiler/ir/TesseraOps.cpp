@@ -5385,6 +5385,25 @@ LogicalResult PagedKVReadOp::verify() {
   return success();
 }
 
+LogicalResult CeilOp::verify() {
+  if (getInput().getType() != getOutput().getType())
+    return emitOpError("requires unchanged tensor shape and element type");
+  return success();
+}
+
+LogicalResult FloorOp::verify() {
+  if (getInput().getType() != getOutput().getType())
+    return emitOpError("requires unchanged tensor shape and element type");
+  return success();
+}
+
+LogicalResult CumsumOp::verify() {
+  auto input = cast<RankedTensorType>(getInput().getType());
+  if (getOutput().getType() != input || static_cast<int64_t>(getAxis()) < -input.getRank() || static_cast<int64_t>(getAxis()) >= input.getRank())
+    return emitOpError("requires unchanged tensor type and an in-range axis");
+  return success();
+}
+
 LogicalResult AbsoluteOp::verify() {
   auto input = cast<RankedTensorType>(getInput().getType());
   auto output = cast<RankedTensorType>(getOutput().getType());

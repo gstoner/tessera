@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-13
+last_updated: 2026-09-14
 audit_role: reference
 ---
 
@@ -3849,3 +3849,149 @@ Remaining: Public logical sparse Graph/package integration and additional sparse
 Evidence: [saved/sparse Schedule packet](../../../benchmarks/baselines/gfx1201_saved_sparse_schedule_20260913/README.md).
 
 <!-- entry-fields:end -->
+
+
+### 2026-09-13 — Logical sparse ownership and floor migration
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: Logical sparse Schedule packing and tiled accumulation execute on gfx1201; asynchronous attention reader release retains retryability; isolated ANN replacement preserves its explicit device ordinal; x86 floor bypasses the historical Graph-owned Tile emitter through replayed native contracts.
+
+Remaining: Public sparse Graph/package binding, additional sparse dtypes, general public attention composition and mixed cotangents, in-process uncertain teardown isolation, remaining cohort/elementwise/breadth constructors, and calibrated performance admission.
+
+Evidence: [Compiler and owning-device packet](../../../benchmarks/baselines/sparse_ownership_migration_20260913/README.md), native artifact/ownership regressions and refreshed lexical route census.
+
+<!-- entry-fields:end -->
+
+The census counts Graph-annotated entry points, not remaining physical constructors
+or device certificates. Floor is a migrated branch inside a function that retains
+other Graph-owned routes. Sparse execution consumes ordinary matrix storage, but
+its validity output is only checked by the device proof harness; no public runtime
+admission is asserted. Explicit device ordinal tests use host IPC and do not prove
+recovery from a hardware hang or recovery of resident attention allocations.
+
+### 2026-09-14 — Sparse runtime and isolated attention
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: Explicit logical sparse compilation/runtime binding validates all device validity words before output exposure and confirms worker teardown. Matching f16/bf16 accumulation lowers through Schedule/Tile/Target to RDNA4 SWMMAC; eight bounded device cases cover two shapes and both accumulator policies. Resident attention composes pending host futures and lossless fp32/fp64 cotangents. The isolated owner confirms process death before replacement and repeats a workload-scoped zero-VJP check. The new zero-first saved-LSE test exposed a missing forward carrier in direct Tile lowering; the fix preserves it only for a reciprocal saved backward companion. Static f32 x86 ceil now projects and replays the native unary contract.
+
+Remaining: Automatic sparse Graph/JIT admission, integer/FP8 sparse packing, general mixed-precision AD, external device pointers across isolation, recovery of an actually hung driver, cohort/breadth and remaining elementwise migrations. No calibrated timing or performance promotion. Zero VJP is a bounded liveness/numerical check, not a global device-health certificate.
+
+Evidence: [Owning-device and host validation](../../../../benchmarks/baselines/sparse_runtime_20260914/README.md).
+
+<!-- entry-fields:end -->
+
+Correction to earlier saved-LSE evidence: reciprocal source attributes and successful reused random-cotangent tests were insufficient to prove the direct forward ABI. The new constant cotangent after a zero-first launch exposed uninitialized checkpoint storage. Both checkpoint modes and repeated reuse are now tested against the oracle with the corrected producer.
+
+### 2026-09-14 — Sparse capture, byte formats and scan
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: Opt-in JIT tracing captures one matmul under an explicit checked 2:4 precondition. Native Graph verification precedes the existing sparse Schedule producer; output storage conversion is emitted on the GPU. Signed i8/i32 and same-format E4M3FN/E5M2/f32 now lower through Schedule/Tile/Target with six gfx1201 instruction/numerical cases. Public attention reverse capture and execution apply exact wider-cotangent checks. Isolated attention admission now compares a nonzero VJP against the shared oracle as well as checking zero VJP. Trailing-axis f32 cumsum moves out of the x86 cohort emitter into replay-verified native Schedule/Tile contracts.
+
+Remaining: Automatic sparse dispatch/arbiter selection, native Graph-to-sparse recipe lowering, mixed FP8/unsigned/INT4 packing, arbitrary public AD composition, actual driver-hang recovery, and remaining cohort/breadth routes. The explicit sparse adapter is frontend code; it does not establish complete MLIR ownership of sparse source lowering. Forced worker death is not a hung-driver or GPU-reset experiment.
+
+Evidence: [Validation packet](../../../../benchmarks/baselines/sparse_capture_20260914/README.md). No performance promotion.
+
+<!-- entry-fields:end -->
+
+### 2026-09-14 — Mixed sparse operand contracts
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: Sparse packages carry an independently typed B operand in their replay identity and input preflight. Schedule/Tile/Target accept both mixed FP8 orders; integer operands carry independent signedness flags consumed by LLVM intrinsic lowering. Noninteger signedness overrides are rejected. No automatic sparsification or performance admission is introduced.
+
+Remaining: Native Graph-to-sparse producer and automatic selection; INT4 packing; arbitrary public AD; actual driver-hang recovery; remaining cohort/breadth migrations. Worker-death proof remains distinct from driver recovery, and replacement numerical checks remain workload-scoped.
+
+Evidence: `tests/unit/test_rocm_sparse_byte_formats.py` owns emitted-instruction and gfx1201 numerical checks, including unsigned values above 127, all sparse index pairs and invalid-pattern refusal. The assertions-enabled gfx1201 build passed 407 focused device/registry tests and 33 additional sparse-contract/audit tests. [Validation packet](../../../../benchmarks/baselines/sparse_mixed_20260914/README.md).
+
+<!-- entry-fields:end -->
+
+### 2026-09-14 — INT4 packing and sparse AD boundary
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: K=32 sparse INT4 retains byte-addressable logical operands with independently signed range contracts. Schedule/Tile/Target carry integer_bits; native lowering packs i32 words and uses the scalar-A/vector-B LLVM intrinsic ABI. Host and compiled GPU guards reject out-of-range values before exposing output. Four gfx1201 cases cover signed/unsigned pairs, sparse indices, emitted instructions and numerical agreement. The AD scoped plan now explicitly requires differentiation of logical matmul before physical packing, preserving derivatives at zero-valued entries.
+
+Remaining: Automatic sparse selection/native Graph lowering, K=64 and other packed storage envelopes, arbitrary public AD and composed derivative ownership. The explicit sparse API remains forward-only; this is not general AD closure or performance promotion.
+
+Evidence: `tests/unit/test_rocm_sparse_byte_formats.py::test_int4_logical_packing_device`; assertions-enabled LLVM on gfx1201. Sub-byte vector truncation and a vector-valued scalar intrinsic operand were rejected during development; final packing uses explicit i32 operations.
+
+<!-- entry-fields:end -->
+
+### 2026-09-14 — Native sparse Graph and logical AD
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: Declared checked-2:4 half matmul now lowers from Graph to a GPU Schedule kernel in C++, including logical packing, indices, accumulator/output conversion and validity status. JIT projects shape/storage from emitted attributes; it does not invoke the Python recipe producer. The pass declares every emitted dialect and rejects unconsumed module/function/argument/op policies. AD-configured JIT parents retain their logical native_backward path. ROCm matmul adjoints now follow operand order, sum repeated-operand contributions and identify the selected device rather than device zero/gfx1151 by assumption.
+
+Remaining: Automatic default/arbiter sparse-versus-dense selection, larger/nonisolated Graph envelopes, arbitrary public AD composition and higher-order/control-flow closure. The selected forward remains an explicit checked contract; no uncalibrated promotion is introduced. Backward matmul still uses the existing composed runtime GEMM route, not a new general region AD package.
+
+Evidence: `tests/unit/test_sparse_capture.py`, `tests/unit/test_native_matmul_operand_ad.py` and `tests/unit/test_autodiff_rocm_matmul_composed.py`; final results recorded with this wave. No performance promotion.
+
+<!-- entry-fields:end -->
+
+### 2026-09-14 — Native automatic sparse selection
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #747.
+
+Outcome: JitFn.compile_sparse_auto lowers isolated half matmul through the native Graph producer. Each K tile uses a wave-wide 2:4 agreement: eligible tiles execute SWMMAC, others execute native dense accumulation. One image accepts changing density without pruning or CPU fallback. The original logical JIT source still owns native_backward. The emitted selection policy is checked against its source policy during package validation.
+
+Remaining: Default-dispatch/performance promotion, broader shapes and composed native regions, arbitrary AD/control-flow/higher-order closure. This explicit automatic policy does not replace incumbents globally and claims no speedup. General AD remains separate from sparse selection.
+
+Evidence: `tests/unit/test_sparse_capture.py::test_native_automatic_sparse_dense_selection` checks dense, sparse, one-invalid-lane mixed tiles and density changes with one artifact on gfx1201; fp16 also checks logical backward. f16 and bf16 cases use the owning device.
+
+<!-- entry-fields:end -->
+
+
+## 2026-09-14 — Native composed HVP execution
+
+- IDs: W4-PRODUCT-1, AD-HIGHER-1.
+- Owner: [AD execution](AUTODIFF_EXECUTION_PLAN.md#native-composed-hvp-execution-2026-09-14).
+- Added public static CPU HVP execution using compiler-produced derivatives and
+  compiled-signature allocation. Tracer nested regions project through SCF;
+  scalar extraction tangents, passive comparison predicates and ownership-clone
+  lowering repair the nested branch/loop path.
+- Evidence: `tests/unit/test_native_hvp_execution.py`; owning-host native CPU
+  execution is distinct from assertions-enabled transformation and GPU proof.
+- Remaining work stays with the scoped AD owner; no GPU or performance promotion.
+
+
+## 2026-09-14 — Saved-product HVP and GPU export
+
+- IDs: W4-PRODUCT-1, AD-HIGHER-1.
+- Owner: [AD execution](AUTODIFF_EXECUTION_PLAN.md#saved-product-tangents-and-resident-hvp-export-2026-09-14).
+- Continuous saved products now carry captured tangents into backward JVPs.
+  The shared typed HVP export feeds existing bufferized GPU tape lowering.
+- Evidence: `tests/unit/test_native_hvp_execution.py` checks native CPU nested
+  SAVE curvature and gfx1201 composed/counting-loop HVP execution. Public capture
+  rejects unsupported effectful while instead of using an empty AST candidate.
+- No performance promotion. Dynamic results, arbitrary effects/CFG, higher
+  derivative orders and general asynchronous GPU product composition stay open.
+
+
+## 2026-09-14 — HVP product identity and CUDA execution
+
+- IDs: W4-PRODUCT-1, AD-HIGHER-1.
+- Owner: [AD execution](AUTODIFF_EXECUTION_PLAN.md#hvp-export-identity-and-cross-device-validation-2026-09-14).
+- Export accepts only HVP products generated by the pass invocation.
+- Evidence: native HVP tests execute composed and counted-loop products with
+  vector/matrix inputs independently on SM120 and gfx1201 (four device cases
+  per host). Both complete files report 7 passed, 10 skipped.
+- No performance promotion. Effectful CFG, dynamic outputs, higher derivative
+  orders and asynchronous frames remain open with the scoped owner.

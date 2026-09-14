@@ -88,3 +88,23 @@ def test_sparse_schedule_tile_target_ancestry(dtype):
     for ir in (schedule, tile):
         bad = subprocess.run([tool], input=ir.replace('arch = "gfx1201"', 'arch = "gfx1151"'), text=True, capture_output=True)
         assert bad.returncode != 0
+
+
+def test_sparse_signedness_is_preserved_and_rejected_for_float():
+    import subprocess
+    from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
+    from tessera.compiler.scheduled_matmul import find_tessera_opt
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip('requires native compiler')
+    source = sparse_logical_schedule_ir(16,16,32,'uint8',rhs_dtype='int8',accum='i32')
+    for flags in (['--tessera-schedule-to-tile'],['--tessera-schedule-to-tile','--lower-tile-to-rocm']):
+        ir = subprocess.check_output([tool,*flags],input=source,text=True)
+        assert 'a_signed = false' in ir
+    source = sparse_logical_schedule_ir(16,16,32,'float16')
+    for flags in ([],['--tessera-schedule-to-tile'],['--tessera-schedule-to-tile','--lower-tile-to-rocm']):
+        ir = subprocess.check_output([tool,*flags],input=source,text=True)
+        ir = ir.replace('arch = "gfx1201"','a_signed = false, arch = "gfx1201"')
+        failed = subprocess.run([tool],input=ir,text=True,capture_output=True)
+        assert failed.returncode != 0
+        assert 'integer signedness flags require i8 operands' in failed.stderr

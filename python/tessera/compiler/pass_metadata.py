@@ -115,7 +115,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="LowerTileToROCMPass",
         summary=(
             "Lowers Tessera Tile IR matmul/attention movement contracts to "
-            "ROCm Target IR, including verified gfx1201 packed sparse MMA fragments. Typed `!tile.fragment` values go through a "
+            "ROCm Target IR, including verified gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation. Typed `!tile.fragment` values go through a "
             "dialect conversion (fragment -> physical per-lane vector) so a "
             "K-loop accumulator, chained MMAs, and a non-zero accumulator all "
             "compose; the legacy bare `!tile.fragment` spelling still takes "
@@ -403,13 +403,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffForwardPass",
         summary=(
             "Emits a separate paired JVP function from compiler-owned Graph "
-            "TangentInterface implementations, including dense f32 Q/K/V attention with same-generation O/LSE. Optional export-attention-jvp projects an isolated verified product into a physical binding contract. Optional emit-storage-child scalarizes "
+            "TangentInterface implementations and structured SCF products; tensor extraction propagates tangents and scalar comparisons retain primal predicates. HVP products capture primal and continuous residual tangents together. Optional export-hvp isolates the tensor entry with typed product ABI for CPU/GPU consumers. Includes dense f32 Q/K/V attention with same-generation O/LSE. Optional export-attention-jvp projects an isolated verified product into a physical binding contract. Optional emit-storage-child scalarizes "
             "one rank-one f32 arithmetic/sigmoid/tanh/stop-gradient or power-of-two sum/mean pair into a native GPU storage child, preserving requested tangent argument order."
         ),
-        input_dialects=("tessera", "func", "arith"),
-        output_dialects=("tessera", "tessera.attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf"),
+        input_dialects=("tessera", "func", "arith", "tensor", "scf"),
+        output_dialects=("tessera", "tessera.attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf", "tensor"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
+        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
                          "tessera.native_jvp_pair", "tessera.native_jvp_inputs",
                          "tessera.native_jvp_input_widths", "tessera.native_jvp_output_widths",
                          "tessera.native_jvp_width", "tessera.native_jvp_output_width", "tessera.native_jvp_wrt"),
@@ -422,11 +422,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffHvpPreparePass",
         summary=(
             "Marks the paired reverse Graph program for exact "
-            "forward-over-reverse differentiation."
+            "forward-over-reverse differentiation with continuous residual directions and fixed output cotangents."
         ),
         input_dialects=("tessera", "func", "arith"),
         output_dialects=("tessera", "func", "arith"),
-        required_attrs=("tessera.autodiff.role", "tessera.autodiff.forward"),
+        required_attrs=("tessera.autodiff.role", "tessera.autodiff.forward", "tessera.autodiff.residual_sources"),
         preserved_attrs=(
             "tessera.autodiff.hvp",
             "tessera.autodiff.hvp_parent",
@@ -610,10 +610,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-graph-to-schedule",
         cpp_class="GraphToSchedulePass",
-        summary="Selects bounded native Schedule contracts from typed Graph IR, including replay-bound x86 absolute and physical batch/head attention bias broadcasting. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
+        summary="Selects bounded native Schedule contracts from typed Graph IR, including native checked-2:4 and wave-uniform automatic sparse/dense gfx1201 half matmul packing, replay-bound x86 absolute/floor/ceil and physical batch/head attention bias broadcasting. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
         input_dialects=("tessera", "func"),
-        output_dialects=("tessera", "schedule", "func"),
-        required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings"),
+        output_dialects=("tessera", "schedule", "func", "gpu", "arith", "scf", "memref", "vector"),
+        required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
         preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
     ),
@@ -798,7 +798,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
-        summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments, into Tile carriers and structured SSD loops, including the x86 absolute contract and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation, into Tile carriers and structured SSD loops, including the x86 absolute/floor/ceil and inclusive trailing-axis cumsum contracts and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
         input_dialects=("schedule", "func", "tessera"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
         required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout", "contract", "bias_shape"),

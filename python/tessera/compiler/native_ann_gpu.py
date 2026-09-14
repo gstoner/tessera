@@ -92,12 +92,12 @@ class NativeANNDevicePair:
         if (self.original.backend,self.original.chip)!=(self.transformed.backend,self.transformed.chip):
             raise ValueError('ANN device programs require the same target')
 
-    def bind_isolated(self, *, input_bound, absolute_budget, timeout_seconds=30.0):
+    def bind_isolated(self, *, input_bound, absolute_budget, timeout_seconds=30.0, device=0):
         """Bind packages in a fresh process; return only checked host outputs."""
         from .native_isolated_ann import IsolatedNativeANN
         return IsolatedNativeANN(self, input_bound=input_bound,
                                  absolute_budget=absolute_budget,
-                                 timeout_seconds=timeout_seconds)
+                                 timeout_seconds=timeout_seconds, device=device)
 
     def bind(self, *, input_bound, absolute_budget):
         return BoundNativeANNDevice(self,input_bound,absolute_budget)

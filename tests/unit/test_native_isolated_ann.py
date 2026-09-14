@@ -8,10 +8,12 @@ import numpy as np
 import pytest
 
 from tessera.compiler.native_isolated_ann import IsolatedNativeANN, _UNCERTAIN_WORKERS
+from tessera.compiler.native_isolated_ann import _ann_worker as device_worker
 from benchmarks.record_native_ann_execution import source
 
 
-def host_worker(connection, pair, input_bound, absolute_budget):
+def host_worker(connection, pair, input_bound, absolute_budget, device):
+    assert device == pair.expected_device
     from tessera.compiler.native_isolated_ann import _serve
     _serve(connection, pair, input_bound, absolute_budget)
 
@@ -23,6 +25,7 @@ def host_transport(monkeypatch):
 
 @dataclass
 class Pair:
+    expected_device: int = 0
     stall: bool = False
     unhealthy: bool = False
     health_stall: bool = False
@@ -145,6 +148,49 @@ def test_replacement_requires_death_and_a_fresh_probe():
     runner.pair.unhealthy = True
     with pytest.raises(RuntimeError, match='health failure'):
         runner.replacement()
+
+
+def test_replacement_preserves_explicit_device_ordinal():
+    runner = IsolatedNativeANN(Pair(expected_device=3), input_bound=1,
+                               absolute_budget=.1, device=3)
+    runner._poison()
+    runner.recover()
+    with runner.replacement() as replacement:
+        assert replacement.device == 3
+        np.testing.assert_array_equal(replacement.run(np.ones((3,2),np.float32)),2)
+
+
+@pytest.mark.parametrize('device', [-1, True, 1.5, 2**31])
+def test_invalid_device_refuses_before_worker_creation(device):
+    with pytest.raises(ValueError, match='ordinal'):
+        IsolatedNativeANN(Pair(), input_bound=1, absolute_budget=.1, device=device)
+
+
+@pytest.mark.parametrize('backend', ['rocm', 'nvidia'])
+def test_worker_initializes_requested_device_before_health_probe(monkeypatch, backend):
+    import ctypes as ct
+    from tessera.compiler import native_isolated_ann as isolation
+    calls = []
+    class Driver:
+        def __getattr__(self, name):
+            def call(*args):
+                calls.append((name,args))
+                if name == 'cuDevicePrimaryCtxRetain':
+                    ct.cast(args[0],ct.POINTER(ct.c_void_p))[0] = 17
+                elif name == 'cuDeviceGet':
+                    ct.cast(args[0],ct.POINTER(ct.c_int))[0] = 51
+                return 0
+            return call
+    monkeypatch.setattr(isolation.ct,'CDLL',lambda _: Driver())
+    monkeypatch.setattr(isolation,'_serve',lambda *args: calls.append(('health',())))
+    pair = SimpleNamespace(original=SimpleNamespace(backend=backend))
+    device_worker(None,pair,1,.1,3)
+    assert calls[-1][0] == 'health'
+    selected = next(args for name,args in calls if name == ('hipSetDevice' if backend == 'rocm' else 'cuDeviceGet'))
+    assert selected[-1] == 3
+    if backend == 'nvidia':
+        retained = next(args for name,args in calls if name == 'cuDevicePrimaryCtxRetain')
+        assert retained[-1].value == 51
 
 
 def test_hung_health_probe_is_bounded_and_worker_reclaimed():

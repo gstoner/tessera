@@ -1,5 +1,6 @@
 """Native split-product compilation; device numerics use the owning-host recorder."""
 from pathlib import Path
+import os
 import subprocess
 import pytest
 import numpy as np
@@ -11,7 +12,7 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 def test_jit_reverse_trace_materializes_split_products():
     tool=find_tessera_opt()
-    llvm=Path('/usr/lib/llvm-23/bin')
+    llvm=Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('requires native LLVM/MLIR toolchain')
     @ts.jit(autodiff='reverse')
@@ -26,7 +27,7 @@ def test_jit_reverse_trace_materializes_split_products():
 
 def test_nested_split_products_materialize_full_residual_storage(monkeypatch):
     tool=find_tessera_opt()
-    llvm=Path('/usr/lib/llvm-23/bin')
+    llvm=Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('requires native LLVM/MLIR toolchain')
     pair=materialize_persistent_tape(source(width=8),compiler=tool,llvm_bin=llvm,backend='rocm',chip='gfx1151')
@@ -49,7 +50,7 @@ def test_nested_split_products_materialize_full_residual_storage(monkeypatch):
 
 def test_nested_temporary_capacity_refuses_before_packaging():
     tool=find_tessera_opt()
-    llvm=Path('/usr/lib/llvm-23/bin')
+    llvm=Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('requires native LLVM/MLIR toolchain')
     with pytest.raises(subprocess.CalledProcessError) as error:
@@ -100,7 +101,8 @@ def test_zero_trip_reserved_temporaries_still_count_against_capacity():
     assert '4096 temporary bytes' in result.stderr
 
 
-def test_dynamic_copy_extent_refuses_before_serial_loop_expansion():
+@pytest.mark.parametrize('known', [True, False])
+def test_dynamic_copy_requires_proven_extent_before_serial_loop_expansion(known):
     tool=find_tessera_opt()
     if tool is None:
         pytest.skip('requires native compiler')
@@ -112,9 +114,20 @@ def test_dynamic_copy_extent_refuses_before_serial_loop_expansion():
         return
       }
     }'''
+    if not known:
+        source = source.replace('%out: memref<4xf32>', '%out: memref<4xf32>, %size: memref<1xi64>')
+        source = source.replace('%n = arith.constant 4 : index',
+            '%zero = arith.constant 0 : index\n'
+            '        %raw = memref.load %size[%zero] : memref<1xi64>\n'
+            '        %n = arith.index_cast %raw : i64 to index')
     result=subprocess.run([tool,'--tessera-native-tape-to-gpu'],input=source,text=True,capture_output=True)
-    assert result.returncode!=0
-    assert 'isolated static f32' in result.stderr
+    if known:
+        assert result.returncode == 0, result.stderr
+        assert 'memref.copy' not in result.stdout
+        assert 'memref.store' in result.stdout
+    else:
+        assert result.returncode != 0
+        assert 'isolated static f32' in result.stderr
 
 
 from benchmarks.record_tape_checkpoint_execution import mixed_source
@@ -123,7 +136,7 @@ from benchmarks.record_tape_checkpoint_execution import mixed_source
 def test_mixed_float_products_preserve_storage_types():
     from tessera.compiler.native_storage_contract import read_tensor_contract
     tool = find_tessera_opt()
-    llvm = Path('/usr/lib/llvm-23/bin')
+    llvm = Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('requires native LLVM/MLIR toolchain')
     pair = materialize_persistent_tape(mixed_source(), compiler=tool, llvm_bin=llvm,
@@ -186,7 +199,7 @@ def test_replay_bounds_require_derived_ssa_capacity(loaded, selected_start):
 def test_counted_while_normalizes_to_persistent_tensor_tape():
     from benchmarks.record_tape_checkpoint_execution import counted_while_source
     tool = find_tessera_opt()
-    llvm = Path('/usr/lib/llvm-23/bin')
+    llvm = Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('requires native LLVM/MLIR toolchain')
     pair = materialize_persistent_tape(counted_while_source(), compiler=tool, llvm_bin=llvm,
@@ -204,7 +217,7 @@ def test_unproven_while_does_not_enter_device_tape(change):
             'step': text.replace('addi %i, %one', 'addi %i, %zero'),
             'capacity': text.replace('max_iters = 3', 'max_iters = 2')}[change]
     tool = find_tessera_opt()
-    llvm = Path('/usr/lib/llvm-23/bin')
+    llvm = Path(os.environ.get('TESSERA_LLVM_BIN', '/usr/lib/llvm-23/bin'))
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('requires native LLVM/MLIR toolchain')
     with pytest.raises((ValueError, subprocess.CalledProcessError)):

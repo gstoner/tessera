@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-13
+last_updated: 2026-09-14
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,16 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 # x86 backend TODO
+
+## Logical sparse matrices, reader release and floor migration — 2026-09-13
+
+Owner E2E-REAL-6 / ROCM-2; sync `LOGICAL-SPARSE-OWNERSHIP-FLOOR-2026-09-13`. F0 still finds cohort, elementwise and breadth Graph-to-emitter paths. The selected static f32 floor branch now registers its existing public Graph op, derives a durable Schedule contract, replays Schedule/Tile ancestry and projects bindings/layout/numerical policy. It bypasses the historical elementwise emitter only for floor, alongside absolute. Owning Zen 5 descriptor execution passes three ranked/ragged shapes with signed-zero, subnormal, infinity, NaN and fractional checks. Tajasarus now builds the x86 Target backend and shipped runtime alongside ROCm with LLVM assertions enabled. No sparse x86 execution is inferred; cohort and other elementwise/breadth routes remain open.
+
+Evidence: [bounded compiler/device packet](../../../../benchmarks/baselines/sparse_ownership_migration_20260913/README.md).
+
+## Selected HIP device follow-through — 2026-09-13
+
+Owner ROCM-2; sync `HIP-SELECTED-DEVICE-2026-09-13`. Shared runtime change assessed: selected-device discovery and GEMM specialization are HIP-only. No x86 ABI, device execution or numerical policy change; no sibling execution proof is inferred.
 
 ## PR 747 review follow-through — 2026-09-13
 
@@ -5144,3 +5154,67 @@ Parity validated on Princess-Luna Ryzen AI Max+ 395: three f32 absolute shapes c
 Evidence: [native slice packets](../../../../benchmarks/baselines/native_slices_20260912/README.md). No performance promotion.
 
 PR #746 review follow-through (E2E-REAL-6): native absolute admission accepts explicit `tessera.layout = "row_major"` alongside dimension names; incompatible or malformed layouts still fail closed. The serialized row-major contract is unchanged. This x86-only admission correction does not change Apple, NVIDIA or ROCm consumers or transfer device evidence.
+
+## Sparse runtime and isolated attention — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-RESIDENT-2026-09-14`.
+
+Static f32 ceil now enters registered Graph/Schedule/Tile and projects native descriptor policy without the legacy constructor. Three owning Zen 5 shapes match signed-zero/subnormal/fractional/infinity behavior and NaN classification. Cohort, breadth and other elementwise migrations remain open. HIP/SWMMAC and isolated resident attention device evidence is not applicable to x86.
+
+Evidence: [bounded validation](../../../../benchmarks/baselines/sparse_runtime_20260914/README.md). No performance promotion; general Graph sparse capture, additional packing formats and actual driver-hang recovery remain open.
+
+## Sparse capture, byte formats and scan — 2026-09-14
+
+Owner E2E-REAL-6; sync `SPARSE-CAPTURE-2026-09-14`.
+
+Trailing-axis static f32 cumsum now uses a native durable Schedule record and Tile scan producer, with descriptor fields projected from replayed IR. Three Zen 5 shapes pass finite/exceptional numerical comparisons. Remaining scan kinds, cohort and breadth routes retain their constructors.
+
+[Evidence](../../../../benchmarks/baselines/sparse_capture_20260914/README.md). Actual driver-hang recovery and calibrated promotion remain open.
+
+### 2026-09-14 — Mixed sparse operands
+
+Sync key: `SPARSE-MIXED-2026-09-14`; owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+
+Sparse package identity now includes B storage. Schedule/Tile/Target preserve independent integer signs and mixed FP8 types through native lowering. Not applicable to x86 physical lowering: these SWMMAC contracts are gfx1201-only. No sibling device or performance evidence transfers. Automatic selection/native Graph lowering, INT4, general AD and actual driver-hang recovery remain separate work.
+
+### 2026-09-14 — INT4 logical packing
+
+Sync `SPARSE-INT4-2026-09-14`, owner E2E-REAL-6. Shared sparse IR carries a verified 4/8-bit integer interpretation; byte storage is range-checked and native lowering packs nibbles. Not applicable to x86 execution: this physical lowering targets gfx1201 only. No sibling support or device proof is inferred. Logical AD must precede packing; automatic sparse selection/native Graph lowering and general AD remain open.
+
+### 2026-09-14 — Native sparse Graph and logical AD
+
+Sync `SPARSE-GRAPH-AD-2026-09-14`; owner E2E-REAL-6. C++ now owns declared checked-2:4 half Graph lowering and the emitted ABI. AD remains on logical matrices, with operand-order/repeated-edge correctness fixes. Not applicable to x86 physical execution: no sparse consumer changes on this backend. Shared AD/IR contracts confer no sibling device proof.
+
+### 2026-09-14 — Automatic native sparse selection
+
+Sync `SPARSE-AUTO-2026-09-14`; owner E2E-REAL-6. The explicit auto_2to4 Graph policy selects per K tile using wave-uniform agreement, with a native dense branch. Not applicable to x86 execution: only gfx1201 emits this policy; no sibling schedule is transferred. Default promotion, broader regions and arbitrary AD remain open; no measured speedup claimed.
+
+
+### Native composed HVP execution — 2026-09-14
+
+Sync: `AD-HVP-2026-09-14`; owner: AD-HIGHER-1 / W4-PRODUCT-1.
+Shared changes: tracer-to-SCF counted regions, scalar extraction tangents, passive
+comparison predicates, signature-owned CPU outputs and ownership-clone lowering.
+Native CPU JIT validation on Princess-Luna covers the shared scalar/loop product path; this does not promote an AVX-512-specific package or performance candidate.
+
+
+### Saved-product HVP and GPU export — 2026-09-14
+
+Sync: `AD-HVP-SAVE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Shared compiler captures continuous residual tangents; typed export reuses GPU
+tape lowering without rebuilding derivative formulas in Python.
+Princess-Luna native CPU validates nested SAVE gradients and HVPs. This does not promote an AVX-512 package. Dynamic/effectful public products remain open.
+
+Shared follow-through: native GPU tape copies require bounded extents even when
+source and destination use identical shape SSA. Constant-bounded views remain
+admitted; unbounded loaded sizes refuse. This changes CUDA/HIP admission; Apple
+and x86 do not consume that GPU pass.
+
+
+### HVP product identity and device breadth — 2026-09-14
+
+Sync `AD-HVP-DEVICE-2026-09-14`; owner AD-HIGHER-1 / W4-PRODUCT-1.
+Export selects only products generated by the current pass, not symbol suffixes.
+Shared export-identity rejection is covered by compiler tests. Prior CPU HVP evidence remains bounded; no dynamic-result or higher-order closure is inferred.
+No performance promotion. Effectful CFG, dynamic outputs and higher derivative
+orders remain with the scoped AD execution plan.

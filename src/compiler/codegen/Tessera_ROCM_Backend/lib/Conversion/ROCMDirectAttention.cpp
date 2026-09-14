@@ -462,6 +462,23 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
                        builder.getBoolAttr(
                            softcap.getValueAsDouble() > 0.0));
     state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
+    // The paired program owns the additional checkpoint output. Dropping this
+    // carrier makes backward read uninitialized LSE while forward keeps the
+    // inference ABI. Do not let an unpaired attribute extend that ABI.
+    auto checkpoint = symbolOwner->getAttrOfType<StringAttr>("tessera.lse_checkpoint");
+    bool saveLse = checkpoint && checkpoint.getValue() == "saved";
+    if (saveLse) {
+      auto vjp = symbolOwner->getAttrOfType<FlatSymbolRefAttr>("tessera.vjp");
+      Operation *backward = vjp ? SymbolTable::lookupNearestSymbolFrom(symbolOwner, vjp) : nullptr;
+      auto primal = backward ? backward->getAttrOfType<FlatSymbolRefAttr>("tessera.primal") : FlatSymbolRefAttr();
+      auto backwardCheckpoint = backward ? backward->getAttrOfType<StringAttr>("tessera.lse_checkpoint") : StringAttr();
+      if (!primal || primal.getValue() != symbol.getValue() ||
+          !backwardCheckpoint || backwardCheckpoint.getValue() != "saved") {
+        op->emitError("ROCm saved LSE requires a matching saved backward companion");
+        return failure();
+      }
+    }
+    state.addAttribute("save_lse", builder.getBoolAttr(saveLse));
     state.addAttribute(
         "dropout",
         builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));

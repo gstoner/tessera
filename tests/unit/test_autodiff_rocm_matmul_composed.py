@@ -57,7 +57,7 @@ def test_rocm_composed_matmul_backward_matches_numpy() -> None:
     } == {
         # Two compiled forward GEMM launches -- the point of the composition.
         "compiler_path": "rocm_compiled+rocm_compiled",
-        "evidence_target": "rocm_gfx1151",
+        "evidence_target": "rocm_" + rt._rocm_live_arch(),
         "execution_kind": "native_gpu",
         "execution_mode": "hip_runtime",
         "family": "matmul_backward",

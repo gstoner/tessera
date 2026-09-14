@@ -3882,7 +3882,7 @@ Outcome: Explicit logical sparse compilation/runtime binding validates all devic
 
 Remaining: Automatic sparse Graph/JIT admission, integer/FP8 sparse packing, general mixed-precision AD, external device pointers across isolation, recovery of an actually hung driver, cohort/breadth and remaining elementwise migrations. No calibrated timing or performance promotion. Zero VJP is a bounded liveness/numerical check, not a global device-health certificate.
 
-Evidence: [Owning-device and host validation](../../../../benchmarks/baselines/sparse_runtime_20260914/README.md).
+Evidence: [Owning-device and host validation](../../../benchmarks/baselines/sparse_runtime_20260914/README.md).
 
 <!-- entry-fields:end -->
 
@@ -3898,7 +3898,7 @@ Outcome: Opt-in JIT tracing captures one matmul under an explicit checked 2:4 pr
 
 Remaining: Automatic sparse dispatch/arbiter selection, native Graph-to-sparse recipe lowering, mixed FP8/unsigned/INT4 packing, arbitrary public AD composition, actual driver-hang recovery, and remaining cohort/breadth routes. The explicit sparse adapter is frontend code; it does not establish complete MLIR ownership of sparse source lowering. Forced worker death is not a hung-driver or GPU-reset experiment.
 
-Evidence: [Validation packet](../../../../benchmarks/baselines/sparse_capture_20260914/README.md). No performance promotion.
+Evidence: [Validation packet](../../../benchmarks/baselines/sparse_capture_20260914/README.md). No performance promotion.
 
 <!-- entry-fields:end -->
 
@@ -3912,7 +3912,7 @@ Outcome: Sparse packages carry an independently typed B operand in their replay 
 
 Remaining: Native Graph-to-sparse producer and automatic selection; INT4 packing; arbitrary public AD; actual driver-hang recovery; remaining cohort/breadth migrations. Worker-death proof remains distinct from driver recovery, and replacement numerical checks remain workload-scoped.
 
-Evidence: `tests/unit/test_rocm_sparse_byte_formats.py` owns emitted-instruction and gfx1201 numerical checks, including unsigned values above 127, all sparse index pairs and invalid-pattern refusal. The assertions-enabled gfx1201 build passed 407 focused device/registry tests and 33 additional sparse-contract/audit tests. [Validation packet](../../../../benchmarks/baselines/sparse_mixed_20260914/README.md).
+Evidence: `tests/unit/test_rocm_sparse_byte_formats.py` owns emitted-instruction and gfx1201 numerical checks, including unsigned values above 127, all sparse index pairs and invalid-pattern refusal. The assertions-enabled gfx1201 build passed 407 focused device/registry tests and 33 additional sparse-contract/audit tests. [Validation packet](../../../benchmarks/baselines/sparse_mixed_20260914/README.md).
 
 <!-- entry-fields:end -->
 

@@ -220,10 +220,29 @@ struct TileMatmul : public RewritePattern {
     int64_t paddedN = alignUp(N, tn);
     int64_t paddedK = alignUp(K, tk);
 
-    // Carry forward transposeA / transposeB attributes.
+    // Epilogue operands (Graph IR `bias` / `residual`, marked by the string
+    // attrs of the same name) are NOT part of the reduction: the tiled inner
+    // step is the plain product, and the epilogue is re-applied once on the
+    // logical result below as act-free Graph ops (broadcast + add), so it is
+    // never silently dropped (Decision #32) and every backend sees the same
+    // form the tracer already emits for `x @ W + b`. Before 2026-09-15 the
+    // inner op kept the attrs but lost the operands and failed its own
+    // verifier inside this pass.
+    const bool hasBias = bool(op->getAttrOfType<StringAttr>("bias"));
+    const bool hasResidual = bool(op->getAttrOfType<StringAttr>("residual"));
+    if (op->getNumOperands() != 2u + hasBias + hasResidual)
+      return failure();
+    Value biasOperand = hasBias ? op->getOperand(2) : Value();
+    Value residualOperand = hasResidual ? op->getOperand(2 + hasBias) : Value();
+
+    // Carry forward transposeA / transposeB attributes; the epilogue markers
+    // stay with the epilogue, not the reduction.
     SmallVector<NamedAttribute> innerAttrs;
-    for (auto &na : op->getAttrs())
+    for (auto &na : op->getAttrs()) {
+      StringRef name = na.getName().strref();
+      if (name == "bias" || name == "residual") continue;
       innerAttrs.push_back(na);
+    }
 
     // ── Emit the tiled loop nest ───────────────────────────────────────────
 
@@ -382,6 +401,25 @@ struct TileMatmul : public RewritePattern {
                                     rewriter.getIndexAttr(N)},
           SmallVector<OpFoldResult>{rewriter.getIndexAttr(1),
                                     rewriter.getIndexAttr(1)});
+    }
+    // Re-apply the epilogue on the logical [M, N] product: bias per output
+    // column (broadcast [N] -> [M, N]), then the residual, in that order.
+    if (hasBias) {
+      OperationState bcSt(loc, "tessera.broadcast");
+      bcSt.addOperands({biasOperand});
+      bcSt.addTypes(resultTy);
+      bcSt.addAttribute("shape", rewriter.getI64ArrayAttr({M, N}));
+      Operation *bc = rewriter.create(bcSt);
+      OperationState addSt(loc, "tessera.add");
+      addSt.addOperands({logicalResult, bc->getResult(0)});
+      addSt.addTypes(resultTy);
+      logicalResult = rewriter.create(addSt)->getResult(0);
+    }
+    if (hasResidual) {
+      OperationState addSt(loc, "tessera.add");
+      addSt.addOperands({logicalResult, residualOperand});
+      addSt.addTypes(resultTy);
+      logicalResult = rewriter.create(addSt)->getResult(0);
     }
     rewriter.replaceOp(op, logicalResult);
     return success();

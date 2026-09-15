@@ -7925,3 +7925,9 @@ Owning outcome for rocm: **follow-up required** — on Princess-Luna and Tajasar
 
 
 Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No rocm compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.
+
+### Shared TilingPass matmul epilogue — 2026-09-15
+
+Sync `TILING-MATMUL-EPILOGUE-2026-09-15`; owner E2E-REAL-6.
+Not applicable to gfx1151 / gfx1201 execution: the tiled inner K step is unchanged, so the typed Tile route and the gfx1201 scheduled packages see the same nest; a biased matmul now carries an explicit `tessera.broadcast` + `tessera.add` after the nest instead of failing inside tiling. No HIP ABI, dtype or schedule change; no sibling proof transfers.
+See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-preserved--2026-09-15).

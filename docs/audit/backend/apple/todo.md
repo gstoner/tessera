@@ -141,7 +141,10 @@ Remaining actions:
    numeric probe recompiles per call) before any arbiter candidacy for FP8.
 3. Commit runtime changes, then on this host: record the E2E fleet packet and
    re-seal the strict route ledger (two independent retune reports on macOS
-   27). No performance promotion follows from these measurements.
+   27). No performance promotion follows from these measurements. **Packet
+   recorded 2026-09-15 against the committed runtime (PR #753,
+   `docs/audit/evidence/e2e_spine/apple_gpu/apple7`); the strict route ledger
+   re-seal is still owed.**
 4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
 5. APPLE-MATMUL2D-1 follow-through — **closed 2026-09-15** (same PR): ragged
    M/N bind at their true extents, sub-block origins / padded strides reach

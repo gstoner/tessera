@@ -36893,6 +36893,13 @@ def _dispatch_gpu_mtl4_matmul2d(inputs, call, np):
     a_bits, b_bits = _APPLE_MATMUL2D_BITS[a_elem], _APPLE_MATMUL2D_BITS[b_elem]
     if (aoff * 8) % a_bits or (boff * 8) % b_bits:
         raise ValueError("mtl4_matmul2d view byte offset is not an element boundary")
+    # The storage must hold the whole window the IR states (origin + (outer-1)
+    # rows + inner), so operands that disagree with the compiled extents are
+    # refused here rather than bound short (PR #753 review, P2).
+    a_need = aoff * 8 // a_bits + (M - 1) * als + K
+    b_need = boff * 8 // b_bits + (K - 1) * bls + N
+    if A_st.shape[0] * a_row < a_need or B_st.shape[0] * b_row < b_need:
+        raise ValueError("mtl4_matmul2d operand storage does not cover the projected view extents")
     out = apple_gpu_mtl4_matmul2d_view(A_st, B_st, np, pair=pair, M=M, N=N, K=K,
                                        a_off=aoff * 8 // a_bits, lda=als,
                                        b_off=boff * 8 // b_bits, ldb=bls,

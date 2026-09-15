@@ -596,8 +596,21 @@ def _spec_shape_dtype(spec: Any) -> Tuple[Tuple[int, ...], str]:
     return tuple(int(d) for d in spec), "fp32"
 
 
+# ml_dtypes spellings of the canonical low-precision storage dtypes. Before
+# 2026-09-15 these fell through to "f32", so an FP8 program traced as an f32
+# program, lowered to the MPS f32 route, and executed on the HOST through the
+# dispatcher's numpy fallback while reporting native_gpu (a hollow green).
+_LOW_PRECISION_ELEMS = {
+    "float8_e4m3fn": "fp8_e4m3",
+    "float8_e5m2": "fp8_e5m2",
+    "float4_e2m1fn": "fp4_e2m1",
+}
+
+
 def _np_dtype_to_elem(dt) -> str:
     name = str(dt)
+    if name in _LOW_PRECISION_ELEMS:
+        return _LOW_PRECISION_ELEMS[name]
     if name == "bfloat16":
         return "bf16"
     if name in ("float16", "half"):
@@ -680,6 +693,7 @@ def to_graph_ir_module(
     *,
     name: str = "traced",
     source_hash: str | None = None,
+    target: object = "cpu",
 ) -> "GraphIRModule":
     """Promote a trace directly to the canonical Graph IR object model.
 
@@ -732,7 +746,11 @@ def to_graph_ir_module(
             "tessera.frontend.authority": '"tracer"',
         },
     )
-    verification = module.verify()
+    # Legality is per target: verifying every trace against the CPU table
+    # rejected any storage dtype only a GPU carries (fp8/fp4 on Apple GPU),
+    # so the tracer authority silently lost those programs to the AST
+    # fallback (2026-09-15). The caller names the target it compiles for.
+    verification = module.verify(target=target)
     if not verification.ok:
         raise TesseraTraceError(verification.format())
     return module

@@ -7931,3 +7931,9 @@ Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark metho
 Sync `TILING-MATMUL-EPILOGUE-2026-09-15`; owner E2E-REAL-6.
 Not applicable to gfx1151 / gfx1201 execution: the tiled inner K step is unchanged, so the typed Tile route and the gfx1201 scheduled packages see the same nest; a biased matmul now carries an explicit `tessera.broadcast` + `tessera.add` after the nest instead of failing inside tiling. No HIP ABI, dtype or schedule change; no sibling proof transfers.
 See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-preserved--2026-09-15).
+
+### @jit low-precision front door — 2026-09-15
+
+Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.
+Shared-frontend change assessed: `to_graph_ir_module` now verifies legality against the compiling target (string targets only; `rocm` keeps its own capability table), and Graph IR spells fp8/fp4 as the MLIR builtins. Not applicable to gfx1151 / gfx1201 execution; the RDNA4 FP8 WMMA audit is unchanged and no proof transfers.
+See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-tensors--2026-09-15).

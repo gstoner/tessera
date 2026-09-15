@@ -302,7 +302,7 @@ def _row_for_generic(op_name: str) -> AppleTargetRow:
 # grows new entries this map needs to grow too — the drift gate flags
 # missing entries (any op in ``_APPLE_GPU_KERNELS`` without an entry).
 _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
-    "matmul":       "tessera_apple_gpu_mps_matmul_{f32,f16,bf16}",
+    "matmul":       "tessera_apple_gpu_mps_matmul_{f32,f16,bf16} + tessera_apple_gpu_mtl4_matmul2d_view (fp8/fp4)",
     "softmax":      "tessera_apple_gpu_softmax_f32",
     "softmax_safe": "tessera_apple_gpu_softmax_f32",  # shares the kernel
     "gelu":         "tessera_apple_gpu_gelu_f32",

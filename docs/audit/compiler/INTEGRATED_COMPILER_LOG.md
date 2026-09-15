@@ -4032,6 +4032,20 @@ Evidence: `tests/tessera-ir/phase8/apple_matmul2d.mlir` (ragged look-through, su
 
 <!-- entry-fields:end -->
 
+### 2026-09-15 — shared TilingPass preserves the matmul bias/residual epilogue
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: follow-up to #753 (sync `TILING-MATMUL-EPILOGUE-2026-09-15`).
+
+Outcome: The shared `tessera-tiling` matmul pattern accepted the tracer's keyword-operand form (`tessera.matmul %a, %b, %bias {bias = "..."}` / `residual`) but copied only the two product operands into the inner tile op while keeping the marker attrs, so the pass failed its own verifier and, had it not, the epilogue would have been silently dropped (Decision #32). The inner K step is now the plain product with the markers stripped, and the epilogue is re-applied once on the logical [M, N] result as ordinary Graph IR — bias broadcast per output column then added, residual added after — the same form `nn.functional.linear` already emits, so every backend's canonical-GEMM recognizer sees the unchanged nest and the Apple `matmul2d_epilogue` fusion consumes the bias-operand matmul end to end.
+
+Remaining: No backend executes a multi-op value program, so a biased matmul still runs the epilogue outside the kernel except on Apple's fused route; the arbiter bucket, the `@jit` front door for 8/4-bit storage tensors and the strict route ledger re-seal stay open from the previous entry.
+
+Evidence: `tests/tessera-ir/phase2/tiling_matmul_epilogue.mlir` (bias, bias + residual on ragged M, residual alone; inner op carries no marker), `tests/tessera-ir/phase8/apple_matmul2d_bias_operand.mlir` (bias-operand matmul → `gpu.matmul2d_epilogue`); full lit 445 passed / 40 unsupported on the Mac (host-free fixtures); registry, tiling and lane unit gates green. No device or performance claim.
+
+<!-- entry-fields:end -->
+
 ### 2026-09-15 — bf16 matmul2d arbiter bucket: measured, retained
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)

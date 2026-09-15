@@ -19,6 +19,16 @@ contiguous incumbent** — same kernel on device time (±3%), view entry 6–42%
 slower end to end because its wrapper zero-fills the fp32 output; the paired
 corpus's earlier 5–12% was the incumbent wrapper's bf16 cast. No promotion.
 
+## Shared TilingPass matmul epilogue preserved — 2026-09-15
+
+Owner E2E-REAL-6; sync `TILING-MATMUL-EPILOGUE-2026-09-15`. The shared
+`tessera-tiling` matmul pattern dropped the tracer's `bias` / `residual`
+epilogue operands and failed its own verifier; it now tiles the plain product
+and re-applies the epilogue after the nest as `tessera.broadcast` + `tessera.add`.
+Apple outcome: **parity validated host-free** — the bias-operand matmul reaches
+`gpu.matmul2d_epilogue` (`tests/tessera-ir/phase8/apple_matmul2d_bias_operand.mlir`).
+No device or performance claim; the paired-corpus admission is unchanged.
+
 ## macOS 27 / Metal 4.1 low-precision validation — 2026-09-14
 
 Owner IR-NATIVE-FOUNDATION-1 / APPLE-ATTN-BWD-1; sync `APPLE-METAL41-20260914`.
@@ -167,9 +177,10 @@ Remaining actions:
    an arbiter bucket for bf16 ≤ 1024 square and weight-only FP8 decode
    (1.6–1.7× at M == 1 with a one-time pack) — **the bf16 bucket is measured
    and retained (section above); the FP8-decode case is a quantization-policy
-   decision, not an arbiter row** — the `@jit` front door for 8/4-bit storage
-   tensors, and the bias-operand `tessera.matmul` form that the shared
-   TilingPass drops before any backend sees it (both separate follow-ups).
+   decision, not an arbiter row** — and the `@jit` front door for 8/4-bit
+   storage tensors (separate follow-up). The bias-operand `tessera.matmul`
+   form the shared TilingPass used to drop is preserved since 2026-09-15, see
+   the section above.
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

@@ -7582,3 +7582,9 @@ Owning outcome for nvidia: **follow-up required** — `nvidia_native.py` now res
 
 
 Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No nvidia compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.
+
+### Shared TilingPass matmul epilogue — 2026-09-15
+
+Sync `TILING-MATMUL-EPILOGUE-2026-09-15`; owner E2E-REAL-6.
+Not applicable to nvidia execution: the tiled inner K step is unchanged, so the scheduled-matmul recognizers see the same nest; a biased matmul now carries an explicit `tessera.broadcast` + `tessera.add` after the nest instead of failing inside tiling. No sibling correctness or performance proof transfers; no CUDA ABI or dtype change.
+See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-preserved--2026-09-15).

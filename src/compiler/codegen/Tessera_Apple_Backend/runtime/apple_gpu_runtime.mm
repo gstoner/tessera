@@ -29001,16 +29001,19 @@ TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e5m2, half, metal_fp8_e5m2_format)
 TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e2m1, half, metal_fp4_e2m1_format)
 
 // Decomposed baseline: the same epilogue as a separate pass over a strided
-// fp32 C (p = {has_bias, act, N, ldc}); one thread per element.
+// fp32 C. p = {flags, N, ldc, M} with flags bit0 = has_bias, bits1-2 = act.
+// One thread per element; BOTH coordinates are guarded because the dispatch
+// rounds the grid up to whole threadgroups in x and y, so a ragged M (e.g. 127)
+// otherwise runs threads at m >= M off the end of the buffer (PR #749 review).
 kernel void mtl4_bias_act_f32(device float *C [[buffer(0)]],
                               device const float *bias [[buffer(1)]],
                               constant int4 &p [[buffer(2)]],
                               uint2 gid [[thread_position_in_grid]]) {
   int n = int(gid.x), m = int(gid.y);
-  if (n >= p.z) return;
-  float v = C[m * p.w + n];
-  if (p.x) v += bias[n];
-  C[m * p.w + n] = ts_epi(v, p.y);
+  if (n >= p.y || m >= p.w) return;
+  float v = C[m * p.z + n];
+  if (p.x & 1) v += bias[n];
+  C[m * p.z + n] = ts_epi(v, (p.x >> 1) & 3);
 }
 )MSL";
 
@@ -29209,7 +29212,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_bias_act_f32(float *C, int32_t ldc,
       const size_t c_bytes = (size_t)M * (size_t)ldc * 4;
       TS_METAL_BUF_ACQUIRE_WITH_BYTES(bC, ctx, C, c_bytes);
       const float zero = 0.0f;
-      const int params[4] = {bias ? 1 : 0, act, N, ldc};
+      const int params[4] = {(bias ? 1 : 0) | (act << 1), N, ldc, M};  // {flags, N, ldc, M}
       TS_METAL_BUF_ACQUIRE_WITH_BYTES(bBias, ctx, bias ? (const void *)bias : (const void *)&zero,
                                       bias ? (size_t)N * 4 : (size_t)4);
       TS_METAL_BUF_ACQUIRE_WITH_BYTES(bP, ctx, params, sizeof(params));

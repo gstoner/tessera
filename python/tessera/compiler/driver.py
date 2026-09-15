@@ -1516,6 +1516,10 @@ _APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
     "tessera_apple_gpu_bmm_bf16": "_apple_gpu_bmm_bf16",
     "tessera_apple_gpu_tile_simdgroup_gemm_f16": "_apple_gpu_tile_simdgroup_gemm_available",
     "tessera_apple_gpu_tile_simdgroup_gemm_bf16": "_apple_gpu_tile_simdgroup_gemm_available",
+    # APPLE-MATMUL2D-1: Metal 4 matmul2d reached through verified Target IR.
+    "tessera_apple_gpu_mtl4_matmul2d_f16": "_apple_gpu_mtl4_matmul2d_lane_available",
+    "tessera_apple_gpu_mtl4_matmul2d_bf16": "_apple_gpu_mtl4_matmul2d_lane_available",
+    "tessera_apple_gpu_mtl4_matmul2d_lowp": "_apple_gpu_mtl4_matmul2d_lane_available",
     "tessera_apple_gpu_native_sparse_attn_f32": "_apple_gpu_native_sparse_attn_f32",
     "tessera_apple_gpu_flash_attn_gqa_f32": "_apple_gpu_flash_attn_gqa_f32",
     "tessera_apple_gpu_ppo_policy_loss_f32": "_apple_gpu_ppo_policy_loss_available",

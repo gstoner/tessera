@@ -255,6 +255,141 @@ static ::mlir::LogicalResult verifyElementMatch(::mlir::Operation *op,
   return ::mlir::success();
 }
 
+//===----------------------------------------------------------------------===//
+// Metal 4 cooperative-tensor GEMM: tensor_view / matmul2d
+//===----------------------------------------------------------------------===//
+
+int64_t appleTensorStorageBits(::mlir::Type t) {
+  if (t.isF16() || t.isBF16()) return 16;
+  if (t.isF32()) return 32;
+  if (::llvm::isa<::mlir::Float8E4M3FNType, ::mlir::Float8E5M2Type>(t)) return 8;
+  if (::llvm::isa<::mlir::Float4E2M1FNType>(t)) return 4;
+  return 0;
+}
+
+std::string appleTensorViewLayoutReason(::mlir::Type elem,
+                                        ::llvm::ArrayRef<int64_t> extents,
+                                        ::llvm::ArrayRef<int64_t> strides,
+                                        int64_t byteOffset) {
+  const int64_t bits = appleTensorStorageBits(elem);
+  if (bits == 0)
+    return "element type is not a Metal 4 tensor storage type";
+  if (extents.size() != 2 || strides.size() != 2)
+    return "this slice models rank-2 views only (extents and strides must have two entries, innermost first)";
+  if (extents[0] <= 0 || extents[1] <= 0)
+    return "extents must be positive";
+  if (strides[0] != 1)
+    return "the innermost stride must be exactly 1 (MTLTensor requires it)";
+  if (strides[1] < extents[0])
+    return "the row stride is smaller than the inner extent, so rows overlap";
+  if (byteOffset < 0)
+    return "byte_offset must be non-negative";
+  if (bits <= 8) {
+    if (extents[0] % 32 != 0)
+      return "8/4-bit MTLTensor views need an innermost extent that is a multiple of 32 elements";
+    if ((strides[1] * bits) % (128 * 8) != 0)
+      return "8/4-bit MTLTensor views need a row stride that is a multiple of 128 bytes (128 fp8 or 256 fp4 elements); pad a packed operand";
+    if (byteOffset % 128 != 0)
+      return "MTLTensor data-plane offsets must be 128-byte aligned";
+    if (bits == 4 && byteOffset % 256 != 0)
+      return "4-bit views can only start at 256-byte origins: Apple applies 4-bit buffer offsets at 2x the byte value passed (measured macOS 27.0)";
+  } else if (byteOffset % 16 != 0) {
+    return "byte_offset must be 16-byte aligned for 16/32-bit views";
+  }
+  return "";
+}
+
+int appleMatmul2dPairCode(::mlir::Type a, ::mlir::Type b) {
+  const bool aE4 = ::llvm::isa<::mlir::Float8E4M3FNType>(a);
+  const bool aE5 = ::llvm::isa<::mlir::Float8E5M2Type>(a);
+  const bool aF4 = ::llvm::isa<::mlir::Float4E2M1FNType>(a);
+  const bool bE4 = ::llvm::isa<::mlir::Float8E4M3FNType>(b);
+  const bool bE5 = ::llvm::isa<::mlir::Float8E5M2Type>(b);
+  const bool bF4 = ::llvm::isa<::mlir::Float4E2M1FNType>(b);
+  if (a.isF16() && b.isF16()) return 10;
+  if (a.isBF16() && b.isBF16()) return 11;
+  if (aE4 && bE4) return 0;
+  if (aE5 && bE5) return 1;
+  if (aF4 && bF4) return 2;
+  if (a.isF16() && bE4) return 3;
+  if (a.isF16() && bE5) return 4;
+  if (a.isF16() && bF4) return 5;
+  return -1;
+}
+
+::mlir::LogicalResult TensorViewType::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::Type elementType) {
+  if (appleTensorStorageBits(elementType) == 0)
+    return emitError() << "tensor_view element type must be f16, bf16, f32, "
+                          "f8E4M3FN, f8E5M2 or f4E2M1FN (the Metal 4 "
+                          "MTLTensorDataType set this dialect models)";
+  return ::mlir::success();
+}
+
+::mlir::LogicalResult TensorViewOp::verify() {
+  ::mlir::Type elem = ::llvm::cast<TensorViewType>(getView().getType()).getElementType();
+  const std::string reason = appleTensorViewLayoutReason(
+      elem, getExtents(), getStrides(), getByteOffset());
+  if (!reason.empty())
+    return emitOpError() << "APPLE_TENSOR_VIEW_LAYOUT: " << reason;
+  auto shaped = ::llvm::dyn_cast<::mlir::ShapedType>(getBuffer().getType());
+  if (shaped) {
+    if (shaped.getElementType() != elem)
+      return emitOpError()
+             << "APPLE_TENSOR_VIEW_STORAGE: the view element type must equal the "
+                "buffer element type; MTLTensor views reinterpret nothing";
+    if (shaped.hasStaticShape()) {
+      const int64_t bits = appleTensorStorageBits(elem);
+      const int64_t needed = (getByteOffset() * 8) / bits +
+                             (getExtents()[1] - 1) * getStrides()[1] + getExtents()[0];
+      if (needed > shaped.getNumElements())
+        return emitOpError()
+               << "APPLE_TENSOR_VIEW_BOUNDS: the view reaches element " << needed
+               << " but the buffer holds " << shaped.getNumElements();
+    }
+  }
+  return ::mlir::success();
+}
+
+::mlir::LogicalResult Matmul2dOp::verify() {
+  auto aView = getA().getDefiningOp<TensorViewOp>();
+  auto bView = getB().getDefiningOp<TensorViewOp>();
+  if (!aView || !bView)
+    return emitOpError() << "APPLE_MATMUL2D_OPERANDS: both operands must be "
+                            "produced by tessera_apple.gpu.tensor_view so their "
+                            "extents and layout are visible to this verifier";
+  ::mlir::Type aElem = ::llvm::cast<TensorViewType>(getA().getType()).getElementType();
+  ::mlir::Type bElem = ::llvm::cast<TensorViewType>(getB().getType()).getElementType();
+  if (appleMatmul2dPairCode(aElem, bElem) < 0)
+    return emitOpError()
+           << "APPLE_MATMUL2D_PAIR_UNSUPPORTED: MPP matmul2d accepts same-type "
+              "f16/bf16/f8E4M3FN/f8E5M2/f4E2M1FN pairs and f16 x {f8E4M3FN, "
+              "f8E5M2, f4E2M1FN}; this pair is not an MPP matmul and is not "
+              "silently converted";
+  auto result = ::llvm::cast<::mlir::RankedTensorType>(getResult().getType());
+  if (!result.getElementType().isF32() || getAccumulate() != "f32")
+    return emitOpError() << "APPLE_MATMUL2D_ACCUM: matmul2d accumulates in fp32; "
+                            "the result element type must be f32 and "
+                            "`accumulate` must say so (Decision #15a)";
+  const int64_t K = aView.getExtents()[0], M = aView.getExtents()[1];
+  const int64_t N = bView.getExtents()[0], Kb = bView.getExtents()[1];
+  if (K != Kb)
+    return emitOpError() << "APPLE_MATMUL2D_SHAPE: a's inner extent (K=" << K
+                         << ") must equal b's outer extent (" << Kb << ")";
+  if (result.getRank() != 2 || !result.hasStaticShape() ||
+      result.getDimSize(0) != M || result.getDimSize(1) != N)
+    return emitOpError() << "APPLE_MATMUL2D_SHAPE: result must be tensor<" << M
+                         << "x" << N << "xf32> for these views";
+  if (getTileM() <= 0 || getTileN() <= 0 || getTileM() % 8 || getTileN() % 8)
+    return emitOpError() << "APPLE_MATMUL2D_DESCRIPTOR: tile_m and tile_n must "
+                            "be positive multiples of 8";
+  const int64_t sg = getSimdgroups();
+  if (sg != 1 && sg != 2 && sg != 4 && sg != 8)
+    return emitOpError() << "APPLE_MATMUL2D_DESCRIPTOR: simdgroups must be 1, 2, 4 or 8";
+  return ::mlir::success();
+}
+
 ::mlir::LogicalResult ThreadgroupBarrierOp::verify() {
   // The enum attribute already constrains the legal set; what is worth saying
   // here is why `none` is legal at all: it is Metal's execution-only barrier,

@@ -36761,12 +36761,118 @@ def _apple_gpu_tile_simdgroup_gemm_available() -> bool:
         return False
 
 
+def _apple_gpu_mtl4_matmul2d_lane_available() -> bool:
+    """Metal 4 stack up and the runtime exports the matmul2d symbols."""
+    try:
+        rt = _load_apple_gpu_runtime()
+        return bool(apple_gpu_metal4_caps()["available"]) and all(
+            getattr(rt, name, None) is not None
+            for name in ("tessera_apple_gpu_mtl4_matmul2d_f16",
+                         "tessera_apple_gpu_mtl4_matmul2d_bf16",
+                         "tessera_apple_gpu_mtl4_matmul2d_lowp"))
+    except Exception:  # noqa: BLE001 - loader failures mean unavailable
+        return False
+
+
+_APPLE_MATMUL2D_LOWP_NAMES = {"f8E4M3FN": "fp8_e4m3", "f8E5M2": "fp8_e5m2", "f4E2M1FN": "fp4_e2m1"}
+
+
+def _apple_matmul2d_codes(x: Any, elem: str, np: Any) -> Any:
+    """Coerce one low-precision operand to the runtime's packed uint8 storage.
+
+    Accepts ml_dtypes ``float8_e4m3fn`` / ``float8_e5m2`` / ``float4_e2m1fn``
+    arrays (bit-exact reinterpretation; FP4 is nibble-packed low-first) or an
+    already-packed ``uint8`` code array. Anything else is refused: this lane
+    never quantizes on the caller's behalf, because the accuracy budget of
+    that step belongs to the program, not to a dispatcher."""
+    x = np.ascontiguousarray(x)
+    if x.dtype == np.uint8:
+        return x
+    try:
+        import ml_dtypes
+    except ImportError as exc:
+        raise ValueError("low-precision matmul2d operands need ml_dtypes arrays or uint8 codes") from exc
+    want = {"f8E4M3FN": ml_dtypes.float8_e4m3fn, "f8E5M2": ml_dtypes.float8_e5m2,
+            "f4E2M1FN": ml_dtypes.float4_e2m1fn}[elem]
+    if x.dtype != want:
+        raise ValueError(f"matmul2d operand dtype {x.dtype} does not match the IR storage {elem}")
+    codes = x.view(np.uint8)
+    if elem == "f4E2M1FN":
+        codes = (codes[..., ::2] | (codes[..., 1::2] << 4)).astype(np.uint8)
+    return np.ascontiguousarray(codes)
+
+
+def _dispatch_gpu_mtl4_matmul2d(inputs, call, np):
+    """APPLE-MATMUL2D-1: strict Metal 4 matmul2d from a `gpu.kernel_call` whose
+    view ABI was projected from verified `tessera_apple.gpu.tensor_view` /
+    `gpu.matmul2d` IR. The dispatcher consumes the attributes; it re-derives
+    nothing, and it never falls back to a host product."""
+    if len(inputs) != 2:
+        raise ValueError("mtl4_matmul2d requires exactly two inputs")
+    symbol = str(call.get("symbol", ""))
+    dtype = str(call.get("dtype", ""))
+    if "x" not in dtype:
+        raise ValueError(f"mtl4_matmul2d call lacks its storage pair (dtype={dtype!r})")
+    a_elem, b_elem = dtype.split("x", 1)
+    try:
+        ai, ao, als, aoff = (int(call[f"tessera_apple.a_{k}"]) for k in ("inner", "outer", "stride", "byte_offset"))
+        bi, bo, bls, boff = (int(call[f"tessera_apple.b_{k}"]) for k in ("inner", "outer", "stride", "byte_offset"))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("mtl4_matmul2d call lacks a complete view ABI") from exc
+    if str(call.get("tessera_apple.accumulate", "")) != "fp32":
+        raise ValueError("mtl4_matmul2d call must state the fp32 accumulator")
+    K, M, N = ai, ao, bi
+    if bo != K:
+        raise ValueError("mtl4_matmul2d view ABI disagrees on K")
+    if aoff or boff:
+        raise ValueError("this slice binds packed operands only (nonzero view origins are not projected yet)")
+    A, B = inputs
+    if symbol == "tessera_apple_gpu_mtl4_matmul2d_f16":
+        if (a_elem, b_elem) != ("f16", "f16"):
+            raise ValueError("symbol/storage-pair mismatch")
+        out, ran = apple_gpu_mtl4_matmul2d_f16(np.asarray(A, np.float16), np.asarray(B, np.float16), np)
+    elif symbol == "tessera_apple_gpu_mtl4_matmul2d_bf16":
+        if (a_elem, b_elem) != ("bf16", "bf16"):
+            raise ValueError("symbol/storage-pair mismatch")
+        bf16 = _bfloat16_dtype()
+        if bf16 is None:
+            raise ValueError("bf16 matmul2d requires ml_dtypes")
+        out, ran = apple_gpu_mtl4_matmul2d_bf16(np.asarray(A, bf16), np.asarray(B, bf16), np)
+    elif symbol == "tessera_apple_gpu_mtl4_matmul2d_lowp":
+        fmt = _APPLE_MATMUL2D_LOWP_NAMES.get(b_elem)
+        if fmt is None or (a_elem != "f16" and a_elem != b_elem):
+            raise ValueError(f"unsupported low-precision pair {dtype!r}")
+        a_half = a_elem == "f16"
+        A_st = np.ascontiguousarray(np.asarray(A, np.float16)) if a_half else _apple_matmul2d_codes(A, a_elem, np)
+        B_st = _apple_matmul2d_codes(B, b_elem, np)
+        bits = 4 if fmt == "fp4_e2m1" else 8
+        if (A_st.shape[0], (A_st.shape[1] if a_half else A_st.shape[1] * (8 // bits))) != (M, als) \
+                or (B_st.shape[0], B_st.shape[1] * (8 // bits)) != (K, bls):
+            raise ValueError("mtl4_matmul2d operand storage does not match the projected view extents/strides")
+        out = apple_gpu_mtl4_matmul2d_lowp(A_st, B_st, np, fmt=fmt, M=M, N=N, K=K,
+                                          a_dtype="f16" if a_half else "lowp")
+        ran = True
+    else:
+        raise ValueError(f"unknown mtl4_matmul2d symbol {symbol!r}")
+    if not ran:
+        raise ValueError("Metal 4 matmul2d declined; this lane has no host fallback")
+    if out.shape != (M, N):
+        raise ValueError("mtl4_matmul2d result shape disagrees with the projected view ABI")
+    return out
+
+
 _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_gpu_bmm_f32": (_apple_gpu_bmm_f32, "f32"),
     "tessera_apple_gpu_bmm_f16": (_apple_gpu_bmm_f16, "f16"),
     "tessera_apple_gpu_bmm_bf16": (_apple_gpu_bmm_bf16, "bf16"),
     "tessera_apple_gpu_tile_simdgroup_gemm_f16": (_apple_gpu_tile_simdgroup_gemm_available, "tile_simdgroup_f16"),
     "tessera_apple_gpu_tile_simdgroup_gemm_bf16": (_apple_gpu_tile_simdgroup_gemm_available, "tile_simdgroup_bf16"),
+    # APPLE-MATMUL2D-1: Metal 4 cooperative-tensor GEMM reached through the
+    # declared `tessera_apple.gpu.matmul2d` Target op (kernel_call op_kind
+    # "mtl4_matmul2d"). The view ABI comes from the call's attributes.
+    "tessera_apple_gpu_mtl4_matmul2d_f16": (_apple_gpu_mtl4_matmul2d_lane_available, "mtl4_matmul2d_f16"),
+    "tessera_apple_gpu_mtl4_matmul2d_bf16": (_apple_gpu_mtl4_matmul2d_lane_available, "mtl4_matmul2d_bf16"),
+    "tessera_apple_gpu_mtl4_matmul2d_lowp": (_apple_gpu_mtl4_matmul2d_lane_available, "mtl4_matmul2d_lowp"),
     "tessera_apple_gpu_native_sparse_attn_f32": (_apple_gpu_native_sparse_attn_f32, "native_sparse_attn_f32"),
     # Resolver is declared later with the native GQA ABI helpers; the value
     # executor validates this tag before binding that ABI.
@@ -37447,6 +37553,8 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         return _dispatch_gpu_batched_matmul(inputs, call, np)
     if op_kind == "tile_simdgroup_gemm":
         return _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np)
+    if op_kind == "mtl4_matmul2d":
+        return _dispatch_gpu_mtl4_matmul2d(inputs, call, np)
     if op_kind == "flash_attn_gqa":
         return _dispatch_gpu_flash_attn_gqa(inputs, call, np)
     if op_kind == "ppo_policy_loss":

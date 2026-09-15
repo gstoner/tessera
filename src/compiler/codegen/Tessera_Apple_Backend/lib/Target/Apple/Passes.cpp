@@ -142,6 +142,8 @@ void registerTesseraAppleBackendPipelines() {
   registerPass([]() { return createMaterializeGraphLayoutToApplePass(); });
   registerPass([]() { return createAppleThreadgroupPipelinePass(); });
   registerPass([]() { return createCanonicalGemmToAppleGPUPass(); });
+  registerPass([]() { return createCanonicalGemmToAppleMatmul2dPass(); });
+  registerPass([]() { return createLowerAppleMatmul2dToCallPass(); });
   registerPass([]() { return createStreamingAttentionToAppleGPUPass(); });
   registerPass([]() { return createLowerDeclarativeFusionsToAppleGPUPass(); });
   // Tile->Target artifact projection. The `-full` pipelines construct these

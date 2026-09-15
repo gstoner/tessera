@@ -441,6 +441,97 @@ def AppleGPU_KVCacheGPUOp : TesseraApple_Op<"gpu.kv_cache_gpu"> {
 def AppleTarget_Buffer : AnyTypeOf<[AnyRankedTensor, AnyMemRef],
                                    "a ranked tensor or memref data buffer">;
 
+//===----------------------------------------------------------------------===//
+// Metal 4 cooperative-tensor GEMM — MetalPerformancePrimitives `matmul2d`.
+//
+// The simdgroup primitives above are Apple7's `simdgroup_matrix` path. Metal 4
+// adds a second, faster machine model: cooperative `tensor` operands bound as
+// strided MTLTensor views and multiplied by `mpp::tensor_ops::matmul2d` on the
+// matrix units. Measured on the M1 Max (2026-09-14) it is 1.34-1.45x the
+// simdgroup kernel and it is the only lane that carries FP8/FP4 storage, and
+// until this op existed it was reachable only from Python ctypes -- the
+// "two disconnected compilers" seam again (CLAUDE.md, Decision #19/#26a).
+//
+// What these ops carry that upstream dialects cannot (the Decision #19
+// membership test): the storage *pair* (half x fp8 is a legal operand pair
+// and not expressible as one element type), the fp32 accumulator contract,
+// and Apple's MTLTensor layout quantum for 8/4-bit data -- 128-byte row
+// strides and 128-byte data-plane offsets, plus the measured 2x buffer-offset
+// factor for 4-bit types that makes 256 B the only reachable FP4 origin.
+// Every one of those is verified, so a view Metal would reject at descriptor
+// creation (or, worse, bind to the wrong bytes) fails here, host-free.
+//===----------------------------------------------------------------------===//
+
+// A strided rank-2 MTLTensor view. The element type is a real MLIR float type
+// (f16, bf16, f32, f8E4M3FN, f8E5M2, f4E2M1FN), so the storage contract is
+// carried by the type system rather than by a string that could disagree with
+// the buffer it views.
+def Apple_TensorViewType : TypeDef<TesseraApple_Dialect, "TensorView"> {
+  let mnemonic = "tensor_view";
+  let summary = "A strided rank-2 MTLTensor view for Metal 4 cooperative-tensor ops";
+  let parameters = (ins "::mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+  let genVerifyDecl = 1;
+}
+
+def Apple_AccumulateAttr
+    : Apple_EnumStrAttr<["f32"],
+        "cooperative-tensor accumulator element type (Decision #15a: storage on the operands, accumulator here)">;
+
+def AppleGPU_TensorViewOp : TesseraApple_Op<"gpu.tensor_view", [Pure]> {
+  let summary = "Bind a strided rank-2 window of a buffer as an MTLTensor view";
+  let description = [{
+    `extents` and `strides` are innermost-first, as Metal states them:
+    `extents = [inner, outer]`, `strides = [1, row_stride]` in elements, and
+    `byte_offset` is where the window starts in the buffer. Padded row strides
+    and nonzero tile origins are ordinary inputs, not special cases.
+
+    Apple's MTLTensor contract for 8/4-bit element types (`MTLTensor.h`,
+    enforced at descriptor creation, measured 2026-09-14 on macOS 27):
+    the innermost extent is a multiple of 32 elements; every non-innermost
+    stride is a multiple of 128 bytes; the data-plane offset is 128-byte
+    aligned. For 4-bit types Apple additionally applies the buffer offset at
+    twice the byte value passed, so only 256-byte origins are reachable.
+    The verifier states all of these so a view is rejected here rather than
+    at `newTensorWithDescriptor:offset:` -- or silently bound to the wrong
+    bytes. A packed 64-wide FP8 matrix is therefore not a legal view; pad it.
+  }];
+  let arguments = (ins AppleTarget_Buffer:$buffer,
+                       I64Attr:$byte_offset,
+                       DenseI64ArrayAttr:$extents,
+                       DenseI64ArrayAttr:$strides);
+  let results = (outs Apple_TensorViewType:$view);
+  let assemblyFormat = "$buffer attr-dict `:` type($buffer) `->` type($view)";
+  let hasVerifier = 1;
+}
+
+def AppleGPU_Matmul2dOp : TesseraApple_Op<"gpu.matmul2d", [Pure]> {
+  let summary = "MetalPerformancePrimitives matmul2d over two tensor views, fp32 accumulate";
+  let description = [{
+    `result[M, N] = a[M, K] @ b[K, N]` on the matrix units through
+    `mpp::tensor_ops::matmul2d<descriptor(tile_m, tile_n, dynamic K),
+    execution_simdgroups<simdgroups>>`.
+
+    The operand pair is verified against the table `MPPTensorOpsMatMul2d.h`
+    publishes: same-type f16, bf16, f8E4M3FN, f8E5M2 and f4E2M1FN, and
+    `f16 x {f8E4M3FN, f8E5M2, f4E2M1FN}` (the weight-only shape). Anything
+    else is not an MPP matmul and is refused rather than converted. The
+    accumulator is fp32 -- the result element type must be f32 and
+    `accumulate` states it -- proven bit-exactly on the M1 Max for the
+    448 + 127 x 0.0625 cell on every operand pair. Extents must agree on K,
+    and the result shape is [a.outer, b.inner].
+  }];
+  let arguments = (ins Apple_TensorViewType:$a,
+                       Apple_TensorViewType:$b,
+                       I64Attr:$tile_m,
+                       I64Attr:$tile_n,
+                       I64Attr:$simdgroups,
+                       Apple_AccumulateAttr:$accumulate);
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = "$a `,` $b attr-dict `:` type($a) `,` type($b) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
   let summary = "Value-producing Apple CPU runtime call (Accelerate/LAPACK)";
   let arguments = (ins Variadic<AppleTarget_Buffer>:$operands,

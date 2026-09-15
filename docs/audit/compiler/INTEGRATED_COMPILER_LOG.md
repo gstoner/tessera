@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-14
+last_updated: 2026-09-15
 audit_role: reference
 ---
 
@@ -4003,3 +4003,17 @@ Evidence: `tests/unit/test_native_hvp_execution.py`: 7 passed, 10 skipped per ow
 
 <!-- entry-fields:end -->
 
+
+### 2026-09-15 — Apple Metal 4 matmul2d family on the canonical GEMM
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #751 (APPLE-MATMUL2D-1).
+
+Outcome: The first Apple family enters F2. `tessera_apple.gpu.tensor_view` (a strided rank-2 MTLTensor view over a real f16/bf16/f32/f8E4M3FN/f8E5M2/f4E2M1FN element type) and `tessera_apple.gpu.matmul2d` (MetalPerformancePrimitives matmul2d, operand pair verified against the header table incl. f16 × {f8E4M3FN, f8E5M2, f4E2M1FN}, fp32 accumulator required, K/M/N agreement) are declared with verifiers; `tessera-apple-canonical-gemm-matmul2d` re-forms the shared TilingPass reduction into them and refuses packed 8/4-bit operands whose row stride is off Apple's 128-byte quantum; `tessera-apple-matmul2d-to-call` lowers to a value-producing `gpu.kernel_call` on the runtime's `mtl4_matmul2d_{f16,bf16,lowp}` symbols with the view ABI (inner/outer/stride/byte_offset per operand, storage pair, format code, accumulator) as attributes; the value-lane dispatcher `mtl4_matmul2d` consumes those attributes and re-derives nothing. Both passes are registered standalone and are not in the default `tessera-lower-to-apple_gpu` pipeline; the incumbent MPS/Accelerate route is unchanged (APPLE-TILE-2 rule).
+
+Remaining: Ragged M is zero-padded by the shared tiling pass before the view is taken (the IR states it; the runtime's own ragged support is not yet used); nonzero view origins and padded strides are verified in IR but not yet projected through the dispatcher; default-pipeline admission needs a paired corpus (measured 2026-09-14: FP8 at 0.77–0.93× fp16, fused epilogue not faster); the Python `apple_native` GEMM packager is bypassed only for this canonical-reduction route and is not deleted; the fused bias/act epilogue and the coopmat MSL emitter remain outside this op family.
+
+Evidence: `tests/tessera-ir/phase8/apple_matmul2d{,_invalid,_lowering_invalid}.mlir` (positive, six verifier negatives, one lowering refusal); `tests/unit/test_apple_matmul2d_lane.py` — host-free lowering rows for seven operand pairs and three refusals, plus seven owning-Mac execution rows (M1 Max, macOS 27.0) comparing the lowered call's value-lane result against a float64 oracle built from the exact quantized bytes; `docs/audit/generated/target_ir_membership.md` scores both ops as requiring their contracts. No performance or promotion claim.
+
+<!-- entry-fields:end -->

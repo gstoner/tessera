@@ -119,6 +119,17 @@ packed-numeric probe). Three further findings, each with a reproduction:
   recorded on macOS 27 and sealed with `seal_strict_route_ledger.py`. The E2E
   fleet packet is likewise commit-gated: the recorder refuses a modified tree.
 
+APPLE-MATMUL2D-1 (2026-09-15, owner E2E-REAL-6): the Metal 4 GEMM lane is now
+expressible in the compiler. `tessera_apple.gpu.tensor_view` / `gpu.matmul2d`
+carry the storage pair, the fp32 accumulator and the measured MTLTensor layout
+quantum as verified contracts; `tessera-apple-canonical-gemm-matmul2d` consumes
+the shared canonical reduction and `tessera-apple-matmul2d-to-call` lowers to
+the `mtl4_matmul2d_{f16,bf16,lowp}` symbols with the view ABI in attributes;
+the value lane executes it (7 owning-Mac rows, exact-bytes oracle). The Python
+`apple_native` GEMM packager is bypassed for this route only and not deleted;
+neither pass is in the default pipeline. See the
+[plan record](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+
 Remaining actions:
 
 1. Auxiliary (UE8M0 / NVFP4 scale) planes and a block-scaled consumer: the
@@ -129,6 +140,9 @@ Remaining actions:
    re-seal the strict route ledger (two independent retune reports on macOS
    27). No performance promotion follows from these measurements.
 4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
+5. APPLE-MATMUL2D-1 follow-through: ragged M without host zero-padding, nonzero
+   origins / padded strides through the dispatcher, fused epilogue as an op,
+   paired corpus before default-pipeline admission.
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

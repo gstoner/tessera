@@ -25,14 +25,14 @@ dropped) and Decision #21a (a semantic key never defaults), violated
 by construction rather than by mistake. Such an op satisfies #19's
 membership test on paper and carries nothing in practice.
 
-**46 of 150 ops require the contract they carry.**
+**48 of 152 ops require the contract they carry.**
 
 | Backend | requires | optional-only | no contract |
 |---|---|---|---|
 | `nvidia` | 5 | 21 | 2 |
 | `rocm` | 32 | 49 | 0 |
 | `x86` | 5 | 0 | 8 |
-| `apple` | 4 | 12 | 12 |
+| `apple` | 6 | 12 | 12 |
 
 ## What this means for the operator expansion
 

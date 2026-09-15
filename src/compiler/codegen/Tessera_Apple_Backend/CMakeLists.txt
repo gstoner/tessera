@@ -45,6 +45,8 @@ add_library(TesseraApple STATIC
   lib/Target/Apple/Lowering/GraphLayoutToApple.cpp
   lib/Target/Apple/Lowering/ThreadgroupPipelineToApple.cpp
   lib/Target/Apple/Lowering/CanonicalGemmToAppleGPU.cpp
+  lib/Target/Apple/Lowering/CanonicalGemmToAppleMatmul2d.cpp
+  lib/Target/Apple/Lowering/LowerAppleMatmul2dToCall.cpp
   lib/Target/Apple/Lowering/StreamingAttentionToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlForToAppleGPU.cpp
   lib/Target/Apple/Lowering/ControlIfToAppleGPU.cpp

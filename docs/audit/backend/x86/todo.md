@@ -5251,3 +5251,9 @@ Owning outcome for x86: **not applicable** beyond marking `test_x86_integer_wrap
 
 
 Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No x86 compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.
+
+### @jit low-precision front door — 2026-09-15
+
+Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.
+Shared-frontend change assessed: `to_graph_ir_module` now verifies legality against the compiling target (`x86` keeps its table), and Graph IR spells fp8/fp4 as the MLIR builtins. Not applicable to x86 execution; no dtype admission or ABI change.
+See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-tensors--2026-09-15).

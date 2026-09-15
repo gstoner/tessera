@@ -7582,3 +7582,9 @@ Owning outcome for nvidia: **follow-up required** — `nvidia_native.py` now res
 
 
 Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No nvidia compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.
+
+### @jit low-precision front door — 2026-09-15
+
+Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.
+Shared-frontend change assessed: `to_graph_ir_module` now verifies legality against the compiling target (a `GPUTargetProfile` target keeps the CPU table, so nvidia behaviour is unchanged), and Graph IR spells fp8/fp4 as the MLIR builtins `f8E4M3FN`/`f8E5M2`/`f4E2M1FN`. Not applicable to nvidia execution; no dtype admission, ABI or proof change.
+See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-tensors--2026-09-15).

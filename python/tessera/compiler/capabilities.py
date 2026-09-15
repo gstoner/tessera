@@ -907,9 +907,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             **_ops("ready", _APPLE_GPU_READY, reason="Apple GPU runtime shim supports this single-op smoke path"),
             canonical_op("tessera.matmul"): OpCapability(
                 canonical_op("tessera.matmul"), "ready",
-                dtypes=("fp32", "f32", "fp16", "bf16"),
-                reason=("Apple GPU rank-2 matmul executes f32 through MPS and "
-                        "f16/bf16 through the Tile simdgroup value ABI"),
+                dtypes=("fp32", "f32", "fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1"),
+                reason=("Apple GPU rank-2 matmul executes f32 through MPS, "
+                        "f16/bf16 through the Tile simdgroup value ABI, and the "
+                        "8/4-bit storage pairs (incl. f16 x fp8/fp4 weight-only) "
+                        "through the Metal 4 MPP matmul2d strided-view lane with "
+                        "an fp32 result (macOS 27, APPLE-MATMUL2D-1)"),
             ),
             canonical_op("tessera.batched_gemm"): OpCapability(
                 canonical_op("tessera.batched_gemm"), "ready",

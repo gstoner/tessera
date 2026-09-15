@@ -425,11 +425,15 @@ def _mlir_dtype(dtype: Optional[str]) -> str:
         "fp32": "f32",
         "fp16": "f16",
         "bf16": "bf16",
-        "fp8_e4m3": "xf8E4M3FN",
-        "fp8_e5m2": "xf8E5M2",
+        # MLIR 23 builtin float types (the spellings tessera-opt and the Apple
+        # tensor_view verifier read). The earlier "xf8E4M3FN" doubled the
+        # tensor separator and "!tessera.fp4_e2m1" named a type no dialect
+        # defines, so no low-precision Graph IR text ever parsed (2026-09-15).
+        "fp8_e4m3": "f8E4M3FN",
+        "fp8_e5m2": "f8E5M2",
         "fp6_e2m3": "!tessera.fp6_e2m3",
         "fp6_e3m2": "!tessera.fp6_e3m2",
-        "fp4_e2m1": "!tessera.fp4_e2m1",
+        "fp4_e2m1": "f4E2M1FN",
         "nvfp4": "!tessera.nvfp4",
         "int4": "i4",
         "int8": "i8",
@@ -2578,6 +2582,13 @@ def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]
         return operand_types[0]
     lhs, rhs = operand_types[0], operand_types[1]
     dtype = lhs.dtype or rhs.dtype
+    # Low-precision storage (fp8 / fp6 / fp4 / nvfp4) is storage-only
+    # (Decision #15a): a product over it accumulates in fp32 and that is the
+    # result the program sees. The weight-only pairs (f16 x fp8) follow the
+    # same rule, matching `dtype._promote_two`.
+    from ..dtype import _LOW_PRECISION
+    if (lhs.dtype in _LOW_PRECISION) or (rhs.dtype in _LOW_PRECISION):
+        dtype = "fp32"
     if lhs.rank == 2 and rhs.rank == 2:
         return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
     return tensor_ir_type(("*",), dtype, layout=lhs.layout)
@@ -4187,11 +4198,11 @@ def _parse_mlir_tensor_type(text: str) -> IRType:
         "f32": "fp32",
         "f16": "fp16",
         "bf16": "bf16",
-        "xf8E4M3FN": "fp8_e4m3",
-        "xf8E5M2": "fp8_e5m2",
+        "f8E4M3FN": "fp8_e4m3",
+        "f8E5M2": "fp8_e5m2",
         "!tessera.fp6_e2m3": "fp6_e2m3",
         "!tessera.fp6_e3m2": "fp6_e3m2",
-        "!tessera.fp4_e2m1": "fp4_e2m1",
+        "f4E2M1FN": "fp4_e2m1",
         "!tessera.nvfp4": "nvfp4",
         "i4": "int4",
         "i8": "int8",
@@ -4581,6 +4592,9 @@ def specialize_module_from_values(
             }.get(arr.dtype)
             if dtype is None and str(arr.dtype) == "bfloat16":
                 dtype = "bf16"
+            if dtype is None:
+                dtype = {"float8_e4m3fn": "f8E4M3FN", "float8_e5m2": "f8E5M2",
+                         "float4_e2m1fn": "f4E2M1FN"}.get(str(arr.dtype))
             if dtype is None:
                 raise TypeError(f"unsupported specialization dtype {arr.dtype}")
             arg.ir_type = tensor_ir_type(tuple(int(d) for d in arr.shape), dtype)

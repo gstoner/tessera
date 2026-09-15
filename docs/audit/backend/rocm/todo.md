@@ -7925,3 +7925,9 @@ Owning outcome for rocm: **follow-up required** — on Princess-Luna and Tajasar
 
 
 Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No rocm compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.
+
+### @jit low-precision front door — 2026-09-15
+
+Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.
+Shared-frontend change assessed: `to_graph_ir_module` now verifies legality against the compiling target (string targets only; `rocm` keeps its own capability table), and Graph IR spells fp8/fp4 as the MLIR builtins. Not applicable to gfx1151 / gfx1201 execution; the RDNA4 FP8 WMMA audit is unchanged and no proof transfers.
+See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-tensors--2026-09-15).

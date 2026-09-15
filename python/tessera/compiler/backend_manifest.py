@@ -602,8 +602,11 @@ _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE = "tests/unit/test_apple_gpu_structured_co
 _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
-        "dtypes": _APPLE_GPU_FUSED,
-        "notes": "MPSMatrixMultiplication + bf16 conversion path",
+        # fp8/fp4 storage (and f16 x fp8/fp4 weight-only): the Metal 4 MPP
+        # matmul2d strided-view lane, fp32 result, macOS 27 (APPLE-MATMUL2D-1).
+        "dtypes": _APPLE_GPU_FUSED + ("fp8_e4m3", "fp8_e5m2", "fp4_e2m1"),
+        "notes": ("MPSMatrixMultiplication + bf16 conversion path; 8/4-bit storage "
+                  "through the MTL4 matmul2d view lane (fp32 result)"),
         "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
     },
     "batched_gemm": {

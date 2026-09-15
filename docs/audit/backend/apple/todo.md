@@ -110,14 +110,14 @@ packed-numeric probe). Three further findings, each with a reproduction:
   its f32 reference by up to 10 % at small magnitudes. Both are behaviour of the
   installed OS, not of a runtime edit (no session touched those lanes); they
   need a sliceTensor-free f16 slice route and a cond-lane bisect on this host.
-- **Strict route ledger is inadmissible on this host until re-measured.**
+- **Strict route ledger re-sealed on macOS 27.0 / SDK 27.0 (2026-09-15).**
   `benchmarks/baselines/apple_strict_route_ledger.json` was sealed on macOS
-  26.6.2 / SDK 26.5; the live context rejects it on `os_version`,
-  `sdk_version`, `compiler_fingerprint` and `runtime_fingerprint`, so
-  `test_apple_legacy_retune_benchmark::test_strict_retune_ledger_admits_on_its_exact_live_apple_host`
-  stays red until two independent `benchmark_legacy_retune.py` reports are
-  recorded on macOS 27 and sealed with `seal_strict_route_ledger.py`. The E2E
-  fleet packet is likewise commit-gated: the recorder refuses a modified tree.
+  26.6.2 / SDK 26.5 and rejected on the upgraded host; it is now re-recorded
+  from the committed runtime with `benchmark_legacy_retune.py --profile
+  extended` (five independent runs, nine trials each): the same 18 decisions
+  and 6 ineligible rows, **zero routes moved**, and
+  `test_strict_retune_ledger_admits_on_its_exact_live_apple_host` admits it
+  on this host. The E2E fleet packet was re-recorded the same day (PR #753).
 
 APPLE-MATMUL2D-1 (2026-09-15, owner E2E-REAL-6): the Metal 4 GEMM lane is now
 expressible in the compiler. `tessera_apple.gpu.tensor_view` / `gpu.matmul2d`
@@ -141,10 +141,10 @@ Remaining actions:
    numeric probe recompiles per call) before any arbiter candidacy for FP8.
 3. Commit runtime changes, then on this host: record the E2E fleet packet and
    re-seal the strict route ledger (two independent retune reports on macOS
-   27). No performance promotion follows from these measurements. **Packet
-   recorded 2026-09-15 against the committed runtime (PR #753,
-   `docs/audit/evidence/e2e_spine/apple_gpu/apple7`); the strict route ledger
-   re-seal is still owed.**
+   27). No performance promotion follows from these measurements. **Closed
+   2026-09-15: packet recorded against the committed runtime (PR #753,
+   `docs/audit/evidence/e2e_spine/apple_gpu/apple7`) and the strict route
+   ledger re-sealed on macOS 27.0 with zero routes moved.**
 4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
 5. APPLE-MATMUL2D-1 follow-through — **closed 2026-09-15** (same PR): ragged
    M/N bind at their true extents, sub-block origins / padded strides reach

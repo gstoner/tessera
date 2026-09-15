@@ -246,7 +246,6 @@ class NativeSourceStateProgram:
         if any('?' in ty for ty in contract['outputs']):
             from .scheduled_matmul import find_tessera_opt
             from .native_gpu_storage import _run
-            from pathlib import Path
             import math
             compiler=find_tessera_opt()
             if compiler is None:raise ValueError('dynamic CPU results require the native compiler')
@@ -254,8 +253,9 @@ class NativeSourceStateProgram:
             if not 1<=capacity<=1024:raise ValueError('dynamic CPU result capacity must be at most 1024 elements')
             lowered=_run(compiler,'--tessera-to-linalg',source=native_ir)
             # Use the configured LLVM companion; it must match the compiler.
-            import os
-            llvm=Path(os.environ.get('TESSERA_LLVM_BIN','/usr/lib/llvm-23/bin'))
+            from .llvm_tools import llvm_bin_dir
+            llvm=llvm_bin_dir()
+            if llvm is None:raise ValueError('matched LLVM 23 tools not found (set TESSERA_LLVM_BIN)')
             buffered=_run(llvm/'mlir-opt','--allow-unregistered-dialect','--convert-elementwise-to-linalg',
                 '--one-shot-bufferize=bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map copy-before-write=true',
                 '--convert-linalg-to-loops','--canonicalize',source=lowered)

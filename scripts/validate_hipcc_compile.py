@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 # Minimum hipcc version the validator accepts (matches the Python pin).
-MIN_HIP_VERSION = (7, 2, 3)
+MIN_HIP_VERSION = (7, 15, 0)  # HIP 7.15 / ROCm 10.0 pin (measured 7.15.26333 on both AMD boxes, 2026-09-15)
 
 
 # Explicit HIP-toolchain probe catalog. Each AMDGCN intrinsic pattern maps to a
@@ -161,7 +161,7 @@ def main() -> int:
     if version < MIN_HIP_VERSION:
         print(
             f"ERROR: hipcc version {version} < required {MIN_HIP_VERSION}.  "
-            f"Tessera pins ROCm 7.2.4.",
+            f"Tessera pins HIP {'.'.join(map(str, MIN_HIP_VERSION[:2]))} (ROCm 10.0).",
             file=sys.stderr,
         )
         return 1

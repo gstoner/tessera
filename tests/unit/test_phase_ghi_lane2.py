@@ -58,10 +58,13 @@ class TestG5PipelineAlias:
         ):
             assert stage in body, f"pipeline missing {stage}"
 
-    def test_pipeline_description_mentions_cuda_13_3(self):
+    def test_pipeline_description_mentions_cuda_pin(self):
         body = (REPO / "src" / "transforms" / "lib" / "Passes.cpp").read_text()
-        assert "CUDA 13.3" in body
-        assert "PTX ISA 9.3" in body or "PTX ISA 9.3," in body
+        # The registered pipeline descriptions carry the live toolchain pin
+        # (13.4 / PTX ISA 9.4 since 2026-09-15); the 13.3 verification notes
+        # stay in comments as history.
+        assert "CUDA 13.4" in body
+        assert "PTX ISA 9.4" in body
 
     def test_lit_fixture_for_pipeline_alias_exists(self):
         fixture = REPO / "tests" / "tessera-ir" / "phase3" / "cuda13" / \
@@ -119,7 +122,7 @@ class TestH2MFMATableSync:
         # Auto-generated banner
         assert "Auto-generated" in body
         # Toolchain pin
-        assert "ROCm target pin: 7.2.4" in body
+        assert "ROCm target pin: 10.0" in body   # bumped 2026-09-15
 
     def test_mfma_table_in_sync_with_python_source(self):
         """The on-disk `mfma_table.inc` must match what
@@ -174,11 +177,11 @@ class TestG6H6CMakeToolchainPin:
 
     def test_pins_required_versions(self):
         body = TOOLCHAIN_CMAKE.read_text()
-        assert 'TESSERA_REQUIRED_CUDA_VERSION   "13.3"' in body
-        assert 'TESSERA_REQUIRED_PTX_ISA        "9.3"' in body
+        assert 'TESSERA_REQUIRED_CUDA_VERSION   "13.4"' in body
+        assert 'TESSERA_REQUIRED_PTX_ISA        "9.4"' in body
         assert 'TESSERA_REQUIRED_NCCL_VERSION   "2.22"' in body
-        assert 'TESSERA_REQUIRED_ROCM_VERSION   "7.2.4"' in body
-        assert 'TESSERA_REQUIRED_HIP_VERSION    "7.2.4"' in body
+        assert 'TESSERA_REQUIRED_ROCM_VERSION   "10.0"' in body
+        assert 'TESSERA_REQUIRED_HIP_VERSION    "7.15"' in body
         assert 'TESSERA_REQUIRED_RCCL_VERSION   "2.22"' in body
 
     def test_exports_pin_functions(self):
@@ -210,7 +213,7 @@ class TestG78NvccCompileValidator:
     def test_validator_imports_clean(self):
         body = NVCC_VALIDATOR.read_text()
         assert "PTX_PATTERN_STUBS" in body
-        assert "MIN_NVCC_VERSION = (13, 3, 0)" in body
+        assert "MIN_NVCC_VERSION = (13, 4, 0)" in body
 
     def test_validator_covers_ptx_instruction_probe_catalog(self):
         """The toolchain validator owns an explicit instruction-probe catalog."""
@@ -251,7 +254,7 @@ class TestH78HipccCompileValidator:
 
     def test_validator_pins_hip_7_2_3(self):
         body = HIPCC_VALIDATOR.read_text()
-        assert "MIN_HIP_VERSION = (7, 2, 3)" in body
+        assert "MIN_HIP_VERSION = (7, 15, 0)" in body
 
     def test_validator_covers_amdgcn_instruction_probe_catalog(self):
         body = HIPCC_VALIDATOR.read_text()
@@ -307,15 +310,15 @@ class TestG9H8CollectivePin:
         assert "TESSERA_RCCL_MIN_MAJOR 2" in body
         assert "TESSERA_RCCL_MIN_MINOR 22" in body
 
-    def test_pins_cuda_13_3_marker(self):
+    def test_pins_cuda_marker(self):
         body = ADAPTER_PIN_HEADER.read_text()
-        assert 'TESSERA_TARGET_CUDA_TOOLKIT "13.3"' in body
-        assert 'TESSERA_TARGET_PTX_ISA      "9.3"' in body
+        assert 'TESSERA_TARGET_CUDA_TOOLKIT "13.4"' in body
+        assert 'TESSERA_TARGET_PTX_ISA      "9.4"' in body
 
-    def test_pins_rocm_7_2_3(self):
+    def test_pins_rocm_marker(self):
         body = ADAPTER_PIN_HEADER.read_text()
-        assert 'TESSERA_TARGET_ROCM         "7.2.4"' in body
-        assert 'TESSERA_TARGET_HIP          "7.2.4"' in body
+        assert 'TESSERA_TARGET_ROCM         "10.0"' in body
+        assert 'TESSERA_TARGET_HIP          "7.15"' in body
 
     def test_static_assert_via_error_directive(self):
         """If NCCL/RCCL headers are present at compile time and the
@@ -376,7 +379,7 @@ class TestToolchainPinConsistency:
             TESSERA_TARGET_PTX_ISA,
             TESSERA_TARGET_NCCL_MIN,
         )
-        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.3"
+        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.4"
 
         cmake_body = TOOLCHAIN_CMAKE.read_text()
         assert TESSERA_TARGET_PTX_ISA in cmake_body
@@ -392,8 +395,8 @@ class TestToolchainPinConsistency:
             TESSERA_TARGET_HIP,
             TESSERA_TARGET_RCCL_MIN,
         )
-        assert TESSERA_TARGET_ROCM == "7.2.4"
-        assert TESSERA_TARGET_HIP == "7.2.4"
+        assert TESSERA_TARGET_ROCM == "10.0"
+        assert TESSERA_TARGET_HIP == "7.15"
         assert TESSERA_TARGET_RCCL_MIN == "2.22"
 
         cmake_body = TOOLCHAIN_CMAKE.read_text()

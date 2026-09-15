@@ -7,6 +7,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.hardware_avx512  # compiles the AVX-512 VNNI kernel: x86 hosts only
 def test_reference_vnni_wraparound_is_defined_under_ubsan(tmp_path):
     compiler = shutil.which('g++')
     if compiler is None:

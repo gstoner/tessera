@@ -173,6 +173,12 @@ Memory Model, **Operations**, Debug Info, **Stability**, Optimization Guide, App
 
 ## Toolkit: the box runs CUDA 13.3 (pin bumped 13.2.1 → 13.3 — LANDED 2026-06-18)
 
+> **Superseded 2026-09-15:** the CUDA box is now The-Super-Bear (RTX 5070,
+> WSL2) on **CUDA 13.4 / nvcc 13.4.59 / PTX ISA 9.4 / driver 610.88**, and the
+> pins in `gpu_target.py` + `cmake/TesseraToolchainPins.cmake` were bumped to
+> those measured values. The per-SM readiness matrix was not re-evaluated for
+> 13.4. The table below is the 13.3 history.
+
 The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin **has been bumped
 13.2.1 → 13.3** (this section's table). 13.3 is materially better for this work:
 - **CUDA Tile C++** — tile programming in CUDA C++ with **NVCC *and* NVRTC**. This is the C++ sibling

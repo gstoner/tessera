@@ -169,6 +169,8 @@ def test_gfx1201_scheduled_attention_package_executes(bias, causal, dtype):
 @pytest.mark.parametrize("family", ["matmul", "attention"])
 def test_gfx1201_driver_uses_adjacent_scheduled_artifacts(family):
     from tessera.compiler.driver import compile_graph_module
+    from tests._support.compiler_tool import require_tessera_opt
+    require_tessera_opt("tessera-schedule-to-tile", "lower-tile-to-rocm")  # ROCm-capable build only
     from tests.unit.test_scheduled_matmul_consumers import _module as matmul_module
     from tests.unit.test_scheduled_attention_consumers import _module as attention_module
     module = (matmul_module if family == "matmul" else attention_module)(target="rocm")

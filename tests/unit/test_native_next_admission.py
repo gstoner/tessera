@@ -41,6 +41,8 @@ def test_terminal_relu_native_analytic_admission():
 
 
 def test_data_dependent_while_preserves_native_checkpoint_and_scalar_storage():
+    from tests._support.rocm_build import require_rocm_hsaco_toolkit
+    require_rocm_hsaco_toolkit()  # packages a gfx1151 HSACO
     pair=materialize_persistent_tape(data_while_source(),compiler=compiler(),
         llvm_bin=Path('/usr/lib/llvm-23/bin'),backend='rocm',chip='gfx1151')
     f,b=pair.validate()
@@ -51,6 +53,8 @@ def test_data_dependent_while_preserves_native_checkpoint_and_scalar_storage():
 
 
 def test_data_while_requires_actual_conjunctive_capacity():
+    from tests._support.rocm_build import require_rocm_hsaco_toolkit
+    require_rocm_hsaco_toolkit()  # packages a gfx1151 HSACO
     text=data_while_source().replace('arith.andi %bounded, %active','arith.ori %bounded, %active')
     with pytest.raises((ValueError,subprocess.CalledProcessError)):
         materialize_persistent_tape(text,compiler=compiler(),llvm_bin=Path('/usr/lib/llvm-23/bin'),backend='rocm',chip='gfx1151')
@@ -101,6 +105,8 @@ def test_gpu_ann_source_replay_rejects_modified_lowered_program():
 
 
 def test_rank_zero_predicate_materializes_native_device_descriptor():
+    from tests._support.rocm_build import require_rocm_hsaco_toolkit
+    require_rocm_hsaco_toolkit()  # packages a gfx1151 HSACO
     pair=materialize_persistent_tape(predicate_source(),compiler=compiler(),llvm_bin=Path('/usr/lib/llvm-23/bin'),backend='rocm',chip='gfx1151')
     f,_=pair.validate()
     assert 'tensor<i8>' in f['results']

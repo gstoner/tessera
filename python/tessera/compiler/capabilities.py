@@ -344,6 +344,12 @@ def _apple_gpu_fused_caps() -> dict[str, OpCapability]:
 # Sprint G-2 (2026-05-11): expanded to match the planned NVIDIA kernel
 # inventory in `docs/backends/nvidia/kernel-inventory.md`.  Each entry
 # here ships a Target IR artifact under CUDA 13.3.
+# The `cuda_13_3` / `rocm_7_2_3` feature markers below are EVALUATION BASELINES,
+# not toolchain pins: they say which toolkit the per-target feature matrix was
+# derived under. The pins themselves live in gpu_target.py / rocm_target.py /
+# cmake/TesseraToolchainPins.cmake (CUDA 13.4 / ROCm 10.0 since 2026-09-15) and
+# are drift-gated by runtime_abi_audit.py. Rename a marker only when the matrix
+# is actually re-evaluated under a newer toolkit.
 _NVIDIA_ARTIFACT = (
     # Matmul / contraction family
     "tessera.matmul", "tessera.batched_gemm", "tessera.einsum",

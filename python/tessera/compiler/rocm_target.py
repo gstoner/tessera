@@ -1,4 +1,10 @@
-"""tessera.compiler.rocm_target — ROCm 7.2.4 target profile.
+"""tessera.compiler.rocm_target — ROCm target profile (toolchain pin ROCm 10.0 / HIP 7.15).
+
+Pin bumped 7.2.4 -> 10.0 on 2026-09-15 from MEASURED values on both AMD boxes
+(Princess-Luna gfx1151 and Tajasarus gfx1201, Ubuntu 26.04 WSL2):
+``/opt/rocm/core/.info/version`` = 10.0.0, ``hipcc --version`` = HIP 7.15.26333.
+Only the toolchain/HIP pins moved; every "under ROCm 7.2.4" note below marks
+when that feature-matrix row was evaluated and was NOT re-evaluated for 10.0.
 
 Mirrors the structure of ``gpu_target.py`` (NVIDIA) for the AMD/ROCm
 backend.  Pinned to ROCm 7.2.4 + HIP 7.2.4 as the minimum AMD toolchain
@@ -67,9 +73,9 @@ _WAVE32_ARCHES: frozenset[AMDArch] = frozenset({
 
 
 #: Target ROCm release that Tessera's AMD backend is built against.
-TESSERA_TARGET_ROCM: str = "7.2.4"
-TESSERA_TARGET_HIP: str = "7.2.4"
-TESSERA_TARGET_RCCL_MIN: str = "2.22"     # RCCL bundled with ROCm 7.2.4
+TESSERA_TARGET_ROCM: str = "10.0"         # measured 10.0.0 on both ROCm boxes (2026-09-15)
+TESSERA_TARGET_HIP: str = "7.15"          # measured HIP 7.15.26333 (2026-09-15)
+TESSERA_TARGET_RCCL_MIN: str = "2.22"     # floor kept; the bundle under 10.0 was not measured
 TESSERA_TARGET_ROCBLAS_MIN: str = "5.0.0"
 TESSERA_TARGET_MIOPEN_MIN: str = "3.5.0"
 

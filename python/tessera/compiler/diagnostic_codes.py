@@ -448,7 +448,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="E_DRIVER", pass_origin="tessera.diagnostics.TesseraErrorCode",
         severity="error",
         summary="Underlying device driver returned an error.",
-        fix_hint="Check the driver version against the pinned CUDA 13.3 / ROCm 7.2.4 minima.",
+        fix_hint="Check the driver version against the pinned toolchain minima (TESSERA_TARGET_CUDA_DRIVER_MIN in gpu_target.py, TESSERA_TARGET_ROCM/HIP in rocm_target.py).",
         spec=None, sprint="Phase 6", language="python", status="implemented",
     ),
     DiagnosticCode(

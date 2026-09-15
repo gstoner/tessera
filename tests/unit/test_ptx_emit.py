@@ -12,6 +12,7 @@ import shutil
 
 import pytest
 
+from tessera.compiler.gpu_target import TESSERA_TARGET_PTX_ISA  # PTX .version follows the pin
 from tessera.compiler import ptx_emit as P
 
 
@@ -31,7 +32,7 @@ def test_emitted_ptx_validates_clean_for_all_documented_shapes():
 
 def test_emitted_ptx_has_version_target_and_protocol():
     ptx = P.emit_wgmma_matmul_ptx()
-    assert ".version 9.3" in ptx
+    assert f".version {TESSERA_TARGET_PTX_ISA}" in ptx
     assert ".target sm_90a" in ptx
     assert ".visible .entry" in ptx
     for op in ("wgmma.fence", "wgmma.commit_group", "wgmma.wait_group"):
@@ -94,7 +95,7 @@ def test_emitted_mma_sync_ptx_is_complete_and_ascii():
     stores. It must also be ASCII (the driver JIT ptxas rejects non-ASCII)."""
     ptx = P.emit_mma_sync_matmul_ptx()
     assert ptx.isascii()
-    assert ".version 9.3" in ptx
+    assert f".version {TESSERA_TARGET_PTX_ISA}" in ptx
     assert ".target sm_120a" in ptx
     assert ".visible .entry " + P.MMA_SYNC_BF16_ENTRY in ptx
     assert "mov.f32 %d0, 0f00000000" in ptx          # accumulator zeroed

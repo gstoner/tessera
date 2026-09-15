@@ -64,7 +64,7 @@ PYTHONPATH=python .venv/bin/python benchmarks/record_dynamic_gpu_storage.py \
 ```
 
 For NVIDIA, use `--backend nvidia`, the exact intended core compiler path,
-CUDA 13.3 and `scripts/_nvidia_env.sh`. GPU images, emitted host LLVM IR and the
+CUDA 13.4 (the pinned toolkit since 2026-09-15; the 13.3 packets are historical) and `scripts/_nvidia_env.sh`. GPU images, emitted host LLVM IR and the
 native sizing library remain in the chosen artifacts directory for inspection.
 
 Apple requires its own MSL threadgroup-argument materializer and launch ABI.

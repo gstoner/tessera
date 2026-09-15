@@ -294,21 +294,24 @@ def _version_pin_consistency() -> dict[str, dict[str, str | None]]:
         "cuda_toolkit": {
             "python_gpu_target": (
                 "python/tessera/compiler/gpu_target.py",
-                r"_TESSERA_TARGET_CUDA[^=]*=\s*\"([0-9.]+)\"",
+                r"TESSERA_TARGET_CUDA_TOOLKIT\s*(?::\s*str)?\s*=\s*\"([0-9.]+)\"",
             ),
             "cmake_pins": (
+                # The real pin variable, not the usage comment: the comment's
+                # argument is what find_package receives, which for ROCm is
+                # the HIP version (7.15), not the ROCm release (10.0).
                 "cmake/TesseraToolchainPins.cmake",
-                r"tessera_pin_cuda_toolkit\s*\(\s*\"?([0-9.]+)\"?",
+                r"TESSERA_REQUIRED_CUDA_VERSION\s+\"([0-9.]+)\"",
             ),
         },
         "rocm": {
             "python_rocm_target": (
                 "python/tessera/compiler/rocm_target.py",
-                r"TESSERA_TARGET_ROCM[^=]*=\s*\"([0-9.]+)\"",
+                r"TESSERA_TARGET_ROCM\s*(?::\s*str)?\s*=\s*\"([0-9.]+)\"",
             ),
             "cmake_pins": (
                 "cmake/TesseraToolchainPins.cmake",
-                r"tessera_pin_rocm\s*\(\s*\"?([0-9.]+)\"?",
+                r"TESSERA_REQUIRED_ROCM_VERSION\s+\"([0-9.]+)\"",
             ),
         },
         "nccl_minimum": {
@@ -318,7 +321,7 @@ def _version_pin_consistency() -> dict[str, dict[str, str | None]]:
             ),
             "cmake_pins": (
                 "cmake/TesseraToolchainPins.cmake",
-                r"NCCL[^)]*MIN[^)]*\"?([0-9.]+)",
+                r"TESSERA_REQUIRED_NCCL_VERSION\s+\"([0-9.]+)\"",
             ),
         },
     }

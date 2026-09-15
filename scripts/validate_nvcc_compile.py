@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 # Minimum nvcc version the validator accepts (matches the Python pin).
-MIN_NVCC_VERSION = (13, 3, 0)
+MIN_NVCC_VERSION = (13, 4, 0)  # CUDA 13.4 pin (measured nvcc 13.4.59 on The-Super-Bear, 2026-09-15)
 
 
 # Explicit CUDA-toolchain probe catalog. Each PTX pattern maps to a minimal
@@ -165,7 +165,7 @@ def main() -> int:
     if version < MIN_NVCC_VERSION:
         print(
             f"ERROR: nvcc version {version} < required {MIN_NVCC_VERSION}.  "
-            f"Tessera pins CUDA 13.3.",
+            f"Tessera pins CUDA {'.'.join(map(str, MIN_NVCC_VERSION[:2]))}.",
             file=sys.stderr,
         )
         return 1

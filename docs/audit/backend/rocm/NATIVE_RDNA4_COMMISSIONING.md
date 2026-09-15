@@ -1,10 +1,23 @@
 ---
 audit_role: plan
 plan_state: open
-last_updated: 2026-09-06
+last_updated: 2026-09-15
 ---
 
 # Native RDNA4 commissioning
+
+> **Stale as a status record — corrected 2026-09-15.** The box landed as
+> **Tajasarus**: RX 9070 XT (**gfx1201**), Ubuntu 26.04.1 **under WSL2** (not
+> the native Linux this plan assumed), ROCm 10.0.0 / HIP 7.15.26333 at
+> `/opt/rocm/core-10.0`, assertions-enabled LLVM/MLIR 23.1.1, commissioned
+> 2026-09-13 (`todo.md` §`GFX1201-FOUNDATION-2026-09-13`, packets under
+> `benchmarks/baselines/gfx1201_*`). "Hardware ordered … no measurements exist"
+> below is history. What this plan still owns is unchanged in substance: the
+> **profiler-attribution obstacle is not removed** — WSL2 has no `/dev/kfd`, so
+> `rocprofv3` returns no dispatch/counter records on Tajasarus either, and no
+> performance promotion is admissible from it. A native-Linux install of the
+> same box remains the route to counters; the commissioning order below is
+> the checklist for that, not a description of the current host.
 
 Owner: W2.4a / IR-NATIVE-FOUNDATION-1; [ROCm queue](todo.md).
 Hardware ordered: Ryzen 7 9800X3D, 32 GB DDR5-6000, RX 9070 XT 16 GB;

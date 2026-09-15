@@ -68,7 +68,8 @@ def test_source_ir_emits_native_allocation_roots_and_cycle_edges(library):
     import json
     from tessera.compiler.native_exception_ir import NativeExceptionIRProgram
     from tessera.compiler.source_exception_heap import pack_exception_table
-    llvm = Path('/usr/lib/llvm-23/bin')
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    llvm = llvm_bin_dir() or Path('/usr/lib/llvm-23/bin')
     if not (llvm/'clang').exists():
         pytest.skip('LLVM 23 toolchain required')
     table = pack_exception_table([('ValueError',['first']),('RuntimeError',['second'])])
@@ -120,7 +121,8 @@ def test_native_source_program_uses_compiled_heap_on_exception(library):
     import numpy as np
     from tessera import _jit_boundary as jit
     from tessera.compiler.native_source_state import compile_source_state
-    llvm = Path('/usr/lib/llvm-23/bin')
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    llvm = llvm_bin_dir() or Path('/usr/lib/llvm-23/bin')
     if jit._find_dylib() is None or not (llvm/'clang').exists():
         pytest.skip('native CPU JIT and LLVM required')
     def check(x,limit):
@@ -141,7 +143,8 @@ def test_native_dynamic_payload_allocation_is_owned_and_retryable(library):
     import numpy as np
     from tessera.compiler.native_exception_ir import NativeExceptionIRProgram
     from tessera.compiler.source_exception_heap import pack_exception_table
-    llvm = Path('/usr/lib/llvm-23/bin')
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    llvm = llvm_bin_dir() or Path('/usr/lib/llvm-23/bin')
     if not (llvm/'clang').exists():
         pytest.skip('LLVM 23 toolchain required')
     table = pack_exception_table([('ValueError',['@tensor','slot'])])
@@ -170,7 +173,8 @@ def test_native_source_dynamic_exception_payload_uses_heap(library):
     import numpy as np
     from tessera import _jit_boundary as jit
     from tessera.compiler.native_source_state import compile_source_state
-    llvm = Path('/usr/lib/llvm-23/bin')
+    from tessera.compiler.llvm_tools import llvm_bin_dir
+    llvm = llvm_bin_dir() or Path('/usr/lib/llvm-23/bin')
     if jit._find_dylib() is None or not (llvm/'clang').exists():
         pytest.skip('native CPU JIT and LLVM required')
     def check(x,limit):

@@ -26,8 +26,24 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+_LLVM_COMPANIONS = frozenset({"mlir-opt", "mlir-translate", "llc", "llvm-link", "clang", "clang++"})
+
+
+def _resolve_tool(tool: Path) -> Path:
+    """A caller-supplied LLVM companion path that does not exist on this host
+    (callers historically pass the Ubuntu ``/usr/lib/llvm-23/bin``) resolves to
+    the fleet-matched LLVM 23 tool of the same name; anything else is used as
+    given so a wrong compiler path still fails loudly."""
+    tool = Path(tool)
+    if tool.exists() or tool.name not in _LLVM_COMPANIONS:
+        return tool
+    from .llvm_tools import find_llvm_tool
+    found = find_llvm_tool(tool.name)
+    return found if found is not None else tool
+
+
 def _run(tool: Path, *args: str, source: str | None = None) -> str:
-    return subprocess.check_output([str(tool), *args], input=source, text=True,
+    return subprocess.check_output([str(_resolve_tool(tool)), *args], input=source, text=True,
                                    stderr=subprocess.PIPE, timeout=120)
 
 
@@ -149,7 +165,7 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     package = NativeGPUStoragePackage(backend, chip, entry, symbol[1],
         tuple('pointer' if t.startswith('!llvm.ptr') else 'index' for t in types),
         arena, image, host_library, _sha(compiler.read_bytes()),
-        _sha((llvm_bin / 'mlir-opt').read_bytes()), '')
+        _sha(_resolve_tool(llvm_bin / 'mlir-opt').read_bytes()), '')
     return NativeGPUStoragePackage(**{**asdict(package), 'binding_digest': package._digest()})
 
 

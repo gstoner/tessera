@@ -763,6 +763,16 @@ needs. Use `ninja -C build`.
 
 Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by default.
 
+**lit parses its directive keywords anywhere in a line, not just at the comment
+start** (`RUN:`, `XFAIL:`, `REQUIRES:`, `UNSUPPORTED:`, `ALLOW_RETRIES:`,
+`END.`, `DEFINE:`, `REDEFINE:`; the regex is unanchored). A `CHECK:` line that
+names a diagnostic such as `..._UNSUPPORTED:` is therefore parsed as an
+UNSUPPORTED expression and the fixture comes back **UNRESOLVED** (hit
+2026-09-15); a stray uppercase `END.` in prose silently ends script parsing and
+later RUN lines never execute. Split the token inside FileCheck patterns
+(`{{UNSUPPORTED}}:`). `tests/unit/test_lit_fixture_keywords.py` scans every
+lit suite for the tokens outside a directive position and fails the fixture.
+
 ---
 
 ## Local Toolchain

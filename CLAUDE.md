@@ -964,7 +964,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | `tessera-lower-to-nvidia-sm{90,100,120}` | Per-arch NVIDIA pipelines the sm_120 fixtures actually use (`compiler/pipeline_registry.py`) |
 | `tessera-lower-to-rocm` | AMD ROCm MFMA |
 | `tessera-lower-to-apple_cpu[-runtime]` | Apple CPU (Accelerate artifact / cblas_sgemm runtime) |
-| `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering) |
+| `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering). Since 2026-09-15 the Tile pipeline lowers 8/4-bit-storage GEMMs to the Metal 4 `matmul2d` view call (`tessera-apple-canonical-gemm-matmul2d=admit=lowp`); f16/bf16 GEMMs keep the simdgroup incumbent — measured, see the E2E-REAL-6 log |
 
 ---
 

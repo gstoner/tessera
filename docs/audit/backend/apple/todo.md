@@ -126,8 +126,11 @@ quantum as verified contracts; `tessera-apple-canonical-gemm-matmul2d` consumes
 the shared canonical reduction and `tessera-apple-matmul2d-to-call` lowers to
 the `mtl4_matmul2d_{f16,bf16,lowp}` symbols with the view ABI in attributes;
 the value lane executes it (7 owning-Mac rows, exact-bytes oracle). The Python
-`apple_native` GEMM packager is bypassed for this route only and not deleted;
-neither pass is in the default pipeline. See the
+`apple_native` GEMM packager is bypassed for this route only and not deleted.
+Follow-through the same day: the default `tessera-lower-to-apple_gpu` pipeline
+admits the family for the 8/4-bit storage pairs (`admit=lowp`; an FP8 GEMM used
+to become an MPSGraph claim MPSGraph cannot run), f16/bf16 stay on the
+APPLE-TILE-2 incumbent. See the
 [plan record](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
 
 Remaining actions:
@@ -140,9 +143,18 @@ Remaining actions:
    re-seal the strict route ledger (two independent retune reports on macOS
    27). No performance promotion follows from these measurements.
 4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
-5. APPLE-MATMUL2D-1 follow-through: ragged M without host zero-padding, nonzero
-   origins / padded strides through the dispatcher, fused epilogue as an op,
-   paired corpus before default-pipeline admission.
+5. APPLE-MATMUL2D-1 follow-through — **closed 2026-09-15** (same PR): ragged
+   M/N bind at their true extents, sub-block origins / padded strides reach
+   the dispatcher through `tessera_apple_gpu_mtl4_matmul2d_view[_epilogue]`
+   (one strided-view entry for every pair), `gpu.matmul2d_epilogue` is the
+   fused op, and the two-process paired corpus
+   (`benchmarks/baselines/apple_matmul2d_route_corpus_20260915/`) admitted the
+   family into the default pipeline for the 8/4-bit pairs only (f16 retained
+   at every shape, bf16 within ±10% of its own runtime entry). Now open:
+   an arbiter bucket for bf16 ≤ 1024 square and weight-only FP8 decode
+   (1.6–1.7× at M == 1 with a one-time pack), the `@jit` front door for
+   8/4-bit storage tensors, and the bias-operand `tessera.matmul` form that
+   the shared TilingPass drops before any backend sees it.
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

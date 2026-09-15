@@ -4031,3 +4031,17 @@ Remaining: An arbiter bucket entry for bf16 ≤ 1024 square and weight-only FP8 
 Evidence: `tests/tessera-ir/phase8/apple_matmul2d.mlir` (ragged look-through, sub-block origins, epilogue fusion, no fusion with two consumers), `apple_matmul2d_invalid.mlir` (nine verifier negatives), `apple_matmul2d_lowering_invalid.mlir` (two lowering refusals), `apple_matmul2d_pipeline.mlir` (default-pipeline admission: f16/bf16 on the incumbent, FP8/FP4 on the view call, closed admit set); `tests/unit/test_apple_matmul2d_lane.py` — 21 host-free rows and 19 owning-Mac rows (macOS 27.0, M1 Max): seven pairs at true ragged M = 100, ragged N = 100 f16 at a 200-byte row stride, four sub-block origin rows through the dispatcher, four fused-epilogue rows against the decomposed oracle, one `runtime.launch` end-to-end through the value artifact, two refusals; corpus packet `benchmarks/baselines/apple_matmul2d_route_corpus_20260915/` (two processes, README records the decision); `docs/audit/generated/target_ir_membership.md` scores the epilogue op as requiring its contracts. Full lit 442 passed / 40 unsupported on the Mac; the ROCm backend lit suite cannot run on this host. No general speedup claimed.
 
 <!-- entry-fields:end -->
+
+### 2026-09-15 — bf16 matmul2d arbiter bucket: measured, retained
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: follow-up to #753 and #755 (sync `APPLE-MATMUL2D-BUCKET-2026-09-15`).
+
+Outcome: The bf16 ≤ 1024 "win" the paired admission corpus reported (5–12% median, view entry over the production bf16 route) is now an arbiter bucket in the strict route ledger — `retune_matmul2d_bf16` at 512, 1024 and 2048 square, the runtime's contiguous MPP `matmul2d` entry against the strided-view entry the compiled route dispatches, five independent runs of nine interleaved trials each — and the production bf16 route (`_mtl4_route_matmul2d_bf16`) consults that ledger per exact shape and dispatches the view entry only when it is promoted. On the first seal **every row retained the contiguous incumbent** (six rows, both timing domains): on device time the two entries are within ±3% (the same kernel), and end to end the view entry is 6–14% slower at 512 and 20–42% slower at 1024. The corpus's earlier win was not the kernel: its incumbent went through the production wrapper (a bf16 result cast and its buffer path) while its candidate did not, so the comparison measured wrapper overhead. The bucket exists so a later runtime change can promote it with evidence; nothing is promoted today.
+
+Remaining: The view-entry wrapper zero-fills its fp32 output on the host, which is most of its end-to-end penalty at 1024; that is a wrapper cost to remove before re-measuring, not a kernel finding. The FP8-decode "bucket" from the corpus is a quantization-policy decision (a different program), recorded as such and not an arbiter row.
+
+Evidence: `benchmarks/baselines/apple_strict_route_ledger.json` (24 decisions, 6 ineligible, macOS 27.0 / SDK 27.0, zero routes moved among the previous 18) and `apple7_legacy_retune_multi_run.json`; `tests/unit/test_apple_legacy_retune_benchmark.py` (14 passed on the Mac incl. the live-host admission row and the host-free consumer test that the bf16 route dispatches the view entry only on a promotion). No performance claim.
+
+<!-- entry-fields:end -->

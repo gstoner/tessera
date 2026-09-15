@@ -22,6 +22,16 @@ Legality in the tracer authority is checked against the compiling target, not
 the CPU table. Evidence: `tests/unit/test_apple_jit_lowp_front_door.py` (7
 owning-Mac rows, exact-bytes oracle). No performance claim.
 
+## Shared TilingPass matmul epilogue preserved — 2026-09-15
+
+Owner E2E-REAL-6; sync `TILING-MATMUL-EPILOGUE-2026-09-15`. The shared
+`tessera-tiling` matmul pattern dropped the tracer's `bias` / `residual`
+epilogue operands and failed its own verifier; it now tiles the plain product
+and re-applies the epilogue after the nest as `tessera.broadcast` + `tessera.add`.
+Apple outcome: **parity validated host-free** — the bias-operand matmul reaches
+`gpu.matmul2d_epilogue` (`tests/tessera-ir/phase8/apple_matmul2d_bias_operand.mlir`).
+No device or performance claim; the paired-corpus admission is unchanged.
+
 ## macOS 27 / Metal 4.1 low-precision validation — 2026-09-14
 
 Owner IR-NATIVE-FOUNDATION-1 / APPLE-ATTN-BWD-1; sync `APPLE-METAL41-20260914`.
@@ -123,14 +133,14 @@ packed-numeric probe). Three further findings, each with a reproduction:
   its f32 reference by up to 10 % at small magnitudes. Both are behaviour of the
   installed OS, not of a runtime edit (no session touched those lanes); they
   need a sliceTensor-free f16 slice route and a cond-lane bisect on this host.
-- **Strict route ledger is inadmissible on this host until re-measured.**
+- **Strict route ledger re-sealed on macOS 27.0 / SDK 27.0 (2026-09-15).**
   `benchmarks/baselines/apple_strict_route_ledger.json` was sealed on macOS
-  26.6.2 / SDK 26.5; the live context rejects it on `os_version`,
-  `sdk_version`, `compiler_fingerprint` and `runtime_fingerprint`, so
-  `test_apple_legacy_retune_benchmark::test_strict_retune_ledger_admits_on_its_exact_live_apple_host`
-  stays red until two independent `benchmark_legacy_retune.py` reports are
-  recorded on macOS 27 and sealed with `seal_strict_route_ledger.py`. The E2E
-  fleet packet is likewise commit-gated: the recorder refuses a modified tree.
+  26.6.2 / SDK 26.5 and rejected on the upgraded host; it is now re-recorded
+  from the committed runtime with `benchmark_legacy_retune.py --profile
+  extended` (five independent runs, nine trials each): the same 18 decisions
+  and 6 ineligible rows, **zero routes moved**, and
+  `test_strict_retune_ledger_admits_on_its_exact_live_apple_host` admits it
+  on this host. The E2E fleet packet was re-recorded the same day (PR #753).
 
 APPLE-MATMUL2D-1 (2026-09-15, owner E2E-REAL-6): the Metal 4 GEMM lane is now
 expressible in the compiler. `tessera_apple.gpu.tensor_view` / `gpu.matmul2d`
@@ -154,10 +164,10 @@ Remaining actions:
    numeric probe recompiles per call) before any arbiter candidacy for FP8.
 3. Commit runtime changes, then on this host: record the E2E fleet packet and
    re-seal the strict route ledger (two independent retune reports on macOS
-   27). No performance promotion follows from these measurements. **Packet
-   recorded 2026-09-15 against the committed runtime (PR #753,
-   `docs/audit/evidence/e2e_spine/apple_gpu/apple7`); the strict route ledger
-   re-seal is still owed.**
+   27). No performance promotion follows from these measurements. **Closed
+   2026-09-15: packet recorded against the committed runtime (PR #753,
+   `docs/audit/evidence/e2e_spine/apple_gpu/apple7`) and the strict route
+   ledger re-sealed on macOS 27.0 with zero routes moved.**
 4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
 5. APPLE-MATMUL2D-1 follow-through — **closed 2026-09-15** (same PR): ragged
    M/N bind at their true extents, sub-block origins / padded strides reach
@@ -168,10 +178,9 @@ Remaining actions:
    family into the default pipeline for the 8/4-bit pairs only (f16 retained
    at every shape, bf16 within ±10% of its own runtime entry). Now open:
    an arbiter bucket for bf16 ≤ 1024 square and weight-only FP8 decode
-   (1.6–1.7× at M == 1 with a one-time pack) and the bias-operand
-   `tessera.matmul` form that the shared TilingPass drops before any backend
-   sees it (separate follow-up). The `@jit` front door for 8/4-bit storage
-   tensors is closed 2026-09-15, see the section above.
+   (1.6–1.7× at M == 1 with a one-time pack). (The `@jit` front door for
+   8/4-bit storage tensors and the bias-operand `tessera.matmul` form are both
+   closed 2026-09-15, see the sections above.)
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

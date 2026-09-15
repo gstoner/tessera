@@ -5252,6 +5252,12 @@ Owning outcome for x86: **not applicable** beyond marking `test_x86_integer_wrap
 
 Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No x86 compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.
 
+### Shared TilingPass matmul epilogue — 2026-09-15
+
+Sync `TILING-MATMUL-EPILOGUE-2026-09-15`; owner E2E-REAL-6.
+Not applicable to x86 execution: the tiled inner K step is unchanged, so `TileToX86Pass` sees the same nest; a biased matmul now carries an explicit `tessera.broadcast` + `tessera.add` after the nest instead of failing inside tiling. No AVX-512 ABI or dtype change; no sibling proof transfers.
+See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-preserved--2026-09-15).
+
 ### @jit low-precision front door — 2026-09-15
 
 Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.

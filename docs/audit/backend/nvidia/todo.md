@@ -7580,3 +7580,5 @@ package tests on it. ROCm-lowering tests gate on the registered passes through
 `compiler_tool.require_tessera_opt(...)` rather than on driver presence.
 Owning outcome for nvidia: **follow-up required** — `nvidia_native.py` now resolves its LLVM companions through the shared resolver; confirm on Super-Bear that a bare pytest still finds `/usr/lib/llvm-23/bin` (it is the first canonical prefix) and that no NVIDIA package test changed from run to skip. No schedule or execution change.
 
+
+Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No nvidia compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.

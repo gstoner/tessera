@@ -5249,3 +5249,5 @@ package tests on it. ROCm-lowering tests gate on the registered passes through
 `compiler_tool.require_tessera_opt(...)` rather than on driver presence.
 Owning outcome for x86: **not applicable** beyond marking `test_x86_integer_wraparound` with `hardware_avx512` (it compiles the VNNI kernel and cannot run on arm64); the x86 native lanes already resolved their toolchain independently. Verify it still runs on Princess-Luna.
 
+
+Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No x86 compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.

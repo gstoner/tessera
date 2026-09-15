@@ -4965,6 +4965,19 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp_epilogue(int32_t, const 
                                                                  const float*, int32_t) {
   return 0;
 }
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_view(int32_t, const void*, int64_t, int64_t,
+                                                        int32_t, const void*, int64_t, int64_t,
+                                                        int32_t, float*, int32_t, int32_t, int32_t,
+                                                        int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_view_epilogue(int32_t, const void*, int64_t,
+                                                                 int64_t, int32_t, const void*,
+                                                                 int64_t, int64_t, int32_t, float*,
+                                                                 int32_t, int32_t, int32_t, int32_t,
+                                                                 const float*, int32_t) {
+  return 0;
+}
 extern "C" int32_t tessera_apple_gpu_mtl4_bias_act_f32(float*, int32_t, const float*, int32_t,
                                                        int32_t, int32_t) {
   return 0;

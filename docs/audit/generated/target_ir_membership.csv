@@ -139,6 +139,9 @@ apple,gpu.msl_kernel,optional-only,,dtype
 apple,diagnostic,no-contract,,
 apple,cpu.kv_cache_cpu,optional-only,,abi
 apple,gpu.kv_cache_gpu,optional-only,,abi
+apple,gpu.tensor_view,requires,strides,
+apple,gpu.matmul2d,requires,accumulate tile_m tile_n,
+apple,gpu.matmul2d_epilogue,requires,accumulate tile_m tile_n,
 apple,cpu.call,optional-only,,abi argument_layout dtype
 apple,gpu.kernel_call,optional-only,,abi argument_layout dtype
 apple,gpu.package_call,optional-only,,abi argument_layout dtype

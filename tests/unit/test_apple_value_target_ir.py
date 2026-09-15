@@ -1667,6 +1667,8 @@ def test_gpu_value_executor_allowlist_exact():
         "tessera_apple_gpu_bmm_bf16",
         "tessera_apple_gpu_tile_simdgroup_gemm_f16",
         "tessera_apple_gpu_tile_simdgroup_gemm_bf16",
+        "tessera_apple_gpu_mtl4_matmul2d_view",           # APPLE-MATMUL2D-1: one view
+        "tessera_apple_gpu_mtl4_matmul2d_view_epilogue",  # symbol per op, every pair
             "tessera_apple_gpu_native_sparse_attn_f32",
             "tessera_apple_gpu_flash_attn_gqa_f32",
         "tessera_apple_gpu_ppo_policy_loss_f32",

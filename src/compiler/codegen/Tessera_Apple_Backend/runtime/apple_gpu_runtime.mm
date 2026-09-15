@@ -28950,6 +28950,12 @@ TS_MM2D_LOWP(mtl4_matmul2d_e2m1,   metal_fp4_e2m1_format, metal_fp4_e2m1_format)
 TS_MM2D_LOWP(mtl4_matmul2d_h_e4m3, half, metal_fp8_e4m3_format)
 TS_MM2D_LOWP(mtl4_matmul2d_h_e5m2, half, metal_fp8_e5m2_format)
 TS_MM2D_LOWP(mtl4_matmul2d_h_e2m1, half, metal_fp4_e2m1_format)
+// APPLE-MATMUL2D-1 follow-through: the 16-bit pairs on the SAME strided-view
+// ABI as the packed ones (pair codes 10 f16/f16, 11 bf16/bf16), so a compiled
+// `tessera_apple.gpu.tensor_view` with a nonzero origin or padded row stride
+// dispatches identically for every operand pair.
+TS_MM2D_LOWP(mtl4_matmul2d_v_h_h,   half,   half)
+TS_MM2D_LOWP(mtl4_matmul2d_v_bf_bf, bfloat, bfloat)
 
 // Shared epilogue: v = act(v + bias[col]); act 0 none, 1 relu, 2 gelu(tanh), 3 silu.
 // One definition, used by BOTH the fused kernel (in-register on the cooperative
@@ -28999,6 +29005,8 @@ TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_e2m1,   metal_fp4_e2m1_format, metal_fp4_e2m1
 TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e4m3, half, metal_fp8_e4m3_format)
 TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e5m2, half, metal_fp8_e5m2_format)
 TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e2m1, half, metal_fp4_e2m1_format)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_v_epi_h_h,   half,   half)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_v_epi_bf_bf, bfloat, bfloat)
 
 // Decomposed baseline: the same epilogue as a separate pass over a strided
 // fp32 C. p = {flags, N, ldc, M} with flags bit0 = has_bias, bits1-2 = act.
@@ -29039,18 +29047,21 @@ static int32_t mtl4_matmul2d_lowp_impl(
     float *C, int32_t ldc,
     int32_t M, int32_t N, int32_t K,
     bool fused, const float *bias, int32_t act) {
-  const char *op = fused ? "mtl4_matmul2d_lowp_epilogue" : "mtl4_matmul2d_lowp";
+  const bool wide = fmt == 10 || fmt == 11;  // f16/f16, bf16/bf16 on the view ABI
+  const char *op = wide ? (fused ? "mtl4_matmul2d_view_epilogue" : "mtl4_matmul2d_view")
+                        : (fused ? "mtl4_matmul2d_lowp_epilogue" : "mtl4_matmul2d_lowp");
 #if TESSERA_HAVE_MICROSCALING_SDK
   if (@available(macOS 27.0, *)) {
     auto reject = [&](const char *why) { ts_set_last_gpu_error(5, op, why); return 0; };
-    if (fmt < 0 || fmt > 5) return reject("fmt must be 0..5");
+    if (!((fmt >= 0 && fmt <= 5) || wide))
+      return reject("pair code must be 0..5 (low precision) or 10/11 (f16/bf16)");
     if (!A || !B || !C) return reject("null operand");
     if (M <= 0 || N <= 0 || K <= 0) return reject("M, N, K must be positive");
     if (a_off < 0 || b_off < 0 || a_nbytes <= 0 || b_nbytes <= 0)
       return reject("negative offset or empty storage");
-    const bool a_half = fmt >= 3;
-    const int lp = fmt % 3;
-    const int lp_bits = lp == 2 ? 4 : 8;
+    const bool a_half = wide || fmt >= 3;
+    const int lp = wide ? -1 : fmt % 3;
+    const int lp_bits = wide ? 16 : (lp == 2 ? 4 : 8);
     const int a_bits = a_half ? 16 : lp_bits;
     if (lda < K || ldb < N || ldc < N)
       return reject("row stride smaller than the view's inner extent");
@@ -29099,7 +29110,9 @@ static int32_t mtl4_matmul2d_lowp_impl(
            @"mtl4_matmul2d_h_e4m3", @"mtl4_matmul2d_h_e5m2", @"mtl4_matmul2d_h_e2m1"},
           {@"mtl4_matmul2d_epi_e4m3", @"mtl4_matmul2d_epi_e5m2", @"mtl4_matmul2d_epi_e2m1",
            @"mtl4_matmul2d_epi_h_e4m3", @"mtl4_matmul2d_epi_h_e5m2", @"mtl4_matmul2d_epi_h_e2m1"}};
-      NSString *entry = kNames[fused ? 1 : 0][fmt];
+      NSString *entry = wide ? (fmt == 10 ? (fused ? @"mtl4_matmul2d_v_epi_h_h" : @"mtl4_matmul2d_v_h_h")
+                                          : (fused ? @"mtl4_matmul2d_v_epi_bf_bf" : @"mtl4_matmul2d_v_bf_bf"))
+                             : kNames[fused ? 1 : 0][fmt];
       if (fused && (act < 0 || act > 3)) return reject("act must be 0..3");
       NSError *err = nil;
       id<MTLComputePipelineState> pso = compile_mtl4_pipeline_lang(
@@ -29109,16 +29122,17 @@ static int32_t mtl4_matmul2d_lowp_impl(
                                          : "MSL 4.1 low-precision matmul2d pipeline unavailable");
         return 0;
       }
-      const MTLTensorDataType lpdt = lp == 0 ? MTLTensorDataTypeMetalFloat8E4M3
+      const MTLTensorDataType lpdt = wide ? (fmt == 10 ? MTLTensorDataTypeFloat16 : MTLTensorDataTypeBFloat16)
+                                   : lp == 0 ? MTLTensorDataTypeMetalFloat8E4M3
                                    : lp == 1 ? MTLTensorDataTypeMetalFloat8E5M2
                                              : MTLTensorDataTypeMetalFloat4E2M1;
+      const MTLTensorDataType adt = wide ? lpdt : (a_half ? MTLTensorDataTypeFloat16 : lpdt);
       const size_t c_bytes = (size_t)M * (size_t)ldc * 4;
       TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, (size_t)a_nbytes);
       TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, (size_t)b_nbytes);
       TS_METAL_BUF_ACQUIRE_WITH_BYTES(bC, ctx, C, c_bytes);  // seed: padding preserved
       if (!bA || !bB || !bC) { ts_set_last_gpu_error(2, op, "buffer allocation failed"); return 0; }
-      id<MTLTensor> tA = ts_lowp_tensor_view(bA, a_byte_off, K, M, lda,
-                                             a_half ? MTLTensorDataTypeFloat16 : lpdt, &err);
+      id<MTLTensor> tA = ts_lowp_tensor_view(bA, a_byte_off, K, M, lda, adt, &err);
       if (!tA) { ts_set_last_gpu_error(5, op, err ? err.localizedDescription.UTF8String : "A view rejected"); return 0; }
       id<MTLTensor> tB = ts_lowp_tensor_view(bB, b_byte_off, N, K, ldb, lpdt, &err);
       if (!tB) { ts_set_last_gpu_error(5, op, err ? err.localizedDescription.UTF8String : "B view rejected"); return 0; }
@@ -29173,6 +29187,7 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp(
     const void *B, int64_t b_nbytes, int64_t b_off, int32_t ldb,
     float *C, int32_t ldc,
     int32_t M, int32_t N, int32_t K) {
+  if (fmt < 0 || fmt > 5) { ts_set_last_gpu_error(5, "mtl4_matmul2d_lowp", "fmt must be 0..5"); return 0; }
   return mtl4_matmul2d_lowp_impl(fmt, A, a_nbytes, a_off, lda, B, b_nbytes, b_off, ldb,
                                  C, ldc, M, N, K, /*fused=*/false, nullptr, 0);
 }
@@ -29186,7 +29201,39 @@ extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp_epilogue(
     float *C, int32_t ldc,
     int32_t M, int32_t N, int32_t K,
     const float *bias, int32_t act) {
+  if (fmt < 0 || fmt > 5) { ts_set_last_gpu_error(5, "mtl4_matmul2d_lowp_epilogue", "fmt must be 0..5"); return 0; }
   return mtl4_matmul2d_lowp_impl(fmt, A, a_nbytes, a_off, lda, B, b_nbytes, b_off, ldb,
+                                 C, ldc, M, N, K, /*fused=*/true, bias, act);
+}
+
+// APPLE-MATMUL2D-1 follow-through: ONE strided-view entry for every MPP
+// operand pair the compiler's `tessera_apple.gpu.matmul2d` verifier admits.
+// `pair` is the dialect's pair code (TesseraAppleDialect.h,
+// appleMatmul2dPairCode): 0 e4m3/e4m3, 1 e5m2/e5m2, 2 e2m1/e2m1, 3 f16/e4m3,
+// 4 f16/e5m2, 5 f16/e2m1, 10 f16/f16, 11 bf16/bf16. Offsets are in ELEMENTS
+// of the respective operand's storage, strides in elements; storage sizes in
+// bytes bound the views. The 16-bit pairs run the same kernel shape as the
+// packed ones so origin/stride behaviour is one contract, not three.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_view(
+    int32_t pair,
+    const void *A, int64_t a_nbytes, int64_t a_off, int32_t lda,
+    const void *B, int64_t b_nbytes, int64_t b_off, int32_t ldb,
+    float *C, int32_t ldc,
+    int32_t M, int32_t N, int32_t K) {
+  return mtl4_matmul2d_lowp_impl(pair, A, a_nbytes, a_off, lda, B, b_nbytes, b_off, ldb,
+                                 C, ldc, M, N, K, /*fused=*/false, nullptr, 0);
+}
+
+// Fused epilogue on the view ABI: C = act(A@B + bias[col]); bias has N entries
+// (may be null); act 0 none, 1 relu, 2 gelu(tanh), 3 silu.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_view_epilogue(
+    int32_t pair,
+    const void *A, int64_t a_nbytes, int64_t a_off, int32_t lda,
+    const void *B, int64_t b_nbytes, int64_t b_off, int32_t ldb,
+    float *C, int32_t ldc,
+    int32_t M, int32_t N, int32_t K,
+    const float *bias, int32_t act) {
+  return mtl4_matmul2d_lowp_impl(pair, A, a_nbytes, a_off, lda, B, b_nbytes, b_off, ldb,
                                  C, ldc, M, N, K, /*fused=*/true, bias, act);
 }
 

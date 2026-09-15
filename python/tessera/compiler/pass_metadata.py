@@ -289,6 +289,34 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="APPLE-TILE-2",
     ),
     PassMetadata(
+        name="tessera-apple-canonical-gemm-matmul2d",
+        cpp_class="CanonicalGemmToAppleMatmul2dPass",
+        summary=(
+            "APPLE-MATMUL2D-1: re-forms the shared canonical M/N/K GEMM "
+            "reduction as two `tessera_apple.gpu.tensor_view` bindings and one "
+            "`tessera_apple.gpu.matmul2d` (storage pair, fp32 accumulator, "
+            "Apple's MTLTensor layout quantum verified). Looks through the "
+            "tiling pass's ragged zero-pad so operands bind at their true "
+            "extents, folds static sub-block slices into view origins, and "
+            "fails closed on layouts Metal cannot bind. `admit=lowp` (the "
+            "default pipeline) re-forms only the 8/4-bit pairs, per the "
+            "2026-09-15 paired corpus; f16/bf16 keep the incumbent."
+        ),
+        input_dialects=("tessera", "scf", "tensor", "func"),
+        output_dialects=("tessera_apple", "func"),
+        diagnostic_codes=(
+            "APPLE_MATMUL2D_UNRECOGNIZED",
+            "APPLE_MATMUL2D_SHAPE_UNSUPPORTED",
+            "APPLE_MATMUL2D_PAIR_UNSUPPORTED",
+            "APPLE_MATMUL2D_ACCUM_UNSUPPORTED",
+            "APPLE_MATMUL2D_LAYOUT_UNSUPPORTED",
+            "APPLE_MATMUL2D_RAGGED_UNSUPPORTED",
+            "APPLE_MATMUL2D_ADMIT",
+        ),
+        pass_kind="lowering",
+        sprint="APPLE-MATMUL2D-1",
+    ),
+    PassMetadata(
         name="tessera-apple-materialize-layout-casts",
         cpp_class="MaterializeGraphLayoutToApplePass",
         summary=(
@@ -303,6 +331,44 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         diagnostic_codes=(),
         pass_kind="lowering",
         sprint="CORE-COMPILER-FOLLOWON",
+    ),
+    PassMetadata(
+        name="tessera-apple-matmul2d-fuse-epilogue",
+        cpp_class="FuseAppleMatmul2dEpiloguePass",
+        summary=(
+            "APPLE-MATMUL2D-1: fuses the per-column bias add (tessera.add "
+            "against tessera.broadcast of a rank-1 f32 [N]) and/or the "
+            "gelu/relu/silu consuming a `gpu.matmul2d` into "
+            "`gpu.matmul2d_epilogue` (bias on the fp32 accumulator, activation "
+            "in fp32, one store). Single-use chains only; recognition is not "
+            "promotion."
+        ),
+        input_dialects=("tessera_apple", "tessera", "func"),
+        output_dialects=("tessera_apple", "func"),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="APPLE-MATMUL2D-1",
+    ),
+    PassMetadata(
+        name="tessera-apple-matmul2d-to-call",
+        cpp_class="LowerAppleMatmul2dToCallPass",
+        summary=(
+            "APPLE-MATMUL2D-1: lowers `gpu.matmul2d` / `gpu.matmul2d_epilogue` "
+            "to a value-producing `gpu.kernel_call` on the runtime's strided-view "
+            "Metal 4 symbol (`tessera_apple_gpu_mtl4_matmul2d_view[_epilogue]`), "
+            "carrying the pair code and every view parameter as attributes so "
+            "the value lane projects the ABI from IR. One lowering path with "
+            "Tier-3 implementations behind it (Decisions #28/#31)."
+        ),
+        input_dialects=("tessera_apple", "func"),
+        output_dialects=("tessera_apple", "func"),
+        diagnostic_codes=(
+            "APPLE_MATMUL2D_OPERANDS",
+            "APPLE_MATMUL2D_PAIR_UNSUPPORTED",
+            "APPLE_MATMUL2D_EPILOGUE_ACT",
+        ),
+        pass_kind="lowering",
+        sprint="APPLE-MATMUL2D-1",
     ),
     PassMetadata(
         name="tessera-apple-streaming-attention",

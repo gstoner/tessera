@@ -1,0 +1,7 @@
+{
+ "base_commit": "60ee2c63",
+ "harness_sha256": "cbb823db49a4d17307789c3fd8200eedb42913e421abd4476a0c878ef8c02c28",
+ "runtime_source_sha256": "4860e1da4a17db01718214033f586cc60a59cbaf3aa6fa593d16fd1fe0c6bb5f",
+ "host": "Apple M1 Max, macOS 27.0, Xcode 27.0 (Metal 4.1)",
+ "note": "runtime and passes uncommitted at measurement time (this PR); the admission option was added after the runs and does not change what the harness executes (standalone passes, admit=all)"
+}

@@ -39,6 +39,23 @@ std::unique_ptr<::mlir::Pass> createAppleThreadgroupPipelinePass();
 /// selection: value-mode Accelerate/MPS stays the incumbent until a two-run
 /// paired corpus shows the simdgroup route winning.
 std::unique_ptr<::mlir::Pass> createCanonicalGemmToAppleGPUPass();
+/// APPLE-MATMUL2D-1: recognize the canonical M/N/K GEMM reduction and re-form
+/// it as Metal 4 `tessera_apple.gpu.tensor_view` + `gpu.matmul2d` Target IR
+/// (storage pair, fp32 accumulator and MTLTensor layout quantum verified).
+/// `admit` selects the operand pairs re-formed: "all" (standalone use) or
+/// "lowp" (the 8/4-bit pairs only). The default `tessera-lower-to-apple_gpu`
+/// pipeline admits "lowp" per the 2026-09-15 paired corpus: those pairs have
+/// no incumbent, while f16/bf16 keep theirs.
+std::unique_ptr<::mlir::Pass> createCanonicalGemmToAppleMatmul2dPass(::llvm::StringRef admit = "all");
+/// APPLE-MATMUL2D-1: lower `gpu.matmul2d` to a value-producing
+/// `gpu.kernel_call` on the runtime's Metal 4 matmul2d symbols, carrying the
+/// view ABI as attributes (one lowering path, Tier-3 delegate behind it).
+std::unique_ptr<::mlir::Pass> createLowerAppleMatmul2dToCallPass();
+/// APPLE-MATMUL2D-1 follow-through: fuse the broadcast per-column bias add and
+/// the gelu/relu/silu that consume a `gpu.matmul2d` into
+/// `gpu.matmul2d_epilogue` (epilogue applied on the fp32 cooperative tensor
+/// before the single store). Runs between the recognizer and the call lowering.
+std::unique_ptr<::mlir::Pass> createFuseAppleMatmul2dEpiloguePass();
 
 /// APPLE-ATTN-STREAM-1: recognize the shared KV-block streaming-attention
 /// recurrence (`CORE-STREAMING-ATTN-2026-07-26`) and re-form it as one Apple

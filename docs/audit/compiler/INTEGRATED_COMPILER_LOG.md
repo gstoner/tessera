@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-14
+last_updated: 2026-09-15
 audit_role: reference
 ---
 
@@ -4003,3 +4003,31 @@ Evidence: `tests/unit/test_native_hvp_execution.py`: 7 passed, 10 skipped per ow
 
 <!-- entry-fields:end -->
 
+
+### 2026-09-15 — Apple Metal 4 matmul2d family on the canonical GEMM
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: Uncommitted follow-through after #751 (APPLE-MATMUL2D-1).
+
+Outcome: The first Apple family enters F2. `tessera_apple.gpu.tensor_view` (a strided rank-2 MTLTensor view over a real f16/bf16/f32/f8E4M3FN/f8E5M2/f4E2M1FN element type) and `tessera_apple.gpu.matmul2d` (MetalPerformancePrimitives matmul2d, operand pair verified against the header table incl. f16 × {f8E4M3FN, f8E5M2, f4E2M1FN}, fp32 accumulator required, K/M/N agreement) are declared with verifiers; `tessera-apple-canonical-gemm-matmul2d` re-forms the shared TilingPass reduction into them and refuses packed 8/4-bit operands whose row stride is off Apple's 128-byte quantum; `tessera-apple-matmul2d-to-call` lowers to a value-producing `gpu.kernel_call` on the runtime's `mtl4_matmul2d_{f16,bf16,lowp}` symbols with the view ABI (inner/outer/stride/byte_offset per operand, storage pair, format code, accumulator) as attributes; the value-lane dispatcher `mtl4_matmul2d` consumes those attributes and re-derives nothing. Both passes are registered standalone and are not in the default `tessera-lower-to-apple_gpu` pipeline; the incumbent MPS/Accelerate route is unchanged (APPLE-TILE-2 rule).
+
+Remaining: Ragged M is zero-padded by the shared tiling pass before the view is taken (the IR states it; the runtime's own ragged support is not yet used); nonzero view origins and padded strides are verified in IR but not yet projected through the dispatcher; default-pipeline admission needs a paired corpus (measured 2026-09-14: FP8 at 0.77–0.93× fp16, fused epilogue not faster); the Python `apple_native` GEMM packager is bypassed only for this canonical-reduction route and is not deleted; the fused bias/act epilogue and the coopmat MSL emitter remain outside this op family.
+
+Evidence: `tests/tessera-ir/phase8/apple_matmul2d{,_invalid,_lowering_invalid}.mlir` (positive, six verifier negatives, one lowering refusal); `tests/unit/test_apple_matmul2d_lane.py` — host-free lowering rows for seven operand pairs and three refusals, plus seven owning-Mac execution rows (M1 Max, macOS 27.0) comparing the lowered call's value-lane result against a float64 oracle built from the exact quantized bytes; `docs/audit/generated/target_ir_membership.md` scores both ops as requiring their contracts. No performance or promotion claim.
+
+<!-- entry-fields:end -->
+
+### 2026-09-15 — matmul2d route: ragged tails, view origins, fused epilogue, paired admission
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: #753 (same branch as APPLE-MATMUL2D-1; follow-through commits).
+
+Outcome: The four items the first slice left open are closed on the compiled route. (1) Ragged M/N: `tessera-apple-canonical-gemm-matmul2d` looks through the shared TilingPass zero-pad (`tensor.insert_slice` into a zero constant) and binds the ORIGINAL operand at its true extents; the product is the true [M, N], the trailing slice disappears, and the op states the runtime contract it relies on (`tessera_apple.ragged_tail`, MPP's partial-tile store); the padded form is kept only when the true extents are not a legal MTLTensor view. (2) Nonzero origins and padded strides reach the dispatcher: a static unit-stride `tensor.extract_slice` operand is bound as a view INTO its parent (byte offset, parent row stride, nothing copied, misaligned FP8 origins refused with the verifier's wording); the runtime gained one strided-view entry for every pair (`tessera_apple_gpu_mtl4_matmul2d_view[_epilogue]`, pair codes 0–5 low precision, 10 f16, 11 bf16, 16-bit kernels added to the MSL 4.1 source), the call lowering emits that one symbol with `tessera_apple.pair`, and `runtime._dispatch_gpu_mtl4_matmul2d` passes element origins and strides through after checking the storage row equals the stated stride. The driver's value-call extractor never captured dialect-prefixed keys (`\w+` took only the suffix), so the view ABI had not actually reached the value lane through the driver before; keys now capture whole with the bare suffix kept for older consumers, and the GPU value executor admits the op kinds it used to reject before its own branch. (3) The fused epilogue is an op: `tessera_apple.gpu.matmul2d_epilogue` (optional rank-1 f32 [N] bias, `act` in {none, relu, gelu, silu}; contract: bias added to the fp32 accumulator, activation in fp32, one store; an op fusing nothing is refused) produced by `tessera-apple-matmul2d-fuse-epilogue` from the tracer's broadcast-add + activation chain (single-use only; Tessera's gelu IS the tanh form the kernel evaluates) and lowered to the `_view_epilogue` symbol with the bias as a third operand. (4) Paired admission measured: two independent 20-rep interleaved processes on the M1 Max against what production dispatches today. f16 retained at every shape (0.53–0.96×); bf16 within ±10% of the runtime's own contiguous bf16 entry (admitted only at 512/1024 square, split at ragged 1000, retained at 2048/MLP/decode); the low-precision pairs lose at every GEMM shape (0.72–0.88× fp16 on identical values) and win only at M == 1 decode (1.6–1.7×, lb ≥ 1.40 both runs) with a one-time ~28 ms pack of a 4096² weight. Decision: the default `tessera-lower-to-apple_gpu` pipeline admits the family for the 8/4-bit storage pairs only (`admit=lowp`), because those pairs had no executable route — the pipeline emitted an MPSGraph `matmul_contract` claim for an FP8 GEMM that MPSGraph cannot run — while f16 and bf16 keep the APPLE-TILE-2 incumbent. The bf16 ≤ 1024 and FP8-decode wins are arbiter-bucket candidates (Decision #28), not pipeline admissions.
+
+Remaining: An arbiter bucket entry for bf16 ≤ 1024 square and weight-only FP8 decode (needs the toolchain-versioned cache key of Decision #11); the JIT front door for 8/4-bit storage dtypes (the pipeline now lowers them, `@jit` tracing of FP8 tensors is a separate gate); the bias-operand matmul form (`tessera.matmul` with `bias = "..."`) is dropped by the shared TilingPass before any backend sees it (pre-existing, sibling-visible — the fusion recognizes the broadcast-add form that survives); amortised or fused operand packing before any FP8 arbiter candidacy; the `apple_native` GEMM packager is still not deleted.
+
+Evidence: `tests/tessera-ir/phase8/apple_matmul2d.mlir` (ragged look-through, sub-block origins, epilogue fusion, no fusion with two consumers), `apple_matmul2d_invalid.mlir` (nine verifier negatives), `apple_matmul2d_lowering_invalid.mlir` (two lowering refusals), `apple_matmul2d_pipeline.mlir` (default-pipeline admission: f16/bf16 on the incumbent, FP8/FP4 on the view call, closed admit set); `tests/unit/test_apple_matmul2d_lane.py` — 21 host-free rows and 19 owning-Mac rows (macOS 27.0, M1 Max): seven pairs at true ragged M = 100, ragged N = 100 f16 at a 200-byte row stride, four sub-block origin rows through the dispatcher, four fused-epilogue rows against the decomposed oracle, one `runtime.launch` end-to-end through the value artifact, two refusals; corpus packet `benchmarks/baselines/apple_matmul2d_route_corpus_20260915/` (two processes, README records the decision); `docs/audit/generated/target_ir_membership.md` scores the epilogue op as requiring its contracts. Full lit 442 passed / 40 unsupported on the Mac; the ROCm backend lit suite cannot run on this host. No general speedup claimed.
+
+<!-- entry-fields:end -->

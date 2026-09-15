@@ -763,6 +763,16 @@ needs. Use `ninja -C build`.
 
 Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by default.
 
+**lit parses its directive keywords anywhere in a line, not just at the comment
+start** (`RUN:`, `XFAIL:`, `REQUIRES:`, `UNSUPPORTED:`, `ALLOW_RETRIES:`,
+`END.`, `DEFINE:`, `REDEFINE:`; the regex is unanchored). A `CHECK:` line that
+names a diagnostic such as `..._UNSUPPORTED:` is therefore parsed as an
+UNSUPPORTED expression and the fixture comes back **UNRESOLVED** (hit
+2026-09-15); a stray uppercase `END.` in prose silently ends script parsing and
+later RUN lines never execute. Split the token inside FileCheck patterns
+(`{{UNSUPPORTED}}:`). `tests/unit/test_lit_fixture_keywords.py` scans every
+lit suite for the tokens outside a directive position and fails the fixture.
+
 ---
 
 ## Local Toolchain
@@ -954,7 +964,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | `tessera-lower-to-nvidia-sm{90,100,120}` | Per-arch NVIDIA pipelines the sm_120 fixtures actually use (`compiler/pipeline_registry.py`) |
 | `tessera-lower-to-rocm` | AMD ROCm MFMA |
 | `tessera-lower-to-apple_cpu[-runtime]` | Apple CPU (Accelerate artifact / cblas_sgemm runtime) |
-| `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering) |
+| `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering). Since 2026-09-15 the Tile pipeline lowers 8/4-bit-storage GEMMs to the Metal 4 `matmul2d` view call (`tessera-apple-canonical-gemm-matmul2d=admit=lowp`); f16/bf16 GEMMs keep the simdgroup incumbent — measured, see the E2E-REAL-6 log |
 
 ---
 

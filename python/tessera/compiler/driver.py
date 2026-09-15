@@ -1482,13 +1482,16 @@ _APPLE_ARTIFACT_OPS: tuple[str, ...] = (
 # `(?:\\.|[^"\\])*` matches a quoted body with escaped quotes/backslashes, so a
 # value containing JSON-like braces (e.g. argument_layout = "{\"buffers\":[…]}")
 # round-trips intact.
-_APPLE_ATTR_RE = re.compile(r'(\w+)\s*=\s*"((?:\\.|[^"\\])*)"')
+# Keys may be dialect-prefixed (`tessera_apple.a_stride = 512`): the matmul2d
+# view ABI rides the call that way, and a bare `\w+` used to capture only the
+# suffix, so the dispatcher never saw the projected ABI (found 2026-09-15).
+_APPLE_ATTR_RE = re.compile(r'([\w.]+)\s*=\s*"((?:\\.|[^"\\])*)"')
 # Bool attrs print unquoted (`lower = true`).  Sprint 3: the linalg semantic
 # attrs (lower/trans/unit_diag/full_matrices) ride the value op as BoolAttrs, so
 # the extractor must surface them — runtime dispatch must not assume defaults.
-_APPLE_BOOL_ATTR_RE = re.compile(r"(\w+)\s*=\s*(true|false)\b")
-_APPLE_INT_ATTR_RE = re.compile(r"(\w+)\s*=\s*(-?\d+)\b")
-_APPLE_FLOAT_ATTR_RE = re.compile(r"(\w+)\s*=\s*(-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?)\s*:\s*f(?:32|64)\b")
+_APPLE_BOOL_ATTR_RE = re.compile(r"([\w.]+)\s*=\s*(true|false)\b")
+_APPLE_INT_ATTR_RE = re.compile(r"([\w.]+)\s*=\s*(-?\d+)\b")
+_APPLE_FLOAT_ATTR_RE = re.compile(r"([\w.]+)\s*=\s*(-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?)\s*:\s*f(?:32|64)\b")
 
 _APPLE_VALUE_CPU_EXECUTABLE_SYMBOLS: frozenset[str] = frozenset(
     {
@@ -1516,6 +1519,9 @@ _APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
     "tessera_apple_gpu_bmm_bf16": "_apple_gpu_bmm_bf16",
     "tessera_apple_gpu_tile_simdgroup_gemm_f16": "_apple_gpu_tile_simdgroup_gemm_available",
     "tessera_apple_gpu_tile_simdgroup_gemm_bf16": "_apple_gpu_tile_simdgroup_gemm_available",
+    # APPLE-MATMUL2D-1: Metal 4 matmul2d reached through verified Target IR.
+    "tessera_apple_gpu_mtl4_matmul2d_view": "_apple_gpu_mtl4_matmul2d_lane_available",
+    "tessera_apple_gpu_mtl4_matmul2d_view_epilogue": "_apple_gpu_mtl4_matmul2d_lane_available",
     "tessera_apple_gpu_native_sparse_attn_f32": "_apple_gpu_native_sparse_attn_f32",
     "tessera_apple_gpu_flash_attn_gqa_f32": "_apple_gpu_flash_attn_gqa_f32",
     "tessera_apple_gpu_ppo_policy_loss_f32": "_apple_gpu_ppo_policy_loss_available",
@@ -1606,6 +1612,11 @@ def extract_apple_value_calls(ir_text: str) -> list[dict[str, object]]:
             attrs.setdefault(k, float(v))
         for k, v in _APPLE_INT_ATTR_RE.findall(attr_blob):
             attrs.setdefault(k, int(v))
+        # Consumers written against the old suffix-only capture (`stage_depth`,
+        # `causal`, ...) keep working: the bare suffix is set when no attr owns it.
+        for key, value in list(attrs.items()):
+            if "." in key:
+                attrs.setdefault(key.rsplit(".", 1)[1], value)
         attrs["op"] = op_name
         attrs.setdefault("status", "")
         calls.append(attrs)

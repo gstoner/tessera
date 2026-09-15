@@ -25,6 +25,8 @@ EMITTER = (ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple"
            / "Lowering/TileToApple.cpp")
 STREAMING_EMITTER = (ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple"
                      / "Lowering/StreamingAttentionToAppleGPU.cpp")
+MATMUL2D_EMITTER = (ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple"
+                    / "Lowering/LowerAppleMatmul2dToCall.cpp")
 RUNTIME = ROOT / "python/tessera/runtime.py"
 
 #: Scope: op_kinds the emitters write as *string literals*. The linalg lane
@@ -49,6 +51,12 @@ def _emitted_executable_gpu_op_kinds() -> set[str]:
     if (re.search(r'state\.addAttribute\("op_kind",\s*builder\.getStringAttr\("flash_attn_gqa"\)\)', streaming)
             and 'state.addAttribute("status", builder.getStringAttr("executable"))' in streaming):
         kinds.add("flash_attn_gqa")
+    # APPLE-MATMUL2D-1: the Metal 4 matmul2d call lowering emits both op kinds
+    # as executable gpu.kernel_call (plain and fused-epilogue).
+    matmul2d = MATMUL2D_EMITTER.read_text(encoding="utf-8")
+    if 'state.addAttribute("status", builder.getStringAttr("executable"))' in matmul2d:
+        for kind in re.findall(r'"(mtl4_matmul2d(?:_epilogue)?)"', matmul2d):
+            kinds.add(kind)
     return kinds
 
 

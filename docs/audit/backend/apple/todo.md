@@ -119,6 +119,20 @@ packed-numeric probe). Three further findings, each with a reproduction:
   recorded on macOS 27 and sealed with `seal_strict_route_ledger.py`. The E2E
   fleet packet is likewise commit-gated: the recorder refuses a modified tree.
 
+APPLE-MATMUL2D-1 (2026-09-15, owner E2E-REAL-6): the Metal 4 GEMM lane is now
+expressible in the compiler. `tessera_apple.gpu.tensor_view` / `gpu.matmul2d`
+carry the storage pair, the fp32 accumulator and the measured MTLTensor layout
+quantum as verified contracts; `tessera-apple-canonical-gemm-matmul2d` consumes
+the shared canonical reduction and `tessera-apple-matmul2d-to-call` lowers to
+the `mtl4_matmul2d_{f16,bf16,lowp}` symbols with the view ABI in attributes;
+the value lane executes it (7 owning-Mac rows, exact-bytes oracle). The Python
+`apple_native` GEMM packager is bypassed for this route only and not deleted.
+Follow-through the same day: the default `tessera-lower-to-apple_gpu` pipeline
+admits the family for the 8/4-bit storage pairs (`admit=lowp`; an FP8 GEMM used
+to become an MPSGraph claim MPSGraph cannot run), f16/bf16 stay on the
+APPLE-TILE-2 incumbent. See the
+[plan record](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+
 Remaining actions:
 
 1. Auxiliary (UE8M0 / NVFP4 scale) planes and a block-scaled consumer: the
@@ -127,8 +141,23 @@ Remaining actions:
    numeric probe recompiles per call) before any arbiter candidacy for FP8.
 3. Commit runtime changes, then on this host: record the E2E fleet packet and
    re-seal the strict route ledger (two independent retune reports on macOS
-   27). No performance promotion follows from these measurements.
+   27). No performance promotion follows from these measurements. **Packet
+   recorded 2026-09-15 against the committed runtime (PR #753,
+   `docs/audit/evidence/e2e_spine/apple_gpu/apple7`); the strict route ledger
+   re-seal is still owed.**
 4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
+5. APPLE-MATMUL2D-1 follow-through — **closed 2026-09-15** (same PR): ragged
+   M/N bind at their true extents, sub-block origins / padded strides reach
+   the dispatcher through `tessera_apple_gpu_mtl4_matmul2d_view[_epilogue]`
+   (one strided-view entry for every pair), `gpu.matmul2d_epilogue` is the
+   fused op, and the two-process paired corpus
+   (`benchmarks/baselines/apple_matmul2d_route_corpus_20260915/`) admitted the
+   family into the default pipeline for the 8/4-bit pairs only (f16 retained
+   at every shape, bf16 within ±10% of its own runtime entry). Now open:
+   an arbiter bucket for bf16 ≤ 1024 square and weight-only FP8 decode
+   (1.6–1.7× at M == 1 with a one-time pack), the `@jit` front door for
+   8/4-bit storage tensors, and the bias-operand `tessera.matmul` form that
+   the shared TilingPass drops before any backend sees it.
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

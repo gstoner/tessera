@@ -2,7 +2,7 @@
   "device": {
     "cpu_brand": "Apple M1 Max",
     "model": "MacBookPro18,2",
-    "os": "26.6.2"
+    "os": "27.0"
   },
   "lane": "apple_gpu",
   "metal": {
@@ -48,7 +48,7 @@
       },
       "source_fingerprint": {
         "state": "measured",
-        "value": "sha256:224d13eca2ab1a69b6d8a1dc5b377cbe687e2fad954e04d84c015d70ea62b617"
+        "value": "sha256:bed7bc054fb14ffccd9c0fed7c1b8f5dc57484d6cff217464dcd7de20c3db56c"
       },
       "spill_count": {
         "state": "no_public_api",
@@ -76,7 +76,7 @@
           2
         ]
       ],
-      "image_digest": "b10055118a0ceea925e0a936da8bc5b8055f5208941eeeca6d9677029d9c49f1",
+      "image_digest": "1e5061ff771f4a8490631f57c89028005043f5d59b1c9c27475419f2805fe9cf",
       "placement": {
         "fixture": {
           "gpu_placement_proven": true,
@@ -89,7 +89,7 @@
           "status_symbol": "tessera_apple_gpu_bmm_f32_status"
         }
       },
-      "resource_fingerprint": "9139a9d6df3488da192ef1423d62b6a2b89f74e5d1e1e8f4e6d594dda5297ca9",
+      "resource_fingerprint": "35794aa64ad06cc344ced8dc8d06922ce05cf05a572617b5da5500a6cecffb66",
       "route": "apple_gpu_bmm_f32_batch1",
       "timing_shape": [
         1,
@@ -107,7 +107,7 @@
           2
         ]
       ],
-      "image_digest": "2d32f509def0066b1901ec6e760d693b3cfd337fcb1e4ede19d372040c5f0cad",
+      "image_digest": "8dd7453362d5f35a4641b584da7150cb52b72f7cc45ff7a6e08f6427486c338a",
       "placement": {
         "fixture": {
           "execution_width": 32,
@@ -136,7 +136,7 @@
           ]
         }
       },
-      "resource_fingerprint": "783421e5c69bbac5b82e3336b4c4543af913c2e677f1adb346f4f0253f87b1db",
+      "resource_fingerprint": "50697e99f4a9a6ec208b5e63504d2c43fd5609aa70c74c34e7d82d093a2d0fb7",
       "route": "apple_gpu_msl_softmax_f32",
       "timing_shape": [
         64,

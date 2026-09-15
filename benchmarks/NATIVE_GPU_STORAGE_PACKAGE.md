@@ -44,7 +44,7 @@ PYTHONPATH=python .venv/bin/python benchmarks/record_native_gpu_storage_package.
   --output /tmp/native_gpu_package_rocm.json
 ```
 
-For CUDA use `--backend nvidia`, the selected core compiler, CUDA 13.3 and
+For CUDA use `--backend nvidia`, the selected core compiler, CUDA 13.4 (pinned 2026-09-15; earlier 13.3 packets are historical) and
 `scripts/_nvidia_env.sh`. The artifact directory retains serialized packages and
 native images. Never load an untrusted native package merely because its
 self-reported hash matches; the caller must pin the expected package identity.

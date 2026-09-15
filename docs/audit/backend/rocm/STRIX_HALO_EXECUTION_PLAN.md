@@ -43,7 +43,9 @@ LLVM/MLIR **23.0.0** from apt.llvm.org). Findings that update this plan:
   890M — a distinct part; the 8060S is `gfx1151`.) The toolchain **fully
   supports `gfx1151`** — verified here: `hipcc --offload-arch=gfx1151` compiles
   and `llc -mcpu=gfx1151` emits a real `v_wmma_f32_16x16x16_f16`. So **`gfx1151`
-  is the codegen target.** Today the WSL/ROCm 7.2.4 runtime *enumerates* the
+  is the codegen target.** (Historical, ROCm 7.2.4 era — under ROCm 10 on
+  Ubuntu 26.04 WSL2 `rocminfo` reports `gfx1151` natively; see CLAUDE.md.)
+  At the time the WSL/ROCm 7.2.4 runtime *enumerated* the
   device as `Name: gfx1100` (RDNA 3 discrete profile) — a **temporary WSL
   limitation; AMD's WSL enablement will report the native RDNA 3.5 arch
   (`gfx1151`)**. A `gfx1100` binary also assembles, so it is the current-WSL

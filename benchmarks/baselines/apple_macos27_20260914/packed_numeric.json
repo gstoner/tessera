@@ -1,0 +1,24 @@
+{
+  "lane": "native_gpu_packed_buffers",
+  "device": "Apple M1 Max",
+  "metal_compiler": "32023.921",
+  "os": "27.0",
+  "tests": "86 passed in 19.07s",
+  "formats": [
+    "E4M3",
+    "E5M2",
+    "E2M1"
+  ],
+  "arithmetic": "fp32 after Metal unpack",
+  "matrix_execution": false,
+  "microscaling_admitted": false,
+  "nan_sign_payload_preserved": false,
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": "645048fb784ea792c4d863e8de0c2e34e647ee583bca5f71d04928694a7c3845",
+    "python/tessera/compiler/apple_packed_numeric.py": "90e7e20b5827b930a783a2f5488825120dbc89815fecdecc063df6c4f431f8c0",
+    "tests/unit/test_apple_packed_numeric.py": "a2e1ddd2cd52e7e111b240fb88850fef06934c4facea89c8192276f8540a2d76"
+  },
+  "library_sha256": "d0dba5cde0273c5f1f87170f788cd6b9bf8ca87618f306648e5712a6b328f5a7",
+  "fleet_sealed": false,
+  "host_free_validation": "164 ABI/dtype tests; 11 audit tests; input/failure tests run separately"
+}

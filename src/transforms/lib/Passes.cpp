@@ -744,9 +744,9 @@ void registerTesseraPasses() {
 
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipeline("tessera-nvidia-pipeline",
-                   "Sprint G-5: NVIDIATargetPipeline (CUDA 13.3, default SM_90) — "
+                   "Sprint G-5: NVIDIATargetPipeline (CUDA 13.4, default SM_90) — "
                    "WarpSpec → AsyncCopy → WGMMA → TMA → NVPTXLowering. "
-                   "Toolchain pin: nvcc 13.3, PTX ISA 9.3, NCCL 2.22.",
+                   "Toolchain pin: nvcc 13.4, PTX ISA 9.4, NCCL 2.22.",
                    [](OpPassManager &pm,
                       const TesseraLoweringPipelineOptions &opts) {
                      addCUDA13PipelineForSM(pm, opts, 90, "nvidia_sm90");
@@ -755,7 +755,7 @@ void registerTesseraPasses() {
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM90("tessera-nvidia-pipeline-sm90",
                        "Sprint G-5: NVIDIATargetPipeline pinned to SM_90 (Hopper) "
-                       "under CUDA 13.3.  Emits WGMMA + TMA + mbarrier paths.",
+                       "under CUDA 13.4.  Emits WGMMA + TMA + mbarrier paths.",
                        [](OpPassManager &pm,
                           const TesseraLoweringPipelineOptions &opts) {
                          addCUDA13PipelineForSM(pm, opts, 90, "nvidia_sm90");
@@ -764,7 +764,7 @@ void registerTesseraPasses() {
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM100("tessera-nvidia-pipeline-sm100",
                         "Sprint G-5: NVIDIATargetPipeline pinned to SM_100 (Blackwell) "
-                        "under CUDA 13.3. Retains typed MMA/attention carriers "
+                        "under CUDA 13.4. Retains typed MMA/attention carriers "
                         "for the exact TCGEN05/TMEM backend pipeline.",
                         [](OpPassManager &pm,
                            const TesseraLoweringPipelineOptions &opts) {
@@ -774,7 +774,7 @@ void registerTesseraPasses() {
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM120("tessera-nvidia-pipeline-sm120",
                         "NVIDIA-E2E-2: pipeline pinned to SM_120 consumer "
-                        "Blackwell under CUDA 13.3; retains typed warp-level "
+                        "Blackwell under CUDA 13.4; retains typed warp-level "
                         "MMA carriers for the exact SM120 backend pipeline.",
                         [](OpPassManager &pm,
                            const TesseraLoweringPipelineOptions &opts) {

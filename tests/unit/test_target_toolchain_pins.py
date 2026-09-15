@@ -34,10 +34,10 @@ class TestCUDA13ToolchainPin:
             TESSERA_TARGET_PTX_ISA,
             TESSERA_TARGET_NCCL_MIN,
         )
-        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.3"
+        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.4"   # measured on The-Super-Bear 2026-09-15
         # Driver pin should be a dotted version string like 610.43.02 etc.
         assert "." in TESSERA_TARGET_CUDA_DRIVER_MIN
-        assert TESSERA_TARGET_PTX_ISA == "9.3"
+        assert TESSERA_TARGET_PTX_ISA == "9.4"        # `.version 9.4` from nvcc 13.4.59
         assert TESSERA_TARGET_NCCL_MIN == "2.22"   # floor stays 2.22 (13.3 bundles 2.30.7)
 
     def test_nvcc_arch_strings(self):
@@ -155,8 +155,8 @@ class TestROCmToolchainPin:
             TESSERA_TARGET_HIP,
             TESSERA_TARGET_RCCL_MIN,
         )
-        assert TESSERA_TARGET_ROCM == "7.2.4"
-        assert TESSERA_TARGET_HIP == "7.2.4"
+        assert TESSERA_TARGET_ROCM == "10.0"    # measured on both ROCm boxes 2026-09-15
+        assert TESSERA_TARGET_HIP == "7.15"
         assert TESSERA_TARGET_RCCL_MIN == "2.22"
 
     def test_hipcc_arch_strings(self):

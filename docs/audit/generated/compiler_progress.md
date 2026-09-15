@@ -44,7 +44,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Verifier coverage` | closed | 244 | 244 | 0 | real=244 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 408 | 520 | 112 | covered_by_family=26, directly_tested=415, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 262 | 262 | 0 | apple_cpu=2, apple_gpu=24, cpu=5, nvidia_sm120=52, rocm=92, x86=87 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 565 | 888 | 323 | apple=707, nvidia=8, rocm=13, x86=160 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime ABI symbols` | mixed | 569 | 896 | 327 | apple=715, nvidia=8, rocm=13, x86=160 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 31 | 64 | 33 | archived=4, compile_only=18, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways

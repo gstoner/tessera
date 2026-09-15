@@ -2,6 +2,7 @@
 from dataclasses import replace
 from fractions import Fraction
 import numpy as np
+import platform
 import pytest
 from tessera.compiler.native_ann import prepare_native_ann, affine_error_bound
 from tessera.compiler.evaluator import evaluate_native_ann
@@ -16,6 +17,8 @@ def pair():
 
 
 def test_affine_budget_composes_domain_and_frozen_weight_norms():
+    if platform.machine().lower() not in ('x86_64', 'amd64'):
+        pytest.skip('ANN admission owns only the x86 native JIT path')
     candidate = pair()
     small = affine_error_bound(candidate, 1.0)
     large = affine_error_bound(candidate, 2.0)

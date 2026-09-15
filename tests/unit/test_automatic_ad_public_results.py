@@ -4,6 +4,13 @@ import pytest
 from benchmarks.record_automatic_ad_results import source
 from tessera.compiler.native_public_result import materialize_ad_public_results
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.rocm_build import require_rocm_hsaco_toolkit
+
+
+@pytest.fixture(autouse=True)
+def _rocm_hsaco_host():
+    # Every case here packages a gfx1151 HSACO: ROCm-toolkit hosts only.
+    require_rocm_hsaco_toolkit()
 
 
 def test_generated_ad_result_owns_shape_copy_and_capacity():

@@ -1,4 +1,7 @@
 #pragma once
+// Pins bumped 2026-09-15 to measured fleet toolchains: CUDA 13.4 / PTX ISA 9.4 /
+// driver 610.88 (The-Super-Bear); ROCm 10.0 / HIP 7.15 (Princess-Luna, Tajasarus).
+// Drift-gated against gpu_target.py / rocm_target.py / TesseraToolchainPins.cmake.
 //===- AdapterVersionPin.h - NCCL 2.22 / RCCL 2.22 version pin ----------===//
 //
 // Sprint G-9 + H-8 (2026-05-11) — Compile-time version checks for the
@@ -26,10 +29,10 @@
 
 // Toolchain pins matching docs/backends/nvidia/kernel-inventory.md +
 // docs/backends/rocm/kernel-inventory.md.
-#define TESSERA_TARGET_CUDA_TOOLKIT "13.3"
-#define TESSERA_TARGET_PTX_ISA      "9.3"
-#define TESSERA_TARGET_ROCM         "7.2.4"
-#define TESSERA_TARGET_HIP          "7.2.4"
+#define TESSERA_TARGET_CUDA_TOOLKIT "13.4"
+#define TESSERA_TARGET_PTX_ISA      "9.4"
+#define TESSERA_TARGET_ROCM         "10.0"
+#define TESSERA_TARGET_HIP          "7.15"
 
 
 #if defined(TESSERA_HAS_NCCL)

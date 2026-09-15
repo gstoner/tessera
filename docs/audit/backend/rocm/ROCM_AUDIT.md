@@ -106,6 +106,12 @@ are not claimed as device-timeline evidence.
 The compact trace capability record is
 `benchmarks/baselines/rocm_gfx1151_rocm714_wsl_profile.json`.
 
+> **Toolchain now (2026-09-15):** both ROCm boxes run **ROCm 10.0.0 / HIP
+> 7.15.26333** at `/opt/rocm/core` (Princess-Luna since the 2026-08-29 Ubuntu
+> 26.04 migration; Tajasarus from commissioning), and the repository pin moved
+> 7.2.4 → 10.0 / 7.15 on 2026-09-15. The ROCm 7.14 paragraphs below are the
+> record of that earlier host state, kept as history.
+
 ROCm 7.14 is selected through the Core SDK prefix `/opt/rocm/core`; the login
 shell and unqualified tools now resolve to that release after the mixed legacy
 installation was removed. WSL AMD SMI tool/library 1.2.1 initializes through

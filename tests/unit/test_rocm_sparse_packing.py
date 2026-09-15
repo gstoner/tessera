@@ -55,10 +55,10 @@ def test_sparse_target_ir_is_consumed_by_native_pass(dtype):
     import os
     import subprocess
     from tessera.compiler.rocm_sparse_packing import sparse_wmma_target_ir
-    from tessera.compiler.scheduled_matmul import find_tessera_opt
-    compiler=find_tessera_opt()
-    if compiler is None:
-        pytest.skip("native Tessera compiler required")
+    from tests._support.compiler_tool import require_tessera_opt
+    # Skips only when no discoverable driver registers the ROCm lowering (a
+    # build without TESSERA_BUILD_ROCM_BACKEND); a ROCm-capable build runs it.
+    compiler=require_tessera_opt("lower-tessera-target-to-rocdl")
     source=sparse_wmma_target_ir(dtype)
     result=subprocess.run([str(compiler),"--lower-tessera-target-to-rocdl"],
         input=source,text=True,capture_output=True,env=os.environ)
@@ -75,11 +75,9 @@ def test_sparse_target_ir_is_consumed_by_native_pass(dtype):
 @pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
 def test_sparse_schedule_tile_target_ancestry(dtype):
     import subprocess
-    from tessera.compiler.scheduled_matmul import find_tessera_opt
+    from tests._support.compiler_tool import require_tessera_opt
     from tessera.compiler.rocm_sparse_packing import sparse_wmma_schedule_ir
-    tool = find_tessera_opt()
-    if tool is None:
-        pytest.skip("requires native compiler")
+    tool = require_tessera_opt("tessera-schedule-to-tile", "lower-tile-to-rocm")
     schedule = sparse_wmma_schedule_ir(dtype)
     tile = subprocess.check_output([tool, "--tessera-schedule-to-tile"], input=schedule, text=True)
     assert "schedule.sparse_mma" not in tile and "tile.sparse_mma" in tile
@@ -93,10 +91,8 @@ def test_sparse_schedule_tile_target_ancestry(dtype):
 def test_sparse_signedness_is_preserved_and_rejected_for_float():
     import subprocess
     from tessera.compiler.rocm_sparse_logical import sparse_logical_schedule_ir
-    from tessera.compiler.scheduled_matmul import find_tessera_opt
-    tool = find_tessera_opt()
-    if tool is None:
-        pytest.skip('requires native compiler')
+    from tests._support.compiler_tool import require_tessera_opt
+    tool = require_tessera_opt("lower-tessera-target-to-rocdl")
     source = sparse_logical_schedule_ir(16,16,32,'uint8',rhs_dtype='int8',accum='i32')
     for flags in (['--tessera-schedule-to-tile'],['--tessera-schedule-to-tile','--lower-tile-to-rocm']):
         ir = subprocess.check_output([tool,*flags],input=source,text=True)

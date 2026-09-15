@@ -4,9 +4,9 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 ## Headline
 
-- **558** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **562** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **152** Apple GPU kernel families with per-dtype variants.
+- **153** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 384 |
+| `apple` | 388 |
 | `nvidia` | 6 |
 | `rocm` | 13 |
 | `x86` | 155 |
@@ -127,6 +127,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 | `msa_block_sparse` | `f16`, `f32` |
 | `msa_block_sparse_tiled` | `f16`, `f32` |
 | `msa_select_blocks` | `f32` |
+| `mtl4_bias_act` | `f32` |
 | `mtl4_conv2d` | `bf16`, `f16` |
 | `mtl4_matmul2d` | `bf16`, `f16` |
 | `mtl4_matmul2d_epilogue` | `bf16`, `f16` |
@@ -193,8 +194,8 @@ Pins declared in Python (`gpu_target.py` / `rocm_target.py`) and CMake (`cmake/T
 
 | Source | Declared value |
 |--------|----------------|
-| `python_gpu_target` | _not found_ |
-| `cmake_pins` | `13.3` |
+| `python_gpu_target` | `13.4` |
+| `cmake_pins` | `13.4` |
 
 ✅ Sources agree.
 
@@ -203,7 +204,7 @@ Pins declared in Python (`gpu_target.py` / `rocm_target.py`) and CMake (`cmake/T
 | Source | Declared value |
 |--------|----------------|
 | `python_gpu_target` | `2.22` |
-| `cmake_pins` | _not found_ |
+| `cmake_pins` | `2.22` |
 
 ✅ Sources agree.
 
@@ -211,7 +212,7 @@ Pins declared in Python (`gpu_target.py` / `rocm_target.py`) and CMake (`cmake/T
 
 | Source | Declared value |
 |--------|----------------|
-| `python_rocm_target` | `7.2.4` |
-| `cmake_pins` | `7.2.4` |
+| `python_rocm_target` | `10.0` |
+| `cmake_pins` | `10.0` |
 
 ✅ Sources agree.

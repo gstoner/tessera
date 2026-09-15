@@ -6342,10 +6342,11 @@ def _nvidia_tile_tool(name: str) -> Path | None:
         "tessera-nvidia-opt": (
             root / "build-nvidia-cuda/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt"
         ),
-        "mlir-opt": Path("/usr/lib/llvm-23/bin/mlir-opt"),
-        "mlir-translate": Path("/usr/lib/llvm-23/bin/mlir-translate"),
-        "llc": Path("/usr/lib/llvm-23/bin/llc"),
     }
+    if name in ("mlir-opt", "mlir-translate", "llc"):
+        # Matched LLVM 23 companion on any fleet host (Ubuntu apt, Mac brew, ...).
+        from .compiler.llvm_tools import find_llvm_tool
+        return find_llvm_tool(name)
     path = candidates[name]
     if path.is_file():
         return path
@@ -6852,12 +6853,37 @@ def _rocm_toolkit_root() -> Optional[Path]:
                 break
     for root in candidates:
         try:
-            if root.is_dir() and _rocm_lld_under(root) is not None:
+            if root.is_dir() and _rocm_lld_under(root) is not None and _is_rocm_toolkit(root):
                 _rocm_toolkit_root_cache = root
                 return root
         except OSError:
             continue
     return None
+
+
+def _is_rocm_toolkit(root: Path) -> bool:
+    """A root is a ROCm toolkit only if it carries something ROCm-specific.
+
+    ``ld.lld`` alone is not evidence: any LLVM install ships one, and on the
+    Mac Homebrew's ``lld`` keg was being taken for a ROCm root (2026-09-15), so
+    every ``backend='rocm'`` package test ran the ROCDL serializer against a
+    toolkit with no device libraries and failed with ``lld invocation failed``
+    instead of skipping. The markers are what ``gpu-module-to-binary`` and
+    ``hipcc`` actually need: device-library bitcode, the release stamp, or the
+    AMD-only drivers."""
+    markers = (
+        root / "amdgcn" / "bitcode",
+        root / "lib" / "llvm" / "amdgcn" / "bitcode",
+        root / ".info" / "version",
+        root / "bin" / "rocminfo",
+        root / "bin" / "hipcc",
+        root / "lib" / "llvm" / "bin" / "amdgpu-arch",
+        root / "bin" / "amdgpu-arch",
+    )
+    try:
+        return any(m.exists() for m in markers)
+    except OSError:
+        return False
 
 
 def _rocm_serializer_env() -> Optional[dict[str, str]]:
@@ -44323,6 +44349,240 @@ def apple_gpu_mtl4_matmul2d_f16(A: Any, B: Any, np: Any):
     if not ok:
         C = (A.astype(np.float32) @ B.astype(np.float32)).astype(np.float32)
     return C, ok
+
+
+_APPLE_LOWP_FORMATS = {"fp8_e4m3": 0, "fp8_e5m2": 1, "fp4_e2m1": 2}
+_APPLE_LOWP_BITS = {"fp8_e4m3": 8, "fp8_e5m2": 8, "fp4_e2m1": 4}
+
+
+def apple_lowp_decode(codes: Any, fmt: str, np: Any) -> Any:
+    """Exact float64 decode of packed low-precision storage (pure numpy).
+
+    ``codes`` is ``uint8`` storage: one element per byte for FP8, two per byte
+    (low nibble first) for FP4. FP8 E4M3 is the finite ``fn`` variant (no
+    infinities; ``S.1111.111`` is NaN, max finite 448); E5M2 follows IEEE
+    (``S.11111.00`` is inf, other ``11111`` mantissas NaN); FP4 E2M1 has no
+    exceptional codes. The reference for every low-precision lane starts from
+    the exact quantized bytes so input-quantisation error is never confused
+    with execution error."""
+    if fmt not in _APPLE_LOWP_FORMATS:
+        raise ValueError(f"unsupported Metal low-precision format {fmt!r}")
+    codes = np.asarray(codes, np.uint8)
+    if fmt == "fp4_e2m1":
+        lo = codes & 0xF
+        hi = codes >> 4
+        nib = np.stack((lo, hi), axis=-1).reshape(codes.shape[:-1] + (codes.shape[-1] * 2,))
+        sign = np.where(nib & 0x8, -1.0, 1.0)
+        exp = (nib >> 1) & 0x3
+        man = (nib & 0x1).astype(np.float64)
+        mag = np.where(exp == 0, man * 0.5, (1.0 + man * 0.5) * np.exp2(exp.astype(np.float64) - 1.0))
+        return sign * mag
+    sign = np.where(codes & 0x80, -1.0, 1.0)
+    if fmt == "fp8_e4m3":
+        exp = (codes >> 3) & 0xF
+        man = (codes & 0x7).astype(np.float64)
+        mag = np.where(exp == 0, man / 8.0 * np.exp2(-6.0),
+                       (1.0 + man / 8.0) * np.exp2(exp.astype(np.float64) - 7.0))
+        mag = np.where((exp == 15) & (man == 7), np.nan, mag)
+        return sign * mag
+    exp = (codes >> 2) & 0x1F
+    man = (codes & 0x3).astype(np.float64)
+    mag = np.where(exp == 0, man / 4.0 * np.exp2(-14.0),
+                   (1.0 + man / 4.0) * np.exp2(exp.astype(np.float64) - 15.0))
+    mag = np.where(exp == 31, np.where(man == 0, np.inf, np.nan), mag)
+    return sign * mag
+
+
+def _apple_gpu_mtl4_matmul2d_lowp_sym() -> Any:
+    """SDK27 / MSL 4.1 low-precision MPP ``matmul2d`` symbol, or ``None`` when
+    the loaded runtime predates it (a pre-27 SDK build exports no such symbol)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_matmul2d_lowp", None)
+    if sym is None:
+        return None
+    i32, i64, vp = ctypes.c_int32, ctypes.c_int64, ctypes.c_void_p
+    sym.argtypes = [i32, vp, i64, i64, i32, vp, i64, i64, i32,
+                    ctypes.POINTER(ctypes.c_float), i32, i32, i32, i32]
+    sym.restype = i32
+    return sym
+
+
+def apple_gpu_mtl4_matmul2d_lowp_available() -> bool:
+    """True when the loaded runtime exports the low-precision matmul2d lane and
+    the Metal 4 stack is up. Symbol presence only -- not an execution proof."""
+    try:
+        sym = _apple_gpu_mtl4_matmul2d_lowp_sym()
+    except Exception:  # noqa: BLE001 - loader failures mean "not available"
+        return False
+    return sym is not None and bool(apple_gpu_metal4_caps()["available"])
+
+
+def _apple_gpu_mtl4_matmul2d_lowp_epilogue_sym() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mtl4_matmul2d_lowp_epilogue", None)
+    if sym is None:
+        return None
+    i32, i64, vp, fp = ctypes.c_int32, ctypes.c_int64, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [i32, vp, i64, i64, i32, vp, i64, i64, i32, fp, i32, i32, i32, i32, fp, i32]
+    sym.restype = i32
+    return sym
+
+
+_APPLE_LOWP_ACTS = {"none": 0, "relu": 1, "gelu": 2, "silu": 3}
+
+
+def apple_gpu_mtl4_bias_act_f32(C: Any, np: Any, *, bias: Any = None, act: str = "none",
+                                N: int | None = None) -> Any:
+    """In place ``C[:, :N] = act(C[:, :N] + bias[None, :])`` on the GPU as a
+    separate MTL4 dispatch -- the *decomposed* epilogue the fused low-precision
+    kernels are measured against (same MSL expression, second pass). ``C`` is a
+    C-contiguous float32 ``(M, ldc)`` array; ``N`` defaults to ``ldc``. Raises on
+    any decline; never falls back to numpy."""
+    if act not in _APPLE_LOWP_ACTS:
+        raise ValueError(f"act must be one of {sorted(_APPLE_LOWP_ACTS)}")
+    if not (isinstance(C, np.ndarray) and C.dtype == np.float32 and C.ndim == 2 and C.flags.c_contiguous):
+        raise ValueError("C must be a C-contiguous float32 rank-2 array")
+    M, ldc = C.shape
+    N = ldc if N is None else int(N)
+    if bias is not None:
+        bias = np.ascontiguousarray(bias, np.float32)
+        if bias.shape != (N,):
+            raise ValueError("bias must have shape (N,)")
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_mtl4_bias_act_f32", None)
+    if sym is None:
+        raise RuntimeError("Apple GPU runtime exports no mtl4_bias_act_f32 (needs a macOS 27 SDK build)")
+    fp, i32 = ctypes.POINTER(ctypes.c_float), ctypes.c_int32
+    sym.argtypes = [fp, i32, fp, i32, i32, i32]
+    sym.restype = i32
+    # Routed through the dispatch breaker like every other blocking Apple
+    # symbol; the lane reports kinds itself (5 contract, 3 compile, 2 command
+    # buffer, 1 bounded-wait timeout), so no silent-failure heuristic is needed.
+    err = {"text": ""}
+
+    def _call() -> int:
+        rc = sym(C.ctypes.data_as(fp), i32(ldc),
+                 bias.ctypes.data_as(fp) if bias is not None else None,
+                 i32(_APPLE_LOWP_ACTS[act]), i32(M), i32(N))
+        if rc != 1:  # read before the breaker helper clears the channel
+            err["text"] = _apple_gpu_last_error_text()
+        return int(rc)
+
+    ok = _apple_gpu_symbol_call_checked("apple_gpu.mtl4_bias_act_f32", _call)
+    if not ok:
+        raise RuntimeError("Metal bias/act pass declined or failed: "
+                           + (err["text"] or "dispatch breaker open, nothing dispatched"))
+    return C
+
+
+def apple_gpu_mtl4_matmul2d_lowp(A: Any, B: Any, np: Any, *, fmt: str,
+                                 M: int, N: int, K: int, a_dtype: str = "lowp",
+                                 a_origin: tuple[int, int] = (0, 0),
+                                 b_origin: tuple[int, int] = (0, 0),
+                                 out: Any = None,
+                                 bias: Any = None, act: str = "none") -> Any:
+    """``C[f32] = A @ B`` on MetalPerformancePrimitives ``matmul2d`` with FP8 /
+    FP4 operands (macOS 27 SDK, MSL 4.1), bound as strided MTLTensor views.
+
+    ``A`` and ``B`` are *storage* arrays, not logical operands: 2-D ``uint8``
+    code arrays of shape ``(rows, ld)`` for FP8 or ``(rows, ld // 2)`` for FP4
+    (two codes per byte, low nibble first); ``A`` is ``float16`` of shape
+    ``(rows, ld)`` when ``a_dtype == "f16"`` (the header's half x low-precision
+    pairs, the weight-only-quantised shape). The logical ``M x K`` and ``K x N``
+    operands are the views at ``a_origin`` / ``b_origin`` (row, col), so a
+    padded row stride and a nonzero tile offset are ordinary inputs rather than
+    special cases. ``out``, when given, is a C-contiguous ``float32`` ``(M, ldc)``
+    array written in place (columns beyond ``N`` are preserved); otherwise a
+    fresh ``(M, N)`` array is returned. Accumulation is fp32 on the matrix
+    units.
+
+    Apple's MTLTensor contract for 8/4-bit data (MTLTensor.h): the innermost
+    extent (``K`` for ``A``, ``N`` for ``B``) must be a multiple of 32 elements
+    and every row stride a multiple of 128 bytes. Violations, a missing symbol,
+    and any submission failure **raise** -- this lane never substitutes a CPU
+    product, so a returned array is always a GPU result (Decision #21)."""
+    if fmt not in _APPLE_LOWP_FORMATS:
+        raise ValueError(f"unsupported Metal low-precision format {fmt!r}")
+    if a_dtype not in ("lowp", "f16"):
+        raise ValueError("a_dtype must be 'lowp' or 'f16'")
+    bits = _APPLE_LOWP_BITS[fmt]
+    A = np.ascontiguousarray(A)
+    B = np.ascontiguousarray(B)
+    if A.ndim != 2 or B.ndim != 2:
+        raise ValueError("A and B storage must be rank-2")
+    if a_dtype == "f16":
+        if A.dtype != np.float16:
+            raise ValueError("A storage must be float16 when a_dtype == 'f16'")
+        lda = A.shape[1]
+    else:
+        if A.dtype != np.uint8:
+            raise ValueError("A storage must be uint8 codes")
+        lda = A.shape[1] * (8 // bits)
+    if B.dtype != np.uint8:
+        raise ValueError("B storage must be uint8 codes")
+    ldb = B.shape[1] * (8 // bits)
+    (ar, ac), (br, bc) = a_origin, b_origin
+    if min(ar, ac, br, bc) < 0:
+        raise ValueError("view origins must be non-negative")
+    if out is None:
+        C = np.zeros((M, N), np.float32)
+    else:
+        C = out
+        if not (isinstance(C, np.ndarray) and C.dtype == np.float32 and C.ndim == 2
+                and C.flags.c_contiguous and C.shape[0] == M and C.shape[1] >= N):
+            raise ValueError("out must be a C-contiguous float32 (M, ldc>=N) array")
+    ldc = C.shape[1]
+    if act not in _APPLE_LOWP_ACTS:
+        raise ValueError(f"act must be one of {sorted(_APPLE_LOWP_ACTS)}")
+    fused = bias is not None or act != "none"
+    if bias is not None:
+        bias = np.ascontiguousarray(bias, np.float32)
+        if bias.shape != (N,):
+            raise ValueError("bias must have shape (N,) (per output column)")
+    sym = (_apple_gpu_mtl4_matmul2d_lowp_epilogue_sym() if fused
+           else _apple_gpu_mtl4_matmul2d_lowp_sym())
+    if sym is None:
+        raise RuntimeError("Apple GPU runtime exports no low-precision matmul2d "
+                           "lane (needs a macOS 27 SDK build)")
+    fmt_code = _APPLE_LOWP_FORMATS[fmt] + (3 if a_dtype == "f16" else 0)
+    fp = ctypes.POINTER(ctypes.c_float)
+    args = [ctypes.c_int32(fmt_code),
+            A.ctypes.data, ctypes.c_int64(A.nbytes), ctypes.c_int64(ar * lda + ac),
+            ctypes.c_int32(lda),
+            B.ctypes.data, ctypes.c_int64(B.nbytes), ctypes.c_int64(br * ldb + bc),
+            ctypes.c_int32(ldb),
+            C.ctypes.data_as(fp), ctypes.c_int32(ldc),
+            ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K)]
+    if fused:
+        args += [bias.ctypes.data_as(fp) if bias is not None else None,
+                 ctypes.c_int32(_APPLE_LOWP_ACTS[act])]
+    err = {"text": ""}
+
+    def _call() -> int:
+        rc = sym(*args)
+        if rc != 1:  # read before the breaker helper clears the channel
+            err["text"] = _apple_gpu_last_error_text()
+        return int(rc)
+
+    ok = _apple_gpu_symbol_call_checked(
+        "apple_gpu.mtl4_matmul2d_lowp_epilogue" if fused else "apple_gpu.mtl4_matmul2d_lowp", _call)
+    if not ok:
+        raise RuntimeError("Metal low-precision matmul2d declined or failed: "
+                           + (err["text"] or "dispatch breaker open, nothing dispatched"))
+    return C
+
+
+def _apple_gpu_last_error_text() -> str:
+    """``kind:message`` from the runtime's thread-local last-error channel."""
+    rt = _load_apple_gpu_runtime()
+    kind_fn = getattr(rt, "tessera_apple_gpu_last_error_kind", None)
+    msg_fn = getattr(rt, "tessera_apple_gpu_last_error_message", None)
+    if kind_fn is None or msg_fn is None:
+        return "<no error channel>"
+    kind_fn.restype = ctypes.c_int32
+    msg_fn.restype = ctypes.c_char_p
+    msg = msg_fn() or b""
+    return f"kind {int(kind_fn())}: {msg.decode('utf-8', 'replace')}"
 
 
 def _apple_gpu_mtl4_matmul2d_sym(name: str, *, fused: bool) -> Any:

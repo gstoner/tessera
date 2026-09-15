@@ -117,9 +117,16 @@ _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 #: Target CUDA Toolkit release that Tessera's NVIDIA backend is built against.
-TESSERA_TARGET_CUDA_TOOLKIT: str = "13.3"
-TESSERA_TARGET_CUDA_DRIVER_MIN: str = "610.43.02"  # Min driver for CUDA 13.3
-TESSERA_TARGET_PTX_ISA: str = "9.3"                # PTX ISA bundled with 13.3
+# Bumped 13.3 -> 13.4 on 2026-09-15 from MEASURED values on the CUDA box
+# (The-Super-Bear, RTX 5070 sm_120, WSL2): `nvcc --version` = release 13.4,
+# V13.4.59; `nvcc -arch=sm_120 -ptx` emits `.version 9.4`; driver 610.88. As with
+# the 13.2->13.3 bump, only the toolkit / driver-min / PTX-ISA pins moved: the
+# per-SM ready/tba feature readiness below was NOT re-evaluated for 13.4.
+# DRIVER_MIN is the measured working driver, not NVIDIA's published floor for
+# 13.4 (which may be lower); a lower value needs the release notes as source.
+TESSERA_TARGET_CUDA_TOOLKIT: str = "13.4"
+TESSERA_TARGET_CUDA_DRIVER_MIN: str = "610.88"     # measured working driver for CUDA 13.4 (2026-09-15)
+TESSERA_TARGET_PTX_ISA: str = "9.4"                # PTX ISA emitted by nvcc 13.4.59
 # NCCL_MIN is a *minimum* floor, not the bundled version.  CUDA 13.3 bundles NCCL
 # 2.30.7, but NCCL is backward-compatible so the required floor stays 2.22 (kept in
 # sync with RCCL 2.22 on the ROCm track); raising the collective minimum is a

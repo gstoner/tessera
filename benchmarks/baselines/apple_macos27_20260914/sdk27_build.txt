@@ -1,0 +1,47 @@
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:433:31: warning: 'MTLGPUFamilyMac2' is deprecated: first deprecated in macOS 27.0 [-Wdeprecated-declarations]
+  433 |           [dev supportsFamily:MTLGPUFamilyMac2]) {
+      |                               ^~~~~~~~~~~~~~~~
+      |                               MTLGPUFamilyApple7
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLDevice.h:246:5: note: 'MTLGPUFamilyMac2' has been explicitly marked deprecated here
+  246 |     MTLGPUFamilyMac2 API_DEPRECATED_WITH_REPLACEMENT("MTLGPUFamilyApple7", macos(10.15, 27.0), ios(13.0, 27.0)) = 2002,
+      |     ^
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3648:33: error: use of undeclared identifier 'MTLTensorDataTypeFloat8E4M3'
+ 3648 |     case TS_MX_FP8_E4M3: return MTLTensorDataTypeFloat8E4M3;
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3649:33: error: use of undeclared identifier 'MTLTensorDataTypeFloat8E5M2'; did you mean 'MTLTensorDataTypeFloat32'?
+ 3649 |     case TS_MX_FP8_E5M2: return MTLTensorDataTypeFloat8E5M2;
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                 MTLTensorDataTypeFloat32
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLTensor.h:24:5: note: 'MTLTensorDataTypeFloat32' declared here
+   24 |     MTLTensorDataTypeFloat32  = MTLDataTypeFloat,
+      |     ^
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3650:33: error: use of undeclared identifier 'MTLTensorDataTypeFloat4E2M1'; did you mean 'MTLTensorDataTypeFloat32'?
+ 3650 |     case TS_MX_FP4_E2M1: return MTLTensorDataTypeFloat4E2M1;
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                 MTLTensorDataTypeFloat32
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLTensor.h:24:5: note: 'MTLTensorDataTypeFloat32' declared here
+   24 |     MTLTensorDataTypeFloat32  = MTLDataTypeFloat,
+      |     ^
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3651:33: error: use of undeclared identifier 'MTLTensorDataTypeFloat8UE8M0'; did you mean 'MTLTensorDataTypeMetalFloat8UE8M0'?
+ 3651 |     case TS_MX_E8M0:     return MTLTensorDataTypeFloat8UE8M0;
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                 MTLTensorDataTypeMetalFloat8UE8M0
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLTensor.h:57:5: note: 'MTLTensorDataTypeMetalFloat8UE8M0' declared here
+   57 |     MTLTensorDataTypeMetalFloat8UE8M0 API_AVAILABLE(macos(27.0), ios(27.0)) = 145,
+      |     ^
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3693:62: error: cannot initialize a parameter of type 'const NSInteger * _Nullable' (aka 'const long *') with an lvalue of type 'const int64_t *' (aka 'const long long *')
+ 3693 |           [[MTLTensorExtents alloc] initWithRank:rank values:dims];
+      |                                                              ^~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLTensor.h:93:91: note: passing argument to parameter 'values' here
+   93 | - (nullable instancetype)initWithRank:(NSUInteger)rank values:(nullable const NSInteger *)values;
+      |                                                                                           ^
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3712:64: error: cannot initialize a parameter of type 'const NSInteger * _Nullable' (aka 'const long *') with an lvalue of type 'const int64_t *' (aka 'const long long *')
+ 3712 |             [[MTLTensorExtents alloc] initWithRank:rank values:block_factors];
+      |                                                                ^~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLTensor.h:93:91: note: passing argument to parameter 'values' here
+   93 | - (nullable instancetype)initWithRank:(NSUInteger)rank values:(nullable const NSInteger *)values;
+      |                                                                                           ^
+src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm:3716:17: error: no visible @interface for 'MTLTensorAuxiliaryPlaneDescriptorMap' declares the selector 'setDescriptor:forPlaneType:'
+ 3716 |         [planes setDescriptor:ap forPlaneType:MTLTensorPlaneTypeScales];
+      |          ~~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 warning and 7 errors generated.

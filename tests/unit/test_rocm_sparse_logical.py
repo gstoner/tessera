@@ -23,9 +23,9 @@ def test_sparse_logical_refuses_unsupported_envelope(shape):
 
 @pytest.mark.parametrize('dtype', ['float16', 'bfloat16'])
 def test_sparse_logical_native_ancestry(dtype):
-    compiler = find_tessera_opt()
-    if compiler is None:
-        pytest.skip('native compiler required')
+    from tests._support.compiler_tool import require_tessera_opt
+    compiler = require_tessera_opt('tessera-schedule-to-tile', 'lower-tile-to-rocm',
+                                   'lower-tessera-target-to-rocdl')
     source = sparse_logical_schedule_ir(32,48,64,dtype)
     tile = subprocess.check_output([compiler,'--tessera-schedule-to-tile'],input=source,text=True)
     assert 'tile.sparse_mma' in tile and 'schedule.sparse_mma' not in tile

@@ -54,3 +54,28 @@ def rocm_flash_attn_lib_path() -> Path | None:
 
 def tessera_runtime_lib_path() -> Path | None:
     return built_artifact(TESSERA_RUNTIME_LIB_REL, defaults=_DEFAULTS)
+
+
+def rocm_hsaco_toolkit_root():
+    """ROCm toolkit root whose ``ld.lld`` MLIR's ROCDL ``gpu-module-to-binary``
+    serializer links with, or ``None``. Mirrors the runtime's own detector so a
+    test and the lane it exercises agree about the host."""
+    from tessera.runtime import _rocm_toolkit_root
+    return _rocm_toolkit_root()
+
+
+def require_rocm_hsaco_toolkit():
+    """Skip when no ROCm toolkit can serialize HSACO on this host.
+
+    ``rocdl-attach-target`` + ``gpu-module-to-binary`` shell out to ``ld.lld``
+    under ``ROCM_PATH``; without a toolkit the pipeline fails with ``lld
+    invocation failed`` regardless of the IR, so a package test asking for
+    ``backend='rocm'`` is a ROCm-host test. On a ROCm box this returns the root
+    and the test runs; on the Mac it skips with the reason, never a false red.
+    """
+    import pytest
+    root = rocm_hsaco_toolkit_root()
+    if root is None:
+        pytest.skip("ROCDL hsaco serialization needs a ROCm toolkit with ld.lld "
+                    "(ROCM_PATH); none on this host")
+    return root

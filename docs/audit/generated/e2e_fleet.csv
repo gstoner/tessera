@@ -1,6 +1,6 @@
 schema,target,architecture,backend,family,state,packet,source_commit,reason
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,matmul,release_ready,docs/audit/evidence/e2e_spine/apple_gpu/apple7,0ba34c2603a475c01b432710a62b7a297f7a9c5a,Validated hash-sealed packet.
-tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,softmax,release_ready,docs/audit/evidence/e2e_spine/apple_gpu/apple7,0ba34c2603a475c01b432710a62b7a297f7a9c5a,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,matmul,release_ready,docs/audit/evidence/e2e_spine/apple_gpu/apple7,17e67334cdb91462b4733abcb3610df5248da3fe,Validated hash-sealed packet.
+tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,softmax,release_ready,docs/audit/evidence/e2e_spine/apple_gpu/apple7,17e67334cdb91462b4733abcb3610df5248da3fe,Validated hash-sealed packet.
 tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,linalg,packet_pending,,,Family absent from active packet.
 tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ppo,packet_pending,,,Family absent from active packet.
 tessera.e2e-release-packet.v1,apple_gpu,apple7,apple,ebm,packet_pending,,,Family absent from active packet.

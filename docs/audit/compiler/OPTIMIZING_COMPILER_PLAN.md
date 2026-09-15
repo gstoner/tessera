@@ -27,7 +27,8 @@ plan_state: landing
 >
 > 1. **"This Mac can't provide a CUDA/ROCm runner, so silicon validation is
 >    deferred" is dead.** The **Strix Halo** box (Radeon 8060S **gfx1151**, ROCm
->    7.2.4) and the **NR2 Pro** box (RTX 5070 Ti **sm_120**, CUDA 13.3) now exist
+>    7.2.4 then, ROCm 10.0 now) and the NVIDIA box (RTX 5070 Ti / CUDA 13.3 then;
+>    since 2026-08-25 **The-Super-Bear** RTX 5070 / CUDA 13.4, **sm_120**) now exist
 >    and *execute* — ROCm gfx1151 runs a compiler-generated matmul + flash-attn
 >    family; NVIDIA sm_120 runs its first `mma.sync` matmul. F6 is no longer
 >    "design + assemble-on-CI, silicon deferred."

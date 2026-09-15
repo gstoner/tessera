@@ -203,12 +203,11 @@ def _tool(name: str) -> Path | None:
     candidates = {
         "tessera-nvidia-opt": root
         / ("build-nvidia-cuda/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt"),
-        "mlir-opt": Path("/usr/lib/llvm-23/bin/mlir-opt"),
-        "mlir-translate": Path("/usr/lib/llvm-23/bin/mlir-translate"),
-        "llc": Path("/usr/lib/llvm-23/bin/llc"),
-        "llvm-link": Path("/usr/lib/llvm-23/bin/llvm-link"),
         "ptxas": Path("/usr/local/cuda/bin/ptxas"),
     }
+    if name in ("mlir-opt", "mlir-translate", "llc", "llvm-link"):
+        from .llvm_tools import find_llvm_tool  # matched LLVM 23 on any fleet host
+        return find_llvm_tool(name)
     candidate = candidates[name]
     if candidate.is_file():
         return candidate

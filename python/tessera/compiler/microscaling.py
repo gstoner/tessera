@@ -1,20 +1,14 @@
 """Low-precision (FP8 / FP4 / MX) quantization contract — the compiler-side
 "scale layout as a first-class IR operand" surface (M3, hardware-free).
 
-Apple7 / Metal 4 expose FP8 (E4M3/E5M2), FP4 (E2M1) and MX block-scale (UE8M0)
-as MTLTensor formats (see the apple7-m1max-gpu-feature-set memo), but the macOS
-26.5 SDK on this machine does not yet expose those tensor formats through the
-public Metal API — so real-silicon execution is toolchain-gated. What is *not*
-gated is the compiler contract: how Tessera represents these dtypes, their
-quantization semantics, and crucially the **scale layout** (the per-block shared
-exponent for microscaled formats) as a first-class typed operand alongside the
-data — the DeepGEMM extraction (see the deepgemm_compiler_extraction memo).
+SDK27 exposes FP8/FP4 data formats and UE8M0 auxiliary scale planes.
+The Metal bridge currently constructs descriptors only; native allocation,
+binding and numerical execution proof remain open. SDK availability alone
+must not admit execution. NVFP4 E4M3 scales need a separate-buffer consumer.
 
-This module is the bit-accurate numpy reference + the typed contract. When a
-Metal SDK exposes the FP8/FP4 MTLTensorDataType cases, the runtime lowering
-plugs in beneath this contract; the Evaluator's metamorphic oracle
-(``mx_matmul`` ≈ fp32 matmul within the quantization error bound) is the proof
-that survives the transition.
+This module supplies the numpy reference and typed scale-layout contract.
+Metal plane-plan axes follow logical tensor order; an eventual binding must
+reverse them for Metal's innermost-first extent convention.
 
 All quantization math is faithful to the OCP Microscaling (MX) spec and NVIDIA's
 NVFP4: a tensor is partitioned into contiguous blocks along an axis; each block
@@ -152,7 +146,7 @@ def format_for_dtype(dtype: str) -> LowPrecisionFormat | None:
 # the mapping itself is hardware-free and unit-testable now.
 #
 # The doc dump gives the Swift case names (``.float8e4m3`` …); ``mtl_symbol`` is
-# the conventional ObjC enum spelling derived from them (not separately verified).
+# the concrete ObjC spelling verified against the macOS 27.0 SDK headers.
 
 @dataclass(frozen=True)
 class MetalTensorType:
@@ -168,10 +162,10 @@ class MetalTensorType:
 
 #: Tessera element/scale dtype name → its MTLTensorDataType image + availability.
 _MTL_TENSOR_DATA_TYPE: dict[str, MetalTensorType] = {
-    "fp8_e4m3": MetalTensorType("fp8_e4m3", "float8e4m3", "MTLTensorDataTypeFloat8E4M3", "27.0"),
-    "fp8_e5m2": MetalTensorType("fp8_e5m2", "float8e5m2", "MTLTensorDataTypeFloat8E5M2", "27.0"),
-    "fp4_e2m1": MetalTensorType("fp4_e2m1", "float4e2m1", "MTLTensorDataTypeFloat4E2M1", "27.0"),
-    "e8m0":     MetalTensorType("e8m0", "float8ue8m0", "MTLTensorDataTypeFloat8UE8M0", "27.0"),
+    "fp8_e4m3": MetalTensorType("fp8_e4m3", "metalFloat8E4M3", "MTLTensorDataTypeMetalFloat8E4M3", "27.0"),
+    "fp8_e5m2": MetalTensorType("fp8_e5m2", "metalFloat8E5M2", "MTLTensorDataTypeMetalFloat8E5M2", "27.0"),
+    "fp4_e2m1": MetalTensorType("fp4_e2m1", "metalFloat4E2M1", "MTLTensorDataTypeMetalFloat4E2M1", "27.0"),
+    "e8m0":     MetalTensorType("e8m0", "metalFloat8UE8M0", "MTLTensorDataTypeMetalFloat8UE8M0", "27.0"),
     "int8":     MetalTensorType("int8", "int8", "MTLTensorDataTypeInt8", "26.0"),
     "int4":     MetalTensorType("int4", "int4", "MTLTensorDataTypeInt4", "26.4"),
     "uint4":    MetalTensorType("uint4", "uint4", "MTLTensorDataTypeUInt4", "26.4"),
@@ -229,7 +223,10 @@ def metal_plane_plan(fmt: LowPrecisionFormat,
     if layout.block_size == 0:
         return MetalPlanePlan(elem, (), elem.min_macos)
     scale = mtl_tensor_data_type(layout.scale_dtype)
-    if scale is None:
+    if scale is None or layout.scale_dtype != "e8m0":
+        # SDK27 auxiliary scale planes accept only MetalFloat8UE8M0.
+        # NVFP4 remains representable by the quantization contract, but needs
+        # a separate-buffer lowering instead of this multi-plane descriptor.
         return None
     rank = len(data_shape)
     ax = layout.axis if layout.axis >= 0 else rank + layout.axis
@@ -243,11 +240,12 @@ def metal_plane_plan(fmt: LowPrecisionFormat,
 
 
 def metal_microscaling_available() -> bool:
-    """True iff the Apple GPU runtime can actually drive microscaled (FP8/FP4/MX)
-    tensors — i.e. it was built against a macOS >=27.0 SDK *and* is running on
-    macOS 27.0+. False on the 26.5 toolchain (the contract + Metal bridge are
-    hardware-free; only the multi-plane MTLTensor execution is version-gated).
-    Probes the runtime's ``tessera_apple_gpu_supports_microscaling`` symbol."""
+    """Report executable microscaling support, not descriptor/SDK availability.
+
+    The SDK27 descriptor bridge alone does not establish tensor allocation,
+    kernel binding or numerical proof; execution remains unavailable until
+    those consumers are implemented and validated.
+    """
     try:
         import ctypes
 

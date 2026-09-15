@@ -36,6 +36,43 @@ def _require_toolchain() -> None:
     require_metal_compiler()
 
 
+
+def _toolchain_air_version(tmp_path: Path) -> str | None:
+    """`!air.version` the installed `metal` compiler emits, e.g. "i32 2, i32 9, i32 0".
+
+    Xcode 27's toolchain expects AIR 2.9 and rejects a 2.8.0 module; the
+    hand-written fixtures were authored under 2.8. Reading the version from a
+    trivial compile keeps the fixtures valid on every macOS the fleet runs.
+    """
+    import re
+    import subprocess
+    src = tmp_path / "air_version_probe.metal"
+    src.write_text("kernel void air_version_probe() {}\n")
+    done = subprocess.run(["xcrun", "metal", "-S", "-emit-llvm", "-c", str(src), "-o", "-"],
+                          capture_output=True, text=True)
+    if done.returncode != 0:
+        return None
+    m = re.search(r"!air\.version = !\{(![0-9]+)\}", done.stdout)
+    if not m:
+        return None
+    node = re.search(re.escape(m.group(1)) + r" = !\{(i32 [0-9]+, i32 [0-9]+, i32 [0-9]+)\}", done.stdout)
+    return node.group(1) if node else None
+
+
+def _air_fixture(tmp_path: Path, name: str) -> Path:
+    """Copy a hand-written AIR fixture with its `air.version` retargeted to the toolchain."""
+    import re
+    src = Path(__file__).resolve().parents[2] / "tests/data/apple" / name
+    if not src.is_file():
+        pytest.skip(f"hand-written AIR fixture missing: {src}")
+    text = src.read_text()
+    version = _toolchain_air_version(tmp_path)
+    if version:
+        text = re.sub(r"!\{i32 2, i32 [0-9]+, i32 0\}", "!{" + version + "}", text)
+    out = tmp_path / name
+    out.write_text(text)
+    return out
+
 def test_air_target_registers_its_own_emitter_and_compiler() -> None:
     assert get_emitter(AIR_TARGET).target == AIR_TARGET
     assert get_compiler(AIR_TARGET) is not None
@@ -267,9 +304,7 @@ def test_gpu_executes_hand_written_air_ir(tmp_path) -> None:
 
     from tessera.runtime import _load_apple_gpu_runtime
 
-    ir = Path(__file__).resolve().parents[2] / "tests/data/apple/handwritten_air.ll"
-    if not ir.is_file():
-        pytest.skip(f"hand-written AIR fixture missing: {ir}")
+    ir = _air_fixture(tmp_path, "handwritten_air.ll")
 
     air, lib = tmp_path / "hw.air", tmp_path / "hw.metallib"
     for command in (["xcrun", "metal", "-c", str(ir), "-o", str(air)],
@@ -455,9 +490,7 @@ def test_gpu_executes_hand_written_simdgroup_air_ir(tmp_path) -> None:
 
     from tessera.runtime import _load_apple_gpu_runtime
 
-    ir = (Path(__file__).resolve().parents[2]
-          / "tests/data/apple/handwritten_air_simdgroup.ll")
-    assert ir.is_file(), f"fixture missing: {ir}"
+    ir = _air_fixture(tmp_path, "handwritten_air_simdgroup.ll")
 
     air, lib = tmp_path / "sg.air", tmp_path / "sg.metallib"
     for command in (["xcrun", "metal", "-c", str(ir), "-o", str(air)],
@@ -531,8 +564,7 @@ def test_rebuilt_metallib_at_the_same_path_is_not_served_from_cache(tmp_path):
 
     from tessera.runtime import _load_apple_gpu_runtime
 
-    template = (Path(__file__).resolve().parents[2]
-                / "tests/data/apple/handwritten_air.ll").read_text()
+    template = _air_fixture(tmp_path, "handwritten_air.ll").read_text()
     library = tmp_path / "same_path.metallib"
 
     def build(multiplier: str) -> None:

@@ -4593,8 +4593,11 @@ def specialize_module_from_values(
             if dtype is None and str(arr.dtype) == "bfloat16":
                 dtype = "bf16"
             if dtype is None:
-                dtype = {"float8_e4m3fn": "f8E4M3FN", "float8_e5m2": "f8E5M2",
-                         "float4_e2m1fn": "f4E2M1FN"}.get(str(arr.dtype))
+                # Canonical names, like every other row: `tensor_ir_type` renders
+                # the MLIR builtin spelling, and the shape rules / legality read
+                # the canonical name (`fp8_e4m3`, not `f8E4M3FN`).
+                dtype = {"float8_e4m3fn": "fp8_e4m3", "float8_e5m2": "fp8_e5m2",
+                         "float4_e2m1fn": "fp4_e2m1"}.get(str(arr.dtype))
             if dtype is None:
                 raise TypeError(f"unsupported specialization dtype {arr.dtype}")
             arg.ir_type = tensor_ir_type(tuple(int(d) for d in arr.shape), dtype)

@@ -35835,6 +35835,10 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     # route also uses. They used to fall through to numpy below while the
     # artifact reported native_gpu.
     lowp = _apple_matmul2d_pair_for_arrays(a, b, np)
+    if lowp is not None and lowp[0] < 0:
+        _note_dispatch_fallback(
+            op_name, f"no Metal matmul lane for the low-precision pair {lowp[1]} x {lowp[2]}; computed with numpy")
+        return np.matmul(a, b)
     if lowp is not None:
         pair, a_elem, b_elem = lowp
         A_st, _ = _apple_matmul2d_storage(a, a_elem, np)
@@ -36833,12 +36837,17 @@ def _apple_matmul2d_pair_for_arrays(a: Any, b: Any, np: Any) -> tuple[int, str, 
     names = {"float8_e4m3fn": "f8E4M3FN", "float8_e5m2": "f8E5M2", "float4_e2m1fn": "f4E2M1FN",
              "float16": "f16"}
     a_elem, b_elem = names.get(str(a.dtype)), names.get(str(b.dtype))
-    if a_elem is None or b_elem is None or b_elem == "f16" and a_elem == "f16":
-        return None
+    lowp = {"f8E4M3FN", "f8E5M2", "f4E2M1FN"}
+    if a_elem not in lowp and b_elem not in lowp:
+        return None  # no low-precision operand: the 16/32-bit lanes decide
     for pair, elems in _APPLE_MATMUL2D_PAIRS.items():
         if elems == (a_elem, b_elem) and pair < 10:
             return pair, a_elem, b_elem
-    return None
+    # A low-precision operand in a pair MPP does not run (e4m3 x e5m2, fp8 x
+    # f16 in that order, fp8 x f32 ...) has no Metal lane at all. That is a
+    # failure-class fallback, not a plain dtype mismatch: it must reach the
+    # funnel (strict dispatch raises) rather than the silent numpy return below.
+    return (-1, str(a.dtype), str(b.dtype))
 
 
 def _apple_matmul2d_storage(x: Any, elem: str, np: Any) -> Any:

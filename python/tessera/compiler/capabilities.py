@@ -975,7 +975,8 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             # benchmarked end-to-end by ``benchmarks/apple_gpu/benchmark_ga_ebm.py``.
             **_apple_gpu_fused_caps(),
         },
-        supported_dtypes=("fp32", "f32", "fp16", "bf16", "int32"),
+        # fp8/fp4 storage (macOS 27, APPLE-MATMUL2D-1): rank-2 matmul only today.
+        supported_dtypes=("fp32", "f32", "fp16", "bf16", "int32", "fp8_e4m3", "fp8_e5m2", "fp4_e2m1"),
         features=("metal", "mps", "msl"),
     ),
 }

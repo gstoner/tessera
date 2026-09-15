@@ -133,7 +133,7 @@ and ``docs/backends/apple/`` (Metal 4 implementation-state review):
 | masked_categorical | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32,int32 | tessera_apple_gpu_masked_categorical_f32 | driver | tests/unit/test_apple_gpu_ldt_loss_ops.py |
 | masked_fill | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | masked_scatter | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
-| matmul | fused | Accelerate (cblas_sgemm) + BNNS (fp16/bf16) | fp32,fp16,bf16 | tessera_apple_cpu_gemm_{f32,f16,bf16} | accelerate_native | fused | MetalPerformanceShaders | fp32,fp16,bf16,fp8_e4m3,fp8_e5m2,fp4_e2m1 | tessera_apple_gpu_mps_matmul_{f32,f16,bf16} | driver | tests/unit/test_apple_backend_roadmap.py |
+| matmul | fused | Accelerate (cblas_sgemm) + BNNS (fp16/bf16) | fp32,fp16,bf16 | tessera_apple_cpu_gemm_{f32,f16,bf16} | accelerate_native | fused | MetalPerformanceShaders | fp32,fp16,bf16,fp8_e4m3,fp8_e5m2,fp4_e2m1 | tessera_apple_gpu_mps_matmul_{f32,f16,bf16} + tessera_apple_gpu_mtl4_matmul2d_view (fp8/fp4) | driver | tests/unit/test_apple_backend_roadmap.py |
 | memory_index_score | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_gpu_composite_helpers.py |
 | memory_read | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
 | mobius | reference | numpy_reference | fp32 | - | numpy_reference | device_verified_jit | - | fp32 | - | manifest | tests/unit/test_apple_*.py |

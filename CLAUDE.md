@@ -5,6 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > This is the operational reference. Read it before touching code.
 > **For current status, finished/open work, and what to do next, start at
 > [`docs/audit/MASTER_AUDIT.md`](docs/audit/MASTER_AUDIT.md) (Decision #26).**
+> Since 2026-09-04 the cross-backend work is organized as the **foundation
+> program** (`INTEGRATED_COMPILER_PLAN.md#foundation-program`, sync key
+> `IR-NATIVE-FOUNDATION-1`); MASTER_AUDIT §1 names its seven programs.
+> `AGENTS.md` at the repo root is the sibling instruction file (Codex-facing);
+> see **AGENTS.md — sibling instruction file** below for how the two relate.
 > Counts (entries, tests, symbols) live in `docs/audit/generated/` — do not
 > trust or copy numeric snapshots written into prose anywhere, including here.
 > Build pin: matched LLVM/MLIR 23.
@@ -49,21 +54,33 @@ heuristics. "Standalone" means runtime-independent of PyTorch / JAX / Flax
 Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm,
 x86 AMX/AVX512, Apple M-series CPU/GPU.
 
-**Execution reality (updated 2026-08-15):** the **x86 AMX/AVX512** backend and
-**Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph)** backends execute natively.
-**ROCm gfx1151** (Strix Halo, RDNA 3.5) now has **broad native execution, not
-merely matmul + flash-attention** — the generated execution matrix records
-dozens of `native_gpu` family rows (attention family, norms/activations,
-matmul-family compositions, MoE transport, SSM fwd/bwd, EBM, warp-shuffle
-reduce/scan/argreduce lanes); the remaining boundary is exact-device expansion,
-not a missing launcher. **NVIDIA sm_120** (RTX 5070 Ti, consumer Blackwell)
-likewise executes a broad compiled family (attention fwd/bwd, conv2d, MLA
-decode, SSM, bounded control flow, MoE transport, optimizer/loss backwards) —
-no longer just an `mma.sync` matmul. Datacenter archs (ROCm CDNA/MI300; NVIDIA
-Hopper sm_90 / datacenter sm_100) stay hardware-gated (Phase G/H). Everything
-else produces IR/artifacts until a hardware-gated proof row says otherwise —
-read `docs/audit/generated/runtime_execution_matrix.md` for what is actually
-proven, never counts copied into prose (Decision #26). See
+**Execution reality (updated 2026-09-15):** the **x86 AVX-512** backend and
+**Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph + Metal 4 MPP `matmul2d`)**
+backends execute natively. **ROCm** executes on two RDNA parts: **gfx1151**
+(Strix Halo, RDNA 3.5, `Princess-Luna`) has broad native execution across the
+attention family, norms/activations, matmul compositions, MoE transport, SSM,
+EBM and warp-shuffle lanes; **gfx1201** (RX 9070 XT, RDNA4, `Tajasarus`, added
+2026-09-13) has replay-verified scheduled packages (f32 softmax / reductions,
+static f16 matmul, f16/bf16 forward attention), public fp16/bf16 GQA
+`native_backward`, the 2:4 sparse `tessera_rocm.swmmac` stack, and the full
+RDNA4 WMMA datatype audit incl. FP8/BF8 — proofs never transfer between the two
+(`docs/audit/backend/rocm/ROCM_AUDIT.md`: the generic `rocm` name inherits no
+proof). **NVIDIA sm_120** executes a broad compiled family on the **RTX 5070
+(`The-Super-Bear`, WSL2)** — every sm_120 result since 2026-08-30 is from that
+box, not the RTX 5070 Ti — and since 2026-09-05 its unary, softmax, reduction,
+norm, forward-attention and scheduled-matmul families lower **natively through
+Schedule → Tile IR** with the Python Graph constructors retired to test
+baselines. **Apple GPU on macOS 27 / Metal 4.1 executes FP8 E4M3/E5M2 and FP4
+E2M1 `matmul2d` operands with fp32 accumulation — emulated, at 0.77–0.93× fp16,
+not an acceleration claim.** Datacenter archs (ROCm CDNA/MI300; NVIDIA Hopper
+sm_90 / datacenter sm_100) stay hardware-gated (Phase G/H). **No NVIDIA or ROCm
+performance promotion has cleared its margin since 2026-08-30**, and one set of
+NVIDIA allocation/token-memref evidence was withdrawn (2026-09-09) because the
+harness recorded a different lowerer than it measured — profiler attribution on
+both WSL2 ROCm boxes is blocked (no `/dev/kfd`, `rocprofv3` returns no
+records). Everything else produces IR/artifacts until a hardware-gated proof row
+says otherwise — read `docs/audit/generated/runtime_execution_matrix.md` for
+what is actually proven, never counts copied into prose (Decision #26). See
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md).
 
 **"Executes natively" is a runtime claim, not a compiler-maturity claim — read
@@ -99,6 +116,24 @@ synthesizer; the synthesizer emits and caches source without going through
 Target IR. Anyone scoping Apple work should be closing that seam, not writing a
 second MSL emitter.
 
+**Updated 2026-09-15 — the seam is narrower, and it moved.** The dialect now
+declares Apple7 machine primitives (`!tessera_apple.simdgroup_matrix`,
+`gpu.simdgroup_{fill,load,matmul,store}`, `gpu.threadgroup_alloc`,
+`gpu.threadgroup_barrier`) **with a producer**
+(`lib/Target/Apple/Lowering/MatmulToAppleSimdgroup.cpp`), so "the MLIR pipeline
+cannot express an Apple kernel" is no longer true; the simdgroup op carries the
+fp32-accumulator contract and a storage attribute limited to f16/bf16/f32. What
+the pipeline still cannot express is the **fastest** Apple GEMM lane, Metal 4
+MetalPerformancePrimitives cooperative-tensor `matmul2d` — measured 1.34–1.45×
+the simdgroup kernel and the only lane carrying FP8/FP4 (macOS 27) — which is
+reachable only from Python `runtime.*` ctypes. The next up-level is a
+cooperative-tensor op family (strided `tensor_view` carrying Apple's 128-byte
+stride/offset quantum, `matmul2d` with a *storage pair* incl. half × fp8 and
+fp32 accumulate, epilogue-on-cooperative-tensor), first lowered to the runtime
+symbol as a Decision #31-clean delegate, then emitted as compiler-owned MSL
+(Decision #26a). Apple status: `docs/audit/backend/apple/todo.md` §"macOS 27 /
+Metal 4.1 low-precision validation".
+
 ---
 
 ## Four-Layer IR Stack
@@ -131,9 +166,9 @@ PTX/HIP/Metal source.
 |-------|--------|-------|
 | 1–6 | ✅ Complete | Python frontend → C++ lowering → NVIDIA backend IR → distributed training → solver passes/autotuner → runtime wrapper + CUDA/HIP backends |
 | 7 | 🟢 Lit-verified | Neighbors (halo/stencil) dialect; real HW gated on Phase G/H |
-| 8 | 🟢 Apple operational | Hardware-free Target IR; `@jit(target="rocm"/"apple_cpu"/"apple_gpu")`; Apple CPU (Accelerate) + GPU (MPS + MSL + MPSGraph) execute natively |
+| 8 | 🟢 Apple operational | Toolchain-free Target IR; `@jit(target="rocm"/"apple_cpu"/"apple_gpu")`; Apple CPU (Accelerate) + GPU (MPS + MSL + MPSGraph + Metal 4 MPP `matmul2d` f16/bf16/**FP8/FP4 on macOS 27**) execute natively |
 | S-series | 🟢 In progress | Standalone-compiler track — primitive contract registry + S2–S15 Python reference surface + reasoning-model attention/RL; `backend_kernel` axis is the long-pole gate (Phase G/H) |
-| W-series | 🟢 In progress | Compiler-contract track — W0 governance landed; **W1.1 typed Tile IR: ROCm steps 1–4 + typed performance closure landed (typed route is now the canonical gfx1151 selection; NVIDIA producers + permissive-branch deletion open)**; W2.1 `GraphDataflowAnalysis` and W2.2 IR-derived effects **closed** (2026-08-10/11). Top active program: **E2E-REAL-6, one compiler authority** (tracer becomes sole general frontend; `_OpExtractor` retired after differential proof). See `INTEGRATED_COMPILER_PLAN.md` + MASTER_AUDIT §1 |
+| W-series | 🟢 In progress | Compiler-contract track — W0 governance landed; **W1.1 typed Tile IR: ROCm steps 1–4 + typed performance closure landed (typed route is now the canonical gfx1151 selection; NVIDIA producers + permissive-branch deletion open)**; W2.1 `GraphDataflowAnalysis` and W2.2 IR-derived effects **closed** (2026-08-10/11). **Since 2026-09-04 the umbrella is the foundation program `IR-NATIVE-FOUNDATION-1`** (cuts F0–F5 in `INTEGRATED_COMPILER_PLAN.md#foundation-program`; F0 entry = E2E-REAL-6F route census; **E2E-REAL-6, one compiler authority**, sits in F2 — `_OpExtractor` still exists, retired only after differential proof). NVIDIA producers landed as native scheduled contracts (2026-09-05→09-10); gfx1201 scheduled packages landed 09-13. Owner of E2E-REAL-6/6F: `MLIR_NATIVE_FOUNDATION_SURVEY.md`. MASTER_AUDIT §1 names seven programs; numbering is theme, not priority |
 | RubinCPX | 📦 Archived | Retired 2026-06-08 with TPU/Metalium/Cerebras (focus = x86 + Apple + NVIDIA + ROCm); material under `archive/`, no build target |
 
 Per-phase deliverables and the open-work priority queue live in
@@ -153,7 +188,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/op_catalog.py` | Canonical op-name catalog — "what we accept today" across all IR layers. |
 | `compiler/primitive_coverage.py` | **Audit truth** (Decision #24) — standalone primitive contract registry over 12 axes; consults `autodiff.vjp._VJPS`/`jvp._JVPS` so registered (V/J)VPs auto-flip to complete. Renders `docs/audit/standalone_primitive_coverage.md`. |
 | `compiler/backend_manifest.py` | Per-op × per-target × per-dtype kernel manifest synthesizer; `BackendKernelEntry` + statuses `fused`/`reference`/`compileable`/`artifact_only`/`planned`. |
-| `compiler/gpu_target.py` / `rocm_target.py` | Target profiles + feature matrices. NVIDIA pinned CUDA 13.3; AMD pinned ROCm 7.2.4. |
+| `compiler/gpu_target.py` / `rocm_target.py` | Target profiles + feature matrices. **Toolchain pins (measured on the fleet, bumped 2026-09-15): NVIDIA CUDA 13.4 / PTX ISA 9.4 / driver 610.88; AMD ROCm 10.0 / HIP 7.15.** The same values live in `cmake/TesseraToolchainPins.cmake` and `src/collectives/.../AdapterVersionPin.h`, drift-gated together by `runtime_abi_audit.py`. The per-SM / per-arch *feature matrices* were evaluated under CUDA 13.3 / ROCm 7.2.x and not re-evaluated; the `cuda_13_3` / `rocm_7_2_3` capability markers record that evaluation baseline, not the pin. |
 | `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`, derived from registered traced Graph IR since W2.2 — see Decision #5), Python→Graph IR emission. |
 | `compiler/{autotune_v2,attn_lower,matmul_pipeline,checkpoint,solver_config,distributed_planner,pipeline_planner}.py` | Bayesian autotuner; FA-4 lowering config; multi-target matmul dispatch; checkpoint extension; solver/ZeRO/resilience config; dp/tp/pp + 1F1B planners. |
 | `compiler/evaluator.py` + `conformance_evaluator.py` + `ptx_emit.py` + `flywheel{,_autotune}.py` + `compiler_grader.py` + `attention_tasks.py` + `magellan.py` + `alphaevolve.py` | **Evaluator program** — execution-derived, rung-aware scoring engine; four oracles (vertical/horizontal/metamorphic/DESIL cross-path), conformance re-derivation, NVIDIA WGMMA PTX emission, device-keyed autotuning records, anti-cheat scored-environment search. See `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5. |
@@ -166,6 +201,12 @@ Per-phase deliverables and the open-work priority queue live in
 | `dflash*.py` / `models/` | DFlash block-diffusion speculative decoding (rides `attn_bias` substrate; greedy spec-decode == greedy AR proven); `tessera.models` DiffusionGemma graph + native block-diffusion runtime. |
 | `runtime.py` / `diagnostics.py` / `debug.py` / `cli/` | `TesseraRuntime` ctypes ABI wrapper; `ErrorReporter` + stable diagnostic codes + source-loc; full debug surface (`check_grad`, `check_determinism`, replay); `tessera-mlir`/`tessera-translate` console scripts. |
 | `distributed/{region,domain,shard,array,launch,moe}.py` | `Region` annotations, `Rect`/`Block`/`Cyclic`/`Replicated`, `ShardSpec`/`MeshSpec`, `DistributedArray`, `index_launch`, MoE routing. |
+| `compiler/native_{unary,storage,attention}_contract.py`, `native_attention_program.py`, `scheduled_{absolute,checkpoint,paged_kv,ssd}.py` (+ `src/compiler/programming_model/lib/Native{Absolute,Checkpoint,PagedKV,SSD,Sparse}.h`) | **Native scheduled contracts** (foundation F2/F3, 2026-09): a Schedule-IR contract serialized from the Graph op, replayed and projected into the package, so bindings/shape/layout/numeric policy come from IR rather than a Python Tile constructor. Replay is mandatory and fails closed. |
+| `compiler/native_{device,persistent}_tape.py`, `native_tape_products.py`, `native_hvp.py`, `native_{attention,storage}_jvp.py`, `src/transforms/lib/NativeTapeToGPUPass.cpp`, `src/compiler/ir/AttentionADContract.h` | **Native tapes / resident GPU AD**: the AD tape as a compiler-owned, IR-serialized, GPU-resident record with ordered status dependencies; forward + VJP packages keep saved values and gradients device-resident under a scoped lifetime (`value_and_grad`). |
+| `compiler/resident_{ssd,attention,trace,gated_pool,incremental_pool,object_pool,pool_snapshot,gradient_sum,rocm_attention}.py`, `gpu_exception_heap.py`, `heap_{barrier_contract,async_receipt,finalization,protocol_model,writer_model}.py`, `native_exception_{arena,ir,producer}.py`, `apple_native_arena.py` | **Resident storage / arenas / gated heaps**: `TileBufferArenaPass` dynamic GPU arenas (RTX 5070 + gfx1151 exact checks), opt-in `ResidentGatedPool` where every metadata op passes an owner-injected gate, exception-carrying heaps. |
+| `compiler/native_driver_isolation.py`, `native_isolated_ann.py`, `native_{module,reader}_retirement.py`, `native_stream_epoch.py`, `isolated_rocm_attention.py` | **Isolated recovery**: out-of-process CUDA/HIP workers; a replacement is admitted only after confirmed predecessor death plus a re-run numerical health probe; explicit device ordinals; retryable retirement. |
+| `compiler/rocm_sparse_{logical,packing,runtime}.py`, `sparse_capture.py` | 2:4 sparse stack for gfx1201: logical row-major producer → packed values/indices → `tessera_rocm.swmmac` (public Graph sparse admission still closed). |
+| `compiler/{bootstrap_prune_audit,primitive_route_map,target_ir_membership,frontend_authority_audit}.py` | Audit generators behind the 2026-09 dashboards `bootstrap_prune_gap.md` (which `package_*` families would lose their only lowering under #31), `primitive_route_map.md`, `target_ir_membership.md` (Decision #19 membership measured: 46 of 150 Target IR ops require the contract they carry), and the `_OpExtractor` retirement gate. |
 | `testing/mock_collective.py` | Thread-based fake ranks for multi-rank tests (no NCCL/MPI dep). |
 
 ### C++ (`src/`)
@@ -191,7 +232,12 @@ Per-phase deliverables and the open-work priority queue live in
 | `tessera-opt/` | MLIR opt-style driver — all dialects + 70+ passes + named lowering pipelines. Build: `ninja -C build tessera-opt`. |
 | `tessera-translate/` | C++ `tessera-translate-mlir` (MLIR↔LLVM IR / SPIR-V) + Python `tessera-translate` (StableHLO/GGUF/SafeTensors export) |
 | `profiler/` / `roofline_tools/` | tprof runtime + Perfetto export; roofline ingestion + HTML reports |
-| `scripts/validate.sh` / `check_versions.py` / `check_generated_docs.sh` | CPU validation spine; version-drift check; generated-doc drift gate (pre-commit) |
+| `tessera-jit/` / `tessera-target-opt/` | Real MLIR `ExecutionEngine` CPU lane through linalg/vector/SCF/LLVM (the reuse target named by `MLIR_NATIVE_FOUNDATION_SURVEY.md`); Target-IR-level opt driver |
+| `scripts/validate.sh` / `check_versions.py` / `check_generated_docs.sh` | CPU validation spine (re-execs under a checkout guard via `validation_tree.py` since 2026-09-04); version-drift check; generated-doc drift gate (pre-commit) |
+| `scripts/_rocm_env.sh` / `_nvidia_env.sh` | Toolkit env resolvers — **source before any device pytest**; each is a silent no-op on a host without that device. The NVIDIA twin exists because a bare Super-Bear sweep reported 454 passed / 395 skipped / exit 0 with zero GPU work. |
+| `scripts/build_assertions_llvm.sh` / `probe_llvm_assertions.py` / `check_installed_compiler.py` | Build an isolated assertions-ON LLVM/MLIR 23 prefix; prove assertions *execute* (not just the CMake option); relocated-prefix driver smoke |
+| `scripts/check_lit_fleet_union.py` / `coverage_evidence.py` / `record_package_route_census.py` / `check_compiler_plan.py` | Lit fleet-union gate (every active fixture must pass in at least one fleet lane); revision-bound coverage artifact (Decision #26 exception); the F0 route census; plan/log routing + anchor drift gate |
+| `scripts/probe_rocm_native_host.py` / `record_dtype_codegen_inventory.py` / `trace_apple_telemetry.py` | RDNA4 host commissioning probe (defaults `--expected-gfx gfx1201`); dtype→codegen inventory (NUMPOL-CARRIER-1); opt-in Apple pytest telemetry plugin |
 
 ---
 
@@ -278,7 +324,7 @@ Per-phase deliverables and the open-work priority queue live in
 
 12. **Benchmark JSON schema is stable.** Fields: `backend`, `op`, `shape`, `dtype`, `latency_ms`, `tflops`, `memory_bw_gb_s`, `device`, `tessera_version`. `tools/roofline_tools/` reads this directly — do not change the schema.
 
-    **Amended 2026-08-30 — a latency without its route is not comparable.** None of those fields records *which lowering produced the number*: the compiled Graph→Schedule→Tile→Target route, a Tier-3 delegate, or the bootstrap packager. Under Decision #28 those three compete for the same `(op, shape, dtype, target)`, so two rows that look identical can come from different compilers, and a regression between them reads as a code change. Practice is already ahead of the rule — `benchmarks/e2e_spine/record_sm120_packet.py` stamps `route` from `descriptor.provenance` — so this is a schema gap, not a missing capability. **A row must carry its route.** This is an additive field: `tools/roofline_tools/` keeps reading the existing ones, and the "do not change the schema" rule still bars removing or repurposing any of them.
+    **Amended 2026-08-30 — a latency without its route is not comparable.** None of those fields records *which lowering produced the number*: the compiled Graph→Schedule→Tile→Target route, a Tier-3 delegate, or the bootstrap packager. Under Decision #28 those three compete for the same `(op, shape, dtype, target)`, so two rows that look identical can come from different compilers, and a regression between them reads as a code change. Practice is already ahead of the rule — `benchmarks/e2e_spine/record_sm120_packet.py` stamps `route` from `descriptor.provenance` — so this is a schema gap, not a missing capability. **A row must carry its route.** This is an additive field: `tools/roofline_tools/` keeps reading the existing ones, and the "do not change the schema" rule still bars removing or repurposing any of them. In practice since 2026-09-14 rows also carry `latency_source` / `timing_source` (e.g. `metal4_timestamp_heap`), because a device-clock and a wall-clock latency are not comparable either.
 
 13. **`TesseraShapeError` always includes Python source location.** `ErrorReporter` walks MLIR `loc` chain. Never suppress — emit `"<unknown location>"` if unavailable.
 
@@ -309,6 +355,19 @@ Per-phase deliverables and the open-work priority queue live in
     **Membership test.** An op belongs in `tessera_<backend>` when it carries at least one Tessera contract the upstream dialect (`vector`, `x86vector`, NVVM, ROCDL, LLVM) cannot express — and **the op's description must name which**. This is not a bar on duplication: `vector.fma` and a `tessera_x86` FMA may look alike, and the Tessera one earns its place by carrying an accumulator contract, an ISA feature level (`avx10.2`, `ace`), or arbiter metadata that upstream has no field for. An op that names no such contract is Decision #29's unconsumed declaration and should lower straight to upstream instead.
 
     **Operator expansion is expected, not exceptional.** Apple and x86 in particular are under-built at this level and should grow: Apple GPU currently declares only dispatch containers (`msl_kernel`, `mps_matmul`, `dispatch`) and no machine primitives at all, while its Python synthesizer already models `simdgroup_matrix`, `simdgroup_multiply_accumulate` and `threadgroup_barrier` — the machine vocabulary lives outside the compiler. x86 is inverted: real primitives for the **retired** AMX ISA and a single opaque `avx512_gemm_microkernel` directive for the live one. Growing both is how the ISA-extension axis (AVX10, ACE, AMD DL extensions) becomes an *attribute* rather than a new op family per generation. Name ops by **machine model, not ISA generation** for the same reason.
+
+    **Updated 2026-09-15 — Apple's first machine primitives landed, and the
+    membership test is now measured.** `TesseraAppleOps.td` declares
+    `simdgroup_{fill,load,matmul,store}`, `threadgroup_alloc` and
+    `threadgroup_barrier` over a real `!tessera_apple.simdgroup_matrix` type,
+    with `MatmulToAppleSimdgroup.cpp` as producer (Decision #29 sequencing
+    honored). The "no machine primitives at all" sentence above is therefore
+    historical. The measured gap is Metal 4 cooperative-tensor `matmul2d`
+    (see the 2026-09-15 Apple paragraph under **What Tessera Is**).
+    `docs/audit/generated/target_ir_membership.md` now scores every Target IR
+    op against this decision's membership test: 46 of 150 ops *require* the
+    contract they carry; `optional-only` carriage is flagged as failing open
+    against #32 and #21a by construction.
 
     **`X86-DIALECT-LOAD-CRASH-2026-08-12` was a build-flag leak, not an IR
     defect — root-caused 2026-08-15.** The dialect and its `TileType`
@@ -364,6 +423,17 @@ Per-phase deliverables and the open-work priority queue live in
     (recipe preserved in `docs/audit/backend/apple/todo.md` §"dedicated
     LLVM/MLIR 23 prefix").
 
+    **Updated 2026-09-15 — the fleet has an assertions-enabled LLVM again.**
+    `Tajasarus` (gfx1201 box, commissioned 2026-09-13) runs assertions-ON
+    LLVM/MLIR 23.1.1 and its assertion subprocess aborts as required; 475 active
+    lit fixtures also pass on Super-Bear under an assertions build
+    (`INTEGRATED_COMPILER_PLAN.md` foundation program). `scripts/build_assertions_llvm.sh`
+    builds such a prefix anywhere and `scripts/probe_llvm_assertions.py` proves
+    the assertions execute. MASTER_AUDIT now treats the assertions compiler as
+    validated infrastructure. The standing lesson stands; the "no resident
+    falsifier" clause above is history. Route MLIR promise/contract claims to
+    Tajasarus (or any assertions build) before recording "does not reproduce".
+
     **Separately, still open: `TileToX86Pass` loads `tessera_x86` from inside
     `runOnOperation()`** (`src/transforms/lib/TileToX86Pass.cpp:1045`, a by-name
     `getOrLoadDialect` used to avoid linking the optional backend). MLIR forbids
@@ -393,9 +463,9 @@ Per-phase deliverables and the open-work priority queue live in
 25. **Registry `partial` ≠ compiler-complete.** Coverage is layered: Python reference, frontend, Graph IR, sharding/transpose/batching, backend manifest, runtime, benchmark proof are separate claims. A row can be useful and still `partial`. The generated dashboards are the **primary current-status evidence** — reconcile them against implementation, tests, and exact-device proof when they conflict or look stale; do not copy numeric snapshots into prose unless a drift gate owns the copy. When a sprint says "shipped", read the generated rows to see what is actually proven vs. `planned`/`partial`/`reference`/`artifact_only`/hardware-gated.
 
 26. **The audit folder is the canonical "what's done / what's open" surface — follow its flow.** `docs/audit/` = one root audit + theme audits + generated dashboards + theme-local archives:
-    1. **Start at `docs/audit/MASTER_AUDIT.md`** — all-up snapshot + P0/P1/P2 queue. Single entry point; do not reconstruct status by grepping.
+    1. **Start at `docs/audit/MASTER_AUDIT.md`** — single entry point; do not reconstruct status by grepping. **Restructured 2026-09-12:** §1 is seven named programs under the foundation program (sync key `IR-NATIVE-FOUNDATION-1`), not a P0/P1/P2 queue, and it deliberately owns no copied totals — it routes to `generated/compiler_progress.md` first, then `INTEGRATED_COMPILER_PLAN.md#live-queue`. Program numbering is theme, not priority.
     2. **Drill into the theme audit:** `compiler/COMPILER_AUDIT.md`, `backend/BACKEND_AUDIT.md` (+ `backend/{apple,nvidia,rocm,x86}/` per-backend todo queues), `coverage/COVERAGE_AUDIT.md`, `domain/DOMAIN_AUDIT.md`, `roadmap/ROADMAP_AUDIT.md`. For compiler work specifically, `docs/audit/compiler/README.md` states the **authority chain** (generated dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) — the integrated plan is the sole cross-domain compiler queue and wins when a scoped plan proposes a different order.
-    3. **`docs/audit/generated/` dashboards are the primary count/status evidence** (script/test-owned, drift-gated). Note what the gate does and does not prove: `check_generated_docs.sh` **byte-compares each committed doc against its generator**, so it catches a stale doc, not a wrong generator model. A dashboard can be green and still overstate reality — Decision #24's registry auto-flips a (V/J)VP axis to complete on *registration of a numpy reference*, which is not a test and not device proof. Reconcile against implementation/tests/device evidence when a row looks stale or contradicts what you read in the code. **Never hand-edit generated docs**; regenerate via their CLI + `scripts/check_generated_docs.sh`.
+    3. **`docs/audit/generated/` dashboards are the primary count/status evidence** (script/test-owned, drift-gated). Note what the gate does and does not prove: `check_generated_docs.sh` **byte-compares each committed doc against its generator**, so it catches a stale doc, not a wrong generator model. A dashboard can be green and still overstate reality — Decision #24's registry auto-flips a (V/J)VP axis to complete on *registration of a numpy reference*, which is not a test and not device proof. Reconcile against implementation/tests/device evidence when a row looks stale or contradicts what you read in the code. **Never hand-edit generated docs**; regenerate via their CLI + `scripts/check_generated_docs.sh`. Added since 2026-08-30: `bootstrap_prune_gap.md`, `primitive_route_map.md`, `target_ir_membership.md`, plus `autodiff_connection_ledger.md` and `dtype_flow.md` in the authority chain's generated tier.
     **Coverage exception (2026-09-04, owner-directed):** `test_coverage.{csv,md}` are generated evidence, no longer committed snapshots. The required Validate audit lane generates and checks both, then publishes `coverage-evidence-<tested SHA>-<attempt>` with a manifest binding the source commit, source-tree digest, workflow run, and artifact hashes. Use the artifact for the cited revision; a missing or expired artifact is unavailable evidence, never a green status. CI retains artifacts for 90 days; for older revisions, regenerate from that exact checkout and identify it as regenerated evidence. Local regeneration remains `python -m tessera.compiler.generated_docs --write test_coverage`. Static references remain inventory, not execution or device proof.
     4. **`*/archive/` is provenance only** — not the current status surface. Historical checklists and sprint prose remain useful context for *why* something was built; they are not sufficient on their own to establish that it is done.
     When you finish audit-relevant work, update the theme audit (and `MASTER_AUDIT.md` if the all-up picture shifts); let generated dashboards carry the numbers.
@@ -427,6 +497,13 @@ Per-phase deliverables and the open-work priority queue live in
     CUDA/ROCm/x86), not performance; revisit on that basis, not on speed.
 
     **Updated 2026-08-30 — the architectural trigger arrived, and it is answered without AIR.** This decision deferred a direct AIR emitter and said to revisit "on that basis" — architectural, i.e. sharing LLVM lowering with CUDA/ROCm/x86 — "not on speed". That architectural need is now live: the Apple GPU Target IR declares only dispatch containers (`msl_kernel`, `mps_matmul`, `dispatch`) and **no machine primitives at all**, while `emit/apple_msl.py` already models `simdgroup_matrix`, `simdgroup_multiply_accumulate` and `threadgroup_barrier` — so Apple's machine vocabulary lives outside the compiler entirely. But the fix is to **up-level the Apple dialect** (Decision #19, amended) so the MLIR pipeline can *express* an Apple kernel, not to emit AIR: NVVM and ROCDL sit *above* LLVM IR too, so the dialect would be wanted even if AIR opened up. That **strengthens this deferral rather than reversing it** — the architectural gap turns out not to be an LLVM gap. The measured case is unchanged: AIR would still save the same ~15 ms and no more.
+
+    **Updated 2026-09-15 — the up-level began.** The Apple dialect now has the
+    simdgroup machine primitives with a producer (Decision #19's 2026-09-15
+    note), so "the machine vocabulary lives outside the compiler" is partly
+    closed. What remains outside is Metal 4 cooperative-tensor `matmul2d`,
+    which is the faster lane and the only FP8/FP4 lane; the AIR verdict is
+    unchanged by it (an MSL emitter produces that kernel too).
 
     This is the fast-path pattern the whole fleet converges on — a precompiled
     artifact plus a content-addressed cache — but **do not read Apple as the
@@ -461,7 +538,7 @@ Per-phase deliverables and the open-work priority queue live in
 
     > **#31 governs lowering *paths* — how IR descends a level. #28 governs implementation *selection* — which kernel runs for one op at one level.**
 
-    A delegate reached through a **declared, verified, arbitrated Target IR op** is **one** lowering path with several measured implementations behind it, not a duplicate lowering authority. What #31 still forbids is unchanged, and is the thing that actually bites: two ways for IR to get *down a level* — a Python packager emitting target code beside the compiled route, a second frontend, a second AD engine. The test is not "how many kernels exist" but **"how many authorities decide what the next level looks like."** Without this distinction the bootstrap prune has no principled stopping point: #31 could be cited to delete the entire Tier-3 population, which is precisely the ceiling #28 exists to protect.
+    A delegate reached through a **declared, verified, arbitrated Target IR op** is **one** lowering path with several measured implementations behind it, not a duplicate lowering authority. What #31 still forbids is unchanged, and is the thing that actually bites: two ways for IR to get *down a level* — a Python packager emitting target code beside the compiled route, a second frontend, a second AD engine. The test is not "how many kernels exist" but **"how many authorities decide what the next level looks like."** Without this distinction the bootstrap prune has no principled stopping point: #31 could be cited to delete the entire Tier-3 population, which is precisely the ceiling #28 exists to protect. **Measured consumer (2026-09):** `docs/audit/generated/bootstrap_prune_gap.md` enumerates which `package_*` families would lose their only lowering under this decision's ordering caveat — read it before deleting a bootstrap path.
 
 32. **Information loss across a level boundary must be declared.** (Adopted 2026-08-02, W0.8.) A lowering either carries each Decision #15a attribute (`layout`, `numeric_policy`, `distribution`, …) forward, or **records a named reason it dropped it**. A boundary verifier fails on silent loss. Derived from `numeric_policy` vanishing above the MMA — the accumulator contract is stated at Graph IR and no longer exists by the time codegen picks an instruction.
 
@@ -488,13 +565,16 @@ X    = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 
 ## GPU-Only Tier — Never Implement on CPU
 
-Gate all of these behind `target_profile.isa >= ISA.SM_90`:
+Gate all of these on the target profile's **feature flags**, never on an ISA
+ordering — Decision #1's correction: `isa >= SM_90` reads as excluding sm_120,
+the live NVIDIA lane, and sm_120 has *neither* `wgmma` nor `tcgen05` while
+being newer than sm_90. Each item below names the profiles that actually have it:
 
-- `tessera.schedule.warp` role assignments (FA-4 warp specialization)
-- `tile.tcgen05.mma` (Blackwell TMEM MMA) — the mnemonic is `tcgen05.mma`, not `mma.tcgen05`; the latter spelling came from a parallel `tile` ODS deleted in W0.6 that nothing compiled
-- `tile.async_copy` / `tile.wait_async` stage indexing
-- `tessera.schedule.policy "persistent"` (persistent CTA scheduling)
-- `tcgen05.mma` PTX inline asm
+- `tessera.schedule.warp` role assignments (FA-4 warp specialization) — sm_90 / sm_100
+- `tile.tcgen05.mma` (Blackwell TMEM MMA) — datacenter sm_100 only; the mnemonic is `tcgen05.mma`, not `mma.tcgen05`; the latter spelling came from a parallel `tile` ODS deleted in W0.6 that nothing compiled
+- `tile.async_copy` / `tile.wait_async` stage indexing — sm_90 / sm_100 / sm_120 (TMA descriptor lifetimes are now checked by `TileBarrierReuseLegalityPass`; unknown descriptor origins fail closed)
+- `tessera.schedule.policy "persistent"` (persistent CTA scheduling) — sm_90+ incl. sm_120
+- `tcgen05.mma` PTX inline asm — sm_100 only; sm_120 uses `mma.sync`
 
 (The `tessera.queue.*` tile-queue dialect that used to sit in this list was
 deleted 2026-08-10 as dead IR — Decisions #29/#31.)
@@ -528,9 +608,19 @@ specifically — they are irreversible, or they make a claim someone else acts o
 
   | Need | Box |
   |---|---|
-  | ROCm / gfx1151, x86 AVX-512 | Strix Halo (`Princess-Luna`), Ubuntu 26.04 under **WSL2** |
-  | CUDA / sm_120 | **NR2 Pro** (RTX 5070 Ti, Linux) |
-  | Metal / Apple CPU + GPU | **Mac** M1 Max |
+  | ROCm / **gfx1151** (RDNA 3.5), x86 AVX-512 (Zen 5) | **Princess-Luna** (Strix Halo), Ubuntu 26.04 under **WSL2** |
+  | ROCm / **gfx1201** (RDNA4, RX 9070 XT), assertions-ON LLVM/MLIR, x86 backend build | **Tajasarus**, Ubuntu 26.04 under **WSL2** (added 2026-09-13) |
+  | CUDA / **sm_120** (RTX 5070) | **The-Super-Bear** (Threadripper 3970X, Zen 2: **no AVX-512**), Ubuntu 26.04 under **WSL2**. NR2 Pro (RTX 5070 Ti) is dormant since 2026-08-25; its open rows are owed follow-ups, not results |
+  | Metal / Apple CPU + GPU (macOS 27, Xcode 27, Metal 4.1) | **Mac** M1 Max |
+
+  Two ROCm boxes means two proof lanes: **gfx1151 and gfx1201 evidence never
+  transfers**, the generic `rocm` target name inherits no proof, and the
+  recorder still defaults `TESSERA_ROCM_CHIP=gfx1151` — pass
+  `TESSERA_ROCM_CHIP=gfx1201` explicitly on Tajasarus or you will run a
+  gfx1151 image and label it gfx1201. gfx1201 device tests skip unless
+  `TESSERA_GFX1201_DEVICE_PROOF=1`. Neither WSL2 ROCm box exposes `/dev/kfd`,
+  so `rocprofv3` returns no dispatch/counter records there — absent counters
+  classify as `unverified`, never as a measurement.
 
   This is a claim-integrity rule, not a convenience one, because of *how* it
   fails. A device test on a host without that device does not usually error —
@@ -600,7 +690,9 @@ lit tests/tessera-ir/phase8/ -q                 # one phase
 # python3, which has no pytest).
 #
 # **Run it locally — CI does not run it at all (lane removed 2026-08-19; too
-# heavy for hosted runners).** The suite now lives in `scripts/validate.sh`,
+# heavy for hosted runners; an opt-in host-free `rocm-serialize` lane and a
+# ROCm-backend-ON lit build do run in `.github/workflows/validate.yml`, but
+# neither executes this suite).** The suite now lives in `scripts/validate.sh`,
 # which runs `check-tessera-rocm` when the build tree has the ROCm backend
 # configured, and warns loudly when it does not. A ROCm backend fixture
 # regression will NOT be caught by any PR check — this suite is that backend's
@@ -650,6 +742,20 @@ The Python side is still defended independently: `runtime.py` and
 serializer subprocess, so the *compiled lanes* work even from a bare shell; the
 script is what the in-process HIP device tests additionally need.
 
+**The CUDA box has the same trap and the same fix.** Without `/usr/lib/wsl/lib`
+on the path a bare Super-Bear sweep reported **454 passed / 395 skipped / exit 0
+having executed no GPU work**. Source `scripts/_nvidia_env.sh` before pytest
+there; the NVIDIA release gate (`scripts/run_nvidia_release_gate.sh --layer
+{cpu,compiler,device,performance}`) flocks so one exact-device proof runs at a
+time, and no GitHub runner executes private GPU proofs. On Tajasarus also
+`source ~/.config/tessera/env.sh` (recorded in the gfx1201 packets) and set
+`TESSERA_ROCM_CHIP=gfx1201` + `TESSERA_GFX1201_DEVICE_PROOF=1`.
+
+Two fleet-wide lit facts: `tests/tessera-ir` holds 479 fixtures (475 active),
+and `scripts/check_lit_fleet_union.py` is the gate — every active fixture must
+pass in **at least one** fleet lane, since no single box configures every
+backend. A per-box count is a lane result, not the suite result.
+
 **Build all targets before pushing, not one.** `ninja -C build tessera-opt`
 links `MLIROptLib`'s broad dependency set and will hide a missing link library
 that the standalone `tessera-rocm-opt` — which the local ROCm gate builds —
@@ -661,11 +767,13 @@ Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by de
 
 ## Local Toolchain
 
-**Core compiler work is driven on the Strix Halo / Ubuntu box (decided
-2026-08-02)** — it is faster, has more memory, and is the only machine in the
-fleet with an executing GPU lane, so compile-time contract work and its hardware
-gate live together. The Mac is retained for Apple-backend work, which cannot be
-retargeted. Fleet routing per work item:
+**Core compiler work is driven on the Ubuntu/WSL2 boxes (decided 2026-08-02,
+widened 2026-09-13)** — Strix Halo for gfx1151 + x86 AVX-512, **Tajasarus for
+gfx1201 and for every MLIR contract claim (it is the assertions-ON LLVM host)**,
+Super-Bear for sm_120. The 2026-08-02 wording "the only machine in the fleet
+with an executing GPU lane" is history: three boxes execute GPU lanes. The Mac
+is retained for Apple-backend work, which cannot be retargeted. Fleet routing
+per work item:
 [`INTEGRATED_COMPILER_PLAN.md`](docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md) §6a.
 
 ### Primary — Ubuntu 26.04 on Strix Halo (x86 + AMD ROCm)
@@ -716,8 +824,38 @@ execution proof on this box means AVX-512; the AMX device lane
 (`tests/device/x86/`, `scripts/run_x86_amx_release_gate.sh`) has no hardware in
 the current fleet and stays capability-gated.
 
+### ROCm RDNA4 + assertions LLVM — Tajasarus (Ubuntu 26.04 WSL2)
+
+Radeon **RX 9070 XT (gfx1201)**, Ubuntu 26.04.1 LTS under WSL2, **ROCm 10.0 /
+HIP 7.15** at `/opt/rocm/core-10.0`, **assertions-enabled LLVM/MLIR 23.1.1**;
+also builds the x86 Target backend. Commissioned 2026-09-13
+(`docs/audit/backend/rocm/todo.md` §`GFX1201-FOUNDATION-2026-09-13`; packets
+under `benchmarks/baselines/gfx1201_*`). Reached as
+`ssh angstorms@192.168.1.166` (default port 22; mDNS name `tajasarus.local`).
+`source ~/.config/tessera/env.sh`
+and `scripts/_rocm_env.sh` before pytest; `TESSERA_ROCM_CHIP=gfx1201`.
+`docs/audit/backend/rocm/NATIVE_RDNA4_COMMISSIONING.md` still describes this
+box as ordered / native-Linux planned — it landed as WSL2; treat that doc as
+stale. RDNA4 ISA sections to cite before touching a schedule: §7.12.2 fragment
+layout, §7.12.1 WMMA hazards, §11.6.2 load-transpose, §5.6 barriers
+(`docs/reference/isa/rdna/`).
+
+### CUDA — The-Super-Bear (Ubuntu 26.04 WSL2)
+
+Threadripper 3970X (**Zen 2, no AVX-512** — x86 proof stays on Strix Halo) +
+**RTX 5070 (sm_120)**, WSL2 CUDA (toolkit only, `/dev/dxg`, no driver
+package), reached as `ssh -p 5023 angstorms@192.168.1.39` (alias `ssh
+super-bear`). Fleet is on **CUDA 13.4.1 / nvcc
+13.4.59 / driver 610.88**, and `compiler/gpu_target.py` pins **13.4 / PTX ISA
+9.4** to match (bumped 2026-09-15); older 13.3 packets are historical.
+Source `scripts/_nvidia_env.sh` before pytest (see Testing). WSL timings do not
+promote: bare-metal calibration is owed on every NVIDIA perf row.
+
 ### Apple only — Mac M1 Max (Homebrew, off-venv)
 
+**macOS 27.0 (26A428), Xcode 27.0 (27A266a), Metal compiler 32023.921, MSL 4.1
+compiles by default** since 2026-09-14; the SDK27 sysroot is the only one
+installed, so `ninja -C build TesseraAppleRuntimeShared` builds against it.
 Use for the Apple backend and Apple lit fixtures. Everything needed for build /
 lint / typecheck / lit / unit-test is on Homebrew under `/opt/homebrew/bin/`:
 `python3` (3.14.6), `ninja`, `cmake`, `pytest`, `mypy`, `ruff`, `black`, `isort`,
@@ -737,7 +875,24 @@ assertions-ON install at `/opt/homebrew/llvm-23.1.0-rc1/` (pre-release
 `23.1.0git`) was removed 2026-08-28; the recipe to rebuild an assertions
 toolchain when needed is preserved in `docs/audit/backend/apple/todo.md`.
 
-See `docs/GETTING_STARTED.md` for the full cross-platform matrix.
+**After a Windows update reboot all three WSL2 boxes drop off ssh at once**
+(seen 2026-09-15): the Windows hosts come back and still answer mDNS
+(`dns-sd -G v4 tajasarus.local` returns within seconds), but WSL2 does not
+auto-start, so the sshd inside it and the port forward are down until someone
+launches WSL on the box. "Name resolves, ARP entry fresh, ssh times out on
+every WSL box, LAN otherwise fine" is that signature, not a network fault and
+not evidence about the box's uptime — nothing can be verified remotely until
+WSL is up.
+
+`docs/GETTING_STARTED.md` was refreshed 2026-09-15 with the four-box fleet
+matrix and the measured pins; this section remains the maintained record and
+the two must not drift. **Toolchain versions, one place to look:** CUDA **13.4**
+(nvcc 13.4.59, PTX ISA 9.4, driver 610.88) on Super-Bear; **ROCm 10.0 / HIP
+7.15** on both AMD boxes; Homebrew LLVM/MLIR 23.1.0 (NDEBUG) on the Mac,
+apt LLVM/MLIR 23.1 on Princess-Luna and Super-Bear, assertions-ON 23.1.1 on
+Tajasarus. Any doc or packet that says CUDA 13.3, ROCm 7.14 or ROCm 7.2.4 is
+recording the toolchain that produced *that* result at the time, which is
+exactly what Decision #11 wants kept; it is not the current fleet.
 
 ---
 
@@ -772,8 +927,9 @@ ninja -C build tessera-opt
 # builds the hardware-free `tessera_x86` Target IR dialect but skips the native
 # AVX-512/AMX kernel subdirectory on a non-x86 host (they are `immintrin.h`
 # intrinsics and cannot compile for arm64). Without the toggle the 11 phase2
-# x86 fixtures fail as "tessera_x86 Target IR is unavailable"; with it the lit
-# suite is 425/425. Per Decision #19's standing lesson this Mac — the only
+# x86 fixtures fail as "tessera_x86 Target IR is unavailable"; with it the Mac
+# lane passes every fixture it can configure (479 in the tree, 475 active;
+# the suite result is the fleet union, `scripts/check_lit_fleet_union.py`). Per Decision #19's standing lesson this Mac — the only
 # fleet host WITHOUT AVX-512 — is the only one whose green result on those
 # fixtures is evidence of host portability.
 cmake -S . -B build -G Ninja \
@@ -795,6 +951,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 |----------|--------|
 | `tessera-lower-to-x86` | x86 AMX/AVX512 (Phase 2) |
 | `tessera-lower-to-gpu` | NVIDIA SM_90+ WGMMA/TMA (Phase 3); `tessera-nvidia-pipeline-{sm90,sm100,sm120}` variants |
+| `tessera-lower-to-nvidia-sm{90,100,120}` | Per-arch NVIDIA pipelines the sm_120 fixtures actually use (`compiler/pipeline_registry.py`) |
 | `tessera-lower-to-rocm` | AMD ROCm MFMA |
 | `tessera-lower-to-apple_cpu[-runtime]` | Apple CPU (Accelerate artifact / cblas_sgemm runtime) |
 | `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering) |
@@ -806,6 +963,8 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | What you need | Where |
 |---------------|-------|
 | **START HERE — status + open-work queue** | `docs/audit/MASTER_AUDIT.md` (+ theme audits; `docs/audit/README.md` for the map) |
+| **Foundation program (2026-09) + MLIR/LLVM foundation survey** — owner of E2E-REAL-6/6F and the F0–F5 cuts | `docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program`, `docs/audit/compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` |
+| **Sibling instruction file** (Codex-facing; drift gates, plan lifecycle, cross-backend protocol) | `AGENTS.md` |
 | **Forward compiler direction (north star)** — three-tier/arbiter model + coordination (Decision #28) | `docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first) + `COMPILER_REFACTOR_PLAN.md` + reassessed `OPTIMIZING_COMPILER_PLAN.md` |
 | **Compiler map + authority chain** — which doc wins when plans disagree (dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) | `docs/audit/compiler/README.md` (routes all scoped plans, incl. `GAME_THEORY_PLAN.md`, `compiler_enhancement.md` (CAKE), `FORGE_ASSESSMENT.md`, `W1_1_TYPING_DESIGN.md`; the Workstream C handoff is archived under `compiler/archive/`) |
 | **Generated dashboards** (primary count/status evidence — never hand-edit) | `docs/audit/generated/` |
@@ -816,7 +975,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Graph IR ops / canonicalizations | `src/compiler/ir/TesseraOps.td`, `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
 | Schedule IR / FA-4 Tile IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`, `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/` |
 | Runtime C ABI header | `src/runtime/include/tessera/tessera_runtime.h` |
-| IR specs (14 files incl. AUTODIFF_SPEC) | `docs/spec/` |
+| IR specs (23 files incl. AUTODIFF_SPEC) | `docs/spec/` |
 | User guides + 11-chapter programming guide | `docs/guides/`, `docs/programming_guide/` (check before claiming a feature is missing — Decision #22) |
 | Standalone primitive coverage registry / dashboard | `python/tessera/compiler/primitive_coverage.py` / `docs/audit/standalone_primitive_coverage.md` |
 | Evaluator program plan | `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5 |
@@ -834,6 +993,37 @@ changelog) is preserved at
 `docs/audit/roadmap/archive/CLAUDE_MD_FULL_2026-06-13.md`.
 
 ---
+
+## AGENTS.md — sibling instruction file
+
+`AGENTS.md` (identical to `agents.md`) is the Codex-facing instruction file.
+It is authoritative for four things this file only summarizes, and the two
+files are read together:
+
+- **Registry and lifecycle drift gates.** Every new dtype, op, diagnostic
+  code, target, pass, or audit-plan state is a cross-registry change with a
+  named focused test: diagnostics → `diagnostic_codes.py` +
+  `test_diagnostic_code_registry.py` / `test_pass_metadata.py`; dtypes →
+  `dtype.py` + `test_canonical_dtype.py` /
+  `test_tensor_attributes_dtype_audit.py`; ops → op catalog + runtime registry
+  + `test_operator_registry_foundation.py`; plans → `audit_role: plan` may
+  only be `open` / `landing` / `closed`, a `closed` plan moves to the theme's
+  `archive/`, `test_audit_docs.py` gates it. Run the focused gate before the
+  broad lanes; `validate-required` is a fan-in — fix the failing lane, never
+  the gate.
+- **Cross-backend coordination.** Read all four backend todos before backend
+  work, name the owning item ID, and record the sibling outcome per backend
+  (follow-up required / parity validated / not applicable with a reason)
+  under a shared synchronization key — this is what the `APPLE-METAL41-…`,
+  `IR-NATIVE-FOUNDATION-1`, `GFX1201-FOUNDATION-…` keys in the todos are.
+- **Host execution.** AGENTS.md says all tests and all git/GitHub operations
+  run in **host WSL, never the Codex sandbox**. Read that as the WSL-box
+  statement of this file's claim-integrity rule: the Mac is the Apple host
+  (Metal cannot run on WSL), and the Claude Code analog is "run device work
+  unsandboxed and say so". Neither file permits reporting a sandbox or
+  device-less run as project validation.
+- **RDNA ISA archive** and **graphify** rules are duplicated verbatim in both
+  files; when editing one, edit the other.
 
 ## graphify
 

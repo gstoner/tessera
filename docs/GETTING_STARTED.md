@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: Entry-point orientation; defers all API and spec claims to docs/CANONICAL_API.md and docs/spec/
-last_updated: 2026-06-01
+last_updated: 2026-09-15
 ---
 
 # Getting Started with Tessera
@@ -18,9 +18,24 @@ in five minutes.
 - Python 3.10+
 - pip
 
-GPU artifact validation is pinned to CUDA 13.3 for NVIDIA and ROCm
-7.2.4 for AMD. Native GPU execution is hardware-gated by target; all examples
-here run on CPU so no accelerator is needed to start.
+GPU artifact validation is pinned to **CUDA 13.4** (PTX ISA 9.4) for NVIDIA and
+**ROCm 10.0 / HIP 7.15** for AMD (measured on the fleet 2026-09-15). Native GPU
+execution is hardware-gated by target; all examples here run on CPU so no
+accelerator is needed to start.
+
+### Fleet matrix (what actually executes, and where)
+
+| Box | Hardware | OS | Executes | Notes |
+|---|---|---|---|---|
+| Princess-Luna | Ryzen AI MAX+ 395 (Zen 5, AVX-512) + Radeon 8060S **gfx1151** | Ubuntu 26.04 under WSL2 | ROCm RDNA 3.5, x86 AVX-512 | primary compiler box; `ssh gstoner@192.168.1.157` |
+| Tajasarus | RX 9070 XT **gfx1201** (RDNA4) | Ubuntu 26.04 under WSL2 | ROCm RDNA4; **assertions-ON LLVM/MLIR 23.1.1** | `ssh angstorms@192.168.1.166`; set `TESSERA_ROCM_CHIP=gfx1201` |
+| The-Super-Bear | Threadripper 3970X (Zen 2, no AVX-512) + RTX 5070 **sm_120** | Ubuntu 26.04 under WSL2 | CUDA 13.4 | `ssh -p 5023 angstorms@192.168.1.39`; source `scripts/_nvidia_env.sh` |
+| Mac | M1 Max | macOS 27.0, Xcode 27.0, Metal 4.1 | Apple CPU + GPU | Apple backend only |
+
+Proof never transfers between boxes (gfx1151 and gfx1201 included). The WSL2
+boxes expose the GPU as `/dev/dxg`, not `/dev/kfd`; after a Windows reboot WSL
+must be launched by hand before any of them accept ssh. `CLAUDE.md` "Local
+Toolchain" is the maintained record of these hosts.
 
 ---
 
@@ -48,8 +63,8 @@ print(tessera.__version__)
 
 ## Developer Environment & Building the Compiler
 
-Tessera builds on **macOS (Apple backend)** and **Ubuntu 26.04 LTS (x86/ROCm
-backend)** from one source tree. The Python flow needs only the lean deps above;
+Tessera builds on **macOS (Apple backend)** and **Ubuntu 26.04 LTS (x86 / ROCm /
+CUDA backends)** from one source tree. The Python flow needs only the lean deps above;
 the C++ compiler (`tessera-opt` and friends) additionally needs a matched
 **LLVM/MLIR 23.1.x** toolchain.
 
@@ -77,7 +92,7 @@ cmake -S . -B build -G Ninja \
 ninja -C build tessera-opt
 ```
 
-### Ubuntu 26.04 LTS — x86 + TheRock ROCm 7.14 backend
+### Ubuntu 26.04 LTS — x86 + ROCm 10.0 backend
 
 One script provisions matched LLVM/MLIR 23.1 from apt.llvm.org, the base build
 deps, and a project-local `.venv`. It needs `sudo` for the apt steps and is
@@ -90,8 +105,10 @@ source scripts/_rocm_env.sh
 ```
 
 Then configure + build the compiler with the ROCm Target IR backend (ROCm
-**7.14** at `/opt/rocm/core`; kernel execution is hardware-gated on a GPU + `kfd`
-driver, Phase H — the build itself needs no GPU):
+**10.0** at `/opt/rocm/core`; kernel execution needs the GPU visible in WSL as
+`/dev/dxg` — the build itself needs no GPU). `scripts/_rocm_env.sh` must be
+sourced before any device pytest: a bare shell has no `ld.lld` for hsaco
+serialization and binds `libamdhip64` against the wrong ROCm.
 
 ```bash
 cmake -S . -B build -G Ninja \
@@ -107,9 +124,20 @@ ninja -C build tessera-opt
 For a CPU-only Linux build (no ROCm), drop the last three flags and add
 `-DTESSERA_CPU_ONLY=ON`.
 
-> The Ubuntu venv caps `numpy<2.2`: numpy ≥2.2 ships PEP 695 `type` statements +
-> stricter reduction overloads in its bundled stubs that break the mypy ratchet
-> under the project's `python_version=3.10` type-check target.
+> The `numpy<2.2` venv cap was lifted 2026-08-28: `pyproject.toml` skips the
+> numpy/scipy stubs under mypy (`follow_imports = "skip"` plus
+> `follow_imports_for_stubs = true`), so any fleet numpy typechecks identically.
+
+### Ubuntu 26.04 LTS (WSL2) — CUDA sm_120 backend
+
+Same `scripts/setup_ubuntu.sh` provisioning. WSL2 CUDA is toolkit-only (the
+driver lives on the Windows side; `/dev/dxg`), so configure with
+`-DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda` and **source
+`scripts/_nvidia_env.sh` before pytest** — without `/usr/lib/wsl/lib` on the
+path a sweep passes with every device lane skipped. The exact-device proof
+layers run through `scripts/run_nvidia_release_gate.sh --layer
+{cpu,compiler,device,performance}`. WSL timings do not promote performance
+rows; bare-metal calibration is owed for those.
 
 ---
 
@@ -196,7 +224,7 @@ def stable_fwd(x: tessera.Tensor["B", "D"]):
 
 ---
 
-## GPU Target (Phase 3, SM_90+)
+## GPU Target (Phase 3; sm_90 shown, sm_120 is the live lane)
 
 ```python
 import tessera

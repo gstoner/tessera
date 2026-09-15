@@ -93,7 +93,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 **Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
 *lead-execution* proofs. The Mac-side E1 gate is green and gfx1151 E2 is recorded,
 so `[MAC]` + `[AMD]` work (A1, B1–B4a, C0, C1 authoring) has correctly proceeded.
-**A live sm_120 box is now present** (RTX 5070 Ti, CUDA 13.3) — the `[NV]` proofs
+**A live sm_120 box is now present** (then RTX 5070 Ti / CUDA 13.3; since 2026-08-25 The-Super-Bear RTX 5070 / CUDA 13.4) — the `[NV]` proofs
 are **no longer gated on a remote box**: the C2 generic-CUDA `FusedRegion` lane is
 hardware-verified on it (`emit/nvidia_cuda.py`; F4-gated + arbiter-selected on-GPU,
 `test_nvidia_plugin.py` live gates), and the **E2 sm_120 perf-ratchet baseline is
@@ -572,9 +572,9 @@ Mac-authored change stays honest about the leads without a GPU present.
   `python3` 3.14.5.
 - **Strix Halo:** Ubuntu 24.04 + `scripts/setup_ubuntu.sh` (LLVM/MLIR 23 from
   apt.llvm.org — ROCm's bundled LLVM has no MLIR); ROCm **7.2.4** at `/opt/rocm`;
-  `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON`; `.venv` numpy<2.2.
+  `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON`; numpy cap lifted 2026-08-28; ROCm 10.0 / HIP 7.15 since 2026-08-29.
   gfx1151 = RDNA 3.5, WMMA 16×16×16, **no FP8 WMMA**.
-- **NR2 Pro:** CUDA **13.3** (PTX ISA 9.3); target `sm_120a` (FP4
+- **The-Super-Bear** (was NR2 Pro; RTX 5070): CUDA **13.4** (PTX ISA 9.4, pinned 2026-09-15); target `sm_120a` (FP4
   `mma.sync.block_scale`); smem 100 KB/SM. `-DTESSERA_ENABLE_CUDA=ON`.
 
 ### 7.5 Two fleet superpowers to exploit (not just coordinate)

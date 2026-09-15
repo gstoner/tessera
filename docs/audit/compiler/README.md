@@ -16,6 +16,7 @@ direction.
    [`generated/compiler_progress.md`](../generated/compiler_progress.md),
    [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md),
    [`generated/dtype_flow.md`](../generated/dtype_flow.md),
+   [`generated/domain_proof_ladder.md`](../generated/domain_proof_ladder.md),
    and the other generated dashboards report what is implemented and evidenced.
 2. **Compiler narrative:** [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) explains the
    current architecture, important findings, and remaining gaps without owning

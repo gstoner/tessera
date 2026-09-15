@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-06
+last_updated: 2026-09-15
 audit_role: reference
 scope: GA/EBM frontend, native lowering, differentiation and workload residency
 ---
@@ -12,6 +12,17 @@ findings remain useful history, but several fixes landed and the proposed
 Python-emitter destination conflicts with the MLIR/LLVM native foundation.
 The [domain audit](DOMAIN_AUDIT.md) owns domain narrative and the
 [integrated compiler plan](../compiler/INTEGRATED_COMPILER_PLAN.md) owns order.
+
+## Re-check — 2026-09-15
+
+No disposition above changed. `ExpandProductTable.cpp` still restricts v1 to
+rank-1 static tensors; `energy.py::langevin_step` still falls back to
+`_numerical_grad` without `grad_fn`; `EBM_ManifoldAttr` still admits only
+euclidean/sphere/bivector. What did move: native HVP and attention JVP products
+landed (2026-09-13) under AD-HIGHER-1, so the W6.4 / W6.3 pairing below now
+routes as **W6.4 with AD-HIGHER-1** (W6.3 is a `successor` row in the plan), and
+W3.5 routes to AD-SOLVER-IFT-1. Per-target execution evidence for GA/EBM is
+read from the generated [domain proof ladder](../generated/domain_proof_ladder.md).
 
 ## Findings reconciled with source
 
@@ -39,7 +50,7 @@ Source anchors: [EBM ODS](../../../src/solvers/ebm/lib/Dialect/EBM/EBMOps.td),
 
 ## Native architecture and acceptance
 
-### W3.6 — batched Clifford products and fusion
+### W6.4 (formerly W3.6) — batched Clifford products and fusion
 
 Use `[..., coefficients]` tensors with explicit algebra and admitted grade sets.
 Lower batch loops plus the compile-time sparse multiplication table through
@@ -52,7 +63,7 @@ all consumers' semantics; and a native package executes on its owning host.
 Measure dispatch/allocation overhead, memory traffic and kernel time separately.
 A fused norm identity must respect its metric/signature assumptions.
 
-### W3.5 / W4 / W6.1 — an energy is a typed program
+### W4-PRODUCT-1 / AD-SOLVER-IFT-1 (formerly W3.5 / W4; W6.1 → AD-HIGHER-1) — an energy is a typed program
 
 Define admitted energy inputs/captures and a scalar result, then use the shared
 native derivative interfaces. Opaque Python/NumPy callbacks retain an explicitly
@@ -71,7 +82,7 @@ independent formulas, fixed-key samples agree with the declared policy, and the
 complete loop executes without per-step host gradient transfers. Extend to a
 nonlinear energy and manifold case with explicit singularity/branch handling.
 
-### W5.1 / W2.4a — residuals and device ownership
+### AD-RESIDUAL-EVAL-1 (formerly W5.1) / W2.4a — residuals and device ownership
 
 Saved trajectory demand comes from the derivative program, not the presence of
 an EBM op inside a loop. Retain exact generations, valid extents and completion
@@ -79,7 +90,7 @@ ownership. The new static f32 split-tape consumer is a correctness baseline;
 it does not yet supply arbitrary mixed-state stochastic sampler tapes.
 Compare full backward work and retained bytes before promoting a policy.
 
-### W6.4 / W6.3 — one finite-algebra lowering, separate proofs
+### W6.4 / AD-HIGHER-1 (formerly W6.3) — one finite-algebra lowering, separate proofs
 
 The Python finite-algebra/jet substrate already exists in `autodiff/algebra.py`;
 its Clifford table is checked against the GA oracle. The remaining opportunity

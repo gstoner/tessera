@@ -36840,9 +36840,10 @@ def _apple_matmul2d_pair_for_arrays(a: Any, b: Any, np: Any) -> tuple[int, str, 
     lowp = {"f8E4M3FN", "f8E5M2", "f4E2M1FN"}
     if a_elem not in lowp and b_elem not in lowp:
         return None  # no low-precision operand: the 16/32-bit lanes decide
-    for pair, elems in _APPLE_MATMUL2D_PAIRS.items():
-        if elems == (a_elem, b_elem) and pair < 10:
-            return pair, a_elem, b_elem
+    if a_elem is not None and b_elem is not None:
+        for pair, elems in _APPLE_MATMUL2D_PAIRS.items():
+            if elems == (a_elem, b_elem) and pair < 10:
+                return pair, a_elem, b_elem
     # A low-precision operand in a pair MPP does not run (e4m3 x e5m2, fp8 x
     # f16 in that order, fp8 x f32 ...) has no Metal lane at all. That is a
     # failure-class fallback, not a plain dtype mismatch: it must reach the

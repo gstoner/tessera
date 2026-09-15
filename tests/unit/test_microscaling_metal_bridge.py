@@ -13,10 +13,10 @@ from tessera.compiler import microscaling as M
 
 def test_element_types_map_to_270_symbols():
     for d, sym, ver in [
-        ("fp8_e4m3", "MTLTensorDataTypeFloat8E4M3", "27.0"),
-        ("fp8_e5m2", "MTLTensorDataTypeFloat8E5M2", "27.0"),
-        ("fp4_e2m1", "MTLTensorDataTypeFloat4E2M1", "27.0"),
-        ("e8m0", "MTLTensorDataTypeFloat8UE8M0", "27.0"),
+        ("fp8_e4m3", "MTLTensorDataTypeMetalFloat8E4M3", "27.0"),
+        ("fp8_e5m2", "MTLTensorDataTypeMetalFloat8E5M2", "27.0"),
+        ("fp4_e2m1", "MTLTensorDataTypeMetalFloat4E2M1", "27.0"),
+        ("e8m0", "MTLTensorDataTypeMetalFloat8UE8M0", "27.0"),
     ]:
         t = M.mtl_tensor_data_type(d)
         assert t is not None and t.mtl_symbol == sym and t.min_macos == ver
@@ -39,24 +39,18 @@ def test_mxfp8_plane_plan_has_e8m0_scale_plane_block32():
     fmt = M.FORMATS["mxfp8_e4m3"]
     plan = M.metal_plane_plan(fmt, (64, 256))
     assert plan is not None
-    assert plan.element.mtl_symbol == "MTLTensorDataTypeFloat8E4M3"
+    assert plan.element.mtl_symbol == "MTLTensorDataTypeMetalFloat8E4M3"
     assert len(plan.aux_planes) == 1
     aux = plan.aux_planes[0]
-    assert aux.data_type == "MTLTensorDataTypeFloat8UE8M0"   # E8M0 MX scale
+    assert aux.data_type == "MTLTensorDataTypeMetalFloat8UE8M0"   # E8M0 MX scale
     assert aux.block_factors == (1, 32)                       # block-32 on last axis
     assert aux.scale_shape == (64, 8)                         # 256 / 32 = 8
     assert plan.min_macos == "27.0"
 
 
-def test_nvfp4_plane_plan_has_e4m3_scale_block16():
-    fmt = M.FORMATS["nvfp4"]
-    plan = M.metal_plane_plan(fmt, (16, 64))
-    assert plan is not None
-    assert plan.element.mtl_symbol == "MTLTensorDataTypeFloat4E2M1"
-    aux = plan.aux_planes[0]
-    assert aux.data_type == "MTLTensorDataTypeFloat8E4M3"     # NVFP4 uses E4M3 scales
-    assert aux.block_factors == (1, 16)
-    assert aux.scale_shape == (16, 4)                         # 64 / 16 = 4
+def test_nvfp4_requires_separate_scale_buffer():
+    # SDK27 auxiliary planes accept UE8M0, not NVFP4's E4M3 scales.
+    assert M.metal_plane_plan(M.FORMATS["nvfp4"], (16, 64)) is None
 
 
 def test_per_tensor_int8_needs_no_auxiliary_plane():
@@ -79,14 +73,6 @@ def test_plane_plan_round_trips_block_count_with_scale_shape():
     assert plan.aux_planes[0].scale_shape == fmt.layout.scale_shape(shape)
 
 
-def test_runtime_gate_matches_contract_min_macos():
-    # The runtime probe and the contract's min_macos must agree: an MX format
-    # needs macOS 27.0, and the runtime here (26.5 SDK) reports unavailable. If
-    # this ever flips True, we're on a 27.0 SDK and the gate has lifted.
-    avail = M.metal_microscaling_available()
-    assert isinstance(avail, bool)
-    mx_needs_270 = M.metal_plane_plan(M.FORMATS["mxfp8_e4m3"], (4, 64)).min_macos
-    assert mx_needs_270 == "27.0"
-    if not avail:
-        # 26.5 toolchain: execution gated, but the hardware-free contract works.
-        assert M.mtl_tensor_data_type("fp8_e4m3") is not None
+def test_runtime_gate_does_not_claim_descriptor_only_execution():
+    assert M.metal_microscaling_available() is False
+    assert M.metal_plane_plan(M.FORMATS["mxfp8_e4m3"], (4, 64)).min_macos == "27.0"

@@ -1,0 +1,86 @@
+{
+  "apple7" : true,
+  "device" : "Apple M1 Max",
+  "metal4" : true,
+  "rows" : [
+    {
+      "values" : [
+        3.5,
+        3,
+        0.75
+      ],
+      "executed" : true,
+      "command_status" : 4,
+      "library_compiled" : true,
+      "language_raw" : 262144,
+      "type" : "float",
+      "exact_arithmetic" : true
+    },
+    {
+      "values" : [
+        3.5,
+        3,
+        0.75
+      ],
+      "executed" : true,
+      "command_status" : 4,
+      "library_compiled" : true,
+      "language_raw" : 262144,
+      "type" : "half",
+      "exact_arithmetic" : true
+    },
+    {
+      "values" : [
+        3.5,
+        3,
+        0.75
+      ],
+      "executed" : true,
+      "command_status" : 4,
+      "library_compiled" : true,
+      "language_raw" : 262144,
+      "type" : "bfloat",
+      "exact_arithmetic" : true
+    },
+    {
+      "values" : [
+        3.5,
+        3,
+        0.75
+      ],
+      "executed" : true,
+      "command_status" : 4,
+      "library_compiled" : true,
+      "language_raw" : 262145,
+      "type" : "float",
+      "exact_arithmetic" : true
+    },
+    {
+      "values" : [
+        3.5,
+        3,
+        0.75
+      ],
+      "executed" : true,
+      "command_status" : 4,
+      "library_compiled" : true,
+      "language_raw" : 262145,
+      "type" : "half",
+      "exact_arithmetic" : true
+    },
+    {
+      "values" : [
+        3.5,
+        3,
+        0.75
+      ],
+      "executed" : true,
+      "command_status" : 4,
+      "library_compiled" : true,
+      "language_raw" : 262145,
+      "type" : "bfloat",
+      "exact_arithmetic" : true
+    }
+  ],
+  "registry_id" : 4294970160
+}

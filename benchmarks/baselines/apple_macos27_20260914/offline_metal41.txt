@@ -1,0 +1,21 @@
+error: invalid value 'metal4.1' in '-std=metal4.1'
+note: use 'ios-metal1.0' for 'Metal 1.0 (iOS)' standard
+note: use 'ios-metal1.1' for 'Metal 1.1 (iOS)' standard
+note: use 'ios-metal1.2' for 'Metal 1.2 (iOS)' standard
+note: use 'ios-metal2.0' for 'Metal 2.0 (iOS)' standard
+note: use 'ios-metal2.1' for 'Metal 2.1 (iOS)' standard
+note: use 'ios-metal2.2' for 'Metal 2.2 (iOS)' standard
+note: use 'ios-metal2.3' for 'Metal 2.3 (iOS)' standard
+note: use 'ios-metal2.4' for 'Metal 2.4 (iOS)' standard
+note: use 'macos-metal1.0' or 'osx-metal1.0' for 'Metal 1.0 (macOS)' standard
+note: use 'macos-metal1.1' or 'osx-metal1.1' for 'Metal 1.1 (macOS)' standard
+note: use 'macos-metal1.2' or 'osx-metal1.2' for 'Metal 1.2 (macOS)' standard
+note: use 'macos-metal2.0' or 'osx-metal2.0' for 'Metal 2.0 (macOS)' standard
+note: use 'macos-metal2.1' for 'Metal 2.1 (macOS)' standard
+note: use 'macos-metal2.2' for 'Metal 2.2 (macOS)' standard
+note: use 'macos-metal2.3' for 'Metal 2.3 (macOS)' standard
+note: use 'macos-metal2.4' for 'Metal 2.4 (macOS)' standard
+note: use 'metal3.0' for 'Metal 3.0' standard
+note: use 'metal3.1' for 'Metal 3.1' standard
+note: use 'metal3.2' for 'Metal 3.2' standard
+note: use 'metal4.0' for 'Metal 4.0' standard

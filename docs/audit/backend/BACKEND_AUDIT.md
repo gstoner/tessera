@@ -145,8 +145,14 @@ scaled packing, stateful families, and architecture-specific device proof.
   compiler-generated attention family, norms/activations, matmul-family
   compositions, MoE transport, SSM forward/backward, and EBM lanes. The
   remaining boundary is **exact-device expansion**, not a missing gfx1151 HIP
-  launcher: gfx1200/gfx1201/gfx1250 and CDNA gfx942/gfx950 rows remain
-  artifact-only until each architecture has launch and numerical proof. See
+  launcher: gfx1200/gfx1250 and CDNA gfx942/gfx950 rows remain artifact-only
+  until each architecture has launch and numerical proof. **Corrected
+  2026-09-15: gfx1201 is no longer artifact-only** — since 2026-09-13 it has
+  exact-device proof on Tajasarus (replay-verified scheduled packages, public
+  fp16/bf16 GQA native backward, the 2:4 `swmmac` sparse stack, the RDNA4 WMMA
+  datatype audit incl. FP8/BF8); its proof does not transfer to gfx1151 or
+  vice versa, and no gfx1201 performance row is promoted (no profiler
+  attribution under WSL2). See `rocm/todo.md` §`GFX1201-FOUNDATION-2026-09-13`. See
   [rocm_target_map.md](../generated/rocm_target_map.md) and
   [rocm/ROCM_AUDIT.md](rocm/ROCM_AUDIT.md).
 
@@ -184,7 +190,11 @@ Policy rules:
   separate policy families.
 - Apple CPU/GPU claims should remain conservative: `fp32`, `fp16`, and integer
   storage are primary; BF16 depends on OS/Metal exposure; FP8/FP4 are not native
-  Apple M1 Max acceleration claims.
+  Apple M1 Max acceleration claims. (Clarified 2026-09-14: on macOS 27 / Metal
+  4.1 FP8 E4M3/E5M2 and FP4 E2M1 **execute** as MPP `matmul2d` operands with
+  fp32 accumulation on the M1 Max, but at 0.77-0.93x the fp16 device time --
+  emulated, so still not an acceleration claim. Evidence and envelope:
+  `docs/audit/backend/apple/todo.md` §"macOS 27 / Metal 4.1 low-precision validation".)
 
 ## Next Work
 

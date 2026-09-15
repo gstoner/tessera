@@ -1,0 +1,13 @@
+{
+  "os": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0\nBuildVersion:\t\t26A428",
+  "xcode": "Xcode 26.6\nBuild version 17F113",
+  "active_sdk": "26.5",
+  "device": "Apple M1 Max",
+  "runtime_build_sdk": "26.5",
+  "runtime_build_path": "/tmp/libtessera_apple_macos27.dylib",
+  "runtime_source_sha256": "224d13eca2ab1a69b6d8a1dc5b377cbe687e2fad954e04d84c015d70ea62b617",
+  "runtime_library_sha256": "7d596f66310b891fd2551d072b71adab3319842dac54ed4f1387f5239fabee68",
+  "proof": "correctness_only",
+  "performance_promotion": false,
+  "sdk265_runtime_supports_microscaling": 0
+}

@@ -4945,3 +4945,27 @@ extern "C" void tessera_apple_gpu_gated_delta_rule_decode_f16(
 }
 
 #endif // !__APPLE__
+
+// SDK27 / macOS 27 lanes (2026-09-14/15): packed-buffer numeric probe and the
+// MPP low-precision matmul2d family. Off-Darwin the symbols exist and decline.
+extern "C" int32_t tessera_apple_gpu_packed_numeric_status(int32_t, const void*, const float*,
+                                                          int32_t, float*, void*) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp(int32_t, const void*, int64_t, int64_t,
+                                                        int32_t, const void*, int64_t, int64_t,
+                                                        int32_t, float*, int32_t, int32_t, int32_t,
+                                                        int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp_epilogue(int32_t, const void*, int64_t,
+                                                                 int64_t, int32_t, const void*,
+                                                                 int64_t, int64_t, int32_t, float*,
+                                                                 int32_t, int32_t, int32_t, int32_t,
+                                                                 const float*, int32_t) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_mtl4_bias_act_f32(float*, int32_t, const float*, int32_t,
+                                                       int32_t, int32_t) {
+  return 0;
+}

@@ -8,6 +8,123 @@ last_updated: 2026-09-14
 
 # Apple compiler, exact-device, and performance plan
 
+
+## macOS 27 / Metal 4.1 low-precision validation — 2026-09-14
+
+Owner IR-NATIVE-FOUNDATION-1 / APPLE-ATTN-BWD-1; sync `APPLE-METAL41-20260914`.
+[Fresh correctness evidence](../../../../benchmarks/baselines/apple_macos27_20260914/README.md).
+The upgraded M1 Max runs macOS 27.0 (26A428). Runtime compilation accepts MSL
+4.1 and executes basic float/half/bfloat arithmetic correctly. The existing
+native low-precision suite passes **79 tests**, using a freshly rebuilt runtime
+with an explicit 26.5 SDK. This validates the tested fp16/bf16 contracts on the
+new OS; it does not establish FP8/FP4 execution or native matrix acceleration.
+
+Xcode27 follow-through: selected Xcode 27.0 (27A266a), SDK27.0 and the
+matching Metal component 27A266a are now aligned. Default `xcrun metal` reports
+32023.921 and successfully compiles `-std=metal4.1`. The runtime rebuilt with
+Xcode's own clang/sysroot passes all 82 native low-precision/descriptor tests.
+The previous mixed Xcode26.6/CLT27 toolchain failure is resolved.
+
+SDK27 follow-through: the seven build errors are fixed (MetalFloat enum names,
+NSInteger extent arrays and the forPlane selector). Dimensions are now actually
+attached to the descriptor. Multi-plane descriptors use Compute usage and accept
+only UE8M0 scale planes; NVFP4 needs a separate-buffer scale consumer. The runtime
+execution capability remains closed. The fresh SDK27 runtime passes 79 native
+low-precision tests and three parameterized descriptor tests; 37 reference/bridge
+tests pass on Tajasarus WSL.
+
+Packed-buffer follow-through: explicit `apple_packed_numeric.evaluate` binds
+E4M3/E5M2/E2M1 storage to a Metal4.1 native pack/unpack kernel. Status-based
+submission uses a bounded wait and never substitutes CPU execution. Owning-M1-Max
+checks cover all 256 FP8 encodings and all 16 FP4 encodings, signed zeros,
+subnormals, infinities/NaNs, midpoint conversion, saturation, and fp32 add/mul/div.
+Four device tests pass. NaN sign/payload preservation is not promised. This is
+not multi-plane tensor, matrix, compiler-selected or performance admission.
+
+Matrix-operand follow-through (2026-09-14, later the same day): FP8 E4M3 /
+E5M2 and FP4 E2M1 now execute as **MetalPerformancePrimitives `matmul2d`
+operands** on this M1 Max (`tessera_apple_gpu_mtl4_matmul2d_lowp{,_epilogue}`,
+MSL 4.1, both-low-precision and the header's half x low-precision pairs), bound
+as strided MTLTensor views with padded row strides and nonzero tile origins.
+Python `runtime.apple_gpu_mtl4_matmul2d_lowp` raises on every decline (no CPU
+product); references start from the exact quantized bytes. **99 owning-Mac tests
+pass** (`test_apple_gpu_lowp_matmul2d.py`, `test_apple_gpu_lowp_accumulation.py`)
+plus the existing 46-test Metal 4 suite. Measured envelope and defects, all
+reported as kind-5 diagnostics rather than wrong answers:
+
+- Apple enforces the documented 8/4-bit MTLTensor contract: row strides must be
+  multiples of **128 bytes** (128 FP8 / 256 FP4 elements) and the data-plane
+  buffer offset must be 128-byte aligned. A packed 64-wide FP8 operand is not a
+  valid view at all; pad or choose K, N on the quantum.
+- **Apple defect:** for 4-bit data types `newTensorWithDescriptor:offset:` places
+  the plane at **2x the byte offset passed** (FP8 lands exactly). The lane
+  reaches 256-byte-aligned FP4 origins by passing half, rejects finer ones, and
+  the origin tests are the canary if a later OS corrects the factor.
+- Accumulation is at least fp32 (Rigel's 448 + 127 x 0.0625 cell returns
+  455.9375 bit-exactly on e4m3, e5m2, half x e4m3 and the fp16 lane; exact
+  cancellation and 8192-long reductions hold); the 2^30 + 256 x 1.0 probe
+  returns exactly 2^30, i.e. sequential-fp32 behaviour at that granularity.
+- **Defect fixed in the shipped f16/bf16 fused epilogues too:** under Metal
+  fast math `tanh` overflowed to NaN, so `gelu` was NaN for every
+  pre-activation >= 10.25. The argument is now clamped; regression test added.
+
+Matched device timing (Metal 4 counter heap, `benchmark_lowp_matmul2d.py`,
+`lowp_matmul2d.json` in the packet): at 1024^3 / 2048^3 FP8 e4m3 and FP4 run at
+0.81x / 0.77x of MPP fp16, e5m2 at 0.93x / 0.90x, half x e4m3 at 0.92x / 0.88x
+-- the same *emulated, not accelerated* result Rigel measured on the M4 Max.
+MPP fp16 is 1.34-1.45x the existing `simdgroup_matrix` f32 kernel. The fused
+bias+gelu epilogue is 0.5-5% *slower* on device time than plain matmul plus a
+separate bias/act pass (fp16 and e4m3), so **no fusion promotion**; host packing
+of both operands costs 4-10x the matmul at 2048^3 (e4m3 13.5 ms vs 2.3 ms
+device), so FP8 only pays where operands are packed once and reused. 512^3 rows
+are overhead-dominated and moved 3x between runs; do not cite them. MPS has no
+device clock in this harness (wall only). The incumbent routing is unchanged.
+
+Host-sweep follow-through (2026-09-15, full non-slow unit sweep on the M1 Max,
+`tessera-opt` rebuilt against HEAD): governance gates caught and fixed five gaps
+in the new lanes (pool-routed buffers, breaker-routed bridge calls, off-Darwin
+stubs, marker-based device gating, and — shared with the previous session — the
+packed-numeric probe). Three further findings, each with a reproduction:
+
+- **Tiled ragged reductions had silently gone to the reference path since
+  2026-09-05.** `ThreadgroupSlot.length` refused any dynamic extent that was
+  not a 16-byte multiple because the native encoders passed `N*4` unrounded to
+  `setThreadgroupMemoryLength`; a 2049-column softmax therefore never reached
+  the tiled route (`test_apple_dispatch_telemetry` red on the owning Mac, unseen
+  by CI). Both tiled encoders now round up to 16 B and the Python contract
+  rounds identically; `test_apple_threadgroup_binding` asserts the rounding.
+- **macOS 27 f16 regressions, open.** MPSGraph `sliceTensor` on Float16 returns
+  values rounded to bf16 precision (`_apple_gpu_dispatch_slice` on an f16
+  array: 0.12103 → 0.12109; f32 and bf16 slices are exact, f16 unary ops via
+  the same helper family are exact). The f16 `cond` native branch differs from
+  its f32 reference by up to 10 % at small magnitudes. Both are behaviour of the
+  installed OS, not of a runtime edit (no session touched those lanes); they
+  need a sliceTensor-free f16 slice route and a cond-lane bisect on this host.
+- **Strict route ledger is inadmissible on this host until re-measured.**
+  `benchmarks/baselines/apple_strict_route_ledger.json` was sealed on macOS
+  26.6.2 / SDK 26.5; the live context rejects it on `os_version`,
+  `sdk_version`, `compiler_fingerprint` and `runtime_fingerprint`, so
+  `test_apple_legacy_retune_benchmark::test_strict_retune_ledger_admits_on_its_exact_live_apple_host`
+  stays red until two independent `benchmark_legacy_retune.py` reports are
+  recorded on macOS 27 and sealed with `seal_strict_route_ledger.py`. The E2E
+  fleet packet is likewise commit-gated: the recorder refuses a modified tree.
+
+Remaining actions:
+
+1. Auxiliary (UE8M0 / NVFP4 scale) planes and a block-scaled consumer: the
+   descriptor bridge accepts them, nothing executes through them yet.
+2. Amortised or fused operand packing (a cached GPU pack kernel; the packed
+   numeric probe recompiles per call) before any arbiter candidacy for FP8.
+3. Commit runtime changes, then on this host: record the E2E fleet packet and
+   re-seal the strict route ledger (two independent retune reports on macOS
+   27). No performance promotion follows from these measurements.
+4. macOS 27 f16 regressions above: sliceTensor-free f16 slice, cond-lane bisect.
+
+API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
+The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build
+findings. Existing CUDA/HIP/x86 evidence and capabilities are unchanged.
+
+
 ## Logical sparse matrices, reader release and floor migration — 2026-09-13
 
 Owner E2E-REAL-6 / ROCM-2; sync `LOGICAL-SPARSE-OWNERSHIP-FLOOR-2026-09-13`. Shared floor Graph registration preserves unary shape/type equality; its new physical consumer is x86-only. The logical sparse GPU producer and asynchronous attention reader release are HIP/gfx1201-specific, and process-isolated ANN device selection is CUDA/HIP-only. No MSL, Metal ABI or Apple execution policy changes; no sparse, recovery or performance proof transfers to Apple.

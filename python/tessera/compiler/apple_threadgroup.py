@@ -21,9 +21,12 @@ class ThreadgroupSlot:
         self.declaration()
         if any(type(v) is not int for v in (elements, device_limit, static_bytes)) or elements <= 0 or static_bytes < 0:
             raise ValueError('invalid Metal threadgroup extent')
-        size = elements * self.element_bytes
-        if size % 16:
-            raise ValueError('legacy Metal tiled ABI requires a 16-byte aligned dynamic extent')
+        # Metal requires the dynamic threadgroup length to be a multiple of 16
+        # bytes. The native encoders round a ragged extent up (2026-09-15; they
+        # previously passed N*4 unrounded, which is why this used to refuse),
+        # so the Python contract rounds identically instead of rejecting every
+        # ragged width and losing the tiled route.
+        size = (elements * self.element_bytes + 15) & ~15
         if size + static_bytes > device_limit:
             raise ValueError('Metal static plus dynamic threadgroup memory exceeds device limit')
         return size

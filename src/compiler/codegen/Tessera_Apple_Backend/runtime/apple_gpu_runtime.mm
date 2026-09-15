@@ -658,7 +658,9 @@ inline void reference_gemm_f32(const float* A, const float* B, float* C,
 // ~72 callers) and read by the Python dispatch layer after a call. thread_local
 // is correct + lock-free here: a ctypes dispatch and its post-call error read
 // run on the same Python thread.
-//   kind: 0 = ok, 1 = timeout/hang, 2 = command-buffer error
+//   kind: 0 = ok, 1 = timeout/hang, 2 = command-buffer error, 3 = MSL compile,
+//         4 = toolchain-gated (SDK/OS too old), 5 = argument/contract rejection
+//         (the lane declined before submitting anything; never a device fault)
 namespace {
 thread_local int32_t g_last_gpu_error_kind = 0;
 thread_local std::string g_last_gpu_error_msg;
@@ -2817,13 +2819,22 @@ extern "C" int32_t ts_dev_cast(TsDeviceTensor *src, TsDeviceTensor *dst,
 // MTL4Compiler). Mirrors compile_msl_kernel but for the MTL4 path; the MSL
 // compile + pipeline build are paid once per (source, entry) and reused.
 API_AVAILABLE(macos(26.0), ios(26.0))
-id<MTLComputePipelineState> compile_mtl4_pipeline(MetalDeviceContext &ctx,
-                                                  NSString *source,
-                                                  NSString *entry) {
+// `lang` selects the MSL version the source is compiled as. Existing lanes
+// stay on 4.0; the SDK27 low-precision matmul2d lane needs 4.1 for the
+// `metal_fp8_*_format` / `metal_fp4_e2m1_format` tensor element types. On a
+// compile failure `*compile_err` (when given) receives Apple's NSError so the
+// caller can report it; the 4.0 wrapper below keeps its historical silent nil.
+id<MTLComputePipelineState> compile_mtl4_pipeline_lang(MetalDeviceContext &ctx,
+                                                       NSString *source,
+                                                       NSString *entry,
+                                                       MTLLanguageVersion lang,
+                                                       NSError **compile_err) {
   std::string key;
   key.append([source UTF8String]);
   key.push_back('\x1f');
   key.append([entry UTF8String]);
+  key.push_back('\x1f');
+  key.append(std::to_string((unsigned long)lang));
   {
     std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
     auto it = ctx.mtl4_pipeline_cache.find(key);
@@ -2831,9 +2842,9 @@ id<MTLComputePipelineState> compile_mtl4_pipeline(MetalDeviceContext &ctx,
   }
   NSError *err = nil;
   MTLCompileOptions *co = [[MTLCompileOptions alloc] init];
-  co.languageVersion = MTLLanguageVersion4_0;
+  co.languageVersion = lang;
   id<MTLLibrary> lib = [ctx.device newLibraryWithSource:source options:co error:&err];
-  if (!lib) return nil;
+  if (!lib) { if (compile_err) *compile_err = err; return nil; }
   MTL4LibraryFunctionDescriptor *fd = [[MTL4LibraryFunctionDescriptor alloc] init];
   fd.name = entry;
   fd.library = lib;
@@ -2856,12 +2867,18 @@ id<MTLComputePipelineState> compile_mtl4_pipeline(MetalDeviceContext &ctx,
   }
   id<MTLComputePipelineState> pso =
       [compiler newComputePipelineStateWithDescriptor:pd compilerTaskOptions:topts error:&err];
-  if (!pso) return nil;
+  if (!pso) { if (compile_err) *compile_err = err; return nil; }
   std::lock_guard<std::mutex> lock(ctx.mtl4_mu);
   auto it = ctx.mtl4_pipeline_cache.find(key);
   if (it != ctx.mtl4_pipeline_cache.end()) return it->second;
   ctx.mtl4_pipeline_cache.emplace(std::move(key), pso);
   return pso;
+}
+
+id<MTLComputePipelineState> compile_mtl4_pipeline(MetalDeviceContext &ctx,
+                                                  NSString *source,
+                                                  NSString *entry) {
+  return compile_mtl4_pipeline_lang(ctx, source, entry, MTLLanguageVersion4_0, nullptr);
 }
 
 // Metal 4 lane — one MTL4 command queue per device, created lazily + reused.
@@ -3609,16 +3626,14 @@ static size_t _mlpkg_dtype_byte_size(MTLTensorDataType dt) {
 // float8ue8m0,int2,uint2} + the multi-plane auxiliary-plane machinery
 // (MTLTensorAuxiliaryPlaneDescriptor.blockFactors / MTLTensorDescriptor.
 // auxiliaryPlanes), which is the runtime image of a Tessera ScaleLayout: one
-// data plane (element dtype) + one auxiliary scale plane (e8m0 for MX / e4m3 for
-// NVFP4) whose blockFactors give data-elements-per-scale. The Python contract
+// data plane (element dtype) + one auxiliary scale plane (e8m0 for MX; NVFP4
+// requires a separate scale buffer) whose blockFactors give data-elements-per-scale. The Python contract
 // (compiler/microscaling.py: metal_plane_plan) computes the exact per-plane
 // dtype + blockFactors this code would consume.
 //
-// This file is compiled against whatever SDK is installed; on the 26.5 SDK here
-// none of those symbols exist, so the real construction is COMPILE-TIME gated and
-// excluded — these entry points are honest no-ops that set last-error kind 4
-// (toolchain_gated). When a 27.0 SDK is installed the gated block compiles and
-// the runtime probe also requires the OS to be 27.0+ at run time.
+// Older SDKs compile the gated fallback. SDK27 builds the descriptor bridge,
+// but descriptor acceptance is not allocation or executable-kernel evidence.
+// The execution capability remains closed pending a verified native consumer.
 //
 // __MAC_27_0 is defined only by a macOS 27.0+ SDK's <AvailabilityVersions.h>.
 #if defined(__MAC_27_0) && defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && \
@@ -3629,7 +3644,7 @@ static size_t _mlpkg_dtype_byte_size(MTLTensorDataType dt) {
 #endif
 
 // Stable ABI dtype codes (independent of the MTLTensorDataType enum ints, which
-// this SDK doesn't expose). Mirrors microscaling._MTL_TENSOR_DATA_TYPE.
+// differ from these stable codes). Mirrors microscaling._MTL_TENSOR_DATA_TYPE.
 enum {
   TS_MX_FP8_E4M3 = 0,
   TS_MX_FP8_E5M2 = 1,
@@ -3645,10 +3660,10 @@ enum {
 API_AVAILABLE(macos(27.0), ios(27.0))
 static MTLTensorDataType _ts_mx_mtl_dtype(int32_t code) {
   switch (code) {
-    case TS_MX_FP8_E4M3: return MTLTensorDataTypeFloat8E4M3;
-    case TS_MX_FP8_E5M2: return MTLTensorDataTypeFloat8E5M2;
-    case TS_MX_FP4_E2M1: return MTLTensorDataTypeFloat4E2M1;
-    case TS_MX_E8M0:     return MTLTensorDataTypeFloat8UE8M0;
+    case TS_MX_FP8_E4M3: return MTLTensorDataTypeMetalFloat8E4M3;
+    case TS_MX_FP8_E5M2: return MTLTensorDataTypeMetalFloat8E5M2;
+    case TS_MX_FP4_E2M1: return MTLTensorDataTypeMetalFloat4E2M1;
+    case TS_MX_E8M0:     return MTLTensorDataTypeMetalFloat8UE8M0;
     case TS_MX_INT8:     return MTLTensorDataTypeInt8;
     case TS_MX_FP32:     return MTLTensorDataTypeFloat32;
     default:             return MTLTensorDataTypeNone;
@@ -3656,19 +3671,16 @@ static MTLTensorDataType _ts_mx_mtl_dtype(int32_t code) {
 }
 #endif
 
-// Returns 1 iff this build can actually drive microscaled tensors: built against
-// a >=27.0 SDK AND running on macOS 27.0+. On the 26.5 toolchain here → 0.
+// Execution admission, not SDK availability. Descriptor construction below is
+// implemented; allocation, binding and a verified kernel consumer remain open.
 extern "C" int32_t tessera_apple_gpu_supports_microscaling(void) {
-#if TESSERA_HAVE_MICROSCALING_SDK
-  if (@available(macOS 27.0, iOS 27.0, *)) return 1;
-#endif
   return 0;
 }
 
 // Build the multi-plane MTLTensorDescriptor for a microscaled tensor: a data
 // plane (``element_code``) + one auxiliary scale plane (``scale_code``) whose
 // ``block_factors`` (``rank`` entries, data-elements-per-scale per axis) come
-// straight from microscaling.metal_plane_plan. ``scale_code < 0`` means a
+// from microscaling.metal_plane_plan with axes reversed into Metal order. ``scale_code < 0`` means a
 // per-tensor scalar scale (no auxiliary plane — e.g. int8). This is the
 // descriptor-construction sketch: it validates the inputs and builds the
 // descriptor under 27.0; wiring it to an actual id<MTLTensor> + buffer
@@ -3677,7 +3689,16 @@ extern "C" int32_t tessera_apple_gpu_supports_microscaling(void) {
 extern "C" int32_t tessera_apple_gpu_microscaled_descriptor_probe(
     int32_t element_code, int32_t scale_code, int32_t rank,
     const int64_t *dims, const int64_t *block_factors) {
-  if (rank <= 0 || !dims) return 0;
+  // Extents use Metal order (innermost dimension first), not NumPy order.
+  if (rank <= 0 || rank > 16 || !dims) return 0;
+  for (int32_t i = 0; i < rank; ++i) if (dims[i] <= 0) return 0;
+  if (element_code == TS_MX_E8M0) return 0; // scale-only format
+  if (element_code >= TS_MX_FP8_E4M3 && element_code <= TS_MX_FP4_E2M1 && dims[0] % 32) return 0;
+  if (scale_code >= 0) {
+    if (scale_code != TS_MX_E8M0 || !block_factors) return 0;
+    for (int32_t i = 0; i < rank; ++i)
+      if (block_factors[i] <= 0 || dims[i] % block_factors[i]) return 0;
+  }
 #if TESSERA_HAVE_MICROSCALING_SDK
   if (@available(macOS 27.0, iOS 27.0, *)) {
     @autoreleasepool {
@@ -3687,15 +3708,17 @@ extern "C" int32_t tessera_apple_gpu_microscaled_descriptor_probe(
                               "unknown element dtype code");
         return 0;
       }
-      NSMutableArray<NSNumber *> *ext = [NSMutableArray arrayWithCapacity:rank];
-      for (int32_t i = 0; i < rank; ++i) [ext addObject:@(dims[i])];
+      NSInteger extents[16];
+      for (int32_t i = 0; i < rank; ++i) extents[i] = static_cast<NSInteger>(dims[i]);
       MTLTensorExtents *dimensions =
-          [[MTLTensorExtents alloc] initWithRank:rank values:dims];
-      (void)dimensions;  // descriptor wiring uses this once tensor-create lands
+          [[MTLTensorExtents alloc] initWithRank:rank values:extents];
+      if (!dimensions) return 0;
 
       MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
       td.dataType = edt;
-      td.usage = MTLTensorUsageMachineLearning;
+      td.dimensions = dimensions;
+      // SDK27 forbids MachineLearning usage on multi-plane tensors.
+      td.usage = MTLTensorUsageCompute;
       td.storageMode = MTLStorageModeShared;
 
       if (scale_code >= 0 && block_factors) {
@@ -3708,12 +3731,15 @@ extern "C" int32_t tessera_apple_gpu_microscaled_descriptor_probe(
         MTLTensorAuxiliaryPlaneDescriptor *ap =
             [[MTLTensorAuxiliaryPlaneDescriptor alloc] init];
         ap.dataType = sdt;
+        NSInteger factors[16];
+        for (int32_t i = 0; i < rank; ++i) factors[i] = static_cast<NSInteger>(block_factors[i]);
         ap.blockFactors =
-            [[MTLTensorExtents alloc] initWithRank:rank values:block_factors];
+            [[MTLTensorExtents alloc] initWithRank:rank values:factors];
+        if (!ap.blockFactors) return 0;
         MTLTensorAuxiliaryPlaneDescriptorMap *planes =
             [[MTLTensorAuxiliaryPlaneDescriptorMap alloc] init];
         // scales plane keyed by the canonical scales plane type
-        [planes setDescriptor:ap forPlaneType:MTLTensorPlaneTypeScales];
+        [planes setDescriptor:ap forPlane:MTLTensorPlaneTypeScales];
         td.auxiliaryPlanes = planes;
       }
       // Descriptor built successfully; tensor-create + buffer attachments next.
@@ -8793,7 +8819,10 @@ kernel void matmul_softmax_tiled_f32(
     [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
     // Dynamic threadgroup memory: scores[N] live floats per threadgroup.
-    NSUInteger tg_score_bytes = sizeof(float) * static_cast<NSUInteger>(N);
+    // Metal requires setThreadgroupMemoryLength to be a multiple of 16 bytes;
+    // a ragged N (e.g. 2049 columns -> 8196 B) must round up, not be refused
+    // upstream. The kernel indexes < N, so the padding is never read.
+    NSUInteger tg_score_bytes = (sizeof(float) * static_cast<NSUInteger>(N) + 15) & ~static_cast<NSUInteger>(15);
     [enc setThreadgroupMemoryLength:tg_score_bytes atIndex:0];
 
     // One threadgroup per row, kFusedTiledThreads threads cooperating.
@@ -9097,7 +9126,10 @@ kernel void matmul_softmax_tiled_f16(
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
 
     // Dynamic threadgroup memory: scores[N] live floats per threadgroup.
-    NSUInteger tg_score_bytes = sizeof(float) * static_cast<NSUInteger>(N);
+    // Metal requires setThreadgroupMemoryLength to be a multiple of 16 bytes;
+    // a ragged N (e.g. 2049 columns -> 8196 B) must round up, not be refused
+    // upstream. The kernel indexes < N, so the padding is never read.
+    NSUInteger tg_score_bytes = (sizeof(float) * static_cast<NSUInteger>(N) + 15) & ~static_cast<NSUInteger>(15);
     [enc setThreadgroupMemoryLength:tg_score_bytes atIndex:0];
 
     MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(M), 1, 1);
@@ -20819,7 +20851,8 @@ kernel void NAME(tensor<device ET,    dextents<int32_t,2>> A [[buffer(0)]], \
       v += bias[int(tg.y) * 64 + int(id[0])]; } \
     if (act == 1) v = fmax(0.0f, v); \
     else if (act == 2) { float t = 0.7978845608028654f * (v + 0.044715f * v * v * v); \
-      v = 0.5f * v * (1.0f + tanh(t)); } \
+      /* clamp: fast-math tanh overflowed to NaN for v >= 10.25 (measured 2026-09-14) */ \
+      v = 0.5f * v * (1.0f + tanh(clamp(t, -20.0f, 20.0f))); } \
     else if (act == 3) v = v / (1.0f + exp(-v)); \
     cT[i] = v; } \
   cT.store(mC); }
@@ -28797,4 +28830,414 @@ extern "C" void tessera_apple_gpu_mla_absorb_decode_bf16(
                              wukt.data(), wuv.data(), of.data(), BH, Sq, Skv, dn,
                              dr, dv, Dl);
   for (size_t i = 0; i < of.size(); ++i) O[i] = gqa_f32_to_bf16(of[i]);
+}
+
+// SDK27 packed-buffer numerical lane. Not MX tensor or matrix admission.
+// Output has four count-sized planes: decode, add(1), multiply(2), divide(2).
+// Repacked output is little-endian packed storage, independently converted from
+// fp32 input with Metal's default nearest-even and format-specific saturation.
+extern "C" int32_t tessera_apple_gpu_packed_numeric_status(
+    int32_t dtype, const void *codes, const float *values, int32_t count,
+    float *output, void *repacked) {
+#if TESSERA_HAVE_MICROSCALING_SDK
+  if (@available(macOS 27.0, *)) {
+    if (dtype < 0 || dtype > 2 || !codes || !values || !output || !repacked ||
+        count <= 0 || count > 1048576 || count % 8) return 0;
+    @autoreleasepool {
+      MetalDeviceContext &ctx = deviceContext();
+      if (!ctx.device || !ctx.queue) return 0;
+      NSString *fmt = dtype == 0 ? @"metal_fp8_e4m3_format" :
+                      dtype == 1 ? @"metal_fp8_e5m2_format" : @"metal_fp4_e2m1_format";
+      int width = dtype == 2 ? 8 : 4;
+      NSString *source = [NSString stringWithFormat:
+        @"#include <metal_stdlib>\nusing namespace metal;\n"
+         "kernel void packed_probe(device const uint *codes [[buffer(0)]],"
+         "device const float *values [[buffer(1)]], device float *out [[buffer(2)]],"
+         "device uint *packed [[buffer(3)]], constant uint &n [[buffer(4)]],"
+         "uint i [[thread_position_in_grid]]) {"
+         "using P=packed_numeric_type<%@,%d>; auto v=unpack<float>(P(as_type<P::storage_type>(codes[i])));"
+         "vec<float,%d> f; for(uint j=0;j<%d;j++){uint k=i*%d+j; f[j]=values[k];"
+         "out[k]=v[j];out[n+k]=v[j]+1.0f;out[2*n+k]=v[j]*2.0f;out[3*n+k]=v[j]/2.0f;}"
+         "packed[i]=as_type<uint>(pack<%@>(f).as_storage_type());}", fmt,width,width,width,width,fmt];
+      MTLCompileOptions *options = [MTLCompileOptions new];
+      options.languageVersion = MTLLanguageVersion4_1;
+      options.mathMode = MTLMathModeSafe;
+      NSError *error = nil;
+      id<MTLLibrary> library = [ctx.device newLibraryWithSource:source options:options error:&error];
+      if (!library) { ts_set_last_gpu_error(4,"packed_numeric",error.localizedDescription.UTF8String); return 0; }
+      id<MTLComputePipelineState> pipeline = [ctx.device newComputePipelineStateWithFunction:[library newFunctionWithName:@"packed_probe"] error:&error];
+      if (!pipeline) return 0;
+      size_t bytes = dtype == 2 ? count / 2 : count;
+      // Pooled (APPLE buffer-pool gate): the RAII guard releases on every exit
+      // and deliberately abandons the storage instead of recycling it when the
+      // dispatch timed out, so a stalled command can never touch a reused buffer.
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bCodes, ctx, codes, bytes);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bValues, ctx, values, count * sizeof(float));
+      TS_METAL_BUF_ACQUIRE(bOutput, ctx, 4 * count * sizeof(float));
+      TS_METAL_BUF_ACQUIRE(bPacked, ctx, bytes);
+      if (!bCodes || !bValues || !bOutput || !bPacked) return 0;
+      id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+      id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+      if (!cb || !enc) return 0;
+      [enc setComputePipelineState:pipeline];
+      [enc setBuffer:bCodes offset:0 atIndex:0];
+      [enc setBuffer:bValues offset:0 atIndex:1];
+      [enc setBuffer:bOutput offset:0 atIndex:2];
+      [enc setBuffer:bPacked offset:0 atIndex:3];
+      uint32_t n = count;
+      [enc setBytes:&n length:sizeof(n) atIndex:4];
+      [enc dispatchThreads:MTLSizeMake(count/width,1,1)
+        threadsPerThreadgroup:MTLSizeMake(std::min<NSUInteger>(32,pipeline.maxTotalThreadsPerThreadgroup),1,1)];
+      [enc endEncoding];
+      // No CPU fallback/copyback on failure; a timed-out buffer is abandoned by
+      // the pool guard rather than recycled.
+      if (!commit_and_wait_with_timeout(ctx,cb,5000,"packed_numeric",true)) return 0;
+      if (cb.status != MTLCommandBufferStatusCompleted) return 0;
+      memcpy(output,bOutput.contents,4*count*sizeof(float));
+      memcpy(repacked,bPacked.contents,bytes);
+      return 1;
+    }
+  }
+#endif
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
+// SDK27 / MSL 4.1 low-precision MPP matmul2d — FP8 E4M3 / E5M2 and FP4 E2M1
+// operands on the cooperative `tensor` matrix path, fp32 accumulation.
+//
+// Operands are strided MTLTensor *views* over caller storage: a view is
+// (byte offset, inner extent, outer extent, row stride) so a padded row stride
+// and a nonzero tile origin are ordinary inputs. Apple's contract for 8/4-bit
+// tensor data (MTLTensor.h, `dimensions` / `strides`): the innermost extent
+// must be a multiple of 32 elements and every non-innermost stride a multiple
+// of 128 bytes. Those are checked here and rejected with last-error kind 5
+// before anything is submitted; everything Apple rejects at descriptor or
+// tensor creation is reported verbatim under the same kind. Not MX / block
+// scaling (no auxiliary plane), not selector admission, not a performance
+// claim — the generic microscaling flag stays 0.
+//
+// fmt: 0 e4m3 x e4m3, 1 e5m2 x e5m2, 2 e2m1 x e2m1,
+//      3 half x e4m3, 4 half x e5m2, 5 half x e2m1   (MPPTensorOpsMatMul2d.h table)
+// FP4 storage is two elements per byte, low nibble first (matches the
+// packed-buffer lane above). `a_off`/`b_off` are ELEMENT offsets of the view
+// origin (row0 * ld + col0); an FP4 origin must therefore be even.
+// C is fp32 with row stride `ldc`; only the M x N view is written and the
+// caller's padding columns are preserved (the buffer is seeded from C).
+//===----------------------------------------------------------------------===//
+#if TESSERA_HAVE_MICROSCALING_SDK
+static NSString *kMTL4Matmul2dLowpMSL = @R"MSL(
+#include <metal_stdlib>
+#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
+using namespace metal;
+using namespace mpp::tensor_ops;
+
+#define TS_MM2D_LOWP(NAME, ETA, ETB) \
+kernel void NAME(tensor<device ETA,   dextents<int32_t,2>> A [[buffer(0)]], \
+                 tensor<device ETB,   dextents<int32_t,2>> B [[buffer(1)]], \
+                 tensor<device float, dextents<int32_t,2>> C [[buffer(2)]], \
+                 uint2 tg [[threadgroup_position_in_grid]]) { \
+  constexpr auto desc = matmul2d_descriptor(64, 64, static_cast<int>(dynamic_extent)); \
+  matmul2d<desc, execution_simdgroups<4>> op; \
+  auto mA = A.slice(0, tg.x * 64); auto mB = B.slice(tg.y * 64, 0); \
+  auto mC = C.slice(tg.y * 64, tg.x * 64); \
+  auto cT = op.get_destination_cooperative_tensor<decltype(mA), decltype(mB), float>(); \
+  op.run(mA, mB, cT); cT.store(mC); }
+
+TS_MM2D_LOWP(mtl4_matmul2d_e4m3,   metal_fp8_e4m3_format, metal_fp8_e4m3_format)
+TS_MM2D_LOWP(mtl4_matmul2d_e5m2,   metal_fp8_e5m2_format, metal_fp8_e5m2_format)
+TS_MM2D_LOWP(mtl4_matmul2d_e2m1,   metal_fp4_e2m1_format, metal_fp4_e2m1_format)
+TS_MM2D_LOWP(mtl4_matmul2d_h_e4m3, half, metal_fp8_e4m3_format)
+TS_MM2D_LOWP(mtl4_matmul2d_h_e5m2, half, metal_fp8_e5m2_format)
+TS_MM2D_LOWP(mtl4_matmul2d_h_e2m1, half, metal_fp4_e2m1_format)
+
+// Shared epilogue: v = act(v + bias[col]); act 0 none, 1 relu, 2 gelu(tanh), 3 silu.
+// One definition, used by BOTH the fused kernel (in-register on the cooperative
+// tensor) and the standalone pass (a second dispatch over C), so the two routes
+// evaluate the identical fp32 expression and differ only in where it runs.
+// gelu(tanh): the argument is clamped before tanh. Under Metal's default fast
+// math, tanh(t) for large positive t evaluates (e^2t - 1)/(e^2t + 1) = inf/inf
+// = NaN instead of 1: measured 2026-09-14 on the M1 Max, gelu(v) was NaN for
+// every pre-activation v >= 10.25 (finite at 10.0; the negative side is fine
+// because e^2t underflows to 0). tanh saturates to 1.0f in fp32 well inside
+// t = 20, so the clamp changes no finite result.
+static inline float ts_epi(float v, int act) {
+  if (act == 1) return fmax(0.0f, v);
+  if (act == 2) { float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+                  return 0.5f * v * (1.0f + tanh(clamp(t, -20.0f, 20.0f))); }
+  if (act == 3) return v / (1.0f + exp(-v));
+  return v;
+}
+
+// Fused: C = act(A@B + bias[col]), epilogue applied on the cooperative tensor
+// before its single store (same shape as the f16/bf16 TS_MM2D_EPI kernels).
+#define TS_MM2D_LOWP_EPI(NAME, ETA, ETB) \
+kernel void NAME(tensor<device ETA,   dextents<int32_t,2>> A [[buffer(0)]], \
+                 tensor<device ETB,   dextents<int32_t,2>> B [[buffer(1)]], \
+                 tensor<device float, dextents<int32_t,2>> C [[buffer(2)]], \
+                 device const float *bias [[buffer(3)]], \
+                 constant int2 &p [[buffer(4)]], \
+                 uint2 tg [[threadgroup_position_in_grid]]) { \
+  constexpr auto desc = matmul2d_descriptor(64, 64, static_cast<int>(dynamic_extent)); \
+  matmul2d<desc, execution_simdgroups<4>> op; \
+  auto mA = A.slice(0, tg.x * 64); auto mB = B.slice(tg.y * 64, 0); \
+  auto mC = C.slice(tg.y * 64, tg.x * 64); \
+  auto cT = op.get_destination_cooperative_tensor<decltype(mA), decltype(mB), float>(); \
+  op.run(mA, mB, cT); \
+  int has_bias = p.x, act = p.y; \
+  for (uint16_t i = 0; i < cT.get_capacity(); ++i) { \
+    if (!cT.is_valid_element(i)) continue; \
+    float v = cT[i]; \
+    if (has_bias) { auto id = cT.get_multidimensional_index(i); \
+      v += bias[int(tg.y) * 64 + int(id[0])]; } \
+    cT[i] = ts_epi(v, act); } \
+  cT.store(mC); }
+
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_e4m3,   metal_fp8_e4m3_format, metal_fp8_e4m3_format)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_e5m2,   metal_fp8_e5m2_format, metal_fp8_e5m2_format)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_e2m1,   metal_fp4_e2m1_format, metal_fp4_e2m1_format)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e4m3, half, metal_fp8_e4m3_format)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e5m2, half, metal_fp8_e5m2_format)
+TS_MM2D_LOWP_EPI(mtl4_matmul2d_epi_h_e2m1, half, metal_fp4_e2m1_format)
+
+// Decomposed baseline: the same epilogue as a separate pass over a strided
+// fp32 C (p = {has_bias, act, N, ldc}); one thread per element.
+kernel void mtl4_bias_act_f32(device float *C [[buffer(0)]],
+                              device const float *bias [[buffer(1)]],
+                              constant int4 &p [[buffer(2)]],
+                              uint2 gid [[thread_position_in_grid]]) {
+  int n = int(gid.x), m = int(gid.y);
+  if (n >= p.z) return;
+  float v = C[m * p.w + n];
+  if (p.x) v += bias[n];
+  C[m * p.w + n] = ts_epi(v, p.y);
+}
+)MSL";
+
+// Strided 2-D view (extents innermost-first, strides {1, ld}) at a byte offset.
+API_AVAILABLE(macos(27.0))
+static id<MTLTensor> ts_lowp_tensor_view(id<MTLBuffer> buf, NSUInteger byte_off,
+                                         NSInteger inner, NSInteger outer, NSInteger ld,
+                                         MTLTensorDataType dt, NSError **err) {
+  MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+  NSInteger dims[2] = {inner, outer}, strd[2] = {1, ld};
+  td.dimensions = [[MTLTensorExtents alloc] initWithRank:2 values:dims];
+  td.strides = [[MTLTensorExtents alloc] initWithRank:2 values:strd];
+  td.dataType = dt;
+  td.usage = MTLTensorUsageCompute;
+  return [buf newTensorWithDescriptor:td offset:byte_off error:err];
+}
+#endif
+
+static int32_t mtl4_matmul2d_lowp_impl(
+    int32_t fmt,
+    const void *A, int64_t a_nbytes, int64_t a_off, int32_t lda,
+    const void *B, int64_t b_nbytes, int64_t b_off, int32_t ldb,
+    float *C, int32_t ldc,
+    int32_t M, int32_t N, int32_t K,
+    bool fused, const float *bias, int32_t act) {
+  const char *op = fused ? "mtl4_matmul2d_lowp_epilogue" : "mtl4_matmul2d_lowp";
+#if TESSERA_HAVE_MICROSCALING_SDK
+  if (@available(macOS 27.0, *)) {
+    auto reject = [&](const char *why) { ts_set_last_gpu_error(5, op, why); return 0; };
+    if (fmt < 0 || fmt > 5) return reject("fmt must be 0..5");
+    if (!A || !B || !C) return reject("null operand");
+    if (M <= 0 || N <= 0 || K <= 0) return reject("M, N, K must be positive");
+    if (a_off < 0 || b_off < 0 || a_nbytes <= 0 || b_nbytes <= 0)
+      return reject("negative offset or empty storage");
+    const bool a_half = fmt >= 3;
+    const int lp = fmt % 3;
+    const int lp_bits = lp == 2 ? 4 : 8;
+    const int a_bits = a_half ? 16 : lp_bits;
+    if (lda < K || ldb < N || ldc < N)
+      return reject("row stride smaller than the view's inner extent");
+    // Apple's documented 8/4-bit MTLTensor contract (innermost extent % 32,
+    // non-innermost strides % 128 bytes) is deliberately NOT pre-checked here:
+    // the descriptor/tensor creation below is Apple's own validator and its
+    // NSError is reported verbatim under kind 5, so the measured envelope on
+    // this SDK is what the tests record (see test_apple_gpu_lowp_matmul2d.py).
+    // Only what Apple cannot see is checked: an FP4 origin that is not on a
+    // byte boundary has no representable byte offset at all.
+    if (!a_half && (a_off * lp_bits) % 8)
+      return reject("A: FP4 view origin must be byte-aligned (even element offset)");
+    if ((b_off * lp_bits) % 8)
+      return reject("B: FP4 view origin must be byte-aligned (even element offset)");
+    const int64_t a_end_bits = (a_off + (int64_t)(M - 1) * lda + K) * a_bits;
+    const int64_t b_end_bits = (b_off + (int64_t)(K - 1) * ldb + N) * lp_bits;
+    if ((a_end_bits + 7) / 8 > a_nbytes) return reject("A view exceeds its storage");
+    if ((b_end_bits + 7) / 8 > b_nbytes) return reject("B view exceeds its storage");
+    NSUInteger a_byte_off = (NSUInteger)((a_off * a_bits) / 8);
+    NSUInteger b_byte_off = (NSUInteger)((b_off * lp_bits) / 8);
+    // MEASURED 2026-09-14 (macOS 27.0 build 26A428, Xcode 27.0, M1 Max): for the
+    // 4-bit MTLTensorDataTypes, `-[MTLBuffer newTensorWithDescriptor:offset:]`
+    // places the data plane at TWICE the byte offset passed (passing 256 B lands
+    // the view at byte 512; 128/256/384/512/1024 B all doubled; the 8-bit
+    // formats land exactly at every tested offset). Apple validates the PASSED
+    // value against its 128-byte data-plane alignment rule, so an FP4 origin is
+    // reachable only when its true byte offset is a multiple of 256, by passing
+    // half of it. Anything else is rejected here rather than bound to the
+    // wrong bytes. If a later OS corrects the factor, the nonzero-origin tests
+    // in test_apple_gpu_lowp_matmul2d.py fail loudly (the halved offset then
+    // lands half-way): that is the intended canary, not a flake.
+    if (lp_bits == 4) {
+      if ((!a_half && (a_byte_off % 256)) || (b_byte_off % 256))
+        return reject("FP4 view origin must be a multiple of 256 bytes: Apple applies 4-bit "
+                      "tensor buffer offsets at 2x the byte value (measured macOS 27.0), so "
+                      "only 256-byte origins are reachable through the halved offset");
+      if (!a_half) a_byte_off /= 2;
+      b_byte_off /= 2;
+    }
+
+    MetalDeviceContext &ctx = deviceContext();
+    if (!ctx.ok) { ts_set_last_gpu_error(2, op, "no Metal device context"); return 0; }
+    @autoreleasepool {
+      static NSString *const kNames[2][6] = {
+          {@"mtl4_matmul2d_e4m3", @"mtl4_matmul2d_e5m2", @"mtl4_matmul2d_e2m1",
+           @"mtl4_matmul2d_h_e4m3", @"mtl4_matmul2d_h_e5m2", @"mtl4_matmul2d_h_e2m1"},
+          {@"mtl4_matmul2d_epi_e4m3", @"mtl4_matmul2d_epi_e5m2", @"mtl4_matmul2d_epi_e2m1",
+           @"mtl4_matmul2d_epi_h_e4m3", @"mtl4_matmul2d_epi_h_e5m2", @"mtl4_matmul2d_epi_h_e2m1"}};
+      NSString *entry = kNames[fused ? 1 : 0][fmt];
+      if (fused && (act < 0 || act > 3)) return reject("act must be 0..3");
+      NSError *err = nil;
+      id<MTLComputePipelineState> pso = compile_mtl4_pipeline_lang(
+          ctx, kMTL4Matmul2dLowpMSL, entry, MTLLanguageVersion4_1, &err);
+      if (!pso) {
+        ts_set_last_gpu_error(3, op, err ? err.localizedDescription.UTF8String
+                                         : "MSL 4.1 low-precision matmul2d pipeline unavailable");
+        return 0;
+      }
+      const MTLTensorDataType lpdt = lp == 0 ? MTLTensorDataTypeMetalFloat8E4M3
+                                   : lp == 1 ? MTLTensorDataTypeMetalFloat8E5M2
+                                             : MTLTensorDataTypeMetalFloat4E2M1;
+      const size_t c_bytes = (size_t)M * (size_t)ldc * 4;
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bA, ctx, A, (size_t)a_nbytes);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bB, ctx, B, (size_t)b_nbytes);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bC, ctx, C, c_bytes);  // seed: padding preserved
+      if (!bA || !bB || !bC) { ts_set_last_gpu_error(2, op, "buffer allocation failed"); return 0; }
+      id<MTLTensor> tA = ts_lowp_tensor_view(bA, a_byte_off, K, M, lda,
+                                             a_half ? MTLTensorDataTypeFloat16 : lpdt, &err);
+      if (!tA) { ts_set_last_gpu_error(5, op, err ? err.localizedDescription.UTF8String : "A view rejected"); return 0; }
+      id<MTLTensor> tB = ts_lowp_tensor_view(bB, b_byte_off, N, K, ldb, lpdt, &err);
+      if (!tB) { ts_set_last_gpu_error(5, op, err ? err.localizedDescription.UTF8String : "B view rejected"); return 0; }
+      id<MTLTensor> tC = ts_lowp_tensor_view(bC, 0, N, M, ldc, MTLTensorDataTypeFloat32, &err);
+      if (!tC) { ts_set_last_gpu_error(5, op, err ? err.localizedDescription.UTF8String : "C view rejected"); return 0; }
+
+      // Epilogue operands through the pool too (buffer-pool gate); a plain
+      // dispatch acquires a 4-byte placeholder so the guards exist on every path.
+      const float zero = 0.0f;
+      const int params[2] = {bias ? 1 : 0, act};
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bBias, ctx, bias ? (const void *)bias : (const void *)&zero,
+                                      bias ? (size_t)N * 4 : (size_t)4);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bP, ctx, params, sizeof(params));
+      if (fused && (!bBias || !bP)) { ts_set_last_gpu_error(2, op, "epilogue buffer allocation failed"); return 0; }
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (!queue) { ts_set_last_gpu_error(2, op, "no MTL4 command queue"); return 0; }
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        id<MTLBuffer> rbufs[5] = {bA, bB, bC, fused ? bBias : nil, fused ? bP : nil};
+        id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, fused ? 5 : 3);
+        if (!res) { ts_set_last_gpu_error(2, op, "residency set failed"); return 0; }
+        done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
+          [at setResource:tA.gpuResourceID atBufferIndex:0];
+          [at setResource:tB.gpuResourceID atBufferIndex:1];
+          [at setResource:tC.gpuResourceID atBufferIndex:2];
+          if (fused) {
+            [at setAddress:bBias.gpuAddress atIndex:3];
+            [at setAddress:bP.gpuAddress atIndex:4];
+          }
+        }, MTLSizeMake((M + 63) / 64, (N + 63) / 64, 1), MTLSizeMake(128, 1, 1), res, entry);
+      }
+      if (!done) {
+        // encode_and_wait sets no kind on its bounded wait; say so explicitly.
+        if (tessera_apple_gpu_last_error_kind() == 0)
+          ts_set_last_gpu_error(1, op, "MTL4 submission did not complete within the wait bound");
+        return 0;
+      }
+      std::memcpy(C, [bC contents], c_bytes);
+      return 1;
+    }
+  }
+#endif
+  (void)fused; (void)bias; (void)act;
+  ts_set_last_gpu_error(4, op, "requires a macOS 27 SDK build running on macOS 27");
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp(
+    int32_t fmt,
+    const void *A, int64_t a_nbytes, int64_t a_off, int32_t lda,
+    const void *B, int64_t b_nbytes, int64_t b_off, int32_t ldb,
+    float *C, int32_t ldc,
+    int32_t M, int32_t N, int32_t K) {
+  return mtl4_matmul2d_lowp_impl(fmt, A, a_nbytes, a_off, lda, B, b_nbytes, b_off, ldb,
+                                 C, ldc, M, N, K, /*fused=*/false, nullptr, 0);
+}
+
+// Fused epilogue: C = act(A@B + bias[col]); bias has N entries (may be null);
+// act 0 none, 1 relu, 2 gelu(tanh), 3 silu. Same view contract as the plain entry.
+extern "C" int32_t tessera_apple_gpu_mtl4_matmul2d_lowp_epilogue(
+    int32_t fmt,
+    const void *A, int64_t a_nbytes, int64_t a_off, int32_t lda,
+    const void *B, int64_t b_nbytes, int64_t b_off, int32_t ldb,
+    float *C, int32_t ldc,
+    int32_t M, int32_t N, int32_t K,
+    const float *bias, int32_t act) {
+  return mtl4_matmul2d_lowp_impl(fmt, A, a_nbytes, a_off, lda, B, b_nbytes, b_off, ldb,
+                                 C, ldc, M, N, K, /*fused=*/true, bias, act);
+}
+
+// Decomposed-baseline epilogue pass: C[m, n] = act(C[m, n] + bias[n]) in place
+// over an M x N view with row stride ldc, on the same MTL4 command model as
+// the fused kernels (so fused-vs-decomposed compares dispatch structure, not
+// command models). Same MSL source, so the epilogue expression is identical.
+extern "C" int32_t tessera_apple_gpu_mtl4_bias_act_f32(float *C, int32_t ldc,
+                                                       const float *bias, int32_t act,
+                                                       int32_t M, int32_t N) {
+  const char *op = "mtl4_bias_act_f32";
+#if TESSERA_HAVE_MICROSCALING_SDK
+  if (@available(macOS 27.0, *)) {
+    if (!C || M <= 0 || N <= 0 || ldc < N) { ts_set_last_gpu_error(5, op, "bad view"); return 0; }
+    if (act < 0 || act > 3) { ts_set_last_gpu_error(5, op, "act must be 0..3"); return 0; }
+    MetalDeviceContext &ctx = deviceContext();
+    if (!ctx.ok) { ts_set_last_gpu_error(2, op, "no Metal device context"); return 0; }
+    @autoreleasepool {
+      NSError *err = nil;
+      id<MTLComputePipelineState> pso = compile_mtl4_pipeline_lang(
+          ctx, kMTL4Matmul2dLowpMSL, @"mtl4_bias_act_f32", MTLLanguageVersion4_1, &err);
+      if (!pso) { ts_set_last_gpu_error(3, op, err ? err.localizedDescription.UTF8String : "compile failed"); return 0; }
+      const size_t c_bytes = (size_t)M * (size_t)ldc * 4;
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bC, ctx, C, c_bytes);
+      const float zero = 0.0f;
+      const int params[4] = {bias ? 1 : 0, act, N, ldc};
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bBias, ctx, bias ? (const void *)bias : (const void *)&zero,
+                                      bias ? (size_t)N * 4 : (size_t)4);
+      TS_METAL_BUF_ACQUIRE_WITH_BYTES(bP, ctx, params, sizeof(params));
+      if (!bC || !bBias || !bP) { ts_set_last_gpu_error(2, op, "buffer allocation failed"); return 0; }
+      id<MTL4CommandQueue> queue = mtl4_shared_queue(ctx);
+      if (!queue) { ts_set_last_gpu_error(2, op, "no MTL4 command queue"); return 0; }
+      bool done = false;
+      {
+        std::lock_guard<std::mutex> lock(ctx.mtl4_dispatch_mu);
+        id<MTLBuffer> rbufs[3] = {bC, bBias, bP};
+        id<MTLResidencySet> res = mtl4_set_residency(ctx, rbufs, 3);
+        if (!res) { ts_set_last_gpu_error(2, op, "residency set failed"); return 0; }
+        done = mtl4_encode_and_wait(ctx, queue, pso, ^(id<MTL4ArgumentTable> at) {
+          [at setAddress:bC.gpuAddress atIndex:0];
+          [at setAddress:bBias.gpuAddress atIndex:1];
+          [at setAddress:bP.gpuAddress atIndex:2];
+        }, MTLSizeMake((N + 31) / 32, (M + 7) / 8, 1), MTLSizeMake(32, 8, 1), res, @"mtl4_bias_act_f32");
+      }
+      if (!done) {
+        if (tessera_apple_gpu_last_error_kind() == 0)
+          ts_set_last_gpu_error(1, op, "MTL4 submission did not complete within the wait bound");
+        return 0;
+      }
+      std::memcpy(C, [bC contents], c_bytes);
+      return 1;
+    }
+  }
+#endif
+  ts_set_last_gpu_error(4, op, "requires a macOS 27 SDK build running on macOS 27");
+  return 0;
 }

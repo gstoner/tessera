@@ -5257,3 +5257,9 @@ Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark metho
 Sync `TILING-MATMUL-EPILOGUE-2026-09-15`; owner E2E-REAL-6.
 Not applicable to x86 execution: the tiled inner K step is unchanged, so `TileToX86Pass` sees the same nest; a biased matmul now carries an explicit `tessera.broadcast` + `tessera.add` after the nest instead of failing inside tiling. No AVX-512 ABI or dtype change; no sibling proof transfers.
 See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-preserved--2026-09-15).
+
+### Matmul epilogue markers and activation order — 2026-09-15
+
+Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
+Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to x86 execution; no ABI or dtype change.
+See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).

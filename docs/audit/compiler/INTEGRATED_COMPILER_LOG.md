@@ -4045,3 +4045,17 @@ Remaining: No backend executes a multi-op value program, so a biased matmul stil
 Evidence: `tests/tessera-ir/phase2/tiling_matmul_epilogue.mlir` (bias, bias + residual on ragged M, residual alone; inner op carries no marker), `tests/tessera-ir/phase8/apple_matmul2d_bias_operand.mlir` (bias-operand matmul → `gpu.matmul2d_epilogue`); full lit 445 passed / 40 unsupported on the Mac (host-free fixtures); registry, tiling and lane unit gates green. No device or performance claim.
 
 <!-- entry-fields:end -->
+
+### 2026-09-15 — bf16 matmul2d arbiter bucket: measured, retained
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: follow-up to #753 and #755 (sync `APPLE-MATMUL2D-BUCKET-2026-09-15`).
+
+Outcome: The bf16 ≤ 1024 "win" the paired admission corpus reported (5–12% median, view entry over the production bf16 route) is now an arbiter bucket in the strict route ledger — `retune_matmul2d_bf16` at 512, 1024 and 2048 square, the runtime's contiguous MPP `matmul2d` entry against the strided-view entry the compiled route dispatches, five independent runs of nine interleaved trials each — and the production bf16 route (`_mtl4_route_matmul2d_bf16`) consults that ledger per exact shape and dispatches the view entry only when it is promoted. On the first seal **every row retained the contiguous incumbent** (six rows, both timing domains): on device time the two entries are within ±3% (the same kernel), and end to end the view entry is 6–14% slower at 512 and 20–42% slower at 1024. The corpus's earlier win was not the kernel: its incumbent went through the production wrapper (a bf16 result cast and its buffer path) while its candidate did not, so the comparison measured wrapper overhead. The bucket exists so a later runtime change can promote it with evidence; nothing is promoted today.
+
+Remaining: The view-entry wrapper zero-fills its fp32 output on the host, which is most of its end-to-end penalty at 1024; that is a wrapper cost to remove before re-measuring, not a kernel finding. The FP8-decode "bucket" from the corpus is a quantization-policy decision (a different program), recorded as such and not an arbiter row.
+
+Evidence: `benchmarks/baselines/apple_strict_route_ledger.json` (24 decisions, 6 ineligible, macOS 27.0 / SDK 27.0, zero routes moved among the previous 18) and `apple7_legacy_retune_multi_run.json`; `tests/unit/test_apple_legacy_retune_benchmark.py` (14 passed on the Mac incl. the live-host admission row and the host-free consumer test that the bf16 route dispatches the view entry only on a promotion). No performance claim.
+
+<!-- entry-fields:end -->

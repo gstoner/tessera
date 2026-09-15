@@ -45279,6 +45279,26 @@ def _mtl4_route_matmul2d_bf16(a: Any, b: Any, np: Any) -> Any:
     caps = _mtl4_caps_cached()
     if not (caps.get("command_queue") and caps.get("compiler")):
         return None
+    # APPLE-MATMUL2D-1 arbiter bucket: the strict route ledger may promote the
+    # strided-view entry (the kernel the compiled route dispatches) over the
+    # contiguous entry for an exactly measured shape; anything unmeasured or
+    # unreadable keeps the contiguous incumbent.
+    M, K = int(a.shape[0]), int(a.shape[1])
+    N = int(b.shape[1])
+    chosen = "mtl4_contiguous"
+    try:
+        from .compiler.apple_route_selector import production_route_for
+        chosen = production_route_for(op="retune_matmul2d_bf16", shape=f"{M}x{N}x{K}",
+                                      dtype="bf16", incumbent_route="mtl4_contiguous")
+    except Exception:  # noqa: BLE001 -- an unreadable ledger is the incumbent
+        chosen = "mtl4_contiguous"
+    if chosen == "mtl4_view":
+        try:
+            C = apple_gpu_mtl4_matmul2d_view(np.ascontiguousarray(a), np.ascontiguousarray(b), np,
+                                             pair=11, M=M, N=N, K=K)
+            return C.astype(bf16)
+        except Exception as exc:  # noqa: BLE001 -- a declined view entry is not a wrong result
+            _note_dispatch_fallback("tessera.matmul", f"ledger route mtl4_view declined ({exc}); contiguous")
     C, ran = apple_gpu_mtl4_matmul2d_bf16(a, b, np)  # f32 output
     return C.astype(bf16) if ran else None
 

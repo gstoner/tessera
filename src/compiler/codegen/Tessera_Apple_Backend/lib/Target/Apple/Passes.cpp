@@ -58,6 +58,17 @@ PassPipelineRegistration<> gAppleGPUPipeline(
       // staging, so this pass must claim the loop before the threadgroup pass
       // judges a schedule the program is about to stop having.
       pm.addPass(createStreamingAttentionToAppleGPUPass());
+      // APPLE-MATMUL2D-1: the Metal 4 matmul2d family claims the canonical
+      // GEMM reduction for the 8/4-bit storage pairs only. The paired corpus
+      // (M1 Max, 2026-09-15) retained the incumbent for every f16 shape and
+      // found the compiled bf16 route within +-10% of the runtime's own bf16
+      // entry; the low-precision pairs had no executable route at all (this
+      // pipeline emitted an MPSGraph matmul claim MPSGraph cannot run), so
+      // they are admitted. Runs before APPLE-TILE-2 so the incumbent sees
+      // only the nests left to it.
+      pm.addPass(createCanonicalGemmToAppleMatmul2dPass("lowp"));
+      pm.addPass(createFuseAppleMatmul2dEpiloguePass());
+      pm.addPass(createLowerAppleMatmul2dToCallPass());
       // APPLE-TILE-2: same shape for the canonical M/N/K GEMM reduction.
       pm.addPass(createCanonicalGemmToAppleGPUPass());
       // APPLE-PIPE-1: claim the shared Tile physical-allocation / staged
@@ -143,6 +154,7 @@ void registerTesseraAppleBackendPipelines() {
   registerPass([]() { return createAppleThreadgroupPipelinePass(); });
   registerPass([]() { return createCanonicalGemmToAppleGPUPass(); });
   registerPass([]() { return createCanonicalGemmToAppleMatmul2dPass(); });
+  registerPass([]() { return createFuseAppleMatmul2dEpiloguePass(); });
   registerPass([]() { return createLowerAppleMatmul2dToCallPass(); });
   registerPass([]() { return createStreamingAttentionToAppleGPUPass(); });
   registerPass([]() { return createLowerDeclarativeFusionsToAppleGPUPass(); });

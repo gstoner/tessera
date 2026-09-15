@@ -62,3 +62,36 @@ func.func @k_mismatch(%a: tensor<64x128xf16>, %b: tensor<96x64xf16>) -> tensor<6
   %r = tessera_apple.gpu.matmul2d %va, %vb {tile_m = 64 : i64, tile_n = 64 : i64, simdgroups = 4 : i64, accumulate = "f32"} : !tessera_apple.tensor_view<f16>, !tessera_apple.tensor_view<f16> -> tensor<64x64xf32>
   return %r : tensor<64x64xf32>
 }
+
+// -----
+
+// The fused epilogue op: a bias must be one fp32 value per output column.
+func.func @epilogue_bias_extent(%a: tensor<64x128xf16>, %b: tensor<128x96xf16>, %bias: tensor<64xf32>) -> tensor<64x96xf32> {
+  %va = tessera_apple.gpu.tensor_view %a {byte_offset = 0 : i64, extents = array<i64: 128, 64>, strides = array<i64: 1, 128>} : tensor<64x128xf16> -> !tessera_apple.tensor_view<f16>
+  %vb = tessera_apple.gpu.tensor_view %b {byte_offset = 0 : i64, extents = array<i64: 96, 128>, strides = array<i64: 1, 96>} : tensor<128x96xf16> -> !tessera_apple.tensor_view<f16>
+  // expected-error @+1 {{APPLE_MATMUL2D_EPILOGUE_BIAS: bias must be tensor<96xf32>, one fp32 value per output column}}
+  %0 = tessera_apple.gpu.matmul2d_epilogue %va, %vb bias %bias : tensor<64xf32> {accumulate = "f32", act = "none", simdgroups = 4 : i64, tile_m = 64 : i64, tile_n = 64 : i64} : !tessera_apple.tensor_view<f16>, !tessera_apple.tensor_view<f16> -> tensor<64x96xf32>
+  return %0 : tensor<64x96xf32>
+}
+
+// -----
+
+// An epilogue op with nothing to fuse is a plain matmul2d and is refused.
+func.func @epilogue_empty(%a: tensor<64x128xf16>, %b: tensor<128x96xf16>) -> tensor<64x96xf32> {
+  %va = tessera_apple.gpu.tensor_view %a {byte_offset = 0 : i64, extents = array<i64: 128, 64>, strides = array<i64: 1, 128>} : tensor<64x128xf16> -> !tessera_apple.tensor_view<f16>
+  %vb = tessera_apple.gpu.tensor_view %b {byte_offset = 0 : i64, extents = array<i64: 96, 128>, strides = array<i64: 1, 96>} : tensor<128x96xf16> -> !tessera_apple.tensor_view<f16>
+  // expected-error @+1 {{APPLE_MATMUL2D_EPILOGUE_EMPTY}}
+  %0 = tessera_apple.gpu.matmul2d_epilogue %va, %vb {accumulate = "f32", act = "none", simdgroups = 4 : i64, tile_m = 64 : i64, tile_n = 64 : i64} : !tessera_apple.tensor_view<f16>, !tessera_apple.tensor_view<f16> -> tensor<64x96xf32>
+  return %0 : tensor<64x96xf32>
+}
+
+// -----
+
+// The activation set is closed: an unknown act is rejected by the enum attr.
+func.func @epilogue_act(%a: tensor<64x128xf16>, %b: tensor<128x96xf16>) -> tensor<64x96xf32> {
+  %va = tessera_apple.gpu.tensor_view %a {byte_offset = 0 : i64, extents = array<i64: 128, 64>, strides = array<i64: 1, 128>} : tensor<64x128xf16> -> !tessera_apple.tensor_view<f16>
+  %vb = tessera_apple.gpu.tensor_view %b {byte_offset = 0 : i64, extents = array<i64: 96, 128>, strides = array<i64: 1, 96>} : tensor<128x96xf16> -> !tessera_apple.tensor_view<f16>
+  // expected-error @+1 {{attribute 'act' failed to satisfy constraint}}
+  %0 = tessera_apple.gpu.matmul2d_epilogue %va, %vb {accumulate = "f32", act = "gelu_erf", simdgroups = 4 : i64, tile_m = 64 : i64, tile_n = 64 : i64} : !tessera_apple.tensor_view<f16>, !tessera_apple.tensor_view<f16> -> tensor<64x96xf32>
+  return %0 : tensor<64x96xf32>
+}

@@ -352,41 +352,79 @@ int appleMatmul2dPairCode(::mlir::Type a, ::mlir::Type b) {
   return ::mlir::success();
 }
 
-::mlir::LogicalResult Matmul2dOp::verify() {
-  auto aView = getA().getDefiningOp<TensorViewOp>();
-  auto bView = getB().getDefiningOp<TensorViewOp>();
+int appleMatmul2dActCode(::llvm::StringRef act) {
+  if (act == "none") return 0;
+  if (act == "relu") return 1;
+  if (act == "gelu") return 2;
+  if (act == "silu") return 3;
+  return -1;
+}
+
+// Shared by gpu.matmul2d and gpu.matmul2d_epilogue: operand provenance, the
+// MPP pair table, the fp32 accumulator, K/M/N agreement and the descriptor.
+static ::mlir::LogicalResult verifyMatmul2dCommon(::mlir::Operation *op, ::mlir::Value a,
+                                                  ::mlir::Value b, ::mlir::Type resultType,
+                                                  int64_t tileM, int64_t tileN, int64_t sg,
+                                                  ::llvm::StringRef accumulate) {
+  auto aView = a.getDefiningOp<TensorViewOp>();
+  auto bView = b.getDefiningOp<TensorViewOp>();
   if (!aView || !bView)
-    return emitOpError() << "APPLE_MATMUL2D_OPERANDS: both operands must be "
-                            "produced by tessera_apple.gpu.tensor_view so their "
-                            "extents and layout are visible to this verifier";
-  ::mlir::Type aElem = ::llvm::cast<TensorViewType>(getA().getType()).getElementType();
-  ::mlir::Type bElem = ::llvm::cast<TensorViewType>(getB().getType()).getElementType();
+    return op->emitOpError() << "APPLE_MATMUL2D_OPERANDS: both operands must be "
+                                "produced by tessera_apple.gpu.tensor_view so their "
+                                "extents and layout are visible to this verifier";
+  ::mlir::Type aElem = ::llvm::cast<TensorViewType>(a.getType()).getElementType();
+  ::mlir::Type bElem = ::llvm::cast<TensorViewType>(b.getType()).getElementType();
   if (appleMatmul2dPairCode(aElem, bElem) < 0)
-    return emitOpError()
+    return op->emitOpError()
            << "APPLE_MATMUL2D_PAIR_UNSUPPORTED: MPP matmul2d accepts same-type "
               "f16/bf16/f8E4M3FN/f8E5M2/f4E2M1FN pairs and f16 x {f8E4M3FN, "
               "f8E5M2, f4E2M1FN}; this pair is not an MPP matmul and is not "
               "silently converted";
-  auto result = ::llvm::cast<::mlir::RankedTensorType>(getResult().getType());
-  if (!result.getElementType().isF32() || getAccumulate() != "f32")
-    return emitOpError() << "APPLE_MATMUL2D_ACCUM: matmul2d accumulates in fp32; "
-                            "the result element type must be f32 and "
-                            "`accumulate` must say so (Decision #15a)";
+  auto result = ::llvm::dyn_cast<::mlir::RankedTensorType>(resultType);
+  if (!result || !result.getElementType().isF32() || accumulate != "f32")
+    return op->emitOpError() << "APPLE_MATMUL2D_ACCUM: matmul2d accumulates in fp32; "
+                                "the result element type must be f32 and "
+                                "`accumulate` must say so (Decision #15a)";
   const int64_t K = aView.getExtents()[0], M = aView.getExtents()[1];
   const int64_t N = bView.getExtents()[0], Kb = bView.getExtents()[1];
   if (K != Kb)
-    return emitOpError() << "APPLE_MATMUL2D_SHAPE: a's inner extent (K=" << K
-                         << ") must equal b's outer extent (" << Kb << ")";
+    return op->emitOpError() << "APPLE_MATMUL2D_SHAPE: a's inner extent (K=" << K
+                             << ") must equal b's outer extent (" << Kb << ")";
   if (result.getRank() != 2 || !result.hasStaticShape() ||
       result.getDimSize(0) != M || result.getDimSize(1) != N)
-    return emitOpError() << "APPLE_MATMUL2D_SHAPE: result must be tensor<" << M
-                         << "x" << N << "xf32> for these views";
-  if (getTileM() <= 0 || getTileN() <= 0 || getTileM() % 8 || getTileN() % 8)
-    return emitOpError() << "APPLE_MATMUL2D_DESCRIPTOR: tile_m and tile_n must "
-                            "be positive multiples of 8";
-  const int64_t sg = getSimdgroups();
+    return op->emitOpError() << "APPLE_MATMUL2D_SHAPE: result must be tensor<" << M
+                             << "x" << N << "xf32> for these views";
+  if (tileM <= 0 || tileN <= 0 || tileM % 8 || tileN % 8)
+    return op->emitOpError() << "APPLE_MATMUL2D_DESCRIPTOR: tile_m and tile_n must "
+                                "be positive multiples of 8";
   if (sg != 1 && sg != 2 && sg != 4 && sg != 8)
-    return emitOpError() << "APPLE_MATMUL2D_DESCRIPTOR: simdgroups must be 1, 2, 4 or 8";
+    return op->emitOpError() << "APPLE_MATMUL2D_DESCRIPTOR: simdgroups must be 1, 2, 4 or 8";
+  return ::mlir::success();
+}
+
+::mlir::LogicalResult Matmul2dOp::verify() {
+  return verifyMatmul2dCommon(getOperation(), getA(), getB(), getResult().getType(),
+                              getTileM(), getTileN(), getSimdgroups(), getAccumulate());
+}
+
+::mlir::LogicalResult Matmul2dEpilogueOp::verify() {
+  if (::mlir::failed(verifyMatmul2dCommon(getOperation(), getA(), getB(),
+                                          getResult().getType(), getTileM(), getTileN(),
+                                          getSimdgroups(), getAccumulate())))
+    return ::mlir::failure();
+  if (appleMatmul2dActCode(getAct()) < 0)
+    return emitOpError() << "APPLE_MATMUL2D_EPILOGUE_ACT: act must be none, relu, gelu or silu";
+  if (!getBias() && getAct() == "none")
+    return emitOpError() << "APPLE_MATMUL2D_EPILOGUE_EMPTY: an epilogue op with neither a "
+                            "bias nor an activation is a plain gpu.matmul2d; use that op";
+  if (getBias()) {
+    auto biasType = ::llvm::dyn_cast<::mlir::RankedTensorType>(getBias().getType());
+    const int64_t N = getB().getDefiningOp<TensorViewOp>().getExtents()[0];
+    if (!biasType || biasType.getRank() != 1 || !biasType.getElementType().isF32() ||
+        !biasType.hasStaticShape() || biasType.getDimSize(0) != N)
+      return emitOpError() << "APPLE_MATMUL2D_EPILOGUE_BIAS: bias must be tensor<" << N
+                           << "xf32>, one fp32 value per output column";
+  }
   return ::mlir::success();
 }
 

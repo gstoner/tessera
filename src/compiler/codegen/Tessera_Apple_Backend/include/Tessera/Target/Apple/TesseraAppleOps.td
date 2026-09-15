@@ -532,6 +532,42 @@ def AppleGPU_Matmul2dOp : TesseraApple_Op<"gpu.matmul2d", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Apple_EpilogueActAttr
+    : Apple_EnumStrAttr<["none", "relu", "gelu", "silu"],
+        "fused epilogue activation, evaluated in fp32 on the accumulator tile before its single store; `gelu` is Tessera's tanh-form gelu (the `tessera.gelu` reference)">;
+
+def AppleGPU_Matmul2dEpilogueOp : TesseraApple_Op<"gpu.matmul2d_epilogue", [Pure]> {
+  let summary = "matmul2d with a per-column bias and/or activation fused on the cooperative tensor";
+  let description = [{
+    `result[M, N] = act(a[M, K] @ b[K, N] + bias[N])` with the epilogue applied
+    in registers on the fp32 cooperative tensor before it is stored once. The
+    contract this op carries and `gpu.matmul2d` + pointwise ops cannot state:
+    the accumulator is fp32 (`accumulate`), the bias is added to the fp32
+    accumulator (never to a rounded product), the activation is evaluated in
+    fp32 on that sum, and the tile is stored exactly once (Decision #15a,
+    #32). `bias` is optional and rank-1 f32 of extent N; `act` is `none`,
+    `relu`, `gelu` (Tessera's tanh form, the runtime clamps the tanh argument so
+    large pre-activations stay finite) or `silu`. An op with neither a bias nor
+    an activation is refused: that is a plain `gpu.matmul2d`.
+
+    Measured 2026-09-14 on the M1 Max: the fused kernel is not faster than the
+    decomposed pair at 512..2048 square; this op exists so the compiled route
+    can express the fusion and the paired corpus can measure it -- it does not
+    promote anything (APPLE-TILE-2 rule).
+  }];
+  let arguments = (ins Apple_TensorViewType:$a,
+                       Apple_TensorViewType:$b,
+                       Optional<AnyRankedTensor>:$bias,
+                       I64Attr:$tile_m,
+                       I64Attr:$tile_n,
+                       I64Attr:$simdgroups,
+                       Apple_AccumulateAttr:$accumulate,
+                       Apple_EpilogueActAttr:$act);
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = "$a `,` $b (`bias` $bias^ `:` type($bias))? attr-dict `:` type($a) `,` type($b) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
   let summary = "Value-producing Apple CPU runtime call (Accelerate/LAPACK)";
   let arguments = (ins Variadic<AppleTarget_Buffer>:$operands,

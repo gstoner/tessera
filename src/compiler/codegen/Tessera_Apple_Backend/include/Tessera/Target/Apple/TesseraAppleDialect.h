@@ -57,6 +57,11 @@ std::string appleTensorViewLayoutReason(::mlir::Type elementType,
 /// low-precision pairs (0 e4m3/e4m3, 1 e5m2/e5m2, 2 e2m1/e2m1, 3 f16/e4m3,
 /// 4 f16/e5m2, 5 f16/e2m1), 10 for f16/f16, 11 for bf16/bf16, or -1.
 int appleMatmul2dPairCode(::mlir::Type a, ::mlir::Type b);
+
+/// Runtime activation code for `gpu.matmul2d_epilogue`'s `act`: 0 none,
+/// 1 relu, 2 gelu (tanh form), 3 silu; -1 for anything else. The codes are
+/// the MSL kernel's `ts_epi` contract.
+int appleMatmul2dActCode(::llvm::StringRef act);
 } // namespace tessera::apple
 
 #endif // TESSERA_TARGET_APPLE_DIALECT_H

@@ -130,3 +130,34 @@ def test_owning_device_packet_replays_and_preserves_raw_report_hashes():
             for saved, row in zip(policy["decisions"], actual["policies"][estimator]["decisions"], strict=True):
                 assert saved == {key: row[key] for key in saved}
     assert summary["promotion_allowed"] is False
+
+
+def _retune_module():
+    path = (Path(__file__).resolve().parents[2] / "benchmarks" / "apple_gpu"
+            / "benchmark_legacy_retune.py")
+    import sys
+    spec = importlib.util.spec_from_file_location("benchmark_legacy_retune", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module  # dataclasses resolve the module by name
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_incumbent_map_covers_every_op_the_extended_profile_measures():
+    """`aggregate_stable_route_reports` silently skips an op with no incumbent,
+    so the policy experiment must name one for every op the extended profile
+    emits, and it must be the incumbent the recorder itself uses. Host-free:
+    the cases are built (arrays and closures), never called."""
+    compare = _module()
+    retune = _retune_module()
+    # The policy experiment runs the extended profile only, so its map is a
+    # sub-map of the recorder's (which also names the low_precision profile).
+    assert set(compare.INCUMBENTS) <= set(retune.INCUMBENT_ROUTES)
+    assert all(compare.INCUMBENTS[op] == retune.INCUMBENT_ROUTES[op] for op in compare.INCUMBENTS)
+    cases = (retune._cases(1701) + retune._cases(11701, scale=2)
+             + retune._matmul2d_bf16_cases(1701) + retune._matmul2d_bf16_cases(11701, scale=2))
+    assert cases
+    for case in cases:
+        assert case.op in compare.INCUMBENTS, case.op
+        assert compare.INCUMBENTS[case.op] == case.incumbent.name, case.op

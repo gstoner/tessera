@@ -564,17 +564,24 @@ def run_report(*, reps: int, trials: int, seed: int = 1701,
     }
 
 
+# The production incumbent per retune op. Every consumer that aggregates
+# reports (this recorder, `compare_cross_run_policy.py`) reads THIS map: an op
+# missing here is silently skipped by `aggregate_stable_route_reports`, so a
+# family that was paid for and measured would never reach a decision.
+INCUMBENT_ROUTES: dict[str, str] = {
+    "retune_grouped_gemm": "grouped_fused",
+    "retune_moe_swiglu": "composed",
+    "retune_moe_swiglu_lowp": "single_fused_lowp",
+    "retune_reduce_sum": "mpsgraph",
+    "retune_resident_kv_read": "resident_view",
+    "retune_mla_decode": "explicit",
+    "retune_replay_decode": "fused_block",
+    "retune_matmul2d_bf16": "mtl4_contiguous",
+}
+
+
 def build_strict_ledger(reports: list[dict[str, Any]], *, valid_days: int = 30) -> dict[str, Any]:
-    incumbents = {
-        "retune_grouped_gemm": "grouped_fused",
-        "retune_moe_swiglu": "composed",
-        "retune_moe_swiglu_lowp": "single_fused_lowp",
-        "retune_reduce_sum": "mpsgraph",
-        "retune_resident_kv_read": "resident_view",
-        "retune_mla_decode": "explicit",
-        "retune_replay_decode": "fused_block",
-        "retune_matmul2d_bf16": "mtl4_contiguous",
-    }
+    incumbents = dict(INCUMBENT_ROUTES)
     stable = aggregate_stable_route_reports(reports, incumbent_routes=incumbents)
     return seal_strict_route_ledger(stable, reports, valid_days=valid_days)
 

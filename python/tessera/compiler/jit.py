@@ -1272,6 +1272,7 @@ class JitFn:
                 traced,
                 name=emitted.name if emitted is not None else self._fn.__name__,
                 source_hash=source_hash,
+                target=self._legality_target(),
             )
             if self.differentiation_request is not None:
                 intent = self.differentiation_request.module_intent_attrs()
@@ -2216,7 +2217,12 @@ class JitFn:
            new code should prefer ``.explain()`` for the unified
            view across all four IR layers.
         """
-        return self.graph_ir.to_mlir()
+        return self.graph_ir.to_mlir(target=self._legality_target())
+
+    def _legality_target(self) -> str:
+        """The target name Graph IR legality is checked against for this jit:
+        the string alias when one was given, else the CPU table."""
+        return self.target if isinstance(self.target, str) else "cpu"
 
     def compile_report(self):
         """Synthesize a :class:`CompileReport` from this JitFn's
@@ -2727,7 +2733,9 @@ class JitFn:
                     metadata["nvidia_ptx"] = _ptx
                     metadata["nvidia_ptx_valid"] = _valid
 
-        graph_ir_text = self.graph_ir.to_mlir()
+        # Verify the render against THIS jit's target: the CPU default rejects
+        # storage dtypes only the GPU carries (fp8/fp4 on Apple GPU).
+        graph_ir_text = self.graph_ir.to_mlir(target=self._legality_target())
         schedule_ir_text = self.schedule_ir or ""
         tile_ir_text = self.tile_ir or ""
         target_ir_text = self.target_ir or ""

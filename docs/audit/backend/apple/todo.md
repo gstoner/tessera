@@ -9,6 +9,19 @@ last_updated: 2026-09-15
 # Apple compiler, exact-device, and performance plan
 
 
+## @jit front door for 8/4-bit storage tensors — 2026-09-15
+
+Owner E2E-REAL-6; sync `LOWP-FRONT-DOOR-2026-09-15`. `@jit(target="apple_gpu")`
+with FP8/FP4 operands used to trace as f32, spell the types unparseably, and
+compute the product on the host through the MPS dispatcher's numpy fallback
+while reporting `native_gpu` (a hollow green). Now: tracer naming, MLIR-builtin
+spellings, fp32 matmul results for storage-only dtypes, and every low-precision
+pair (fp8×fp8, fp4×fp4, f16×{fp8, fp4}) dispatched on the Metal 4 matmul2d
+strided-view lane; a lane-less dtype goes through the strict-dispatch funnel.
+Legality in the tracer authority is checked against the compiling target, not
+the CPU table. Evidence: `tests/unit/test_apple_jit_lowp_front_door.py` (7
+owning-Mac rows, exact-bytes oracle). No performance claim.
+
 ## Shared TilingPass matmul epilogue preserved — 2026-09-15
 
 Owner E2E-REAL-6; sync `TILING-MATMUL-EPILOGUE-2026-09-15`. The shared
@@ -165,9 +178,9 @@ Remaining actions:
    family into the default pipeline for the 8/4-bit pairs only (f16 retained
    at every shape, bf16 within ±10% of its own runtime entry). Now open:
    an arbiter bucket for bf16 ≤ 1024 square and weight-only FP8 decode
-   (1.6–1.7× at M == 1 with a one-time pack), the `@jit` front door for
-   8/4-bit storage tensors. (The bias-operand `tessera.matmul` form the shared
-   TilingPass used to drop is preserved since 2026-09-15, see the section above.)
+   (1.6–1.7× at M == 1 with a one-time pack). (The `@jit` front door for
+   8/4-bit storage tensors and the bias-operand `tessera.matmul` form are both
+   closed 2026-09-15, see the sections above.)
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

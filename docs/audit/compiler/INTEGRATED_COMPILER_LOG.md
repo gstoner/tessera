@@ -4045,3 +4045,17 @@ Remaining: No backend executes a multi-op value program, so a biased matmul stil
 Evidence: `tests/tessera-ir/phase2/tiling_matmul_epilogue.mlir` (bias, bias + residual on ragged M, residual alone; inner op carries no marker), `tests/tessera-ir/phase8/apple_matmul2d_bias_operand.mlir` (bias-operand matmul → `gpu.matmul2d_epilogue`); full lit 445 passed / 40 unsupported on the Mac (host-free fixtures); registry, tiling and lane unit gates green. No device or performance claim.
 
 <!-- entry-fields:end -->
+
+### 2026-09-15 — the @jit front door for 8/4-bit storage tensors on Apple GPU
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: follow-up to #753 (sync `LOWP-FRONT-DOOR-2026-09-15`).
+
+Outcome: Probing `@jit(target="apple_gpu")` with FP8 / FP4 operands found a hollow green, not a missing feature: the tracer named every numpy dtype it did not know "f32", so an FP8 program traced as an f32 program; the Graph IR spellings of the low-precision types were unparseable (`xxf8E4M3FN`, `!tessera.fp4_e2m1` — a type no dialect defines); and the MPS matmul dispatcher, finding no lane for the dtype, computed the product on the host with numpy while the artifact reported `native_gpu` (the result matched a float64 oracle exactly). Fixed end to end: the tracer names `float8_e4m3fn` / `float8_e5m2` / `float4_e2m1fn` by their canonical storage dtypes; Graph IR spells them as the MLIR 23 builtins `f8E4M3FN` / `f8E5M2` / `f4E2M1FN` (reverse table too); a matmul over storage-only dtypes types its result fp32 (Decision #15a, matching `_promote_two`); the dispatcher routes every low-precision pair — fp8×fp8, fp4×fp4 and the weight-only f16×{fp8, fp4} — through the strided-view MPP matmul2d lane the compiled route also uses, and a dtype with no lane now goes through the fallback funnel (strict dispatch raises) instead of standing in silently; the apple_gpu matmul capability and manifest rows declare the three dtypes. Two shared-frontend fixes rode along: `to_graph_ir_module` verifies legality against the target the caller compiles for instead of always the CPU table, and the jit's Graph IR renders verify against the jit's own target — before this the tracer authority silently lost every GPU-only-dtype program to the AST fallback.
+
+Remaining: The compiled (value-mode) route for a traced FP8 program is proven host-free through the default pipeline (`op_kind = "mtl4_matmul2d"`); the `@jit` default mode still dispatches through the MPS envelope, which now reaches the same Metal kernel — moving the default mode onto the compiled artifact is E2E-REAL-6's general migration, not this item. The arbiter bucket for bf16 ≤ 1024 stays open; the FP8-decode "bucket" is a quantization-policy decision (a different program), not an arbiter choice, and is recorded as such. The bias-operand matmul form dropped by the shared TilingPass is addressed separately (sync `TILING-MATMUL-EPILOGUE-2026-09-15`).
+
+Evidence: `tests/unit/test_apple_jit_lowp_front_door.py` — 13 host-free rows (tracer naming, builtin spellings with round trip, fp32 matmul result, a traced FP8 program lowering to the matmul2d view call through the default pipeline) and 7 owning-Mac rows (five pairs through `@jit` on the Metal view lane against an exact-bytes float64 oracle, f16 unchanged, strict-dispatch refusal of a lane-less dtype); jit, frontend-authority, Apple value-lane, manifest and capability suites 507 passed on the Mac; `dtype_flow`, `apple_target_map` and `support_table` regenerated. No performance claim.
+
+<!-- entry-fields:end -->

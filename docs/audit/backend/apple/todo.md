@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-14
+last_updated: 2026-09-15
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -71,7 +71,7 @@ reported as kind-5 diagnostics rather than wrong answers:
 Matched device timing (Metal 4 counter heap, `benchmark_lowp_matmul2d.py`,
 `lowp_matmul2d.json` in the packet): at 1024^3 / 2048^3 FP8 e4m3 and FP4 run at
 0.81x / 0.77x of MPP fp16, e5m2 at 0.93x / 0.90x, half x e4m3 at 0.92x / 0.88x
--- the same *emulated, not accelerated* result Rigel measured on the M4 Max.
+-- no throughput acceleration measured; this ratio alone does not establish hardware implementation.
 MPP fp16 is 1.34-1.45x the existing `simdgroup_matrix` f32 kernel. The fused
 bias+gelu epilogue is 0.5-5% *slower* on device time than plain matmul plus a
 separate bias/act pass (fp16 and e4m3), so **no fusion promotion**; host packing
@@ -79,6 +79,16 @@ of both operands costs 4-10x the matmul at 2048^3 (e4m3 13.5 ms vs 2.3 ms
 device), so FP8 only pays where operands are packed once and reused. 512^3 rows
 are overhead-dominated and moved 3x between runs; do not cite them. MPS has no
 device clock in this harness (wall only). The incumbent routing is unchanged.
+
+Matched-value follow-through (2026-09-15): the earlier harness matched shapes
+but used unrelated random low-precision codes and did not verify timed inputs.
+`compare_quantized_matmul.py` now pairs exact quantized values with FP16,
+checks each product against a float64 reference before timing, and rejects
+missing device counters. Fresh runtime: 99 accumulation/layout tests pass.
+Three process runs at 2048^3 give 0.772–0.773x E4M3, 0.897–0.898x E5M2,
+0.775–0.776x E2M1 throughput versus matched FP16; smaller shapes are unstable.
+These are storage-capability measurements, not hardware-mechanism proof or
+selector promotion. [Evidence](../../../../benchmarks/baselines/apple_matched_quantized_20260915/README.md).
 
 Host-sweep follow-through (2026-09-15, full non-slow unit sweep on the M1 Max,
 `tessera-opt` rebuilt against HEAD): governance gates caught and fixed five gaps

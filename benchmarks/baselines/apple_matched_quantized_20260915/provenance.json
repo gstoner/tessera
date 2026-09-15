@@ -1,0 +1,6 @@
+{
+  "base_commit": "c8ea88fe",
+  "harness_sha256": "56e8f45b459c3938e79f047fce16500468512df914c21b81cee5b317b6683664",
+  "runtime_source_sha256": "bed7bc054fb14ffccd9c0fed7c1b8f5dc57484d6cff217464dcd7de20c3db56c",
+  "note": "harness import moved into main after measurements; algorithm unchanged"
+}

@@ -7923,3 +7923,5 @@ package tests on it. ROCm-lowering tests gate on the registered passes through
 `compiler_tool.require_tessera_opt(...)` rather than on driver presence.
 Owning outcome for rocm: **follow-up required** — on Princess-Luna and Tajasarus the detector must still return the real `/opt/rocm/core*` root (it carries `.info/version`), and the newly gated sparse/gfx1201/native-package tests must run, not skip; verify with a bare non-interactive pytest on each box. No device, schedule or performance change.
 
+
+Matched-value comparison (`APPLE-METAL41-20260914`, 2026-09-15): benchmark methodology now checks exact quantized operands against float64 before timing. No rocm compiler/runtime changes or device evidence; Apple timing and layout results are not transferable.

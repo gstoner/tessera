@@ -1,0 +1,10 @@
+........................................................................ [ 72%]
+...........................                                              [100%]
+=============================== warnings summary ===============================
+tests/unit/test_apple_gpu_lowp_matmul2d.py::test_lowp_matmul2d_fused_epilogue[silu-False-fp8_e4m3]
+tests/unit/test_apple_gpu_lowp_matmul2d.py::test_lowp_matmul2d_fused_epilogue[silu-False-fp8_e5m2]
+  /Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_lowp_matmul2d.py:286: RuntimeWarning: overflow encountered in exp
+    return v / (1.0 + np.exp(-v))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+99 passed, 2 warnings in 0.92s

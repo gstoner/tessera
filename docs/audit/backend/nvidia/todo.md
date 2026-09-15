@@ -7589,6 +7589,12 @@ Sync `TILING-MATMUL-EPILOGUE-2026-09-15`; owner E2E-REAL-6.
 Not applicable to nvidia execution: the tiled inner K step is unchanged, so the scheduled-matmul recognizers see the same nest; a biased matmul now carries an explicit `tessera.broadcast` + `tessera.add` after the nest instead of failing inside tiling. No sibling correctness or performance proof transfers; no CUDA ABI or dtype change.
 See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-preserved--2026-09-15).
 
+### @jit low-precision front door — 2026-09-15
+
+Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.
+Shared-frontend change assessed: `to_graph_ir_module` now verifies legality against the compiling target (a `GPUTargetProfile` target keeps the CPU table, so nvidia behaviour is unchanged), and Graph IR spells fp8/fp4 as the MLIR builtins `f8E4M3FN`/`f8E5M2`/`f4E2M1FN`. Not applicable to nvidia execution; no dtype admission, ABI or proof change.
+See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-tensors--2026-09-15).
+
 ### Matmul epilogue markers and activation order — 2026-09-15
 
 Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.

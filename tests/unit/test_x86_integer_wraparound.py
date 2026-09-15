@@ -1,5 +1,6 @@
 """The scalar oracle must match non-saturating VNNI without C++ overflow UB."""
 from pathlib import Path
+import platform
 import shutil
 import subprocess
 import pytest
@@ -7,8 +8,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.hardware_avx512  # compiles the AVX-512 VNNI kernel: x86 hosts only
 def test_reference_vnni_wraparound_is_defined_under_ubsan(tmp_path):
+    # Exercises only the scalar reference (`tessera_x86_reference_gemm_u8s8_s32`),
+    # compiled without AVX-512 flags: it needs an x86 compile environment, not
+    # AVX-512 hardware, so it stays in the PR lane on every x86 host (PR #749 review).
+    if platform.machine().lower() not in ('x86_64', 'amd64'):
+        pytest.skip('x86 compile environment required (the kernel TU is x86 C++)')
     compiler = shutil.which('g++')
     if compiler is None:
         pytest.skip('host C++ compiler unavailable')

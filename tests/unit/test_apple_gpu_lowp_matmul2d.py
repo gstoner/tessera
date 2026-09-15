@@ -365,3 +365,25 @@ def test_bias_act_pass_respects_view_and_padding(lane):
     R.apple_gpu_mtl4_bias_act_f32(C, np, bias=bias, act="relu", N=N)
     np.testing.assert_allclose(C[:, :N], ref, rtol=1e-6, atol=1e-6)
     assert np.array_equal(C[:, N:], keep)
+
+
+def test_bias_act_pass_guards_ragged_rows(lane):
+    """PR #749 review: the dispatch rounds the y grid up to whole threadgroups,
+    so a ragged M ran threads at m >= M against C[m*ldc + n] past the buffer
+    (masked by pool-bucket rounding for most shapes; M=127, N=ldc=513 sits at a
+    bucket edge). Both coordinates are guarded now; the pass must be exact on
+    that shape and leave nothing outside the view touched."""
+    M, N, ldc = 127, 513, 513
+    rng = np.random.default_rng(31)
+    C = rng.standard_normal((M, ldc)).astype(np.float32)
+    bias = rng.standard_normal(N).astype(np.float32)
+    ref = _epi_ref(C.astype(np.float64), bias.astype(np.float64), "silu")
+    R.apple_gpu_mtl4_bias_act_f32(C, np, bias=bias, act="silu", N=N)
+    np.testing.assert_allclose(C, ref, rtol=1e-6, atol=1e-6)
+    # And a padded output: columns past N untouched with the ragged M.
+    C2 = rng.standard_normal((M, ldc + 7)).astype(np.float32)
+    keep = C2[:, N:].copy()
+    ref2 = _epi_ref(C2[:, :N].astype(np.float64), bias.astype(np.float64), "gelu")
+    R.apple_gpu_mtl4_bias_act_f32(C2, np, bias=bias, act="gelu", N=N)
+    np.testing.assert_allclose(C2[:, :N], ref2, rtol=1e-5, atol=1e-5)
+    assert np.array_equal(C2[:, N:], keep)

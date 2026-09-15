@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-06
+last_updated: 2026-09-15
 audit_role: theme
 ---
 
@@ -18,6 +18,31 @@ transformation**, **native execution**, and **measured selection**. The
 [execution matrix](../generated/runtime_execution_matrix.md) provide the
 registry/evidence projections. Reconcile stale prose against source and exact
 proof scope; do not promote all variants of a domain from one kernel.
+
+**Status is generated, not written here.** The
+[domain proof ladder](../generated/domain_proof_ladder.md) derives, per domain,
+the registry rows, the AD-ledger rows (adjoint / device-verified), the native
+executable rows per target and the plan owners from those registries; it is
+drift-gated, and `tests/unit/test_domain_audit_routing.py` fails this document
+when it cites a plan ID the integrated plan has retired or re-routed. Read the
+ladder before this prose; an empty native column there is a finding.
+
+## Routing to the integrated compiler plan
+
+The plan reorganized into the foundation program (cuts F0–F5) after this audit
+was written; the W-items it used to cite are now `successor` rows. Current
+owners, as the plan's routing index states them:
+
+| Domain boundary | Plan owner(s) | Was cited as |
+|---|---|---|
+| Batched native GA products, rotor fusion, packed grades, PGA/CGA | [W6.4](../compiler/INTEGRATED_COMPILER_PLAN.md#w64) (owner: [GA/EBM review](GA_EBM_ARCHITECTURE_REVIEW.md)); higher-order / jets under [AD-HIGHER-1](../compiler/INTEGRATED_COMPILER_PLAN.md#ad-higher-1) | W3.6 → W6.4; W6.3 → AD-HIGHER-1 |
+| Traceable energy bodies, effects, resident sampler loops | [W4-PRODUCT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#w4-product-1) (frontend CFG/effects), [AD-SOLVER-IFT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#ad-solver-ift-1) (implicit differentiation, OT primitives) | W3.5 → AD-SOLVER-IFT-1; W4 → W4-PRODUCT-1 |
+| Saved-state / residual policy, device ownership | [AD-RESIDUAL-EVAL-1](../compiler/INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1), [W2.4a](../compiler/INTEGRATED_COMPILER_PLAN.md#w24a) | W5.1 → AD-RESIDUAL-EVAL-1 |
+| Attention / persistent state selectors and tiled SSD | [W5.2](../compiler/INTEGRATED_COMPILER_PLAN.md#w52), [W5.2f](../compiler/INTEGRATED_COMPILER_PLAN.md#w52f) | unchanged |
+| Field calculus, PDE, spectral policy | [MSW-9](../compiler/INTEGRATED_COMPILER_PLAN.md#msw-9), [TSOL-POLICY-PHYS-1](../compiler/INTEGRATED_COMPILER_PLAN.md#tsol-policy-phys-1), [TSOL-PHYS-TAIL-1](../compiler/INTEGRATED_COMPILER_PLAN.md#tsol-phys-tail-1); PDE contract under [PDE-STENCIL-FOUNDATION-1](../compiler/PDE_STENCIL_CAPABILITY_PLAN.md) | unchanged |
+| Game theory / structured contractions | [TSOL-PHYS-TAIL-1](../compiler/INTEGRATED_COMPILER_PLAN.md#tsol-phys-tail-1) | unchanged |
+| Sharding and distributed execution | [DIST-NATIVE-1](../compiler/INTEGRATED_COMPILER_PLAN.md#dist-native-1), [TSOL-SHARD-1](../compiler/INTEGRATED_COMPILER_PLAN.md#tsol-shard-1) | W5.4 → DIST-NATIVE-1 |
+| Riemannian OT workload | [RIEMANNIAN-OT](../compiler/INTEGRATED_COMPILER_PLAN.md#riemannian-ot) | unchanged |
 
 ## Current boundaries
 
@@ -48,16 +73,16 @@ proof scope; do not promote all variants of a domain from one kernel.
 
 ## Improving domain support through the shared foundation
 
-1. **W3.6: batched native GA first.** Carry algebra, grades, shape and numerical
+1. **W6.4 (formerly W3.6): batched native GA first.** Carry algebra, grades, shape and numerical
    policy from the frontend into native products. Prove that the rotor fusion
    reaches the selected package; retain general product-table math as oracle.
-2. **W3.5/W4: traceable energy and gradient bodies.** Preserve a defined reference
+2. **W4-PRODUCT-1 with AD-SOLVER-IFT-1 (formerly W3.5/W4): traceable energy and gradient bodies.** Preserve a defined reference
    path for opaque callbacks. For supported traces, generate native derivatives,
    explicit RNG/state and resident loops; reject unsupported captures/effects.
-3. **W5.1/W2.4a: measured state/residual policy.** Use shared persistent tapes,
+3. **AD-RESIDUAL-EVAL-1 (formerly W5.1) with W2.4a: measured state/residual policy.** Use shared persistent tapes,
    alias/generation proofs and completion ownership. Domain-only checkpoint
    annotations are not executable policies.
-4. **W6.4 with W6.3: native finite-algebra lowering.** Reuse a typed multiplication
+4. **W6.4 with AD-HIGHER-1 (formerly W6.3): native finite-algebra lowering.** Reuse a typed multiplication
    table and layout machinery across Clifford and jets. New shared production
    lowering goes through MLIR/LLVM, not another `emit/` source generator.
 5. **Promote one end-to-end workload per backend.** Start with batched rotor
@@ -70,3 +95,37 @@ The [GA/EBM architecture review](GA_EBM_ARCHITECTURE_REVIEW.md) supplies detaile
 acceptance criteria. The [active AD plan](../compiler/AUTODIFF_EXECUTION_PLAN.md)
 owns derivative/tape obligations. Backend queues own execution and performance;
 this documentation update grants no new device-support status.
+
+## Drift review — 2026-09-15
+
+Re-read against source, the generated dashboards and the plan after the
+foundation-program reorganization (413 commits since this audit's date):
+
+- **Plan nomenclature had drifted.** Every W-item the improvement list cited
+  had become a `successor` row (W3.5 → AD-SOLVER-IFT-1, W3.6 → W6.4,
+  W5.1 → AD-RESIDUAL-EVAL-1, W6.3 → AD-HIGHER-1); the routing table above and
+  the renamed items are the correction. The new gate keeps it from recurring.
+- **Native GA/EBM execution exists on ROCm and is not described here.** The
+  execution matrix carries `rocm_clifford_compiled` (Cl(3,0) table-driven
+  bilinear products), `rocm_ebm_compute_compiled` and
+  `rocm_ebm_langevin_compiled` as `native_gpu` rows on gfx1151, alongside the
+  Apple GPU Clifford/EBM lanes the test tree exercises. The "Existing
+  capability" column's "specialized kernels" undersold this; the ladder now
+  reports it per target so this prose need not.
+- **Code claims still hold.** `ExpandProductTable.cpp` still restricts v1 to
+  rank-1 static tensors (batched lowering remains W6.4's gate);
+  `ebm/energy.py::langevin_step` still takes finite differences when no
+  `grad_fn` is supplied (the numerical-gradient default under W4-PRODUCT-1).
+- **Higher-order AD moved.** Native HVP execution and attention JVP landed in
+  the compiler (2026-09-13, `native_hvp.py`, `native_attention_jvp.py`) under
+  AD-HIGHER-1; the GA/EBM review's W6.4 acceptance ("native jet coefficients
+  require scaling, order-zero control, numeric policy") is now the next slice
+  on that owner rather than a pre-requisite the tree lacks.
+- **Domain suites are green on the Mac** (852 passed, 18 skipped across the
+  Clifford, GA, EBM, jet and algebra files on 2026-09-15); that is host-free
+  and Apple evidence only and transfers nothing to ROCm or CUDA.
+
+The corresponding engineering loops: the generated
+[proof ladder](../generated/domain_proof_ladder.md) (drift-gated) and
+`tests/unit/test_domain_audit_routing.py` (routing gate). Both are named in
+the plan's maintenance rules.

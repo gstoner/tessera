@@ -89,6 +89,16 @@ def _r_bootstrap_prune_csv() -> str:
     return bootstrap_prune_audit.render_csv()
 
 
+def _r_domain_proof_ladder() -> str:
+    from . import domain_proof_ladder
+    return domain_proof_ladder.render_markdown()
+
+
+def _r_domain_proof_ladder_csv() -> str:
+    from . import domain_proof_ladder
+    return domain_proof_ladder.render_csv()
+
+
 def _r_primitive_route_map() -> str:
     from . import primitive_route_map
     return primitive_route_map.render_markdown()
@@ -518,6 +528,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "bootstrap_prune_gap.md", _r_bootstrap_prune,
         csv_path=_GEN / "bootstrap_prune_gap.csv",
         render_csv=_r_bootstrap_prune_csv,
+    ),
+    # ── Domain proof ladder: the domain audit's four proof columns, derived ──
+    GeneratedDoc(
+        "domain_proof_ladder", "compiler_progress",
+        _GEN / "domain_proof_ladder.md", _r_domain_proof_ladder,
+        csv_path=_GEN / "domain_proof_ladder.csv",
+        render_csv=_r_domain_proof_ladder_csv,
     ),
     # ── The join between per-primitive coverage and the MLIR/LLVM route ──
     GeneratedDoc(

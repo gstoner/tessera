@@ -406,6 +406,12 @@ remainder stays with its owner and is not silently declared complete.
   OS versions, command pins, budgets or governance decisions into this queue.
 - Scoped acceptance remains in its owner document; the global queue chooses
   sequencing, not duplicate domain designs. The log has no current next-order.
+- Theme audits route to this queue and are gated on it: the
+  [domain audit](../domain/DOMAIN_AUDIT.md) may cite only IDs in the routing
+  index, must name the destination beside any `successor`/`archive` ID, and
+  reads status from the generated
+  [domain proof ladder](../generated/domain_proof_ladder.md)
+  (`tests/unit/test_domain_audit_routing.py`, `check_generated_docs.sh`).
 
 ## Routing index
 

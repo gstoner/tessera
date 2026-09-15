@@ -78,6 +78,7 @@ and gates and are excluded from this contract.
 | [README.md](README.md) | Folder map and authority rules. |
 | [op_target_conformance.md](op_target_conformance.md) | Drift-gated op-by-target conformance dashboard. |
 | [standalone_primitive_coverage.md](standalone_primitive_coverage.md) | Drift-gated standalone primitive coverage dashboard. |
+| [generated/domain_proof_ladder.md](generated/domain_proof_ladder.md) | Drift-gated per-domain proof ladder (registry / AD ledger / native execution / plan owners) behind the domain audit. |
 | [generated/compiler_progress.md](generated/compiler_progress.md) | Generated all-up compiler-progress dashboard: phase/IR state, primitives, integration, backend/codegen pathways, and open work. |
 | [generated/](generated/) | Script/test-owned generated dashboards. |
 

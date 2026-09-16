@@ -76,3 +76,13 @@ func.func @matmul_unknown_activation(%a: tensor<32x64xf32>, %b: tensor<64x48xf32
   %0 = tessera.matmul %a, %b {activation = "swish2"} : (tensor<32x64xf32>, tensor<64x48xf32>) -> tensor<32x48xf32>
   return %0 : tensor<32x48xf32>
 }
+
+// A non-string activation attribute (a programmatic enum) is not "absent":
+// the nest is left untouched rather than stripped into a plain matmul.
+// CHECK-LABEL: func.func @matmul_enum_activation
+// CHECK-NOT: scf.for
+// CHECK: tessera.matmul %arg0, %arg1 {activation = 2 : i64}
+func.func @matmul_enum_activation(%a: tensor<32x64xf32>, %b: tensor<64x48xf32>) -> tensor<32x48xf32> {
+  %0 = tessera.matmul %a, %b {activation = 2 : i64} : (tensor<32x64xf32>, tensor<64x48xf32>) -> tensor<32x48xf32>
+  return %0 : tensor<32x48xf32>
+}

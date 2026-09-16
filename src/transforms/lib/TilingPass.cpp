@@ -238,8 +238,14 @@ struct TileMatmul : public RewritePattern {
     // activation -> residual). Left on the inner K step it would apply per
     // partial product; it is materialized once on the completed reduction.
     StringRef activation = "none";
-    if (auto act = op->getAttrOfType<StringAttr>("activation")) {
-      activation = act.getValue();
+    if (Attribute act = op->getAttr("activation")) {
+      // A present activation must be a known string. A non-string attribute
+      // (an integer enum from a programmatic producer) is not "absent": it is
+      // an epilogue this pass cannot re-apply, so the nest is left untouched
+      // rather than stripped into an unactivated matmul (review of #754).
+      auto str = dyn_cast<StringAttr>(act);
+      if (!str) return failure();
+      activation = str.getValue();
       if (activation != "none" && activation != "relu" && activation != "gelu" &&
           activation != "silu")
         return failure();  // unknown activation: leave the op for its verifier

@@ -1,0 +1,7 @@
+{
+ "python/tessera/compiler/native_row_program.py": "a070d93b8aa9dd6e8f5b1700dc589a04b3be6eb572cf3b108277bd4171270fe6",
+ "python/tessera/compiler/native_gpu_storage.py": "a728b2bf1276ecbcc05c270207891fd5ac5a7e0869e2bc6886a9c2353ef7e12d",
+ "src/transforms/lib/RowProgramToGPUPass.cpp": "33b5defcc6815154ca28f383d93fd6ea0dccba9a9899a1b0e502f837d0e81290",
+ "benchmarks/record_row_program_math_precision.py": "662cfe246f0a7ce0c53bce1a57cda202aa699501a705157de488a397c9018f3e",
+ "tests/unit/test_row_program_math_admission.py": "2680ebf7f9d21b24e08a6cbb2eab6af850fa95bf101b9dfa7ef48515f0208dd0"
+}

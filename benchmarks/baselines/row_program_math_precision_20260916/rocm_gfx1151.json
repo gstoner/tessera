@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host": "Princess-Luna",
+  "compiler_sha256": "46cba5f63ad19f6ee6ec8ae34f30a68714e824c65a739b6ad08ea69e3dd1294b",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "recorder_sha256": "662cfe246f0a7ce0c53bce1a57cda202aa699501a705157de488a397c9018f3e",
+  "rows": [
+    {
+      "op": "math.absf",
+      "plan": "bit_exact",
+      "declared": [
+        "math.absf:bit_exact"
+      ],
+      "domains": [
+        [
+          -1000000.0,
+          1000000.0
+        ]
+      ],
+      "points": 16384,
+      "max_ulp": 0,
+      "worst_input": null,
+      "device_result": null,
+      "host_result": null,
+      "non_finite_disagreements": 0
+    },
+    {
+      "op": "math.cos",
+      "plan": "measured",
+      "declared": [
+        "math.cos:measured"
+      ],
+      "domains": [
+        [
+          -3.14159265,
+          3.14159265
+        ],
+        [
+          -100.0,
+          100.0
+        ],
+        [
+          -1000000.0,
+          1000000.0
+        ]
+      ],
+      "points": 49152,
+      "max_ulp": 1,
+      "worst_input": -3.071408748626709,
+      "device_result": -0.9975380897521973,
+      "host_result": -0.997538149356842,
+      "non_finite_disagreements": 0
+    },
+    {
+      "op": "math.exp",
+      "plan": "measured",
+      "declared": [
+        "math.exp:measured"
+      ],
+      "domains": [
+        [
+          -87.0,
+          88.0
+        ],
+        [
+          -1.0,
+          1.0
+        ],
+        [
+          -1e-06,
+          1e-06
+        ]
+      ],
+      "points": 49152,
+      "max_ulp": 2,
+      "worst_input": -86.14545440673828,
+      "device_result": 3.868160535984411e-38,
+      "host_result": 3.868161096503797e-38,
+      "non_finite_disagreements": 0
+    },
+    {
+      "op": "math.log",
+      "plan": "measured",
+      "declared": [
+        "math.log:measured"
+      ],
+      "domains": [
+        [
+          1e-30,
+          1.0
+        ],
+        [
+          1.0,
+          1e+30
+        ],
+        [
+          0.5,
+          2.0
+        ]
+      ],
+      "points": 49152,
+      "max_ulp": 3,
+      "worst_input": 0.7044497132301331,
+      "device_result": -0.3503383696079254,
+      "host_result": -0.35033828020095825,
+      "non_finite_disagreements": 0
+    },
+    {
+      "op": "math.sqrt",
+      "plan": "rounding_explicit",
+      "declared": [
+        "math.sqrt:rounding_explicit"
+      ],
+      "domains": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          1.0,
+          1000000.0
+        ],
+        [
+          1e-30,
+          1e-20
+        ]
+      ],
+      "points": 49152,
+      "max_ulp": 0,
+      "worst_input": null,
+      "device_result": null,
+      "host_result": null,
+      "non_finite_disagreements": 0
+    }
+  ],
+  "exact_ops": [
+    "math.absf",
+    "math.sqrt"
+  ],
+  "inexact_ops": {
+    "math.cos": 1,
+    "math.exp": 2,
+    "math.log": 3
+  },
+  "proofs": [
+    "every op the row-program emitter admits is measured against numpy f32 on this device over its declared input domains, at 16384 points per domain",
+    "each kernel declares its own admission plan in tessera.row_program.math, and the recorder refuses a kernel whose declaration does not match the table",
+    "no result disagrees with the host on finiteness (a lowering defect would show here, not as a rounding difference)"
+  ],
+  "envelope": "f32 unary math ops inside one cooperative row-program kernel; accuracy against the host reference on this device and this toolchain only",
+  "promotion_eligible": false,
+  "measured_performance": false,
+  "rocm_chip_env": null
+}

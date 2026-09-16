@@ -19,6 +19,7 @@
 
 #include "tessera/Clifford/CliffordDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "tessera/Clifford/CliffordPasses.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -39,11 +40,12 @@ int main(int argc, char **argv) {
   registry.insert<arith::ArithDialect>();
   registry.insert<tensor::TensorDialect>();
   registry.insert<scf::SCFDialect>();
+  registry.insert<math::MathDialect>();
   registry.insert<func::FuncDialect>();
 
   // Individual passes.
   registerPass(tessera::createCliffordAnnotateAlgebraPass);
-  registerPass(tessera::createCliffordExpandProductTablePass);
+  registerPass([] { return tessera::createCliffordExpandProductTablePass(); });
   registerPass(tessera::createCliffordGradeFusionPass);
   registerPass(tessera::createCliffordRotorSandwichFoldPass);
 

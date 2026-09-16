@@ -936,9 +936,10 @@ class _LazyCompiledCallable(CliffordCompiledCallable):
         self._compiled = True
 
 
-def package_clifford_geo_product_cpu(shape, *, algebra=(3, 0, 0), grades=None):
-    """A runtime artifact for one batched geometric product on the MLIR/LLVM
-    CPU lane (execution-matrix row ``cpu`` / ``cpu_clifford_geo_product_llvm_jit``).
+def package_clifford_cpu(op, shape, *, algebra=(3, 0, 0), grades=None):
+    """A runtime artifact for one batched Clifford op on the MLIR/LLVM CPU
+    lane (execution-matrix row ``cpu`` / ``cpu_clifford_llvm_jit``;
+    ``op`` is a `tessera_clifford` mnemonic from ``_jit_boundary.CLIFFORD_JIT_OPS``).
 
     ``shape`` is the admitted ``[..., 2**n]`` operand shape for ``Cl(p, q, r)``;
     ``grades`` optionally restricts the emitted table to those output grades.
@@ -950,6 +951,8 @@ def package_clifford_geo_product_cpu(shape, *, algebra=(3, 0, 0), grades=None):
     """
     from ..runtime import RuntimeArtifact
     from .. import _jit_boundary as jb
+    if op not in jb.CLIFFORD_JIT_OPS:
+        raise CliffordJitError(f"clifford lane has no lowering for {op!r}")
     p, q, r = (int(x) for x in algebra)
     if min(p, q, r) < 0 or p + q + r > 4:
         raise CliffordJitError("clifford lane admits Cl(p, q, r) with 0 <= p+q+r <= 4")
@@ -963,9 +966,14 @@ def package_clifford_geo_product_cpu(shape, *, algebra=(3, 0, 0), grades=None):
         raise CliffordJitError("libtessera_jit was built without the Clifford lane "
                                "(configure with -DTESSERA_BUILD_CLIFFORD_BACKEND=ON)")
     return RuntimeArtifact(metadata={
-        "target": "cpu", "compiler_path": "cpu_clifford_geo_product_llvm_jit", "executable": True,
-        "kernel_id": f"clifford_geo_product_cl{p}{q}{r}_" + "x".join(map(str, shape)),
-        "op": "clifford_geometric_product", "algebra": (p, q, r), "shape": shape,
+        "target": "cpu", "compiler_path": "cpu_clifford_llvm_jit", "executable": True,
+        "kernel_id": f"clifford_{op}_cl{p}{q}{r}_" + "x".join(map(str, shape)),
+        "op": f"clifford_{op}", "clifford_op": op, "algebra": (p, q, r), "shape": shape,
         "grades": wanted, "dtype": "f32",
     })
+
+
+def package_clifford_geo_product_cpu(shape, *, algebra=(3, 0, 0), grades=None):
+    """Geometric-product artifact on the CPU lane; see :func:`package_clifford_cpu`."""
+    return package_clifford_cpu("geo_product", shape, algebra=algebra, grades=grades)
 

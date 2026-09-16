@@ -33681,18 +33681,20 @@ def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
     from . import _jit_boundary as jb
 
     metadata = artifact.metadata or {}
+    op = str(metadata.get("clifford_op", "geo_product"))
     algebra = tuple(int(x) for x in metadata.get("algebra", (3, 0, 0)))
     grades = metadata.get("grades")
     shape = tuple(int(d) for d in metadata.get("shape", ()))
-    if len(algebra) != 3 or not shape:
-        raise ValueError("clifford lane artifact requires algebra and shape metadata")
-    if len(args) != 2:
-        raise ValueError("clifford geometric product takes exactly two operands")
-    a, b = (np.ascontiguousarray(np.asarray(value, dtype=np.float32)) for value in args)
-    if a.shape != shape or b.shape != shape:
+    if len(algebra) != 3 or not shape or op not in jb.CLIFFORD_JIT_OPS:
+        raise ValueError("clifford lane artifact requires an admitted op, algebra and shape metadata")
+    arity = jb.CLIFFORD_JIT_OPS[op][0]
+    if len(args) != arity:
+        raise ValueError(f"clifford {op} takes exactly {arity} operand(s)")
+    operands = [np.ascontiguousarray(np.asarray(value, dtype=np.float32)) for value in args]
+    if any(x.shape != shape for x in operands):
         raise ValueError(f"clifford lane artifact admits operands of shape {shape}")
-    return jb.jit_clifford_geo_product(a, b, algebra=algebra,
-                                       grades=None if grades is None else tuple(int(g) for g in grades))
+    return jb.jit_clifford_op(op, *operands, algebra=algebra,
+                              grades=None if grades is None else tuple(int(g) for g in grades))
 
 
 def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

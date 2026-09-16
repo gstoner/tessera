@@ -684,7 +684,7 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // the compile-time Cayley table (batched over leading axes) to scf/tensor/
   // arith that one-shot bufferization consumes like any other tensor loop.
   pm1a.addPass(tessera::createCliffordGradeFusionPass());
-  pm1a.addPass(tessera::createCliffordExpandProductTablePass());
+  pm1a.addPass(tessera::createCliffordExpandProductTablePass(/*expandRotorSandwich=*/true));
 #endif
   pm1a.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
   // Elementwise arith/math ops ON TENSORS (e.g. the paired autodiff pass's

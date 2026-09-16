@@ -856,9 +856,10 @@ layout, §7.12.1 WMMA hazards, §11.6.2 load-transpose, §5.6 barriers
 
 ### CUDA — The-Super-Bear (Ubuntu 26.04 WSL2)
 
-Threadripper 3970X (**Zen 2, no AVX-512** — x86 proof stays on Strix Halo) +
-**RTX 5070 (sm_120)**, WSL2 CUDA (toolkit only, `/dev/dxg`, no driver
-package), reached as `ssh -p 5023 angstorms@192.168.1.39` (alias `ssh
+Threadripper 3970X (**Zen 2, 32 cores / 64 threads, no AVX-512** — x86 proof
+stays on the Zen 5 hosts), **128 GB** RAM, **RTX 5070 12 GB GDDR7 (192-bit,
+MSI Ventus 3X OC, 2557 MHz boost; sm_120)** — owner-recorded 2026-09-16 —
+WSL2 CUDA (toolkit only, `/dev/dxg`, no driver package), reached as `ssh -p 5023 angstorms@192.168.1.39` (alias `ssh
 super-bear`). Fleet is on **CUDA 13.4.1 / nvcc
 13.4.59 / driver 610.88**, and `compiler/gpu_target.py` pins **13.4 / PTX ISA
 9.4** to match (bumped 2026-09-15); older 13.3 packets are historical.

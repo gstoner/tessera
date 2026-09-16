@@ -1248,18 +1248,20 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
-    ("cpu", "cpu_clifford_geo_product_llvm_jit"): ExecutionRow(
-        target="cpu", compiler_path="cpu_clifford_geo_product_llvm_jit",
+    ("cpu", "cpu_clifford_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_clifford_llvm_jit",
         execution_kind="native_cpu", executable=True,
         executor_id="cpu_clifford_llvm_jit", runtime_status="success",
-        reason="W6.4 batched native GA: a tessera_clifford.geo_product on "
-               "[..., 2**n] f32 tensors (Cl(p,q,r), optional output-grade "
-               "restriction) lowers through GradeFusion + ExpandProductTable "
-               "to an scf.for nest over the compile-time Cayley table inside "
+        reason="W6.4 batched native GA: the tessera_clifford product family "
+               "(geo_product with optional output-grade restriction, wedge, "
+               "left_contract, inner, norm, reverse, grade_involute, conjugate, "
+               "hodge_star, grade, rotor_sandwich) on [..., 2**n] f32 tensors "
+               "of Cl(p,q,r) lowers through GradeFusion + ExpandProductTable to "
+               "an scf.for nest over the compile-time Cayley table inside "
                "libtessera_jit and executes through MLIR/LLVM on the host CPU "
                "(M1 Max, Zen 5, Zen 2 parity with the standalone GA reference, "
                "2026-09-16). No numpy fallback; out-of-envelope requests raise.",
-        execution_mode="mlir_llvm_jit", op_family="clifford_geometric_product",
+        execution_mode="mlir_llvm_jit", op_family="clifford",
         evidence_target="cpu_x86_64",
         numerical_fixture="tests/unit/test_clifford_jit_native.py",
         proof_build="llvm23-core+clifford+jit"),

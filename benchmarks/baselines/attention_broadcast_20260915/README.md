@@ -21,7 +21,7 @@ expansion of the bias and compared to the numpy oracle
 |---|---|---|
 | `attention_batch_head_{3_5,5_3}.json` | `[1,1,Q,K]` | shared across batch and head (re-recorded under the v3 ABI) |
 | `attention_key_padding_{3_5,5_3}.json` | `[1,1,1,K]` | one additive key-padding row for every batch, head and query |
-| `attention_per_query_{3_5,5_3}.json` | `[B,Hq,Q,1]` | a per-(batch, head, query) scalar over every key |
+| `attention_per_query_{3_5,5_3}.json` | `[B,Hq,Q,1]` | a per-(batch, head, query) constant over every key, carried as a per-row power-of-two magnitude so the f32 rounding signature identifies the row the kernel read (a constant would cancel out of the softmax); the row must also differ from the unbiased output |
 
 `3_5` is Q=3/K=5 (ragged, K>Q) and `5_3` is Q=5/K=3. The key-axis forms carry
 a `-inf` column at `K//2` that is masked wherever the axis broadcasts; the

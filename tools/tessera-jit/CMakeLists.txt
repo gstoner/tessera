@@ -40,6 +40,19 @@ endif()
 
 add_library(tessera_jit SHARED tessera_jit.cpp)
 
+# Domain dialects ride the same lane when their backend is built: the Clifford
+# (geometric-algebra) dialect's GradeFusion + ExpandProductTable run ahead of
+# tessera->linalg, so a `tessera_clifford.geo_product` on `[..., dim]` tensors
+# executes through MLIR/LLVM here (W6.4, 2026-09-16) rather than through a
+# Python-emitted kernel. Absent the backend the symbol reports no support.
+if(TESSERA_BUILD_CLIFFORD_BACKEND)
+  target_compile_definitions(tessera_jit PRIVATE TESSERA_JIT_HAVE_CLIFFORD=1)
+  target_include_directories(tessera_jit PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/solvers/clifford/include
+    ${CMAKE_BINARY_DIR}/src/solvers/clifford)
+  target_link_libraries(tessera_jit PRIVATE TesseraClifford MLIRSCFDialect)
+endif()
+
 target_link_libraries(tessera_jit PRIVATE
   # Tessera
   TesseraIR

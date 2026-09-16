@@ -652,6 +652,69 @@ def _jit_binary(op_name: str, sym: str, a: np.ndarray, b: np.ndarray) -> np.ndar
         destroy(handle)
 
 
+def has_clifford() -> bool:
+    """Whether libtessera_jit was built with the Clifford (geometric algebra)
+    dialect lane (``TESSERA_BUILD_CLIFFORD_BACKEND``)."""
+    if not is_available():
+        return False
+    lib = _load()
+    sym = getattr(lib, "tessera_jit_has_clifford", None)
+    if sym is None:  # a library older than the lane
+        return False
+    sym.restype = ctypes.c_int
+    sym.argtypes = []
+    return bool(sym())
+
+
+def jit_clifford_geo_product(
+    a: np.ndarray, b: np.ndarray, *, algebra: tuple[int, int, int] = (3, 0, 0),
+    grades: Sequence[int] | None = None,
+) -> np.ndarray:
+    """Geometric product of ``[..., 2**n]`` multivector tensors through the
+    MLIR/LLVM lane (W6.4 batched native GA, 2026-09-16).
+
+    The Clifford dialect's GradeFusion + ExpandProductTable emit the
+    compile-time Cayley table of ``Cl(p, q, r)`` once inside an scf.for nest
+    over the leading axes; ``grades`` restricts the emitted table to those
+    output grades (the other coefficients are written as zero, never
+    computed). f32 only; rank >= 1; no numpy fallback -- an out-of-envelope
+    request raises. Requires :func:`has_clifford`.
+    """
+    if not has_clifford():
+        raise TesseraJitError("libtessera_jit was built without the Clifford lane "
+                              "(configure with -DTESSERA_BUILD_CLIFFORD_BACKEND=ON)")
+    p, q, r = (int(x) for x in algebra)
+    if min(p, q, r) < 0 or p + q + r > 4:
+        raise TesseraJitError("clifford lane admits Cl(p, q, r) with 0 <= p+q+r <= 4")
+    dim = 1 << (p + q + r)
+    a = np.ascontiguousarray(a, dtype=np.float32)
+    b = np.ascontiguousarray(b, dtype=np.float32)
+    if a.shape != b.shape or a.ndim < 1 or a.shape[-1] != dim:
+        raise TesseraJitError(
+            f"geometric product requires equal [..., {dim}] operands (got {a.shape}, {b.shape})")
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + "xf32>"
+    attrs = f"algebra = [{p}, {q}, {r}], dtype = \"fp32\""
+    if grades is not None:
+        wanted = sorted({int(g) for g in grades})
+        if not wanted or wanted[0] < 0 or wanted[-1] > p + q + r:
+            raise TesseraJitError("grades must be a non-empty subset of 0..n")
+        attrs += ", tessera.clifford.output_grades = [" + ", ".join(map(str, wanted)) + "]"
+    sym = "tessera_jit_clifford_geo_product"
+    mlir = (
+        f"func.func @{sym}(%a: {t}, %b: {t}) -> {t} {{\n"
+        f"  %0 = \"tessera_clifford.geo_product\"(%a, %b) {{{attrs}}} : ({t}, {t}) -> {t}\n"
+        f"  return %0 : {t}\n"
+        f"}}\n"
+    )
+    handle = compile_module(mlir)
+    try:
+        out = np.empty_like(a)
+        invoke(handle, sym, [a, b], out)
+        return out
+    finally:
+        destroy(handle)
+
+
 def jit_add(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Production-lane elementwise add (rank>=1, f32 or bf16). No fallback."""
     return _jit_binary("tessera.add", "tessera_jit_add", a, b)

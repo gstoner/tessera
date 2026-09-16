@@ -11,11 +11,14 @@
 // complexity for marginal benefit at these algebra sizes — Q1 locks
 // v1 to dim ≤ 16.
 //
-// Restrictions (v1):
-//   - Operands must be rank-1 RankedTensorType<dim x dtype> for now.
-//     Higher-rank (batched) operands raise a diagnostic and skip; a
-//     follow-on sprint can wrap the emission in an scf.for over the
-//     leading axes.
+// Restrictions:
+//   - Operands are static RankedTensorType<[..., dim] x dtype> of equal
+//     shape. Rank 1 is the single multivector (v1). Since 2026-09-16 any
+//     higher rank is the W6.4 batched form: the same compile-time-known
+//     table is emitted once inside an `scf.for` nest over the leading axes
+//     (tensor iter_arg, `tensor.extract` / `tensor.insert` per coefficient),
+//     so the batch loops and the sparse table reach native IR together and
+//     bufferize in place. Dynamic extents fail closed with a diagnostic.
 //   - dtype must be float (f32 / f64 / f16 / bf16).
 //
 // Optimisations (v1):
@@ -31,6 +34,7 @@
 #include "CayleyTable.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -41,6 +45,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <cstdint>
+#include <functional>
 #include <set>
 #include <vector>
 
@@ -91,23 +96,30 @@ struct ExpandProductTablePattern : public RewritePattern {
     int64_t n = p + q + r;
     int64_t dim = int64_t(1) << n;
 
-    // Restrict v1 to rank-1 static tensors.
+    // Static `[..., dim]` operands of one shape; rank 1 is a single
+    // multivector, higher ranks are batched over the leading axes.
     Value lhs = op->getOperand(0);
     Value rhs = op->getOperand(1);
     auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
     auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
     if (!lhsTy || !rhsTy) return failure();
-    if (lhsTy.getRank() != 1 || rhsTy.getRank() != 1) {
-      op->emitWarning(
-          "ExpandProductTable: batched (rank > 1) operands are pending a "
-          "follow-on sprint; skipping");
+    if (lhsTy.getRank() < 1 || !lhsTy.hasStaticShape() || !rhsTy.hasStaticShape()) {
+      op->emitError("ExpandProductTable: operands must be static ranked "
+                    "tensors of shape [..., ")
+          << dim << "]; dynamic or unranked operands are not lowered";
       return failure();
     }
-    if (lhsTy.getShape()[0] != dim || rhsTy.getShape()[0] != dim) {
+    if (lhsTy.getShape() != rhsTy.getShape()) {
+      op->emitError("ExpandProductTable: operand shapes must agree (got ")
+          << lhsTy << " and " << rhsTy << ")";
+      return failure();
+    }
+    if (lhsTy.getShape().back() != dim) {
       op->emitError("ExpandProductTable: operand last-dim must equal ")
           << dim << " for Cl(" << p << ", " << q << ", " << r << ")";
       return failure();
     }
+    const int64_t rank = lhsTy.getRank();
     Type elemTy = lhsTy.getElementType();
     if (!elemTy.isF32() && !elemTy.isF64() && !elemTy.isF16() &&
         !elemTy.isBF16()) {
@@ -139,45 +151,81 @@ struct ExpandProductTablePattern : public RewritePattern {
     const std::vector<bool> rhsMask = bladeMaskFor(op, kRhsGradesAttr, dim);
 
     Location loc = op->getLoc();
-
-    // Pre-extract all lhs and rhs coefficients as scalars.
-    // tensor.extract %lhs[%i_idx] : tensor<dim x elemTy>
-    std::vector<Value> lhsCoeffs(dim), rhsCoeffs(dim);
-    for (int64_t i = 0; i < dim; ++i) {
-      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
-      lhsCoeffs[i] = rewriter.create<tensor::ExtractOp>(loc, lhs, ValueRange{idx});
-      rhsCoeffs[i] = rewriter.create<tensor::ExtractOp>(loc, rhs, ValueRange{idx});
-    }
-
-    // For each output coefficient k, accumulate the relevant (i, j) terms.
     auto zeroAttr = rewriter.getZeroAttr(elemTy);
     Value zero = rewriter.create<arith::ConstantOp>(
         loc, elemTy, cast<TypedAttr>(zeroAttr));
 
-    std::vector<Value> outCoeffs(dim, zero);
-    for (int64_t i = 0; i < dim; ++i) {
-      if (!lhsMask[i]) continue;
-      for (int64_t j = 0; j < dim; ++j) {
-        if (!rhsMask[j]) continue;
-        auto entry = table[i][j];
-        if (entry.sign == 0) continue;
-        int outGrade = tessera::clifford::gradeOfMask(entry.result_mask);
-        if (!wantGrade[outGrade]) continue;
-        // term = lhs[i] * rhs[j]
-        Value prod = rewriter.create<arith::MulFOp>(loc, lhsCoeffs[i], rhsCoeffs[j]);
-        Value updated;
-        if (entry.sign == 1) {
-          updated = rewriter.create<arith::AddFOp>(loc, outCoeffs[entry.result_mask], prod);
-        } else {  // -1
-          updated = rewriter.create<arith::SubFOp>(loc, outCoeffs[entry.result_mask], prod);
-        }
-        outCoeffs[entry.result_mask] = updated;
+    // One multivector product at coordinate `prefix` (the leading indices;
+    // empty for rank 1): extract both coefficient rows, accumulate the
+    // table's surviving (i, j) terms, return the `dim` output coefficients.
+    auto productAt = [&](ArrayRef<Value> prefix) -> std::vector<Value> {
+      std::vector<Value> lhsCoeffs(dim), rhsCoeffs(dim);
+      for (int64_t i = 0; i < dim; ++i) {
+        SmallVector<Value> indices(prefix.begin(), prefix.end());
+        indices.push_back(rewriter.create<arith::ConstantIndexOp>(loc, i));
+        lhsCoeffs[i] = rewriter.create<tensor::ExtractOp>(loc, lhs, indices);
+        rhsCoeffs[i] = rewriter.create<tensor::ExtractOp>(loc, rhs, indices);
       }
-    }
+      std::vector<Value> outCoeffs(dim, zero);
+      for (int64_t i = 0; i < dim; ++i) {
+        if (!lhsMask[i]) continue;
+        for (int64_t j = 0; j < dim; ++j) {
+          if (!rhsMask[j]) continue;
+          auto entry = table[i][j];
+          if (entry.sign == 0) continue;
+          int outGrade = tessera::clifford::gradeOfMask(entry.result_mask);
+          if (!wantGrade[outGrade]) continue;
+          // term = lhs[i] * rhs[j]
+          Value prod = rewriter.create<arith::MulFOp>(loc, lhsCoeffs[i], rhsCoeffs[j]);
+          Value updated;
+          if (entry.sign == 1) {
+            updated = rewriter.create<arith::AddFOp>(loc, outCoeffs[entry.result_mask], prod);
+          } else {  // -1
+            updated = rewriter.create<arith::SubFOp>(loc, outCoeffs[entry.result_mask], prod);
+          }
+          outCoeffs[entry.result_mask] = updated;
+        }
+      }
+      return outCoeffs;
+    };
 
-    // Build the result tensor: tensor.from_elements %c0, %c1, ..., %c{dim-1}.
-    Value resultTensor =
-        rewriter.create<tensor::FromElementsOp>(loc, lhsTy, outCoeffs);
+    Value resultTensor;
+    if (rank == 1) {
+      // Single multivector: tensor.from_elements %c0, ..., %c{dim-1}.
+      std::vector<Value> outCoeffs = productAt({});
+      resultTensor = rewriter.create<tensor::FromElementsOp>(loc, lhsTy, outCoeffs);
+    } else {
+      // Batched: an scf.for nest over the leading axes carrying the result
+      // tensor; every coefficient (pruned grades included, as zero) is
+      // written, so the result is fully defined.
+      Value init = rewriter.create<tensor::EmptyOp>(loc, lhsTy.getShape(), elemTy);
+      Value c0 = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+      Value c1 = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      std::function<Value(int64_t, SmallVector<Value> &, Value)> buildLoops =
+          [&](int64_t axis, SmallVector<Value> &ivs, Value carried) -> Value {
+        if (axis == rank - 1) {
+          std::vector<Value> outCoeffs = productAt(ivs);
+          Value updated = carried;
+          for (int64_t k = 0; k < dim; ++k) {
+            SmallVector<Value> indices(ivs.begin(), ivs.end());
+            indices.push_back(rewriter.create<arith::ConstantIndexOp>(loc, k));
+            updated = rewriter.create<tensor::InsertOp>(loc, outCoeffs[k], updated, indices);
+          }
+          return updated;
+        }
+        Value ub = rewriter.create<arith::ConstantIndexOp>(loc, lhsTy.getShape()[axis]);
+        auto loop = rewriter.create<scf::ForOp>(loc, c0, ub, c1, ValueRange{carried});
+        OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(loop.getBody());
+        ivs.push_back(loop.getInductionVar());
+        Value inner = buildLoops(axis + 1, ivs, loop.getRegionIterArgs()[0]);
+        ivs.pop_back();
+        rewriter.create<scf::YieldOp>(loc, ValueRange{inner});
+        return loop.getResult(0);
+      };
+      SmallVector<Value> ivs;
+      resultTensor = buildLoops(0, ivs, init);
+    }
 
     rewriter.replaceOp(op, resultTensor);
     return success();
@@ -199,7 +247,7 @@ struct CliffordExpandProductTablePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, tensor::TensorDialect>();
+    registry.insert<arith::ArithDialect, scf::SCFDialect, tensor::TensorDialect>();
   }
 
   void runOnOperation() override {

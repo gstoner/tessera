@@ -4115,3 +4115,17 @@ Remaining: Legacy snapshot/import callers still need an explicit gated producer;
 Evidence: [CUDA/HIP replacement packets](../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md) (nine proofs each, source fingerprints), `tests/unit/test_gated_heap.py` (admission refusals and the probe's three failure modes, host-free), `tests/unit/test_arena_replay_pipeline.py`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-16 — batched geometric products execute through the MLIR/LLVM backbone
+
+Owner: [W6.4](INTEGRATED_COMPILER_PLAN.md#w64)
+
+PRs: domain-support stream, first slice (sync `GA-NATIVE-BATCHED-2026-09-16`); also carries the `FLEET-REDS-2026-09-15` NVIDIA/x86 sibling entries Codex asked for on #761.
+
+Outcome: `ExpandProductTable` lowers any static `[..., dim]` operand pair — the compile-time Cayley table emitted once inside an scf.for nest over the leading axes, result tensor as iter_arg, grade pruning unchanged, dynamic extents refused. `libtessera_jit` registers the Clifford dialect and runs GradeFusion + ExpandProductTable ahead of tessera→linalg, so `tessera_clifford.geo_product` compiles and executes through one-shot bufferization and LLVM; `_jit_boundary.jit_clifford_geo_product` and `package_clifford_geo_product_cpu` + `runtime.launch` are the consumers, and the execution matrix carries the `cpu` row the domain proof ladder now counts. Parity with the standalone GA reference for rank 1/2/3, grade-restricted products equal the projection with untouched coefficients zero, non-commutativity preserved, no fallback; verified on the M1 Max, Princess-Luna (Zen 5) and Super-Bear (Zen 2), with the Clifford lit suite 17/17 on all three. Princess-Luna and Super-Bear now configure the Clifford backend ON — until now only the Mac could build the domain dialects.
+
+Remaining: rotor sandwich fold and the remaining Clifford ops have no lowering behind the JIT; ragged batches (static extents only); the GPU package route through the arena pipeline; the acceptance's separate dispatch/allocation/memory/kernel-time measurements (no performance claim); the Python-emitted x86/ROCm/Apple GA kernels stay the device lanes until displaced by measured evidence. EBM's traceable quadratic energy loop is the next domain slice.
+
+Evidence: `tests/unit/test_clifford_jit_native.py` (three CPU hosts), `src/solvers/clifford/test/ir/passes/expand_batched.mlir` + `expand_rejects_dynamic.mlir`, `docs/audit/generated/domain_proof_ladder.md` (`cpu=1` under GA), `docs/audit/generated/runtime_execution_matrix.md`.
+
+<!-- entry-fields:end -->

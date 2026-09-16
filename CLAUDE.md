@@ -609,7 +609,7 @@ specifically — they are irreversible, or they make a claim someone else acts o
   | Need | Box |
   |---|---|
   | ROCm / **gfx1151** (RDNA 3.5), x86 AVX-512 (Zen 5) | **Princess-Luna** (Strix Halo), Ubuntu 26.04 under **WSL2** |
-  | ROCm / **gfx1201** (RDNA4, RX 9070 XT), assertions-ON LLVM/MLIR, x86 backend build | **Tajasarus**, Ubuntu 26.04 under **WSL2** (added 2026-09-13) |
+  | ROCm / **gfx1201** (RDNA4, RX 9070 XT), assertions-ON LLVM/MLIR, x86 backend build, x86 AVX-512 (Zen 5 9800X3D) | **Tajasarus**, Ubuntu 26.04 under **WSL2** (added 2026-09-13) |
   | CUDA / **sm_120** (RTX 5070) | **The-Super-Bear** (Threadripper 3970X, Zen 2: **no AVX-512**), Ubuntu 26.04 under **WSL2**. NR2 Pro (RTX 5070 Ti) is dormant since 2026-08-25; its open rows are owed follow-ups, not results |
   | Metal / Apple CPU + GPU (macOS 27, Xcode 27, Metal 4.1) | **Mac** M1 Max |
 
@@ -836,9 +836,13 @@ the current fleet and stays capability-gated.
 
 ### ROCm RDNA4 + assertions LLVM — Tajasarus (Ubuntu 26.04 WSL2)
 
-Radeon **RX 9070 XT (gfx1201)**, Ubuntu 26.04.1 LTS under WSL2, **ROCm 10.0 /
-HIP 7.15** at `/opt/rocm/core-10.0`, **assertions-enabled LLVM/MLIR 23.1.1**;
-also builds the x86 Target backend. Commissioned 2026-09-13
+**AMD Ryzen 7 9800X3D (Zen 5, 8 cores / 16 threads, AVX-512 incl. bf16/vnni —
+a second x86 AVX-512 proof host beside Princess-Luna; recorded by the owner
+2026-09-16), 32 GB DDR5-6000, 2 TB NVMe**, Radeon **RX 9070 XT 16 GB (gfx1201)**,
+Ubuntu 26.04.1 LTS under WSL2, **ROCm 10.0 / HIP 7.15** at
+`/opt/rocm/core-10.0`, **assertions-enabled LLVM/MLIR 23.1.1**; also builds
+the x86 Target backend. No `libffi-dev` yet, so `libtessera_jit` (the MLIR CPU
+JIT lane) is skipped at configure time there. Commissioned 2026-09-13
 (`docs/audit/backend/rocm/todo.md` §`GFX1201-FOUNDATION-2026-09-13`; packets
 under `benchmarks/baselines/gfx1201_*`). Reached as
 `ssh angstorms@192.168.1.166` (default port 22; mDNS name `tajasarus.local`).
@@ -924,6 +928,10 @@ ninja -C build tessera-opt        # 32 threads; ~1-2 min cold
 
 # EBM / Clifford (GA) dialects are OFF by default — enable them or their passes
 # and lit fixtures silently do not build. Required for the W0 compiler work.
+# Since 2026-09-16 the Clifford backend is also what puts the geometric-algebra
+# lane into libtessera_jit (tessera_jit_has_clifford()); Princess-Luna and
+# Super-Bear `build/` trees configure it ON (the Mac already did), so domain
+# fixtures and the CPU GA lane are fleet-covered, not Mac-only.
 cmake -S . -B build -G Ninja -DTESSERA_BUILD_EBM_BACKEND=ON -DTESSERA_BUILD_CLIFFORD_BACKEND=ON
 
 # Re-verify a C++ pass change end-to-end: rebuild → lit fixture + FileCheck → drift test

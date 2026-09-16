@@ -5284,3 +5284,17 @@ Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
 Not applicable with a reason: no x86 process-isolated heap worker exists and none is claimed; host-free tests only.
 
 Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.
+
+## Fleet reds follow-through — 2026-09-15
+
+Sync `FLEET-REDS-2026-09-15`.
+
+Owner-directed fleet-red follow-through (PR #761), x86 outcome: not applicable with a reason for the packaging selector — `native_storage_target()` chooses a *GPU* storage lane (CUDA or ROCm toolchain); on an x86-only host it returns `None` and the heap replay tests skip honestly, as before. Host CPU JIT build contract: the `tessera-jit` configure guard now skips `libtessera_jit` only when libffi headers or `MLIRExecutionEngine` are missing; on the AVX-512 host (Princess-Luna) both are present and the lane still builds (`ninja -C build` clean, 2026-09-15). `TESSERA_REQUIRE_JIT=ON` makes a missing prerequisite fatal where the CPU JIT lane is claimed. No x86 device evidence is inferred from the Apple or ROCm fixes.
+
+## Batched native geometric products — 2026-09-16
+
+Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
+
+Parity validated on Princess-Luna (Zen 5, AVX-512) and Super-Bear (Zen 2): batched Cl(3,0) geometric products execute through the MLIR/LLVM CPU lane (`libtessera_jit` with the Clifford backend ON) and match the standalone GA reference for rank 1/2/3 and grade-restricted products; Clifford lit 17/17 on both. Both `build/` trees now configure `TESSERA_BUILD_CLIFFORD_BACKEND=ON`. The Python-emitted `x86_clifford_compiled` AVX-512 kernel is unchanged and remains the x86 device lane until the native lowering is measured against it (dispatch/allocation/kernel time separately) — no performance claim.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).

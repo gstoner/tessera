@@ -52,7 +52,8 @@ CLIFFORD_FILES = [
     # GA8 lit fixtures.
     "src/solvers/clifford/test/ir/passes/expand_product_table_cl30.mlir",
     "src/solvers/clifford/test/ir/passes/expand_product_table_cl13.mlir",
-    "src/solvers/clifford/test/ir/passes/expand_rejects_batched.mlir",
+    "src/solvers/clifford/test/ir/passes/expand_batched.mlir",
+    "src/solvers/clifford/test/ir/passes/expand_rejects_dynamic.mlir",
     "src/solvers/clifford/test/ir/passes/grade_fusion_basic.mlir",
     "src/solvers/clifford/test/ir/passes/grade_fusion_multi_consumer.mlir",
     "src/solvers/clifford/test/ir/passes/grade_fusion_then_expand.mlir",
@@ -368,8 +369,11 @@ def test_expand_product_table_emits_arith_and_tensor_ops() -> None:
     assert "rewriter.create<tensor::FromElementsOp>" in body
     # Reads the optional output_grades attribute (grade-fusion savings).
     assert "tessera.clifford.output_grades" in body
-    # Honors the v1 rank-1-only restriction with a diagnostic.
-    assert "rank > 1" in body or "rank-1" in body
+    # W6.4 (2026-09-16): batched operands lower to an scf.for nest carrying the
+    # result tensor; dynamic extents fail closed with a diagnostic.
+    assert "rewriter.create<scf::ForOp>" in body
+    assert "rewriter.create<tensor::InsertOp>" in body
+    assert "dynamic or unranked operands are not lowered" in body
 
 
 def test_expand_product_table_uses_cayley_helper() -> None:
@@ -457,12 +461,24 @@ def test_expand_cl13_fixture_validates_minkowski_sign_flips() -> None:
     assert "algebra = [1, 3, 0]" in fixture
 
 
-def test_expand_rejects_batched_fixture() -> None:
+def test_expand_batched_fixture_lowers_to_loops() -> None:
     fixture = (REPO_ROOT
-        / "src/solvers/clifford/test/ir/passes/expand_rejects_batched.mlir").read_text()
-    assert "tensor<32x8xf32>" in fixture
-    # The op stays in the IR after the failed lowering.
-    assert "tessera_clifford.geo_product" in fixture
+        / "src/solvers/clifford/test/ir/passes/expand_batched.mlir").read_text()
+    assert "tensor<32x8xf32>" in fixture and "tensor<4x5x8xf32>" in fixture
+    assert "CHECK: %[[R:.*]] = scf.for" in fixture
+    assert "tensor.insert" in fixture
+    # No product survives the lowering; the grade-restricted rank-3 case prunes.
+    assert "CHECK-NOT: tessera_clifford.geo_product" in fixture
+    assert "tessera.clifford.output_grades = [2]" in fixture
+
+
+def test_expand_rejects_dynamic_fixture() -> None:
+    fixture = (REPO_ROOT
+        / "src/solvers/clifford/test/ir/passes/expand_rejects_dynamic.mlir").read_text()
+    assert "tensor<?x8xf32>" in fixture
+    assert "dynamic or unranked operands are not lowered" in fixture
+    # The op stays in the IR after the refused lowering.
+    assert "CHECK: tessera_clifford.geo_product" in fixture
 
 
 def test_grade_fusion_basic_fixture_targets_bivector_slice() -> None:

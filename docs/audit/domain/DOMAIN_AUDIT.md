@@ -48,7 +48,7 @@ owners, as the plan's routing index states them:
 
 | Domain | Existing capability | Remaining architectural boundary |
 |---|---|---|
-| Geometric algebra / Clifford | Signature/product-table references, canonical `clifford_*` operations, differentiated tensor shims, specialized kernels and native grade-pruning passes. | Native `ExpandProductTable` remains rank-1; connect batched typed products and rotor fusion to executable native packages. General signatures, packed grades and physical derivatives require their own proof. |
+| Geometric algebra / Clifford | Signature/product-table references, canonical `clifford_*` operations, differentiated tensor shims, specialized kernels and native grade-pruning passes; since 2026-09-16 the batched geometric product lowers natively (`ExpandProductTable` over any static rank) and executes through MLIR/LLVM on the CPU lane (`cpu` row in the ladder). | Rotor fusion and the remaining Clifford ops have no native lowering behind the JIT; the GPU package route through the arena pipeline is not built; the Python-emitted x86/ROCm/Apple kernels are a second implementation until displaced. General signatures, packed grades and physical derivatives require their own proof. |
 | Energy-based models | Reference energies/samplers/losses and specialized update/loss kernels. `geo_sampling.py` uses tape gradients for traceable energies and finite differences otherwise. | The generic `energy.py` Langevin route still uses numerical gradients when no `grad_fn` is supplied. Host gradient evaluation is not a fully resident sampler. Trace an energy body into the native shared AD/loop/ownership path. |
 | Attention / persistent state | Canonical families, scheduled packages and bounded native AD; resident O/LSE and isolated CUDA Q/K JVP have explicit packets. | Composed AD, variant breadth, general state lifetimes and cross-target evidence remain separate. KV tiering or a prefetch annotation does not prove overlap. |
 | Matrix/field calculus, PDE and spectral | Reference/domain contracts and shared transform/solver surfaces exist. | Coordinate/boundary-condition semantics must reach native operators; use the existing layout, numerical-policy, solver and AD owners. Follow [MSW](../compiler/MATH_SOURCE_WORKSTREAM.md) and the [PDE plan](../compiler/PDE_STENCIL_CAPABILITY_PLAN.md). |
@@ -66,7 +66,8 @@ owners, as the plan's routing index states them:
   constraint and fail-closed canonicalization. Native consumption of the
   semantic key is still a separate obligation.
 - “Input grades have no consumer” is obsolete: Python grade masks and native
-  `GradeFusion`/`ExpandProductTable` consume them. Batched lowering remains open.
+  `GradeFusion`/`ExpandProductTable` consume them. Batched lowering landed
+  2026-09-16 (`GA-NATIVE-BATCHED-2026-09-16`); the GPU package route is open.
 - A single-dispatch sampler update can still evaluate its energy gradient on
   the host. Whole-loop residency and whole-training throughput need separate
   measurements; old “all gaps closed” language does not establish either.
@@ -112,8 +113,9 @@ foundation-program reorganization (413 commits since this audit's date):
   Apple GPU Clifford/EBM lanes the test tree exercises. The "Existing
   capability" column's "specialized kernels" undersold this; the ladder now
   reports it per target so this prose need not.
-- **Code claims still hold.** `ExpandProductTable.cpp` still restricts v1 to
-  rank-1 static tensors (batched lowering remains W6.4's gate);
+- **Code claims still hold** (as of 2026-09-15; the first was closed the next
+  day). `ExpandProductTable.cpp` restricted v1 to rank-1 static tensors until
+  `GA-NATIVE-BATCHED-2026-09-16` lowered every static rank;
   `ebm/energy.py::langevin_step` still takes finite differences when no
   `grad_fn` is supplied (the numerical-gradient default under W4-PRODUCT-1).
 - **Higher-order AD moved.** Native HVP execution and attention JVP landed in
@@ -129,3 +131,21 @@ The corresponding engineering loops: the generated
 [proof ladder](../generated/domain_proof_ladder.md) (drift-gated) and
 `tests/unit/test_domain_audit_routing.py` (routing gate). Both are named in
 the plan's maintenance rules.
+
+## Drive through the native backbone — 2026-09-16
+
+Owner direction: close domain gaps by driving each domain through the
+MLIR/LLVM compiler rather than through Python-emitted kernels. First slice,
+sync `GA-NATIVE-BATCHED-2026-09-16` (W6.4): the batched geometric product is one native lowering
+(`GradeFusion` → batched `ExpandProductTable` → scf/tensor/arith) that both
+`ts-clifford-opt` and `libtessera_jit` run, and it executes on three CPU hosts
+against the GA reference. The proof ladder's GA row gained its `cpu` column
+from the execution matrix, not from this prose. Found on the way: the Clifford
+and EBM dialects were configured OFF on every WSL build tree (the Mac was the
+only host that could even parse them), so the domain dialects had no fleet
+lit coverage — Princess-Luna and Super-Bear now configure
+`TESSERA_BUILD_CLIFFORD_BACKEND=ON`. Next in this stream: rotor sandwich and
+the remaining Clifford ops behind the JIT, then a GPU package through the
+arena pipeline (the ladder's `rocm`/`apple_gpu` GA rows are still the
+Python-emitted kernels), then the traceable quadratic energy loop (EBM).
+

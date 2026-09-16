@@ -116,6 +116,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "when their Metal/MPSGraph executor probes are active)",
     "cpu_autodiff_paired_llvm_jit": "Compiler-generated paired backward compiled "
                              "through MLIR/LLVM and invoked through libtessera_jit",
+    "cpu_clifford_llvm_jit": "Geometric-algebra products lowered by the Clifford "
+                             "dialect (GradeFusion + batched ExpandProductTable) "
+                             "inside libtessera_jit and executed through MLIR/LLVM",
     "apple_gpu_structured_compute_compiled": "Apple GPU structured-compute tail — "
                              "the conv family (conv1d / conv_transpose / "
                              "depthwise_conv1d) reaches an executable apple_gpu "
@@ -1245,6 +1248,21 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
+    ("cpu", "cpu_clifford_geo_product_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_clifford_geo_product_llvm_jit",
+        execution_kind="native_cpu", executable=True,
+        executor_id="cpu_clifford_llvm_jit", runtime_status="success",
+        reason="W6.4 batched native GA: a tessera_clifford.geo_product on "
+               "[..., 2**n] f32 tensors (Cl(p,q,r), optional output-grade "
+               "restriction) lowers through GradeFusion + ExpandProductTable "
+               "to an scf.for nest over the compile-time Cayley table inside "
+               "libtessera_jit and executes through MLIR/LLVM on the host CPU "
+               "(M1 Max, Zen 5, Zen 2 parity with the standalone GA reference, "
+               "2026-09-16). No numpy fallback; out-of-envelope requests raise.",
+        execution_mode="mlir_llvm_jit", op_family="clifford_geometric_product",
+        evidence_target="cpu_x86_64",
+        numerical_fixture="tests/unit/test_clifford_jit_native.py",
+        proof_build="llvm23-core+clifford+jit"),
     ("cpu", "cpu_autodiff_matmul_llvm_jit"): ExecutionRow(
         target="cpu", compiler_path="cpu_autodiff_matmul_llvm_jit",
         execution_kind="native_cpu", executable=True,

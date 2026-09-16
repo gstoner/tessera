@@ -7964,3 +7964,11 @@ Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_
 Sync `FLEET-REDS-2026-09-15`.
 
 Owner-directed fleet-red follow-through, both ROCm hosts: (1) `phase2/rocm_typed_fragment_composition_invalid.mlir` is green again — `TileToROCM` names both operand dtypes when no matrix form accepts the A/B pair (b59da796 had folded the #517 message into "unsupported mixed-input matrix form"); `check-tessera-ir` 482 passed / 4 unsupported and `check-tessera-rocm` 67 passed / 1 unresolved (the known gfx1151 data fixture) on Princess-Luna. (2) The heap replay tests (`test_gated_heap.py`, `test_gpu_heap_collection.py`) package for the host's own lane via `tests/_support/environment.native_storage_target()` — `rocm`/`$TESSERA_ROCM_CHIP` here — instead of hard-coding NVIDIA. (3) Tajasarus: `tessera-jit` configure now skips `libtessera_jit` with a warning when libffi headers or MLIRExecutionEngine are missing (both true there: no `libffi-dev`, and the assertions LLVM ships no ExecutionEngine), so `ninja -C build` and `ninja -C build-assertions` complete; installing `libffi-dev` (needs interactive sudo) restores the lane. The JIT tests skip on the missing library.
+
+## Batched native geometric products — 2026-09-16
+
+Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
+
+Follow-up required: the batched native lowering is CPU-only today; the `rocm_clifford_compiled` gfx1151 kernel is a Python-emitted HIP kernel and stays the ROCm device lane. Next slice routes the same scf/arith expansion through the arena pipeline (`build_native_gpu_storage`) to a gfx1151/gfx1201 package with exact-device parity. Princess-Luna's `build/` now configures the Clifford backend ON so the domain fixtures run there.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).

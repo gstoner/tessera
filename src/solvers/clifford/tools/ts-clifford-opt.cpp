@@ -18,6 +18,7 @@
 // and gates downstream lowering on the v1 signature allow-list.
 
 #include "tessera/Clifford/CliffordDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "tessera/Clifford/CliffordPasses.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -37,6 +38,7 @@ int main(int argc, char **argv) {
   // lowered modules are valid + printable.
   registry.insert<arith::ArithDialect>();
   registry.insert<tensor::TensorDialect>();
+  registry.insert<scf::SCFDialect>();
   registry.insert<func::FuncDialect>();
 
   // Individual passes.

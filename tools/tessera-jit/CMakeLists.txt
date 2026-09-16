@@ -12,6 +12,32 @@
 # — which segfaults the moment a dialect/type is constructed. Static MLIR + the
 # libLLVM.dylib dependency (exactly what tessera-opt does) is a single copy.
 
+# Host prerequisites. Both are configure-time facts about the toolchain, not
+# about Tessera: a host without libffi headers (Ubuntu: `apt install libffi-dev`)
+# or with an LLVM/MLIR install built without MLIRExecutionEngine cannot build
+# this lane at all. Skip it loudly instead of failing every `ninja -C build`
+# on that host (Tajasarus, 2026-09-15): the JIT tests then skip on a missing
+# libtessera_jit, and every other target still builds. The lane stays required
+# where it is claimed -- set -DTESSERA_REQUIRE_JIT=ON to make this fatal.
+option(TESSERA_REQUIRE_JIT "Fail configure when the MLIR CPU JIT lane cannot be built" OFF)
+include(CheckIncludeFileCXX)
+check_include_file_cxx("ffi.h" TESSERA_JIT_HAVE_FFI_H)
+check_include_file_cxx("ffi/ffi.h" TESSERA_JIT_HAVE_FFI_FFI_H)
+set(_tessera_jit_blocker "")
+if(NOT TESSERA_JIT_HAVE_FFI_H AND NOT TESSERA_JIT_HAVE_FFI_FFI_H)
+  set(_tessera_jit_blocker "libffi headers not found (install libffi-dev)")
+elseif(NOT TARGET MLIRExecutionEngine)
+  set(_tessera_jit_blocker "this LLVM/MLIR install has no MLIRExecutionEngine")
+endif()
+if(_tessera_jit_blocker)
+  if(TESSERA_REQUIRE_JIT)
+    message(FATAL_ERROR "tessera-jit: ${_tessera_jit_blocker}")
+  endif()
+  message(WARNING "tessera-jit: ${_tessera_jit_blocker}; libtessera_jit is NOT built on this host "
+                  "and the MLIR CPU JIT tests will skip (TESSERA_REQUIRE_JIT=ON to fail instead)")
+  return()
+endif()
+
 add_library(tessera_jit SHARED tessera_jit.cpp)
 
 target_link_libraries(tessera_jit PRIVATE

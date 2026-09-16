@@ -9040,3 +9040,9 @@ Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
 Not applicable with a reason: `IsolatedHeapPool` spawns CUDA/HIP workers only; the Apple arena owner has no process-isolated worker and no probe is claimed. The shared arena-pipeline repair does not touch the Apple MSL arena lane (`apple_native_arena.py` runs `--tessera-tile-buffer-arena=emit-apple-msl=true` deliberately).
 
 Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.
+
+## Fleet reds follow-through — 2026-09-15
+
+Sync `FLEET-REDS-2026-09-15`.
+
+Owner-directed fleet-red follow-through: the one Mac `verify-fixtures` red (`slice/apple_gpu`) is closed. `tessera.slice` for f16/bf16 now widens exactly to f32, slices on the f32 MPSGraph Metal lane and narrows exactly back — a slice moves values, so the round trip is lossless — instead of the raw f16 entry, which on macOS 27 rounds f16 payloads through bf16 (`macOS 27 Apple f16 regressions`). Bitwise f16/bf16 tests; verify-fixtures 708/708 on the M1 Max. The other macOS 27 f16 findings (cond) are unchanged. Not a performance claim: the widen/narrow is host work.

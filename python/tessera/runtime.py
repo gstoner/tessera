@@ -44010,8 +44010,11 @@ def _apple_gpu_dispatch_slice(op_name: str, operands: list[Any], kwargs: dict, n
     StableHLO dynamic-slice / KV-window data-mover). v1 envelope: a static per-axis
     slice ``x[starts[i] : starts[i]+sizes[i]]`` (stride 1) where ``start_indices``
     and ``slice_sizes`` are length-rank int lists in kwargs. A rank mismatch or a
-    dtype outside {f32, f16, bf16} falls back to numpy. f32 + f16 native; bf16 rides
-    the f16 raw path."""
+    dtype outside {f32, f16, bf16} falls back to numpy. f32 runs natively; f16 and
+    bf16 widen exactly to f32, slice on the same Metal lane and narrow exactly
+    back (a slice moves values, so the round trip is lossless). They used to ride
+    the raw f16 MPSGraph entry, which on macOS 27 rounds f16 payloads through
+    bf16 (measured 2026-09-14; see macOS 27 Apple f16 regressions)."""
     x = np.asarray(operands[0])
     starts = [int(s) for s in kwargs.get("start_indices", ())]
     sizes = [int(s) for s in kwargs.get("slice_sizes", ())]
@@ -44031,10 +44034,10 @@ def _apple_gpu_dispatch_slice(op_name: str, operands: list[Any], kwargs: dict, n
     bf16_dtype = _bfloat16_dtype()
     lanes: dict[Any, tuple[Any, Any, Any]] = {
         np.float32: (np.float32, _apple_gpu_mpsgraph_slice_f32, ctypes.c_float),
-        np.float16: (np.float16, _apple_gpu_mpsgraph_slice_f16, ctypes.c_uint16),
+        np.float16: (np.float32, _apple_gpu_mpsgraph_slice_f32, ctypes.c_float),
     }
     if bf16_dtype is not None:
-        lanes[bf16_dtype] = (bf16_dtype, _apple_gpu_mpsgraph_slice_f16, ctypes.c_uint16)
+        lanes[bf16_dtype] = (np.float32, _apple_gpu_mpsgraph_slice_f32, ctypes.c_float)
 
     lane = lanes.get(x.dtype.type)
     if lane is None:
@@ -44062,7 +44065,7 @@ def _apple_gpu_dispatch_slice(op_name: str, operands: list[Any], kwargs: dict, n
             x_ptr = xc.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
             o_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         sym(x_ptr, o_ptr, d_ptr, st_ptr, sz_ptr, ctypes.c_int32(x.ndim))
-        return out
+        return out if run_dtype == x.dtype.type else out.astype(x.dtype)  # exact narrowing
 
     return _apple_gpu_run_checked(op_name, _gpu, _host)
 

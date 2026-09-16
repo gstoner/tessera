@@ -259,6 +259,26 @@ def nvidia_cuda_tool(name: str) -> Path | None:
                  if path.is_file()), None)
 
 
+def native_storage_target() -> tuple[str, str] | None:
+    """The ``(backend, chip)`` this host's *toolchain* can package native GPU
+    storage for, or ``None``.
+
+    Packaging (``build_native_gpu_storage``) needs a device toolchain, not a
+    device: ``ptxas`` for ``nvidia``/``sm_120``, a ROCm root with ``ld.lld``
+    for ``rocm`` (chip from ``TESSERA_ROCM_CHIP``, default ``gfx1151`` -- pass
+    ``gfx1201`` on Tajasarus or you package a gfx1151 image under its name).
+    Tests that hard-coded ``nvidia``/``sm_120`` were red by construction on
+    both ROCm boxes (2026-09-15); this picks the lane the host can evaluate and
+    the caller skips honestly on ``None``.
+    """
+    if nvidia_cuda_tool("ptxas") is not None:
+        return "nvidia", "sm_120"
+    roots = [os.environ.get("ROCM_PATH", "")] + ["/opt/rocm", "/opt/rocm/core", "/opt/rocm/core-10.0"]
+    if any(root and (Path(root) / "llvm/bin/ld.lld").is_file() for root in roots):
+        return "rocm", os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+    return None
+
+
 @dataclass(frozen=True)
 class CompilerToolchain:
     """Discovered host compiler tools; requirement checks skip consistently."""

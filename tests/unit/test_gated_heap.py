@@ -8,15 +8,18 @@ from tessera.compiler.native_isolated_heap import IsolatedHeapPool
 from tessera.compiler.heap_barrier_contract import ATOMIC_MODES
 from tessera.compiler.gpu_heap_collection import materialize_pool
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.environment import native_storage_target
+from tessera.compiler.llvm_tools import llvm_bin_dir
 
 
 @pytest.mark.parametrize('mode', ATOMIC_MODES)
 def test_every_admitted_metadata_operation_has_atomic_replay(mode):
     tool = find_tessera_opt()
-    if tool is None or not Path('/usr/lib/llvm-23/bin/mlir-opt').exists():
-        pytest.skip('native compiler required')
+    target = native_storage_target()
+    if tool is None or target is None or llvm_bin_dir() is None:
+        pytest.skip('native compiler and a CUDA or ROCm toolchain required')
     program = materialize_pool(4, 8, 'atomic_' + mode, compiler=tool,
-        llvm_bin='/usr/lib/llvm-23/bin', backend='nvidia', chip='sm_120', payload_dtype='int8', references=1)
+        llvm_bin=llvm_bin_dir(), backend=target[0], chip=target[1], payload_dtype='int8', references=1)
     assert program.validate()[-2].name == 'gate'
 
 

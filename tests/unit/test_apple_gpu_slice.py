@@ -55,12 +55,20 @@ def test_slice_handler_matches_numpy_3d():
     np.testing.assert_array_equal(np.asarray(out), x[0:2, 1:4, 0:4])
 
 
-def test_slice_f16_matches_numpy():
-    from tessera.runtime import _apple_gpu_dispatch_slice
-    x = _RNG.standard_normal((6, 8)).astype(np.float16)
-    out = _apple_gpu_dispatch_slice(
-        "tessera.slice", [x], {"start_indices": [2, 1], "slice_sizes": [3, 4]}, np)
-    np.testing.assert_array_equal(np.asarray(out), x[2:5, 1:5])
+@pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
+def test_slice_16bit_matches_numpy_bitwise(dtype):
+    """16-bit payloads are moved, never rounded: on macOS 27 the raw f16 MPSGraph
+    slice entry rounded f16 through bf16, so the dispatcher widens exactly to
+    f32, slices on Metal and narrows exactly back (2026-09-15)."""
+    from tessera.runtime import _apple_gpu_dispatch_slice, _bfloat16_dtype
+    kind = np.float16 if dtype == "float16" else _bfloat16_dtype()
+    if kind is None:
+        pytest.skip("bfloat16 dtype unavailable (ml_dtypes)")
+    x = _RNG.standard_normal((6, 8)).astype(np.float32).astype(kind)
+    out = np.asarray(_apple_gpu_dispatch_slice(
+        "tessera.slice", [x], {"start_indices": [2, 1], "slice_sizes": [3, 4]}, np))
+    assert out.dtype == x.dtype
+    np.testing.assert_array_equal(out.view(np.uint16), x[2:5, 1:5].view(np.uint16))
 
 
 def test_slice_out_of_bounds_falls_back():

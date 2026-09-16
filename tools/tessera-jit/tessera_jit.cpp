@@ -747,6 +747,13 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
     pm1a.addPass(tessera::createAutodiffPairedPass());
   pm1a.addPass(tessera::createEBMCanonicalizePass());
   pm1a.addPass(tessera::createEBMLowerLangevinPass());
+#ifdef TESSERA_JIT_HAVE_CLIFFORD
+  // The bivector integrator EMITS `tessera_clifford.grade` (2026-09-16, M2),
+  // so the Clifford expansion above it has already run: expand once more
+  // after the EBM lowering, or the grade projections reach bufferization
+  // unlowered. A module with no Clifford op left is unchanged by this.
+  pm1a.addPass(tessera::createCliffordExpandProductTablePass(/*expandRotorSandwich=*/true));
+#endif
 #endif
   pm1a.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
   // Elementwise arith/math ops ON TENSORS (e.g. the paired autodiff pass's

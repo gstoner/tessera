@@ -11,7 +11,8 @@ with [AD-SOLVER-IFT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#ad-solver-ift-1);
 acceptance from the [GA/EBM review](GA_EBM_ARCHITECTURE_REVIEW.md) §"an
 energy is a typed program". Sync keys `EBM-NATIVE-QUADRATIC-2026-09-16`
 (CPU lane), `EBM-NATIVE-GPU-2026-09-16` (device lane) and
-`EBM-NONLINEAR-MANIFOLD-2026-09-16` (N1 nonlinear energies, M1 sphere).
+`EBM-NONLINEAR-MANIFOLD-2026-09-16` (N1 nonlinear energies, M1 sphere) and
+`EBM-BIVECTOR-OVERHEAD-2026-09-16` (M2 bivector, and the overhead measurement).
 Written after the CPU-lane slice landed (`tests/unit/test_ebm_native_langevin.py`)
 and after driving that same loop as far as the existing device routes take it;
 every "today" claim below is a measured stop, not a reading of prose.
@@ -293,7 +294,18 @@ exists; do not write a third emitter (`CLAUDE.md` §"the real Apple gap").
 > never silently repaired, with the dot products and norms declared as
 > sequential f32 row sums — which the emitter's ordered fold reproduces, so
 > the device agrees with the host sequential fold rather than merely within a
-> tolerance. §4.3 (bivector) is unchanged and still refuses.
+> tolerance. §4.3 (bivector) landed too, exactly as scoped: the integrator
+> emits the Clifford dialect's own `grade` op on the gradient and the noise,
+> the EBM library takes a build-time dependency on the Clifford one gated on
+> that backend, and the input-grade check is a status word like the sphere's.
+> What §4.3 did not anticipate is that the Clifford expansion's
+> per-multivector loop nest could not reach a cooperative kernel: for a
+> DIAGONAL blade map (grade, reverse, involution, conjugation) the batched op
+> is elementwise, and it now lowers that way — as a select against per-blade
+> keep/negate masks, not a multiply by a {0, ±1} mask, since `0 * NaN` is NaN
+> while the map *drops* a blade. The row-program emitter learned per-feature
+> constant tables to carry those masks into the kernel, which generalizes to
+> any per-feature weight vector.
 
 
 ### 4.1 Nonlinear energies: nothing manifold-specific is needed
@@ -419,6 +431,30 @@ programs outside the row-program envelope. M1/M2 now build on G2 (the
 tangent projection and retraction are row programs: a feature-axis
 reduction followed by lane arithmetic, exactly what the emitter maps); N1 is
 independent and can run in parallel on the CPU lane.
+
+## 5a. The overhead measurement (2026-09-16)
+
+The acceptance's remaining clause. `benchmarks/record_ebm_langevin_overhead.py`
+compares the two routes at temperature 0, where both compute the same iterated
+descent, checking they agree before it keeps a timing, and dispatching both at
+the same wrapper depth. The result is structural rather than a kernel-speed
+claim:
+
+* the native route is **flat in K** — about 1.1 ms whether the loop runs 1 step
+  or 32, and whether the state is 32 or 16384 elements — because the whole loop
+  is one launch and one host round trip;
+* the Python-emitted route costs about 1.8 ms **per step**, because its kernel
+  takes `(y, grad)` and so the loop cannot live inside it;
+* on gfx1151 that is 1.6x at K = 1 and 53x at K = 32, and the ratio grows with
+  K by construction.
+
+Two facts matter more than the ratio. First, this is a *dispatch* measurement:
+wall clock only, since neither WSL2 ROCm box exposes `/dev/kfd` and `rocprofv3`
+returns no records, so kernel time is unavailable and absent counters classify
+as `unverified`. Second, **on two of the three devices the cooperative kernel
+is the only compiled Langevin lane at all** — gfx1201 has no promoted
+Python-emitted EBM family and sm_120 never had one — so only gfx1151 can run
+the comparison. No lane is promoted by this packet.
 
 ## 6. Risks named now
 

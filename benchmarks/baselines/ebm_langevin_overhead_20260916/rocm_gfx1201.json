@@ -1,0 +1,178 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1201",
+  "host": "tajasarus",
+  "compiler_sha256": "779b8b7c64d7a76e1edfa3d50dd1b1cc82805f4abac7bdd8b4af2b89408932ad",
+  "recorder_sha256": "fde5dbd5092e087e6737fbe97b771e928a3f5d2c85cdd59006c857af20a863b7",
+  "llvm_bin": "/home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1-assertions/bin",
+  "eta": 0.05,
+  "reps": 9,
+  "rows": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 400,
+        "median_ms": 0.9902370074996725,
+        "min_ms": 0.9476060076849535,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 400,
+        "median_ms": 1.1344820086378604,
+        "min_ms": 1.0294210078427568,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 12304,
+        "median_ms": 1.1476959916763008,
+        "min_ms": 1.0294410021742806,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 32,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 12304,
+        "median_ms": 1.144120004028082,
+        "min_ms": 1.06403800600674,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        64,
+        256
+      ],
+      "steps": 32,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 196624,
+        "median_ms": 1.2671250005951151,
+        "min_ms": 1.1736169981304556,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    }
+  ],
+  "native_with_noise": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.129882992245257,
+      "min_ms": 1.0415650031063706,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 8,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.1453920014901087,
+      "min_ms": 1.036333997035399,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 8,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.1557920079212636,
+      "min_ms": 1.0689170012483373,
+      "latency_source": "host_wall_clock"
+    }
+  ],
+  "comparison": "temperature 0, where both routes compute the same iterated descent; the agreement is checked per row before the timing is kept",
+  "claims": [
+    "the native route is ONE launch and one host round trip per K-step loop; the Python-emitted route is K of each, because its kernel takes the gradient from the caller",
+    "both routes are dispatched through runtime.launch on an artifact, so this measures the routes and not a wrapper difference",
+    "no Python-emitted EBM Langevin lane is available on this chip (ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence), so this packet carries the native route alone; pairing it with another device's lane would compare two devices and call it a route comparison"
+  ],
+  "not_claimed": [
+    "no promotion: this packet does not move any lane",
+    "wall clock only \u2014 neither WSL2 ROCm box exposes /dev/kfd, so rocprofv3 returns no dispatch or counter records and kernel time is unavailable",
+    "WSL2 timings do not promote; bare-metal calibration is owed",
+    "the T > 0 rows are the native route alone: the two routes' Philox counter policies differ, so their samples are not comparable"
+  ],
+  "comparison_available": false,
+  "no_comparison_reason": "ROCm executable pipeline has no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence",
+  "promotion_eligible": false,
+  "measured_performance": true,
+  "rocm_chip_env": "gfx1201"
+}

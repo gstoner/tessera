@@ -30,11 +30,15 @@
 // is exactly y - eta * g per step.
 //
 // Envelope: static ranked f32 state, key `tensor<2xi64>`, manifold
-// "euclidean" (any rank) or "sphere" ([rows, features], per-row status word;
-// 2026-09-16); "bivector" fails closed with a diagnostic.
+// "euclidean" (any rank), "sphere" ([rows, features]) or "bivector"
+// ([rows, 2^n] Clifford coefficients); the two manifold integrators report a
+// per-row status word (2026-09-16).
 //
 //===----------------------------------------------------------------------===//
 #include "tessera/EBM/EBMPasses.h"
+#ifdef TESSERA_EBM_HAVE_CLIFFORD
+#include "tessera/Clifford/CliffordDialect.h"
+#endif
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -216,6 +220,22 @@ static Value rowBroadcast(PatternRewriter &rewriter, Location loc, Value row, Ra
   return generic.getResult(0);
 }
 
+// Project a batched multivector onto `grades` with the Clifford dialect's own
+// op — never a second grade projection here (Decision #31). The op is expanded
+// downstream by `-tessera-clifford-expand-product-table`, which turns the
+// compile-time keep-mask into scalar arithmetic; the EBM lowering only names
+// the projection.
+static Value gradeProject(PatternRewriter &rewriter, Location loc, Value value,
+                          ArrayAttr grades, ArrayAttr algebra) {
+#ifdef TESSERA_EBM_HAVE_CLIFFORD
+  return rewriter.create<tessera::clifford::GradeProjectionOp>(
+      loc, value.getType(), value, grades, algebra, rewriter.getStringAttr("f32"));
+#else
+  (void)rewriter; (void)loc; (void)grades; (void)algebra;
+  return value;  // unreachable: the caller refuses "bivector" without Clifford
+#endif
+}
+
 struct LowerLangevin : public RewritePattern {
   LowerLangevin(MLIRContext *ctx) : RewritePattern(kLangevinOp, 1, ctx) {}
   LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
@@ -225,10 +245,47 @@ struct LowerLangevin : public RewritePattern {
     auto manifold = op->getAttrOfType<StringAttr>("manifold");
     if (!fn || !eta || !temperature || !manifold) return failure();
     const bool sphere = manifold.getValue() == "sphere";
-    if (manifold.getValue() != "euclidean" && !sphere) {
+    const bool bivector = manifold.getValue() == "bivector";
+    if (manifold.getValue() != "euclidean" && !sphere && !bivector) {
       op->emitError("EBM lowering: manifold \"") << manifold.getValue()
-          << "\" has no native integrator yet; \"euclidean\" and \"sphere\" lower";
+          << "\" has no native integrator yet; \"euclidean\", \"sphere\" and \"bivector\" lower";
       return failure();
+    }
+#ifndef TESSERA_EBM_HAVE_CLIFFORD
+    if (bivector) {
+      op->emitError("EBM lowering: the bivector integrator needs the Clifford dialect's grade "
+                    "projection; rebuild with -DTESSERA_BUILD_CLIFFORD_BACKEND=ON");
+      return failure();
+    }
+#endif
+    // `grade` and `algebra` are SEMANTIC keys for this integrator (Decision
+    // #21a): a wrong grade or signature converges to a different distribution
+    // rather than failing, so neither may be defaulted.
+    ArrayAttr gradesAttr, algebraAttr;
+    if (bivector) {
+      auto grade = op->getAttrOfType<IntegerAttr>("grade");
+      algebraAttr = op->getAttrOfType<ArrayAttr>("algebra");
+      if (!grade || !algebraAttr) {
+        op->emitError("EBM lowering: the bivector integrator requires `grade` and `algebra` "
+                      "(the Clifford signature [p, q, r]); neither is defaulted");
+        return failure();
+      }
+      int64_t p = 0, q = 0, r = 0, idx = 0;
+      for (Attribute a : algebraAttr) {
+        auto ai = dyn_cast<IntegerAttr>(a);
+        if (!ai || ai.getInt() < 0) { op->emitError("EBM lowering: `algebra` must be [p, q, r]"); return failure(); }
+        (idx == 0 ? p : idx == 1 ? q : r) = ai.getInt();
+        ++idx;
+      }
+      if (idx != 3) { op->emitError("EBM lowering: `algebra` must be [p, q, r]"); return failure(); }
+      const int64_t n = p + q + r;
+      if (n < 1 || n > 12) { op->emitError("EBM lowering: the algebra must have 1..12 generators"); return failure(); }
+      if (grade.getInt() < 0 || grade.getInt() > n) {
+        op->emitError("EBM lowering: grade ") << grade.getInt() << " is out of range for a "
+            << n << "-generator algebra";
+        return failure();
+      }
+      gradesAttr = rewriter.getI64ArrayAttr({grade.getInt()});
     }
     if (eta.getValueAsDouble() <= 0.0 || temperature.getValueAsDouble() < 0.0) {
       op->emitError("EBM lowering: langevin_step requires eta > 0 and temperature >= 0");
@@ -246,7 +303,23 @@ struct LowerLangevin : public RewritePattern {
       return failure();
     }
     RankedTensorType statusTy;
-    if (sphere) {
+    if (bivector) {
+      // State is [rows, 2^n] coefficients — the batched Clifford layout.
+      int64_t n = 0;
+      for (Attribute a : algebraAttr) n += cast<IntegerAttr>(a).getInt();
+      const int64_t dim = int64_t{1} << n;
+      if (stateTy.getRank() != 2 || stateTy.getDimSize(1) != dim) {
+        op->emitError("EBM lowering: the bivector integrator takes a [rows, 2^n] state; the "
+                      "algebra has ") << n << " generators, so the feature axis must be " << dim;
+        return failure();
+      }
+      statusTy = RankedTensorType::get({stateTy.getDimSize(0)}, rewriter.getI32Type());
+      if (op->getNumResults() != 3 || op->getResult(2).getType() != statusTy) {
+        op->emitError("EBM lowering: the bivector integrator reports a per-row status word; "
+                      "declare a third result of type ") << statusTy;
+        return failure();
+      }
+    } else if (sphere) {
       if (stateTy.getRank() != 2) {
         op->emitError("EBM lowering: the sphere integrator takes a [rows, features] state (one unit vector per row)");
         return failure();
@@ -261,6 +334,7 @@ struct LowerLangevin : public RewritePattern {
       op->emitError("EBM lowering: the euclidean integrator has no status result");
       return failure();
     }
+    const bool manifoldStatus = sphere || bivector;
     auto module = op->getParentOfType<ModuleOp>();
     auto backward = module.lookupSymbol<func::FuncOp>((fn.getValue() + "__bwd").str());
     if (!backward || backward.isExternal()) {
@@ -297,6 +371,35 @@ struct LowerLangevin : public RewritePattern {
     auto bumpKey = [&]() -> Value {
       return rewriter.create<arith::AddIOp>(loc, key, rewriter.create<arith::ConstantOp>(loc, bump));
     };
+    if (bivector) {
+      // geo_sampling.bivector_langevin_step: both the gradient and the noise
+      // are grade-projected, the Euclidean affine step applies, and a final
+      // projection cleans up float leakage outside the subspace. The state
+      // must already be grade-k on entry; that precondition is REPORTED per
+      // row (status bit 0), never repaired (Decision #21a).
+      auto rowTy = RankedTensorType::get({stateTy.getDimSize(0)}, stateTy.getElementType());
+      Value kept = gradeProject(rewriter, loc, state, gradesAttr, algebraAttr);
+      Value leak = rewriter.create<arith::SubFOp>(loc, state, kept);
+      Value leak2 = rowSum(rewriter, loc, rewriter.create<arith::MulFOp>(loc, leak, leak));
+      Value entryBad = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT, leak2,
+                                                      splat(rewriter, loc, rowTy, 1.0e-12));
+      Value gk = gradeProject(rewriter, loc, grad, gradesAttr, algebraAttr);
+      Value next = rewriter.create<arith::SubFOp>(
+          loc, state, rewriter.create<arith::MulFOp>(loc, gk, splat(rewriter, loc, stateTy, eta.getValueAsDouble())));
+      if (noiseScale > 0.0) {
+        Value zk = gradeProject(rewriter, loc, standardNormals(rewriter, loc, stateTy, key),
+                                gradesAttr, algebraAttr);
+        next = rewriter.create<arith::AddFOp>(
+            loc, next, rewriter.create<arith::MulFOp>(loc, zk, splat(rewriter, loc, stateTy, noiseScale)));
+      }
+      next = gradeProject(rewriter, loc, next, gradesAttr, algebraAttr);
+      auto statusRow = [&](int64_t v) {
+        return rewriter.create<arith::ConstantOp>(loc, DenseElementsAttr::get(statusTy, rewriter.getI32IntegerAttr(v))).getResult();
+      };
+      Value status = rewriter.create<arith::SelectOp>(loc, entryBad, statusRow(1), statusRow(0));
+      rewriter.replaceOp(op, {next, bumpKey(), status});
+      return success();
+    }
     if (!sphere) {
       Value step = rewriter.create<arith::MulFOp>(loc, grad, splat(rewriter, loc, stateTy, eta.getValueAsDouble()));
       Value next = rewriter.create<arith::SubFOp>(loc, state, step);
@@ -362,19 +465,35 @@ struct EBMLowerLangevinPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EBMLowerLangevinPass)
   StringRef getArgument() const final { return "tessera-ebm-lower-langevin"; }
   StringRef getDescription() const final {
-    return "Lower tessera_ebm.energy / inner_step / langevin_step (euclidean, sphere) to "
+    return "Lower tessera_ebm.energy / inner_step / langevin_step (euclidean, sphere, bivector) to "
            "arith/linalg over the compiler-derived gradient (@E__bwd) with "
            "on-device Philox noise.";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, func::FuncDialect, linalg::LinalgDialect,
                     math::MathDialect, tensor::TensorDialect>();
+#ifdef TESSERA_EBM_HAVE_CLIFFORD
+    // The bivector integrator emits the Clifford dialect's own grade op.
+    registry.insert<tessera::clifford::CliffordDialect>();
+#endif
   }
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.add<LowerEnergy, LowerInnerStep, LowerLangevin>(&getContext());
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
-      signalPassFailure();
+      return signalPassFailure();
+    // A pattern that refuses an op emits a diagnostic and declines to rewrite;
+    // the greedy driver still reports success, so the pass used to EXIT 0 with
+    // an unlowered `tessera_ebm.*` op and an error already printed. Downstream
+    // refuses that op, but the exit status must say so here (2026-09-16).
+    bool survived = false;
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getDialectNamespace() == "tessera_ebm") {
+        op->emitError("EBM lowering: this op was not lowered; see the diagnostic above");
+        survived = true;
+      }
+    });
+    if (survived) signalPassFailure();
   }
 };
 

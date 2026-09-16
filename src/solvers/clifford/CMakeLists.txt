@@ -89,6 +89,7 @@ add_mlir_library(TesseraClifford
         MLIRMathDialect
         MLIRSCFDialect
         MLIRTensorDialect
+        MLIRLinalgDialect
         MLIRPass
         MLIRTransforms
 )

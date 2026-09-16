@@ -33703,7 +33703,9 @@ def _execute_ebm_langevin_native_gpu(artifact: RuntimeArtifact, args: Any) -> An
     return native_langevin_loop_device(y0, x, args[2], eta=float(metadata["eta"]), temperature=float(metadata["temperature"]),
                                        steps=int(metadata["steps"]), backend=backend, chip=chip, compiler=compiler,
                                        llvm_bin=llvm_bin, manifold=str(metadata.get("manifold", "euclidean")),
-                                       energy=str(metadata.get("energy", "quadratic")))
+                                       energy=str(metadata.get("energy", "quadratic")),
+                                       grade=int(metadata.get("grade", 2)),
+                                       algebra=tuple(metadata.get("algebra", (3, 0, 0))))
 
 
 def _execute_cpu_ebm_langevin_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -33726,7 +33728,9 @@ def _execute_cpu_ebm_langevin_llvm_jit(artifact: RuntimeArtifact, args: Any) -> 
     return native_langevin_loop(y0, x, args[2], eta=float(metadata["eta"]),
                                 temperature=float(metadata["temperature"]), steps=int(metadata["steps"]),
                                 manifold=str(metadata.get("manifold", "euclidean")),
-                                energy=str(metadata.get("energy", "quadratic")))
+                                energy=str(metadata.get("energy", "quadratic")),
+                                grade=int(metadata.get("grade", 2)),
+                                algebra=tuple(metadata.get("algebra", (3, 0, 0))))
 
 
 def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:

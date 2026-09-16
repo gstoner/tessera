@@ -1,0 +1,221 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host": "Princess-Luna",
+  "compiler_sha256": "4ce554760f0f7a3d338b0fd725e9e75f02448a6f35726f26eaa67403c6565d76",
+  "recorder_sha256": "e8fcc2a93f31bb4f6b38e0a33648edd21e2a327e8369a6617bba3d0495ea4a06",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "eta": 0.05,
+  "reps": 9,
+  "rows": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 400,
+        "median_ms": 1.0677329992176965,
+        "min_ms": 1.021909003611654,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": {
+        "route": "python_emitted_step_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 384,
+        "median_ms": 1.6808979999041185,
+        "min_ms": 1.6117249906528741,
+        "gradient": "host, per step"
+      },
+      "speedup_median": 1.574268099923552,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 400,
+        "median_ms": 1.0827639925992116,
+        "min_ms": 1.0075790050905198,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": {
+        "route": "python_emitted_step_kernel",
+        "target": "rocm",
+        "launches_per_loop": 8,
+        "host_round_trips_per_loop": 8,
+        "host_bytes_per_loop": 3072,
+        "median_ms": 14.263870005379431,
+        "min_ms": 13.952206005342305,
+        "gradient": "host, per step"
+      },
+      "speedup_median": 13.173572544778228,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 12304,
+        "median_ms": 1.0468719992786646,
+        "min_ms": 1.0241900017717853,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": {
+        "route": "python_emitted_step_kernel",
+        "target": "rocm",
+        "launches_per_loop": 8,
+        "host_round_trips_per_loop": 8,
+        "host_bytes_per_loop": 98304,
+        "median_ms": 13.878472993383184,
+        "min_ms": 12.564645992824808,
+        "gradient": "host, per step"
+      },
+      "speedup_median": 13.257086829092755,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 32,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 12304,
+        "median_ms": 1.115986000513658,
+        "min_ms": 1.0667719907360151,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": {
+        "route": "python_emitted_step_kernel",
+        "target": "rocm",
+        "launches_per_loop": 32,
+        "host_round_trips_per_loop": 32,
+        "host_bytes_per_loop": 393216,
+        "median_ms": 57.9682719981065,
+        "min_ms": 57.75781399279367,
+        "gradient": "host, per step"
+      },
+      "speedup_median": 51.943547653308634,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        64,
+        256
+      ],
+      "steps": 32,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "rocm",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 196624,
+        "median_ms": 1.1703190102707595,
+        "min_ms": 1.092683000024408,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": {
+        "route": "python_emitted_step_kernel",
+        "target": "rocm",
+        "launches_per_loop": 32,
+        "host_round_trips_per_loop": 32,
+        "host_bytes_per_loop": 6291456,
+        "median_ms": 62.059841002337635,
+        "min_ms": 60.39828900247812,
+        "gradient": "host, per step"
+      },
+      "speedup_median": 53.028140581925406,
+      "latency_source": "host_wall_clock"
+    }
+  ],
+  "native_with_noise": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.123994996305555,
+      "min_ms": 1.0753329988801852,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 8,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.0895140003412962,
+      "min_ms": 1.0369399969931692,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 8,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.1665280035231262,
+      "min_ms": 1.1068150051869452,
+      "latency_source": "host_wall_clock"
+    }
+  ],
+  "comparison": "temperature 0, where both routes compute the same iterated descent; the agreement is checked per row before the timing is kept",
+  "claims": [
+    "the native route is ONE launch and one host round trip per K-step loop; the Python-emitted route is K of each, because its kernel takes the gradient from the caller",
+    "both routes are dispatched through runtime.launch on an artifact, so this measures the routes and not a wrapper difference"
+  ],
+  "not_claimed": [
+    "no promotion: this packet does not move any lane",
+    "wall clock only \u2014 neither WSL2 ROCm box exposes /dev/kfd, so rocprofv3 returns no dispatch or counter records and kernel time is unavailable",
+    "WSL2 timings do not promote; bare-metal calibration is owed",
+    "the T > 0 rows are the native route alone: the two routes' Philox counter policies differ, so their samples are not comparable"
+  ],
+  "comparison_available": true,
+  "promotion_eligible": false,
+  "measured_performance": true,
+  "rocm_chip_env": null
+}

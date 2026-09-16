@@ -118,6 +118,9 @@ struct Emitter {
   SmallVector<Value> pointers;  // one per entry argument then per result
   DenseMap<Value, Slot> slots;
   LLVM::LLVMArrayType sharedTy;
+  // Per-feature constant tables (one global each), deduplicated by value.
+  DenseMap<Attribute, Value> laneTables;
+  gpu::GPUModuleOp gpuModule;
   bool broken = false;
 
   Emitter(ModuleOp m, func::FuncOp f) : module(m), entry(f), b(m.getContext()), loc(f.getLoc()) {}
@@ -311,6 +314,46 @@ struct Emitter {
     return true;
   }
 
+  // (d0, ..., dN-1) -> (dN-1): a read along the FEATURE axis only. A constant
+  // read this way is a per-feature table — the Clifford grade/involution masks
+  // are the first ones — and on the device the feature index IS the lane, so
+  // it materializes as a private constant array the lane indexes.
+  bool isFeatureMap(AffineMap m, int64_t rank) {
+    return m.getNumDims() == rank && m.getNumResults() == 1 &&
+           m.getResult(0) == getAffineDimExpr(rank - 1, m.getContext());
+  }
+
+  // A compile-time table of one value per feature, read at the lane index.
+  Value laneConstant(DenseElementsAttr dense, Operation *at) {
+    Type elem = dense.getElementType();
+    auto arrayTy = LLVM::LLVMArrayType::get(elem, lanes);
+    auto found = laneTables.find(dense);
+    Value table;
+    if (found != laneTables.end()) {
+      table = found->second;
+    } else {
+      SmallVector<Attribute> values(dense.getValues<Attribute>());
+      // Spare lanes (features rounded up to a power of two) read a zero tail.
+      while ((int64_t)values.size() < lanes) values.push_back(b.getZeroAttr(elem));
+      auto tensorTy = RankedTensorType::get({lanes}, elem);
+      LLVM::GlobalOp global;
+      {
+        OpBuilder::InsertionGuard g(b);
+        b.setInsertionPointToStart(gpuModule.getBody());
+        global = LLVM::GlobalOp::create(
+            b, loc, arrayTy, /*isConstant=*/true, LLVM::Linkage::Private,
+            ("row_feature_table_" + Twine(laneTables.size())).str(),
+            DenseElementsAttr::get(tensorTy, ArrayRef<Attribute>(values)));
+      }
+      table = LLVM::AddressOfOp::create(b, loc, global);
+      laneTables[dense] = table;
+    }
+    Value zero = arith::ConstantOp::create(b, loc, b.getI64IntegerAttr(0));
+    Value ptr = LLVM::GEPOp::create(b, loc, table.getType(), arrayTy, table, ValueRange{zero, i64(lane)});
+    (void)at;
+    return LLVM::LoadOp::create(b, loc, elem, ptr);
+  }
+
   LogicalResult emitGeneric(linalg::GenericOp op) {
     if (op.getNumResults() < 1) return fail(op, "generics must produce a result");
     Kind out = classify(op.getResult(0).getType(), op);
@@ -333,6 +376,16 @@ struct Emitter {
       for (auto [i, input] : llvm::enumerate(op.getInputs())) {
         Slot &s = slot(input, op);
         AffineMap m = maps[i];
+        // A constant read along the feature axis is a per-lane table, not a
+        // uniform vector: every lane reads its own entry.
+        if (laneBody && isFeatureMap(m, rank)) {
+          DenseElementsAttr dense;
+          if (auto c = input.getDefiningOp<arith::ConstantOp>()) dense = dyn_cast<DenseElementsAttr>(c.getValue());
+          if (!dense || dense.getNumElements() != feats)
+            return fail(op, "a feature-axis operand must be a constant table with one entry per feature");
+          args.push_back(laneConstant(dense, op));
+          continue;
+        }
         if (!usable(s)) {
           if (broken) return failure();
           auto diag = fail(op, "operand has no usable device mapping: ");
@@ -588,6 +641,7 @@ struct Emitter {
     if (!lowered) return entry.emitError("row program: kernel skeleton failed to parse");
     gpu::GPUFuncOp kernel;
     lowered->walk([&](gpu::GPUFuncOp f) { kernel = f; });
+    lowered->walk([&](gpu::GPUModuleOp m) { gpuModule = m; });
     Operation *ret = kernel.getBody().front().getTerminator();
     b.setInsertionPoint(ret);
     for (unsigned i = 0; i < count; ++i) pointers.push_back(kernel.getArgument(i));

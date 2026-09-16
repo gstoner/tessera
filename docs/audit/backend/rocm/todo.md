@@ -7989,6 +7989,16 @@ Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Ta
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM bivector integrator and the overhead measurement — 2026-09-16
+
+Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on both owning devices (46/46 device tests each). **The measurement this queue was owed:** on gfx1151 the cooperative kernel is flat in K — about 1.1 ms for a 1- or 32-step loop, 32 or 16384 elements — while `rocm_ebm_langevin_compiled` costs about 1.8 ms per step because its kernel takes `(y, grad)` from the caller; 1.6x at K = 1, 53x at K = 32. **No promotion**: wall clock only, because neither WSL2 ROCm box exposes `/dev/kfd` so `rocprofv3` returns no dispatch or counter records, and absent counters classify as `unverified`. Follow-up required: kernel-time attribution needs a ROCm host with `/dev/kfd` — that is the gate on promoting this lane, not more wall-clock runs.
+
+**gfx1201 finding:** the Python-emitted EBM family is fail-closed there ("no promoted family plugins for gfx1201; gfx1200/gfx1250 remain fail-closed pending exact-device evidence"), so the cooperative kernel is the only compiled Langevin lane on that chip and no comparison exists to run.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-bivector-integrator-and-the-overhead-measurement-close-the-ebm-stream) and the [overhead packets](../../../../benchmarks/baselines/ebm_langevin_overhead_20260916/README.md).
+
 ## EBM nonlinear energies and the sphere integrator — 2026-09-16
 
 Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

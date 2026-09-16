@@ -7648,6 +7648,14 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM bivector integrator and the overhead measurement — 2026-09-16
+
+Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on sm_120 (46/46 device tests). The overhead packet here carries the native route **alone**: sm_120 has no Python-emitted EBM Langevin lane, and pairing the native GPU route with the x86 CPU one would compare two devices and label it a route comparison, so the recorder refuses that. Native cost is flat in K (1.17–1.24 ms across 1–32 steps and 32–16384 elements). Follow-up required: WSL2 wall clock does not promote — bare-metal calibration is owed, as on every NVIDIA perf row.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-bivector-integrator-and-the-overhead-measurement-close-the-ebm-stream) and the [overhead packets](../../../../benchmarks/baselines/ebm_langevin_overhead_20260916/README.md).
+
 ## EBM nonlinear energies and the sphere integrator — 2026-09-16
 
 Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

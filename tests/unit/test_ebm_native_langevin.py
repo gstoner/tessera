@@ -215,8 +215,85 @@ def test_runtime_launch_carries_the_energy_and_manifold():
     np.testing.assert_allclose(np.asarray(out[0]), want[0], rtol=1e-5, atol=1e-5)
 
 
-@pytest.mark.parametrize("kwargs", [dict(manifold="bivector"), dict(manifold="hyperbolic"), dict(energy="l1")])
+@pytest.mark.parametrize("kwargs", [dict(manifold="hyperbolic"), dict(energy="l1"),
+                                   # bivector is admitted, but its semantic keys are checked
+                                   dict(manifold="bivector", grade=9),
+                                   dict(manifold="bivector", algebra=(2, 0, 0))])
 def test_unadmitted_energies_and_manifolds_are_refused(kwargs):
     y, x = _pair((4, 8), 41)
     with pytest.raises(ValueError):
         nl.native_langevin_loop(y, x, [1, 1], eta=0.1, temperature=0.1, steps=1, **kwargs)
+
+
+# --- M2: the bivector integrator --------------------------------------------
+
+def _bivector_pair(rows=4, seed=51, grade=nl.BIVECTOR_GRADE):
+    rng = np.random.default_rng(seed)
+    state = nl.grade_projection(rng.standard_normal((rows, 8)).astype(np.float32), grade)
+    return state, rng.standard_normal((rows, 8)).astype(np.float32)
+
+
+def test_blade_grades_match_the_clifford_layout():
+    """Blade i has grade popcount(i) — the layout both the dialect's keep-mask
+    and this reference index by."""
+    assert list(nl.blade_grades()) == [0, 1, 1, 2, 1, 2, 2, 3]
+    assert [i for i, g in enumerate(nl.blade_grades()) if g == 2] == [3, 5, 6]
+
+
+@pytest.mark.parametrize("energy", nl.ENERGIES)
+def test_bivector_samples_match_the_reference_and_stay_in_the_subspace(energy):
+    y, x = _bivector_pair()
+    got = nl.native_langevin_loop(y, x, [9, 3], eta=0.05, temperature=0.3, steps=4,
+                                  manifold="bivector", energy=energy)
+    want = nl.reference_langevin_loop(y, x, [9, 3], eta=0.05, temperature=0.3, steps=4,
+                                      manifold="bivector", energy=energy)
+    np.testing.assert_allclose(got[0], want[0], rtol=1e-6, atol=1e-6)
+    assert list(got[1]) == list(want[1]) and list(got[2]) == list(want[2]) == [0, 0, 0, 0]
+    # The state never leaves grade 2: every other blade is EXACTLY zero, which
+    # a mask multiply could not guarantee for a non-finite input.
+    off_grade = [i for i, g in enumerate(nl.blade_grades()) if g != 2]
+    assert np.all(np.asarray(got[0])[:, off_grade] == 0.0)
+    # The projection is what distinguishes it from the euclidean step.
+    flat = nl.reference_langevin_loop(y, x, [9, 3], eta=0.05, temperature=0.3, steps=4, energy=energy)
+    assert not np.allclose(got[0], flat[0], atol=1e-3)
+
+
+def test_bivector_stays_in_the_subspace_over_a_long_chain():
+    """The acceptance's own clause: the state stays grade-restricted over 100
+    steps, so float leakage cannot accumulate."""
+    y, x = _bivector_pair(rows=3, seed=52)
+    got = nl.native_langevin_loop(y, x, [4, 4], eta=0.02, temperature=0.2, steps=100, manifold="bivector")
+    off_grade = [i for i, g in enumerate(nl.blade_grades()) if g != 2]
+    assert np.all(np.asarray(got[0])[:, off_grade] == 0.0) and list(got[2]) == [0, 0, 0]
+    assert np.all(np.isfinite(np.asarray(got[0])))
+
+
+def test_bivector_at_zero_temperature_is_projected_descent():
+    y, x = _bivector_pair(seed=53)
+    got = nl.native_langevin_loop(y, x, [1, 1], eta=0.25, temperature=0.0, steps=1, manifold="bivector")
+    want = (y - np.float32(0.25) * nl.grade_projection(nl.reference_gradient(y, x))).astype(np.float32)
+    np.testing.assert_allclose(got[0], nl.grade_projection(want), rtol=1e-6, atol=1e-6)
+
+
+def test_bivector_reports_the_entry_grade_per_row_without_repairing_it():
+    """Decision #21a: a state carrying a blade outside the restricted grade is
+    reported, never silently projected away before the step."""
+    y, x = _bivector_pair(seed=54)
+    bad = y.copy(); bad[1, 0] = 1.0     # a scalar (grade-0) blade on row 1
+    got = nl.native_langevin_loop(bad, x, [1, 1], eta=0.05, temperature=0.0, steps=1, manifold="bivector")
+    assert list(got[2]) == [0, 1, 0, 0]
+    want = nl.reference_langevin_loop(bad, x, [1, 1], eta=0.05, temperature=0.0, steps=1, manifold="bivector")
+    np.testing.assert_allclose(got[0], want[0], rtol=1e-6, atol=1e-6)
+
+
+def test_bivector_admits_another_grade_and_algebra():
+    """grade and algebra are inputs, not a hard-wired so(3): grade 1 in Cl(3,0)
+    is the vector subspace."""
+    y, x = _bivector_pair(seed=55, grade=1)
+    got = nl.native_langevin_loop(y, x, [2, 2], eta=0.05, temperature=0.2, steps=3,
+                                  manifold="bivector", grade=1)
+    want = nl.reference_langevin_loop(y, x, [2, 2], eta=0.05, temperature=0.2, steps=3,
+                                      manifold="bivector", grade=1)
+    np.testing.assert_allclose(got[0], want[0], rtol=1e-6, atol=1e-6)
+    off_grade = [i for i, g in enumerate(nl.blade_grades()) if g != 1]
+    assert np.all(np.asarray(got[0])[:, off_grade] == 0.0)

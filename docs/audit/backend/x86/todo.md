@@ -5315,6 +5315,14 @@ Not applicable with a reason: the GPU storage route has no CPU package; x86's na
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM bivector integrator and the overhead measurement — 2026-09-16
+
+Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on Princess-Luna and Super-Bear: the CPU JIT lane carries the bivector integrator (44/44 each) and is the oracle the device lanes are checked against. `x86_ebm_langevin_compiled` is untouched and is deliberately NOT used as the comparison baseline for the GPU routes — pairing a CPU lane with a GPU one would compare two devices and call it a route comparison.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-bivector-integrator-and-the-overhead-measurement-close-the-ebm-stream).
+
 ## EBM nonlinear energies and the sphere integrator — 2026-09-16
 
 Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

@@ -152,7 +152,10 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
     F64Attr:$eta,
     F64Attr:$temperature,
     EBM_ManifoldAttr:$manifold,
-    OptionalAttr<I64Attr>:$grade
+    OptionalAttr<I64Attr>:$grade,
+    // The Clifford signature [p, q, r] the bivector integrator projects in.
+    // Semantic key with `grade` (Decision #21a): neither is defaulted.
+    OptionalAttr<I64ArrayAttr>:$algebra
   );
   // 2026-09-16: a manifold integrator may report a per-row status word
   // (`tensor<rows x i32>`; 0 = ok, bit 0 = entry precondition violated,

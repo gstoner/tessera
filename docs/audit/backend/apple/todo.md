@@ -9,6 +9,10 @@ last_updated: 2026-09-15
 # Apple compiler, exact-device, and performance plan
 
 
+## Matmul epilogue markers and activation order — 2026-09-15
+
+Owner E2E-REAL-6; sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`. Both frontends now mark the bound `bias`/`residual` operands of `tessera.matmul` the way the C++ verifier reads them, and `tessera-tiling` materializes `activation` once after the reduction (bias → activation → residual). Apple outcome: parity validated host-free — a traced `ops.matmul(..., bias=, activation=)` now reaches the tiled form the `gpu.matmul2d_epilogue` fusion consumes. No device or performance claim.
+
 ## bf16 matmul2d arbiter bucket — measured, retained — 2026-09-15
 
 Owner E2E-REAL-6; sync `APPLE-MATMUL2D-BUCKET-2026-09-15`. `retune_matmul2d_bf16`

@@ -4073,3 +4073,17 @@ Remaining: The view-entry wrapper zero-fills its fp32 output on the host, which 
 Evidence: `benchmarks/baselines/apple_strict_route_ledger.json` (24 decisions, 6 ineligible, macOS 27.0 / SDK 27.0, zero routes moved among the previous 18) and `apple7_legacy_retune_multi_run.json`; `tests/unit/test_apple_legacy_retune_benchmark.py` (14 passed on the Mac incl. the live-host admission row and the host-free consumer test that the bf16 route dispatches the view entry only on a promotion). No performance claim.
 
 <!-- entry-fields:end -->
+
+### 2026-09-15 — matmul epilogue markers from both frontends, activation after the reduction
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+
+PRs: follow-up to #754 (review), sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`.
+
+Outcome: The #754 rewrite was unreachable from Python: `ops.matmul(a, w, bias=b)` traced as a three-operand `tessera.matmul` with no `bias` marker (the tracer moves keyword tensors into the operand list and drops the keyword), so `MatmulOp::verify` rejected it before tiling. The shared `apply_presence_flags` — one implementation both frontends call, held to parity by the differential certificate — now also emits the string markers the C++ verifier reads (`bias = "bias"`, `residual = "residual"`) for the bound epilogue operands of `tessera.matmul`. The `activation` attribute was left on every inner K step, where a consumer honoring it would apply it per partial product; the tiling pass now strips it and materializes `tessera.<act>` once on the completed product, between the bias and the residual (the public `gemm` contract), and leaves the nest untouched for an unknown activation name rather than guessing.
+
+Remaining: Outside Apple's fused `gpu.matmul2d_epilogue` no backend executes the re-applied epilogue inside the kernel; the value lane still executes single-call programs only.
+
+Evidence: `tests/unit/test_tiling_matmul_epilogue.py` (tracer and AST markers, contract-order tiling of a traced matmul through tessera-opt, host-free); `tests/tessera-ir/phase2/tiling_matmul_epilogue.mlir` (bias + gelu + residual order, activation alone, unknown activation left alone); full lit and the frontend/trace/jit suites green on the Mac. No device or performance claim.
+
+<!-- entry-fields:end -->

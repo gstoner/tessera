@@ -234,13 +234,29 @@ struct TileMatmul : public RewritePattern {
       return failure();
     Value biasOperand = hasBias ? op->getOperand(2) : Value();
     Value residualOperand = hasResidual ? op->getOperand(2 + hasBias) : Value();
+    // The activation is the epilogue's too (contract: product -> bias ->
+    // activation -> residual). Left on the inner K step it would apply per
+    // partial product; it is materialized once on the completed reduction.
+    StringRef activation = "none";
+    if (Attribute act = op->getAttr("activation")) {
+      // A present activation must be a known string. A non-string attribute
+      // (an integer enum from a programmatic producer) is not "absent": it is
+      // an epilogue this pass cannot re-apply, so the nest is left untouched
+      // rather than stripped into an unactivated matmul (review of #754).
+      auto str = dyn_cast<StringAttr>(act);
+      if (!str) return failure();
+      activation = str.getValue();
+      if (activation != "none" && activation != "relu" && activation != "gelu" &&
+          activation != "silu")
+        return failure();  // unknown activation: leave the op for its verifier
+    }
 
     // Carry forward transposeA / transposeB attributes; the epilogue markers
     // stay with the epilogue, not the reduction.
     SmallVector<NamedAttribute> innerAttrs;
     for (auto &na : op->getAttrs()) {
       StringRef name = na.getName().strref();
-      if (name == "bias" || name == "residual") continue;
+      if (name == "bias" || name == "residual" || name == "activation") continue;
       innerAttrs.push_back(na);
     }
 
@@ -403,7 +419,8 @@ struct TileMatmul : public RewritePattern {
                                     rewriter.getIndexAttr(1)});
     }
     // Re-apply the epilogue on the logical [M, N] product: bias per output
-    // column (broadcast [N] -> [M, N]), then the residual, in that order.
+    // column (broadcast [N] -> [M, N]), then the activation, then the
+    // residual, in that order.
     if (hasBias) {
       OperationState bcSt(loc, "tessera.broadcast");
       bcSt.addOperands({biasOperand});
@@ -414,6 +431,12 @@ struct TileMatmul : public RewritePattern {
       addSt.addOperands({logicalResult, bc->getResult(0)});
       addSt.addTypes(resultTy);
       logicalResult = rewriter.create(addSt)->getResult(0);
+    }
+    if (activation != "none") {
+      OperationState actSt(loc, ("tessera." + activation).str());
+      actSt.addOperands({logicalResult});
+      actSt.addTypes(resultTy);
+      logicalResult = rewriter.create(actSt)->getResult(0);
     }
     if (hasResidual) {
       OperationState addSt(loc, "tessera.add");

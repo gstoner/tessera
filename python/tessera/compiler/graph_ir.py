@@ -290,6 +290,16 @@ _PRESENCE_FLAGGED_OPERANDS: Dict[str, tuple[str, ...]] = {
     "tessera.modified_delta_attention": ("gate", "beta", "decay"),
 }
 
+# Ops whose optional operands are marked by a STRING attribute naming the
+# operand -- the contract `MatmulOp::verify` already reads (`bias = "bias"`,
+# `residual = "residual"`; epilogue input count must equal the markers). The
+# tracer moved `bias=` into the operand list and dropped the keyword, so the
+# emitted op had three operands and no marker and failed the C++ verifier;
+# no frontend ever reached the TilingPass epilogue rewrite (2026-09-15).
+_MARKER_ATTR_OPERANDS: Dict[str, tuple[str, ...]] = {
+    "tessera.matmul": ("bias", "residual"),
+}
+
 
 def apply_presence_flags(
     graph_name: str,
@@ -310,6 +320,18 @@ def apply_presence_flags(
     slots in order, and keyword arguments bind by name. A flag the caller set
     explicitly is left alone -- an explicit statement outranks an inference.
     """
+    marked = _MARKER_ATTR_OPERANDS.get(graph_name, ())
+    if marked:
+        from .op_catalog import get_op_spec as _spec_for
+
+        spec = _spec_for(graph_name)
+        required = int(getattr(spec, "min_arity", 2)) if spec else 2
+        extra_positional = max(0, int(positional_operand_count) - required)
+        present = set(keyword_operand_names)
+        present.update(marked[:extra_positional])
+        for name in marked:
+            if name in present:
+                kwargs.setdefault(name, name)
     flagged = _PRESENCE_FLAGGED_OPERANDS.get(graph_name, ())
     if not flagged:
         return

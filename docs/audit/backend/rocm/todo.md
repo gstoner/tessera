@@ -7937,3 +7937,9 @@ See [Apple follow-through](../apple/todo.md#shared-tilingpass-matmul-epilogue-pr
 Sync `LOWP-FRONT-DOOR-2026-09-15`; owner E2E-REAL-6.
 Shared-frontend change assessed: `to_graph_ir_module` now verifies legality against the compiling target (string targets only; `rocm` keeps its own capability table), and Graph IR spells fp8/fp4 as the MLIR builtins. Not applicable to gfx1151 / gfx1201 execution; the RDNA4 FP8 WMMA audit is unchanged and no proof transfers.
 See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-tensors--2026-09-15).
+
+### Matmul epilogue markers and activation order — 2026-09-15
+
+Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
+Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to gfx1151 / gfx1201 execution; no proof transfers.
+See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).

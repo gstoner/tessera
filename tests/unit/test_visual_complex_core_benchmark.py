@@ -184,14 +184,13 @@ def test_ir_fixture_names_both_lanes() -> None:
     text = FIXTURE.read_text()
     # GA lane ops.
     assert "tessera_clifford.rotor_sandwich" in text
-    assert "tessera_clifford.grade_projection" in text
+    assert "tessera_clifford.grade" in text
     # EBM lane ops.
-    assert "tessera_ebm.energy_quadratic" in text
+    assert "tessera_ebm.energy" in text
     assert "tessera_ebm.langevin_step" in text
-    assert "tessera_ebm.partition_exact" in text
-    assert "tessera_ebm.logsumexp" in text
+    assert "tessera_ebm.partition_z" in text
     # Cross-lane signature attribute survives.
-    assert "algebra_signature = [3, 0, 0]" in text
+    assert "algebra = [3, 0, 0]" in text
 
 
 def test_ir_fixture_roundtrips_through_tessera_opt() -> None:
@@ -199,18 +198,22 @@ def test_ir_fixture_roundtrips_through_tessera_opt() -> None:
     if binary is None:
         pytest.skip("tessera-opt not built")
     r = subprocess.run(
-        [binary, "--allow-unregistered-dialect", str(FIXTURE)],
+        # No --allow-unregistered-dialect: both dialects are registered in
+        # tessera-opt, so the cross-lane module must parse and VERIFY.
+        [binary, str(FIXTURE)],
         capture_output=True, text=True, timeout=30,
     )
     assert r.returncode == 0, r.stderr
     out = r.stdout
     for op in (
+        # Corrected 2026-09-16 to the dialects' own spellings; see
+        # test_energy_core_benchmark.REQUIRED_EBM_OPS for why the placeholder
+        # names are gone.
         "tessera_clifford.rotor_sandwich",
-        "tessera_clifford.grade_projection",
-        "tessera_ebm.energy_quadratic",
+        "tessera_clifford.grade",
+        "tessera_ebm.energy",
         "tessera_ebm.langevin_step",
-        "tessera_ebm.partition_exact",
-        "tessera_ebm.logsumexp",
+        "tessera_ebm.partition_z",
     ):
         assert op in out
 

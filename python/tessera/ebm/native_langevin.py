@@ -17,9 +17,7 @@ two int64 words. No fallback: a library without the EBM lane raises.
 from __future__ import annotations
 
 import math
-import re
 import threading
-from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -188,40 +186,28 @@ _DEVICE_PIPELINE = ("--tessera-autodiff-paired", "--tessera-ebm-canonicalize", "
 
 def langevin_device_source(shape, *, eta: float, temperature: float, steps: int, backend: str, compiler):
     """Run the whole chain in one tessera-opt invocation and attach the tensor contract."""
-    from tessera.compiler.native_gpu_storage import _run
-    from tessera.compiler.native_gpu_tensor import IndexSpec, TensorSpec
-    from tessera.compiler.native_storage_contract import attach_tensor_contract
-    if backend not in ("nvidia", "rocm"):
-        raise ValueError("langevin device route targets nvidia or rocm")
+    from tessera.compiler.native_gpu_tensor import TensorSpec
+    from tessera.compiler.native_row_program import MAX_FEATURES, row_program_device_source
     rows, feats = _check(shape, eta, temperature, steps)
-    if feats > 1024:
-        raise ValueError("langevin device route admits at most 1024 features per row (one lane each)")
-    kernel = _run(Path(compiler), *_DEVICE_PIPELINE,
-                  f"--tessera-row-program-to-gpu=backend={backend} entry={DEVICE_ENTRY}",
-                  source=langevin_loop_module((rows, feats), eta=eta, temperature=temperature, steps=steps))
-    block = re.search(r"known_block_size = array<i32: (\d+), 1, 1>", kernel)
-    if block is None or "gpu.func @row_program(" not in kernel or "tessera_ebm." in kernel:
-        raise ValueError("langevin device route: the compiler did not produce the row-program kernel")
-    lanes = int(block[1])
+    if feats > MAX_FEATURES:
+        raise ValueError(f"langevin device route admits at most {MAX_FEATURES} features per row (one lane each)")
     specs = (TensorSpec("y0", "fp32", (rows, feats), False), TensorSpec("x", "fp32", (rows, feats), False),
              TensorSpec("key", "int64", (2,), False), TensorSpec("y", "fp32", (rows, feats), True),
-             TensorSpec("next_key", "int64", (2,), True), IndexSpec("scratch", 1, 1))
-    return attach_tensor_contract(kernel, specs, grid=(rows, 1, 1), block=(lanes, 1, 1)), specs
+             TensorSpec("next_key", "int64", (2,), True))
+    source, full = row_program_device_source(
+        langevin_loop_module((rows, feats), eta=eta, temperature=temperature, steps=steps), entry=DEVICE_ENTRY,
+        specs=specs, rows=rows, backend=backend, compiler=compiler, passes=_DEVICE_PIPELINE)
+    if "tessera_ebm." in source.split("gpu.func @row_program(", 1)[1]:
+        raise ValueError("langevin device route: an EBM op survived the lowering")
+    return source, full
 
 
 def bind_ebm_langevin_gpu(shape, *, eta, temperature, steps, compiler, llvm_bin, backend, chip):
     """Package the loop for (backend, chip) and return its native tensor call."""
-    import inspect
-    from tessera.compiler.native_gpu_storage import build_native_gpu_storage, replay_arena_ir
-    from tessera.compiler.native_storage_contract import generate_tensor_binding
+    from tessera.compiler.native_row_program import bind_row_program
     source, specs = langevin_device_source(shape, eta=eta, temperature=temperature, steps=steps,
                                            backend=backend, compiler=compiler)
-    compiler = Path(compiler)
-    package = build_native_gpu_storage(source, compiler=compiler, llvm_bin=Path(llvm_bin), backend=backend, chip=chip)
-    if package.arena_ir != replay_arena_ir(compiler, source):
-        raise ValueError("langevin device route native replay disagrees")
-    return generate_tensor_binding(package, inspect.Signature([
-        inspect.Parameter(s.name, inspect.Parameter.POSITIONAL_ONLY) for s in specs]))
+    return bind_row_program(source, specs, compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
 
 
 _PROGRAMS: dict = {}

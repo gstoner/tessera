@@ -77,6 +77,19 @@ def test_kernel_replays_through_the_arena_pipeline_for_both_backends():
         assert "known_block_size = array<i32: 8, 1, 1>" in arena  # 5 features -> 8 lanes
 
 
+def test_row_reduction_program_emits_the_ordered_shared_fold():
+    """The quadratic gradient is elementwise, so the Langevin kernel carries no
+    reduction; the emitter's reduction path is proven on a row-normalization
+    program (feature-axis linalg.reduce broadcast back over the lanes)."""
+    from tessera.compiler.native_row_program import row_normalize_module, row_program_kernel
+    tool = _compiler()
+    kernel, lanes = row_program_kernel(row_normalize_module(3, 6), entry="row_normalize", backend="rocm", compiler=tool)
+    body = kernel.split("gpu.func @row_program(", 1)[1]
+    assert lanes == 8 and body.count("gpu.barrier") == 3
+    assert "llvm.mlir.addressof @row_reduction" in body and body.count("!llvm.ptr<3>") >= 4
+    assert "linalg." not in body and "tensor." not in body and "math.sqrt" in body
+
+
 @pytest.mark.parametrize("shape,message", [((4, 2000), "1024 features"), ((4,), "rows, features")])
 def test_out_of_envelope_shapes_are_refused(shape, message):
     tool = _compiler()
@@ -149,3 +162,28 @@ def test_device_loop_is_one_launch_and_launch_row_reports_native_gpu():
     program.run(y, x, [5, 6])
     if before is not None:
         assert program.bound.launch_count == before + 1
+
+
+def _sequential_row_normalize(x):
+    """The declared reduction order: lanes folded in index order in f32."""
+    out = np.empty_like(x)
+    for r in range(x.shape[0]):
+        acc = np.float32(0.0)
+        for v in x[r]:
+            acc = np.float32(np.float32(v * v) + acc)
+        out[r] = x[r] / np.float32(np.sqrt(acc))
+    return out
+
+
+@pytest.mark.parametrize("shape", [(3, 6), (5, 8), (2, 100), (7, 1024)])
+def test_row_reduction_program_is_bit_exact_with_the_declared_order_on_device(shape):
+    from tessera.compiler.native_gpu_tensor import TensorSpec
+    from tessera.compiler.native_row_program import row_normalize_module, row_program_device
+    backend, chip, tool, llvm = _device_lane()
+    x = np.random.default_rng(shape[1]).standard_normal(shape).astype(np.float32)
+    program = row_program_device(row_normalize_module(*shape), entry="row_normalize", rows=shape[0],
+                                 specs=(TensorSpec("x", "fp32", shape, False), TensorSpec("y", "fp32", shape, True)),
+                                 backend=backend, chip=chip, compiler=tool, llvm_bin=llvm, name="row normalize")
+    out = program.run(x)
+    np.testing.assert_array_equal(np.asarray(out), _sequential_row_normalize(x))
+    np.testing.assert_allclose(np.linalg.norm(np.asarray(out), axis=1), 1.0, rtol=1e-5, atol=1e-5)

@@ -156,6 +156,22 @@ device kernels (dispatch/allocation/kernel time separately) before any lane
 change, an Apple package route (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
 
+## EBM nonlinear energies and the sphere integrator — 2026-09-16
+
+Sixth slice, sync `EBM-NONLINEAR-MANIFOLD-2026-09-16` (W4-PRODUCT-1 /
+AD-SOLVER-IFT-1). Driving three energies and a curved manifold through the
+same compiler found what a per-energy kernel would have hidden: `softplus`
+had only a placeholder adjoint, so an energy written with it would have
+round-tripped its gradient through the Python VJP registry every step; the
+row-program emitter could fail with no diagnostic, indexed an empty slot
+after a failed lookup, and copied a slot reference into the map it was
+inserting into; and registering the domain dialects in `tessera-opt` had left
+three `phase7` fixtures red on main, because a registered dialect withdraws
+`--allow-unregistered-dialect` from its own ops. All are closed on the branch.
+The sphere's two singularities are reported per row and never repaired
+silently. Next in this stream: the bivector integrator (M2), which needs the
+Clifford `grade` op inside the EBM lowering, and the overhead measurement.
+
 ## EBM Langevin loop as one cooperative GPU kernel — 2026-09-16
 
 Fifth slice, sync `EBM-NATIVE-GPU-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The

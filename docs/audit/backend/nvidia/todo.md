@@ -7648,6 +7648,14 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM nonlinear energies and the sphere integrator — 2026-09-16
+
+Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on sm_120 (Super-Bear), 32/32 device tests on both trees. The sphere retraction's f32 `sqrt` goes through the rounding-explicit libdevice call the last slice introduced, so the retracted state matches the host fold; the three energies each lower inside the kernel with no `custom_adjoint_call`. No performance claim.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--nonlinear-energies-and-the-sphere-integrator-reach-the-same-kernel).
+
 ## EBM Langevin loop as one cooperative kernel — 2026-09-16
 
 Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

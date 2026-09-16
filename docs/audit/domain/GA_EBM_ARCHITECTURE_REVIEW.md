@@ -145,6 +145,24 @@ claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured
 evidence.
 
+## Nonlinear energies and the sphere integrator — 2026-09-16
+
+Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The
+acceptance's remaining clauses: **an energy is a typed program whatever the
+energy is** — quadratic, Huber and softplus all run through the one
+integrator, each matching its own oracle, with no `custom_adjoint_call` left
+in any kernel (softplus gained a native `dy · sigmoid(x)` adjoint and a stable
+lowering); and **a manifold integrator fails closed** — `manifold = "sphere"`
+projects the gradient and the noise to the tangent plane and retracts by
+normalization, reporting its entry precondition and retraction underflow in a
+per-row status word rather than repairing either silently (Decision #21a). The
+declared reduction order is sequential over features and the device's ordered
+fold reproduces it, so the projections agree with the host fold rather than
+merely within a tolerance. Verified on the Mac, gfx1151, gfx1201 and sm_120.
+Still not met: the bivector integrator (it needs the Clifford `grade` op inside
+the EBM lowering), opaque callbacks, Apple, and the overhead measurement that
+would let this lane displace the Python-emitted kernels.
+
 ## The Langevin loop as one cooperative kernel — 2026-09-16
 
 Sync `EBM-NATIVE-GPU-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The device

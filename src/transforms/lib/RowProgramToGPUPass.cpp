@@ -37,6 +37,7 @@
 // unsupported ops) with a diagnostic naming the op.
 //
 //===----------------------------------------------------------------------===//
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -562,8 +563,12 @@ struct RowProgramToGPUPass : public PassWrapper<RowProgramToGPUPass, OperationPa
            "native storage ABI: one block per row, one lane per feature, ordered reductions.";
   }
   void getDependentDialects(DialectRegistry &r) const override {
-    r.insert<arith::ArithDialect, func::FuncDialect, gpu::GPUDialect, LLVM::LLVMDialect, linalg::LinalgDialect,
-             math::MathDialect, memref::MemRefDialect, scf::SCFDialect, tensor::TensorDialect>();
+    // The emitted skeleton names `tile.alloc_shared` (the arena sizer marker):
+    // the tile dialect must be declared here or an assertions-enabled MLIR
+    // refuses to load it inside the pass manager (Tajasarus, 2026-09-16).
+    r.insert<tessera::tile::TesseraTileDialect, arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
+             LLVM::LLVMDialect, linalg::LinalgDialect, math::MathDialect, memref::MemRefDialect, scf::SCFDialect,
+             tensor::TensorDialect>();
   }
   void runOnOperation() override {
     ModuleOp module = getOperation();

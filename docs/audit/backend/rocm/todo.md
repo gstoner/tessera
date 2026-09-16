@@ -7943,3 +7943,11 @@ See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-te
 Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
 Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to gfx1151 / gfx1201 execution; no proof transfers.
 See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).
+
+## Attention broadcast masks on every axis — 2026-09-15
+
+Sync `ATTN-QK-BROADCAST-2026-09-15`; owner FRONTEND-IR-MEDIUM-1.
+
+Follow-up required: the shared FA-4 `score_bias` block may now be physically broadcast (`[1,tkv]` or `[tq,1]`). `TileToROCM`'s canonical streaming attention indexes the bias at the scores' shape, so it now refuses a broadcast block (fails closed with a named error) instead of reading the wrong bytes; a gfx1151/gfx1201 broadcast lowering plus its negative fixture in the ROCm suite are owed. `check-tessera-rocm` 68/69 on both Princess-Luna and Tajasarus (the one unresolved fixture is the known gfx1151 data fixture). SM120 proof does not transfer.
+
+Evidence: [attention broadcast packets](../../../../benchmarks/baselines/attention_broadcast_20260915/README.md). No performance promotion.

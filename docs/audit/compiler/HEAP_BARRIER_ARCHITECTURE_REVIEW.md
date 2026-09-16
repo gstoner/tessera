@@ -328,3 +328,34 @@ includes a real heap worker deliberately stopped before close, timeout retention
 and confirmed process teardown. This is injected process stalling, not a reproduced
 driver hang. No measured overlap or performance promotion.
 Sync: `HEAP-GATED-ISOLATION-2026-09-11`.
+
+## Probed admission and health-checked replacement (2026-09-15)
+
+`IsolatedHeapPool` no longer admits a worker on a bare ready message. The
+worker runs `_probe_health` on the device it will own before reporting: an
+int8 allocation with a known pattern must publish exactly one live slot of the
+payload width, read back bitwise through a generation-checked pin, and be
+reclaimed after an empty graph is published and marked. The ready message
+carries the probe tag; a bare or foreign message is a failed admission, the
+lease is recovered with confirmed death, and no owner exists. Admission has its
+own bound (`startup_seconds`) because it compiles the metadata kernels
+in-process; `timeout_seconds` still bounds one device command.
+
+`replacement()` refuses until the predecessor is closed, failed and its lease
+reusable — confirmed death, which proves resource-owner termination only — and
+then admits a fresh worker whose own startup probe is the health evidence.
+Neither worker is reused, and a failed probe admits nothing. The probe proves
+the selected workload on one device ordinal now; it is not a global
+driver-health certificate, a device reset, or a replacement *policy*.
+
+Prerequisite repaired on the way: every native GPU storage validator replayed
+a hand-copied four-pass arena pipeline while the packager had grown a fifth
+pass (`--tessera-expand-lowp-conversions`, 100a2980), so on both device boxes
+every heap, SSD, ANN, exception-heap, public-result and gradient-sum package
+was refused as "disagrees with native replay". The pipeline is spelled once in
+`native_gpu_storage.ARENA_PIPELINE` and a drift test fails any copy.
+
+[CUDA/HIP evidence](../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md) records both owning devices passing all nine recorder
+proofs, including refusal before confirmed death and admission after it. The
+stopped-worker fault remains injected; legacy snapshot/import migration remains
+open. Sync: `HEAP-REPLACEMENT-HEALTH-2026-09-15`.

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import threading
 import numpy as np
 from .native_ann import NativeANNPair, _affine, _affine_error_bounds, _exact_output, _exact_error, _output_shape
-from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage
+from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage, replay_arena_ir
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 from .native_persistent_tape import _attribute
@@ -83,8 +83,7 @@ class NativeANNDevicePair:
             if pipeline not in ('serial-v1','elementwise-fused-v1','serial-rows-v1','elementwise-fused-rows-v1'):
                 raise ValueError('ANN physical optimization pipeline is unsupported')
             gpu=_prepare_ann_gpu_ir(source,self.compiler,self.llvm_bin,package.backend,pipeline.startswith('elementwise-fused'),'-rows-' in pipeline)
-            replay=_run(self.compiler,'--allow-unregistered-dialect','--tessera-tile-buffer-reuse',
-                        '--tessera-tile-buffer-arena','--canonicalize',source=gpu)
+            replay=replay_arena_ir(self.compiler, gpu)
             if replay!=package.arena_ir:
                 raise ValueError('ANN device artifact disagrees with native source replay')
             if _attribute(package.arena_ir,'tessera.ann.source') != source or package.compiler_digest != self.logical.compiler_digest:

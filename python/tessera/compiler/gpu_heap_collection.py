@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import hashlib
 import inspect
 from pathlib import Path
-from .native_gpu_storage import build_native_gpu_storage, _run, NativeGPUStoragePackage
+from .native_gpu_storage import build_native_gpu_storage, NativeGPUStoragePackage, replay_arena_ir
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 
@@ -545,14 +545,7 @@ class GPUHeapPoolKernel:
         source, specs = emit_pool(
             self.slots, self.width, self.mode, payload_dtype=self.payload_dtype, references=self.references
         )
-        replay = _run(
-            self.compiler,
-            "--allow-unregistered-dialect",
-            "--tessera-tile-buffer-reuse",
-            "--tessera-tile-buffer-arena",
-            "--canonicalize",
-            source=source,
-        )
+        replay = replay_arena_ir(self.compiler, source)
         if replay != self.package.arena_ir:
             raise ValueError("GPU heap pool disagrees with native replay")
         return specs

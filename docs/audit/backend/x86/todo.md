@@ -5277,3 +5277,10 @@ Sync `ATTN-QK-BROADCAST-2026-09-15`; owner FRONTEND-IR-MEDIUM-1.
 Not applicable with a reason: the x86 raised-attention package takes the full-shape bias path only; no broadcast form reaches it and none is claimed. The shared recognizer/verifier changes are host-free and covered by the Tile lowering fixture; no Zen 5 device evidence is inferred.
 
 Evidence: [attention broadcast packets](../../../../benchmarks/baselines/attention_broadcast_20260915/README.md). No performance promotion.
+## Probed admission and health-checked heap replacement — 2026-09-15
+
+Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
+
+Not applicable with a reason: no x86 process-isolated heap worker exists and none is claimed; host-free tests only.
+
+Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.

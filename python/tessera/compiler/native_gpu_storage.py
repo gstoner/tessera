@@ -119,6 +119,21 @@ class NativeGPUStoragePackage:
         return BoundNativeGPUStorage(self)
 
 
+# The one arena pipeline every native GPU storage package is built with and
+# every consumer replays against. Since 100a2980 the packager also expands
+# low-precision conversions before canonicalization; six consumers kept a
+# hand-copied four-pass replay and refused every package on device with
+# "disagrees with native replay" (found 2026-09-15). Spell the pipeline here
+# only -- tests/unit/test_arena_replay_pipeline.py fails a hand copy.
+ARENA_PIPELINE = ('--allow-unregistered-dialect', '--tessera-tile-buffer-reuse',
+                  '--tessera-tile-buffer-arena', '--tessera-expand-lowp-conversions', '--canonicalize')
+
+
+def replay_arena_ir(compiler: Path, source: str) -> str:
+    """Replay ``source`` through the packager's arena pipeline for validation."""
+    return _run(Path(compiler), *ARENA_PIPELINE, source=source)
+
+
 def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
                              backend: str, chip: str, toolkit: Path | None = None) -> NativeGPUStoragePackage:
     if (backend, chip) not in (('nvidia', 'sm_120'), ('rocm', 'gfx1151'), ('rocm', 'gfx1201')):
@@ -126,8 +141,7 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     if re.search(r'\btessera\.denormal_mode\s*=', source):
         raise ValueError('explicit denormal policy currently requires the Apple arena consumer')
     binary_pass = _binary_pass(toolkit)
-    arena = _run(compiler, '--allow-unregistered-dialect', '--tessera-tile-buffer-reuse',
-                 '--tessera-tile-buffer-arena', '--tessera-expand-lowp-conversions', '--canonicalize', source=source)
+    arena = replay_arena_ir(compiler, source)
     device = _block(arena, r'^  gpu.module .*?^  }')
     host = _block(arena, r'^  func.func @__tessera_shared_bytes_.*?^  }')
     signatures = re.findall(r'gpu.func @([\w]+)\(([^)]*)\) kernel', device)

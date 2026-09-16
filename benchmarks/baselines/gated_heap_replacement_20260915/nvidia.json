@@ -1,0 +1,282 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host": "The-Super-Bear",
+  "compiler_sha256": "d3a353d9e9d6d5620de2a2495d9c9a0f9e0b8eb1cc5fdd2f8e90a9d5201c0662",
+  "recorder_sha256": "fe92d6dbc73841724780a8203b038c357823bf8ae3c3909e2428b204fb67a1a8",
+  "health": "heap-health-v1",
+  "artifacts": {
+    "allocate": {
+      "binding": "4b996ec29027f1ac8b9359db0cfa3169ddffb135df1d221a5a8e210bccf31186",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_allocate",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "pin": {
+      "binding": "68e8c6d299a5b30f9be8c1456481c415fc0ef64c6c8f4be1eeb883dcea4f924a",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_pin",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "unpin": {
+      "binding": "2edcde341a412d0cb1d923bedc215d1ddcab4529a7349e0ac10c83d0b6c87606",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_unpin",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "mark_begin": {
+      "binding": "0d816b71ef4bae44d365b54057d293e2a1bb46e69444e567039c0b4c88de071e",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_mark_begin",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "mark_step": {
+      "binding": "2d5a0ed7e8bf19dabf27e59dd7bd65d18734be665071fc15da362783e585a88b",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_mark_step",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "allocate_marked": {
+      "binding": "ff545a0ef8a8ed34c282c4de4817350eff467fabda8dbe4fe011c770aed525c2",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_allocate_marked",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "retire_marked": {
+      "binding": "ca69f324450a8dee84796ba39ede873adc2564e8bf6c8f8368ea51b398db5c36",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_retire_marked",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "inspect": {
+      "binding": "f7bf6ba5ca4ed4ae8a106f29fcd952f43c955946059c0ec7387063857f3c1558",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_inspect",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "graph_checked": {
+      "binding": "9633146a501b08b103c3381e1287fff34d950b352aaabc8e81609780b9b93be2",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_graph_checked",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "graph_incremental": {
+      "binding": "2713e73536d3bd97afecd0c0de3d1e9aecaf64b72fd345d41d8e0110fc64e6d5",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_graph_incremental",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    },
+    "reclaim_pinned": {
+      "binding": "f93de7edd4acc17a1b4b0f49f96d6f3bb0c58cca975c6d7d4209da049de789ec",
+      "protocol": {
+        "address_space": 1,
+        "contention_status": 3,
+        "final_remark": "same_gate_as_graph_writers",
+        "gate": "aligned_i64_zero_initialized_shared_by_all_metadata_users",
+        "generation_limit": 2147483647,
+        "handle": "slot_generation_i64_pair",
+        "marking": "incremental_update_tricolor",
+        "mode": "atomic_reclaim_pinned",
+        "payload": "immutable_until_unpinned_reuse",
+        "publication": "release_gate",
+        "reclamation": "per_slot_pins_and_recorded_readers",
+        "references": 1,
+        "schema": 3,
+        "slots": 4,
+        "state_layout": "generation_length_lifecycle",
+        "synchronization": "system_scope_acq_rel_try_lock",
+        "width": 8
+      }
+    }
+  },
+  "writer_model": {
+    "states": 13,
+    "transitions": 16,
+    "counterexample": null
+  },
+  "split_writer_counterexample": {
+    "states": 23,
+    "transitions": 26,
+    "counterexample": [
+      "0:checked",
+      "1:checked",
+      "0:unchecked_reserve",
+      "1:unchecked_reserve"
+    ]
+  },
+  "proofs": [
+    "private polled admission and unpin receipts reused across eight scopes",
+    "cancelled admission releases pin after completion",
+    "stale admission refuses without poisoning pool",
+    "allocation during marking publishes grey root before retirement",
+    "all admitted metadata kernels carry the owned gate",
+    "metadata copies remain valid after reclamation",
+    "normal and stopped-process teardown require confirmed worker death",
+    "a worker is admitted only after its in-process device probe verifies allocation, readback and reclamation",
+    "replacement refuses before confirmed predecessor death and admits a freshly probed worker after it"
+  ],
+  "promotion_eligible": false,
+  "measured_overlap": false,
+  "envelope": "gated owner retains stream epochs; isolated bounded host commands; stopped-worker fault is not a driver hang; the startup probe proves the workload on this device ordinal now, not global driver health"
+}

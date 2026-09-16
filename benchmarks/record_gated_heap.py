@@ -14,7 +14,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'python')]
 from benchmarks.record_device_ring_protocol import Device  # noqa: E402
 from benchmarks.record_pool_resident_ssd import Memory  # noqa: E402
 from tessera.compiler.resident_gated_pool import ResidentGatedPool
-from tessera.compiler.native_isolated_heap import IsolatedHeapPool  # noqa: E402
+from tessera.compiler.native_isolated_heap import HEALTH_PROBE, IsolatedHeapPool  # noqa: E402
 from tessera.compiler.heap_writer_model import explore_writers  # noqa: E402
 from tessera.compiler.heap_barrier_contract import read_heap_contract  # noqa: E402
 
@@ -140,13 +140,37 @@ def main():
         else:
             raise AssertionError('stopped heap worker was treated as closed')
         assert not stalled.closed
+        # No replacement before the predecessor's death is confirmed.
+        try:
+            stalled.replacement()
+        except ValueError as exc:
+            assert 'confirmed' in str(exc)
+        else:
+            raise AssertionError('replacement admitted before confirmed death')
         stalled.recover_async()
         until(stalled.poll_recovery)
         assert stalled.process.exitcode is not None
+        # A replacement is a fresh worker that passed its own in-process device
+        # probe (allocate / inspect / pinned readback / empty-graph mark /
+        # reclaim) before it was admitted; it then serves bounded commands.
+        fresh = stalled.replacement()
+        assert fresh is not stalled and fresh.process.pid != stalled.process.pid
+        fresh.submit('allocate', np.full(8, 5, np.int8))
+        until(lambda: result(fresh))
+        assert results[-1][0] == 0
+        fresh.submit('inspect')
+        until(lambda: result(fresh))
+        assert results[-1][0][0, 2] == 1 and results[-1][0][0, 1] == 8
+        fresh.submit('close')
+        until(lambda: result(fresh))
+        assert results[-1] == 'close_receipt'
+        fresh.recover_async()
+        until(fresh.poll_recovery)
+        assert fresh.process.exitcode is not None
         packet = dict(schema=1, backend=args.backend, chip=options['chip'], host=platform.node(),
                       compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
                       recorder_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                      artifacts=artifacts, writer_model=explore_writers(),
+                      health=HEALTH_PROBE, artifacts=artifacts, writer_model=explore_writers(),
                       split_writer_counterexample=explore_writers(split_reservation=True),
                       proofs=['private polled admission and unpin receipts reused across eight scopes',
                               'cancelled admission releases pin after completion',
@@ -154,9 +178,11 @@ def main():
                               'allocation during marking publishes grey root before retirement',
                               'all admitted metadata kernels carry the owned gate',
                               'metadata copies remain valid after reclamation',
-                              'normal and stopped-process teardown require confirmed worker death'],
+                              'normal and stopped-process teardown require confirmed worker death',
+                              'a worker is admitted only after its in-process device probe verifies allocation, readback and reclamation',
+                              'replacement refuses before confirmed predecessor death and admits a freshly probed worker after it'],
                       promotion_eligible=False, measured_overlap=False,
-                      envelope='gated owner retains stream epochs; isolated bounded host commands; stopped-worker fault is not a driver hang')
+                      envelope='gated owner retains stream epochs; isolated bounded host commands; stopped-worker fault is not a driver hang; the startup probe proves the workload on this device ordinal now, not global driver health')
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(packet, indent=2) + '\n')
         print(json.dumps(dict(output=str(args.output), proofs=packet['proofs'])))

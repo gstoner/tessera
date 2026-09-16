@@ -7610,3 +7610,10 @@ Parity validated on owning SM120 (RTX 5070, CUDA 13.4.1, driver 610.88): six B=2
 Operational note: the NVIDIA native runtime resolves `tessera-nvidia-opt` and `libtessera_nvidia_ptx_launch.so` from `build-nvidia-cuda/`, not `build/`. A `build/`-only rebuild left a two-week-old compiler in place that ignored `bias_shape` and a launcher that rejected the v3 dims (`rc=5`); rebuild `build-nvidia-cuda/` before any sm_120 device claim.
 
 Evidence: [attention broadcast packets](../../../../benchmarks/baselines/attention_broadcast_20260915/README.md). No performance promotion.
+## Probed admission and health-checked heap replacement — 2026-09-15
+
+Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
+
+Parity validated on owning SM120 (RTX 5070, CUDA 13.4 / driver 610.88): a spawned heap worker is admitted only after its in-process device probe (allocate → one live slot → bitwise pinned readback → empty-graph mark → reclaim) verifies; `replacement()` refuses before confirmed predecessor death and admits a freshly probed worker after it; all nine recorder proofs pass. Prerequisite: the arena replay pipeline is now shared with the packager — on `origin/main` every heap/SSD/ANN/exception/public-result/gradient-sum package was refused on this box as "disagrees with native replay" since 100a2980. Follow-up required: legacy snapshot/import migration; the stall is injected, not a driver hang.
+
+Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.

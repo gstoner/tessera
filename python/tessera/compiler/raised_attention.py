@@ -83,7 +83,10 @@ def validate_mask_rows(artifact, bias):
         valid &= key >= query - artifact.window_left
     if artifact.window_right >= 0:
         valid &= key <= query + artifact.window_right
-    if not np.all(np.any(np.isfinite(bias) & valid, axis=-1)):
+    # The bias may be broadcast on any axis; judge rows on the logical view
+    # (a view, not a copy -- nothing is expanded for the device).
+    finite = np.broadcast_to(np.isfinite(bias), bias.shape[:2] + (sq, sk))
+    if not np.all(np.any(finite & valid, axis=-1)):
         raise ValueError('raised attention mask produces a fully masked row')
 
 
@@ -114,7 +117,8 @@ class RaisedAttentionBinding:
             raise ValueError('this attention artifact has no bias operand')
         arguments.update(zip(('B','Hq','Hkv','Sq','Sk','D','Dv'),self.artifact.dims,strict=True))
         if self.artifact.bias_name is not None and self.artifact.bias_shape != (b,h,sq,self.artifact.dims[4]):
-            arguments.update(BiasB=self.artifact.bias_shape[0], BiasH=self.artifact.bias_shape[1])
+            arguments.update(BiasB=self.artifact.bias_shape[0], BiasH=self.artifact.bias_shape[1],
+                             BiasQ=self.artifact.bias_shape[2], BiasK=self.artifact.bias_shape[3])
         result = rt.launch(artifact,arguments)
         expected_kind = 'native_cpu' if self.artifact.target == 'x86' else 'native_gpu'
         if not result.get('ok') or result.get('execution_kind')!=expected_kind:

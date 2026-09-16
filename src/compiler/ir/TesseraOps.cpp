@@ -2239,9 +2239,13 @@ LogicalResult FlashAttnOp::verify() {
             "attn_bias requires rank-3 [B,Sq,D] or rank-4 [B,Hq,Sq,D] q");
       int64_t qSequenceDim = qT.getRank() == 4 ? 2 : 1;
       int64_t biasSequenceDim = bT.getRank() == 4 ? 2 : 1;
-      if (bT.getDimSize(biasSequenceDim) != qT.getDimSize(qSequenceDim))
+      // The query axis may broadcast (a per-key padding mask is [.., 1, Sk]);
+      // the key axis is checked at lowering against the (possibly
+      // concatenated) K seqlen, where 1 broadcasts likewise (2026-09-15).
+      if (bT.getDimSize(biasSequenceDim) != 1 &&
+          bT.getDimSize(biasSequenceDim) != qT.getDimSize(qSequenceDim))
         return emitOpError("attn_bias Sq dimension (")
-               << bT.getDimSize(biasSequenceDim) << ") must match q seqlen ("
+               << bT.getDimSize(biasSequenceDim) << ") must be 1 or match q seqlen ("
                << qT.getDimSize(qSequenceDim) << ")";
       if (bT.getDimSize(0) != 1 && bT.getDimSize(0) != qT.getDimSize(0))
         return emitOpError("attn_bias batch dim (")

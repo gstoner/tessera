@@ -1505,10 +1505,14 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
     if (!bias || !bias.hasStaticShape() || !bias.getElementType().isF32() || bias.getRank() != 4 ||
         (bias.getDimSize(0) != schedule.batch && !(nvidia && bias.getDimSize(0) == 1)) ||
         (bias.getDimSize(1) != schedule.queryHeads && !(nvidia && bias.getDimSize(1) == 1)) ||
-        bias.getDimSize(2) != schedule.queryRows || bias.getDimSize(3) != schedule.keyRows)
+        (bias.getDimSize(2) != schedule.queryRows && !(nvidia && bias.getDimSize(2) == 1)) ||
+        (bias.getDimSize(3) != schedule.keyRows && !(nvidia && bias.getDimSize(3) == 1)))
       return failure();
     schedule.bias = true;
-    if (bias.getDimSize(0) != schedule.batch || bias.getDimSize(1) != schedule.queryHeads)
+    // Any broadcast axis (batch, head, query, key) is carried as the physical
+    // bias shape so the kernel indexes the storage that exists.
+    if (bias.getDimSize(0) != schedule.batch || bias.getDimSize(1) != schedule.queryHeads ||
+        bias.getDimSize(2) != schedule.queryRows || bias.getDimSize(3) != schedule.keyRows)
       schedule.biasShape.assign(bias.getShape().begin(), bias.getShape().end());
   }
   auto scale = op->getAttrOfType<FloatAttr>("scale");

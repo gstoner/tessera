@@ -2357,14 +2357,23 @@ static LogicalResult materializeSm120AttentionKernel(
       builder.setInsertionPointAfter(dot);
       Value value = arith::MulFOp::create(builder, loc, dot.getResult(0), scale);
       if (hasBias) {
+        // Physical bias indexing: a broadcast axis (extent 1 in bias_shape)
+        // reads index 0 and contributes a stride of 1; the others use the
+        // attention coordinate and the physical extent (query/key axes since
+        // 2026-09-15, batch/head since 2026-09-12).
         Value bb = biasShape && biasShape[0] == 1 ? i64Constant(builder, loc, 0) : b;
         Value bh = biasShape && biasShape[1] == 1 ? i64Constant(builder, loc, 0) : hq;
+        Value bq = biasShape && biasShape[2] == 1 ? i64Constant(builder, loc, 0) : q;
+        Value bk = biasShape && biasShape[3] == 1 ? i64Constant(builder, loc, 0) : key;
         Value physicalHeads = biasShape ? i64Constant(builder, loc, biasShape[1]) : Hq;
+        Value physicalQueries = biasShape ? i64Constant(builder, loc, biasShape[2]) : Sq;
+        Value physicalKeys = biasShape ? i64Constant(builder, loc, biasShape[3]) : Sk;
         Value biasIndex = addI64(builder, loc,
             mulI64(builder, loc,
                 addI64(builder, loc, mulI64(builder, loc,
-                    addI64(builder, loc, mulI64(builder, loc, bb, physicalHeads), bh), Sq), q), Sk),
-            key);
+                    addI64(builder, loc, mulI64(builder, loc, bb, physicalHeads), bh), physicalQueries), bq),
+                physicalKeys),
+            bk);
         Value biasPtr = LLVM::GEPOp::create(builder, loc, in[3].getType(), f32,
                                             in[3], ValueRange{biasIndex});
         Value bias = LLVM::LoadOp::create(builder, loc, f32, biasPtr, 4);

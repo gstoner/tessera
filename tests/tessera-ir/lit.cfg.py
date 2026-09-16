@@ -129,6 +129,11 @@ if _opt_help_contains("tessera-lower-to-rocm"):
 if _opt_help_contains("tessera-lower-to-apple_gpu"):
     config.available_features.add("tessera-apple-backend")
 
+# The EBM solver dialect + its lowering and the row-program emitter register in
+# tessera-opt only when TESSERA_BUILD_EBM_BACKEND=ON (2026-09-16).
+if _opt_help_contains("tessera-ebm-lower-langevin") and _opt_help_contains("tessera-row-program-to-gpu"):
+    config.available_features.add("tessera-ebm")
+
 # The x86 executable pass is always registered so it can fail closed with a
 # useful rebuild diagnostic.  Help-text probing therefore cannot distinguish a
 # build that actually registered TesseraX86Dialect.  Probe the dialect directly

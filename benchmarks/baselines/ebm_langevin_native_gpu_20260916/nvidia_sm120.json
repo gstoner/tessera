@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host": "The-Super-Bear",
+  "compiler_sha256": "7715c2cae3b62acda99052651b84eaeaa73b3ad317deaa0a2586af07ef6543f9",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "recorder_sha256": "8d1a24427a4d9a8395aaffa4b6a4c2c69c0c983008dd0a6d54b851142c508ced",
+  "rows": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.7,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977207,
+        43
+      ],
+      "binding": "ff3f26a07d47eb4b4791c6db506488898dfb84f45f9c3b317910b7ce79858157"
+    },
+    {
+      "shape": [
+        6,
+        8
+      ],
+      "steps": 5,
+      "temperature": 0.7,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977211,
+        47
+      ],
+      "binding": "7f8adc6b089de3ff02502af88e2c6c87e062e2291e3acd23826e37877e9f6e5c"
+    },
+    {
+      "shape": [
+        3,
+        5
+      ],
+      "steps": 12,
+      "temperature": 0.7,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977218,
+        54
+      ],
+      "binding": "c4d03d8d12909999d1a181b0cd6602bfb228f2e54382fac0e7ccfc15bc2ec15c"
+    },
+    {
+      "shape": [
+        9,
+        100
+      ],
+      "steps": 4,
+      "temperature": 0.3,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977210,
+        46
+      ],
+      "binding": "82184df27e9b8e926c06630d60c2692044cabd96681cb71f7847e68340705d36"
+    },
+    {
+      "shape": [
+        16,
+        33
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977214,
+        50
+      ],
+      "binding": "dee9be1aac695b75ad94620852cf7b1e9ef85b0a6ae417b3f26b67e415a85d6f"
+    },
+    {
+      "shape": [
+        2,
+        1024
+      ],
+      "steps": 3,
+      "temperature": 0.5,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977209,
+        45
+      ],
+      "binding": "85a7eb9f04b41abc4e2a1cd4a608e36b25bd498d2630e393659075e25374df3b"
+    }
+  ],
+  "kernel_structure": {
+    "gpu_funcs": 1,
+    "loops": 1,
+    "loop_carried": [
+      "f32, i64"
+    ],
+    "philox_mul": 18,
+    "barriers": 0,
+    "linalg_or_tensor_ops": 0
+  },
+  "proofs": [
+    "the K-step loop is one device launch, bit-exact with the declared Philox/Box-Muller policy for every case (K in 1..12, F in 5..1024, T in {0, 0.3, 0.5, 0.7})",
+    "the gradient is the paired autodiff pass's own adjoint, lowered inside the kernel (no host gradient, no host noise, no Python-emitted kernel)",
+    "one gpu.func, one scf.for carrying (state, key, key) in registers, Philox inside the loop"
+  ],
+  "promotion_eligible": false,
+  "measured_performance": false,
+  "envelope": "f32, quadratic energy, [rows, features] with features <= 1024; per-call host transfers; correctness only",
+  "rocm_chip_env": null
+}

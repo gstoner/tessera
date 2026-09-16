@@ -19,6 +19,7 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRBufferizationTransforms
   MLIRFuncDialect
   MLIRLLVMDialect
+  MLIRLLVMIRTransforms
   MLIRNVVMDialect
   MLIRNVGPUDialect
   MLIRROCDLDialect
@@ -191,6 +192,22 @@ endif()
 
 # Phase 8: Apple Silicon backend (TESSERA_BUILD_APPLE_BACKEND).
 # Only linked when the backend subdirectory has been added by src/CMakeLists.txt.
+# Domain dialects (2026-09-16): one driver runs the whole chain -- paired
+# autodiff, the EBM/Clifford lowerings, tessera-to-linalg and the row-program
+# GPU emission -- instead of three drivers exchanging generic-printed IR.
+if(TARGET TesseraEBM)
+  tessera_opt_feature(ebm TESSERA_HAVE_EBM)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/solvers/ebm/include ${CMAKE_BINARY_DIR}/src/solvers/ebm)
+  target_link_libraries(tessera-opt PRIVATE TesseraEBM)
+endif()
+if(TARGET TesseraClifford)
+  tessera_opt_feature(clifford TESSERA_HAVE_CLIFFORD)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/solvers/clifford/include ${CMAKE_BINARY_DIR}/src/solvers/clifford)
+  target_link_libraries(tessera-opt PRIVATE TesseraClifford)
+endif()
+
 if(TARGET TesseraApple)
   tessera_opt_feature(apple-backend TESSERA_HAVE_APPLE_BACKEND)
   target_link_libraries(tessera-opt PRIVATE TesseraApple)

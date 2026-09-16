@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Conversion/Passes.h"  // Phase 4 GPU emission: per-pass register decls
 #include "mlir/InitAllExtensions.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 // Phase 4 GPU emission: BufferizableOpInterface external models — without these,
 // one-shot-bufferize reports "op was not bufferized" for linalg/tensor/etc.
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -87,6 +88,15 @@
 #ifdef TESSERA_HAVE_APPLE_BACKEND
 #include "Tessera/Target/Apple/Passes.h"
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
+#endif
+
+#ifdef TESSERA_HAVE_EBM
+#include "tessera/EBM/EBMDialect.h"
+#include "tessera/EBM/EBMPasses.h"
+#endif
+#ifdef TESSERA_HAVE_CLIFFORD
+#include "tessera/Clifford/CliffordDialect.h"
+#include "tessera/Clifford/CliffordPasses.h"
 #endif
 
 #ifdef TESSERA_HAVE_ROCM_BACKEND
@@ -417,6 +427,20 @@ int main(int argc, char **argv) {
   tessera::solver::registerTesseraLinalgSolverPipeline();
 #endif
 
+#ifdef TESSERA_HAVE_EBM
+  ::mlir::registerPass([]() { return tessera::createEBMCanonicalizePass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMFuseEnergyGradPass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMCheckpointInnerLoopPass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMPipelineCandidatesPass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMLowerLangevinPass(); });
+#endif
+#ifdef TESSERA_HAVE_CLIFFORD
+  ::mlir::registerPass([]() { return tessera::createCliffordAnnotateAlgebraPass(); });
+  ::mlir::registerPass([]() { return tessera::createCliffordExpandProductTablePass(); });
+  ::mlir::registerPass([]() { return tessera::createCliffordGradeFusionPass(); });
+  ::mlir::registerPass([]() { return tessera::createCliffordRotorSandwichFoldPass(); });
+#endif
+
 #ifdef TESSERA_HAVE_SCALING_RESILIENCE
   mlir::tessera::sr::registerPasses();
 #endif
@@ -480,6 +504,9 @@ int main(int argc, char **argv) {
   // link surface), not the full conversion umbrella.
   mlir::registerConvertLinalgToParallelLoopsPass();
   mlir::bufferization::registerBufferizationPasses();
+  // Tensor-level arith on tensors becomes linalg.generic for the row-program
+  // emitter (the JIT runs the same pass in-process).
+  mlir::registerConvertElementwiseToLinalgPass();
   mlir::registerGpuMapParallelLoopsPass();
   mlir::registerGpuKernelOutliningPass();
   mlir::registerConvertParallelLoopToGpuPass();
@@ -519,6 +546,15 @@ int main(int argc, char **argv) {
   // attributes and every loaded dialect's ConvertToLLVM interface must be
   // registered before MlirOptMain creates its context.
   mlir::registerAllExtensions(registry);
+  // The LLVM dialect *promises* a DialectInlinerInterface that
+  // registerAllExtensions does not provide. `--inline` builds its interface
+  // collection over every loaded dialect, and the row-program emitter loads
+  // llvm as a dependent dialect before the inliner runs, so without this
+  // registration an assertions-enabled MLIR aborts with "checking for an
+  // interface ... promised by dialect 'llvm' but never implemented" while an
+  // NDEBUG build silently proceeds (found on Tajasarus 2026-09-16; the
+  // Decision #19 standing lesson, third instance).
+  mlir::LLVM::registerInlinerInterface(registry);
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);
@@ -543,6 +579,12 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_SOLVERS
   tessera::solver::registerTesseraLinalgSolverDialect(registry);
+#endif
+#ifdef TESSERA_HAVE_EBM
+  registry.insert<tessera::ebm::EBMDialect>();
+#endif
+#ifdef TESSERA_HAVE_CLIFFORD
+  registry.insert<tessera::clifford::CliffordDialect>();
 #endif
 #ifdef TESSERA_HAVE_COLLECTIVES
   tessera::collective::registerCollectiveDialect(registry);

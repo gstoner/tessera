@@ -986,6 +986,117 @@ struct ReduceLowering : public RewritePattern {
 // selected extremum for max/min; a second sum reduction counts ties and the
 // final generic divides the incoming cotangent equally among them.  Mean reads
 // a dynamic axis extent directly from the original input.
+// `tessera.unsqueeze` / `tessera.broadcast` (2026-09-16). The sum / static-mean
+// reduce adjoint decomposes into exactly these two ops, and until now neither
+// had a linalg lowering, so no reduce-sum gradient could reach the CPU JIT
+// lane -- the EBM quadratic energy (0.5 * sum((x - y)^2)) was the first to
+// hit it. Static shapes only; anything else is left for the residual check
+// to report rather than guessed.
+struct UnsqueezeLowering : public RewritePattern {
+  UnsqueezeLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.unsqueeze", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape() ||
+        inTy.getElementType() != outTy.getElementType())
+      return rewriter.notifyMatchFailure(op, "static ranked tensors required");
+    auto axesAttr = op->getAttrOfType<ArrayAttr>("axes");
+    if (!axesAttr)
+      return rewriter.notifyMatchFailure(op, "missing axes");
+    const int64_t outRank = outTy.getRank();
+    llvm::SmallVector<bool> inserted(outRank, false);
+    for (Attribute a : axesAttr) {
+      auto ia = dyn_cast<IntegerAttr>(a);
+      if (!ia) return rewriter.notifyMatchFailure(op, "axes must be integers");
+      int64_t axis = ia.getInt();
+      if (axis < 0) axis += outRank;
+      if (axis < 0 || axis >= outRank || inserted[axis])
+        return rewriter.notifyMatchFailure(op, "axis out of range or repeated");
+      inserted[axis] = true;
+    }
+    if (outRank != inTy.getRank() + (int64_t)axesAttr.size())
+      return rewriter.notifyMatchFailure(op, "result rank != input rank + axes");
+    // Expected result shape: input dims in order with 1s at the inserted axes.
+    llvm::SmallVector<int64_t> expected;
+    int64_t next = 0;
+    for (int64_t d = 0; d < outRank; ++d)
+      expected.push_back(inserted[d] ? 1 : inTy.getShape()[next++]);
+    if (outTy.getShape() != ArrayRef<int64_t>(expected))
+      return rewriter.notifyMatchFailure(op, "result shape disagrees with axes");
+    if (inTy.getRank() == 0) {
+      // A scalar tensor expands through a splat-free reshape.
+      rewriter.replaceOpWithNewOp<tensor::ReshapeOp>(
+          op, outTy, op->getOperand(0),
+          rewriter.create<arith::ConstantOp>(
+              op->getLoc(), rewriter.getIndexTensorAttr(expected)));
+      return success();
+    }
+    // Reassociation: each input dim absorbs the unit dims inserted before it
+    // (leading unit dims join the first input dim; trailing ones the last).
+    llvm::SmallVector<ReassociationIndices> reassociation(inTy.getRank());
+    int64_t group = 0;
+    llvm::SmallVector<int64_t> pending;
+    for (int64_t d = 0; d < outRank; ++d) {
+      if (inserted[d]) { pending.push_back(d); continue; }
+      reassociation[group].append(pending.begin(), pending.end());
+      pending.clear();
+      reassociation[group].push_back(d);
+      ++group;
+    }
+    reassociation.back().append(pending.begin(), pending.end());
+    rewriter.replaceOpWithNewOp<tensor::ExpandShapeOp>(op, outTy, op->getOperand(0), reassociation);
+    return success();
+  }
+};
+
+struct BroadcastLowering : public RewritePattern {
+  BroadcastLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.broadcast", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return failure();
+    auto inTy = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape() ||
+        inTy.getElementType() != outTy.getElementType())
+      return rewriter.notifyMatchFailure(op, "static ranked tensors required");
+    const int64_t rank = outTy.getRank();
+    if (inTy.getRank() != rank)
+      return rewriter.notifyMatchFailure(op, "same-rank broadcast required (unsqueeze first)");
+    // Input index for output dim d: d when the extents agree, 0 when the
+    // input extent is 1 (a stride-0 read); anything else is not a broadcast.
+    llvm::SmallVector<AffineExpr> inExprs;
+    for (int64_t d = 0; d < rank; ++d) {
+      if (inTy.getShape()[d] == outTy.getShape()[d])
+        inExprs.push_back(rewriter.getAffineDimExpr(d));
+      else if (inTy.getShape()[d] == 1)
+        inExprs.push_back(rewriter.getAffineConstantExpr(0));
+      else
+        return rewriter.notifyMatchFailure(op, "extent neither equal nor 1");
+    }
+    Location loc = op->getLoc();
+    Value init = rewriter.create<tensor::EmptyOp>(loc, outTy.getShape(), outTy.getElementType());
+    llvm::SmallVector<AffineMap> maps{
+        AffineMap::get(rank, 0, inExprs, rewriter.getContext()),
+        rewriter.getMultiDimIdentityMap(rank)};
+    llvm::SmallVector<utils::IteratorType> iterators(rank, utils::IteratorType::parallel);
+    auto generic = rewriter.create<linalg::GenericOp>(
+        loc, TypeRange{outTy}, ValueRange{op->getOperand(0)}, ValueRange{init}, maps, iterators,
+        [](OpBuilder &b, Location l, ValueRange args) {
+          b.create<linalg::YieldOp>(l, args[0]);
+        });
+    rewriter.replaceOp(op, generic.getResult(0));
+    return success();
+  }
+};
+
 struct ReduceBackwardLowering : public RewritePattern {
   ReduceBackwardLowering(MLIRContext *ctx)
       : RewritePattern("tessera.reduce_backward", /*benefit=*/1, ctx) {}
@@ -3073,6 +3184,8 @@ public:
     patterns.add<TransposeLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
     patterns.add<ReduceBackwardLowering>(ctx);
+    patterns.add<UnsqueezeLowering>(ctx);
+    patterns.add<BroadcastLowering>(ctx);
     patterns.add<MSELossLowering>(ctx);
     patterns.add<MSELossBackwardLowering>(ctx);
     patterns.add<BinaryCrossEntropyLossLowering>(ctx);

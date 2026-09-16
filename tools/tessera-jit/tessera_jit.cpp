@@ -105,6 +105,10 @@
 #include "tessera/Clifford/CliffordDialect.h"
 #include "tessera/Clifford/CliffordPasses.h"
 #endif
+#ifdef TESSERA_JIT_HAVE_EBM
+#include "tessera/EBM/EBMDialect.h"
+#include "tessera/EBM/EBMPasses.h"
+#endif
 
 using namespace mlir;
 
@@ -323,7 +327,16 @@ void maybeTrace(PassManager &pm) {
 // copy is correct for ANY producer, and for our identity-layout C-contiguous
 // boundary (§12.4) `memref.copy` lowers to a `memcpy` intrinsic — no runtime
 // symbol, negligible cost.
+//
+// Intra-module callers (2026-09-16): a compiler-derived gradient reached the
+// lane as `call @E__bwd` from the EBM Langevin lowering, and every such call
+// site must follow its callee's new signature -- the caller allocates the
+// out-buffers (static memrefs), passes them trailing, and reads them back as
+// the former results. A callee whose result is not a static memref is left
+// untouched together with its callers. Before this, the rewrite silently left
+// callers with the old arity and the verifier failed after bufferization.
 LogicalResult rewriteResultsToOutParams(ModuleOp module) {
+  llvm::StringMap<SmallVector<Type>> rewritten;
   for (auto fn : module.getOps<func::FuncOp>()) {
     if (fn.getNumResults() == 0 || fn.isExternal())
       continue;
@@ -333,6 +346,18 @@ LogicalResult rewriteResultsToOutParams(ModuleOp module) {
     });
     if (!allMemref)
       continue;
+    bool called = false;
+    module.walk([&](func::CallOp call) {
+      if (call.getCallee() == fn.getName()) called = true;
+    });
+    if (called && !llvm::all_of(fn.getResultTypes(), [](Type t) {
+          return cast<MemRefType>(t).hasStaticShape();
+        })) {
+      fn.emitError("tessera_jit: a called function must return static memrefs "
+                   "for the DPS rewrite to allocate its out-buffers at call sites");
+      return failure();
+    }
+    rewritten[fn.getName()] = SmallVector<Type>(fn.getResultTypes());
 
     Block &entry = fn.getBody().front();
     auto retOp = cast<func::ReturnOp>(entry.getTerminator());
@@ -350,6 +375,25 @@ LogicalResult rewriteResultsToOutParams(ModuleOp module) {
     retOp.erase();
     fn.setType(
         FunctionType::get(fn.getContext(), entry.getArgumentTypes(), {}));
+  }
+  // Follow every call site of a rewritten callee.
+  SmallVector<func::CallOp> calls;
+  module.walk([&](func::CallOp call) {
+    if (rewritten.count(call.getCallee())) calls.push_back(call);
+  });
+  for (func::CallOp call : calls) {
+    OpBuilder b(call);
+    SmallVector<Value> operands(call.getOperands());
+    SmallVector<Value> outs;
+    for (Type t : rewritten[call.getCallee()]) {
+      Value buffer = memref::AllocOp::create(b, call.getLoc(), cast<MemRefType>(t));
+      operands.push_back(buffer);
+      outs.push_back(buffer);
+    }
+    func::CallOp::create(b, call.getLoc(), call.getCallee(), TypeRange{}, operands);
+    for (auto [result, buffer] : llvm::zip(call.getResults(), outs))
+      result.replaceAllUsesWith(buffer);
+    call.erase();
   }
   return success();
 }
@@ -686,6 +730,24 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   pm1a.addPass(tessera::createCliffordGradeFusionPass());
   pm1a.addPass(tessera::createCliffordExpandProductTablePass(/*expandRotorSandwich=*/true));
 #endif
+#ifdef TESSERA_JIT_HAVE_EBM
+  // Energy-based models: the paired autodiff pass derives @E__bwd for every
+  // energy marked tessera.autodiff = "reverse" that has no paired partner yet
+  // (modules that arrive already paired -- the autodiff CPU rows -- carry
+  // `tessera.autodiff.paired` and must not have their __bwd regenerated);
+  // the EBM lowering then turns energy / inner_step / langevin_step into
+  // arith + linalg (Philox noise in a linalg.generic) so a whole sampling
+  // loop compiles as one function.
+  bool needsPairing = false;
+  module.walk([&](func::FuncOp fn) {
+    if (fn->hasAttr("tessera.autodiff") && !fn->hasAttr("tessera.autodiff.paired"))
+      needsPairing = true;
+  });
+  if (needsPairing)
+    pm1a.addPass(tessera::createAutodiffPairedPass());
+  pm1a.addPass(tessera::createEBMCanonicalizePass());
+  pm1a.addPass(tessera::createEBMLowerLangevinPass());
+#endif
   pm1a.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
   // Elementwise arith/math ops ON TENSORS (e.g. the paired autodiff pass's
   // cotangent accumulation `arith.addf : tensor<...>`) have no bufferization
@@ -871,6 +933,14 @@ const char *tessera_jit_last_error(void) { return g_lastError.c_str(); }
 // Whether this library was built with the Clifford dialect lane (CMake option
 // TESSERA_BUILD_CLIFFORD_BACKEND). Callers needing geometric products check
 // this instead of compiling and reading a parse error.
+int tessera_jit_has_ebm(void) {
+#ifdef TESSERA_JIT_HAVE_EBM
+  return 1;
+#else
+  return 0;
+#endif
+}
+
 int tessera_jit_has_clifford(void) {
 #ifdef TESSERA_JIT_HAVE_CLIFFORD
   return 1;
@@ -891,6 +961,9 @@ void *tessera_jit_compile(const char *mlir_text) {
   tessera::registerTesseraDialects(registry);
 #ifdef TESSERA_JIT_HAVE_CLIFFORD
   registry.insert<tessera::clifford::CliffordDialect>();
+#endif
+#ifdef TESSERA_JIT_HAVE_EBM
+  registry.insert<tessera::ebm::EBMDialect>();
 #endif
   registry.insert<func::FuncDialect, arith::ArithDialect, scf::SCFDialect,
                   tensor::TensorDialect, linalg::LinalgDialect,

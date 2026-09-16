@@ -292,7 +292,7 @@ stack,tensor_algebra,yes,none,none,,,,,,,,python_reference=python-unit-registry,
 std,reduction,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 stft,spectral,yes,native,native,,,,x86_avx512,x86_avx512,,x86_avx512,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512],native compiler adjoint; native backward executes on x86_avx512 (Phase 4),x86_avx512=save_inputs,x86_avx512=dedicated
 stop_gradient,layout_transform,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
-sub,elementwise,yes,none,native,,,,,,,,python_reference=python-unit-registry;ir_tangent=llvm23-core,,,
+sub,elementwise,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
 sum,stable_reduction,yes,native,none,,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint (static extent required for mean),,
 svd,linalg_decomposition,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 take,indexing,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,

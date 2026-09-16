@@ -23,8 +23,14 @@ def attach_tensor_contract(source: str, specs, *, grid, block) -> str:
     encoded = json.dumps(data, sort_keys=True, separators=(',', ':'), allow_nan=False)
     encoded = encoded.replace('\\', '\\5C').replace('"', '\\22')
     result, count = re.subn(r'(?m)^module \{', lambda _: f'module attributes {{{ATTRIBUTE} = "{encoded}"}} {{', source)
+    if count == 0:
+        # A compiler-produced module may already carry provenance attributes
+        # (e.g. tessera.row_program.*); the contract joins that dictionary so
+        # the provenance survives into the package.
+        result, count = re.subn(r'(?m)^module attributes \{', lambda _: f'module attributes {{{ATTRIBUTE} = "{encoded}", ',
+                                source)
     if count != 1:
-        raise ValueError('tensor manifest producer requires one plain top-level module')
+        raise ValueError('tensor manifest producer requires one top-level module')
     return result
 
 

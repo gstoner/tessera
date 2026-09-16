@@ -40,3 +40,10 @@ def EBMPipelineCandidates : Pass<"tessera-ebm-pipeline-candidates", "mlir::Modul
     "[EBM6 stub] Map the K-candidate dimension across streams / devices "
     "for self_verify parallelism.";
 }
+
+def EBMLowerLangevin : Pass<"tessera-ebm-lower-langevin", "mlir::ModuleOp"> {
+  let summary =
+    "Lower energy / inner_step / langevin_step (euclidean) to arith/linalg over "
+    "the compiler-derived gradient @E__bwd with on-device Philox noise.";
+}
+

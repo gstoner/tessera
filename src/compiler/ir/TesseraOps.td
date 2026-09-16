@@ -1626,7 +1626,8 @@ def Tessera_AddOp : Op<
 // shared name→arith-kind table. sub/mul are the minimum needed before
 // softmax/normalization arrive (softmax = max → sub → exp → div).
 def Tessera_SubOp : Op<Tessera_Dialect, "sub",
-  [Pure, DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Elementwise tensor subtraction (a - b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);

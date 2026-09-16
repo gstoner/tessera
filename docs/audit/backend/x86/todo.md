@@ -5314,3 +5314,19 @@ Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
 Not applicable with a reason: the GPU storage route has no CPU package; x86's native GA lane is the MLIR/LLVM JIT recorded under `GA-NATIVE-FAMILY-2026-09-16`. Host-free halves of the new tests (skeleton expansion, pruning counts) run on any host with the tools.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
+
+## EBM Langevin loop as one cooperative kernel — 2026-09-16
+
+Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Not applicable: a GPU-only slice. The CPU JIT lane (`cpu_ebm_langevin_llvm_jit`, `EBM-NATIVE-QUADRATIC-2026-09-16`) is unchanged and its numpy policy is the oracle the device packets are bit-exact against. The x86-hosted drivers on Princess-Luna and Tajasarus ran the host-free chain and fixtures (the Zen 5 hosts), Super-Bear's Zen 2 driver too.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-langevin-loop-runs-as-one-cooperative-kernel-on-gfx1151-gfx1201-and-sm120).
+
+## EBM quadratic energy loop through the backbone — 2026-09-16
+
+Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on Princess-Luna (Zen 5): the quadratic-energy Langevin loop compiles as one function through libtessera_jit with the compiler-derived gradient and on-device Philox noise; forward/gradient match the independent formulas and fixed-key samples are bit-exact with the declared policy for 1/5/12 steps; JIT + autodiff suites 174 passed; EBM lit 14/14; autodiff fixtures 21/21. Super-Bear (Zen 2) passes the same EBM and autodiff suites; its bf16 JIT tests fail independent of this branch (bisected against main's JIT sources; Zen 2 has no AVX512-BF16). The Python-emitted `x86_ebm_langevin_compiled` AVX-512 kernel is unchanged; no performance claim.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).

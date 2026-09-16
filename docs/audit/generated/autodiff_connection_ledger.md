@@ -19,7 +19,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 - Differentiable families tracked: **314**
 - `python_reference` (Python VJP/JVP): **314**
-- `ir_adjoint = native`: **54** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, depth_attn, dropout, expand, fft, flash_attn, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, tanh, transpose, unsqueeze, view)
+- `ir_adjoint = native`: **55** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, depth_attn, dropout, expand, fft, flash_attn, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
 - `ir_tangent = native`: **37** (add, all_gather, all_reduce, all_to_all, broadcast, dct, depth_attn, dropout, es_low_rank_correction, expand, fft, flash_attn, flatten, ifft, irfft, istft, layer_norm, matmul, mul, permute, reduce, reduce_scatter, reshape, rfft, rmsnorm, sigmoid, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
@@ -367,7 +367,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `std` | reduction | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `stft` | spectral | yes | native | native | — | — | — | x86_avx512 | x86_avx512 | — | x86_avx512 | x86_avx512=save_inputs | x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on x86_avx512 (Phase 4) |
 | `stop_gradient` | layout_transform | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
-| `sub` | elementwise | yes | none | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_tangent=llvm23-core |  |
+| `sub` | elementwise | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `sum` | stable_reduction | yes | native | none | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint (static extent required for mean) |
 | `svd` | linalg_decomposition | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `take` | indexing | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

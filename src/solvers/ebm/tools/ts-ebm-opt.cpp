@@ -17,6 +17,9 @@
 #include "tessera/EBM/EBMDialect.h"
 #include "tessera/EBM/EBMPasses.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -38,11 +41,15 @@ int main(int argc, char **argv) {
   registry.insert<arith::ArithDialect>();
   registry.insert<scf::SCFDialect>();
   registry.insert<func::FuncDialect>();
+  registry.insert<linalg::LinalgDialect>();
+  registry.insert<math::MathDialect>();
+  registry.insert<tensor::TensorDialect>();
 
   registerPass(tessera::createEBMCanonicalizePass);
   registerPass(tessera::createEBMFuseEnergyGradPass);
   registerPass(tessera::createEBMCheckpointInnerLoopPass);
   registerPass(tessera::createEBMPipelineCandidatesPass);
+  registerPass(tessera::createEBMLowerLangevinPass);
 
   // W0.2 — `checkpoint-inner-loop` is NOT in the default pipeline.
   //

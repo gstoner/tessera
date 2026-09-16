@@ -6,9 +6,9 @@ Reference date for staleness: **2026-09-16**.
 
 ## Headline
 
-- **157** docs catalogued across the canonical doc tree.
-- **156** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **57** updated within the last 30 days.
+- **158** docs catalogued across the canonical doc tree.
+- **157** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **58** updated within the last 30 days.
 - **38** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -206,6 +206,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/compiler_enhancement.md` | - | 2026-09-08 | 8 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 12 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-09-15 | 1 | ✓ |
+| `domain/EBM_NATIVE_LOOP_ARCHITECTURE.md` | - | 2026-09-16 | 0 | ✓ |
 | `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-09-15 | 1 | ✓ |
 | `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 78 | ✓ |
 | `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-08-12 | 35 | ✓ |

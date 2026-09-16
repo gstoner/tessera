@@ -32839,6 +32839,9 @@ def _executor_table():
         "native_cpu": _execute_cpu_native_or_jit,
         "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,
         "cpu_clifford_llvm_jit": _execute_cpu_clifford_llvm_jit,
+        "cpu_ebm_langevin_llvm_jit": _execute_cpu_ebm_langevin_llvm_jit,
+        "rocm_ebm_langevin_native_compiled": _execute_ebm_langevin_native_gpu,
+        "nvidia_ebm_langevin_native_compiled": _execute_ebm_langevin_native_gpu,
         "rocm_clifford_native_compiled": _execute_clifford_native_gpu,
         "nvidia_clifford_native_compiled": _execute_clifford_native_gpu,
         "jit_cpu_numpy": _execute_jit_cpu_artifact,
@@ -33670,6 +33673,56 @@ def _execute_cpu_autodiff_paired(artifact: RuntimeArtifact, args: Any) -> Any:
     finally:
         jb.destroy(handle)
     return tuple(outputs)
+
+
+def _execute_ebm_langevin_native_gpu(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch the K-step Langevin loop as one cooperative device kernel (the
+    row-program emitter over the compiler-derived gradient). No fallback."""
+    import numpy as np
+    from .ebm.native_langevin import native_langevin_loop_device
+    from .compiler.scheduled_matmul import find_tessera_opt
+    from .compiler.llvm_tools import llvm_bin_dir
+
+    metadata = artifact.metadata or {}
+    shape = tuple(int(d) for d in metadata.get("shape", ()))
+    target = str(metadata.get("target", ""))
+    if len(shape) != 2 or len(args) != 3:
+        raise ValueError("ebm langevin native artifact requires a [rows, features] shape and (y0, x, key) operands")
+    if target == "rocm":
+        backend, chip = "rocm", _rocm_chip()
+    elif target == "nvidia_sm120":
+        backend, chip = "nvidia", "sm_120"
+    else:
+        raise ValueError("ebm langevin native route targets rocm or nvidia_sm120")
+    compiler, llvm_bin = find_tessera_opt(), llvm_bin_dir()
+    if compiler is None or llvm_bin is None:
+        raise RuntimeError("ebm langevin native route requires tessera-opt and the matched LLVM tools")
+    y0, x = (np.ascontiguousarray(np.asarray(v, dtype=np.float32)) for v in args[:2])
+    if y0.shape != shape or x.shape != shape:
+        raise ValueError(f"ebm langevin native artifact admits operands of shape {shape}")
+    return native_langevin_loop_device(y0, x, args[2], eta=float(metadata["eta"]), temperature=float(metadata["temperature"]),
+                                       steps=int(metadata["steps"]), backend=backend, chip=chip, compiler=compiler, llvm_bin=llvm_bin)
+
+
+def _execute_cpu_ebm_langevin_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch the compiled K-step quadratic-energy Langevin loop (W4-PRODUCT-1).
+
+    Metadata owns the shape, eta, temperature and step count; the lane derives
+    the gradient and draws the noise. Operands: (y0, x, key). No fallback.
+    """
+    import numpy as np
+    from .ebm.native_langevin import native_langevin_loop
+
+    metadata = artifact.metadata or {}
+    shape = tuple(int(d) for d in metadata.get("shape", ()))
+    if len(shape) != 2 or len(args) != 3:
+        raise ValueError("ebm langevin artifact requires a [rows, features] shape and (y0, x, key) operands")
+    y0, x = (np.ascontiguousarray(np.asarray(v, dtype=np.float32)) for v in args[:2])
+    if y0.shape != shape or x.shape != shape:
+        raise ValueError(f"ebm langevin artifact admits operands of shape {shape}")
+    out, next_key = native_langevin_loop(y0, x, args[2], eta=float(metadata["eta"]),
+                                         temperature=float(metadata["temperature"]), steps=int(metadata["steps"]))
+    return out, next_key
 
 
 def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:

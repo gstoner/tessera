@@ -179,6 +179,10 @@ std::unique_ptr<mlir::Pass> createAutodiffPass();
 // Body: src/transforms/lib/AutodiffPairedPass.cpp
 std::unique_ptr<mlir::Pass> createAutodiffPairedPass();
 std::unique_ptr<mlir::Pass> createNativeTapeToGPUPass();
+// RowProgramToGPUPass -- a [rows, features] tensor row program (parallel linalg
+// bodies, feature-axis reductions, uniform integer vectors, scf.for) becomes one
+// cooperative kernel in the native storage ABI. Body: RowProgramToGPUPass.cpp.
+std::unique_ptr<mlir::Pass> createRowProgramToGPUPass();
 
 // AutodiffForwardPass — AD-FWD-CORE-1. Emits a separate paired JVP:
 //   @f__jvp(inputs..., input_tangents...) -> (primals..., output_tangents...)

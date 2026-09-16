@@ -7988,3 +7988,19 @@ Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
 Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`, Clifford backend now configured ON in its `build/`), ten ops × three shapes, worst abs error 0; row `rocm` / `rocm_clifford_native_compiled`. The Python-emitted `rocm_clifford_compiled` gfx1151 kernel is untouched and remains the ROCm GA lane until the native route is measured against it (dispatch/allocation/kernel time separately; no `/dev/kfd` here, so no counters).
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
+
+## EBM Langevin loop as one cooperative kernel — 2026-09-16
+
+Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`, driver built against the assertions-ON LLVM): the K-step quadratic-energy Langevin loop is one launch through the row-program emitter + native storage package, bit-exact with the declared policy in every packet row (worst abs error 0, K up to 12, F up to 1024, T ∈ {0,…,0.7}); the row-normalization reduction program is bit-exact with the sequential f32 fold; row `rocm` / `rocm_ebm_langevin_native_compiled`, 11/11 device tests on each box. The Python-emitted `rocm_ebm_langevin_compiled` (gfx1151) stays the ROCm lane until the dispatch/allocation/traffic/kernel-time comparison is recorded — no promotion. `arith.mului_extended` and the f64 `math.log`/`cos` lowered and matched on both RDNA parts. Tajasarus's assertions driver caught the two dialect-promise defects recorded in the log entry.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-langevin-loop-runs-as-one-cooperative-kernel-on-gfx1151-gfx1201-and-sm120) and the [device packets](../../../../benchmarks/baselines/ebm_langevin_native_gpu_20260916/README.md).
+
+## EBM quadratic energy loop through the backbone — 2026-09-16
+
+Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Follow-up required: CPU-lane only; `rocm_ebm_langevin_compiled` (Python-emitted gfx1151 kernel) stays the ROCm lane. A device package for the loop needs the tensor-level gradient lowered inside a kernel (tile pipeline), which the arena skeleton route used for Clifford does not provide. EBM lit 14/14 on Princess-Luna and, under the assertions LLVM, on Tajasarus.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).

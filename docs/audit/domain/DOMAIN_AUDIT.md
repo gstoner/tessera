@@ -49,7 +49,7 @@ owners, as the plan's routing index states them:
 | Domain | Existing capability | Remaining architectural boundary |
 |---|---|---|
 | Geometric algebra / Clifford | Signature/product-table references, canonical `clifford_*` operations, differentiated tensor shims, specialized kernels and native grade-pruning passes; since 2026-09-16 the batched geometric product lowers natively (`ExpandProductTable` over any static rank) and executes through MLIR/LLVM on the CPU lane (`cpu` row in the ladder). | The linear/bilinear family (products, contractions, inner/norm, involutions, Hodge star, grade projection, rotor sandwich) lowers natively and executes on the CPU lane and, as native storage packages, on gfx1151/gfx1201/sm_120 (`GA-NATIVE-GPU-2026-09-16`). Still open: exp/log and the field ops, an Apple package route, and measuring the native route against the Python-emitted x86/ROCm/Apple kernels, which remain a second implementation until displaced. General signatures, packed grades and physical derivatives require their own proof. |
-| Energy-based models | Reference energies/samplers/losses and specialized update/loss kernels. `geo_sampling.py` uses tape gradients for traceable energies and finite differences otherwise. | The generic `energy.py` Langevin route still uses numerical gradients when no `grad_fn` is supplied. Host gradient evaluation is not a fully resident sampler. Trace an energy body into the native shared AD/loop/ownership path. |
+| Energy-based models | Reference energies/samplers/losses and specialized update/loss kernels. `geo_sampling.py` uses tape gradients for traceable energies and finite differences otherwise. Since 2026-09-16 the quadratic energy loop differentiates and executes through the MLIR/LLVM CPU lane (`cpu` row in the ladder): compiler-derived gradient, on-device Philox noise, one native call per K-step loop. | The generic `energy.py` Langevin route still uses numerical gradients when no `grad_fn` is supplied. Host gradient evaluation is not a fully resident sampler. Trace an energy body into the native shared AD/loop/ownership path. |
 | Attention / persistent state | Canonical families, scheduled packages and bounded native AD; resident O/LSE and isolated CUDA Q/K JVP have explicit packets. | Composed AD, variant breadth, general state lifetimes and cross-target evidence remain separate. KV tiering or a prefetch annotation does not prove overlap. |
 | Matrix/field calculus, PDE and spectral | Reference/domain contracts and shared transform/solver surfaces exist. | Coordinate/boundary-condition semantics must reach native operators; use the existing layout, numerical-policy, solver and AD owners. Follow [MSW](../compiler/MATH_SOURCE_WORKSTREAM.md) and the [PDE plan](../compiler/PDE_STENCIL_CAPABILITY_PLAN.md). |
 | Game theory / structured contractions | Reference butterfly/coalition operations and derivative laws provide consumers for shared transforms. | Native shared butterfly lowering, batching, numerical-policy transport and measured execution remain workload-specific gates. |
@@ -155,4 +155,41 @@ Next in this stream: measure the native route against the Python-emitted
 device kernels (dispatch/allocation/kernel time separately) before any lane
 change, an Apple package route (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
+
+## EBM Langevin loop as one cooperative GPU kernel — 2026-09-16
+
+Fifth slice, sync `EBM-NATIVE-GPU-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The
+tensor-level gradient now lowers inside a device kernel through the compiler
+alone: the new row-program emitter turns the lowered `[rows, features]` loop
+into one cooperative `gpu.func` (block per row, lane per feature, K steps and
+Philox in registers, ordered reductions), the native storage route packages
+it, and the ladder's EBM row gains `rocm` and `nvidia_sm120` from the matrix
+rows `rocm_ebm_langevin_native_compiled` / `nvidia_ebm_langevin_native_compiled`.
+Bit-exact on gfx1151, gfx1201 and sm_120; one launch per loop. Driving it
+through the compiler found what no EBM kernel would have: `tessera-opt` had
+no way to run a domain dialect's passes in one invocation (now it does, with
+EBM and Clifford registered when built), and the assertions-ON driver on
+Tajasarus falsified two dialect promises the NDEBUG fleet ran green through.
+The Python-emitted device kernels remain the lanes until measured against
+this route. Next: the sphere and bivector integrators and the nonlinear
+energies — all row programs the same emitter maps — per
+[EBM_NATIVE_LOOP_ARCHITECTURE.md](EBM_NATIVE_LOOP_ARCHITECTURE.md).
+
+## EBM quadratic energy through the backbone — 2026-09-16
+
+Fourth slice, sync `EBM-NATIVE-QUADRATIC-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). Driving the
+energy through the compiler rather than through `energy_jit`'s Python plan
+found three shared-compiler gaps that no EBM-specific kernel would have
+exposed: the Graph IR subtraction had no reverse-mode adjoint, the
+sum-reduce adjoint's `unsqueeze`/`broadcast` had no linalg lowering, and the
+JIT's DPS rewrite did not follow intra-module calls. All three are closed on
+the branch and are what let the paired autodiff pass carry `0.5·Σ(x−y)²` to a
+native gradient. The loop is a CPU-lane result on three hosts; the ladder's
+EBM row gains `cpu=1` from the matrix. The Python-emitted
+`x86_ebm_langevin_compiled` / `rocm_ebm_langevin_compiled` kernels are
+unchanged and remain the device lanes. Next in this stream, planned in
+[EBM_NATIVE_LOOP_ARCHITECTURE.md](EBM_NATIVE_LOOP_ARCHITECTURE.md): G1 serial
+device residency through the native-tape route (two precise admission changes),
+then the sphere (M1) and bivector (M2) integrators, nonlinear energies (N1),
+the cooperative Tile contract (G2) and one compiler driver (T1).
 

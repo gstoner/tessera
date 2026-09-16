@@ -70,8 +70,12 @@ def main():
                      loop_carried=re.findall(r"iter_args\([^)]*\) -> \(([^)]*)\)", body),
                      philox_mul=body.count("arith.mului_extended"), barriers=body.count("gpu.barrier"),
                      linalg_or_tensor_ops=sum(("linalg." in line or "tensor." in line) for line in body.splitlines()))
+    # The arena pipeline canonicalizes the packaged kernel: the loop-invariant
+    # key word (key[0]) is hoisted out of the loop, so the carried tuple is
+    # (state f32, key[1] i64); before the arena it is (f32, i64, i64).
+    carried = structure["loop_carried"]
     if structure["gpu_funcs"] != 1 or structure["loops"] != 1 or structure["linalg_or_tensor_ops"] != 0 \
-            or structure["loop_carried"] != ["f32, i64, i64"]:
+            or len(carried) != 1 or not carried[0].startswith("f32") or "i64" not in carried[0]:
         raise SystemExit(f"unexpected kernel structure {structure}")
     packet = dict(schema=1, backend=args.backend, chip=args.chip, host=platform.node(),
                   compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),

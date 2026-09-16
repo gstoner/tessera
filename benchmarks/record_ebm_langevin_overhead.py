@@ -80,13 +80,13 @@ def main():
     llvm = llvm_bin_dir()
     if llvm is None:
         raise SystemExit("matched LLVM tools are required")
-    if args.backend == "rocm":
-        native_target, python_target = "rocm", "rocm"
-    else:
-        # sm_120 has no Python-emitted EBM Langevin lane; the x86 one is the
-        # only other compiled implementation and runs on this host's CPU, so
-        # the comparison there is native-GPU vs native-CPU and is labelled so.
-        native_target, python_target = "nvidia_sm120", "x86"
+    # sm_120 has NO Python-emitted EBM Langevin lane to compare against. The
+    # x86 one runs on this host's CPU, so pairing them would compare two
+    # different devices and call it a route comparison — the trap this repo
+    # has already recorded twice. On NVIDIA the packet therefore carries the
+    # native route's own structure and timing, and says no comparison exists.
+    native_target = "rocm" if args.backend == "rocm" else "nvidia_sm120"
+    python_target = "rocm" if args.backend == "rocm" else None
     rng = np.random.default_rng(20260916)
     rows = []
     for shape, steps in CASES:
@@ -95,7 +95,8 @@ def main():
         key = [17, 4]
         native_art = nl.package_ebm_langevin_native(shape, eta=ETA, temperature=0.0, steps=steps,
                                                     target=native_target)
-        step_art = _python_step_artifact(python_target, {"eta": ETA, "temperature": 0.0})
+        step_art = (_python_step_artifact(python_target, {"eta": ETA, "temperature": 0.0})
+                    if python_target else None)
 
         def native():
             out = rt.launch(native_art, (y0, x, key))
@@ -114,13 +115,23 @@ def main():
                 y = np.asarray(res["output"], np.float32)
             return y
 
-        got, want = native(), python_loop()
-        agree = float(np.max(np.abs(got - want)))
-        if not np.allclose(got, want, rtol=1e-5, atol=1e-5):
-            raise SystemExit(f"{shape} K={steps}: the two routes disagree at T=0 (max abs {agree}); "
-                             "the timing comparison would not be like-for-like")
+        got = native()
+        agree = None
+        if step_art is not None:
+            want = python_loop()
+            agree = float(np.max(np.abs(got - want)))
+            if not np.allclose(got, want, rtol=1e-5, atol=1e-5):
+                raise SystemExit(f"{shape} K={steps}: the two routes disagree at T=0 (max abs {agree}); "
+                                 "the timing comparison would not be like-for-like")
+        else:
+            # Still check the native route against the declared policy, so a
+            # timing is never kept for a wrong result.
+            expect, _ = nl.reference_langevin_loop(y0, x, key, eta=ETA, temperature=0.0, steps=steps)
+            agree = float(np.max(np.abs(got - expect)))
+            if not np.allclose(got, expect, rtol=1e-5, atol=1e-5):
+                raise SystemExit(f"{shape} K={steps}: the native route disagrees with the reference")
         native_ms, native_min = _median_ms(native)
-        python_ms, python_min = _median_ms(python_loop)
+        python_ms, python_min = _median_ms(python_loop) if step_art is not None else (None, None)
         element_bytes = int(np.prod(shape)) * 4
         rows.append(dict(
             shape=list(shape), steps=steps, temperature=0.0, max_abs_difference=agree,
@@ -129,15 +140,16 @@ def main():
                         host_bytes_per_loop=3 * element_bytes + 16,
                         median_ms=native_ms, min_ms=native_min,
                         gradient="compiler-derived, evaluated in the kernel"),
-            python_emitted=dict(route="python_emitted_step_kernel", target=python_target,
-                                launches_per_loop=steps, host_round_trips_per_loop=steps,
-                                host_bytes_per_loop=steps * 3 * element_bytes,
-                                median_ms=python_ms, min_ms=python_min,
-                                gradient="host, per step"),
-            speedup_median=python_ms / native_ms if native_ms else None,
+            python_emitted=(dict(route="python_emitted_step_kernel", target=python_target,
+                                 launches_per_loop=steps, host_round_trips_per_loop=steps,
+                                 host_bytes_per_loop=steps * 3 * element_bytes,
+                                 median_ms=python_ms, min_ms=python_min,
+                                 gradient="host, per step") if step_art is not None else
+                            "no Python-emitted EBM Langevin lane exists on this target"),
+            speedup_median=(python_ms / native_ms) if (python_ms and native_ms) else None,
             latency_source="host_wall_clock"))
-        print(json.dumps(rows[-1]["native"] | {"shape": list(shape), "steps": steps,
-                                               "python_ms": python_ms}), flush=True)
+        print(json.dumps({"shape": list(shape), "steps": steps, "native_ms": native_ms,
+                          "python_ms": python_ms, "launches": [1, steps if step_art else None]}), flush=True)
 
     # The native route also runs the cases the other cannot: noise and the
     # gradient stay on the device, so T > 0 costs no extra launches.
@@ -160,19 +172,24 @@ def main():
                           "the Python-emitted route is K of each, because its kernel takes the "
                           "gradient from the caller",
                           "both routes are dispatched through runtime.launch on an artifact, so this "
-                          "measures the routes and not a wrapper difference"],
+                          "measures the routes and not a wrapper difference"]
+                  + ([] if python_target else
+                     ["sm_120 has no Python-emitted EBM Langevin lane, so this packet carries the "
+                      "native route alone; pairing it with the x86 CPU lane would compare two "
+                      "devices and call it a route comparison"]),
                   not_claimed=["no promotion: this packet does not move any lane",
                                "wall clock only — neither WSL2 ROCm box exposes /dev/kfd, so rocprofv3 "
                                "returns no dispatch or counter records and kernel time is unavailable",
                                "WSL2 timings do not promote; bare-metal calibration is owed",
                                "the T > 0 rows are the native route alone: the two routes' Philox "
                                "counter policies differ, so their samples are not comparable"],
+                  comparison_available=python_target is not None,
                   promotion_eligible=False, measured_performance=True,
                   rocm_chip_env=os.environ.get("TESSERA_ROCM_CHIP"))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2) + "\n")
     print(json.dumps(dict(output=str(args.output), rows=len(rows),
-                          speedups=[round(r["speedup_median"], 2) for r in rows])))
+                          speedups=[round(r["speedup_median"], 2) for r in rows if r["speedup_median"]])))
 
 
 if __name__ == "__main__":

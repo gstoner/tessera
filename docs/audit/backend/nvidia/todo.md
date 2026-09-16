@@ -7631,3 +7631,11 @@ Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
 Follow-up required: no sm_120 Clifford lane exists (the proof ladder's GA row has no `nvidia_sm120` column); the GPU package route through the arena pipeline is the next slice and will be proven on Super-Bear. Super-Bear's `build/` now configures the Clifford backend ON (CPU lane parity on its Zen 2 host recorded under x86).
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).
+
+## Clifford product family behind the JIT — 2026-09-16
+
+Sync `GA-NATIVE-FAMILY-2026-09-16`; owner W6.4.
+
+Follow-up required: CPU-only; the arena-pipeline GPU slice will be proven on Super-Bear (Clifford lit 19/19 there today).
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit).

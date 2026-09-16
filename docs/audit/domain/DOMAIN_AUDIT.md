@@ -144,8 +144,10 @@ from the execution matrix, not from this prose. Found on the way: the Clifford
 and EBM dialects were configured OFF on every WSL build tree (the Mac was the
 only host that could even parse them), so the domain dialects had no fleet
 lit coverage — Princess-Luna and Super-Bear now configure
-`TESSERA_BUILD_CLIFFORD_BACKEND=ON`. Next in this stream: rotor sandwich and
-the remaining Clifford ops behind the JIT, then a GPU package through the
+`TESSERA_BUILD_CLIFFORD_BACKEND=ON`. Second slice (`GA-NATIVE-FAMILY-2026-09-16`): the
+rest of the linear/bilinear family — wedge, contractions, inner, norm, the
+involutions, Hodge star, grade projection, rotor sandwich — executes behind
+the JIT on the same three hosts. Next in this stream: a GPU package through the
 arena pipeline (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
 

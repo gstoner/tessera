@@ -7972,3 +7972,11 @@ Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
 Follow-up required: the batched native lowering is CPU-only today; the `rocm_clifford_compiled` gfx1151 kernel is a Python-emitted HIP kernel and stays the ROCm device lane. Next slice routes the same scf/arith expansion through the arena pipeline (`build_native_gpu_storage`) to a gfx1151/gfx1201 package with exact-device parity. Princess-Luna's `build/` now configures the Clifford backend ON so the domain fixtures run there.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).
+
+## Clifford product family behind the JIT — 2026-09-16
+
+Sync `GA-NATIVE-FAMILY-2026-09-16`; owner W6.4.
+
+Follow-up required: CPU-only; the family lowering is what the arena-pipeline GPU slice will carry to gfx1151/gfx1201. Clifford lit 19/19 on Princess-Luna.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit).

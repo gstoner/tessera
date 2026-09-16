@@ -346,10 +346,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
 
 - Owner: [../domain/GA_EBM_ARCHITECTURE_REVIEW.md](../domain/GA_EBM_ARCHITECTURE_REVIEW.md)
 - Gate: Carry W3.6 batching and grade-aware algebra through native consumers; packed grades/PGA/CGA/exp/log require independent semantic, AD and device proof.
-- Current increment: The batched geometric product is native (2026-09-16): `ExpandProductTable` lowers any static `[..., dim]` rank to an scf.for nest over the compile-time table with grade pruning, and `libtessera_jit` runs GradeFusion + ExpandProductTable so a `tessera_clifford.geo_product` executes through MLIR/LLVM (execution-matrix row `cpu` / `cpu_clifford_llvm_jit`; parity on M1 Max, Zen 5 and Zen 2). Open: rotor fusion and the other Clifford ops behind the JIT, ragged batches, the GPU package route, and the acceptance's separate overhead/traffic/kernel-time measurements.
+- Current increment: The batched geometric product is native (2026-09-16): `ExpandProductTable` lowers any static `[..., dim]` rank to an scf.for nest over the compile-time table with grade pruning, and `libtessera_jit` runs GradeFusion + ExpandProductTable so a `tessera_clifford.geo_product` executes through MLIR/LLVM (execution-matrix row `cpu` / `cpu_clifford_llvm_jit`; parity on M1 Max, Zen 5 and Zen 2). Same day, the whole product family (wedge, left contraction, inner, norm, reverse/involution/conjugate, Hodge star, grade projection, rotor sandwich) lowers through the same table and executes behind the JIT (`cpu` / `cpu_clifford_llvm_jit`, nine ops × three shapes against the GA reference on M1 Max, Zen 5, Zen 2). Open: exp/log and the field ops, ragged batches, the GPU package route, and the acceptance's separate overhead/traffic/kernel-time measurements.
 - Depends on: [AD-HIGHER-1](#ad-higher-1)
 - Start: host-free
-- Latest: [batched native products](INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone)
+- Latest: [product family behind the JIT](INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit)
 
 ### RIEMANNIAN-OT
 

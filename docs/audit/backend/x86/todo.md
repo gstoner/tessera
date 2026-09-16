@@ -5298,3 +5298,11 @@ Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
 Parity validated on Princess-Luna (Zen 5, AVX-512) and Super-Bear (Zen 2): batched Cl(3,0) geometric products execute through the MLIR/LLVM CPU lane (`libtessera_jit` with the Clifford backend ON) and match the standalone GA reference for rank 1/2/3 and grade-restricted products; Clifford lit 17/17 on both. Both `build/` trees now configure `TESSERA_BUILD_CLIFFORD_BACKEND=ON`. The Python-emitted `x86_clifford_compiled` AVX-512 kernel is unchanged and remains the x86 device lane until the native lowering is measured against it (dispatch/allocation/kernel time separately) — no performance claim.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).
+
+## Clifford product family behind the JIT — 2026-09-16
+
+Sync `GA-NATIVE-FAMILY-2026-09-16`; owner W6.4.
+
+Parity validated on Princess-Luna (Zen 5) and Super-Bear (Zen 2): nine Clifford ops (wedge, left contraction, inner, norm, reverse, grade involution, conjugate, Hodge star, rotor sandwich) plus grade projection match the GA reference through the MLIR/LLVM CPU lane for single, batched and rank-3 inputs; Clifford lit 19/19. The Python-emitted `x86_clifford_compiled` kernel is unchanged; no performance claim.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit).

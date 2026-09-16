@@ -9054,3 +9054,11 @@ Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
 Parity validated on the M1 Max (arm64 CPU lane of `libtessera_jit`): the same batched native geometric product matches the GA reference; Clifford lit 17/17. Follow-up required: the Apple GPU Clifford kernels (`apple_gpu` GA row in the proof ladder) remain hand-written MSL behind `runtime.py`; the native lowering has no Metal package route yet (`bootstrap_prune_gap.md` still lists `value_clifford_geometric_product` as a gap).
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).
+
+## Clifford product family behind the JIT — 2026-09-16
+
+Sync `GA-NATIVE-FAMILY-2026-09-16`; owner W6.4.
+
+Parity validated on the M1 Max CPU lane for the same family. Follow-up unchanged: the Apple GPU Clifford kernels are hand-written MSL with no native package route.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit).

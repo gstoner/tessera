@@ -128,9 +128,13 @@ bufferization → LLVM — shared by `ts-clifford-opt` and `libtessera_jit`; no
 `emit/` source generator was added. Executed on M1 Max (arm64), Princess-Luna
 (Zen 5) and Super-Bear (Zen 2) via `tests/unit/test_clifford_jit_native.py`;
 the execution matrix now carries the `cpu` row and the domain proof ladder
-counts it. Not yet met: rotor fusion through a package consumer, the remaining
-Clifford ops, ragged batches (the loop nest needs static extents), a GPU
-package through the arena pipeline, and the separate dispatch/allocation/
+counts it. Second slice the same day (`GA-NATIVE-FAMILY-2026-09-16`): wedge, left
+contraction, inner, norm, the three involutions, Hodge star, grade projection
+and rotor sandwich lower through the same table and execute behind the JIT on
+all three CPU hosts (rotor sandwich expands to its product chain there; the
+fused marker survives the standalone pipeline for backends with a kernel).
+Not yet met: `exp`/`log` and the field ops, ragged batches (the loop nest
+needs static extents), a GPU package through the arena pipeline, and the separate dispatch/allocation/
 memory/kernel-time measurements the acceptance asks for — no performance
 claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured

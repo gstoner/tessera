@@ -4129,3 +4129,17 @@ Remaining: rotor sandwich fold and the remaining Clifford ops have no lowering b
 Evidence: `tests/unit/test_clifford_jit_native.py` (three CPU hosts), `src/solvers/clifford/test/ir/passes/expand_batched.mlir` + `expand_rejects_dynamic.mlir`, `docs/audit/generated/domain_proof_ladder.md` (`cpu=1` under GA), `docs/audit/generated/runtime_execution_matrix.md`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-16 — the Clifford product family executes behind the MLIR/LLVM JIT
+
+Owner: [W6.4](INTEGRATED_COMPILER_PLAN.md#w64)
+
+PRs: domain-support stream, second slice, stacked on the batched-product slice (sync `GA-NATIVE-FAMILY-2026-09-16`).
+
+Outcome: One compile-time table now carries every linear/bilinear op the standalone GA reference defines: `ExpandProductTable` lowers wedge (disjoint blades only), left contraction (result grade = grade(b) − grade(a)), inner and norm (one scalar per multivector, typed `[..., 1]`, norm clipped before sqrt), reverse / grade involution / conjugate (per-grade signs), Hodge star (`reverse(a)·I` as a signed blade permutation), standalone grade projection, and rotor sandwich expanded to `gp(gp(R,x), reverse(R))` behind an `expand-rotor-sandwich` pass option — the fused marker still survives the standalone pipeline for backends with a sandwich kernel, and the JIT enables the expansion. All batched through the shared loop nest. `jit_clifford_op` / `package_clifford_cpu` are the consumers; the execution-matrix row is renamed `cpu` / `cpu_clifford_llvm_jit` (op family `clifford`). Nine ops × single/batched/rank-3 shapes match the reference on the M1 Max, Princess-Luna and Super-Bear; grade projection keeps only the listed grades; a unit rotor preserves the vector norm; Clifford lit 19/19 on all three.
+
+Remaining: `exp`/`log` (series with branch handling) and the field ops (ext_deriv, codiff, vec_deriv, integral) have no native lowering; ragged batches; the GPU package route through the arena pipeline; the acceptance's separate overhead/traffic/kernel-time measurements (no performance claim); the Python-emitted device kernels stay the x86/ROCm/Apple GA lanes until measured against this path.
+
+Evidence: `tests/unit/test_clifford_jit_native.py` (three CPU hosts), `src/solvers/clifford/test/ir/passes/expand_family.mlir` + `expand_family_rejects.mlir`, `docs/audit/generated/runtime_execution_matrix.md`.
+
+<!-- entry-fields:end -->

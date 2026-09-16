@@ -4087,3 +4087,17 @@ Remaining: Outside Apple's fused `gpu.matmul2d_epilogue` no backend executes the
 Evidence: `tests/unit/test_tiling_matmul_epilogue.py` (tracer and AST markers, contract-order tiling of a traced matmul through tessera-opt, host-free); `tests/tessera-ir/phase2/tiling_matmul_epilogue.mlir` (bias + gelu + residual order, activation alone, unknown activation left alone); full lit and the frontend/trace/jit suites green on the Mac. No device or performance claim.
 
 <!-- entry-fields:end -->
+
+### 2026-09-15 — probed admission and health-checked replacement of isolated heap workers
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: continuation of the 2026-09-11 gated owner (sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`).
+
+Outcome: A spawned `IsolatedHeapPool` worker is admitted only after its own in-process device probe verifies the admitted producers on the ordinal it will own (int8 allocation → one live slot of the payload width → bitwise readback through a generation-checked pin → empty graph published, marked and reclaimed); the ready message carries the probe tag and anything else is a failed admission, torn down with confirmed death. `replacement()` refuses until the predecessor's death is confirmed and then admits a fresh worker whose own probe is the health evidence. Admission has its own bound because it compiles the metadata kernels in-process. Both owning devices (RTX 5070, gfx1151) pass all nine recorder proofs. Prerequisite repair: since 100a2980 the storage packager expanded low-precision conversions while six validators (heap pool, SSD, ANN, exception heap, public result, gradient sum) replayed a hand-copied pipeline, so every such package was refused on device with "disagrees with native replay"; the pipeline is now spelled once (`native_gpu_storage.ARENA_PIPELINE`) with a drift test.
+
+Remaining: Legacy snapshot/import callers still need an explicit gated producer; the stopped-worker fault is injected, not a reproduced driver hang; the probe proves the selected workload on one ordinal now, not global driver health; automatic replacement policy, broader isolated commands and epoch relaxation stay open. No measured overlap or promotion.
+
+Evidence: [CUDA/HIP replacement packets](../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md) (nine proofs each, source fingerprints), `tests/unit/test_gated_heap.py` (admission refusals and the probe's three failure modes, host-free), `tests/unit/test_arena_replay_pipeline.py`.
+
+<!-- entry-fields:end -->

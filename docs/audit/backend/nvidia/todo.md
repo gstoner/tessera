@@ -7600,3 +7600,11 @@ See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-te
 Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
 Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to nvidia execution; no ABI, dtype or proof change.
 See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).
+
+## Probed admission and health-checked heap replacement — 2026-09-15
+
+Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
+
+Parity validated on owning SM120 (RTX 5070, CUDA 13.4 / driver 610.88): a spawned heap worker is admitted only after its in-process device probe (allocate → one live slot → bitwise pinned readback → empty-graph mark → reclaim) verifies; `replacement()` refuses before confirmed predecessor death and admits a freshly probed worker after it; all nine recorder proofs pass. Prerequisite: the arena replay pipeline is now shared with the packager — on `origin/main` every heap/SSD/ANN/exception/public-result/gradient-sum package was refused on this box as "disagrees with native replay" since 100a2980. Follow-up required: legacy snapshot/import migration; the stall is injected, not a driver hang.
+
+Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.

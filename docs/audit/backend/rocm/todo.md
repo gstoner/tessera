@@ -7943,3 +7943,11 @@ See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-te
 Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
 Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to gfx1151 / gfx1201 execution; no proof transfers.
 See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).
+
+## Probed admission and health-checked heap replacement — 2026-09-15
+
+Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
+
+Parity validated on owning gfx1151 (Princess-Luna, ROCm 10.0): the same recorder passes all nine proofs — probed admission, refusal before confirmed death, probed replacement after it. The replay-pipeline repair applied here too (every native storage package was refused on this box on `origin/main`). gfx1201 not run: the recorder hard-codes gfx1151 for ROCm and no gfx1201 claim is made. Follow-up required: gfx1201 run, legacy snapshot/import migration. Note `test_every_admitted_metadata_operation_has_atomic_replay` hard-codes `nvidia`/`sm_120` and fails on this box for lack of a CUDA toolchain (pre-existing; NVIDIA-only by construction).
+
+Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.

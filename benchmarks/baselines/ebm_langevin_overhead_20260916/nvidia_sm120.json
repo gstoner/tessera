@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host": "The-Super-Bear",
+  "compiler_sha256": "ad7dfde96d94d53a683f2feafffdc2ad13d5b852aad843f39139c0d1d669ce02",
+  "recorder_sha256": "e8fcc2a93f31bb4f6b38e0a33648edd21e2a327e8369a6617bba3d0495ea4a06",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "eta": 0.05,
+  "reps": 9,
+  "rows": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "nvidia_sm120",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 400,
+        "median_ms": 1.1814239987870678,
+        "min_ms": 1.1135350068798289,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "no Python-emitted EBM Langevin lane exists on this target",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "nvidia_sm120",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 400,
+        "median_ms": 1.2267260026419535,
+        "min_ms": 1.1322749924147502,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "no Python-emitted EBM Langevin lane exists on this target",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "nvidia_sm120",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 12304,
+        "median_ms": 1.1868849978782237,
+        "min_ms": 1.1071949993493035,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "no Python-emitted EBM Langevin lane exists on this target",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 32,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "nvidia_sm120",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 12304,
+        "median_ms": 1.2407559988787398,
+        "min_ms": 1.131584998802282,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "no Python-emitted EBM Langevin lane exists on this target",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        64,
+        256
+      ],
+      "steps": 32,
+      "temperature": 0.0,
+      "max_abs_difference": 0.0,
+      "native": {
+        "route": "row_program_cooperative_kernel",
+        "target": "nvidia_sm120",
+        "launches_per_loop": 1,
+        "host_round_trips_per_loop": 1,
+        "host_bytes_per_loop": 196624,
+        "median_ms": 1.169139999547042,
+        "min_ms": 1.1567799956537783,
+        "gradient": "compiler-derived, evaluated in the kernel"
+      },
+      "python_emitted": "no Python-emitted EBM Langevin lane exists on this target",
+      "speedup_median": null,
+      "latency_source": "host_wall_clock"
+    }
+  ],
+  "native_with_noise": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.2183450016891584,
+      "min_ms": 1.10549500095658,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 8,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.1797699989983812,
+      "min_ms": 1.1541949934326112,
+      "latency_source": "host_wall_clock"
+    },
+    {
+      "shape": [
+        16,
+        64
+      ],
+      "steps": 8,
+      "temperature": 0.6,
+      "launches_per_loop": 1,
+      "median_ms": 1.2778749951394275,
+      "min_ms": 1.1193549871677533,
+      "latency_source": "host_wall_clock"
+    }
+  ],
+  "comparison": "temperature 0, where both routes compute the same iterated descent; the agreement is checked per row before the timing is kept",
+  "claims": [
+    "the native route is ONE launch and one host round trip per K-step loop; the Python-emitted route is K of each, because its kernel takes the gradient from the caller",
+    "both routes are dispatched through runtime.launch on an artifact, so this measures the routes and not a wrapper difference",
+    "sm_120 has no Python-emitted EBM Langevin lane, so this packet carries the native route alone; pairing it with the x86 CPU lane would compare two devices and call it a route comparison"
+  ],
+  "not_claimed": [
+    "no promotion: this packet does not move any lane",
+    "wall clock only \u2014 neither WSL2 ROCm box exposes /dev/kfd, so rocprofv3 returns no dispatch or counter records and kernel time is unavailable",
+    "WSL2 timings do not promote; bare-metal calibration is owed",
+    "the T > 0 rows are the native route alone: the two routes' Philox counter policies differ, so their samples are not comparable"
+  ],
+  "comparison_available": false,
+  "promotion_eligible": false,
+  "measured_performance": true,
+  "rocm_chip_env": null
+}

@@ -156,6 +156,21 @@ device kernels (dispatch/allocation/kernel time separately) before any lane
 change, an Apple package route (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
 
+## EBM bivector integrator and the overhead measurement — 2026-09-16
+
+Seventh slice, sync `EBM-BIVECTOR-OVERHEAD-2026-09-16` (W4-PRODUCT-1 /
+AD-SOLVER-IFT-1). The last manifold and the last measurement. Driving the
+bivector integrator through the compiler found what a hand-written kernel
+would not have: the Clifford expansion's per-multivector loop nest expressed a
+*diagonal* blade map, which no consumer mapping the trailing axis to lanes
+could use — it now lowers elementwise, as a select against keep/negate masks
+rather than a multiply by a {0, ±1} mask, because a multiply would turn NaN
+into NaN where the map drops a blade. The row-program emitter gained
+per-feature constant tables to carry those masks into a kernel. The overhead
+measurement is structural: one launch per loop against one per step, flat in K
+against linear in K. It promotes nothing, and it showed that on gfx1201 and
+sm_120 the cooperative kernel is the only compiled Langevin lane there is.
+
 ## EBM nonlinear energies and the sphere integrator — 2026-09-16
 
 Sixth slice, sync `EBM-NONLINEAR-MANIFOLD-2026-09-16` (W4-PRODUCT-1 /

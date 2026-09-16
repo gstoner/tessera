@@ -9071,6 +9071,14 @@ Follow-up required: the arena pipeline route is NVVM/ROCDL only; the Apple arena
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM bivector integrator and the overhead measurement — 2026-09-16
+
+Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Not applicable on the device: no Apple package route for the loop (the Apple arena lane is MSL, a separate emitter). Parity validated on the M1 Max CPU lane (44/44) and host-free for all nine energy x manifold device programs. Note for the Apple lane: the Clifford expansion's diagonal blade maps (grade, reverse, involution, conjugation) now lower elementwise for batched inputs, which the Apple Clifford consumers see too; rank-1 keeps the `from_elements` path unchanged.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-bivector-integrator-and-the-overhead-measurement-close-the-ebm-stream).
+
 ## EBM nonlinear energies and the sphere integrator — 2026-09-16
 
 Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

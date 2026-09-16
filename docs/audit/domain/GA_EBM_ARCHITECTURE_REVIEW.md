@@ -145,6 +145,23 @@ claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured
 evidence.
 
+## The bivector integrator and the overhead measurement — 2026-09-16
+
+Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The
+manifold enum is now fully served: `manifold = "bivector"` grade-projects the
+gradient and the noise through the Clifford dialect's own op, keeps the state
+exactly in the subspace over a 100-step chain, and reports its entry-grade
+precondition per row. The acceptance's last clause, the overhead comparison,
+is measured: the native route is flat in K (one launch and one host round trip
+for the whole loop) while the Python-emitted route costs about 1.8 ms per step
+because its kernel takes the gradient from the caller — 1.6x at K = 1 and 53x
+at K = 32 on gfx1151. That is a dispatch result and **promotes nothing**:
+kernel time is unavailable on either WSL2 ROCm box, and on two of the three
+devices the cooperative kernel is the only compiled Langevin lane, so only
+gfx1151 can run the comparison. Still open: promotion (kernel-time attribution
+and bare-metal calibration), `exp`/`log` of multivectors for rotor sampling on
+the group, opaque callbacks, and Apple.
+
 ## Nonlinear energies and the sphere integrator — 2026-09-16
 
 Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The

@@ -13,6 +13,16 @@ last_updated: 2026-09-15
 
 Owner E2E-REAL-6; sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`. Both frontends now mark the bound `bias`/`residual` operands of `tessera.matmul` the way the C++ verifier reads them, and `tessera-tiling` materializes `activation` once after the reduction (bias → activation → residual). Apple outcome: parity validated host-free — a traced `ops.matmul(..., bias=, activation=)` now reaches the tiled form the `gpu.matmul2d_epilogue` fusion consumes. No device or performance claim.
 
+## bf16 matmul2d arbiter bucket — measured, retained — 2026-09-15
+
+Owner E2E-REAL-6; sync `APPLE-MATMUL2D-BUCKET-2026-09-15`. `retune_matmul2d_bf16`
+(512/1024/2048 square, contiguous MPP entry vs the strided-view entry the
+compiled route dispatches) is in the strict route ledger and the production
+bf16 route consults it per exact shape. First seal: **all six rows retain the
+contiguous incumbent** — same kernel on device time (±3%), view entry 6–42%
+slower end to end because its wrapper zero-fills the fp32 output; the paired
+corpus's earlier 5–12% was the incumbent wrapper's bf16 cast. No promotion.
+
 ## @jit front door for 8/4-bit storage tensors — 2026-09-15
 
 Owner E2E-REAL-6; sync `LOWP-FRONT-DOOR-2026-09-15`. `@jit(target="apple_gpu")`
@@ -182,9 +192,11 @@ Remaining actions:
    family into the default pipeline for the 8/4-bit pairs only (f16 retained
    at every shape, bf16 within ±10% of its own runtime entry). Now open:
    an arbiter bucket for bf16 ≤ 1024 square and weight-only FP8 decode
-   (1.6–1.7× at M == 1 with a one-time pack). (The `@jit` front door for
-   8/4-bit storage tensors and the bias-operand `tessera.matmul` form are both
-   closed 2026-09-15, see the sections above.)
+   (1.6–1.7× at M == 1 with a one-time pack) — **the bf16 bucket is measured
+   and retained (section above); the FP8-decode case is a quantization-policy
+   decision, not an arbiter row**. (The `@jit` front door for 8/4-bit storage
+   tensors and the bias-operand `tessera.matmul` form are both closed
+   2026-09-15, see the sections above.)
 
 API reference: [Apple Metal feature tables](https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf).
 The installed SDK27 `MTLTensor.h` is the concrete API evidence for the build

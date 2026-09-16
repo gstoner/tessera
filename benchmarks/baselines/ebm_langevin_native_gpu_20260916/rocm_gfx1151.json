@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host": "Princess-Luna",
+  "compiler_sha256": "a68c821632fa74eca218d2519a58a6749c4dba7580335d52cbe7d29dcd0c1949",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "recorder_sha256": "8d1a24427a4d9a8395aaffa4b6a4c2c69c0c983008dd0a6d54b851142c508ced",
+  "rows": [
+    {
+      "shape": [
+        4,
+        8
+      ],
+      "steps": 1,
+      "temperature": 0.7,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977207,
+        43
+      ],
+      "binding": "abc46be93febf94155207757e2bc85fc641b8e02723d6e84c98ede2900c579d2"
+    },
+    {
+      "shape": [
+        6,
+        8
+      ],
+      "steps": 5,
+      "temperature": 0.7,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977211,
+        47
+      ],
+      "binding": "80b884cb338c99a51930415b2f9553e5e5eff7a7d9b08eb88ef7c5a9909aeff3"
+    },
+    {
+      "shape": [
+        3,
+        5
+      ],
+      "steps": 12,
+      "temperature": 0.7,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977218,
+        54
+      ],
+      "binding": "94dd26cd5e765ce817148e7f4957ef8e53da876710d6dd9e3fd9db08a438cfba"
+    },
+    {
+      "shape": [
+        9,
+        100
+      ],
+      "steps": 4,
+      "temperature": 0.3,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977210,
+        46
+      ],
+      "binding": "d41479668d50b16cb233347b6d692e5c97cedfd389c96ecea4a6920b0b49f81d"
+    },
+    {
+      "shape": [
+        16,
+        33
+      ],
+      "steps": 8,
+      "temperature": 0.0,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977214,
+        50
+      ],
+      "binding": "8881cc2b4a96b206b5d6ec9875603fd9f436f46f963bc2c53469d6805344493e"
+    },
+    {
+      "shape": [
+        2,
+        1024
+      ],
+      "steps": 3,
+      "temperature": 0.5,
+      "max_abs_error": 0.0,
+      "next_key": [
+        20017429977209,
+        45
+      ],
+      "binding": "be4fe83e60ca9158b5f817d68f5a555afeeb949b79d9f57598393f9b21b62d0b"
+    }
+  ],
+  "kernel_structure": {
+    "gpu_funcs": 1,
+    "loops": 1,
+    "loop_carried": [
+      "f32, i64"
+    ],
+    "philox_mul": 18,
+    "barriers": 0,
+    "linalg_or_tensor_ops": 0
+  },
+  "proofs": [
+    "the K-step loop is one device launch, bit-exact with the declared Philox/Box-Muller policy for every case (K in 1..12, F in 5..1024, T in {0, 0.3, 0.5, 0.7})",
+    "the gradient is the paired autodiff pass's own adjoint, lowered inside the kernel (no host gradient, no host noise, no Python-emitted kernel)",
+    "one gpu.func, one scf.for carrying (state, key, key) in registers, Philox inside the loop"
+  ],
+  "promotion_eligible": false,
+  "measured_performance": false,
+  "envelope": "f32, quadratic energy, [rows, features] with features <= 1024; per-call host transfers; correctness only",
+  "rocm_chip_env": null
+}

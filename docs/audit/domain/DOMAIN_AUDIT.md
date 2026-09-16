@@ -156,6 +156,25 @@ device kernels (dispatch/allocation/kernel time separately) before any lane
 change, an Apple package route (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
 
+## EBM Langevin loop as one cooperative GPU kernel — 2026-09-16
+
+Fifth slice, sync `EBM-NATIVE-GPU-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The
+tensor-level gradient now lowers inside a device kernel through the compiler
+alone: the new row-program emitter turns the lowered `[rows, features]` loop
+into one cooperative `gpu.func` (block per row, lane per feature, K steps and
+Philox in registers, ordered reductions), the native storage route packages
+it, and the ladder's EBM row gains `rocm` and `nvidia_sm120` from the matrix
+rows `rocm_ebm_langevin_native_compiled` / `nvidia_ebm_langevin_native_compiled`.
+Bit-exact on gfx1151, gfx1201 and sm_120; one launch per loop. Driving it
+through the compiler found what no EBM kernel would have: `tessera-opt` had
+no way to run a domain dialect's passes in one invocation (now it does, with
+EBM and Clifford registered when built), and the assertions-ON driver on
+Tajasarus falsified two dialect promises the NDEBUG fleet ran green through.
+The Python-emitted device kernels remain the lanes until measured against
+this route. Next: the sphere and bivector integrators and the nonlinear
+energies — all row programs the same emitter maps — per
+[EBM_NATIVE_LOOP_ARCHITECTURE.md](EBM_NATIVE_LOOP_ARCHITECTURE.md).
+
 ## EBM quadratic energy through the backbone — 2026-09-16
 
 Fourth slice, sync `EBM-NATIVE-QUADRATIC-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). Driving the

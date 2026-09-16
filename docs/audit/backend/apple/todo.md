@@ -9071,6 +9071,14 @@ Follow-up required: the arena pipeline route is NVVM/ROCDL only; the Apple arena
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM Langevin loop as one cooperative kernel — 2026-09-16
+
+Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Not applicable on the device: the row-program emitter targets the NVVM/ROCDL arena pipeline; the Apple GPU EBM rows remain the hand-written MSL kernels and the Apple arena lane (MSL) is a separate emitter (`EBM_NATIVE_LOOP_ARCHITECTURE.md` §3.4). Host-free half validated on the M1 Max: the single-driver chain, the arena replay for both backends, the envelope refusals and both lit fixtures (`row_program_to_gpu_langevin.mlir`, `row_program_to_gpu_reduce.mlir`); device lanes skip honestly.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-langevin-loop-runs-as-one-cooperative-kernel-on-gfx1151-gfx1201-and-sm120).
+
 ## EBM quadratic energy loop through the backbone — 2026-09-16
 
 Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

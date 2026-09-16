@@ -9,10 +9,33 @@ scope: EBM sampling loops as native GPU packages; nonlinear and manifold energie
 Owner: [W4-PRODUCT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#w4-product-1)
 with [AD-SOLVER-IFT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#ad-solver-ift-1);
 acceptance from the [GA/EBM review](GA_EBM_ARCHITECTURE_REVIEW.md) §"an
-energy is a typed program". Sync key `EBM-NATIVE-QUADRATIC-2026-09-16`.
+energy is a typed program". Sync keys `EBM-NATIVE-QUADRATIC-2026-09-16`
+(CPU lane) and `EBM-NATIVE-GPU-2026-09-16` (device lane).
 Written after the CPU-lane slice landed (`tests/unit/test_ebm_native_langevin.py`)
 and after driving that same loop as far as the existing device routes take it;
 every "today" claim below is a measured stop, not a reading of prose.
+
+> **Updated 2026-09-16, same day — G2 and T1 landed, and G2 landed by a
+> different mechanism than §3.3 scoped.** The cooperative kernel is produced
+> by a new pass over the *already lowered* loop
+> (`tessera-row-program-to-gpu`, §3.3), not by a `schedule.ebm_langevin` /
+> `tile.langevin_kernel` contract: once the paired autodiff pass, the EBM
+> lowering, `tessera-to-linalg` and inlining have run, the loop function *is*
+> a `[rows, features]` row program in linalg, and that program is the
+> scalar body the Tile route would otherwise have carried as a region. The
+> row-program emitter maps it directly (one block per row, one lane per
+> feature, the K-step `scf.for` and the Philox draw inside the kernel, state
+> in registers, ordered shared-memory reductions). Measured on gfx1151,
+> gfx1201 and sm_120: one launch per loop, bit-exact with the declared
+> policy for every case in the packets. §3.3 below is rewritten to what
+> shipped; §3.2's G1 (serial residency through the native-tape route) was
+> **not** built — the cooperative route made it unnecessary for this loop
+> and it stays scoped only as the fallback for programs outside the
+> row-program envelope. `tessera-opt` now registers the EBM and Clifford
+> dialects and passes when built with them (T1), so the whole chain is one
+> driver invocation, and the assertions-enabled driver on Tajasarus
+> falsified three dialect promises the NDEBUG fleet had run green through,
+> and sm_120 exposed libdevice's approximate `sqrtf` default (see §6).
 
 ## 1. What the CPU slice established, and what it did not
 
@@ -143,52 +166,103 @@ one launch (the binding's launch count) and that no host buffer was touched
 between steps (the kernel's only host contact is the argument copy-in and
 result copy-out). Not a performance route; no promotion.
 
-### 3.3 G2 — cooperative kernel (rows to blocks, features to lanes)
+### 3.3 G2 — cooperative kernel (rows to blocks, features to lanes) — landed 2026-09-16
 
-Purpose: the loop at real batch sizes. Two candidate mechanisms, decided by
-measurement per Decision #28, both fed by the same lowered IR:
+Purpose: the loop at real batch sizes, as one launch. What shipped is the
+**row-program emitter**, `src/transforms/lib/RowProgramToGPUPass.cpp`
+(`--tessera-row-program-to-gpu=backend={nvidia,rocm} entry=<fn>`), consuming
+the lowered loop after
+`--tessera-autodiff-paired --tessera-ebm-canonicalize --tessera-ebm-lower-langevin
+--tessera-to-linalg --inline --convert-elementwise-to-linalg --canonicalize --cse`
+in one `tessera-opt` invocation:
 
-* **G2a upstream spine.** `convert-linalg-to-parallel-loops` →
-  `gpu-map-parallel-loops` → `convert-parallel-loops-to-gpu` →
-  `gpu-kernel-outlining` on the bufferized loop function. Free of new
-  Tessera code, but it produces **one kernel per linalg op** — the row
-  reduction inside `@E__bwd`, the elementwise update and the noise generic
-  each outline separately, so a K-step loop becomes K×(3–4) launches driven
-  from the host. That is exactly the per-step transfer the acceptance forbids
-  unless the `scf.for` itself is on the device, which the spine cannot do
-  (the loop would have to be inside one kernel). G2a is therefore a
-  measurement baseline and a fallback for energies whose gradient cannot be
-  expressed as a single block-local program, not the target.
-* **G2b Tile contract.** Project the lowered loop into a Schedule/Tile
-  contract the way SSD is: a `schedule.ebm_langevin` op carrying (state
-  shape, η, T, K, integrator, noise policy, and the energy's `__bwd` as a
-  **region** rather than a symbol), lowered by `PMPasses` to a
-  `tile.langevin_kernel` and materialized per target (`materializeSm120…` in
-  `NVIDIALowering.cpp` beside the softmax/reduce/norm kernels; the
-  `TileToROCM` streaming lane on ROCm). Lane mapping follows `NativeSSD.h`:
-  one block owns one row (feature count ≤ block width; wider rows tile the
-  feature axis with a second reduction level), lanes own feature elements
-  and keep the state in registers across all K steps, the per-row reduction
-  in the gradient runs in LDS/shared memory with a barrier, Philox is
-  per-element from (flat index, key[1]), and the key advance is a scalar the
-  block leader writes. The body region is lowered by the *same* scalar
-  emitter the Tile kernels already use for elementwise arithmetic; a
-  reduction inside the region maps to the kernel's row-reduction primitive.
-  Decision #32 carries `numeric_policy` (f32 accumulation, ordered
-  reduction, no fast-math) onto the contract so the reduction order is
-  declared, not incidental.
+* **Input envelope (fails closed outside it).** One entry `func.func` whose
+  operands and results are `[R, F]` f32 tensors (lane values), `[R, 1]` /
+  `[R]` f32 tensors (row values) and small integer vectors of ≤ 8 elements
+  (uniform values, e.g. the Philox key); a body of parallel
+  `linalg.generic` (identity or row-broadcast maps), feature-axis
+  `linalg.reduce`, `tensor.empty`/`linalg.fill`, `expand_shape`/`collapse_shape`
+  between row shapes, `tensor.extract` on a uniform vector with a constant
+  index, splat constants, and `scf.for` over any mix of those. `F ≤ 1024`
+  (one lane each; lanes = next power of two ≥ F, spare lanes masked). Any
+  call is refused with "inline every call before lowering"; anything else
+  names the op it cannot classify.
+* **Mapping.** One `gpu.func @row_program` in `gpu.module @native_row`,
+  `known_block_size = [lanes, 1, 1]`, one block per row. Lane values live in
+  registers across the whole program including every `scf.for` iteration
+  (the loop is carried as `iter_args` of scalars, so a K-step Langevin loop
+  is *one* kernel with the state, the gradient and the noise never leaving
+  registers). Arguments are `!llvm.ptr<1>` per tensor plus the index scratch
+  the arena pipeline expects; loads and stores are guarded by the lane mask
+  (lane values) or the block leader (row / uniform values). The
+  `tile.alloc_shared` marker is emitted so `build_native_gpu_storage`'s
+  shared-memory sizer sees the kernel it already knows.
+* **Reductions.** A feature-axis `linalg.reduce` becomes an **ordered**
+  fold: every active lane stores its element into a
+  `@row_reduction` array in address space 3, `gpu.barrier`, the leader folds
+  the combiner over lanes **in index order** into a scalar and writes it
+  back, `gpu.barrier`, every lane reads the broadcast, `gpu.barrier`. The
+  declared reduction order is therefore "sequential over the feature index",
+  the same order a host `for` loop in f32 produces — which is why the row
+  normalization proof below is bit-exact, not tolerance-based.
+* **Noise.** The EBM lowering's Philox-4x32-10 / Box–Muller `linalg.generic`
+  is an ordinary lane body to the emitter: `linalg.index 0/1` become
+  `(block_id, thread_id)`, the ten `arith.mului_extended` rounds and the
+  f64 `math.log`/`math.cos` stay inside the loop, and the key words are
+  uniform values carried through the loop (canonicalization hoists the
+  invariant `key[0]`, so the packaged loop carries `(state f32, key[1] i64)`).
+* **Provenance.** The module carries `tessera.row_program.{source, entry,
+  rows, features, backend}`; the tensor contract producer merges into that
+  attribute dictionary instead of requiring a bare module, so the package
+  records the lowered program it was built from.
 
-G2b is the target because it is the only shape that keeps the K-step loop
-inside one kernel with the state resident in registers, which is the whole
-point of the acceptance clause. G2a exists to measure it against.
+Python: `compiler/native_row_program.py` (`row_program_kernel` →
+`row_program_device_source` → `bind_row_program` → `row_program_device`, a
+cached `HostArrayProgram`) is the seam every row-shaped domain loop packages
+through; `ebm/native_langevin.py` builds the Langevin module and its specs
+on top of it (`langevin_device_source`, `native_langevin_loop_device`,
+`package_ebm_langevin_native`); `runtime.launch` rows
+`rocm` / `rocm_ebm_langevin_native_compiled` and
+`nvidia_sm120` / `nvidia_ebm_langevin_native_compiled`.
 
-Acceptance G2: same bit-exactness as G1 (the noise policy is per-element, so
-lane mapping cannot change samples; the row reduction's order is declared
-and the reference sums in the same order), plus the separate
-dispatch/allocation/memory-traffic/kernel-time measurement the GA/EBM review
-asks for, recorded with `route` and `latency_source`. Promotion of any lane
-over the Python-emitted `*_ebm_langevin_compiled` kernels waits for that
-measurement.
+Measured (packets in `benchmarks/baselines/ebm_langevin_native_gpu_20260916/`,
+`tests/unit/test_ebm_native_langevin_gpu.py`): on gfx1151 (Princess-Luna),
+gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`, assertions-ON driver) and
+sm_120 (Super-Bear) the loop is one launch and **bit-exact** with
+`reference_langevin_loop` for K ∈ {1, 4, 5, 8, 12}, F ∈ {5, 8, 33, 100, 1024},
+T ∈ {0, 0.3, 0.5, 0.7} — worst absolute error 0 in every row, including the
+f64 `log`/`cos` of the noise (the libm risk in §6 did not materialize on any
+of the three devices). The T = 0 loop is the plain descent. The quadratic
+gradient is elementwise (the sum-reduce adjoint is a broadcast), so the
+Langevin kernel carries no reduction; the reduction path is proven
+separately by a row-normalization program (`x / sqrt(Σ_f x²)`, F up to
+1024) that matches the sequential-order f32 fold bit-for-bit on the same
+three devices.
+
+What this is not: a performance claim. The route's per-call host transfers
+are correctness-only; the Python-emitted `rocm_ebm_langevin_compiled` /
+`x86_ebm_langevin_compiled` / Apple kernels remain their lanes until the
+dispatch/allocation/traffic/kernel-time comparison the GA/EBM review asks for
+is recorded with `route` and `latency_source`. The envelope is also narrow
+on purpose: rows wider than 1024 features (a second reduction level), row
+programs with data-dependent control flow, and energies whose gradient is
+not a row program (cross-row coupling) fail closed and would go through
+§3.2's serial route or a real Tile contract.
+
+Why not the Tile contract scoped before: `schedule.ebm_langevin` with a body
+region would have carried exactly the program the emitter now reads from
+linalg, and would have needed its own body lowering — a second scalar
+emitter beside the one the Tile kernels use (Decision #31). The row-program
+pass is the smaller authority: it adds one pass over upstream dialects, no
+new ops, and the same pass serves any `[rows, features]` domain program (the
+GA family's batched products qualify once their ExpandProductTable output is
+inlined). If a future energy needs multi-level reductions or cross-row
+coupling, the Tile contract is the next step and this pass is its
+measurement baseline.
+
+Acceptance G2, as met: bit-exactness (samples *and* the ordered reductions);
+one launch per loop; the packets. As not met: the separate overhead
+measurement against the Python-emitted lanes — promotion waits for it.
 
 ### 3.4 Apple
 
@@ -311,32 +385,60 @@ rotors is the batched Clifford tensor the W6.4 lowering already handles.
 | M1 | `manifold = "sphere"` on CPU + G1: tangent projection, retraction, per-row status word; reference guard mirrored | ‖x'‖ = 1 per row, T = 0 monotone descent, 1e-5 parity on projected quantities, bit-exact noise | Mac + x86 + G1 devices |
 | M2 | `manifold = "bivector"` via `clifford.grade` on gradient and noise; EBM → Clifford build dependency | parity with `bivector_langevin_step` on Cl(3,0) grade 2; state stays grade-2 over 100 steps | same |
 | N1 | Huber and softplus energies through the paired pass with no placeholder; the `softplus`/`cosh` adjoints if missing | gradient matches finite differences and the Apple/ROCm reference kernels | Mac + x86 |
-| G2 | `schedule.ebm_langevin` / `tile.langevin_kernel` with a body region; sm_120 and ROCm materializers; G2a spine as baseline | bit-exact samples; separate dispatch/alloc/traffic/kernel-time packets vs the Python-emitted lanes | all three GPUs |
-| T1 | register EBM + Clifford in `tessera-opt` when built, so one driver runs the whole chain (the JIT already does) | the G1 chain runs as one `tessera-opt` invocation | host-free |
+| G2 | **landed 2026-09-16** as the row-program emitter over the lowered loop (§3.3), not a Schedule/Tile op; rows `rocm_ebm_langevin_native_compiled` / `nvidia_ebm_langevin_native_compiled`; recorder | bit-exact on gfx1151, gfx1201, sm_120 (packets); one launch per loop; **open:** the dispatch/alloc/traffic/kernel-time packets vs the Python-emitted lanes | all three GPUs |
+| T1 | **landed 2026-09-16**: `tessera-opt` registers EBM + Clifford dialects and passes when built with them (`TESSERA_HAVE_EBM` / `TESSERA_HAVE_CLIFFORD`) plus `convert-elementwise-to-linalg`; the whole chain is one invocation, and lit gains a `tessera-ebm` feature | one `tessera-opt` invocation runs the G2 chain; fixtures `phase2_autodiff/row_program_to_gpu_langevin.mlir`, `phase_f5/row_program_to_gpu_reduce.mlir` | host-free |
 
-G1 before M1/M2 because the manifold integrators need the same device
-residency proof and the status-word machinery; N1 is independent and can run
-in parallel on the CPU lane; G2 last because it is the only slice that
-changes the Schedule/Tile dialects and it should land against a working G1
-that already proves the numbers.
+G2 and T1 landed first, and G1 was skipped: the cooperative route covers the
+quadratic loop outright, so serial residency is only the fallback for
+programs outside the row-program envelope. M1/M2 now build on G2 (the
+tangent projection and retraction are row programs: a feature-axis
+reduction followed by lane arithmetic, exactly what the emitter maps); N1 is
+independent and can run in parallel on the CPU lane.
 
 ## 6. Risks named now
 
-* **Reduction order across lanes.** G2b's block reduction cannot reproduce
-  the sequential f32 sum the CPU/G1 routes use. The contract must state the
-  order; parity for reduced quantities is tolerance-based while the noise
-  stays bit-exact. Do not hide this behind a looser global tolerance.
+* **Reduction order across lanes.** *Resolved by construction (2026-09-16):*
+  the emitter's fold is sequential over the feature index, so it reproduces
+  the host's sequential f32 sum bit-for-bit (row normalization proof, three
+  devices). A tree or warp-shuffle reduction, if one is ever adopted for
+  speed, changes the declared order and must re-derive the reference — never
+  hide it behind a looser tolerance.
 * **Philox on ROCDL.** `arith.mului_extended` lowers to `llvm.umul_with_overflow`
   or a 64-bit multiply; both targets have it, but the first G1 run on each
   device is the proof, not the ISA table. The `philox_msl_source` template
   already exists for Apple.
-* **`math.log`/`math.cos` precision.** `convert-math-to-llvm` maps to
-  `llvm.intr.log`/`cos`; the device libm implementations differ from the
-  host's by ulps. The reference computes in f64 and rounds once; the kernel
-  does the same (f64 intermediates), which is why the CPU lane is bit-exact.
-  Device libm f64 `cos` may still differ in the last ulp — if it does, the
-  packet records the observed max ulp and the policy is amended to a
-  tolerance for `z`, never silently.
+* **`math.log`/`math.cos` precision.** *Measured 2026-09-16:* the f64
+  `log`/`cos` of the Box–Muller draw matched the host bit-for-bit on
+  gfx1151, gfx1201 and sm_120 in every packet row (worst abs error 0 after
+  the single f32 rounding). The risk stays named: a toolkit upgrade can
+  change a libm ulp, and the recorder will show it as a non-zero
+  `max_abs_error` on a noise row — amend the policy to a tolerance for `z`
+  then, never silently.
+* **libdevice's approximate f32 paths are the NVVM route's default.**
+  *Measured 2026-09-16:* `math.sqrt` on the NVVM route lowers to
+  `__nv_sqrtf`, whose precise branch is gated on the `__CUDA_PREC_SQRT`
+  reflect value that MLIR's pipeline never sets (LLVM 23's NVVMReflect
+  exposes only `nvvm-reflect-ftz`), so the kernel ran `MUFU.SQRT` and one
+  row of the row-normalization proof was 1 ulp off on sm_120 — the
+  division was `div.rn` and both RDNA parts were exact. `convert-gpu-to-nvvm`
+  marks the LLVM math intrinsics illegal, so the emitter now calls
+  libdevice's rounding-explicit `__nv_fsqrt_rn` on NVIDIA (correctly rounded
+  whatever the reflect flags say) and pins `llvm.intr.sqrt` on ROCm (AMDGPU's
+  correctly rounded expansion). Every other `math.*` f32 op that reaches libdevice
+  on this route (`rsqrt`, `exp`, `log`, `tanh`…) is still subject to the
+  same default and must be measured before its result is called exact; the
+  f64 `log`/`cos` of the noise are bit-exact because libdevice's f64 paths
+  carry no approximate branch.
+* **NDEBUG hides dialect-promise defects (Decision #19, third instance).**
+  The chain ran green on every NDEBUG driver in the fleet and aborted twice
+  on Tajasarus's assertions-ON driver: `--inline` needs the LLVM dialect's
+  promised `DialectInlinerInterface`, which `registerAllExtensions` does not
+  provide (`tessera-opt` now registers it), and the row-program pass emits
+  `tile.alloc_shared` without declaring the tile dialect as a dependency
+  (now declared), and parsing its `tessera.*`-prefixed provenance
+  attributes loads the Tessera dialect, which an input without Tessera ops
+  never loaded (now declared). All one-line fixes; none visible without that
+  box. Route every new pass through it before recording "passes".
 * **Register pressure in G2b.** Keeping a row's state and gradient in
   registers across K steps bounds the feature width per lane; wider rows
   need the second reduction level. Declare the admitted width in the

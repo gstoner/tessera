@@ -56,7 +56,7 @@ x86 AMX/AVX512, Apple M-series CPU/GPU.
 
 **Execution reality (updated 2026-09-15):** the **x86 AVX-512** backend and
 **Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph + Metal 4 MPP `matmul2d`)**
-backends execute natively. **ROCm** executes on two RDNA parts: **gfx1151**
+backends execute natively. Since 2026-09-16 the EBM Langevin loop's compiler-derived gradient runs *inside* one cooperative kernel on gfx1151, gfx1201 and sm_120 through the row-program emitter (`tessera-row-program-to-gpu`), bit-exact with the CPU JIT lane's policy — a correctness lane, not a promotion. **ROCm** executes on two RDNA parts: **gfx1151**
 (Strix Halo, RDNA 3.5, `Princess-Luna`) has broad native execution across the
 attention family, norms/activations, matmul compositions, MoE transport, SSM,
 EBM and warp-shuffle lanes; **gfx1201** (RX 9070 XT, RDNA4, `Tajasarus`, added
@@ -433,6 +433,23 @@ Per-phase deliverables and the open-work priority queue live in
     validated infrastructure. The standing lesson stands; the "no resident
     falsifier" clause above is history. Route MLIR promise/contract claims to
     Tajasarus (or any assertions build) before recording "does not reproduce".
+
+    **Third instance (2026-09-16): the EBM row-program chain ran green on every
+    NDEBUG driver in the fleet and aborted twice on Tajasarus's assertions-ON
+    driver** — `--inline` builds its interface collection over every loaded
+    dialect and the LLVM dialect *promises* a `DialectInlinerInterface` that
+    `registerAllExtensions` does not provide (`tessera-opt` now calls
+    `LLVM::registerInlinerInterface`), and a pass that parses a textual
+    skeleton naming `tile.alloc_shared` had not declared the tile dialect in
+    `getDependentDialects` ("Loading a dialect (tile) while in a
+    multi-threaded execution context"), nor the Tessera dialect its
+    `tessera.*` provenance attributes load. All one-line fixes; all invisible
+    without that box. (Separately, sm_120 showed the NVVM arena route's
+    `math.sqrt` reaches libdevice's *approximate* `__nv_sqrtf` because MLIR
+    never sets the precise-sqrt reflect flag, and `convert-gpu-to-nvvm`
+    outlaws `llvm.intr.sqrt` — call libdevice's rounding-explicit
+    `__nv_fsqrt_rn` when a result must be IEEE; `docs/audit/backend/nvidia/todo.md`.) Run every new pass through Tajasarus before recording
+    "passes" (sync `EBM-NATIVE-GPU-2026-09-16`).
 
     **Separately, still open: `TileToX86Pass` loads `tessera_x86` from inside
     `runOnOperation()`** (`src/transforms/lib/TileToX86Pass.cpp:1045`, a by-name

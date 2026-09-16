@@ -5315,6 +5315,14 @@ Not applicable with a reason: the GPU storage route has no CPU package; x86's na
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM Langevin loop as one cooperative kernel — 2026-09-16
+
+Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Not applicable: a GPU-only slice. The CPU JIT lane (`cpu_ebm_langevin_llvm_jit`, `EBM-NATIVE-QUADRATIC-2026-09-16`) is unchanged and its numpy policy is the oracle the device packets are bit-exact against. The x86-hosted drivers on Princess-Luna and Tajasarus ran the host-free chain and fixtures (the Zen 5 hosts), Super-Bear's Zen 2 driver too.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-langevin-loop-runs-as-one-cooperative-kernel-on-gfx1151-gfx1201-and-sm120).
+
 ## EBM quadratic energy loop through the backbone — 2026-09-16
 
 Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

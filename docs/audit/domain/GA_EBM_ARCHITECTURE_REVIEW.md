@@ -145,6 +145,24 @@ claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured
 evidence.
 
+## The Langevin loop as one cooperative kernel — 2026-09-16
+
+Sync `EBM-NATIVE-GPU-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The device
+half of the first acceptance clause: the compiler-derived gradient is
+lowered *inside* a kernel by the new row-program emitter
+(`tessera-row-program-to-gpu`) over the lowered loop — one block per row,
+one lane per feature, the K-step loop with its Philox draw carried in
+registers, ordered shared-memory reductions — packaged by the native GPU
+storage route and launched as one call. Bit-exact with the declared policy
+on gfx1151, gfx1201 and sm_120 (packets, worst abs error 0), reductions
+bit-exact with the sequential f32 fold, one launch per loop, one driver
+invocation for the chain. Still not met: the overhead measurement that
+would let this lane displace the Python-emitted `*_ebm_langevin_compiled`
+kernels (no promotion is claimed); nonlinear and manifold energies (the
+sphere and bivector integrators are row programs the same emitter maps and
+are the next slices); opaque callbacks; Apple. Details and the reason the
+scoped Tile contract was not needed: [EBM_NATIVE_LOOP_ARCHITECTURE.md](EBM_NATIVE_LOOP_ARCHITECTURE.md) §3.3.
+
 ## Quadratic energy through the backbone — 2026-09-16
 
 Sync `EBM-NATIVE-QUADRATIC-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The first acceptance clause

@@ -7648,6 +7648,14 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM Langevin loop as one cooperative kernel — 2026-09-16
+
+Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on sm_120 (Super-Bear): the loop is one launch through the row-program emitter + native storage package, bit-exact with the declared policy in every packet row (worst abs error 0); the reduction program bit-exact with the sequential fold; row `nvidia_sm120` / `nvidia_ebm_langevin_native_compiled`, 11/11 device tests. No performance claim (per-call host transfers; WSL). `build-nvidia-cuda/` — the tree whose driver the runtime resolves — was configured without the EBM/Clifford backends and is now reconfigured with `TESSERA_BUILD_EBM_BACKEND=ON -DTESSERA_BUILD_CLIFFORD_BACKEND=ON`; the fixture passes under both trees there. **Finding, NVIDIA-specific:** on the NVVM arena route `math.sqrt` lowers to libdevice `__nv_sqrtf`, whose precise branch is gated on `__CUDA_PREC_SQRT`, which MLIR's pipeline never sets (LLVM 23 exposes only `nvvm-reflect-ftz`) — the kernel ran `MUFU.SQRT` and one row of the reduction proof was 1 ulp off; `div` was `div.rn`. The row-program emitter now calls libdevice's rounding-explicit `__nv_fsqrt_rn` (`convert-gpu-to-nvvm` marks the LLVM math intrinsics illegal, so `llvm.intr.sqrt` is not an option on this route). Follow-up required: every other libdevice f32 path any NVIDIA arena package takes (`__nv_rsqrtf`, `__nv_expf`, `__nv_tanhf`…) is subject to the same default; measure before calling any such result exact, or set the reflect defaults at the packager once LLVM exposes them.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-langevin-loop-runs-as-one-cooperative-kernel-on-gfx1151-gfx1201-and-sm120) and the [device packets](../../../../benchmarks/baselines/ebm_langevin_native_gpu_20260916/README.md).
+
 ## EBM quadratic energy loop through the backbone — 2026-09-16
 
 Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

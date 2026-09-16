@@ -1,0 +1,12 @@
+{
+  "python/tessera/compiler/native_row_program.py": "b50709a6cf41bb64d9e755e8a5660a148fdfa9df79444f9df8c01c028b96664c",
+  "python/tessera/compiler/native_host_program.py": "d003efc0ebe03686f3ee62147733b403c2c1aaf2120d53240be93c6cfeda7aea",
+  "python/tessera/compiler/native_gpu_storage.py": "d862ef1d36bca98d74d3afc20eba1f13ef89053fd773529bb64d961bdd9ad5f8",
+  "python/tessera/compiler/native_storage_contract.py": "75fcc10ce8c864164207a345fe9bd9b7d5d096f0f10af1a5f6c39667c60f8283",
+  "python/tessera/ebm/native_langevin.py": "91f78a01dd8bb819b54e5bcac61e059f6305275d625084aceffa9b48b3b73bdc",
+  "src/transforms/lib/RowProgramToGPUPass.cpp": "cfc732ae3d0261726d7ec0f990b1fea381f87252c6dddafb934da7d3cc78963d",
+  "src/solvers/ebm/lib/Passes/LowerLangevin.cpp": "0646284d848bc5a46b321976747feb24b1e620cd858dfb8fe21c6ce443135883",
+  "tools/tessera-opt/tessera-opt.cpp": "b1b60bb9ba0bce43a5f7b6da8aabb800a879070ca2fa82b0add9499040aa73f8",
+  "benchmarks/record_ebm_langevin_native_gpu.py": "8d1a24427a4d9a8395aaffa4b6a4c2c69c0c983008dd0a6d54b851142c508ced",
+  "tests/unit/test_ebm_native_langevin_gpu.py": "0f99d1182e9117b579227f57a4e6197ad3fe297eacdaa4defddcde25eb265c26"
+}

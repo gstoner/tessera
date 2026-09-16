@@ -104,9 +104,27 @@ def test_broadcast_masks_have_native_indexing_and_physical_guards(qsize,ksize,fo
               [(2,4,qsize,4),(2,2,ksize,4),(2,2,ksize,2),bias_shape]]
     if bias_shape[3] != 1:
         values[-1][..., ksize // 2] = -np.inf  # a masked key column, broadcast wherever the axis is 1
+    else:
+        # A per-(batch, head, query) constant cancels out of an exact softmax, so a
+        # random value could not tell a kernel that reads bias[b, h, q] from one
+        # that ignores the operand or reads a neighbour. Give each row a
+        # power-of-two magnitude from a per-row class instead: adding 2**e to the
+        # f32 logits rounds them to that magnitude's ulp before the softmax, so
+        # the output carries the rounding signature of exactly the row the kernel
+        # read (f32 on both sides; q/k are quantised to 1/16 so every logit is
+        # exact and no rounding boundary depends on accumulation order).
+        values[0] = (np.round(values[0] * 16) / 16).astype(np.float32)
+        values[1] = (np.round(values[1] * 16) / 16).astype(np.float32)
+        rows = np.arange(2 * 4 * qsize).reshape(2, 4, qsize)
+        values[-1] = np.ldexp(np.float32(1), 10 + rows % 14).astype(np.float32)[..., None]
     expected = grouped_masked_bias(*values[:3],np.ascontiguousarray(np.broadcast_to(values[-1],(2,4,qsize,ksize))))
     actual = binding(*values)
     np.testing.assert_allclose(actual,expected,rtol=1e-5,atol=1e-6)
+    if bias_shape[3] == 1:
+        # The signature must be visible: the same inputs without the bias give a
+        # materially different output, so the kernel consumed bias[b, h, q].
+        unbiased = binding(*values[:3], np.zeros(bias_shape, np.float32))
+        assert np.abs(actual - unbiased).max() > 1e-3, 'per-query bias signature not observed'
     if directory := os.environ.get('TESSERA_BROADCAST_EVIDENCE'):
         import hashlib
         import json

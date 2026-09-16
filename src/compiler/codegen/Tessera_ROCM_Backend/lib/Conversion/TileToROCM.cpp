@@ -1064,8 +1064,21 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
         op.getContext(), aTy.getFamily(), aTy.getM(), aTy.getN(), aTy.getK(),
         aTy.getElem(), bTy.getElem(), aTy.getAcc(), aTy.getLayout(), bTy.getLayout(), 1);
     auto pairPhysical = tessera_rocm::resolveFragmentLayout(pairDesc, converter->getArch());
-    if (!pairPhysical)
-      return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: unsupported mixed-input matrix form");
+    if (!pairPhysical) {
+      // Name both operand dtypes: the #517 fixture checks the MESSAGE, not the
+      // code, because this file emits the same code earlier for a single
+      // fragment. b59da796 folded that text into "unsupported mixed-input
+      // matrix form" and left phase2 red on every ROCm host (2026-09-15).
+      if (aTy.getElem() != bTy.getElem())
+        return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: ")
+               << converter->getArch() << " has no mixed-input matrix form; A "
+               << "states elem \"" << aTy.getElem() << "\" and B states \""
+               << bTy.getElem() << "\"";
+      return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: ")
+             << converter->getArch() << " has no matrix form for the A/B pair elem \""
+             << aTy.getElem() << "\" with layouts \"" << aTy.getLayout() << "\"/\""
+             << bTy.getLayout() << "\"";
+    }
     physical = pairPhysical;
     // The accumulator resolving does NOT imply the inputs did: an `acc`
     // fragment names no input dtype, so it resolves via a representative one

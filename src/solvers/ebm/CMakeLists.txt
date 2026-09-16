@@ -41,6 +41,27 @@ set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/include/tessera/EBM/EBMP
 mlir_tablegen(EBMPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(TesseraEBMPassesIncGen)
 
+# The bivector integrator (2026-09-16, M2) projects the gradient and the noise
+# onto a grade with the Clifford dialect's own `grade` op rather than growing a
+# second grade projection here (Decision #31 — one lowering per boundary). That
+# makes TesseraEBM depend on TesseraClifford for that integrator ONLY, so the
+# dependency is gated: built without the Clifford backend, `manifold =
+# "bivector"` fails closed with a diagnostic naming the missing build option
+# instead of silently taking a Euclidean step (Decision #21a).
+#
+# These are set at DIRECTORY scope, before the library is declared, because
+# add_mlir_library compiles the sources in a companion object library whose
+# compile options are fixed when it is created — setting them on the
+# TesseraEBM target afterwards leaves every .cpp compiled without them, and
+# the integrator then silently takes its fail-closed branch. Only this
+# directory is affected, and the flag is a feature define, never a host ISA
+# flag (Decision #19's build-flag leak).
+if(TARGET TesseraClifford)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../clifford/include
+                        ${CMAKE_CURRENT_BINARY_DIR}/../clifford)
+    add_compile_definitions(TESSERA_EBM_HAVE_CLIFFORD=1)
+endif()
+
 add_mlir_library(TesseraEBM
     lib/Dialect/EBM/EBMDialect.cpp
     lib/Dialect/EBM/EBMOps.cpp
@@ -65,6 +86,16 @@ add_mlir_library(TesseraEBM
         MLIRPass
         MLIRTransforms
 )
+
+
+
+if(TARGET TesseraClifford)
+    target_link_libraries(TesseraEBM PUBLIC TesseraClifford)
+    add_dependencies(TesseraEBM TesseraCliffordTableGen)
+    if(TARGET obj.TesseraEBM)
+        add_dependencies(obj.TesseraEBM TesseraCliffordTableGen)
+    endif()
+endif()
 
 add_executable(ts-ebm-opt tools/ts-ebm-opt.cpp)
 target_link_libraries(ts-ebm-opt PRIVATE

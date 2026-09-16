@@ -48,6 +48,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -492,6 +493,55 @@ struct UnaryMapPattern : public RewritePattern {
     Location loc = op->getLoc();
     Type elemTy = ty.getElementType();
     Value zero = rewriter.create<arith::ConstantOp>(loc, elemTy, cast<TypedAttr>(rewriter.getZeroAttr(elemTy)));
+    // Diagonal maps — grade projection, reverse, grade involution, conjugation
+    // — send blade i to blade i with a fixed coefficient, so the whole batched
+    // op is one ELEMENTWISE multiply by a per-blade constant. Emitting the
+    // per-multivector extract/insert loop for those was both slower (a loop
+    // nest over the leading axes to express a diagonal scale) and opaque to
+    // consumers that map the trailing axis to lanes: the EBM bivector
+    // integrator's grade projections reach a cooperative kernel only in this
+    // form (2026-09-16). Hodge star keeps the general path (target[i] != i).
+    // Rank 1 keeps the `tensor.from_elements` path: a single multivector folds
+    // to scalars under canonicalization, which is what the Clifford GPU
+    // skeleton route consumes. Only the BATCHED form takes the elementwise
+    // path, where the loop nest is the cost this removes.
+    bool diagonal = ty.getRank() > 1;
+    for (int64_t i = 0; i < dim; ++i) diagonal &= target[i] == i;
+    if (diagonal) {
+      // Per-blade keep/negate masks read along the trailing axis. NOT a
+      // multiply by a {0, +1, -1} mask: 0 * NaN is NaN, while this map DROPS
+      // a blade, so the drop must be a select to stay exact on NaN/Inf, and
+      // the sign flip stays `negf` (the family's contract is sign and
+      // permutation maps, never multiplies).
+      llvm::SmallVector<Attribute> keepAttrs, negAttrs;
+      Type i1 = rewriter.getI1Type();
+      for (int64_t i = 0; i < dim; ++i) {
+        keepAttrs.push_back(rewriter.getBoolAttr(sign[i] != 0));
+        negAttrs.push_back(rewriter.getBoolAttr(sign[i] < 0));
+      }
+      auto maskTy = RankedTensorType::get({dim}, i1);
+      Value keepMask = rewriter.create<arith::ConstantOp>(
+          loc, maskTy, DenseElementsAttr::get(maskTy, ArrayRef<Attribute>(keepAttrs)));
+      Value negMask = rewriter.create<arith::ConstantOp>(
+          loc, maskTy, DenseElementsAttr::get(maskTy, ArrayRef<Attribute>(negAttrs)));
+      const int64_t rank = ty.getRank();
+      MLIRContext *ctx = rewriter.getContext();
+      AffineMap bladeMap = AffineMap::get(rank, 0, {getAffineDimExpr(rank - 1, ctx)}, ctx);
+      SmallVector<AffineMap> maps{rewriter.getMultiDimIdentityMap(rank), bladeMap, bladeMap,
+                                  rewriter.getMultiDimIdentityMap(rank)};
+      SmallVector<utils::IteratorType> iterators(rank, utils::IteratorType::parallel);
+      Value init = rewriter.create<tensor::EmptyOp>(loc, ty.getShape(), elemTy);
+      auto generic = rewriter.create<linalg::GenericOp>(
+          loc, TypeRange{ty}, ValueRange{in, keepMask, negMask}, ValueRange{init}, maps, iterators,
+          [&](OpBuilder &b, Location l, ValueRange args) {
+            Value neg = b.create<arith::NegFOp>(l, args[0]).getResult();
+            Value signed_ = b.create<arith::SelectOp>(l, args[2], neg, args[0]).getResult();
+            Value z = b.create<arith::ConstantOp>(l, elemTy, cast<TypedAttr>(b.getZeroAttr(elemTy))).getResult();
+            b.create<linalg::YieldOp>(l, b.create<arith::SelectOp>(l, args[1], signed_, z).getResult());
+          });
+      rewriter.replaceOp(op, generic.getResult(0));
+      return success();
+    }
     Value result = emitPerMultivector(rewriter, loc, ty, [&](ArrayRef<Value> prefix) {
       auto a = coefficientsAt(rewriter, loc, in, dim, prefix);
       std::vector<Value> out(dim, zero);
@@ -572,7 +622,7 @@ struct CliffordExpandProductTablePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, math::MathDialect, scf::SCFDialect,
+    registry.insert<arith::ArithDialect, linalg::LinalgDialect, math::MathDialect, scf::SCFDialect,
                     tensor::TensorDialect>();
   }
 

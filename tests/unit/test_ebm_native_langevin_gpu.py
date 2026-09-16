@@ -35,10 +35,11 @@ def _compiler():
     return tool
 
 
-def _kernel(shape=(4, 8), steps=3, temperature=0.7, backend="nvidia", manifold="euclidean", energy="quadratic"):
+def _kernel(shape=(4, 8), steps=3, temperature=0.7, backend="nvidia", manifold="euclidean", energy="quadratic",
+            **kw):
     tool = _compiler()
     source, specs = nl.langevin_device_source(shape, eta=0.1, temperature=temperature, steps=steps,
-                                              backend=backend, compiler=tool, manifold=manifold, energy=energy)
+                                              backend=backend, compiler=tool, manifold=manifold, energy=energy, **kw)
     body = source.split("gpu.func @row_program(", 1)[1]
     return source, specs, body
 
@@ -289,4 +290,88 @@ def test_device_sphere_launch_row_returns_the_status():
     assert result["ok"] and result["execution_kind"] == "native_gpu" and len(result["output"]) == 3
     expect = nl.reference_langevin_loop(y, x, [7, 8], eta=0.05, temperature=0.3, steps=4,
                                         manifold="sphere", energy="softplus")
+    np.testing.assert_allclose(np.asarray(result["output"][0]), expect[0], rtol=1e-5, atol=1e-5)
+
+
+# --- M2: the bivector integrator on the device ------------------------------
+
+@pytest.mark.parametrize("energy", nl.ENERGIES)
+def test_the_bivector_kernel_reads_its_grade_mask_from_a_per_lane_table(energy):
+    """The grade projection is the Clifford dialect's own compile-time keep
+    mask; on the device the blade index IS the lane, so the mask becomes a
+    private constant table each lane indexes — no Clifford op and no batch
+    loop survive into the kernel."""
+    source, specs, body = _kernel(manifold="bivector", energy=energy)
+    assert [s.name for s in specs] == ["y0", "x", "key", "y", "next_key", "status", "scratch"]
+    assert "tessera_clifford." not in body and "linalg." not in body and "tensor." not in body
+    # Two tables: the keep mask and the negate mask of the diagonal blade map.
+    assert body.count("row_feature_table") >= 2
+    assert "llvm.mlir.global private constant @row_feature_table_0" in source
+    loops = re.findall(r"scf\.for [^\n]*iter_args\([^)]*\) -> \(([^)]*)\)", body)
+    assert loops[0] == "f32, i64, i64, i32"     # state, key, key, status
+    # One ordered reduction only — the entry-grade leak check.
+    assert body.count("gpu.barrier") == 3
+
+
+def test_the_bivector_kernel_replays_for_both_backends():
+    from tessera.compiler.native_gpu_storage import replay_arena_ir
+    tool = _compiler()
+    for backend in ("nvidia", "rocm"):
+        source, _, _ = _kernel(backend=backend, manifold="bivector")
+        arena = replay_arena_ir(tool, source)
+        assert "__tessera_shared_bytes_" in arena and "gpu.func @row_program" in arena
+
+
+@pytest.mark.parametrize("shape,message", [((4, 7), "2\\^n"), ((4, 8), "out of range")])
+def test_bivector_semantic_keys_are_checked(shape, message):
+    tool = _compiler()
+    grade = 2 if shape[1] == 7 else 9
+    with pytest.raises(ValueError, match=message):
+        nl.langevin_device_source(shape, eta=0.1, temperature=0.3, steps=1, backend="nvidia",
+                                  compiler=tool, manifold="bivector", grade=grade)
+
+
+def _bivector_device_pair(rows=4, seed=61, grade=nl.BIVECTOR_GRADE):
+    rng = np.random.default_rng(seed)
+    return (nl.grade_projection(rng.standard_normal((rows, 8)).astype(np.float32), grade),
+            rng.standard_normal((rows, 8)).astype(np.float32))
+
+
+@pytest.mark.parametrize("energy", nl.ENERGIES)
+@pytest.mark.parametrize("steps", [1, 6])
+def test_device_bivector_matches_the_reference_and_stays_in_the_subspace(energy, steps):
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _bivector_device_pair(seed=60 + steps)
+    out, key, status = nl.native_langevin_loop_device(y, x, [31, 32], eta=0.05, temperature=0.3, steps=steps,
+                                                      backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                                      manifold="bivector", energy=energy)
+    expect, expect_key, expect_status = nl.reference_langevin_loop(
+        y, x, [31, 32], eta=0.05, temperature=0.3, steps=steps, manifold="bivector", energy=energy)
+    assert list(key) == list(expect_key) and list(np.asarray(status)) == list(expect_status)
+    np.testing.assert_allclose(out, expect, rtol=1e-5, atol=1e-5)
+    off_grade = [i for i, g in enumerate(nl.blade_grades()) if g != 2]
+    assert np.all(np.asarray(out)[:, off_grade] == 0.0)
+
+
+def test_device_bivector_reports_the_entry_grade_per_row():
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _bivector_device_pair(seed=63)
+    bad = y.copy(); bad[2, 0] = 1.0
+    _, _, status = nl.native_langevin_loop_device(bad, x, [1, 1], eta=0.05, temperature=0.0, steps=1,
+                                                  backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                                  manifold="bivector")
+    assert list(np.asarray(status)) == [0, 0, 1, 0]
+
+
+def test_device_bivector_launch_row():
+    from tessera import runtime as rt
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _bivector_device_pair(seed=64)
+    target = "rocm" if backend == "rocm" else "nvidia_sm120"
+    artifact = nl.package_ebm_langevin_native((4, 8), eta=0.05, temperature=0.3, steps=5, target=target,
+                                              manifold="bivector", energy="huber")
+    result = rt.launch(artifact, (y, x, [8, 9]))
+    assert result["ok"] and result["execution_kind"] == "native_gpu" and len(result["output"]) == 3
+    expect = nl.reference_langevin_loop(y, x, [8, 9], eta=0.05, temperature=0.3, steps=5,
+                                        manifold="bivector", energy="huber")
     np.testing.assert_allclose(np.asarray(result["output"][0]), expect[0], rtol=1e-5, atol=1e-5)

@@ -1,0 +1,32 @@
+// The semantic keys fail closed: no grade, no algebra, a grade outside the
+// algebra, and a state whose feature axis is not 2^n.
+module {
+  func.func @E(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>) -> tensor<4xf32> {
+    %z = arith.constant dense<0.0> : tensor<4xf32>
+    return %z : tensor<4xf32>
+  }
+  func.func @E__bwd(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %cot: tensor<4xf32>) -> (tensor<4x8xf32>, tensor<4x8xf32>) {
+    %d = arith.subf %y, %x : tensor<4x8xf32>
+    return %d, %d : tensor<4x8xf32>, tensor<4x8xf32>
+  }
+  func.func @no_keys(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>) -> tensor<4x8xf32> {
+    %r:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
+        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "bivector" }
+        : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>)
+    return %r#0 : tensor<4x8xf32>
+  }
+  func.func @grade_out_of_range(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>) -> tensor<4x8xf32> {
+    %r:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
+        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "bivector",
+          grade = 9 : i64, algebra = [3, 0, 0] }
+        : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>)
+    return %r#0 : tensor<4x8xf32>
+  }
+  func.func @not_a_power_of_two(%y: tensor<4x7xf32>, %x: tensor<4x7xf32>, %key: tensor<2xi64>) -> tensor<4x7xf32> {
+    %r:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
+        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "bivector",
+          grade = 2 : i64, algebra = [3, 0, 0] }
+        : (tensor<4x7xf32>, tensor<2xi64>, tensor<4x7xf32>) -> (tensor<4x7xf32>, tensor<2xi64>, tensor<4xi32>)
+    return %r#0 : tensor<4x7xf32>
+  }
+}

@@ -3025,7 +3025,7 @@ struct LayerNormLowering : public RewritePattern {
 
 // ── Activations (unary math family) ────────────────────────────────────────
 
-enum class ActKind { Relu, Sigmoid, Tanh, Silu, Gelu };
+enum class ActKind { Relu, Sigmoid, Tanh, Silu, Gelu, Softplus };
 
 // Per-scalar activation body. All float; uses math.{exp,tanh} (lowered via
 // convert-math-to-llvm) + arith. gelu is the tanh approximation (GPT-2/BERT
@@ -3051,6 +3051,15 @@ static Value emitActScalar(OpBuilder &b, Location loc, ActKind kind, Value x,
   case ActKind::Silu: {
     Value sig = emitActScalar(b, loc, ActKind::Sigmoid, x, elem);
     return arith::MulFOp::create(b, loc, x, sig).getResult();
+  }
+  case ActKind::Softplus: {
+    // Stable form: max(x, 0) + log(1 + exp(-|x|)) — never overflows, and
+    // agrees with log(1 + exp(x)) to f32 rounding (2026-09-16, EBM N1).
+    Value pos = arith::MaximumFOp::create(b, loc, x, cst(0.0)).getResult();
+    Value negAbs = arith::NegFOp::create(b, loc, math::AbsFOp::create(b, loc, x).getResult()).getResult();
+    Value e = math::ExpOp::create(b, loc, negAbs).getResult();
+    Value l = math::LogOp::create(b, loc, arith::AddFOp::create(b, loc, cst(1.0), e).getResult()).getResult();
+    return arith::AddFOp::create(b, loc, pos, l).getResult();
   }
   case ActKind::Gelu: {
     // 0.5 * x * (1 + tanh( sqrt(2/pi) * (x + 0.044715 x³) ))
@@ -3213,6 +3222,7 @@ public:
     patterns.add<NormalizationStatsLowering>(ctx);
     patterns.add<UnaryActLowering>(ctx, "tessera.relu", ActKind::Relu);
     patterns.add<UnaryActLowering>(ctx, "tessera.sigmoid", ActKind::Sigmoid);
+    patterns.add<UnaryActLowering>(ctx, "tessera.softplus", ActKind::Softplus);
     patterns.add<UnaryActLowering>(ctx, "tessera.tanh", ActKind::Tanh);
     patterns.add<UnaryActLowering>(ctx, "tessera.silu", ActKind::Silu);
     patterns.add<UnaryActLowering>(ctx, "tessera.gelu", ActKind::Gelu);

@@ -133,17 +133,20 @@ struct Emitter {
     if (!tensor) return Kind::Scalar;
     if (!tensor.hasStaticShape()) { fail(at, "dynamic tensor shapes are not admitted"); return Kind::None; }
     Type elem = tensor.getElementType();
+    // Lane / row values may be f32 or any integer (i32 status words, i1
+    // comparison results); a uniform vector is the small i64 key.
+    const bool scalarElem = elem.isF32() || elem.isInteger();
     if (tensor.getRank() == 0) return Kind::Scalar;
-    if (tensor.getRank() == 2 && elem.isF32()) {
+    if (tensor.getRank() == 2 && scalarElem) {
       if (tensor.getDimSize(0) == rows && tensor.getDimSize(1) == feats) return Kind::Lane;
       if (tensor.getDimSize(0) == rows && tensor.getDimSize(1) == 1) return Kind::Row;
       fail(at, "rank-2 tensors must be [rows, features] or [rows, 1]");
       return Kind::None;
     }
     if (tensor.getRank() == 1) {
-      if (elem.isF32() && tensor.getDimSize(0) == rows) return Kind::Row;
+      if (scalarElem && !elem.isInteger(64) && tensor.getDimSize(0) == rows) return Kind::Row;
       if (elem.isInteger() && tensor.getDimSize(0) >= 1 && tensor.getDimSize(0) <= 8) return Kind::Uniform;
-      fail(at, "rank-1 tensors must be f32 [rows] or an integer vector of at most 8 elements");
+      fail(at, "rank-1 tensors must be f32/i32/i1 [rows] or an i64 vector of at most 8 elements");
       return Kind::None;
     }
     fail(at, "unsupported tensor type");
@@ -154,11 +157,16 @@ struct Emitter {
     auto it = slots.find(v);
     if (it == slots.end()) {
       fail(at, "value has no device mapping (produced by an unsupported op?)");
+      // The dead slot carries one poison value so a caller that indexes it
+      // before checking `broken` reads in bounds; the pass still fails.
       static Slot dead;
+      if (dead.values.empty()) dead.values.push_back(Value());
       return dead;
     }
     return it->second;
   }
+  // A slot usable as a scalar operand: present, mapped and non-empty.
+  bool usable(Slot &s) { return !broken && s.kind != Kind::None && !s.values.empty() && s.values[0]; }
 
   // Scalar broadcast of a slot for use inside a body: Lane/Row/Scalar -> the one value.
   Value scalarOf(Value v, Operation *at) {
@@ -251,11 +259,17 @@ struct Emitter {
   // --- ops ----------------------------------------------------------------
   // Clone a scalar body region once with `args` bound to its block arguments.
   Value cloneBody(Region &region, ArrayRef<Value> args, Operation *at, bool inLane) {
+    SmallVector<Value> r = cloneBodyMulti(region, args, at, inLane, 1);
+    return r.size() == 1 ? r[0] : Value();
+  }
+
+  SmallVector<Value> cloneBodyMulti(Region &region, ArrayRef<Value> args, Operation *at, bool inLane,
+                                    unsigned expected) {
     Block &body = region.front();
     if (body.getNumArguments() != args.size()) { fail(at, "body arity disagrees"); return {}; }
     IRMapping map;
     for (auto [arg, value] : llvm::zip(body.getArguments(), args)) map.map(arg, value);
-    Value result;
+    SmallVector<Value> results;
     for (Operation &op : body) {
       if (auto index = dyn_cast<linalg::IndexOp>(op)) {
         if (index.getDim() == 0) map.map(index.getResult(), row);
@@ -264,8 +278,8 @@ struct Emitter {
         continue;
       }
       if (auto yield = dyn_cast<linalg::YieldOp>(op)) {
-        if (yield.getNumOperands() != 1) { fail(at, "single-result bodies only"); return {}; }
-        result = map.lookupOrDefault(yield.getOperand(0));
+        if (yield.getNumOperands() != expected) { fail(at, "body yields a different number of values than the op produces"); return {}; }
+        for (Value v : yield.getOperands()) results.push_back(map.lookupOrDefault(v));
         continue;
       }
       if (op.getNumRegions() != 0) { fail(&op, "nested regions inside bodies are not admitted"); return {}; }
@@ -282,7 +296,7 @@ struct Emitter {
       }
       b.clone(op, map);
     }
-    return result;
+    return results;
   }
 
   bool isIdentityMap(AffineMap m, int64_t rank) { return m.isIdentity() && m.getNumDims() == rank; }
@@ -298,20 +312,34 @@ struct Emitter {
   }
 
   LogicalResult emitGeneric(linalg::GenericOp op) {
-    if (op.getNumResults() != 1) return fail(op, "one-result generics only");
+    if (op.getNumResults() < 1) return fail(op, "generics must produce a result");
     Kind out = classify(op.getResult(0).getType(), op);
     if (out == Kind::None) return failure();
+    // A multi-result generic (the Huber/clamp backward yields dstate and
+    // dcontext from one body) maps result-by-result; every result must share
+    // one classification and an identity output map.
+    for (Value r : op.getResults())
+      if (classify(r.getType(), op) != out) return fail(op, "all results of a generic must share one mapping");
     for (auto it : op.getIteratorTypesArray())
       if (it != utils::IteratorType::parallel) return fail(op, "reductions must be linalg.reduce, not a reduction generic");
     auto maps = op.getIndexingMapsArray();
     const int64_t rank = cast<RankedTensorType>(op.getResult(0).getType()).getRank();
-    if (!isIdentityMap(maps.back(), rank)) return fail(op, "the output map must be the identity");
+    for (unsigned r = 0; r < op.getNumResults(); ++r)
+      if (!isIdentityMap(maps[maps.size() - op.getNumResults() + r], rank))
+        return fail(op, "every output map must be the identity");
     const bool laneBody = out == Kind::Lane;
     auto perElement = [&](int64_t element) -> LogicalResult {
       SmallVector<Value> args;
       for (auto [i, input] : llvm::enumerate(op.getInputs())) {
         Slot &s = slot(input, op);
         AffineMap m = maps[i];
+        if (!usable(s)) {
+          if (broken) return failure();
+          auto diag = fail(op, "operand has no usable device mapping: ");
+          if (Operation *def = input.getDefiningOp()) diag << "produced by " << def->getName();
+          else diag << "a block argument";
+          return diag;
+        }
         if (s.kind == Kind::Lane) {
           if (!laneBody || !isIdentityMap(m, 2)) return fail(op, "a [rows, features] input needs a lane body and an identity map");
           args.push_back(s.values[0]);
@@ -324,7 +352,7 @@ struct Emitter {
         } else if (s.kind == Kind::Uniform) {
           if (out != Kind::Uniform || !isIdentityMap(m, 1)) return fail(op, "uniform vectors combine only elementwise with uniform vectors");
           args.push_back(s.values[element]);
-        } else return failure();
+        } else return broken ? failure() : fail(op, "operand has no device mapping");
       }
       // outs block arguments: the init value if it has one, else zero.
       for (Value init : op.getOutputs()) {
@@ -333,12 +361,12 @@ struct Emitter {
           args.push_back(it->second.kind == Kind::Uniform ? it->second.values[element] : it->second.values[0]);
         else args.push_back(zeroOf(cast<RankedTensorType>(init.getType()).getElementType()));
       }
-      Value r = cloneBody(op.getRegion(), args, op, laneBody);
-      if (!r) return failure();
-      slots[op.getResult(0)].values.push_back(r);
+      SmallVector<Value> produced = cloneBodyMulti(op.getRegion(), args, op, laneBody, op.getNumResults());
+      if (produced.size() != op.getNumResults()) return failure();
+      for (auto [r, v] : llvm::zip(op.getResults(), produced)) slots[r].values.push_back(v);
       return success();
     };
-    slots[op.getResult(0)].kind = out;
+    for (Value r : op.getResults()) slots[r].kind = out;
     if (out == Kind::Uniform) {
       const int64_t n = cast<RankedTensorType>(op.getResult(0).getType()).getDimSize(0);
       for (int64_t k = 0; k < n; ++k) if (failed(perElement(k))) return failure();
@@ -399,7 +427,7 @@ struct Emitter {
     SmallVector<Slot> layout;
     for (Value init : op.getInitArgs()) {
       Slot &s = slot(init, op);
-      if (s.kind == Kind::None) return failure();
+      if (!usable(s)) return broken ? failure() : fail(op, "loop-carried initial value has no usable device mapping");
       layout.push_back(s);
       flat.append(s.values.begin(), s.values.end());
     }
@@ -474,9 +502,14 @@ struct Emitter {
     if (auto g = dyn_cast<linalg::GenericOp>(op)) return emitGeneric(g);
     if (auto r = dyn_cast<linalg::ReduceOp>(op)) return emitReduce(r);
     if (isa<tensor::ExpandShapeOp, tensor::CollapseShapeOp>(op)) {
-      Slot &in = slot(op.getOperand(0), &op);
+      // COPY the source slot before inserting the result: `slots` is a
+      // DenseMap, so inserting can rehash and a reference into it would
+      // dangle mid-assignment (the reshaped row then arrived empty and the
+      // next reader refused it — found 2026-09-16 on the sphere lane).
+      Slot in = slot(op.getOperand(0), &op);
       Kind out = classify(op.getResult(0).getType(), &op);
       if (in.kind != Kind::Row || out != Kind::Row) return fail(&op, "reshapes are admitted only between [rows] and [rows, 1]");
+      if (!usable(in)) return broken ? failure() : fail(&op, "the reshaped value has no device value");
       slots[op.getResult(0)] = in;
       return success();
     }
@@ -623,7 +656,15 @@ struct RowProgramToGPUPass : public PassWrapper<RowProgramToGPUPass, OperationPa
       if (!entry) { module.emitError("row program: entry function not found: ") << entryName; return signalPassFailure(); }
     }
     Emitter emitter(module, entry);
-    if (failed(emitter.run(backend))) signalPassFailure();
+    if (failed(emitter.run(backend))) {
+      // Every refusal names its op through Emitter::fail; a failure that
+      // emitted nothing is a defect in this pass, not a user error, and must
+      // still say so rather than exiting silently.
+      if (!emitter.broken)
+        entry.emitError("row program: lowering failed without a diagnostic (internal); "
+                        "the entry is ") << entry.getName();
+      signalPassFailure();
+    }
   }
 };
 

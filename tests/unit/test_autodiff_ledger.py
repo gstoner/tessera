@@ -50,6 +50,10 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
             "squeeze", "transpose", "unsqueeze", "view", "reduce", "sgd",
             "silu", "smooth_l1_loss",
             "softmax", "tanh", "sigmoid", "relu", "rmsnorm", "layer_norm",
+            # 2026-09-16 (EBM nonlinear energies): softplus' adjoint is
+            # dy * sigmoid(x) — the stable form, emitted as Graph IR rather
+            # than round-tripping through the Python VJP registry.
+            "softplus",
             "all_reduce", "all_gather", "reduce_scatter", "all_to_all",
             "binary_cross_entropy_loss", "cross_entropy_loss",
             "k_l_divergence_loss", "j_s_divergence_loss",

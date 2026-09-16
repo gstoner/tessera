@@ -232,6 +232,11 @@ except ImportError:  # pragma: no cover - exercised only on minimal envs
 # descriptor storage types, not an extension of floating high-level math APIs.
 _RESIDUAL_DTYPE_TABLE = {
     "i64": (np.int64, ctypes.c_int64, "i64"),
+    # Per-row status words from a fail-closed integrator (2026-09-16, the EBM
+    # sphere lane: 0 ok, bit 0 entry precondition violated, bit 1 retraction
+    # underflow). Storage only, like the other residual types — never a math
+    # dtype, so `_resolve_elem` still refuses it for operands.
+    "i32": (np.int32, ctypes.c_int32, "i32"),
     "i8": (np.int8, ctypes.c_int8, "i8"),
 }
 

@@ -33701,14 +33701,17 @@ def _execute_ebm_langevin_native_gpu(artifact: RuntimeArtifact, args: Any) -> An
     if y0.shape != shape or x.shape != shape:
         raise ValueError(f"ebm langevin native artifact admits operands of shape {shape}")
     return native_langevin_loop_device(y0, x, args[2], eta=float(metadata["eta"]), temperature=float(metadata["temperature"]),
-                                       steps=int(metadata["steps"]), backend=backend, chip=chip, compiler=compiler, llvm_bin=llvm_bin)
+                                       steps=int(metadata["steps"]), backend=backend, chip=chip, compiler=compiler,
+                                       llvm_bin=llvm_bin, manifold=str(metadata.get("manifold", "euclidean")),
+                                       energy=str(metadata.get("energy", "quadratic")))
 
 
 def _execute_cpu_ebm_langevin_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
-    """Launch the compiled K-step quadratic-energy Langevin loop (W4-PRODUCT-1).
+    """Launch the compiled K-step Langevin loop (W4-PRODUCT-1).
 
-    Metadata owns the shape, eta, temperature and step count; the lane derives
-    the gradient and draws the noise. Operands: (y0, x, key). No fallback.
+    Metadata owns the shape, eta, temperature, step count, energy and manifold;
+    the lane derives the gradient and draws the noise. Operands: (y0, x, key).
+    The sphere returns a third value, the per-row status word. No fallback.
     """
     import numpy as np
     from .ebm.native_langevin import native_langevin_loop
@@ -33720,9 +33723,10 @@ def _execute_cpu_ebm_langevin_llvm_jit(artifact: RuntimeArtifact, args: Any) -> 
     y0, x = (np.ascontiguousarray(np.asarray(v, dtype=np.float32)) for v in args[:2])
     if y0.shape != shape or x.shape != shape:
         raise ValueError(f"ebm langevin artifact admits operands of shape {shape}")
-    out, next_key = native_langevin_loop(y0, x, args[2], eta=float(metadata["eta"]),
-                                         temperature=float(metadata["temperature"]), steps=int(metadata["steps"]))
-    return out, next_key
+    return native_langevin_loop(y0, x, args[2], eta=float(metadata["eta"]),
+                                temperature=float(metadata["temperature"]), steps=int(metadata["steps"]),
+                                manifold=str(metadata.get("manifold", "euclidean")),
+                                energy=str(metadata.get("energy", "quadratic")))
 
 
 def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:

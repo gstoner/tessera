@@ -5269,3 +5269,11 @@ See [Apple follow-through](../apple/todo.md#jit-front-door-for-84-bit-storage-te
 Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
 Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to x86 execution; no ABI or dtype change.
 See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).
+
+## Attention broadcast masks on every axis — 2026-09-15
+
+Sync `ATTN-QK-BROADCAST-2026-09-15`; owner FRONTEND-IR-MEDIUM-1.
+
+Not applicable with a reason: the x86 raised-attention package takes the full-shape bias path only; no broadcast form reaches it and none is claimed. The shared recognizer/verifier changes are host-free and covered by the Tile lowering fixture; no Zen 5 device evidence is inferred.
+
+Evidence: [attention broadcast packets](../../../../benchmarks/baselines/attention_broadcast_20260915/README.md). No performance promotion.

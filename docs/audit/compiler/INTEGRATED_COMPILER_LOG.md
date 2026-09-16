@@ -4087,3 +4087,17 @@ Remaining: Outside Apple's fused `gpu.matmul2d_epilogue` no backend executes the
 Evidence: `tests/unit/test_tiling_matmul_epilogue.py` (tracer and AST markers, contract-order tiling of a traced matmul through tessera-opt, host-free); `tests/tessera-ir/phase2/tiling_matmul_epilogue.mlir` (bias + gelu + residual order, activation alone, unknown activation left alone); full lit and the frontend/trace/jit suites green on the Mac. No device or performance claim.
 
 <!-- entry-fields:end -->
+
+### 2026-09-15 — query/key-axis broadcast attention masks reach native SM120 indexing
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+
+PRs: continuation of the 2026-09-12 batch/head increment (sync `ATTN-QK-BROADCAST-2026-09-15`).
+
+Outcome: A raised attention bias may now broadcast on any of its four axes: a key-padding row (`[1,1,1,K]`) and a per-(batch, head, query) column (`[B,Hq,Q,1]`) pass source recognition (`loop_idioms` accepts extent 1 and index 0 on the query and key axes), symbolic binding (`SymbolicDimEqualityPass`), Schedule selection and `bias_shape` carriage (`PMPasses`), Tile lowering that keeps the physical block (`TileIRLoweringPass` slices `[1,tkv]` / `[tq,1]` blocks and `ScoreBiasOp` verifies each axis as 1 or the scores extent), and SM120 kernel indexing (`NVIDIALowering` reads index 0 with stride 1 on every broadcast axis). The f32 broadcast host ABI is versioned to v3 and carries all four physical extents (`BiasB`, `BiasH`, `BiasQ`, `BiasK`); the launcher validates each against 1 or the logical extent and copies only the physical storage. Empty-row refusal now judges rows on the logical broadcast view, so a fully masked key-padding row is refused before launch. Six B=2 ragged causal/GQA/window buckets (batch/head, key-padding and per-query forms at Q/K = 3/5 and 5/3) match the numpy oracle on the owning RTX 5070 within 6e-8. ROCm's canonical streaming attention refuses a broadcast `score_bias` block instead of indexing it at the scores' shape.
+
+Remaining: Boolean/padding masks as a first-class operand (today a padding mask is an additive `-inf` row), sibling-target consumers (Apple, ROCm, x86 raised attention have no broadcast proof; ROCm fails closed), f16/bf16 storage for broadcast bias, and any performance admission. The 2026-09-12 batch/head evidence was re-recorded here under the v3 ABI; the v2 packets are historical.
+
+Evidence: [attention broadcast packets](../../../benchmarks/baselines/attention_broadcast_20260915/README.md) (six device rows, source fingerprints), `tests/unit/test_attention_broadcast.py` (recognition, physical-shape guards, tampered-schedule refusal, device rows behind `TESSERA_TEST_RAISED_ATTENTION=1`), `tests/tessera-ir/phase3/flash_attn_broadcast_bias_tile_lowering.mlir` (host-free Tile lowering of both forms), `ninja -C build-nvidia-cuda check-tessera-nvidia` 61/61 on Super-Bear.
+
+<!-- entry-fields:end -->

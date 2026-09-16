@@ -1508,6 +1508,16 @@ static LogicalResult materializeCanonicalStreamingAttention(
         "must be present together");
     return failure();
   }
+  // The FA-4 score_bias block may be physically broadcast (an axis of extent
+  // 1, 2026-09-15). This lowering indexes the bias at the scores' shape and
+  // has no gfx1151/gfx1201 proof for a broadcast block, so it refuses rather
+  // than reading the wrong bytes.
+  if (scoreBias && scoreBias->getOperand(1).getType() != scoreBias->getOperand(0).getType()) {
+    kvLoop.emitError(
+        "ROCm canonical attention requires the score_bias block at the scores' "
+        "shape; a broadcast bias block is not lowered on ROCm");
+    return failure();
+  }
   if (softcap) {
     auto cap = softcap->getAttrOfType<FloatAttr>("cap");
     if (!cap || !cap.getValue().isFinite() ||

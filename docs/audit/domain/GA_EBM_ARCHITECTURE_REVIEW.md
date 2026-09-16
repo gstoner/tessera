@@ -145,3 +145,19 @@ claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured
 evidence.
 
+## Quadratic energy through the backbone — 2026-09-16
+
+Sync `EBM-NATIVE-QUADRATIC-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). The first acceptance clause
+above is met on the CPU lane: the quadratic energy is a Graph IR function,
+its gradient is the compiler's (paired reverse-mode), fixed-key samples agree
+bit-for-bit with the declared Philox / Box-Muller policy, and a K-step loop
+executes as one native call without per-step host gradient transfers, on the
+M1 Max, Princess-Luna and Super-Bear. The EBM dialect gained its first
+lowering pass and a `captures` operand on `langevin_step`; the shared
+compiler gained the `sub` adjoint and `unsqueeze`/`broadcast` lowerings the
+energy's gradient needed. Not yet met: the nonlinear and manifold cases
+(sphere / bivector integrators fail closed), opaque callbacks (still the
+reported reference path), a GPU package for the loop, and the "no per-step
+transfers" claim on a device — this is the CPU lane. `energy.py::langevin_step`
+still takes finite differences without `grad_fn`; the native lane is opt-in.
+

@@ -4157,3 +4157,17 @@ Remaining: the Python-emitted `rocm_clifford_compiled` / `x86_clifford_compiled`
 Evidence: [three device packets](../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md) with source fingerprints, `tests/unit/test_clifford_native_gpu.py` (host-free expansion/pruning half on the Mac; device half on the three boxes), `benchmarks/record_clifford_native_gpu.py`, `docs/audit/generated/domain_proof_ladder.md`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-16 — the EBM quadratic energy loop executes through the MLIR/LLVM backbone
+
+Owner: [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1)
+
+PRs: domain-support stream, fourth slice (sync `EBM-NATIVE-QUADRATIC-2026-09-16`); co-owner [AD-SOLVER-IFT-1](INTEGRATED_COMPILER_PLAN.md#ad-solver-ift-1).
+
+Outcome: The GA/EBM review's first acceptance clause for "an energy is a typed program" is met on the CPU lane. `E(y, x) = 0.5·Σ(x − y)²` is a Graph IR function marked for reverse-mode; inside `libtessera_jit` the paired autodiff pass derives `@E__bwd`, the EBM dialect's first lowering pass (`tessera-ebm-lower-langevin`) turns `energy` / `inner_step` / `langevin_step` into arith + linalg over that gradient with Philox-4x32-10 / Box-Muller noise generated in a `linalg.generic`, and the K-step `scf.for` compiles as one function — no per-step host gradient or noise transfers. `langevin_step` gained a variadic `captures` operand for the energy's context. The declared RNG policy is stated in the pass and mirrored bit-for-bit by `native_langevin.reference_langevin_loop`; forward energy and the T = 0 step match the independent formulas; fixed-key samples match for 1, 5 and 12 steps; `runtime.launch` row `cpu` / `cpu_ebm_langevin_llvm_jit`. Verified on the M1 Max, Princess-Luna (Zen 5) and Super-Bear (Zen 2); EBM lit 14/14 on the Mac, both Zen hosts and Tajasarus under its assertions LLVM. Three compiler gaps found and closed on the way: `tessera.sub` had no adjoint (reverse-mode stopped on any subtraction); `tessera.unsqueeze` / `tessera.broadcast`, which the sum-reduce adjoint emits, had no linalg lowering (no reduce-sum gradient could reach the JIT); and the JIT's DPS out-param rewrite did not follow intra-module call sites.
+
+Remaining: a GPU package for the loop (the tensor-level gradient needs the tile pipeline, not the arena skeleton); nonlinear and manifold energies (sphere / bivector integrators fail closed); opaque-callback energies keep the reported reference path; no performance measurement. Pre-existing and unrelated: every bf16 JIT test fails on Super-Bear (Zen 2, no AVX512-BF16) with unresolved `_mlir_ciface_*` symbols — bisected by building the JIT from main's sources on that box; bf16 JIT proof belongs on the Zen 5 hosts.
+
+Evidence: `tests/unit/test_ebm_native_langevin.py` (three CPU hosts), `src/solvers/ebm/test/ir/passes/lower_langevin_quadratic.mlir` + `lower_langevin_rejects.mlir`, `tests/tessera-ir/phase2_autodiff/autodiff_paired_sub.mlir`, `docs/audit/generated/domain_proof_ladder.md` (`cpu=1` under EBM).
+
+<!-- entry-fields:end -->

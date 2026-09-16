@@ -7647,3 +7647,11 @@ Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
 Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Clifford ops × three shapes through the native storage route match the GA reference (worst abs error 2.4e-7); grade-2 pruning emits 24 of 64 products in the NVVM kernel; `runtime.launch` row `nvidia_sm120` / `nvidia_clifford_native_compiled` reports native_gpu. This is the first sm_120 GA row in the proof ladder. No performance measured; the route pays per-call host transfers and is correctness evidence only.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
+
+## EBM quadratic energy loop through the backbone — 2026-09-16
+
+Sync `EBM-NATIVE-QUADRATIC-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Follow-up required: CPU-lane only; no sm_120 EBM lane exists and none is claimed. EBM lit 14/14 on Super-Bear.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-ebm-quadratic-energy-loop-executes-through-the-mlirllvm-backbone).

@@ -932,9 +932,13 @@ ninja -C build tessera-opt        # 32 threads; ~1-2 min cold
 # Since 2026-09-16 the Clifford backend is also what puts the geometric-algebra
 # lane into libtessera_jit (tessera_jit_has_clifford()) and builds
 # ts-clifford-opt, which the native GPU route (native_clifford_gpu.py) shells
-# out to; every WSL box's `build/` (Princess-Luna, Super-Bear, Tajasarus) and
-# the Mac configure it ON, so domain fixtures and the GA lanes are
-# fleet-covered, not Mac-only.
+# out to, and the EBM backend puts the energy lane in (tessera_jit_has_ebm();
+# paired autodiff + tessera-ebm-lower-langevin). Every WSL box's `build/`
+# (Princess-Luna, Super-Bear, Tajasarus, plus Tajasarus's build-assertions)
+# and the Mac configure both ON, so domain fixtures and the GA/EBM lanes are
+# fleet-covered, not Mac-only. bf16 JIT tests fail on Super-Bear (Zen 2 has
+# no AVX512-BF16; unresolved `_mlir_ciface_*` symbols) independent of any
+# branch — bf16 JIT proof belongs on the Zen 5 hosts.
 cmake -S . -B build -G Ninja -DTESSERA_BUILD_EBM_BACKEND=ON -DTESSERA_BUILD_CLIFFORD_BACKEND=ON
 
 # Re-verify a C++ pass change end-to-end: rebuild → lit fixture + FileCheck → drift test

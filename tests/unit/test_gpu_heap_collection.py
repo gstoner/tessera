@@ -4,6 +4,7 @@ import pytest
 from tessera.compiler.gpu_heap_collection import emit_pool, materialize_pool
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests._support.environment import native_storage_target
+from tessera.compiler.llvm_tools import llvm_bin_dir
 
 
 @pytest.mark.parametrize(
@@ -19,10 +20,10 @@ def test_pool_envelope(slots, width, mode):
 def test_native_pool_replay(mode):
     tool = find_tessera_opt()
     target = native_storage_target()
-    if tool is None or target is None or not Path("/usr/lib/llvm-23/bin/mlir-opt").exists():
+    if tool is None or target is None or llvm_bin_dir() is None:
         pytest.skip("native compiler and a CUDA or ROCm toolchain required")
     program = materialize_pool(
-        3, 4, mode, compiler=tool, llvm_bin="/usr/lib/llvm-23/bin", backend=target[0], chip=target[1]
+        3, 4, mode, compiler=tool, llvm_bin=llvm_bin_dir(), backend=target[0], chip=target[1]
     )
     program.validate()
     with pytest.raises(ValueError, match="replay"):
@@ -33,9 +34,9 @@ def test_native_pool_replay(mode):
 def test_byte_object_graph_native_replay(mode):
     tool = find_tessera_opt()
     target = native_storage_target()
-    if tool is None or target is None or not Path('/usr/lib/llvm-23/bin/mlir-opt').exists():
+    if tool is None or target is None or llvm_bin_dir() is None:
         pytest.skip('native compiler and a CUDA or ROCm toolchain required')
-    program = materialize_pool(4,64,mode,compiler=tool,llvm_bin='/usr/lib/llvm-23/bin',backend=target[0],chip=target[1],payload_dtype='int8',references=4)
+    program = materialize_pool(4,64,mode,compiler=tool,llvm_bin=llvm_bin_dir(),backend=target[0],chip=target[1],payload_dtype='int8',references=4)
     assert program.validate()[2].shape == (4,8)
     with pytest.raises(ValueError,match='replay'):
         replace(program,references=2).validate()

@@ -168,6 +168,7 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
     encoded = re.search(r'bin = "((?:\\.|[^"\\])*)"', binary)
     literal = encoded[1] if encoded else literals[-1]
     image = _decode_image(literal)
+    _reject_bodyless_image(image, backend, entry, llvm_bin)
     lowered = _run(llvm_bin / 'mlir-opt', '--convert-to-llvm', '--reconcile-unrealized-casts', source=host)
     native = _run(llvm_bin / 'mlir-translate', '--mlir-to-llvmir', source=lowered)
     with tempfile.TemporaryDirectory(prefix='tessera-native-sizer-') as tmp:
@@ -181,6 +182,45 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
         arena, image, host_library, _sha(compiler.read_bytes()),
         _sha(_resolve_tool(llvm_bin / 'mlir-opt').read_bytes()), '')
     return NativeGPUStoragePackage(**{**asdict(package), 'binding_digest': package._digest()})
+
+
+def _reject_bodyless_image(image: bytes, backend: str, entry: str, llvm_bin: Path) -> None:
+    """Refuse an image whose kernel does not store anything.
+
+    Found 2026-09-16 on gfx1151: a `math.tanh` row program serialized to a kernel
+    whose entire body was one `s_endpgm`. The launch succeeded, wrote nothing,
+    and the caller read back whatever was in the output buffer -- all zeros, a
+    plausible-looking answer. The same module serialized with `format=isa`
+    contained the correct implementation, so the body was lost in the binary
+    path; `__ocml_tanh_f32` is the trigger, and nothing in the packager noticed.
+
+    Every kernel in this ABI writes at least one output buffer, so "the
+    disassembly contains no global store" is a sound refusal rather than a
+    heuristic. Only the AMDGPU image is checked: `llvm-objdump` from the matched
+    LLVM disassembles amdgcn, and the NVIDIA cubin needs `nvdisasm`, which is not
+    a matched-LLVM tool -- so the NVVM route is *not* covered by this guard and
+    an equivalent silent loss there would still ship. That gap is named in
+    `docs/audit/backend/nvidia/todo.md` rather than papered over.
+    """
+    if backend != 'rocm':
+        return
+    objdump = _resolve_tool(llvm_bin / 'llvm-objdump')
+    with tempfile.TemporaryDirectory(prefix='tessera-native-image-') as tmp:
+        path = Path(tmp) / 'kernel.hsaco'
+        path.write_bytes(image)
+        result = subprocess.run([str(objdump), '-d', '--triple=amdgcn-amd-amdhsa', str(path)],
+                                capture_output=True, text=True)
+    if result.returncode != 0:
+        raise ValueError('native storage package: the image could not be disassembled for validation: '
+                         + result.stderr.strip()[:400])
+    body = [line for line in result.stdout.splitlines() if line.startswith('\t')]
+    if not any('global_store' in line or 'buffer_store' in line or 'flat_store' in line for line in body):
+        raise ValueError(
+            f'native storage package: the packaged kernel @{entry} stores nothing ('
+            f'{len(body)} instructions), so a launch would write no output and the caller would '
+            'read back whatever was in the buffer. A device-library call whose body the binary '
+            'serialization drops produces exactly this image; serialize the same module with '
+            'gpu-module-to-binary{format=isa} to see whether the implementation survives there.')
 
 
 def _binary_pass(toolkit: Path | None) -> str:

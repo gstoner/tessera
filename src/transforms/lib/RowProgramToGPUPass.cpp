@@ -114,10 +114,25 @@ static const MathAdmission kMathAdmission[] = {
     {"math.absf", MathPlan::BitExact, nullptr, nullptr},
     {"math.exp", MathPlan::Measured, nullptr, nullptr},
     {"math.log", MathPlan::Measured, nullptr, nullptr},
-    {"math.log1p", MathPlan::Measured, nullptr, nullptr},
     {"math.cos", MathPlan::Measured, nullptr, nullptr},
-    {"math.tanh", MathPlan::Measured, nullptr, nullptr},
 };
+
+// Refused on purpose, with what the audit measured (2026-09-16, gfx1151):
+//
+//   math.tanh  -- lowers to `__ocml_tanh_f32`, and the packager's binary
+//                 serialization ships a kernel whose whole body is one
+//                 `s_endpgm`: the launch succeeds and writes nothing, so every
+//                 element read back is whatever was in the buffer (measured as
+//                 all zeros). The same module serialized with `format=isa`
+//                 contains the correct 40-instruction implementation, so the
+//                 body is lost in the binary path, not in this lowering.
+//                 `build_native_gpu_storage` now refuses such an image outright;
+//                 this op stays out of the table until it ships real code.
+//   math.log1p -- lowers to `__ocml_log1p_f32` and the device computes
+//                 log(1 + x): log1p(-1e-6) came back -1.0132795e-06 against the
+//                 host's -1.0000005e-06. Accuracy near zero is the only reason
+//                 log1p exists, so admitting it would admit a trap. Use
+//                 log(1 + x) explicitly if that is what you want.
 
 static const char *planName(MathPlan plan) {
   switch (plan) {

@@ -42,23 +42,29 @@ ADMITTED_MATH: dict[str, str] = {
     "math.absf": "bit_exact",
     "math.exp": "measured",
     "math.log": "measured",
-    "math.log1p": "measured",
     "math.cos": "measured",
-    "math.tanh": "measured",
+}
+
+#: Refused with a recorded reason rather than left unmentioned, because both were
+#: admitted until the audit measured them on gfx1151 (2026-09-16): `math.tanh`
+#: ships a kernel whose body is one `s_endpgm` (the launch writes nothing), and
+#: `math.log1p` is computed as log(1 + x), losing exactly the accuracy near zero
+#: that log1p exists for. See `kMathAdmission` in the pass for the detail.
+REFUSED_MATH: dict[str, str] = {
+    "math.tanh": "the packaged ROCm image contains no kernel body (__ocml_tanh_f32)",
+    "math.log1p": "the device computes log(1 + x), so it is inaccurate near zero",
 }
 
 #: The host reference for each admitted op, and the input domain the audit
 #: sweeps it over. The domain is per-op because the interesting disagreements
-#: are domain-specific: argument reduction for `cos`, the near-1 cancellation
-#: for `log`/`log1p`, saturation for `tanh`, the overflow shoulder for `exp`.
+#: are domain-specific: argument reduction for `cos`, the decades-wide range
+#: and the near-1 cancellation for `log`, the overflow shoulder for `exp`.
 MATH_AUDIT_DOMAINS: dict[str, tuple[tuple[float, float], ...]] = {
     "math.sqrt": ((0.0, 1.0), (1.0, 1e6), (1e-30, 1e-20)),
     "math.absf": ((-1e6, 1e6),),
     "math.exp": ((-87.0, 88.0), (-1.0, 1.0), (-1e-6, 1e-6)),
     "math.log": ((1e-30, 1.0), (1.0, 1e30), (0.5, 2.0)),
-    "math.log1p": ((-0.999999, 1.0), (-1e-6, 1e-6), (1.0, 1e20)),
     "math.cos": ((-3.14159265, 3.14159265), (-100.0, 100.0), (-1e6, 1e6)),
-    "math.tanh": ((-10.0, 10.0), (-1.0, 1.0), (-1e-6, 1e-6)),
 }
 
 

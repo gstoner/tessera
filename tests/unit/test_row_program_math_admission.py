@@ -16,8 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from tessera.compiler.native_row_program import (ADMITTED_MATH, MATH_AUDIT_DOMAINS, declared_math,
-                                                 row_program_kernel, row_unary_math_module)
+from tessera.compiler.native_row_program import (ADMITTED_MATH, MATH_AUDIT_DOMAINS, REFUSED_MATH,
+                                                 declared_math, row_program_kernel,
+                                                 row_unary_math_module)
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -89,7 +90,8 @@ def test_a_rounding_explicit_op_is_realized_as_the_correctly_rounded_call():
     assert "llvm.intr.sqrt" in body(rocm) and "math.sqrt" not in body(rocm)
 
 
-@pytest.mark.parametrize("op", ["math.rsqrt", "math.erf", "math.powf", "math.exp2"])
+@pytest.mark.parametrize("op", ["math.rsqrt", "math.erf", "math.powf", "math.exp2",
+                                "math.tanh", "math.log1p"])
 def test_an_unadmitted_math_op_is_refused_by_name(op):
     """The refusal must name the op and the recorder, because the fix is to
     measure it — not to widen the table and hope."""
@@ -115,3 +117,16 @@ module {{
     assert f"`{op}` is not in the emitter's math admission table" in result.stderr
     assert "record_row_program_math_precision.py" in result.stderr
     assert "lowering failed without a diagnostic" not in result.stderr
+
+
+def test_the_refused_set_is_disjoint_and_reasoned():
+    """`tanh` and `log1p` were admitted until the audit measured them; they are
+    recorded as refused *with the measurement* so nobody re-admits them on the
+    assumption that nobody had looked."""
+    assert not set(REFUSED_MATH) & set(ADMITTED_MATH)
+    assert set(REFUSED_MATH) == {"math.tanh", "math.log1p"}
+    for op, reason in REFUSED_MATH.items():
+        assert len(reason) > 20 and op.split(".")[-1] not in reason.split()[0]
+    table = PASS_SOURCE.read_text()
+    for op in REFUSED_MATH:
+        assert op in table, f"the pass must record why {op} is refused, not just omit it"

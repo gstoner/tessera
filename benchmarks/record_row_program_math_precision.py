@@ -47,9 +47,7 @@ HOST = {
     "math.absf": np.abs,
     "math.exp": np.exp,
     "math.log": np.log,
-    "math.log1p": np.log1p,
     "math.cos": np.cos,
-    "math.tanh": np.tanh,
 }
 
 

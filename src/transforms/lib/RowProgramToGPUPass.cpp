@@ -38,6 +38,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/IR/TesseraOps.h"
 #include "Tessera/Transforms/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -566,7 +567,9 @@ struct RowProgramToGPUPass : public PassWrapper<RowProgramToGPUPass, OperationPa
     // The emitted skeleton names `tile.alloc_shared` (the arena sizer marker):
     // the tile dialect must be declared here or an assertions-enabled MLIR
     // refuses to load it inside the pass manager (Tajasarus, 2026-09-16).
-    r.insert<tessera::tile::TesseraTileDialect, arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
+    // The provenance attributes are tessera.*-prefixed: parsing them loads the
+    // Tessera dialect, which an input without Tessera ops never loaded.
+    r.insert<tessera::TesseraDialect, tessera::tile::TesseraTileDialect, arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
              LLVM::LLVMDialect, linalg::LinalgDialect, math::MathDialect, memref::MemRefDialect, scf::SCFDialect,
              tensor::TensorDialect>();
   }

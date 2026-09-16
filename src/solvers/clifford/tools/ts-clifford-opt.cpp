@@ -20,6 +20,9 @@
 #include "tessera/Clifford/CliffordDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "tessera/Clifford/CliffordPasses.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -41,6 +44,11 @@ int main(int argc, char **argv) {
   registry.insert<tensor::TensorDialect>();
   registry.insert<scf::SCFDialect>();
   registry.insert<math::MathDialect>();
+  // Kernel skeletons for the native GPU storage route carry gpu/llvm/memref
+  // around a rank-1 Clifford op (native_clifford_gpu.py, 2026-09-16).
+  registry.insert<gpu::GPUDialect>();
+  registry.insert<LLVM::LLVMDialect>();
+  registry.insert<memref::MemRefDialect>();
   registry.insert<func::FuncDialect>();
 
   // Individual passes.

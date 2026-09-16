@@ -32839,6 +32839,8 @@ def _executor_table():
         "native_cpu": _execute_cpu_native_or_jit,
         "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,
         "cpu_clifford_llvm_jit": _execute_cpu_clifford_llvm_jit,
+        "rocm_clifford_native_compiled": _execute_clifford_native_gpu,
+        "nvidia_clifford_native_compiled": _execute_clifford_native_gpu,
         "jit_cpu_numpy": _execute_jit_cpu_artifact,
         "rocm_wmma": _execute_rocm_wmma_artifact,
         "rocm_compiled": _execute_rocm_compiled_gemm,
@@ -33695,6 +33697,45 @@ def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(f"clifford lane artifact admits operands of shape {shape}")
     return jb.jit_clifford_op(op, *operands, algebra=algebra,
                               grades=None if grades is None else tuple(int(g) for g in grades))
+
+
+def _execute_clifford_native_gpu(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch one Clifford op through the native GPU storage route: the same
+    Clifford lowering the CPU JIT runs, expanded into a per-thread kernel by
+    ts-clifford-opt, packaged by the arena pipeline and executed on the
+    owning device. No reference fallback (W6.4 GPU route, 2026-09-16)."""
+    import numpy as np
+    from .compiler.native_clifford_gpu import CLIFFORD_GPU_OPS, clifford_gpu_program
+    from .compiler.scheduled_matmul import find_tessera_opt
+    from .compiler.llvm_tools import llvm_bin_dir
+
+    metadata = artifact.metadata or {}
+    op = str(metadata.get("clifford_op", ""))
+    algebra = tuple(int(x) for x in metadata.get("algebra", (3, 0, 0)))
+    grades = metadata.get("grades")
+    shape = tuple(int(d) for d in metadata.get("shape", ()))
+    target = str(metadata.get("target", ""))
+    if op not in CLIFFORD_GPU_OPS or len(algebra) != 3 or not shape:
+        raise ValueError("clifford native artifact requires an admitted op, algebra and shape metadata")
+    if target == "rocm":
+        backend, chip = "rocm", _rocm_chip()
+    elif target == "nvidia_sm120":
+        backend, chip = "nvidia", "sm_120"
+    else:
+        raise ValueError("clifford native route targets rocm or nvidia_sm120")
+    compiler, llvm_bin = find_tessera_opt(), llvm_bin_dir()
+    if compiler is None or llvm_bin is None:
+        raise RuntimeError("clifford native route requires tessera-opt and the matched LLVM tools")
+    arity = CLIFFORD_GPU_OPS[op][0]
+    if len(args) != arity:
+        raise ValueError(f"clifford {op} takes exactly {arity} operand(s)")
+    operands = [np.ascontiguousarray(np.asarray(value, dtype=np.float32)) for value in args]
+    if any(x.shape != shape for x in operands):
+        raise ValueError(f"clifford native artifact admits operands of shape {shape}")
+    program = clifford_gpu_program(op, shape, backend=backend, chip=chip, compiler=compiler, llvm_bin=llvm_bin,
+                                   algebra=algebra, grades=None if grades is None else tuple(int(g) for g in grades))
+    out = program.run(*operands)
+    return out.reshape(shape[:-1]) if CLIFFORD_GPU_OPS[op][1] else out
 
 
 def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

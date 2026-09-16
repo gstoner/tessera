@@ -99,6 +99,9 @@ add_mlir_library(TesseraClifford
 add_executable(ts-clifford-opt tools/ts-clifford-opt.cpp)
 target_link_libraries(ts-clifford-opt PRIVATE
     TesseraClifford
+    MLIRGPUDialect
+    MLIRLLVMDialect
+    MLIRMemRefDialect
     MLIRIR
     MLIRPass
     MLIRSupport

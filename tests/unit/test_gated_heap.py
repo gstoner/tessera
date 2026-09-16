@@ -40,7 +40,7 @@ def parent():
     p._lock = threading.RLock()
     p.closed = p.failed = False
     p._pending = p._recovery = None
-    p.width, p.timeout = 8, 30
+    p.width, p.timeout, p.startup = 8, 30, 180
     p._dimensions, p._options = (4, 8, 1), dict(backend='nvidia', chip='sm_120')
     p.channel = SimpleNamespace(send=lambda value: pytest.fail('invalid request reached worker'))
     return p
@@ -98,7 +98,7 @@ def test_replacement_requires_confirmed_death_then_reprobes(monkeypatch):
                         lambda self, *args, **kwargs: admitted.append((args, kwargs)))
     fresh = p.replacement()
     # Same dimensions, options and timeout; a brand-new worker, never this one.
-    assert fresh is not p and admitted == [((4, 8, 1), dict(timeout_seconds=30, backend='nvidia', chip='sm_120'))]
+    assert fresh is not p and admitted == [((4, 8, 1), dict(timeout_seconds=30, startup_seconds=180, backend='nvidia', chip='sm_120'))]
 
 
 def test_startup_without_verified_health_probe_never_admits_an_owner(monkeypatch):

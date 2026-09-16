@@ -128,14 +128,19 @@ def _heap_worker(channel, dimensions, options):
 
 
 class IsolatedHeapPool:
-    def __init__(self, slots, width, references, *, timeout_seconds=30., **options):
+    def __init__(self, slots, width, references, *, timeout_seconds=30., startup_seconds=180., **options):
         from .gpu_heap_collection import emit_pool
         emit_pool(slots, width, 'atomic_allocate', payload_dtype='int8', references=references)
         if options.get('backend') not in ('nvidia', 'rocm'):
             raise ValueError('isolated heap requires CUDA or HIP')
-        if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-            raise ValueError('isolated heap requires finite positive timeout')
-        self.width, self.timeout = width, timeout_seconds
+        for bound in (timeout_seconds, startup_seconds):
+            if type(bound) not in (int, float) or not math.isfinite(bound) or bound <= 0:
+                raise ValueError('isolated heap requires finite positive timeouts')
+        # Admission materializes and probes every admitted producer inside the
+        # worker (host compilation of ~9 kernels plus bounded device work,
+        # measured 21 s on the RTX 5070 alone), so startup has its own bound;
+        # `timeout_seconds` keeps modelling one device command that never returns.
+        self.width, self.timeout, self.startup = width, timeout_seconds, startup_seconds
         self._dimensions, self._options = (slots, width, references), dict(options)
         self._lock = threading.RLock()
         self._pending = None
@@ -165,7 +170,7 @@ class IsolatedHeapPool:
         try:
             # The worker is admitted only with its device-probe tag; a bare or
             # foreign ready message is a failed admission, never an owner.
-            ready = parent.recv() if parent.poll(timeout_seconds) else 'startup timed out'
+            ready = parent.recv() if parent.poll(startup_seconds) else 'startup timed out'
             if ready != ('ready', HEALTH_PROBE):
                 raise RuntimeError(f'isolated heap startup failed: health probe not verified ({ready!r})')
         except BaseException:
@@ -242,7 +247,8 @@ class IsolatedHeapPool:
         with self._lock:
             if not self.closed or not self.failed or not self.lease.reusable:
                 raise ValueError('replacement requires confirmed uncertain-worker teardown')
-            return type(self)(*self._dimensions, timeout_seconds=self.timeout, **self._options)
+            return type(self)(*self._dimensions, timeout_seconds=self.timeout,
+                              startup_seconds=self.startup, **self._options)
 
     def recover_async(self):
         with self._lock:

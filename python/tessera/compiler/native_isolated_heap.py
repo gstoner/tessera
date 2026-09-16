@@ -11,6 +11,61 @@ from .native_isolated_ann import _ProcessBoundary
 
 _UNCERTAIN: set["IsolatedHeapPool"] = set()
 _WORKER_SLOTS = threading.BoundedSemaphore(8)
+# Startup admission tag: a worker sends it only after its in-process probe
+# verified allocation, metadata inspection, pinned readback, empty-graph
+# marking and reclamation on the device it will own (2026-09-15).
+HEALTH_PROBE = 'heap-health-v1'
+
+
+def _probe_health(pool, stream, dimensions, buffers):
+    """Numerical admission probe run inside the worker before it is admitted.
+
+    Exercises the admitted producers on the exact device: an allocation with a
+    known int8 pattern must publish one live slot of the payload width, read
+    back bitwise through a generation-checked pin, and disappear after an
+    empty graph is published, marked and reclaimed. Any mismatch raises, the
+    worker exits and the parent never admits it as an owner. This proves the
+    workload on this device ordinal now; it is not a global driver-health
+    certificate.
+    """
+    slots, width, references = dimensions
+    payload, roots, edges = buffers
+    P = ct.c_void_p
+    pattern = (np.arange(width, dtype=np.int64) % 7 - 3).astype(np.int8)
+    pool.check(pool._upload(payload.pointer, P(pattern.ctypes.data), pattern.nbytes))
+    status = tuple(int(x) for x in pool._status_values(pool.allocate(stream, payload, width)))
+    if status[0] != 0:
+        raise RuntimeError(f'isolated heap health probe: allocation refused ({status})')
+    state = pool.inspect_metadata(stream)[0]
+    live = [int(i) for i in np.flatnonzero(state[:, 2])]
+    if len(live) != 1 or int(state[live[0], 1]) != width:
+        raise RuntimeError('isolated heap health probe: allocation metadata did not verify')
+    slot, generation = live[0], int(state[live[0], 0])
+    pool.prepare_readers(1)
+    request = pool.begin_read_object(stream, slot, generation)
+    while not request.poll():
+        time.sleep(.001)
+    copy = np.empty(width, np.int8)
+    with request as view:
+        pool.check(pool._download(P(copy.ctypes.data), view.pointer, copy.nbytes))
+    while not pool.poll_object_readers(stream):
+        time.sleep(.001)
+    if not np.array_equal(copy, pattern):
+        raise RuntimeError('isolated heap health probe: pinned payload readback did not verify')
+    empty_roots = np.zeros(slots, np.int64)
+    empty_edges = np.tile(np.array([-1, 0], np.int64), (slots, references))
+    pool.check(pool._upload(roots.pointer, P(empty_roots.ctypes.data), empty_roots.nbytes))
+    pool.check(pool._upload(edges.pointer, P(empty_edges.ctypes.data), empty_edges.nbytes))
+    pool.set_graph(stream, roots, edges).wait()
+    pool.begin_mark(stream)
+    pool.mark_step(stream, slots).wait()
+    receipt = pool.finish_mark_async(stream)
+    while not receipt.poll():
+        time.sleep(.001)
+    pool.reclaim_retired(stream).wait()
+    if np.any(pool.inspect_metadata(stream)[0][:, 2]):
+        raise RuntimeError('isolated heap health probe: reclamation did not verify')
+    return HEALTH_PROBE
 
 
 def _heap_worker(channel, dimensions, options):
@@ -36,7 +91,9 @@ def _heap_worker(channel, dimensions, options):
         call('cuStreamCreate' if cuda else 'hipStreamCreateWithFlags', [ct.POINTER(P), ct.c_uint], ct.byref(stream), 1)
         pool = ResidentGatedPool(*dimensions, stream=stream.value, **options)
         data = _Buffer(pool, (dimensions[1],), 'int8')
-        channel.send(('ready',))
+        roots = _Buffer(pool, (dimensions[0],), 'int64')
+        edges = _Buffer(pool, (dimensions[0], 2 * dimensions[2]), 'int64')
+        channel.send(('ready', _probe_health(pool, stream.value, dimensions, (data, roots, edges))))
         while True:
             op, value = channel.recv()
             if op == 'close':
@@ -79,6 +136,7 @@ class IsolatedHeapPool:
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError('isolated heap requires finite positive timeout')
         self.width, self.timeout = width, timeout_seconds
+        self._dimensions, self._options = (slots, width, references), dict(options)
         self._lock = threading.RLock()
         self._pending = None
         self._recovery = None
@@ -105,8 +163,10 @@ class IsolatedHeapPool:
         self.lease = DriverIsolationLease(_ProcessBoundary(self.process), context_identity=f'heap-{self.process.pid}',
                                           timeout_seconds=min(timeout_seconds, 5.))
         try:
-            if not parent.poll(timeout_seconds) or parent.recv() != ('ready',):
-                raise RuntimeError('isolated heap startup failed')
+            # The worker is admitted only with its device-probe tag; a bare or
+            # foreign ready message is a failed admission, never an owner.
+            if not parent.poll(timeout_seconds) or parent.recv() != ('ready', HEALTH_PROBE):
+                raise RuntimeError('isolated heap startup failed: health probe not verified')
         except BaseException:
             self._poison()
             self.lease.recover()
@@ -170,6 +230,18 @@ class IsolatedHeapPool:
             except BaseException:
                 self._poison()
                 raise
+
+    def replacement(self):
+        """Admit a fresh, numerically probed worker after this one's confirmed teardown.
+
+        Confirmed death proves only that the predecessor's resources are gone;
+        the replacement's own startup probe on the same device is the health
+        evidence, and a failed probe admits nothing. Neither worker is reused.
+        """
+        with self._lock:
+            if not self.closed or not self.failed or not self.lease.reusable:
+                raise ValueError('replacement requires confirmed uncertain-worker teardown')
+            return type(self)(*self._dimensions, timeout_seconds=self.timeout, **self._options)
 
     def recover_async(self):
         with self._lock:

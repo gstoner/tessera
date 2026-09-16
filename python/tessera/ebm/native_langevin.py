@@ -333,10 +333,12 @@ def langevin_device_source(shape, *, eta: float, temperature: float, steps: int,
     _check_kinds(energy, manifold)
     if feats > MAX_FEATURES:
         raise ValueError(f"langevin device route admits at most {MAX_FEATURES} features per row (one lane each)")
-    specs = (TensorSpec("y0", "fp32", (rows, feats), False), TensorSpec("x", "fp32", (rows, feats), False),
-             TensorSpec("key", "int64", (2,), False), TensorSpec("y", "fp32", (rows, feats), True),
-             TensorSpec("next_key", "int64", (2,), True))
+    specs: tuple[TensorSpec, ...] = (
+        TensorSpec("y0", "fp32", (rows, feats), False), TensorSpec("x", "fp32", (rows, feats), False),
+        TensorSpec("key", "int64", (2,), False), TensorSpec("y", "fp32", (rows, feats), True),
+        TensorSpec("next_key", "int64", (2,), True))
     if manifold == "sphere":
+        # The per-row status word the sphere integrator reports.
         specs = specs + (TensorSpec("status", "int32", (rows,), True),)
     source, full = row_program_device_source(
         langevin_loop_module((rows, feats), eta=eta, temperature=temperature, steps=steps, manifold=manifold,

@@ -152,7 +152,7 @@ def _probe_pool(state_rows, *, readback=None):
         def poll(self):
             return True
         def __enter__(self):
-            return SimpleNamespace(pointer=ct.c_void_p(0))
+            return SimpleNamespace(__cuda_array_interface__={'data': (0, False)})
         def __exit__(self, *exc):
             return False
     rows = iter(state_rows)

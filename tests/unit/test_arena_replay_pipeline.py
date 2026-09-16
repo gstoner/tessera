@@ -19,7 +19,7 @@ def test_arena_pipeline_is_spelled_once():
     offenders = sorted(
         str(path.relative_to(COMPILER))
         for path in COMPILER.rglob("*.py")
-        if path.name != "native_gpu_storage.py" and TOKEN.search(path.read_text())
+        if path.name != "native_gpu_storage.py" and TOKEN.search(path.read_text(encoding="utf-8", errors="replace"))
     )
     assert offenders == [], f"replay the packager pipeline via replay_arena_ir, not a copy: {offenders}"
 

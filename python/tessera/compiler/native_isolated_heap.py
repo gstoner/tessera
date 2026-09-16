@@ -46,8 +46,8 @@ def _probe_health(pool, stream, dimensions, buffers):
     while not request.poll():
         time.sleep(.001)
     copy = np.empty(width, np.int8)
-    with request as view:
-        pool.check(pool._download(P(copy.ctypes.data), view.pointer, copy.nbytes))
+    with request as view:  # a borrowed, generation-checked device view
+        pool.check(pool._download(P(copy.ctypes.data), P(view.__cuda_array_interface__['data'][0]), copy.nbytes))
     while not pool.poll_object_readers(stream):
         time.sleep(.001)
     if not np.array_equal(copy, pattern):
@@ -165,8 +165,9 @@ class IsolatedHeapPool:
         try:
             # The worker is admitted only with its device-probe tag; a bare or
             # foreign ready message is a failed admission, never an owner.
-            if not parent.poll(timeout_seconds) or parent.recv() != ('ready', HEALTH_PROBE):
-                raise RuntimeError('isolated heap startup failed: health probe not verified')
+            ready = parent.recv() if parent.poll(timeout_seconds) else 'startup timed out'
+            if ready != ('ready', HEALTH_PROBE):
+                raise RuntimeError(f'isolated heap startup failed: health probe not verified ({ready!r})')
         except BaseException:
             self._poison()
             self.lease.recover()

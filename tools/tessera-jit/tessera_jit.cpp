@@ -101,6 +101,10 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#ifdef TESSERA_JIT_HAVE_CLIFFORD
+#include "tessera/Clifford/CliffordDialect.h"
+#include "tessera/Clifford/CliffordPasses.h"
+#endif
 
 using namespace mlir;
 
@@ -675,6 +679,13 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // what makes the Graph-IR optimizations observable end-to-end through the JIT.
   pm1a.addPass(createCanonicalizerPass());
   pm1a.addPass(createCSEPass());
+#ifdef TESSERA_JIT_HAVE_CLIFFORD
+  // Geometric algebra: fuse `grade` consumers into the product, then expand
+  // the compile-time Cayley table (batched over leading axes) to scf/tensor/
+  // arith that one-shot bufferization consumes like any other tensor loop.
+  pm1a.addPass(tessera::createCliffordGradeFusionPass());
+  pm1a.addPass(tessera::createCliffordExpandProductTablePass());
+#endif
   pm1a.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
   // Elementwise arith/math ops ON TENSORS (e.g. the paired autodiff pass's
   // cotangent accumulation `arith.addf : tensor<...>`) have no bufferization
@@ -857,6 +868,17 @@ extern "C" {
 
 const char *tessera_jit_last_error(void) { return g_lastError.c_str(); }
 
+// Whether this library was built with the Clifford dialect lane (CMake option
+// TESSERA_BUILD_CLIFFORD_BACKEND). Callers needing geometric products check
+// this instead of compiling and reading a parse error.
+int tessera_jit_has_clifford(void) {
+#ifdef TESSERA_JIT_HAVE_CLIFFORD
+  return 1;
+#else
+  return 0;
+#endif
+}
+
 // Compile any MLIR module. Every non-external function is marked for c-iface
 // emission and has DPS applied when its sole result is a memref. Returns an
 // opaque handle on success, nullptr on failure (see tessera_jit_last_error()).
@@ -867,6 +889,9 @@ void *tessera_jit_compile(const char *mlir_text) {
 
   DialectRegistry registry;
   tessera::registerTesseraDialects(registry);
+#ifdef TESSERA_JIT_HAVE_CLIFFORD
+  registry.insert<tessera::clifford::CliffordDialect>();
+#endif
   registry.insert<func::FuncDialect, arith::ArithDialect, scf::SCFDialect,
                   tensor::TensorDialect, linalg::LinalgDialect,
                   math::MathDialect, memref::MemRefDialect,

@@ -26,6 +26,41 @@ from .native_storage_contract import attach_tensor_contract, generate_tensor_bin
 ROW_PROGRAM_PASS = "--tessera-row-program-to-gpu"
 MAX_FEATURES = 1024
 
+#: The emitter's math admission table, mirrored from `kMathAdmission` in
+#: `src/transforms/lib/RowProgramToGPUPass.cpp` (drift-gated by
+#: `tests/unit/test_row_program_math_admission.py`). A `math.*` op outside it is
+#: refused by the pass rather than passed through, because on both device routes
+#: it reaches a vendor library whose default accuracy nobody here measured.
+#:
+#: ``rounding_explicit`` — realized as a correctly-rounded call, exact whatever
+#: the vendor default is. ``bit_exact`` — sign/bit manipulation, exact by
+#: construction. ``measured`` — the vendor default, admitted because
+#: ``benchmarks/record_row_program_math_precision.py`` has measured it against
+#: the host on the owning device.
+ADMITTED_MATH: dict[str, str] = {
+    "math.sqrt": "rounding_explicit",
+    "math.absf": "bit_exact",
+    "math.exp": "measured",
+    "math.log": "measured",
+    "math.log1p": "measured",
+    "math.cos": "measured",
+    "math.tanh": "measured",
+}
+
+#: The host reference for each admitted op, and the input domain the audit
+#: sweeps it over. The domain is per-op because the interesting disagreements
+#: are domain-specific: argument reduction for `cos`, the near-1 cancellation
+#: for `log`/`log1p`, saturation for `tanh`, the overflow shoulder for `exp`.
+MATH_AUDIT_DOMAINS: dict[str, tuple[tuple[float, float], ...]] = {
+    "math.sqrt": ((0.0, 1.0), (1.0, 1e6), (1e-30, 1e-20)),
+    "math.absf": ((-1e6, 1e6),),
+    "math.exp": ((-87.0, 88.0), (-1.0, 1.0), (-1e-6, 1e-6)),
+    "math.log": ((1e-30, 1.0), (1.0, 1e30), (0.5, 2.0)),
+    "math.log1p": ((-0.999999, 1.0), (-1e-6, 1e-6), (1.0, 1e20)),
+    "math.cos": ((-3.14159265, 3.14159265), (-100.0, 100.0), (-1e6, 1e6)),
+    "math.tanh": ((-10.0, 10.0), (-1.0, 1.0), (-1e-6, 1e-6)),
+}
+
 
 def row_program_kernel(module_text: str, *, entry: str, backend: str, compiler, passes: Sequence[str] = ()) -> tuple[str, int]:
     """Run ``passes`` then the row-program emitter; return (kernel text, lanes)."""
@@ -116,3 +151,33 @@ module {{
   }}
 }}
 """
+
+
+def row_unary_math_module(rows: int, features: int, op: str) -> str:
+    """``y[r, f] = <op>(x[r, f])``: the smallest row program that isolates one
+    ``math.*`` op, so the audit recorder measures that op and nothing else."""
+    if op not in ADMITTED_MATH:
+        raise ValueError(f"{op} is not in the emitter's math admission table")
+    r, f = int(rows), int(features)
+    return f"""#map = affine_map<(d0, d1) -> (d0, d1)>
+module {{
+  func.func @unary_math(%x: tensor<{r}x{f}xf32>) -> tensor<{r}x{f}xf32> {{
+    %e = tensor.empty() : tensor<{r}x{f}xf32>
+    %y = linalg.generic {{indexing_maps = [#map, #map], iterator_types = ["parallel", "parallel"]}}
+        ins(%x : tensor<{r}x{f}xf32>) outs(%e : tensor<{r}x{f}xf32>) {{
+    ^bb0(%a: f32, %o: f32):
+      %v = {op} %a : f32
+      linalg.yield %v : f32
+    }} -> tensor<{r}x{f}xf32>
+    return %y : tensor<{r}x{f}xf32>
+  }}
+}}
+"""
+
+
+def declared_math(kernel_text: str) -> tuple[str, ...]:
+    """The `tessera.row_program.math` plan the emitted kernel declares."""
+    found = re.search(r"tessera\.row_program\.math = \[([^\]]*)\]", kernel_text)
+    if found is None:
+        return ()
+    return tuple(sorted(entry.strip().strip('"') for entry in found[1].split(",") if entry.strip()))

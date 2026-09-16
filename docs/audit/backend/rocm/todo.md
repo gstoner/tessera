@@ -7972,3 +7972,19 @@ Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
 Follow-up required: the batched native lowering is CPU-only today; the `rocm_clifford_compiled` gfx1151 kernel is a Python-emitted HIP kernel and stays the ROCm device lane. Next slice routes the same scf/arith expansion through the arena pipeline (`build_native_gpu_storage`) to a gfx1151/gfx1201 package with exact-device parity. Princess-Luna's `build/` now configures the Clifford backend ON so the domain fixtures run there.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).
+
+## Clifford product family behind the JIT — 2026-09-16
+
+Sync `GA-NATIVE-FAMILY-2026-09-16`; owner W6.4.
+
+Follow-up required: CPU-only; the family lowering is what the arena-pipeline GPU slice will carry to gfx1151/gfx1201. Clifford lit 19/19 on Princess-Luna.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit).
+
+## Clifford family through the native GPU route — 2026-09-16
+
+Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
+
+Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`, Clifford backend now configured ON in its `build/`), ten ops × three shapes, worst abs error 0; row `rocm` / `rocm_clifford_native_compiled`. The Python-emitted `rocm_clifford_compiled` gfx1151 kernel is untouched and remains the ROCm GA lane until the native route is measured against it (dispatch/allocation/kernel time separately; no `/dev/kfd` here, so no counters).
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).

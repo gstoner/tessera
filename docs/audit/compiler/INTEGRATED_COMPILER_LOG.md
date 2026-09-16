@@ -4129,3 +4129,31 @@ Remaining: rotor sandwich fold and the remaining Clifford ops have no lowering b
 Evidence: `tests/unit/test_clifford_jit_native.py` (three CPU hosts), `src/solvers/clifford/test/ir/passes/expand_batched.mlir` + `expand_rejects_dynamic.mlir`, `docs/audit/generated/domain_proof_ladder.md` (`cpu=1` under GA), `docs/audit/generated/runtime_execution_matrix.md`.
 
 <!-- entry-fields:end -->
+
+### 2026-09-16 — the Clifford product family executes behind the MLIR/LLVM JIT
+
+Owner: [W6.4](INTEGRATED_COMPILER_PLAN.md#w64)
+
+PRs: domain-support stream, second slice, stacked on the batched-product slice (sync `GA-NATIVE-FAMILY-2026-09-16`).
+
+Outcome: One compile-time table now carries every linear/bilinear op the standalone GA reference defines: `ExpandProductTable` lowers wedge (disjoint blades only), left contraction (result grade = grade(b) − grade(a)), inner and norm (one scalar per multivector, typed `[..., 1]`, norm clipped before sqrt), reverse / grade involution / conjugate (per-grade signs), Hodge star (`reverse(a)·I` as a signed blade permutation), standalone grade projection, and rotor sandwich expanded to `gp(gp(R,x), reverse(R))` behind an `expand-rotor-sandwich` pass option — the fused marker still survives the standalone pipeline for backends with a sandwich kernel, and the JIT enables the expansion. All batched through the shared loop nest. `jit_clifford_op` / `package_clifford_cpu` are the consumers; the execution-matrix row is renamed `cpu` / `cpu_clifford_llvm_jit` (op family `clifford`). Nine ops × single/batched/rank-3 shapes match the reference on the M1 Max, Princess-Luna and Super-Bear; grade projection keeps only the listed grades; a unit rotor preserves the vector norm; Clifford lit 19/19 on all three.
+
+Remaining: `exp`/`log` (series with branch handling) and the field ops (ext_deriv, codiff, vec_deriv, integral) have no native lowering; ragged batches; the GPU package route through the arena pipeline; the acceptance's separate overhead/traffic/kernel-time measurements (no performance claim); the Python-emitted device kernels stay the x86/ROCm/Apple GA lanes until measured against this path.
+
+Evidence: `tests/unit/test_clifford_jit_native.py` (three CPU hosts), `src/solvers/clifford/test/ir/passes/expand_family.mlir` + `expand_family_rejects.mlir`, `docs/audit/generated/runtime_execution_matrix.md`.
+
+<!-- entry-fields:end -->
+
+### 2026-09-16 — the Clifford family reaches ROCm and sm_120 through the arena pipeline
+
+Owner: [W6.4](INTEGRATED_COMPILER_PLAN.md#w64)
+
+PRs: domain-support stream, third slice, on the family branch (sync `GA-NATIVE-GPU-2026-09-16`).
+
+Outcome: A domain op now reaches a GPU package without a Python-emitted kernel. `native_clifford_gpu.py` writes only the kernel skeleton (one thread per multivector: loads, a rank-1 `tessera_clifford` op on tensors, stores); `ts-clifford-opt` — which now registers gpu/llvm/memref to parse kernels — expands it through the same GradeFusion + ExpandProductTable lowering the CPU JIT runs; the arena pipeline's canonicalization folds the tensors away, leaving scalar arithmetic the compiler emitted (64 products for the full Cl(3,0) product, 24 under a grade-2 restriction, counted in the arena IR); `build_native_gpu_storage` packages it and the native storage binding launches it. `runtime.launch` rows `rocm` / `rocm_clifford_native_compiled` and `nvidia_sm120` / `nvidia_clifford_native_compiled` share one executor; `package_clifford_native` builds the artifacts. Ten ops × single/batched/rank-3 shapes match the standalone GA reference on gfx1151 (Princess-Luna), gfx1201 (Tajasarus, Clifford backend now ON there too) and sm_120 (Super-Bear), 49/49 tests each; the domain proof ladder's GA row gains `nvidia_sm120=1` and a second `rocm` row from the matrix.
+
+Remaining: the Python-emitted `rocm_clifford_compiled` / `x86_clifford_compiled` / Apple kernels are untouched and remain the device lanes until this route is measured against them (per-call host transfers here are correctness-only); `exp`/`log` and the field ops; ragged batches; an Apple package route (the Apple arena lane is MSL, not this pipeline); the acceptance's separate overhead/traffic/kernel-time measurements. EBM's traceable quadratic energy loop is the next domain slice.
+
+Evidence: [three device packets](../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md) with source fingerprints, `tests/unit/test_clifford_native_gpu.py` (host-free expansion/pruning half on the Mac; device half on the three boxes), `benchmarks/record_clifford_native_gpu.py`, `docs/audit/generated/domain_proof_ladder.md`.
+
+<!-- entry-fields:end -->

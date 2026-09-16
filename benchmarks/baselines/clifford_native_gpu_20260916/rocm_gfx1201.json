@@ -1,0 +1,295 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1201",
+  "host": "tajasarus",
+  "compiler_sha256": "2099c19166568c326156a0d64ef10e37e46df8995bd42d4d14305b0a170e2231",
+  "clifford_opt_sha256": "d86b9d3c038c0cad038b007a8c73ba1144e2cc8a708a14a64feadfe628dce20d",
+  "llvm_bin": "/home/angstorms/.local/share/tessera-toolchains/llvm-23.1.1-assertions/bin",
+  "recorder_sha256": "9e031dd8fb1843b170b342c515c6df06e62bdbde617dde33749217338f8940ec",
+  "rows": [
+    {
+      "op": "conjugate",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "a18339598abe109663bae9388fa97b35b6c1753ce491007108486aa15e59ee37"
+    },
+    {
+      "op": "conjugate",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "e33dea50b6805f919428c5f4f06d1a2c772f8d8f603f6bbd542d8f83d7ff9bf5"
+    },
+    {
+      "op": "conjugate",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "414d38538339d29f062495eaa5339bb4437dbe85772cd8213a15835a79c65c1e"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "9e7a492fb75af020eb0f40bfb89f847671b25cc8e1ac29a26c47e6bf48eb910c"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "e0ae726d854c4f9aaf5e7a6f7f7c63a6a5bbeb609a09ce74b0c56a8b9d181a48"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "0d73d10976f10f659de5b6a82b92351af6f271e9945360c7db4f3ba18f59ade8"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "a9001922970c790aac864b965e3283e1789dd108046345a7af34d062230a0899"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "ecb68049226d8a22da0297874695c4f66d322cce0261f935fcedc7c2247b65d5"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "dac34e81d94e98389c0f7442d3b7685a977019a2cd8ff1a7793d31292c42c4a1"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "8f2b47948e5dad09a5f5e7a518ddfcde626c2c525c340fb9f374fc5fea1959e5"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "e5d6ad57cd320ff28c314494c5b650c2f48da78a67c882058d0427d80cac4adc"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "0a1960a57e98ef719a3eae8d6228d9c073fbba222413e6a1f81c9cb8458541a3"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "b8a5913cede2bff548ac46f8a29ece9323c7b0fb929463855bbf61d2f31cbab3"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "562a544240adf2b9fa096447fa92c1799095b3f4ec41d42e210f7d1ac955d29c"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "5a821b088d80285a71031238b21d19a7b34a8d043f46e57c077a0965061c5c71"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "1ccc397e2c1c9c2a3dd120097bacc22332633ae02013bb347e2940d95eed8d03"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "c3a68880f71944ac1ec1e0ed3171902c120e9a042102b42015e42a3ab8ab4b55"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "cc106581dc74f648ae2bc3b8edb39511ff2adcf6f76e090a4d50fd736c741f3b"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "2b3fd2194d585246c3ce583016f4f3d25f31e7fc3f85a0566811df694499acad"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "1492c3275a804f9b499d61046448ac475877ab77ba7155913d10f2d2041afd1f"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "8d8aaec3a8c345c4588821fc07aeebe8842541807b458687ea914306d101613c"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "3f0a1c062f2ddf37357e894fc99d3f240566fac2bc56a6f709e0790ae3277662"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "14dc1cf7baf68407dbd66e3b7e6e125336569fb36ccbeaa17aad398b964a6303"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "b9d14f5ea0558dd6971e7a9da7ba87dd33d0bd6edb7e288fa495d3a72fb81558"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "d984210240ca548df7d2d6eaab8e9cc493ce66bcdafd4347f6130335e289629c"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "5810e6a1f576f97ace79cf97669476be8c92960747b5271fd68452cfaedc81f7"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "859069a26bed2a5bc35402b13e4d144799f3d2c8446e07cd0a91f66e2c55db3e"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "a9639ec71eda39f71125f994174bb3382f163cfc44e4b96fa9f9df2dc3088cdd"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "45795cb9326a3c9c5b64feb4be9ed0deb0b2ff48fe97765cda6fa29bc65205d9"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "f622a185fd475707d1dded5241d66dbf5cb4efb07a2b02840272146603c8815d"
+    }
+  ],
+  "emitted_products": {
+    "full": 64,
+    "grade2": 24
+  },
+  "proofs": [
+    "every op of the family matches the standalone GA reference for single, batched and rank-3 inputs",
+    "grade-2 restriction emits 24 of 64 products and writes the other coefficients as zero",
+    "the device kernel is the dialect's own lowering folded to scalar code; no Python-emitted kernel"
+  ],
+  "promotion_eligible": false,
+  "measured_performance": false,
+  "envelope": "f32, Cl(3,0), static shapes; per-call host transfers; correctness only",
+  "rocm_chip_env": "gfx1201"
+}

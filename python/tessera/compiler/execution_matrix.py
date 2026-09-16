@@ -116,6 +116,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "when their Metal/MPSGraph executor probes are active)",
     "cpu_autodiff_paired_llvm_jit": "Compiler-generated paired backward compiled "
                              "through MLIR/LLVM and invoked through libtessera_jit",
+    "rocm_clifford_native_compiled": "Clifford ops lowered by the dialect's "
+                             "ExpandProductTable into a per-thread kernel, "
+                             "packaged by the arena pipeline and launched on gfx1151/gfx1201",
+    "nvidia_clifford_native_compiled": "Clifford ops lowered by the dialect's "
+                             "ExpandProductTable into a per-thread kernel, "
+                             "packaged by the arena pipeline and launched on sm_120",
     "cpu_clifford_llvm_jit": "Geometric-algebra products lowered by the Clifford "
                              "dialect (GradeFusion + batched ExpandProductTable) "
                              "inside libtessera_jit and executed through MLIR/LLVM",
@@ -1248,18 +1254,20 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
-    ("cpu", "cpu_clifford_geo_product_llvm_jit"): ExecutionRow(
-        target="cpu", compiler_path="cpu_clifford_geo_product_llvm_jit",
+    ("cpu", "cpu_clifford_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_clifford_llvm_jit",
         execution_kind="native_cpu", executable=True,
         executor_id="cpu_clifford_llvm_jit", runtime_status="success",
-        reason="W6.4 batched native GA: a tessera_clifford.geo_product on "
-               "[..., 2**n] f32 tensors (Cl(p,q,r), optional output-grade "
-               "restriction) lowers through GradeFusion + ExpandProductTable "
-               "to an scf.for nest over the compile-time Cayley table inside "
+        reason="W6.4 batched native GA: the tessera_clifford product family "
+               "(geo_product with optional output-grade restriction, wedge, "
+               "left_contract, inner, norm, reverse, grade_involute, conjugate, "
+               "hodge_star, grade, rotor_sandwich) on [..., 2**n] f32 tensors "
+               "of Cl(p,q,r) lowers through GradeFusion + ExpandProductTable to "
+               "an scf.for nest over the compile-time Cayley table inside "
                "libtessera_jit and executes through MLIR/LLVM on the host CPU "
                "(M1 Max, Zen 5, Zen 2 parity with the standalone GA reference, "
                "2026-09-16). No numpy fallback; out-of-envelope requests raise.",
-        execution_mode="mlir_llvm_jit", op_family="clifford_geometric_product",
+        execution_mode="mlir_llvm_jit", op_family="clifford",
         evidence_target="cpu_x86_64",
         numerical_fixture="tests/unit/test_clifford_jit_native.py",
         proof_build="llvm23-core+clifford+jit"),
@@ -2940,6 +2948,23 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "row to a power of two and flips for descending). f32, matches "
                "numpy.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_clifford_native_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_clifford_native_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_clifford_native_compiled", runtime_status="success",
+        reason="W6.4 GPU route: the Clifford product family (geo_product with "
+               "optional output-grade restriction, wedge, left_contract, inner, "
+               "norm, reverse, grade_involute, conjugate, hodge_star, grade, "
+               "rotor_sandwich) on [..., 2**n] f32 tensors. The kernel skeleton "
+               "(one thread per multivector) carries a rank-1 tessera_clifford op; "
+               "ts-clifford-opt expands it through the same GradeFusion + "
+               "ExpandProductTable lowering the CPU JIT runs, the arena pipeline "
+               "folds it to scalar ROCDL code, and the native storage package "
+               "launches it. No Python-emitted kernel; no fallback.",
+        execution_mode="hip_runtime", op_family="clifford",
+        device_proof="device_verified_abi", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_clifford_native_gpu.py",
+        proof_build="llvm23-core+clifford+arena"),
     ("rocm", "rocm_clifford_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_clifford_compiled",
         execution_kind="native_gpu", executable=True,
@@ -3821,6 +3846,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_conv2d.py",
         proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_clifford_native_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_clifford_native_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_clifford_native_compiled", runtime_status="success",
+        reason="W6.4 GPU route on sm_120: the Clifford product family lowered by "
+               "the dialect's GradeFusion + ExpandProductTable into a per-thread "
+               "kernel, folded to scalar NVVM code by the arena pipeline and "
+               "launched through the native storage package. No Python-emitted "
+               "kernel; no fallback.",
+        execution_mode="cuda_runtime", op_family="clifford",
+        device_proof="device_verified_abi", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_clifford_native_gpu.py",
+        proof_build="llvm23-core+clifford+arena"),
     ("nvidia_sm120", "nvidia_softmax_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_softmax_compiled",
         execution_kind="native_gpu", executable=True,

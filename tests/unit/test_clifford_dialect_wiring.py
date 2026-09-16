@@ -428,6 +428,8 @@ def test_ts_clifford_opt_pipeline_orders_passes_correctly() -> None:
     (otherwise the inner geo_product gets `output_grades` and the
     sandwich pattern is no longer recognizable)."""
     src = (REPO_ROOT / "src/solvers/clifford/tools/ts-clifford-opt.cpp").read_text()
+    # Search the canonical pipeline body, not the per-pass registrations above it.
+    src = src[src.find('"tessera-clifford-pipeline"'):]
     annotate_pos = src.find("createCliffordAnnotateAlgebraPass()")
     rotor_pos = src.find("createCliffordRotorSandwichFoldPass()")
     grade_pos = src.find("createCliffordGradeFusionPass()")

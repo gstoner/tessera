@@ -856,9 +856,10 @@ layout, §7.12.1 WMMA hazards, §11.6.2 load-transpose, §5.6 barriers
 
 ### CUDA — The-Super-Bear (Ubuntu 26.04 WSL2)
 
-Threadripper 3970X (**Zen 2, no AVX-512** — x86 proof stays on Strix Halo) +
-**RTX 5070 (sm_120)**, WSL2 CUDA (toolkit only, `/dev/dxg`, no driver
-package), reached as `ssh -p 5023 angstorms@192.168.1.39` (alias `ssh
+Threadripper 3970X (**Zen 2, 32 cores / 64 threads, no AVX-512** — x86 proof
+stays on the Zen 5 hosts), **128 GB** RAM, **RTX 5070 12 GB GDDR7 (192-bit,
+MSI Ventus 3X OC, 2557 MHz boost; sm_120)** — owner-recorded 2026-09-16 —
+WSL2 CUDA (toolkit only, `/dev/dxg`, no driver package), reached as `ssh -p 5023 angstorms@192.168.1.39` (alias `ssh
 super-bear`). Fleet is on **CUDA 13.4.1 / nvcc
 13.4.59 / driver 610.88**, and `compiler/gpu_target.py` pins **13.4 / PTX ISA
 9.4** to match (bumped 2026-09-15); older 13.3 packets are historical.
@@ -929,9 +930,11 @@ ninja -C build tessera-opt        # 32 threads; ~1-2 min cold
 # EBM / Clifford (GA) dialects are OFF by default — enable them or their passes
 # and lit fixtures silently do not build. Required for the W0 compiler work.
 # Since 2026-09-16 the Clifford backend is also what puts the geometric-algebra
-# lane into libtessera_jit (tessera_jit_has_clifford()); Princess-Luna and
-# Super-Bear `build/` trees configure it ON (the Mac already did), so domain
-# fixtures and the CPU GA lane are fleet-covered, not Mac-only.
+# lane into libtessera_jit (tessera_jit_has_clifford()) and builds
+# ts-clifford-opt, which the native GPU route (native_clifford_gpu.py) shells
+# out to; every WSL box's `build/` (Princess-Luna, Super-Bear, Tajasarus) and
+# the Mac configure it ON, so domain fixtures and the GA lanes are
+# fleet-covered, not Mac-only.
 cmake -S . -B build -G Ninja -DTESSERA_BUILD_EBM_BACKEND=ON -DTESSERA_BUILD_CLIFFORD_BACKEND=ON
 
 # Re-verify a C++ pass change end-to-end: rebuild → lit fixture + FileCheck → drift test

@@ -83,11 +83,84 @@ def test_runtime_launch_reports_the_native_cpu_lane():
     before = jb.invocation_count()
     result = rt.launch(artifact, (a, b))
     assert result["ok"] and result["execution_kind"] == "native_cpu"
-    assert result["compiler_path"] == "cpu_clifford_geo_product_llvm_jit"
+    assert result["compiler_path"] == "cpu_clifford_llvm_jit"
     assert jb.invocation_count() == before + 1
     np.testing.assert_allclose(np.asarray(result["output"]), _reference(a, b), rtol=1e-5, atol=1e-5)
     # A shape outside the packaged envelope is a failed launch, never a fallback.
     refused = rt.launch(artifact, (a[:2], b[:2]))
     assert refused["ok"] is False and "shape" in str(refused.get("reason", refused))
     assert "output" not in refused or refused["output"] is None
+
+
+_REF = {
+    "wedge": "clifford_wedge", "left_contract": "clifford_left_contraction",
+    "inner": "clifford_inner", "norm": "clifford_norm", "rotor_sandwich": "clifford_rotor_sandwich",
+    "reverse": "clifford_reverse", "grade_involute": "clifford_grade_involution",
+    "conjugate": "clifford_conjugate", "hodge_star": "clifford_hodge_star",
+}
+
+
+def _rows(shape, seed):
+    rng = np.random.default_rng(seed)
+    return rng.standard_normal(shape).astype(np.float32)
+
+
+def _reference_op(op, *arrays):
+    """Apply the standalone GA reference row by row (it takes one multivector
+    at a time for the unary/scalar forms) and re-batch."""
+    import tessera._clifford_ops as ref
+    fn = getattr(ref, _REF[op])
+    lead = arrays[0].shape[:-1]
+    flat = [x.reshape(-1, 8) for x in arrays]
+    rows = [np.asarray(fn(*[f[i] for f in flat]), dtype=np.float32) for i in range(flat[0].shape[0])]
+    return np.stack(rows).reshape(lead + rows[0].shape).astype(np.float32)
+
+
+@pytest.mark.parametrize("op", sorted(_REF))
+@pytest.mark.parametrize("shape", [(8,), (6, 8), (2, 3, 8)])
+def test_family_matches_reference(op, shape):
+    """Every op of the family the lane admits matches the standalone GA
+    reference for single, batched and rank-3 inputs (Cl(3,0), f32)."""
+    arity = jb.CLIFFORD_JIT_OPS[op][0]
+    arrays = [_rows(shape, 100 * arity + i + len(shape)) for i in range(arity)]
+    if op == "rotor_sandwich":  # a unit rotor: cos + sin e12
+        rotor = np.zeros(shape, np.float32); rotor[..., 0] = np.cos(0.3); rotor[..., 3] = np.sin(0.3)
+        arrays[0] = rotor
+    before = jb.invocation_count()
+    out = jb.jit_clifford_op(op, *arrays)
+    assert jb.invocation_count() == before + 1
+    expect = _reference_op(op, *arrays)
+    assert out.shape == expect.shape, (out.shape, expect.shape)
+    np.testing.assert_allclose(out, expect, rtol=1e-5, atol=1e-5)
+
+
+def test_grade_projection_keeps_only_the_listed_grades():
+    from tessera._clifford_ops import clifford_grade_projection
+    a = _rows((5, 8), 21)
+    out = jb.jit_clifford_op("grade", a, grades=[1, 3])
+    expect = np.stack([clifford_grade_projection(row, [1, 3]) if False else
+                       np.where(np.isin(np.arange(8), [1, 2, 4, 7]), row, 0.0) for row in a]).astype(np.float32)
+    np.testing.assert_allclose(out, expect, rtol=0, atol=0)
+    with pytest.raises(jb.TesseraJitError, match="grades"):
+        jb.jit_clifford_op("grade", a)
+
+
+def test_rotor_sandwich_preserves_vector_norm():
+    """A unit rotor rotates: |R v R~| == |v| through the native lane."""
+    v = np.zeros((4, 8), np.float32); v[:, [1, 2, 4]] = _rows((4, 3), 5)
+    rotor = np.zeros((4, 8), np.float32); rotor[:, 0] = np.cos(0.7); rotor[:, 5] = np.sin(0.7)
+    rotated = jb.jit_clifford_op("rotor_sandwich", rotor, v)
+    np.testing.assert_allclose(jb.jit_clifford_op("norm", rotated), jb.jit_clifford_op("norm", v), rtol=1e-5, atol=1e-5)
+    assert not np.allclose(rotated, v)
+
+
+def test_family_launch_consumer():
+    from tessera import runtime as rt
+    from tessera.compiler.clifford_jit import package_clifford_cpu
+    a, b = _rows((3, 8), 1), _rows((3, 8), 2)
+    result = rt.launch(package_clifford_cpu("wedge", (3, 8)), (a, b))
+    assert result["ok"] and result["execution_kind"] == "native_cpu"
+    np.testing.assert_allclose(np.asarray(result["output"]), _reference_op("wedge", a, b), rtol=1e-5, atol=1e-5)
+    with pytest.raises(Exception, match="no lowering"):
+        package_clifford_cpu("exp", (3, 8))
 

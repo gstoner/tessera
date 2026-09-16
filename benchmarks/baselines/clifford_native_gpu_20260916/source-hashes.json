@@ -1,0 +1,10 @@
+{
+  "python/tessera/compiler/native_clifford_gpu.py": "19c4fed30f2793de2777391b42dd19d4b620143be0779d16ed3b7eaf99a6663f",
+  "python/tessera/compiler/native_gpu_storage.py": "d862ef1d36bca98d74d3afc20eba1f13ef89053fd773529bb64d961bdd9ad5f8",
+  "python/tessera/compiler/native_storage_contract.py": "de8db87bb22827acd2cac9c13b9c396564ecd20fe7e32eb6f81af7bface53700",
+  "src/solvers/clifford/lib/Passes/ExpandProductTable.cpp": "ca96145f95ceec0be1d686bcccc1d0f5c6148d7f712dd3c3169365af8bc72473",
+  "src/solvers/clifford/lib/Passes/GradeFusion.cpp": "eb5dfe0fd98b53d3371f56a79112f323a462eb3c553474a6451ccbb3e1fe8470",
+  "src/solvers/clifford/tools/ts-clifford-opt.cpp": "a921f06e3f63b383b11b55170b2c82c40d7641c5fb7868bd513997b93d7d6e46",
+  "benchmarks/record_clifford_native_gpu.py": "9e031dd8fb1843b170b342c515c6df06e62bdbde617dde33749217338f8940ec",
+  "tests/unit/test_clifford_native_gpu.py": "583830ea835875c617fad26643fad15df752ddeefba49fdb369368c460b3bf66"
+}

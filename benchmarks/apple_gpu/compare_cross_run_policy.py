@@ -24,10 +24,15 @@ PLAN = {
     "first_seed": 1701, "process_timeout_seconds": 300,
     "synthetic_run_index": 0, "synthetic_candidate_time_factors": [1.5, 3.0],
 }
+# Must match `benchmark_legacy_retune.INCUMBENT_ROUTES` for every op the
+# extended profile emits (drift-gated by test_apple_cross_run_comparison): an
+# op absent here is silently dropped by the aggregation and the synthetic
+# slowdown loop, so the experiment would pay to measure it and never decide.
 INCUMBENTS = {
     "retune_grouped_gemm": "grouped_fused", "retune_moe_swiglu": "composed",
     "retune_reduce_sum": "mpsgraph", "retune_resident_kv_read": "resident_view",
     "retune_mla_decode": "explicit", "retune_replay_decode": "fused_block",
+    "retune_matmul2d_bf16": "mtl4_contiguous",
 }
 
 

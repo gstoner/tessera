@@ -203,7 +203,7 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
     assert {row["family"] for report in corpus["reports"]
             for row in report["runs"]} == {
         "grouped_gemm", "moe", "reduction", "kv_movement", "mla_decode",
-        "decode",
+        "decode", "matmul2d",  # bf16 arbiter bucket, 2026-09-15
     }
     ledger_path = root / "benchmarks/baselines/apple_strict_route_ledger.json"
     payload = json.loads(ledger_path.read_text(encoding="utf-8"))
@@ -218,6 +218,15 @@ def test_committed_retune_corpus_and_strict_ledger_are_consistent():
         ("apple7", "retune_grouped_gemm", "32x64x64_e4", "f32", "end_to_end"): "grouped_fused",
         ("apple7", "retune_grouped_gemm", "64x128x128_e4", "f32", "device"): "grouped_fused",
         ("apple7", "retune_grouped_gemm", "64x128x128_e4", "f32", "end_to_end"): "grouped_fused",
+        # bf16 matmul2d arbiter bucket (2026-09-15): every row retained the
+        # contiguous incumbent on the first seal -- same kernel on device
+        # time, the view wrapper slower end to end.
+        ("apple7", "retune_matmul2d_bf16", "512x512x512", "bf16", "device"): "mtl4_contiguous",
+        ("apple7", "retune_matmul2d_bf16", "512x512x512", "bf16", "end_to_end"): "mtl4_contiguous",
+        ("apple7", "retune_matmul2d_bf16", "1024x1024x1024", "bf16", "device"): "mtl4_contiguous",
+        ("apple7", "retune_matmul2d_bf16", "1024x1024x1024", "bf16", "end_to_end"): "mtl4_contiguous",
+        ("apple7", "retune_matmul2d_bf16", "2048x2048x2048", "bf16", "device"): "mtl4_contiguous",
+        ("apple7", "retune_matmul2d_bf16", "2048x2048x2048", "bf16", "end_to_end"): "mtl4_contiguous",
         ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "device"): "absorbed",
         ("apple7", "retune_mla_decode", "1x4x1x128x32x16x32x64", "f32", "end_to_end"): "absorbed",
         ("apple7", "retune_mla_decode", "1x4x1x64x16x8x16x32", "f32", "device"): "absorbed",
@@ -524,7 +533,10 @@ def test_strict_retune_ledger_admits_on_its_exact_live_apple_host():
     # Eighteen since the bounded-wait change: the two `retune_reduce_sum`
     # device rows stopped being ineligible once their incumbent owned a
     # command buffer and could report a device interval to pair against.
-    assert len(admitted.routes) == 18
+    # Twenty-four since 2026-09-15: the bf16 matmul2d arbiter bucket adds
+    # three shapes (512, 1024, 2048 square) in both timing domains; all six
+    # retained the contiguous incumbent on the first seal.
+    assert len(admitted.routes) == 24
     decision = production_route_decision(
         op="retune_moe_swiglu", shape="16x32x64x32_e4", dtype="f32",
         incumbent_route="composed", context=context, ledger_path=path)
@@ -533,3 +545,51 @@ def test_strict_retune_ledger_admits_on_its_exact_live_apple_host():
     assert decision.route == "single_fused"
     assert decision.selected_from_ledger is True
     assert decision.citation is not None and "#decision[" in decision.citation
+
+
+def test_bf16_matmul_route_consults_the_ledger_for_the_view_entry(monkeypatch):
+    """APPLE-MATMUL2D-1 arbiter bucket: the production bf16 route dispatches the
+    strided-view entry only when the strict ledger promotes it for that exact
+    shape; every other answer (retain, unreadable ledger) is the contiguous
+    incumbent. Host-free: both entries are stubbed."""
+    import numpy as np
+    from tessera import runtime as R
+    from tessera.compiler import apple_route_selector as sel
+    bf16 = R._bfloat16_dtype()
+    if bf16 is None:
+        import pytest
+        pytest.skip("ml_dtypes unavailable")
+    a = np.ones((8, 16), np.float32).astype(bf16)
+    b = np.ones((16, 4), np.float32).astype(bf16)
+    monkeypatch.setattr(R, "_MTL4_BF16_DEFAULT", True)
+    monkeypatch.setattr(R, "_mtl4_caps_cached", lambda: {"command_queue": True, "compiler": True})
+    seen: list[str] = []
+    monkeypatch.setattr(R, "apple_gpu_mtl4_matmul2d_bf16",
+                        lambda x, y, np_: (seen.append("contiguous"), np.full((8, 4), 16.0, np.float32))[1:] + (True,))
+    monkeypatch.setattr(R, "apple_gpu_mtl4_matmul2d_view",
+                        lambda x, y, np_, **kw: (seen.append(f"view:{kw['pair']}:{kw['M']}x{kw['N']}x{kw['K']}"),
+                                                 np.full((8, 4), 16.0, np.float32))[1])
+    asked: list[tuple] = []
+
+    def route(**kw):
+        asked.append((kw["op"], kw["shape"], kw["dtype"], kw["incumbent_route"]))
+        return "mtl4_view"
+
+    monkeypatch.setattr(sel, "production_route_for", route)
+    out = R._mtl4_route_matmul2d_bf16(a, b, np)
+    assert out.dtype == bf16 and seen == ["view:11:8x4x16"]
+    assert asked == [("retune_matmul2d_bf16", "8x4x16", "bf16", "mtl4_contiguous")]
+
+    seen.clear()
+    monkeypatch.setattr(sel, "production_route_for", lambda **kw: "mtl4_contiguous")
+    R._mtl4_route_matmul2d_bf16(a, b, np)
+    assert seen == ["contiguous"]
+
+    seen.clear()
+
+    def broken(**kw):
+        raise OSError("no ledger")
+
+    monkeypatch.setattr(sel, "production_route_for", broken)
+    R._mtl4_route_matmul2d_bf16(a, b, np)
+    assert seen == ["contiguous"]

@@ -367,6 +367,49 @@ def _low_precision_moe_cases(seed: int = 1701, *, scale: int = 1) -> list[Case]:
     return cases
 
 
+def _matmul2d_bf16_cases(seed: int = 1701, *, scale: int = 1) -> list[Case]:
+    """APPLE-MATMUL2D-1 arbiter bucket: the runtime's contiguous bf16 MPP
+    matmul2d entry (the production bf16 route) against the strided-view entry
+    the compiled `gpu.matmul2d` route dispatches (pair code 11). Both are the
+    same MPP kernel shape on one complete command buffer; the corpus decides
+    per exact shape whether the view entry earns the production route.
+
+    The paired admission corpus (benchmarks/baselines/apple_matmul2d_route_
+    corpus_20260915) measured the view entry 5-12% ahead at 512 and 1024
+    square and behind at 2048, so those are the bucket's shapes and its
+    negative control. bf16 storage, fp32 result on both routes."""
+    if scale < 1:
+        raise ValueError("retune shape scale must be positive")
+    bf16 = rt._bfloat16_dtype()
+    if bf16 is None:
+        return []
+    rng = np.random.default_rng(seed)
+    cases: list[Case] = []
+    for n in ((512, 1024) if scale == 1 else (2048,)):  # 2048 is the negative control
+        M = N = K = n
+        a = np.ascontiguousarray((rng.standard_normal((M, K)) * 0.25).astype(np.float32).astype(bf16))
+        w = np.ascontiguousarray((rng.standard_normal((K, N)) * 0.25).astype(np.float32).astype(bf16))
+        oracle = a.astype(np.float32) @ w.astype(np.float32)
+
+        def contiguous(ma=a, mw=w) -> Any:
+            out, ran = rt.apple_gpu_mtl4_matmul2d_bf16(ma, mw, np)
+            if not ran:
+                raise RuntimeError("contiguous bf16 matmul2d declined")
+            return out
+
+        def view(ma=a, mw=w, m=M, n_=N, k=K) -> Any:
+            return rt.apple_gpu_mtl4_matmul2d_view(ma, mw, np, pair=11, M=m, N=n_, K=k)
+
+        cases.append(Case(
+            "matmul2d", "retune_matmul2d_bf16", f"{M}x{N}x{K}", "bf16",
+            Route("mtl4_contiguous", contiguous, True, True, "MSL.mtl4_matmul2d_bf16.contiguous"),
+            Route("mtl4_view", view, True, True, "MSL.mtl4_matmul2d_view.pair11"),
+            oracle, _bytes(a, w), int(oracle.nbytes), "gemm_logical_io",
+            rtol=2e-3, atol=2e-3,
+        ))
+    return cases
+
+
 def _measure(route: Route, oracle: Any, *, reps: int,
              rtol: float = 5e-4, atol: float = 5e-4) -> dict[str, Any]:
     wall: list[int] = []
@@ -475,7 +518,8 @@ def run_report(*, reps: int, trials: int, seed: int = 1701,
             elif profile == "extended":
                 # A second, independently seeded larger-shape pass.  It is not a
                 # dtype claim: f16/bf16 are measured by ``low_precision`` below.
-                cases = _cases(seed) + _cases(seed + 10_000, scale=2)
+                cases = (_cases(seed) + _cases(seed + 10_000, scale=2)
+                         + _matmul2d_bf16_cases(seed) + _matmul2d_bf16_cases(seed + 10_000, scale=2))
             elif profile == "low_precision":
                 cases = (_low_precision_moe_cases(seed) +
                          _low_precision_moe_cases(seed + 10_000, scale=2))
@@ -520,16 +564,24 @@ def run_report(*, reps: int, trials: int, seed: int = 1701,
     }
 
 
+# The production incumbent per retune op. Every consumer that aggregates
+# reports (this recorder, `compare_cross_run_policy.py`) reads THIS map: an op
+# missing here is silently skipped by `aggregate_stable_route_reports`, so a
+# family that was paid for and measured would never reach a decision.
+INCUMBENT_ROUTES: dict[str, str] = {
+    "retune_grouped_gemm": "grouped_fused",
+    "retune_moe_swiglu": "composed",
+    "retune_moe_swiglu_lowp": "single_fused_lowp",
+    "retune_reduce_sum": "mpsgraph",
+    "retune_resident_kv_read": "resident_view",
+    "retune_mla_decode": "explicit",
+    "retune_replay_decode": "fused_block",
+    "retune_matmul2d_bf16": "mtl4_contiguous",
+}
+
+
 def build_strict_ledger(reports: list[dict[str, Any]], *, valid_days: int = 30) -> dict[str, Any]:
-    incumbents = {
-        "retune_grouped_gemm": "grouped_fused",
-        "retune_moe_swiglu": "composed",
-        "retune_moe_swiglu_lowp": "single_fused_lowp",
-        "retune_reduce_sum": "mpsgraph",
-        "retune_resident_kv_read": "resident_view",
-        "retune_mla_decode": "explicit",
-        "retune_replay_decode": "fused_block",
-    }
+    incumbents = dict(INCUMBENT_ROUTES)
     stable = aggregate_stable_route_reports(reports, incumbent_routes=incumbents)
     return seal_strict_route_ledger(stable, reports, valid_days=valid_days)
 

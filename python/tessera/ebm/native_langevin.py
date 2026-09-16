@@ -17,6 +17,9 @@ two int64 words. No fallback: a library without the EBM lane raises.
 from __future__ import annotations
 
 import math
+import re
+import threading
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -169,3 +172,97 @@ def package_ebm_langevin_cpu(shape, *, eta: float, temperature: float, steps: in
         "op": "ebm_langevin_loop", "shape": shape, "eta": float(eta), "temperature": float(temperature),
         "steps": int(steps), "dtype": "f32",
     })
+
+
+# ---------------------------------------------------------------------------
+# Device route (EBM_NATIVE_LOOP_ARCHITECTURE.md, realized as the row-program
+# emitter): the same lowered loop becomes one cooperative kernel -- one block
+# per row, one lane per feature, the K steps and the Philox draw inside the
+# kernel, state in registers -- packaged by build_native_gpu_storage.
+# ---------------------------------------------------------------------------
+
+DEVICE_ENTRY = "tessera_jit_ebm_langevin_loop"
+_DEVICE_PIPELINE = ("--tessera-autodiff-paired", "--tessera-ebm-canonicalize", "--tessera-ebm-lower-langevin",
+                    "--tessera-to-linalg", "--inline", "--convert-elementwise-to-linalg", "--canonicalize", "--cse")
+
+
+def langevin_device_source(shape, *, eta: float, temperature: float, steps: int, backend: str, compiler):
+    """Run the whole chain in one tessera-opt invocation and attach the tensor contract."""
+    from tessera.compiler.native_gpu_storage import _run
+    from tessera.compiler.native_gpu_tensor import IndexSpec, TensorSpec
+    from tessera.compiler.native_storage_contract import attach_tensor_contract
+    if backend not in ("nvidia", "rocm"):
+        raise ValueError("langevin device route targets nvidia or rocm")
+    rows, feats = _check(shape, eta, temperature, steps)
+    if feats > 1024:
+        raise ValueError("langevin device route admits at most 1024 features per row (one lane each)")
+    kernel = _run(Path(compiler), *_DEVICE_PIPELINE,
+                  f"--tessera-row-program-to-gpu=backend={backend} entry={DEVICE_ENTRY}",
+                  source=langevin_loop_module((rows, feats), eta=eta, temperature=temperature, steps=steps))
+    block = re.search(r"known_block_size = array<i32: (\d+), 1, 1>", kernel)
+    if block is None or "gpu.func @row_program(" not in kernel or "tessera_ebm." in kernel:
+        raise ValueError("langevin device route: the compiler did not produce the row-program kernel")
+    lanes = int(block[1])
+    specs = (TensorSpec("y0", "fp32", (rows, feats), False), TensorSpec("x", "fp32", (rows, feats), False),
+             TensorSpec("key", "int64", (2,), False), TensorSpec("y", "fp32", (rows, feats), True),
+             TensorSpec("next_key", "int64", (2,), True), IndexSpec("scratch", 1, 1))
+    return attach_tensor_contract(kernel, specs, grid=(rows, 1, 1), block=(lanes, 1, 1)), specs
+
+
+def bind_ebm_langevin_gpu(shape, *, eta, temperature, steps, compiler, llvm_bin, backend, chip):
+    """Package the loop for (backend, chip) and return its native tensor call."""
+    import inspect
+    from tessera.compiler.native_gpu_storage import build_native_gpu_storage, replay_arena_ir
+    from tessera.compiler.native_storage_contract import generate_tensor_binding
+    source, specs = langevin_device_source(shape, eta=eta, temperature=temperature, steps=steps,
+                                           backend=backend, compiler=compiler)
+    compiler = Path(compiler)
+    package = build_native_gpu_storage(source, compiler=compiler, llvm_bin=Path(llvm_bin), backend=backend, chip=chip)
+    if package.arena_ir != replay_arena_ir(compiler, source):
+        raise ValueError("langevin device route native replay disagrees")
+    return generate_tensor_binding(package, inspect.Signature([
+        inspect.Parameter(s.name, inspect.Parameter.POSITIONAL_ONLY) for s in specs]))
+
+
+_PROGRAMS: dict = {}
+_PROGRAM_LOCK = threading.Lock()
+
+
+def ebm_langevin_program(shape, *, eta, temperature, steps, backend, chip, compiler, llvm_bin):
+    """Compile (once per process) and return the device program for the loop."""
+    from tessera.compiler.native_host_program import HostArrayProgram, ensure_device_context
+    key = (tuple(shape), float(eta), float(temperature), int(steps), backend, chip, str(compiler), str(llvm_bin))
+    with _PROGRAM_LOCK:
+        program = _PROGRAMS.get(key)
+        if program is None:
+            ensure_device_context(backend)
+            binding = bind_ebm_langevin_gpu(shape, eta=eta, temperature=temperature, steps=steps,
+                                            compiler=compiler, llvm_bin=llvm_bin, backend=backend, chip=chip)
+            program = _PROGRAMS[key] = HostArrayProgram(binding, "ebm langevin loop")
+        return program
+
+
+def native_langevin_loop_device(y0, x, key, *, eta, temperature, steps, backend, chip, compiler, llvm_bin):
+    """K Langevin steps as one device launch; returns (y_K, next_key)."""
+    program = ebm_langevin_program(np.asarray(y0).shape, eta=eta, temperature=temperature, steps=steps,
+                                   backend=backend, chip=chip, compiler=compiler, llvm_bin=llvm_bin)
+    out, next_key = program.run(y0, x, np.asarray(key, dtype=np.int64).reshape(2))
+    return out, next_key
+
+
+def package_ebm_langevin_native(shape, *, eta: float, temperature: float, steps: int, target: str):
+    """A runtime artifact for the device route (rows ``rocm`` /
+    ``rocm_ebm_langevin_native_compiled``, ``nvidia_sm120`` /
+    ``nvidia_ebm_langevin_native_compiled``); compiled at launch on the owning host."""
+    if target not in ("rocm", "nvidia_sm120"):
+        raise ValueError("langevin native device route targets rocm or nvidia_sm120")
+    shape = _check(shape, eta, temperature, steps)
+    from tessera.runtime import RuntimeArtifact
+    path = "rocm_ebm_langevin_native_compiled" if target == "rocm" else "nvidia_ebm_langevin_native_compiled"
+    return RuntimeArtifact(metadata={
+        "target": target, "compiler_path": path, "executable": True,
+        "kernel_id": f"ebm_langevin_native_{shape[0]}x{shape[1]}_k{steps}",
+        "op": "ebm_langevin_loop", "shape": shape, "eta": float(eta), "temperature": float(temperature),
+        "steps": int(steps), "dtype": "f32",
+    })
+

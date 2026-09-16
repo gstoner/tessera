@@ -89,6 +89,15 @@
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
 #endif
 
+#ifdef TESSERA_HAVE_EBM
+#include "tessera/EBM/EBMDialect.h"
+#include "tessera/EBM/EBMPasses.h"
+#endif
+#ifdef TESSERA_HAVE_CLIFFORD
+#include "tessera/Clifford/CliffordDialect.h"
+#include "tessera/Clifford/CliffordPasses.h"
+#endif
+
 #ifdef TESSERA_HAVE_ROCM_BACKEND
 #include "TesseraROCM/Passes.h"
 // Stage L3 — in-process MLIR -> hsaco serialization (no mlir-opt shell-out).
@@ -417,6 +426,20 @@ int main(int argc, char **argv) {
   tessera::solver::registerTesseraLinalgSolverPipeline();
 #endif
 
+#ifdef TESSERA_HAVE_EBM
+  ::mlir::registerPass([]() { return tessera::createEBMCanonicalizePass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMFuseEnergyGradPass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMCheckpointInnerLoopPass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMPipelineCandidatesPass(); });
+  ::mlir::registerPass([]() { return tessera::createEBMLowerLangevinPass(); });
+#endif
+#ifdef TESSERA_HAVE_CLIFFORD
+  ::mlir::registerPass([]() { return tessera::createCliffordAnnotateAlgebraPass(); });
+  ::mlir::registerPass([]() { return tessera::createCliffordExpandProductTablePass(); });
+  ::mlir::registerPass([]() { return tessera::createCliffordGradeFusionPass(); });
+  ::mlir::registerPass([]() { return tessera::createCliffordRotorSandwichFoldPass(); });
+#endif
+
 #ifdef TESSERA_HAVE_SCALING_RESILIENCE
   mlir::tessera::sr::registerPasses();
 #endif
@@ -480,6 +503,9 @@ int main(int argc, char **argv) {
   // link surface), not the full conversion umbrella.
   mlir::registerConvertLinalgToParallelLoopsPass();
   mlir::bufferization::registerBufferizationPasses();
+  // Tensor-level arith on tensors becomes linalg.generic for the row-program
+  // emitter (the JIT runs the same pass in-process).
+  mlir::registerConvertElementwiseToLinalgPass();
   mlir::registerGpuMapParallelLoopsPass();
   mlir::registerGpuKernelOutliningPass();
   mlir::registerConvertParallelLoopToGpuPass();
@@ -543,6 +569,12 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_SOLVERS
   tessera::solver::registerTesseraLinalgSolverDialect(registry);
+#endif
+#ifdef TESSERA_HAVE_EBM
+  registry.insert<tessera::ebm::EBMDialect>();
+#endif
+#ifdef TESSERA_HAVE_CLIFFORD
+  registry.insert<tessera::clifford::CliffordDialect>();
 #endif
 #ifdef TESSERA_HAVE_COLLECTIVES
   tessera::collective::registerCollectiveDialect(registry);

@@ -16,16 +16,13 @@ tool or a mismatched replay raises.
 """
 from __future__ import annotations
 
-import ctypes as ct
 import inspect
 import math
 import os
 import shutil
 import threading
 from pathlib import Path
-from types import SimpleNamespace
 
-import numpy as np
 
 from .native_gpu_storage import _run, build_native_gpu_storage, replay_arena_ir
 from .native_gpu_tensor import IndexSpec, TensorSpec
@@ -174,96 +171,14 @@ def bind_clifford_gpu(op: str, shape, *, compiler, llvm_bin, backend, chip, alge
 # Execution from host arrays.
 # ---------------------------------------------------------------------------
 
-_CONTEXT_LOCK = threading.Lock()
-_CONTEXTS: dict[str, bool] = {}
+from .native_host_program import HostArrayProgram, ensure_device_context  # noqa: E402,F401
 
 
-def ensure_device_context(backend: str) -> None:
-    """Make device 0 current for this process once (the bound package launches
-    on the caller's active context and never creates one)."""
-    with _CONTEXT_LOCK:
-        if _CONTEXTS.get(backend):
-            return
-        cuda = backend == "nvidia"
-        driver = ct.CDLL("libcuda.so.1" if cuda else "libamdhip64.so")
-        P = ct.c_void_p
-
-        def call(name, types, *args):
-            fn = getattr(driver, name)
-            fn.argtypes, fn.restype = types, ct.c_int
-            status = fn(*args)
-            if status:
-                raise RuntimeError(f"clifford GPU lane: {name} failed with status {status}")
-        if cuda:
-            call("cuInit", [ct.c_uint], 0)
-            context = P()
-            call("cuDevicePrimaryCtxRetain", [ct.POINTER(P), ct.c_int], ct.byref(context), 0)
-            call("cuCtxSetCurrent", [P], context)
-        else:
-            call("hipInit", [ct.c_uint], 0)
-            call("hipSetDevice", [ct.c_int], 0)
-        _CONTEXTS[backend] = True
-
-
-class CliffordDeviceProgram:
-    """One packaged Clifford op, runnable from host arrays.
-
-    Device buffers are allocated per call through the bound package's own
-    driver handle and freed before returning; the output comes back as a new
-    host array. Correctness evidence only -- per-call transfers are not a
-    performance path.
-    """
+class CliffordDeviceProgram(HostArrayProgram):
+    """A packaged Clifford op runnable from host arrays (see HostArrayProgram)."""
     def __init__(self, binding, op: str):
-        self.binding, self.op = binding, op
-        self.package = binding.package
-        self.bound = binding.package.bind()
-        binding._bound = self.bound
-        cuda = self.package.backend == "nvidia"
-        P, S = ct.c_void_p, ct.c_size_t
-
-        def bind(cu, hip, types):
-            fn = getattr(self.bound._driver, cu if cuda else hip)
-            fn.argtypes, fn.restype = types, ct.c_int
-            return fn
-        self._alloc = bind("cuMemAlloc_v2", "hipMalloc", [ct.POINTER(P), S])
-        self._free = bind("cuMemFree_v2", "hipFree", [P])
-        self._to_device = bind("cuMemcpyHtoD_v2", "hipMemcpyHtoD", [P, P, S])
-        self._to_host = bind("cuMemcpyDtoH_v2", "hipMemcpyDtoH", [P, P, S])
-        self.specs = tuple(s for s in binding.specs if isinstance(s, TensorSpec))
-        self._lock = threading.RLock()
-
-    def run(self, *arrays) -> np.ndarray:
-        inputs = [np.ascontiguousarray(np.asarray(a, dtype=np.float32)) for a in arrays]
-        if len(inputs) != len(self.specs) - 1:
-            raise ValueError(f"clifford {self.op} takes {len(self.specs) - 1} operand(s)")
-        for spec, value in zip(self.specs[:-1], inputs, strict=True):
-            if value.shape != tuple(spec.shape):
-                raise ValueError(f"clifford GPU lane admits {spec.name} of shape {tuple(spec.shape)}")
-        out_spec = self.specs[-1]
-        out = np.empty(tuple(out_spec.shape), np.float32)
-        pointers: list[ct.c_void_p] = []
-        with self._lock:
-            try:
-                views = []
-                for value in [*inputs, out]:
-                    pointer = ct.c_void_p()
-                    self.bound._check(self._alloc(ct.byref(pointer), max(value.nbytes, 4)))
-                    pointers.append(pointer)
-                    views.append(SimpleNamespace(__cuda_array_interface__=dict(
-                        version=3, shape=value.shape, typestr="<f4", data=(pointer.value, False))))
-                for value, pointer in zip(inputs, pointers[:-1], strict=True):
-                    self.bound._check(self._to_device(pointer, value.ctypes.data, value.nbytes))
-                self.binding(*views, 1)
-                self.bound._check(self.bound._sync())
-                self.bound._check(self._to_host(out.ctypes.data, pointers[-1], out.nbytes))
-            finally:
-                for pointer in reversed(pointers):
-                    if pointer.value:
-                        self._free(pointer)
-        return out
-
-    def close(self):
-        self.bound.close()
+        super().__init__(binding, f"clifford {op}")
+        self.op = op
 
 
 _PROGRAMS: dict[tuple, CliffordDeviceProgram] = {}

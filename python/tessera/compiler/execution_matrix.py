@@ -122,6 +122,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_clifford_native_compiled": "Clifford ops lowered by the dialect's "
                              "ExpandProductTable into a per-thread kernel, "
                              "packaged by the arena pipeline and launched on sm_120",
+    "rocm_ebm_langevin_native_compiled": "The EBM Langevin loop as one cooperative "
+                             "gfx1151/gfx1201 kernel from the row-program emitter over the "
+                             "compiler-derived gradient (one block per row, lanes per feature, "
+                             "K steps and Philox inside the kernel)",
+    "nvidia_ebm_langevin_native_compiled": "The EBM Langevin loop as one cooperative "
+                             "sm_120 kernel from the row-program emitter over the "
+                             "compiler-derived gradient",
     "cpu_ebm_langevin_llvm_jit": "The EBM quadratic-energy Langevin loop: the paired "
                              "autodiff pass derives the gradient, the EBM lowering "
                              "emits the step with Philox noise, the whole scf.for "
@@ -2969,6 +2976,22 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "row to a power of two and flips for descending). f32, matches "
                "numpy.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_ebm_langevin_native_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_ebm_langevin_native_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_ebm_langevin_native_compiled", runtime_status="success",
+        reason="EBM quadratic-energy Langevin loop on gfx1151/gfx1201 (2026-09-16): the "
+               "paired autodiff pass derives the gradient, the EBM lowering emits the "
+               "step with Philox noise, tessera-to-linalg + the row-program emitter "
+               "turn the K-step scf.for into ONE cooperative kernel (one block per row, "
+               "one lane per feature, state in registers across steps, ordered shared-"
+               "memory reductions), and the native storage package launches it. One "
+               "launch per loop; no per-step host gradient or noise transfer; bit-exact "
+               "with the declared numpy policy. No Python-emitted kernel; no fallback.",
+        execution_mode="hip_runtime", op_family="ebm_langevin",
+        device_proof="device_verified_abi", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_ebm_native_langevin_gpu.py",
+        proof_build="llvm23-core+ebm+arena"),
     ("rocm", "rocm_clifford_native_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_clifford_native_compiled",
         execution_kind="native_gpu", executable=True,
@@ -3867,6 +3890,20 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_conv2d.py",
         proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_ebm_langevin_native_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_ebm_langevin_native_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_ebm_langevin_native_compiled", runtime_status="success",
+        reason="EBM quadratic-energy Langevin loop on sm_120 (2026-09-16): the K-step "
+               "scf.for over the compiler-derived gradient becomes one cooperative "
+               "kernel through the row-program emitter (one block per row, one lane "
+               "per feature, Philox inside the kernel), launched through the native "
+               "storage package. One launch per loop; bit-exact with the declared "
+               "numpy policy. No Python-emitted kernel; no fallback.",
+        execution_mode="cuda_runtime", op_family="ebm_langevin",
+        device_proof="device_verified_abi", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/unit/test_ebm_native_langevin_gpu.py",
+        proof_build="llvm23-core+ebm+arena"),
     ("nvidia_sm120", "nvidia_clifford_native_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_clifford_native_compiled",
         execution_kind="native_gpu", executable=True,

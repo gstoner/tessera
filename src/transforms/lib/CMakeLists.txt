@@ -40,6 +40,7 @@ add_library(TesseraPasses
   # ODS scaffold lives at src/compiler/ir/include/Tessera/AdjointInterface.td.
   AutodiffPass.cpp
   NativeTapeToGPUPass.cpp
+  RowProgramToGPUPass.cpp
   AutodiffPairedPass.cpp
   AutodiffForwardPass.cpp
 

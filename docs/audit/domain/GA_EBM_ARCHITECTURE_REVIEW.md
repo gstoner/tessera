@@ -133,8 +133,13 @@ contraction, inner, norm, the three involutions, Hodge star, grade projection
 and rotor sandwich lower through the same table and execute behind the JIT on
 all three CPU hosts (rotor sandwich expands to its product chain there; the
 fused marker survives the standalone pipeline for backends with a kernel).
-Not yet met: `exp`/`log` and the field ops, ragged batches (the loop nest
-needs static extents), a GPU package through the arena pipeline, and the separate dispatch/allocation/
+Third slice (`GA-NATIVE-GPU-2026-09-16`): the same lowering, expanded by
+`ts-clifford-opt` inside a per-thread kernel skeleton and folded to scalar
+device code by the arena pipeline, executes as a native storage package on
+gfx1151, gfx1201 and sm_120 (ten ops × three shapes; the grade-2 pruning is
+counted in the emitted IR: 24 of 64 products). Not yet met: `exp`/`log` and
+the field ops, ragged batches (the loop nest needs static extents), an Apple
+package route, and the separate dispatch/allocation/
 memory/kernel-time measurements the acceptance asks for — no performance
 claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured

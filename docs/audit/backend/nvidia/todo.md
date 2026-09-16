@@ -7639,3 +7639,11 @@ Sync `GA-NATIVE-FAMILY-2026-09-16`; owner W6.4.
 Follow-up required: CPU-only; the arena-pipeline GPU slice will be proven on Super-Bear (Clifford lit 19/19 there today).
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-product-family-executes-behind-the-mlirllvm-jit).
+
+## Clifford family through the native GPU route — 2026-09-16
+
+Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
+
+Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Clifford ops × three shapes through the native storage route match the GA reference (worst abs error 2.4e-7); grade-2 pruning emits 24 of 64 products in the NVVM kernel; `runtime.launch` row `nvidia_sm120` / `nvidia_clifford_native_compiled` reports native_gpu. This is the first sm_120 GA row in the proof ladder. No performance measured; the route pays per-call host transfers and is correctness evidence only.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm_120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).

@@ -1,0 +1,295 @@
+{
+  "schema": 1,
+  "backend": "rocm",
+  "chip": "gfx1151",
+  "host": "Princess-Luna",
+  "compiler_sha256": "ade6f14867b2b8b352cf68b947490ba28b1032f8babfff8953555cc61f6be789",
+  "clifford_opt_sha256": "f1cccbaaa53a4b781a5b1b9361bd259eddc74a1fb93ea0fa5ec47bba17cab411",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "recorder_sha256": "9e031dd8fb1843b170b342c515c6df06e62bdbde617dde33749217338f8940ec",
+  "rows": [
+    {
+      "op": "conjugate",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "5caa2e0f3a68dd188badeb491634cb581fd5b2b24d68bfb92e9995774748a8e5"
+    },
+    {
+      "op": "conjugate",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "42281b2d457a2ac8a1737d28b1a28e90d1f7a96651fd312ca335c555ce831f3b"
+    },
+    {
+      "op": "conjugate",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "c66935c15345d6898d55658a60424d7093c30485f3c3474f4826a709003af941"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "ff4cc2c6c5ae3b05bc7043f7c1b876f8dd526ae8c5492169ce8fe99d4ef01764"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "ff765f2f0f827bc3284e7790baf0b8339c891845498abc064cb43899d254d1b7"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "f3551f95b72ec2731d6fc1e4b94002f8c565d791fca7f4d4e1cb7e9f4a3ca412"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "2ab7b7cfadbe3a2f5a9b5aaa252625b297bfb7fba109dee8bb932e75a95d0990"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "45020ff7f0291103068594cec831632ba74c7ff850df680e0291b52d4f515192"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "96df5bf964c8486d16f565e51dfc9ca1db50c44a3bddda45a62312a61e1f1f11"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "db487da4d6737a49d59ec4a302e29ef2ad7fd25f8ec9e1e5f2ef7babd59f3a99"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "b541d96748d11f73126c4b1393f58776da4c25d0b82708f55eee598d5d705e01"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "09da8d619d4d87f8c5ec595cfb552a332edae056b413b72b996165cbe5324220"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "0af4c4d1c38e7eccfca097d1d7e7b04a9d712a97bf00d318024b2c7473b0c731"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "0a64641f51a4e62c290d9dd637941632dd9d7f42604780d0ade74d2c1f52c58e"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "d904e3bdc56d9591212469b4d2c62d7a4997abf291d61adcab2a70cfca94c5a7"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "6a4bf7f113358b641a4d8015bee3a9652fd276db106461480509281760db58f3"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "974a55ef49ec625e9588c2bd74c345240be26af707f77e0c4fca4b3b7db81f4c"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "81309d2d1404bc8e7ba3aaf8702141098b15e253d188b3b4f4fb511a4a95c5d5"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "e455e0fe031b7ad68847f05955834fbdf94af59b2656954b7d66403263536ac2"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "cc494d92936961b456dce75f41f7652f37652af308339bf29a7dee62902a2cbd"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "55962b65429c53c8d9476a385a020c56b56d46f4af89744471f23b8c35135cb1"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "74c5f5026f82bbb574cc424220ee69379cb7631b6cf27d9f7248434cf1845b85"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "0083f8952807d7ae8274b9d1f955fceb491629baaf58b8f1f24b1c89ae1f5c5a"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "642bc8ffeec036320bb80497cfa7f60cd78a4e20f37aa53331614df5fa06c9cc"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "81fa4395336214e4a75ec29e051cfd1d88106d4d0ccbd63fe8e946af81d4fad0"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "4d3d1e0c276b7ea2be62ff9e832f34f7995a77b164716925b33bcfc8abced7ab"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "4c20df94e3c52dc805a56e0ee22de40ffe7370137791ec0db2337bdd3fee74b6"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "ecf574675685c890284da99cb221258ddff7585b978039aece6328dce14ec7f8"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "bd42ada2645181cc2afdd1487e14d132302981c721a23bfd7e7ba9b4a88ca809"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "2ddf4b914883f6091ad05c5eff01f23a32de05993558d4bc162dc005ff51f4d8"
+    }
+  ],
+  "emitted_products": {
+    "full": 64,
+    "grade2": 24
+  },
+  "proofs": [
+    "every op of the family matches the standalone GA reference for single, batched and rank-3 inputs",
+    "grade-2 restriction emits 24 of 64 products and writes the other coefficients as zero",
+    "the device kernel is the dialect's own lowering folded to scalar code; no Python-emitted kernel"
+  ],
+  "promotion_eligible": false,
+  "measured_performance": false,
+  "envelope": "f32, Cl(3,0), static shapes; per-call host transfers; correctness only",
+  "rocm_chip_env": null
+}

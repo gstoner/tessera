@@ -1,0 +1,295 @@
+{
+  "schema": 1,
+  "backend": "nvidia",
+  "chip": "sm_120",
+  "host": "The-Super-Bear",
+  "compiler_sha256": "d3a353d9e9d6d5620de2a2495d9c9a0f9e0b8eb1cc5fdd2f8e90a9d5201c0662",
+  "clifford_opt_sha256": "b8adb46b265565f84c9ff78aacd35978c2e72e643e30e1fb35a7744fdaad90a5",
+  "llvm_bin": "/usr/lib/llvm-23/bin",
+  "recorder_sha256": "9e031dd8fb1843b170b342c515c6df06e62bdbde617dde33749217338f8940ec",
+  "rows": [
+    {
+      "op": "conjugate",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "951edf1863c75714cd94efdcdde70705400d97553682c4ffa0942c2c5f845552"
+    },
+    {
+      "op": "conjugate",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "1a73714cfea176453137419bcfac7a42fe6df1102d2db2172d1425be848d250b"
+    },
+    {
+      "op": "conjugate",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "eceb01424d4f477a2fbbb3436266e6189056edf14dd24aa06ff385c3a06c3055"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "961ee057202ee2fbaada43d78b1ded7644b2eb3a3c0a99f635fc138182adfb5f"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "a983e0d73a4e725cff6f29fd9977637130401eeb7607b1e5446713de24d8221a"
+    },
+    {
+      "op": "geo_product",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "e169f7ce4542f32ca57267ff60702ee5556c35e9fa4e5fbfb6f2993bd26a576c"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "6bd4ddbec184bd6f536623bdf96a913ada3ab6a7c61df38e8db10a55a07e67d6"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "3eb52ebdd76de099cb7ed972acf8b6e4f94fafe5970a029c4fbcad62561f52ff"
+    },
+    {
+      "op": "grade_involute",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "e1269d154788ad2c39761c319602a16f6e09123aa09ffdb7f24521b5f819beb5"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "a2fdc98ee7c5595b1985f9ce2c3a22c10703602bb8caab0514487bd128840ed0"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "0904d0cc5f4ec2ca133bdf463618a5112395c576d047347efbf5e89c7eb6381f"
+    },
+    {
+      "op": "hodge_star",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "f24b437c642fe5464f2dbfaf5549b5bada2f45ada18af1894fa4177cc623cf35"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "d3b3d18bd45511346e32e0173172942959690d1a3e67d57c72e6d99c1b15152f"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "5a0990f10b5b8f88ca0e3c2ac7de9456017da615b8ef7b8fe4fe81461119b31a"
+    },
+    {
+      "op": "inner",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "79aba7bc96d29eb3ddb21006237388fdfbe87e03b770a69651e8b072a7acb92f"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "00e1de7ead89c1c7f21d5549f0a2b8a6eea79e945281a9fd7d845baeed7bc1d5"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "18d380195737efe43a893a03f57a6123f8b4b3b01dcbdaad0f00d148085e964d"
+    },
+    {
+      "op": "left_contract",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "8bea68bad6ad953610ba253c0f82a6c293afe93a5c6cad09481cee1a2d87e1da"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "61d216f6e096af1f37ab6da690c669d8123c9cbf761469cfa5fa97de72f983f9"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 2.384185791015625e-07,
+      "binding": "c921a51fce3b6974d8da9e393c6e438f3ef40f2f1135efa6850ba01f963a10f5"
+    },
+    {
+      "op": "norm",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 2.384185791015625e-07,
+      "binding": "b32d37df89bb907e8fe557c304a059ec50cc722d7a0c897eff50db1ff3270c47"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "99ea38b973813ce2b6935b4e71f5c7e132601fbdb69672c08ae6d8cf192e05ed"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "6c215716d1bd3f0bdeda2212b87f159b2b25125376ea980bfa2e28d37b774d01"
+    },
+    {
+      "op": "reverse",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "6c1719d8fffb1bbf622a5542428f9a3aa0926869407eed5b552d2bf4a89a2717"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "abb41ae494ee2a4a353df4aa2e7d6e2f063226f30278fe6b0212739745328cc4"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "8fa5dfc036d28a9bd08abbf9ec0cc618c0b4cb74998b8f469e5d98b3fdad7013"
+    },
+    {
+      "op": "rotor_sandwich",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "35c1f25627f42d9687f9287a28ef663637ebbc9e684adbf7edb84da00581dddc"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "d75a455eefdc53adbfb29aa1db9fba1741dc5c1b8d631ea95b2116c2f3f4536a"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        37,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "21f2c4bf950e61995abee68ef50c03bc8d90aa4e60d38c16c5b0c8be283a7ecb"
+    },
+    {
+      "op": "wedge",
+      "shape": [
+        3,
+        5,
+        8
+      ],
+      "max_abs_error": 0.0,
+      "binding": "1ef9814faf5bad8f13f25682ad417ce4b92622a95ed893979211ecb63915f656"
+    }
+  ],
+  "emitted_products": {
+    "full": 64,
+    "grade2": 24
+  },
+  "proofs": [
+    "every op of the family matches the standalone GA reference for single, batched and rank-3 inputs",
+    "grade-2 restriction emits 24 of 64 products and writes the other coefficients as zero",
+    "the device kernel is the dialect's own lowering folded to scalar code; no Python-emitted kernel"
+  ],
+  "promotion_eligible": false,
+  "measured_performance": false,
+  "envelope": "f32, Cl(3,0), static shapes; per-call host transfers; correctness only",
+  "rocm_chip_env": null
+}

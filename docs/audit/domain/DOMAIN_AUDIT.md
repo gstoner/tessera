@@ -48,7 +48,7 @@ owners, as the plan's routing index states them:
 
 | Domain | Existing capability | Remaining architectural boundary |
 |---|---|---|
-| Geometric algebra / Clifford | Signature/product-table references, canonical `clifford_*` operations, differentiated tensor shims, specialized kernels and native grade-pruning passes; since 2026-09-16 the batched geometric product lowers natively (`ExpandProductTable` over any static rank) and executes through MLIR/LLVM on the CPU lane (`cpu` row in the ladder). | Rotor fusion and the remaining Clifford ops have no native lowering behind the JIT; the GPU package route through the arena pipeline is not built; the Python-emitted x86/ROCm/Apple kernels are a second implementation until displaced. General signatures, packed grades and physical derivatives require their own proof. |
+| Geometric algebra / Clifford | Signature/product-table references, canonical `clifford_*` operations, differentiated tensor shims, specialized kernels and native grade-pruning passes; since 2026-09-16 the batched geometric product lowers natively (`ExpandProductTable` over any static rank) and executes through MLIR/LLVM on the CPU lane (`cpu` row in the ladder). | The linear/bilinear family (products, contractions, inner/norm, involutions, Hodge star, grade projection, rotor sandwich) lowers natively and executes on the CPU lane and, as native storage packages, on gfx1151/gfx1201/sm_120 (`GA-NATIVE-GPU-2026-09-16`). Still open: exp/log and the field ops, an Apple package route, and measuring the native route against the Python-emitted x86/ROCm/Apple kernels, which remain a second implementation until displaced. General signatures, packed grades and physical derivatives require their own proof. |
 | Energy-based models | Reference energies/samplers/losses and specialized update/loss kernels. `geo_sampling.py` uses tape gradients for traceable energies and finite differences otherwise. | The generic `energy.py` Langevin route still uses numerical gradients when no `grad_fn` is supplied. Host gradient evaluation is not a fully resident sampler. Trace an energy body into the native shared AD/loop/ownership path. |
 | Attention / persistent state | Canonical families, scheduled packages and bounded native AD; resident O/LSE and isolated CUDA Q/K JVP have explicit packets. | Composed AD, variant breadth, general state lifetimes and cross-target evidence remain separate. KV tiering or a prefetch annotation does not prove overlap. |
 | Matrix/field calculus, PDE and spectral | Reference/domain contracts and shared transform/solver surfaces exist. | Coordinate/boundary-condition semantics must reach native operators; use the existing layout, numerical-policy, solver and AD owners. Follow [MSW](../compiler/MATH_SOURCE_WORKSTREAM.md) and the [PDE plan](../compiler/PDE_STENCIL_CAPABILITY_PLAN.md). |
@@ -147,7 +147,12 @@ lit coverage — Princess-Luna and Super-Bear now configure
 `TESSERA_BUILD_CLIFFORD_BACKEND=ON`. Second slice (`GA-NATIVE-FAMILY-2026-09-16`): the
 rest of the linear/bilinear family — wedge, contractions, inner, norm, the
 involutions, Hodge star, grade projection, rotor sandwich — executes behind
-the JIT on the same three hosts. Next in this stream: a GPU package through the
-arena pipeline (the ladder's `rocm`/`apple_gpu` GA rows are still the
+the JIT on the same three hosts. Third slice (`GA-NATIVE-GPU-2026-09-16`): the same lowering
+reaches gfx1151, gfx1201 and sm_120 as native storage packages — the kernel
+skeleton carries the Clifford op and the dialect expands it; the ladder's GA
+row now carries `nvidia_sm120=1` and a second `rocm` row from the matrix.
+Next in this stream: measure the native route against the Python-emitted
+device kernels (dispatch/allocation/kernel time separately) before any lane
+change, an Apple package route (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
 

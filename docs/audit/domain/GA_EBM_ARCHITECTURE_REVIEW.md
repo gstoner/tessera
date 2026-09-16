@@ -160,4 +160,8 @@ energy's gradient needed. Not yet met: the nonlinear and manifold cases
 reported reference path), a GPU package for the loop, and the "no per-step
 transfers" claim on a device — this is the CPU lane. `energy.py::langevin_step`
 still takes finite differences without `grad_fn`; the native lane is opt-in.
+The device package, the sphere and bivector integrators and the nonlinear
+energies are scoped as slices G1/M1/M2/N1/G2/T1 in
+[EBM_NATIVE_LOOP_ARCHITECTURE.md](EBM_NATIVE_LOOP_ARCHITECTURE.md), which
+records where each existing device route stops on this loop today.
 

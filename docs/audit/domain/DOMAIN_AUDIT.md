@@ -168,7 +168,9 @@ the branch and are what let the paired autodiff pass carry `0.5·Σ(x−y)²` to
 native gradient. The loop is a CPU-lane result on three hosts; the ladder's
 EBM row gains `cpu=1` from the matrix. The Python-emitted
 `x86_ebm_langevin_compiled` / `rocm_ebm_langevin_compiled` kernels are
-unchanged and remain the device lanes. Next in this stream: a GPU package
-for the loop through the tile pipeline, then the nonlinear energy and the
-sphere integrator.
+unchanged and remain the device lanes. Next in this stream, planned in
+[EBM_NATIVE_LOOP_ARCHITECTURE.md](EBM_NATIVE_LOOP_ARCHITECTURE.md): G1 serial
+device residency through the native-tape route (two precise admission changes),
+then the sphere (M1) and bivector (M2) integrators, nonlinear energies (N1),
+the cooperative Tile contract (G2) and one compiler driver (T1).
 

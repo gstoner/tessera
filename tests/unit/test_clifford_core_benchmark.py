@@ -201,36 +201,41 @@ class TestCliffordCoreBenchmark:
 # --------------------------------------------------------------------------- #
 
 
+# The dialect's own spellings. Corrected 2026-09-16: this list used to name
+# `rotor_from_axis`, `geometric_product`, `grade_projection` and
+# `norm_squared`, none of which `tessera_clifford` ever declared — the fixture
+# predated the dialect and only parsed because --allow-unregistered-dialect
+# covered it. Rotor construction from an axis and angle is still absent from
+# the dialect and is deliberately NOT listed here: an op that does not exist
+# must not be pinned as a required surface (Decision #29).
+REQUIRED_CLIFFORD_OPS = (
+    "tessera_clifford.rotor_sandwich",
+    "tessera_clifford.geo_product",
+    "tessera_clifford.grade",
+    "tessera_clifford.inner",
+)
+
+
 def test_ir_fixture_names_required_clifford_ops() -> None:
     text = FIXTURE.read_text()
-    for op in (
-        "tessera_clifford.rotor_from_axis",
-        "tessera_clifford.rotor_sandwich",
-        "tessera_clifford.geometric_product",
-        "tessera_clifford.grade_projection",
-        "tessera_clifford.norm_squared",
-    ):
+    for op in REQUIRED_CLIFFORD_OPS:
         assert op in text, f"missing {op} from IR-visible fixture"
-    # The Cl(3, 0) signature is documented as an attribute.
-    assert "algebra_signature = [3, 0, 0]" in text
+    # The Cl(3, 0) signature rides every op as its `algebra` attribute.
+    assert "algebra = [3, 0, 0]" in text
 
 
 def test_ir_fixture_roundtrips_through_tessera_opt() -> None:
     binary = _find_tessera_opt()
     if binary is None:
         pytest.skip("tessera-opt not built")
+    # No --allow-unregistered-dialect: tessera-opt registers the Clifford
+    # dialect, so these ops must parse and VERIFY as themselves.
     r = subprocess.run(
-        [binary, "--allow-unregistered-dialect", str(FIXTURE)],
+        [binary, str(FIXTURE)],
         capture_output=True, text=True, timeout=30,
     )
     assert r.returncode == 0, r.stderr
     out = r.stdout
     # Every op survives the parse → print → parse roundtrip.
-    for op in (
-        "tessera_clifford.rotor_from_axis",
-        "tessera_clifford.rotor_sandwich",
-        "tessera_clifford.geometric_product",
-        "tessera_clifford.grade_projection",
-        "tessera_clifford.norm_squared",
-    ):
+    for op in REQUIRED_CLIFFORD_OPS:
         assert op in out

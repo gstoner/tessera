@@ -35,10 +35,10 @@ def _compiler():
     return tool
 
 
-def _kernel(shape=(4, 8), steps=3, temperature=0.7, backend="nvidia"):
+def _kernel(shape=(4, 8), steps=3, temperature=0.7, backend="nvidia", manifold="euclidean", energy="quadratic"):
     tool = _compiler()
     source, specs = nl.langevin_device_source(shape, eta=0.1, temperature=temperature, steps=steps,
-                                              backend=backend, compiler=tool)
+                                              backend=backend, compiler=tool, manifold=manifold, energy=energy)
     body = source.split("gpu.func @row_program(", 1)[1]
     return source, specs, body
 
@@ -192,3 +192,101 @@ def test_row_reduction_program_is_bit_exact_with_the_declared_order_on_device(sh
     out = program.run(x)
     np.testing.assert_array_equal(np.asarray(out), _sequential_row_normalize(x))
     np.testing.assert_allclose(np.linalg.norm(np.asarray(out), axis=1), 1.0, rtol=1e-5, atol=1e-5)
+
+
+# --- N1 / M1 on the device --------------------------------------------------
+
+@pytest.mark.parametrize("energy", nl.ENERGIES)
+def test_every_energy_becomes_one_cooperative_kernel(energy):
+    """The integrator is energy-agnostic: whatever the paired pass derives is
+    lowered inside the same kernel, with no call and no host round-trip."""
+    source, _, body = _kernel(energy=energy)
+    assert source.count("gpu.func ") == 1
+    assert "func.call" not in body and "linalg." not in body and "tensor." not in body
+    assert "tessera.custom_adjoint_call" not in source  # a host VJP would be a per-step transfer
+    if energy == "huber":
+        assert "arith.select" in body      # the kink is in the device code
+    if energy == "softplus":
+        assert "math.exp" in body          # the stable sigmoid form
+
+
+@pytest.mark.parametrize("energy", nl.ENERGIES)
+def test_the_sphere_kernel_carries_its_reductions_and_status(energy):
+    """Four ordered row reductions per step (entry norm, two projections, the
+    retraction norm), each fenced by barriers, plus the per-row status word."""
+    source, specs, body = _kernel(manifold="sphere", energy=energy)
+    assert [s.name for s in specs] == ["y0", "x", "key", "y", "next_key", "status", "scratch"]
+    assert body.count("gpu.barrier") == 12
+    assert "llvm.mlir.addressof @row_reduction" in body
+    loops = re.findall(r"scf\.for [^\n]*iter_args\(([^)]*)\) -> \(([^)]*)\)", body)
+    assert loops[0][1] == "f32, i64, i64, i32"          # state, key, key, status
+    assert body.count("__nv_fsqrt_rn") >= 1 or "llvm.intr.sqrt" in body   # the retraction
+    assert "linalg." not in body and "tensor." not in body
+
+
+def test_the_sphere_kernel_replays_for_both_backends():
+    from tessera.compiler.native_gpu_storage import replay_arena_ir
+    tool = _compiler()
+    for backend in ("nvidia", "rocm"):
+        source, _, _ = _kernel(shape=(3, 5), backend=backend, manifold="sphere")
+        arena = replay_arena_ir(tool, source)
+        assert "__tessera_shared_bytes_" in arena and "gpu.func @row_program" in arena
+
+
+def _sphere_pair(shape, seed):
+    v = np.random.default_rng(seed).standard_normal(shape).astype(np.float32)
+    unit = (v / np.linalg.norm(v, axis=1, keepdims=True)).astype(np.float32)
+    return unit, np.random.default_rng(seed + 1).standard_normal(shape).astype(np.float32)
+
+
+@pytest.mark.parametrize("energy", nl.ENERGIES)
+def test_device_energies_are_bit_exact_with_the_declared_policy(energy):
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _pair((6, 8), 60)
+    out, key = nl.native_langevin_loop_device(y, x, [11, 12], eta=0.1, temperature=0.5, steps=5,
+                                              backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                              energy=energy)
+    expect, expect_key = nl.reference_langevin_loop(y, x, [11, 12], eta=0.1, temperature=0.5, steps=5, energy=energy)
+    assert list(key) == list(expect_key)
+    np.testing.assert_allclose(out, expect, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("shape,steps,energy", [((4, 8), 1, "quadratic"), ((5, 16), 4, "huber"),
+                                                ((3, 33), 7, "softplus"), ((2, 100), 3, "quadratic")])
+def test_device_sphere_matches_the_reference_and_stays_on_the_sphere(shape, steps, energy):
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _sphere_pair(shape, 70 + steps)
+    out, key, status = nl.native_langevin_loop_device(y, x, [21, 22], eta=0.05, temperature=0.3, steps=steps,
+                                                      backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                                      manifold="sphere", energy=energy)
+    expect, expect_key, expect_status = nl.reference_langevin_loop(
+        y, x, [21, 22], eta=0.05, temperature=0.3, steps=steps, manifold="sphere", energy=energy)
+    assert list(key) == list(expect_key) and list(np.asarray(status)) == list(expect_status)
+    # The row reductions are ordered, so the device fold matches the sequential
+    # host fold; the tolerance covers only the f32 rounding of the projections.
+    np.testing.assert_allclose(out, expect, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(np.linalg.norm(np.asarray(out), axis=1), 1.0, rtol=1e-5, atol=1e-5)
+
+
+def test_device_sphere_reports_the_entry_precondition_per_row():
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _sphere_pair((4, 8), 80)
+    bad = y.copy(); bad[1] *= 2.0
+    _, _, status = nl.native_langevin_loop_device(bad, x, [1, 1], eta=0.05, temperature=0.0, steps=1,
+                                                  backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                                  manifold="sphere")
+    assert list(np.asarray(status)) == [0, 1, 0, 0]
+
+
+def test_device_sphere_launch_row_returns_the_status():
+    from tessera import runtime as rt
+    backend, chip, tool, llvm = _device_lane()
+    y, x = _sphere_pair((4, 8), 90)
+    target = "rocm" if backend == "rocm" else "nvidia_sm120"
+    artifact = nl.package_ebm_langevin_native((4, 8), eta=0.05, temperature=0.3, steps=4, target=target,
+                                              manifold="sphere", energy="softplus")
+    result = rt.launch(artifact, (y, x, [7, 8]))
+    assert result["ok"] and result["execution_kind"] == "native_gpu" and len(result["output"]) == 3
+    expect = nl.reference_langevin_loop(y, x, [7, 8], eta=0.05, temperature=0.3, steps=4,
+                                        manifold="sphere", energy="softplus")
+    np.testing.assert_allclose(np.asarray(result["output"][0]), expect[0], rtol=1e-5, atol=1e-5)

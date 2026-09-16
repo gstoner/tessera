@@ -5315,6 +5315,14 @@ Not applicable with a reason: the GPU storage route has no CPU package; x86's na
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM nonlinear energies and the sphere integrator — 2026-09-16
+
+Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on Princess-Luna (Zen 5) and Super-Bear (Zen 2): the CPU JIT lane carries all three energies and the sphere integrator, 35/35 on each, and it is the oracle the device lanes are checked against. The `softplus` adjoint and its stable lowering (`max(x,0) + log1p(exp(-|x|))`) are shared compiler work and reach the x86 lane through the same `tessera-to-linalg` path.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--nonlinear-energies-and-the-sphere-integrator-reach-the-same-kernel).
+
 ## EBM Langevin loop as one cooperative kernel — 2026-09-16
 
 Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

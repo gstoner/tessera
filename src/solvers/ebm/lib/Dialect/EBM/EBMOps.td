@@ -132,10 +132,14 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
         "sphere"     → tessera.ebm.sphere_langevin_step (EBM7)
         "bivector"   → tessera.ebm.bivector_langevin_step (EBM7)
 
-    For "bivector", `grade` is the restricted grade (default 2 for SO(n)
-    sampling).  For "sphere", the state must be unit-norm on entry.
+    For "bivector", `grade` is the restricted grade (a semantic key: it
+    must be given, never defaulted).  For "sphere", the state must be
+    unit-norm on entry per row; the integrator projects the gradient and
+    the noise to the tangent plane and retracts by normalization.
 
-    Returns the (new_state, next_key) tuple as two result values.
+    Returns (new_state, next_key) and, for a manifold integrator, a per-row
+    `i32` status word (0 ok; 1 entry precondition violated; 2 retraction
+    underflow, previous state kept).
   }];
   let arguments = (ins
     AnyType:$state,
@@ -150,7 +154,12 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
     EBM_ManifoldAttr:$manifold,
     OptionalAttr<I64Attr>:$grade
   );
-  let results = (outs AnyType:$new_state, AnyType:$next_key);
+  // 2026-09-16: a manifold integrator may report a per-row status word
+  // (`tensor<rows x i32>`; 0 = ok, bit 0 = entry precondition violated,
+  // bit 1 = retraction underflow, the previous state kept). "sphere" requires
+  // it (Decision #21a: the precondition fails closed, never renormalizes
+  // silently); "euclidean" has none.
+  let results = (outs AnyType:$new_state, AnyType:$next_key, Optional<AnyType>:$status);
   let assemblyFormat = [{
     $state `,` $rng_key (`captures` $captures^)? `energy_fn` $energy_fn `eta` $eta
     `temperature` $temperature `manifold` $manifold (`grade` $grade^)?

@@ -764,10 +764,10 @@ llvm::SmallVector<mlir::Value> SoftmaxOp::buildAdjoint(
 POINTWISE_BUILD_ADJOINT(SinOp, "sin")
 // Tier-1 MPSGraph-lane ops (2026-05-29). Each has a Python VJP the runtime
 // resolves via the custom_adjoint_call placeholder keyed by name.
-POINTWISE_BUILD_ADJOINT(SoftplusOp, "softplus")
 POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
 
 #undef POINTWISE_BUILD_ADJOINT
+
 
 // relu: dx = x > 0 ? dy : 0.  compare_scalar produces a genuine i1 tensor
 // mask even for dynamic shapes; masked_fill supplies the scalar-zero branch
@@ -930,6 +930,24 @@ llvm::SmallVector<mlir::Value> SigmoidOp::buildAdjoint(
   mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();
   mlir::Value sPrime = builder.create<MulOp>(loc, ty, s, oneMinusS).getResult();
   mlir::Value dx = builder.create<MulOp>(loc, ty, dy, sPrime).getResult();
+  return {dx};
+}
+
+// softplus: dx = dy * sigmoid(x). Native since 2026-09-16 (the EBM nonlinear
+// energy slice): the stable form is the sigmoid itself, never
+// exp(x) / (1 + exp(x)), so no overflow guard is needed here; the sigmoid
+// lowering owns the numerics. Dynamic shapes keep the placeholder.
+llvm::SmallVector<mlir::Value> SoftplusOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value()};
+  auto loc = getLoc();
+  mlir::Type ty = getX().getType();
+  mlir::Value dy = outputCotangents[0];
+  if (!isStaticShaped(ty))
+    return placeholderAdjoint(builder, loc, ty, "softplus", dy, getX());
+  mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
+  mlir::Value dx = builder.create<MulOp>(loc, ty, dy, s).getResult();
   return {dx};
 }
 

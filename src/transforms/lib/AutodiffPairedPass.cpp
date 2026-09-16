@@ -2197,6 +2197,15 @@ private:
             : hasHybridResidual ? "hybrid" : "save";
     builder.setInsertionPointToEnd(module.getBody());
     auto bwdName = (fwd.getName() + "__bwd").str();
+    // A module may already carry a partner for this function — written by
+    // hand (the HVP rows) or by an earlier run of this pass on a module that
+    // is being re-lowered. Pairing it again would emit a second definition
+    // and MLIR would reject the module ("redefinition of symbol named
+    // '<f>__bwd'"), so an existing partner is left alone (2026-09-16; before
+    // this, a driver could only decide module-wide and a single unpaired
+    // function dragged every paired one back through the pass).
+    if (module.lookupSymbol<mlir::func::FuncOp>(bwdName))
+      return mlir::success();
     auto bwdType = builder.getFunctionType(bwdInTypes, bwdResTypes);
     auto bwd = builder.create<mlir::func::FuncOp>(fwd.getLoc(), bwdName, bwdType);
     bwd->setAttr("tessera.autodiff.role", builder.getStringAttr("backward"));

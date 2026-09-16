@@ -7989,6 +7989,14 @@ Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Ta
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM nonlinear energies and the sphere integrator — 2026-09-16
+
+Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`, assertions-ON driver), 32/32 device tests each. Three energies (quadratic, Huber, softplus) each become one cooperative kernel with no host VJP left, and the sphere integrator's four ordered row reductions per step reproduce the host's sequential f32 fold, so the projections agree exactly rather than within a tolerance; the per-row status word rides the loop in a register. No promotion: the Python-emitted `rocm_ebm_langevin_compiled` stays the ROCm lane until the overhead comparison is recorded.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--nonlinear-energies-and-the-sphere-integrator-reach-the-same-kernel).
+
 ## EBM Langevin loop as one cooperative kernel — 2026-09-16
 
 Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

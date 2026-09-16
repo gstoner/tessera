@@ -19,8 +19,8 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 - Differentiable families tracked: **314**
 - `python_reference` (Python VJP/JVP): **314**
-- `ir_adjoint = native`: **55** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, depth_attn, dropout, expand, fft, flash_attn, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
-- `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
+- `ir_adjoint = native`: **56** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, depth_attn, dropout, expand, fft, flash_attn, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, softplus, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
+- `ir_adjoint = placeholder` (Python round-trip, not native): **2** (log_softmax, sin)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
 - `ir_tangent = native`: **37** (add, all_gather, all_reduce, all_to_all, broadcast, dct, depth_attn, dropout, es_low_rank_correction, expand, fft, flash_attn, flatten, ifft, irfft, istft, layer_norm, matmul, mul, permute, reduce, reduce_scatter, reshape, rfft, rmsnorm, sigmoid, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
 - forward JVP IR **oracle-verified on CPU**: **12** (fft, ifft, irfft, layer_norm, matmul, mul, reduce, rfft, rmsnorm, sigmoid, softmax, tanh)
@@ -352,7 +352,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `softcap` | elementwise | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `softmax` | stable_reduction | yes | native | native | cpu | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; fwd_cpu_ir_oracle=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `softmax_safe` | stable_reduction | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `softplus` | elementwise | yes | placeholder | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | custom_adjoint_call → Python VJP (not native IR) |
+| `softplus` | elementwise | yes | native | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
 | `solve` | linalg_solver | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `sparsemax` | normalization | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `spectral_conv` | spectral | yes | native | native | — | — | rocm_gfx1151 | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | rocm_gfx1151 | x86_avx512 | rocm_gfx1151=save_inputs; x86_avx512=save_inputs | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; device[rocm_gfx1151=LLVM/MLIR 23; gfx1151 HIP module launch]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |

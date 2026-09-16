@@ -30,7 +30,8 @@
 // is exactly y - eta * g per step.
 //
 // Envelope: static ranked f32 state, key `tensor<2xi64>`, manifold
-// "euclidean" only ("sphere" / "bivector" fail closed with a diagnostic).
+// "euclidean" (any rank) or "sphere" ([rows, features], per-row status word;
+// 2026-09-16); "bivector" fails closed with a diagnostic.
 //
 //===----------------------------------------------------------------------===//
 #include "tessera/EBM/EBMPasses.h"
@@ -140,6 +141,81 @@ static Value uniform(OpBuilder &b, Location loc, Value word) {
 }
 
 // langevin_step(y, key, captures...) -> (y - eta*grad + scale*noise, key + [0, 1])
+// Standard normals of `stateTy`'s shape from Philox-4x32-10 / Box-Muller on
+// (flat index, key[1]) with key[0] as the Philox key (the declared policy).
+static Value standardNormals(PatternRewriter &rewriter, Location loc, RankedTensorType stateTy, Value key) {
+  Type i32 = rewriter.getI32Type(), i64 = rewriter.getI64Type();
+  Value c0i = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  Value c1i = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+  Value key0 = rewriter.create<tensor::ExtractOp>(loc, key, ValueRange{c0i});
+  Value key1 = rewriter.create<tensor::ExtractOp>(loc, key, ValueRange{c1i});
+  Value c32 = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64, 32));
+  Value k0 = rewriter.create<arith::TruncIOp>(loc, i32, key0);
+  Value k1 = rewriter.create<arith::TruncIOp>(loc, i32, rewriter.create<arith::ShRUIOp>(loc, key0, c32));
+  Value s0 = rewriter.create<arith::TruncIOp>(loc, i32, key1);
+  Value s1 = rewriter.create<arith::TruncIOp>(loc, i32, rewriter.create<arith::ShRUIOp>(loc, key1, c32));
+  Value zero32 = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i32, 0));
+  Value init = rewriter.create<tensor::EmptyOp>(loc, stateTy.getShape(), stateTy.getElementType());
+  const int64_t rank = stateTy.getRank();
+  SmallVector<AffineMap> maps{rewriter.getMultiDimIdentityMap(rank)};
+  SmallVector<utils::IteratorType> iterators(rank, utils::IteratorType::parallel);
+  auto generic = rewriter.create<linalg::GenericOp>(
+      loc, TypeRange{stateTy}, ValueRange{}, ValueRange{init}, maps, iterators,
+      [&](OpBuilder &b, Location l, ValueRange) {
+        // flat index = sum(idx[d] * stride[d]) in row-major order.
+        Value flat = b.create<arith::ConstantIndexOp>(l, 0);
+        int64_t stride = 1;
+        for (int64_t d = rank - 1; d >= 0; --d) {
+          Value idx = b.create<linalg::IndexOp>(l, d);
+          Value s = b.create<arith::ConstantIndexOp>(l, stride);
+          flat = b.create<arith::AddIOp>(l, flat, b.create<arith::MulIOp>(l, idx, s));
+          stride *= stateTy.getShape()[d];
+        }
+        Value flat32 = b.create<arith::IndexCastOp>(l, i32, flat);
+        auto words = philox4x32(b, l, {flat32, s0, s1, zero32}, {k0, k1});
+        Value u0 = uniform(b, l, words[0]), u1 = uniform(b, l, words[1]);
+        Value minusTwo = b.create<arith::ConstantOp>(l, b.getF64FloatAttr(-2.0));
+        Value twoPi = b.create<arith::ConstantOp>(l, b.getF64FloatAttr(2.0 * M_PI));
+        Value r = b.create<math::SqrtOp>(l, b.create<arith::MulFOp>(l, minusTwo, b.create<math::LogOp>(l, u0)));
+        Value z = b.create<arith::MulFOp>(l, r, b.create<math::CosOp>(l, b.create<arith::MulFOp>(l, twoPi, u1)));
+        b.create<linalg::YieldOp>(l, b.create<arith::TruncFOp>(l, b.getF32Type(), z).getResult());
+      });
+  return generic.getResult(0);
+}
+
+// Per-row sum over the feature axis of a [rows, features] tensor (sequential
+// order over features: the declared reduction order, matched by the
+// reference's f32 accumulate and by the row-program emitter's ordered fold).
+static Value rowSum(PatternRewriter &rewriter, Location loc, Value lanes) {
+  auto ty = cast<RankedTensorType>(lanes.getType());
+  auto rowTy = RankedTensorType::get({ty.getDimSize(0)}, ty.getElementType());
+  Value zero = rewriter.create<arith::ConstantOp>(loc, rewriter.getF32FloatAttr(0.0));
+  Value init = rewriter.create<linalg::FillOp>(
+      loc, ValueRange{zero}, ValueRange{rewriter.create<tensor::EmptyOp>(loc, rowTy.getShape(), rowTy.getElementType())}).getResult(0);
+  auto reduce = rewriter.create<linalg::ReduceOp>(
+      loc, ValueRange{lanes}, ValueRange{init}, ArrayRef<int64_t>{1},
+      [](OpBuilder &b, Location l, ValueRange args) {
+        b.create<linalg::YieldOp>(l, b.create<arith::AddFOp>(l, args[0], args[1]).getResult());
+      });
+  return reduce.getResult(0);
+}
+
+// Broadcast a [rows] value across the feature axis: [rows] -> [rows, features].
+static Value rowBroadcast(PatternRewriter &rewriter, Location loc, Value row, RankedTensorType lanesTy) {
+  auto rowTy = cast<RankedTensorType>(row.getType());
+  auto expandedTy = RankedTensorType::get({rowTy.getDimSize(0), 1}, rowTy.getElementType());
+  Value expanded = rewriter.create<tensor::ExpandShapeOp>(loc, expandedTy, row, ArrayRef<ReassociationIndices>{{0, 1}});
+  Value init = rewriter.create<tensor::EmptyOp>(loc, lanesTy.getShape(), lanesTy.getElementType());
+  MLIRContext *ctx = rewriter.getContext();
+  AffineMap rowMap = AffineMap::get(2, 0, {getAffineDimExpr(0, ctx), getAffineConstantExpr(0, ctx)}, ctx);
+  SmallVector<AffineMap> maps{rowMap, rewriter.getMultiDimIdentityMap(2)};
+  SmallVector<utils::IteratorType> iterators(2, utils::IteratorType::parallel);
+  auto generic = rewriter.create<linalg::GenericOp>(
+      loc, TypeRange{lanesTy}, ValueRange{expanded}, ValueRange{init}, maps, iterators,
+      [](OpBuilder &b, Location l, ValueRange args) { b.create<linalg::YieldOp>(l, args[0]); });
+  return generic.getResult(0);
+}
+
 struct LowerLangevin : public RewritePattern {
   LowerLangevin(MLIRContext *ctx) : RewritePattern(kLangevinOp, 1, ctx) {}
   LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
@@ -148,9 +224,10 @@ struct LowerLangevin : public RewritePattern {
     auto temperature = op->getAttrOfType<FloatAttr>("temperature");
     auto manifold = op->getAttrOfType<StringAttr>("manifold");
     if (!fn || !eta || !temperature || !manifold) return failure();
-    if (manifold.getValue() != "euclidean") {
+    const bool sphere = manifold.getValue() == "sphere";
+    if (manifold.getValue() != "euclidean" && !sphere) {
       op->emitError("EBM lowering: manifold \"") << manifold.getValue()
-          << "\" has no native integrator yet; only \"euclidean\" lowers";
+          << "\" has no native integrator yet; \"euclidean\" and \"sphere\" lower";
       return failure();
     }
     if (eta.getValueAsDouble() <= 0.0 || temperature.getValueAsDouble() < 0.0) {
@@ -166,6 +243,22 @@ struct LowerLangevin : public RewritePattern {
     }
     if (op->getResult(0).getType() != stateTy || op->getResult(1).getType() != keyTy) {
       op->emitError("EBM lowering: langevin_step results must match its state and key types");
+      return failure();
+    }
+    RankedTensorType statusTy;
+    if (sphere) {
+      if (stateTy.getRank() != 2) {
+        op->emitError("EBM lowering: the sphere integrator takes a [rows, features] state (one unit vector per row)");
+        return failure();
+      }
+      statusTy = RankedTensorType::get({stateTy.getDimSize(0)}, rewriter.getI32Type());
+      if (op->getNumResults() != 3 || op->getResult(2).getType() != statusTy) {
+        op->emitError("EBM lowering: the sphere integrator reports a per-row status word; declare a third result of type ")
+            << statusTy;
+        return failure();
+      }
+    } else if (op->getNumResults() != 2) {
+      op->emitError("EBM lowering: the euclidean integrator has no status result");
       return failure();
     }
     auto module = op->getParentOfType<ModuleOp>();
@@ -199,53 +292,67 @@ struct LowerLangevin : public RewritePattern {
     for (auto [i, capture] : llvm::enumerate(captures)) args[i + 1] = capture;
     args[captures.size() + 1] = splat(rewriter, loc, cotTy, 1.0);  // dE/dE = 1 per energy
     Value grad = rewriter.create<func::CallOp>(loc, backward, args).getResult(0);
-    Value step = rewriter.create<arith::MulFOp>(loc, grad, splat(rewriter, loc, stateTy, eta.getValueAsDouble()));
-    Value next = rewriter.create<arith::SubFOp>(loc, state, step);
     const double noiseScale = std::sqrt(2.0 * eta.getValueAsDouble() * temperature.getValueAsDouble());
-    if (noiseScale > 0.0) {
-      // Standard normals per element from Philox on (flat index, key[1]), key[0].
-      Type i32 = rewriter.getI32Type(), i64 = rewriter.getI64Type();
-      Value c0i = rewriter.create<arith::ConstantIndexOp>(loc, 0);
-      Value c1i = rewriter.create<arith::ConstantIndexOp>(loc, 1);
-      Value key0 = rewriter.create<tensor::ExtractOp>(loc, key, ValueRange{c0i});
-      Value key1 = rewriter.create<tensor::ExtractOp>(loc, key, ValueRange{c1i});
-      Value c32 = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64, 32));
-      Value k0 = rewriter.create<arith::TruncIOp>(loc, i32, key0);
-      Value k1 = rewriter.create<arith::TruncIOp>(loc, i32, rewriter.create<arith::ShRUIOp>(loc, key0, c32));
-      Value s0 = rewriter.create<arith::TruncIOp>(loc, i32, key1);
-      Value s1 = rewriter.create<arith::TruncIOp>(loc, i32, rewriter.create<arith::ShRUIOp>(loc, key1, c32));
-      Value zero32 = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i32, 0));
-      Value init = rewriter.create<tensor::EmptyOp>(loc, stateTy.getShape(), stateTy.getElementType());
-      const int64_t rank = stateTy.getRank();
-      SmallVector<AffineMap> maps{rewriter.getMultiDimIdentityMap(rank)};
-      SmallVector<utils::IteratorType> iterators(rank, utils::IteratorType::parallel);
-      auto generic = rewriter.create<linalg::GenericOp>(
-          loc, TypeRange{stateTy}, ValueRange{}, ValueRange{init}, maps, iterators,
-          [&](OpBuilder &b, Location l, ValueRange) {
-            // flat index = sum(idx[d] * stride[d]) in row-major order.
-            Value flat = b.create<arith::ConstantIndexOp>(l, 0);
-            int64_t stride = 1;
-            for (int64_t d = rank - 1; d >= 0; --d) {
-              Value idx = b.create<linalg::IndexOp>(l, d);
-              Value s = b.create<arith::ConstantIndexOp>(l, stride);
-              flat = b.create<arith::AddIOp>(l, flat, b.create<arith::MulIOp>(l, idx, s));
-              stride *= stateTy.getShape()[d];
-            }
-            Value flat32 = b.create<arith::IndexCastOp>(l, i32, flat);
-            auto words = philox4x32(b, l, {flat32, s0, s1, zero32}, {k0, k1});
-            Value u0 = uniform(b, l, words[0]), u1 = uniform(b, l, words[1]);
-            Value minusTwo = b.create<arith::ConstantOp>(l, b.getF64FloatAttr(-2.0));
-            Value twoPi = b.create<arith::ConstantOp>(l, b.getF64FloatAttr(2.0 * M_PI));
-            Value r = b.create<math::SqrtOp>(l, b.create<arith::MulFOp>(l, minusTwo, b.create<math::LogOp>(l, u0)));
-            Value z = b.create<arith::MulFOp>(l, r, b.create<math::CosOp>(l, b.create<arith::MulFOp>(l, twoPi, u1)));
-            b.create<linalg::YieldOp>(l, b.create<arith::TruncFOp>(l, b.getF32Type(), z).getResult());
-          });
-      Value noise = rewriter.create<arith::MulFOp>(loc, generic.getResult(0), splat(rewriter, loc, stateTy, noiseScale));
-      next = rewriter.create<arith::AddFOp>(loc, next, noise);
-    }
     auto bump = DenseElementsAttr::get(keyTy, ArrayRef<int64_t>{0, 1});
-    Value nextKey = rewriter.create<arith::AddIOp>(loc, key, rewriter.create<arith::ConstantOp>(loc, bump));
-    rewriter.replaceOp(op, {next, nextKey});
+    auto bumpKey = [&]() -> Value {
+      return rewriter.create<arith::AddIOp>(loc, key, rewriter.create<arith::ConstantOp>(loc, bump));
+    };
+    if (!sphere) {
+      Value step = rewriter.create<arith::MulFOp>(loc, grad, splat(rewriter, loc, stateTy, eta.getValueAsDouble()));
+      Value next = rewriter.create<arith::SubFOp>(loc, state, step);
+      if (noiseScale > 0.0) {
+        Value noise = standardNormals(rewriter, loc, stateTy, key);
+        next = rewriter.create<arith::AddFOp>(loc, next, rewriter.create<arith::MulFOp>(loc, noise, splat(rewriter, loc, stateTy, noiseScale)));
+      }
+      rewriter.replaceOp(op, {next, bumpKey()});
+      return success();
+    }
+    Value noise;  // standard normals, drawn once per step when T > 0
+    if (noiseScale > 0.0) noise = standardNormals(rewriter, loc, stateTy, key);
+    Value nextKey = bumpKey();
+    // Sphere (geo_sampling.sphere_langevin_step, per row):
+    //   g_t = g - <g, x> x ; xi_t = xi - <xi, x> x
+    //   y   = x - eta g_t + sqrt(2 eta T) xi_t ; x' = y / |y|
+    // Entry precondition |x|^2 in [1 - 2e-3, 1 + 2e-3] per row (the reference's
+    // | |x| - 1 | <= 1e-3, stated on the squared norm) -> status bit 0; a
+    // retraction underflow |y|^2 < 1e-12 keeps x and sets status bit 1. The
+    // dot products and norms are sequential f32 row sums (rowSum).
+    auto rowTy = RankedTensorType::get({stateTy.getDimSize(0)}, stateTy.getElementType());
+    auto rowI1Ty = RankedTensorType::get({stateTy.getDimSize(0)}, rewriter.getI1Type());
+    auto rowSplat = [&](double v) { return splat(rewriter, loc, rowTy, v); };
+    auto project = [&](Value v) {
+      Value dot = rowSum(rewriter, loc, rewriter.create<arith::MulFOp>(loc, v, state));
+      return rewriter.create<arith::SubFOp>(loc, v, rewriter.create<arith::MulFOp>(loc, rowBroadcast(rewriter, loc, dot, stateTy), state)).getResult();
+    };
+    Value n0 = rowSum(rewriter, loc, rewriter.create<arith::MulFOp>(loc, state, state));
+    Value dev = rewriter.create<math::AbsFOp>(loc, rewriter.create<arith::SubFOp>(loc, n0, rowSplat(1.0)));
+    Value entryBad = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT, dev, rowSplat(2.0e-3));
+    Value gt = project(grad);
+    Value y = rewriter.create<arith::SubFOp>(loc, state, rewriter.create<arith::MulFOp>(loc, gt, splat(rewriter, loc, stateTy, eta.getValueAsDouble())));
+    if (noise) {
+      Value xt = project(noise);
+      y = rewriter.create<arith::AddFOp>(loc, y, rewriter.create<arith::MulFOp>(loc, xt, splat(rewriter, loc, stateTy, noiseScale)));
+    }
+    Value n2 = rowSum(rewriter, loc, rewriter.create<arith::MulFOp>(loc, y, y));
+    Value under = rewriter.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT, n2, rowSplat(1.0e-12));
+    Value safeN2 = rewriter.create<arith::SelectOp>(loc, under, rowSplat(1.0), n2);
+    Value norm = rewriter.create<math::SqrtOp>(loc, safeN2);
+    Value normalized = rewriter.create<arith::DivFOp>(loc, y, rowBroadcast(rewriter, loc, norm, stateTy));
+    // Blend by a {0,1} row weight instead of broadcasting an i1 row.
+    Value keep = rewriter.create<arith::SelectOp>(loc, under, rowSplat(1.0), rowSplat(0.0));
+    Value keepB = rowBroadcast(rewriter, loc, keep, stateTy);
+    Value one = splat(rewriter, loc, stateTy, 1.0);
+    Value next = rewriter.create<arith::AddFOp>(
+        loc, rewriter.create<arith::MulFOp>(loc, keepB, state),
+        rewriter.create<arith::MulFOp>(loc, rewriter.create<arith::SubFOp>(loc, one, keepB), normalized));
+    auto i32Row = [&](int64_t v) {
+      return rewriter.create<arith::ConstantOp>(loc, DenseElementsAttr::get(statusTy, rewriter.getI32IntegerAttr(v))).getResult();
+    };
+    Value status = rewriter.create<arith::OrIOp>(
+        loc, rewriter.create<arith::SelectOp>(loc, entryBad, i32Row(1), i32Row(0)),
+        rewriter.create<arith::SelectOp>(loc, under, i32Row(2), i32Row(0)));
+    (void)rowI1Ty;
+    rewriter.replaceOp(op, {next, nextKey, status});
     return success();
   }
 };
@@ -255,7 +362,7 @@ struct EBMLowerLangevinPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EBMLowerLangevinPass)
   StringRef getArgument() const final { return "tessera-ebm-lower-langevin"; }
   StringRef getDescription() const final {
-    return "Lower tessera_ebm.energy / inner_step / langevin_step (euclidean) to "
+    return "Lower tessera_ebm.energy / inner_step / langevin_step (euclidean, sphere) to "
            "arith/linalg over the compiler-derived gradient (@E__bwd) with "
            "on-device Philox noise.";
   }

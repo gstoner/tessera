@@ -10,7 +10,8 @@ Owner: [W4-PRODUCT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#w4-product-1)
 with [AD-SOLVER-IFT-1](../compiler/INTEGRATED_COMPILER_PLAN.md#ad-solver-ift-1);
 acceptance from the [GA/EBM review](GA_EBM_ARCHITECTURE_REVIEW.md) §"an
 energy is a typed program". Sync keys `EBM-NATIVE-QUADRATIC-2026-09-16`
-(CPU lane) and `EBM-NATIVE-GPU-2026-09-16` (device lane).
+(CPU lane), `EBM-NATIVE-GPU-2026-09-16` (device lane) and
+`EBM-NONLINEAR-MANIFOLD-2026-09-16` (N1 nonlinear energies, M1 sphere).
 Written after the CPU-lane slice landed (`tests/unit/test_ebm_native_langevin.py`)
 and after driving that same loop as far as the existing device routes take it;
 every "today" claim below is a measured stop, not a reading of prose.
@@ -275,6 +276,26 @@ exists; do not write a third emitter (`CLAUDE.md` §"the real Apple gap").
 
 ## 4. Nonlinear and manifold energies
 
+> **Updated 2026-09-16 — N1 and M1 landed; this section is now a record of
+> what shipped, not only a plan.** Three energies (quadratic, Huber,
+> softplus) run through the same integrator on the CPU JIT lane and as
+> cooperative kernels on the device, and `manifold = "sphere"` has a native
+> integrator with a per-row status word. §4.1's admission rule held: the
+> lowering is energy-agnostic, so each new energy was a *differentiation*
+> question, and the one gap it found was `softplus`, whose adjoint was a
+> `custom_adjoint_call` placeholder (a host VJP, i.e. a per-step transfer).
+> It now has a native adjoint, `dy · sigmoid(x)` — §4.1's own stability note,
+> implemented — and a stable linalg lowering, `max(x,0) + log1p(exp(-|x|))`.
+> Huber needed no new adjoint, as predicted, but its backward yields two
+> results from one body, which the row-program emitter had to learn.
+> §4.2's contract shipped intact: entry precondition on the squared norm,
+> retraction underflow keeping the previous state, both reported per row and
+> never silently repaired, with the dot products and norms declared as
+> sequential f32 row sums — which the emitter's ordered fold reproduces, so
+> the device agrees with the host sequential fold rather than merely within a
+> tolerance. §4.3 (bivector) is unchanged and still refuses.
+
+
 ### 4.1 Nonlinear energies: nothing manifold-specific is needed
 
 The Euclidean integrator is energy-agnostic: the lowering calls `@E__bwd`
@@ -382,13 +403,17 @@ rotors is the batched Clifford tensor the W6.4 lowering already handles.
 | Slice | Deliverable | Acceptance | Fleet |
 |---|---|---|---|
 | G1 | isolate-loop inlining + `tessera.ebm.source` owner + admission audit; `package_ebm_langevin_native`; rows for `rocm` and `nvidia_sm120`; recorder | bit-exact K ∈ {1,5,12} on gfx1151, gfx1201, sm_120; one launch per loop | Princess-Luna, Tajasarus, Super-Bear |
-| M1 | `manifold = "sphere"` on CPU + G1: tangent projection, retraction, per-row status word; reference guard mirrored | ‖x'‖ = 1 per row, T = 0 monotone descent, 1e-5 parity on projected quantities, bit-exact noise | Mac + x86 + G1 devices |
+| M1 | **landed 2026-09-16**: `manifold = "sphere"` in `tessera-ebm-lower-langevin` (tangent projection, retraction, per-row i32 status word ORed across the loop) on the CPU JIT lane and as a cooperative kernel | ‖x'‖ = 1 per row, T = 0 monotone descent, parity with the reference for every energy, status words equal, entry violation flagged on the offending row only | Mac, gfx1151, gfx1201, sm_120 |
 | M2 | `manifold = "bivector"` via `clifford.grade` on gradient and noise; EBM → Clifford build dependency | parity with `bivector_langevin_step` on Cl(3,0) grade 2; state stays grade-2 over 100 steps | same |
-| N1 | Huber and softplus energies through the paired pass with no placeholder; the `softplus`/`cosh` adjoints if missing | gradient matches finite differences and the Apple/ROCm reference kernels | Mac + x86 |
+| N1 | **landed 2026-09-16**: Huber and softplus energies through the paired pass with no placeholder; `softplus` gained its native adjoint (`dy · sigmoid(x)`) and a stable lowering | each energy matches its own numpy oracle and descends on its own compiler-derived gradient; no `custom_adjoint_call` survives in any kernel | Mac, gfx1151, gfx1201, sm_120 |
 | G2 | **landed 2026-09-16** as the row-program emitter over the lowered loop (§3.3), not a Schedule/Tile op; rows `rocm_ebm_langevin_native_compiled` / `nvidia_ebm_langevin_native_compiled`; recorder | bit-exact on gfx1151, gfx1201, sm_120 (packets); one launch per loop; **open:** the dispatch/alloc/traffic/kernel-time packets vs the Python-emitted lanes | all three GPUs |
 | T1 | **landed 2026-09-16**: `tessera-opt` registers EBM + Clifford dialects and passes when built with them (`TESSERA_HAVE_EBM` / `TESSERA_HAVE_CLIFFORD`) plus `convert-elementwise-to-linalg`; the whole chain is one invocation, and lit gains a `tessera-ebm` feature | one `tessera-opt` invocation runs the G2 chain; fixtures `phase2_autodiff/row_program_to_gpu_langevin.mlir`, `phase_f5/row_program_to_gpu_reduce.mlir` | host-free |
 
-G2 and T1 landed first, and G1 was skipped: the cooperative route covers the
+N1 and M1 followed G2/T1 rather than preceding them, because the cooperative
+route turned out to carry both without new device work: an energy is a
+gradient the integrator calls, and the sphere's projections are exactly the
+row reductions the emitter already fences. G2 and T1 landed first, and G1 was
+skipped: the cooperative route covers the
 quadratic loop outright, so serial residency is only the fallback for
 programs outside the row-program envelope. M1/M2 now build on G2 (the
 tangent projection and retraction are row programs: a feature-axis
@@ -429,6 +454,24 @@ independent and can run in parallel on the CPU lane.
   same default and must be measured before its result is called exact; the
   f64 `log`/`cos` of the noise are bit-exact because libdevice's f64 paths
   carry no approximate branch.
+* **A registered dialect withdraws `--allow-unregistered-dialect`.** Registering
+  the EBM and Clifford dialects in `tessera-opt` (T1) turned three
+  `tests/tessera-ir/phase7` fixtures red: they predated their dialects and
+  named placeholder ops (`energy_quadratic`, `annealing_schedule`,
+  `partition_exact`, `rotor_from_axis`, `grade_projection`, …) with f32
+  attributes the real ops reject, and MLIR refuses an unknown or malformed op
+  inside a *registered* dialect whatever that flag says. CI does not run this
+  suite, so the reds sat on main. All three now use the real spellings and
+  verify with no escape flag; the genuinely absent ops (rotor construction,
+  an annealing schedule) are named as gaps rather than faked. Expect this
+  whenever a dialect is first registered in a driver.
+* **Silent pass failure and dangling slot references (found 2026-09-16).**
+  The row-program emitter could fail with no diagnostic, and a failed slot
+  lookup returned an empty slot that every caller then indexed; separately, a
+  reshape copied a slot *reference* into the same `DenseMap`, so the insertion
+  could rehash and the reshaped row arrived empty. The first two are
+  fail-open defects, the third memory-unsafe. The pass now refuses to fail
+  without naming an op, and every refusal names the value and its producer.
 * **NDEBUG hides dialect-promise defects (Decision #19, third instance).**
   The chain ran green on every NDEBUG driver in the fleet and aborted twice
   on Tajasarus's assertions-ON driver: `--inline` needs the LLVM dialect's

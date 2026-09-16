@@ -9071,6 +9071,14 @@ Follow-up required: the arena pipeline route is NVVM/ROCDL only; the Apple arena
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## EBM nonlinear energies and the sphere integrator — 2026-09-16
+
+Sync `EBM-NONLINEAR-MANIFOLD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+Parity validated on the M1 Max CPU lane (35/35) and host-free for the device chain (all six energy x manifold programs compile and replay for both backends). Follow-up unchanged: the Apple GPU EBM rows remain hand-written MSL; `_try_apple_gpu_sphere_langevin_step_f32` is still the Apple sphere lane and is untouched by this slice. Note for the Apple lane: `softplus` now has a native adjoint, so an Apple energy using it no longer needs the Python VJP.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--nonlinear-energies-and-the-sphere-integrator-reach-the-same-kernel).
+
 ## EBM Langevin loop as one cooperative kernel — 2026-09-16
 
 Sync `EBM-NATIVE-GPU-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

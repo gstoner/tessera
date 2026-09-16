@@ -87,7 +87,7 @@ def test_row_reduction_program_emits_the_ordered_shared_fold():
     body = kernel.split("gpu.func @row_program(", 1)[1]
     assert lanes == 8 and body.count("gpu.barrier") == 3
     assert "llvm.mlir.addressof @row_reduction" in body and body.count("!llvm.ptr<3>") >= 4
-    assert "linalg." not in body and "tensor." not in body and "math.sqrt" in body
+    assert "linalg." not in body and "tensor." not in body and "llvm.intr.sqrt" in body and "math.sqrt" not in body
 
 
 @pytest.mark.parametrize("shape,message", [((4, 2000), "1024 features"), ((4,), "rows, features")])

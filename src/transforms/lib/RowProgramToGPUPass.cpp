@@ -62,6 +62,24 @@
 
 using namespace mlir;
 
+// The emitter's numeric contract is IEEE arithmetic. `math.sqrt` on the NVVM
+// route lowers to libdevice's __nv_sqrtf, which takes the approximate path
+// (MUFU.SQRT, 1 ulp) because MLIR's pipeline leaves the NVVM reflect flag
+// for precise sqrt unset; the LLVM intrinsic lowers to sqrt.rn on NVPTX and
+// to the correctly rounded expansion on AMDGPU (measured 2026-09-16: one
+// row of the row-normalization proof differed by 1 ulp on sm_120 only).
+static void pinSqrt(Operation *root) {
+  SmallVector<math::SqrtOp> ops;
+  root->walk([&](math::SqrtOp op) { ops.push_back(op); });
+  for (math::SqrtOp op : ops) {
+    OpBuilder b(op);
+    Value r = LLVM::SqrtOp::create(b, op.getLoc(), op.getType(), op.getOperand());
+    op.replaceAllUsesWith(r);
+    op.erase();
+  }
+}
+
+
 namespace tessera {
 namespace {
 
@@ -543,6 +561,7 @@ struct Emitter {
       storeResult(s, pointers[entry.getNumArguments() + r], terminator);
       if (broken) return failure();
     }
+    pinSqrt(kernel);
     // Replace the module contents with the kernel module.
     module->setAttrs((*lowered)->getAttrs());
     module.getBody()->clear();

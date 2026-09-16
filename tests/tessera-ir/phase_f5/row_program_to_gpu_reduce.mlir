@@ -65,7 +65,7 @@ module {
 // CHECK: gpu.barrier
 // CHECK: llvm.load {{.*}} : !llvm.ptr<3> -> f32
 // CHECK: gpu.barrier
-// CHECK: math.sqrt
+// CHECK: llvm.intr.sqrt
 // CHECK: arith.divf
 // CHECK: llvm.store {{.*}} : f32, !llvm.ptr<1>
 // CHECK: gpu.return

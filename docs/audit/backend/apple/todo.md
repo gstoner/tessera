@@ -9069,4 +9069,4 @@ Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
 
 Follow-up required: the arena pipeline route is NVVM/ROCDL only; the Apple arena lane emits MSL (`apple_native_arena.py`) and the hand-written Apple GPU Clifford kernels stay the `apple_gpu` GA row. An Apple package route would expand the same skeleton through the MSL arena emitter.
 
-See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm_120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).

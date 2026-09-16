@@ -7987,4 +7987,4 @@ Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
 
 Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Tajasarus, `TESSERA_ROCM_CHIP=gfx1201`, Clifford backend now configured ON in its `build/`), ten ops × three shapes, worst abs error 0; row `rocm` / `rocm_clifford_native_compiled`. The Python-emitted `rocm_clifford_compiled` gfx1151 kernel is untouched and remains the ROCm GA lane until the native route is measured against it (dispatch/allocation/kernel time separately; no `/dev/kfd` here, so no counters).
 
-See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm_120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).

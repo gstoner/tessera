@@ -5313,4 +5313,4 @@ Sync `GA-NATIVE-GPU-2026-09-16`; owner W6.4.
 
 Not applicable with a reason: the GPU storage route has no CPU package; x86's native GA lane is the MLIR/LLVM JIT recorded under `GA-NATIVE-FAMILY-2026-09-16`. Host-free halves of the new tests (skeleton expansion, pruning counts) run on any host with the tools.
 
-See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm_120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).

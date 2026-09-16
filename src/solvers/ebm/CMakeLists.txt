@@ -48,6 +48,7 @@ add_mlir_library(TesseraEBM
     lib/Passes/FuseEnergyGrad.cpp
     lib/Passes/CheckpointInnerLoop.cpp
     lib/Passes/PipelineCandidates.cpp
+    lib/Passes/LowerLangevin.cpp
 
     DEPENDS
         TesseraEBMTableGen
@@ -55,8 +56,12 @@ add_mlir_library(TesseraEBM
 
     LINK_LIBS PUBLIC
         MLIRIR
+        MLIRArithDialect
         MLIRFuncDialect
+        MLIRLinalgDialect
+        MLIRMathDialect
         MLIRSCFDialect
+        MLIRTensorDialect
         MLIRPass
         MLIRTransforms
 )
@@ -64,6 +69,10 @@ add_mlir_library(TesseraEBM
 add_executable(ts-ebm-opt tools/ts-ebm-opt.cpp)
 target_link_libraries(ts-ebm-opt PRIVATE
     TesseraEBM
+    MLIRArithDialect
+    MLIRLinalgDialect
+    MLIRMathDialect
+    MLIRTensorDialect
     MLIRIR
     MLIRPass
     MLIRSupport

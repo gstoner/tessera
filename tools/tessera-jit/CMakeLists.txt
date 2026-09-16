@@ -45,6 +45,13 @@ add_library(tessera_jit SHARED tessera_jit.cpp)
 # tessera->linalg, so a `tessera_clifford.geo_product` on `[..., dim]` tensors
 # executes through MLIR/LLVM here (W6.4, 2026-09-16) rather than through a
 # Python-emitted kernel. Absent the backend the symbol reports no support.
+if(TESSERA_BUILD_EBM_BACKEND)
+  target_compile_definitions(tessera_jit PRIVATE TESSERA_JIT_HAVE_EBM=1)
+  target_include_directories(tessera_jit PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/solvers/ebm/include
+    ${CMAKE_BINARY_DIR}/src/solvers/ebm)
+  target_link_libraries(tessera_jit PRIVATE TesseraEBM)
+endif()
 if(TESSERA_BUILD_CLIFFORD_BACKEND)
   target_compile_definitions(tessera_jit PRIVATE TESSERA_JIT_HAVE_CLIFFORD=1)
   target_include_directories(tessera_jit PRIVATE

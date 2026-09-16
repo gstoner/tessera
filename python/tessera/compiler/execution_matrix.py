@@ -122,6 +122,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_clifford_native_compiled": "Clifford ops lowered by the dialect's "
                              "ExpandProductTable into a per-thread kernel, "
                              "packaged by the arena pipeline and launched on sm_120",
+    "cpu_ebm_langevin_llvm_jit": "The EBM quadratic-energy Langevin loop: the paired "
+                             "autodiff pass derives the gradient, the EBM lowering "
+                             "emits the step with Philox noise, the whole scf.for "
+                             "compiles as one function in libtessera_jit",
     "cpu_clifford_llvm_jit": "Geometric-algebra products lowered by the Clifford "
                              "dialect (GradeFusion + batched ExpandProductTable) "
                              "inside libtessera_jit and executed through MLIR/LLVM",
@@ -1254,6 +1258,23 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
+    ("cpu", "cpu_ebm_langevin_llvm_jit"): ExecutionRow(
+        target="cpu", compiler_path="cpu_ebm_langevin_llvm_jit",
+        execution_kind="native_cpu", executable=True,
+        executor_id="cpu_ebm_langevin_llvm_jit", runtime_status="success",
+        reason="W4-PRODUCT-1 quadratic energy loop (2026-09-16): E(y, x) = "
+               "0.5*||x - y||^2 is a Graph IR function marked for reverse-mode; "
+               "inside libtessera_jit the paired autodiff pass derives @E__bwd, "
+               "the EBM lowering turns each tessera_ebm.langevin_step into "
+               "y - eta*grad + sqrt(2 eta T)*z with Philox-4x32-10 / Box-Muller "
+               "noise generated in a linalg.generic, and the K-step scf.for "
+               "compiles as one function: no per-step host gradient or noise "
+               "transfers. Bit-exact with the declared numpy policy on the M1 "
+               "Max and the x86 hosts. No fallback.",
+        execution_mode="mlir_llvm_jit", op_family="ebm_langevin",
+        evidence_target="cpu_x86_64",
+        numerical_fixture="tests/unit/test_ebm_native_langevin.py",
+        proof_build="llvm23-core+ebm+jit"),
     ("cpu", "cpu_clifford_llvm_jit"): ExecutionRow(
         target="cpu", compiler_path="cpu_clifford_llvm_jit",
         execution_kind="native_cpu", executable=True,

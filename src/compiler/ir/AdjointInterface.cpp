@@ -322,6 +322,27 @@ llvm::SmallVector<mlir::Value> AddOp::buildAdjoint(
   return {outputCotangents[0], outputCotangents[0]};
 }
 
+// d(lhs - rhs): the cotangent passes through to lhs and is negated for rhs.
+// Until 2026-09-16 `sub` carried only a tangent rule, so any energy or loss
+// written with a subtraction (the quadratic energy 0.5*||x - y||^2 first)
+// stopped reverse-mode with AUTODIFF_OP_NOT_DIFFERENTIABLE. The negation is
+// `0 - dy` on a static zero of the operand type; dynamic operand shapes are
+// refused (empty cotangent) rather than guessed.
+llvm::SmallVector<mlir::Value> SubOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::Value dy = outputCotangents[0];
+  auto rhsTy = mlir::dyn_cast<mlir::RankedTensorType>(getRhs().getType());
+  if (!rhsTy || !rhsTy.hasStaticShape())
+    return {dy, mlir::Value()};
+  auto zeroAttr = mlir::DenseElementsAttr::get(
+      rhsTy, builder.getZeroAttr(rhsTy.getElementType()));
+  mlir::Value zero = builder.create<mlir::arith::ConstantOp>(getLoc(), zeroAttr);
+  auto dRhs = builder.create<SubOp>(getLoc(), rhsTy, zero, dy);
+  return {dy, dRhs.getResult()};
+}
+
 llvm::SmallVector<mlir::Value> MulOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
   if (outputCotangents.size() != 1 || !outputCotangents[0])

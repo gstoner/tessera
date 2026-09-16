@@ -32839,6 +32839,7 @@ def _executor_table():
         "native_cpu": _execute_cpu_native_or_jit,
         "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,
         "cpu_clifford_llvm_jit": _execute_cpu_clifford_llvm_jit,
+        "cpu_ebm_langevin_llvm_jit": _execute_cpu_ebm_langevin_llvm_jit,
         "rocm_clifford_native_compiled": _execute_clifford_native_gpu,
         "nvidia_clifford_native_compiled": _execute_clifford_native_gpu,
         "jit_cpu_numpy": _execute_jit_cpu_artifact,
@@ -33670,6 +33671,27 @@ def _execute_cpu_autodiff_paired(artifact: RuntimeArtifact, args: Any) -> Any:
     finally:
         jb.destroy(handle)
     return tuple(outputs)
+
+
+def _execute_cpu_ebm_langevin_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch the compiled K-step quadratic-energy Langevin loop (W4-PRODUCT-1).
+
+    Metadata owns the shape, eta, temperature and step count; the lane derives
+    the gradient and draws the noise. Operands: (y0, x, key). No fallback.
+    """
+    import numpy as np
+    from .ebm.native_langevin import native_langevin_loop
+
+    metadata = artifact.metadata or {}
+    shape = tuple(int(d) for d in metadata.get("shape", ()))
+    if len(shape) != 2 or len(args) != 3:
+        raise ValueError("ebm langevin artifact requires a [rows, features] shape and (y0, x, key) operands")
+    y0, x = (np.ascontiguousarray(np.asarray(v, dtype=np.float32)) for v in args[:2])
+    if y0.shape != shape or x.shape != shape:
+        raise ValueError(f"ebm langevin artifact admits operands of shape {shape}")
+    out, next_key = native_langevin_loop(y0, x, args[2], eta=float(metadata["eta"]),
+                                         temperature=float(metadata["temperature"]), steps=int(metadata["steps"]))
+    return out, next_key
 
 
 def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:

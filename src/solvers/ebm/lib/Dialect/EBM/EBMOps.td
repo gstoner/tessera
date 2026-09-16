@@ -140,6 +140,10 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
   let arguments = (ins
     AnyType:$state,
     AnyType:$rng_key,
+    // Captured context the energy closes over (2026-09-16): `energy_fn` is
+    // E(state, captures...) -> energies, so a quadratic energy's target `x`
+    // rides here instead of being baked into the module.
+    Variadic<AnyType>:$captures,
     FlatSymbolRefAttr:$energy_fn,
     F64Attr:$eta,
     F64Attr:$temperature,
@@ -148,7 +152,7 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
   );
   let results = (outs AnyType:$new_state, AnyType:$next_key);
   let assemblyFormat = [{
-    $state `,` $rng_key `energy_fn` $energy_fn `eta` $eta
+    $state `,` $rng_key (`captures` $captures^)? `energy_fn` $energy_fn `eta` $eta
     `temperature` $temperature `manifold` $manifold (`grade` $grade^)?
     attr-dict `:` functional-type(operands, results)
   }];

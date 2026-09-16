@@ -10,7 +10,7 @@ import hashlib
 from typing import Any
 import json
 from pathlib import Path
-from .native_gpu_storage import build_native_gpu_storage, _run, NativeGPUStoragePackage
+from .native_gpu_storage import build_native_gpu_storage, NativeGPUStoragePackage, replay_arena_ir
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 from .native_source_state import _attribute, bind_source_exception_types
@@ -111,8 +111,7 @@ class GPUExceptionHeap:
         if hashlib.sha256(self.compiler.read_bytes()).hexdigest() != self.package.compiler_digest:
             raise ValueError('GPU heap compiler identity changed')
         ir,specs = emit_gpu_exception_heap(self.source,self.capacity)
-        replay = _run(self.compiler,'--allow-unregistered-dialect','--tessera-tile-buffer-reuse',
-                      '--tessera-tile-buffer-arena','--canonicalize',source=ir)
+        replay = replay_arena_ir(self.compiler, ir)
         if replay != self.package.arena_ir:
             raise ValueError('GPU exception heap disagrees with source replay')
         return specs

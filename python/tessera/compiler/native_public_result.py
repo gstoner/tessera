@@ -11,7 +11,7 @@ import json
 import math
 import threading
 from pathlib import Path
-from .native_gpu_storage import _run, build_native_gpu_storage, NativeGPUStoragePackage
+from .native_gpu_storage import _run, build_native_gpu_storage, NativeGPUStoragePackage, replay_arena_ir
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 from .native_persistent_tape import _attribute
@@ -60,8 +60,7 @@ class NativePublicResult:
         if hashlib.sha256(self.compiler.read_bytes()).hexdigest()!=self.package.compiler_digest:
             raise ValueError('public result compiler identity changed')
         gpu, metadata, specs = _prepare(self.source,self.compiler,self.package.backend,self.capacity,self.input_capacity)
-        arena = _run(self.compiler,'--allow-unregistered-dialect','--tessera-tile-buffer-reuse',
-                     '--tessera-tile-buffer-arena','--canonicalize',source=gpu)
+        arena = replay_arena_ir(self.compiler, gpu)
         if arena != self.package.arena_ir:
             raise ValueError('public result artifact disagrees with native source replay')
         return metadata, specs

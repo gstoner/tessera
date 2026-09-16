@@ -5,7 +5,7 @@ import inspect
 from pathlib import Path
 import re
 from .scheduled_ssd import ScheduledSSD
-from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage
+from .native_gpu_storage import NativeGPUStoragePackage, _run, build_native_gpu_storage, replay_arena_ir
 from .native_gpu_tensor import TensorSpec, IndexSpec
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 
@@ -104,8 +104,7 @@ class NativeSSD:
         if hashlib.sha256((self.llvm_bin/'mlir-opt').read_bytes()).hexdigest() != self.package.llvm_digest:
             raise ValueError('SSD physical toolchain identity changed')
         source,specs = _prepare(self.logical,self.compiler,self.llvm_bin,self.package.backend,self.cooperative,self.adjoint)
-        arena = _run(self.compiler,'--allow-unregistered-dialect','--tessera-tile-buffer-reuse',
-                     '--tessera-tile-buffer-arena','--canonicalize',source=source)
+        arena = replay_arena_ir(self.compiler, source)
         if arena != self.package.arena_ir:
             raise ValueError('SSD device artifact disagrees with Schedule replay')
         return specs

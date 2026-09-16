@@ -3,7 +3,7 @@ import inspect
 import math
 from pathlib import Path
 from .native_gpu_tensor import TensorSpec, IndexSpec
-from .native_gpu_storage import build_native_gpu_storage, _run
+from .native_gpu_storage import build_native_gpu_storage, replay_arena_ir
 from .native_storage_contract import attach_tensor_contract, generate_tensor_binding
 
 
@@ -46,8 +46,7 @@ def bind_gradient_sum(shape, *, compiler, llvm_bin, backend, chip):
     source, specs = gradient_sum_source(shape)
     compiler = Path(compiler)
     package = build_native_gpu_storage(source, compiler=compiler, llvm_bin=Path(llvm_bin), backend=backend, chip=chip)
-    replay = _run(compiler, '--allow-unregistered-dialect', '--tessera-tile-buffer-reuse',
-                  '--tessera-tile-buffer-arena', '--canonicalize', source=source)
+    replay = replay_arena_ir(compiler, source)
     if package.arena_ir != replay:
         raise ValueError('gradient sum native replay disagrees')
     return generate_tensor_binding(package, inspect.Signature([

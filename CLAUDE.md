@@ -924,6 +924,10 @@ ninja -C build tessera-opt        # 32 threads; ~1-2 min cold
 
 # EBM / Clifford (GA) dialects are OFF by default — enable them or their passes
 # and lit fixtures silently do not build. Required for the W0 compiler work.
+# Since 2026-09-16 the Clifford backend is also what puts the geometric-algebra
+# lane into libtessera_jit (tessera_jit_has_clifford()); Princess-Luna and
+# Super-Bear `build/` trees configure it ON (the Mac already did), so domain
+# fixtures and the CPU GA lane are fleet-covered, not Mac-only.
 cmake -S . -B build -G Ninja -DTESSERA_BUILD_EBM_BACKEND=ON -DTESSERA_BUILD_CLIFFORD_BACKEND=ON
 
 # Re-verify a C++ pass change end-to-end: rebuild → lit fixture + FileCheck → drift test

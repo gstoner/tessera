@@ -16,7 +16,8 @@ The [domain audit](DOMAIN_AUDIT.md) owns domain narrative and the
 ## Re-check — 2026-09-15
 
 No disposition above changed. `ExpandProductTable.cpp` still restricts v1 to
-rank-1 static tensors; `energy.py::langevin_step` still falls back to
+rank-1 static tensors (**closed 2026-09-16**: see the batched update below);
+`energy.py::langevin_step` still falls back to
 `_numerical_grad` without `grad_fn`; `EBM_ManifoldAttr` still admits only
 euclidean/sphere/bivector. What did move: native HVP and attention JVP products
 landed (2026-09-13) under AD-HIGHER-1, so the W6.4 / W6.3 pairing below now
@@ -30,7 +31,7 @@ read from the generated [domain proof ladder](../generated/domain_proof_ladder.m
 |---|---|
 | §1.1 invalid/missing manifold accepted | **Fixed at the semantic boundary.** `EBMOps.td::EBM_ManifoldAttr` admits euclidean/sphere/bivector; `Canonicalize.cpp` rejects omission/unknown values. `canonicalize_rejects_bad_manifold.mlir` is the negative fixture. This does not establish a device consumer for arbitrary manifold metadata. |
 | §1.2 host energy/gradient boundary | **Still material.** Native arithmetic on precomputed gradients does not lower a callable energy. `geo_sampling.py::_tape_grad` and `_tape_grad_mv` reduce host differentiation cost for traceable functions, but do not compile the energy loop to the device. |
-| §1.3 disconnected GA producers and unbatched native expansion | **Still open in W3.6.** `ExpandProductTable.cpp` rejects rank>1. `RotorSandwichFold` and specialized Python/runtime kernels must converge through a verified package consumer; recognizing a pattern is not execution proof. |
+| §1.3 disconnected GA producers and unbatched native expansion | **Batched expansion closed 2026-09-16 (`GA-NATIVE-BATCHED-2026-09-16`).** `ExpandProductTable.cpp` lowers any static `[..., dim]` rank to an scf.for nest over the compile-time table, and the product executes through MLIR/LLVM inside `libtessera_jit` (`cpu` / `cpu_clifford_geo_product_llvm_jit`; M1 Max, Zen 5, Zen 2 parity with the GA reference). Still open: `RotorSandwichFold` and the other Clifford ops (reverse, wedge, contractions) have no native lowering behind the JIT, the GPU route (arena pipeline) is not built, and the specialized Python/runtime kernels remain a second implementation until the native package displaces them; recognizing a pattern is not execution proof. |
 | §1.4 pass-description drift | **Partially repaired, still inconsistent.** `CliffordPasses.td` now says annotation-only, yet `GradeFusion.cpp` and `ExpandProductTable.cpp` perform real rewrites. Some EBM headers still say stub while the bodies annotate. Reconcile each description with the registered body; do not copy either blanket label. |
 | §1.5 EBM checkpoint policy | **Removed from the default pipeline; standalone marker remains.** `CheckpointInnerLoop.cpp` still sets syntactic recompute/budget attributes. Do not restore it as production rematerialization without a shared demand/effect analysis and native policy consumer. |
 | §2.1 grade information discarded | **Fixed for bounded consumers.** `ga/ops.py::_product_grade_contract`, native `InputGradeFusionPattern`, and `ExpandProductTable` consume operand grades. The latter prunes emitted terms; this is more than an unused annotation. |
@@ -113,3 +114,25 @@ ISA admission and workload measurements. In particular, CUDA schedules and
 private-memory representations must not be transferred to AMDGPU or Metal.
 
 No new runtime, registry status or performance claim is introduced by this review.
+
+## Batched native products — 2026-09-16
+
+Sync `GA-NATIVE-BATCHED-2026-09-16` (W6.4). The first W6.4 acceptance clause is met for the geometric
+product: scalar (rank 1) and batched (rank 2, rank 3) shapes match the
+standalone GA reference through a native package; forbidden grade terms are
+absent from the emitted IR (`expand_batched.mlir` checks the grade-2 pruning;
+the runtime test checks the pruned coefficients are written as zero and never
+computed); dynamic extents fail closed. The lowering is one path —
+`GradeFusion` → `ExpandProductTable` → scf/tensor/arith → one-shot
+bufferization → LLVM — shared by `ts-clifford-opt` and `libtessera_jit`; no
+`emit/` source generator was added. Executed on M1 Max (arm64), Princess-Luna
+(Zen 5) and Super-Bear (Zen 2) via `tests/unit/test_clifford_jit_native.py`;
+the execution matrix now carries the `cpu` row and the domain proof ladder
+counts it. Not yet met: rotor fusion through a package consumer, the remaining
+Clifford ops, ragged batches (the loop nest needs static extents), a GPU
+package through the arena pipeline, and the separate dispatch/allocation/
+memory/kernel-time measurements the acceptance asks for — no performance
+claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
+kernels are unchanged and remain the device lanes until displaced by measured
+evidence.
+

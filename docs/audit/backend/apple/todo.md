@@ -9046,3 +9046,11 @@ Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_
 Sync `FLEET-REDS-2026-09-15`.
 
 Owner-directed fleet-red follow-through: the one Mac `verify-fixtures` red (`slice/apple_gpu`) is closed. `tessera.slice` for f16/bf16 now widens exactly to f32, slices on the f32 MPSGraph Metal lane and narrows exactly back — a slice moves values, so the round trip is lossless — instead of the raw f16 entry, which on macOS 27 rounds f16 payloads through bf16 (`macOS 27 Apple f16 regressions`). Bitwise f16/bf16 tests; verify-fixtures 708/708 on the M1 Max. The other macOS 27 f16 findings (cond) are unchanged. Not a performance claim: the widen/narrow is host work.
+
+## Batched native geometric products — 2026-09-16
+
+Sync `GA-NATIVE-BATCHED-2026-09-16`; owner W6.4.
+
+Parity validated on the M1 Max (arm64 CPU lane of `libtessera_jit`): the same batched native geometric product matches the GA reference; Clifford lit 17/17. Follow-up required: the Apple GPU Clifford kernels (`apple_gpu` GA row in the proof ladder) remain hand-written MSL behind `runtime.py`; the native lowering has no Metal package route yet (`bootstrap_prune_gap.md` still lists `value_clifford_geometric_product` as a gap).
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--batched-geometric-products-execute-through-the-mlirllvm-backbone).

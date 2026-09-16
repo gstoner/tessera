@@ -934,3 +934,38 @@ class _LazyCompiledCallable(CliffordCompiledCallable):
         # Freeze.
         object.__setattr__(self, "artifact", artifact)
         self._compiled = True
+
+
+def package_clifford_geo_product_cpu(shape, *, algebra=(3, 0, 0), grades=None):
+    """A runtime artifact for one batched geometric product on the MLIR/LLVM
+    CPU lane (execution-matrix row ``cpu`` / ``cpu_clifford_geo_product_llvm_jit``).
+
+    ``shape`` is the admitted ``[..., 2**n]`` operand shape for ``Cl(p, q, r)``;
+    ``grades`` optionally restricts the emitted table to those output grades.
+    The artifact carries no kernel source: the Clifford dialect inside
+    libtessera_jit lowers the product at launch. ``runtime.launch`` reports
+    ``native_cpu`` only when the lane actually executed; a library built
+    without the Clifford backend fails the launch instead of falling back
+    (W6.4 batched native GA, 2026-09-16).
+    """
+    from ..runtime import RuntimeArtifact
+    from .. import _jit_boundary as jb
+    p, q, r = (int(x) for x in algebra)
+    if min(p, q, r) < 0 or p + q + r > 4:
+        raise CliffordJitError("clifford lane admits Cl(p, q, r) with 0 <= p+q+r <= 4")
+    shape = tuple(int(d) for d in shape)
+    if not shape or any(d <= 0 for d in shape) or shape[-1] != 1 << (p + q + r):
+        raise CliffordJitError(f"operand shape must be [..., {1 << (p + q + r)}] for Cl{(p, q, r)}")
+    wanted = None if grades is None else tuple(sorted({int(g) for g in grades}))
+    if wanted is not None and (not wanted or wanted[0] < 0 or wanted[-1] > p + q + r):
+        raise CliffordJitError("grades must be a non-empty subset of 0..n")
+    if not jb.has_clifford():
+        raise CliffordJitError("libtessera_jit was built without the Clifford lane "
+                               "(configure with -DTESSERA_BUILD_CLIFFORD_BACKEND=ON)")
+    return RuntimeArtifact(metadata={
+        "target": "cpu", "compiler_path": "cpu_clifford_geo_product_llvm_jit", "executable": True,
+        "kernel_id": f"clifford_geo_product_cl{p}{q}{r}_" + "x".join(map(str, shape)),
+        "op": "clifford_geometric_product", "algebra": (p, q, r), "shape": shape,
+        "grades": wanted, "dtype": "f32",
+    })
+

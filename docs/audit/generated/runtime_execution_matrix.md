@@ -42,6 +42,7 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 | `cpu` | `cpu_autodiff_matmul_llvm_jit` | `cpu_autodiff_paired_llvm_jit` | `native_cpu` | `mlir_llvm_jit` | First-call-specialized @jit paired matmul backward compiles through tessera-opt and MLIR/LLVM, then launches through the libtessera_jit packed C interface. |
 | `cpu` | `cpu_autodiff_sigmoid_llvm_jit` | `cpu_autodiff_paired_llvm_jit` | `native_cpu` | `mlir_llvm_jit` | Compiler-generated sigmoid adjoint in the paired matmul activation slice launches through MLIR/LLVM JIT and matches NumPy. |
 | `cpu` | `cpu_autodiff_tanh_llvm_jit` | `cpu_autodiff_paired_llvm_jit` | `native_cpu` | `mlir_llvm_jit` | Compiler-generated tanh adjoint in the paired matmul activation slice launches through MLIR/LLVM JIT and matches NumPy. |
+| `cpu` | `cpu_clifford_geo_product_llvm_jit` | `cpu_clifford_llvm_jit` | `native_cpu` | `mlir_llvm_jit` | W6.4 batched native GA: a tessera_clifford.geo_product on [..., 2**n] f32 tensors (Cl(p,q,r), optional output-grade restriction) lowers through GradeFusion + ExpandProductTable to an scf.for nest over the compile-time Cayley table inside libtessera_jit and executes through MLIR/LLVM on the host CPU (M1 Max, Zen 5, Zen 2 parity with the standalone GA reference, 2026-09-16). No numpy fallback; out-of-envelope requests raise. |
 | `cpu` | `jit_cpu_numpy` | `jit_cpu_numpy` | `reference_cpu` | - | CPU JIT artifact runs through the numpy reference path. |
 | `cpu` | `native_cpu` | `native_cpu` | `native_cpu` | - | CPU artifact runs through the x86 AMX / native CPU runtime. |
 | `nvidia_sm120` | `nvidia_adafactor_bwd_compiled` | `nvidia_adafactor_bwd_compiled` | `native_gpu` | `cuda_driver` | SM120 PTX executes full or factored Adafactor VJP; factored reductions have one deterministic owner. |
@@ -314,6 +315,7 @@ nvidia_sm80, nvidia_sm90, nvidia_sm100, rocm_gfx90a, rocm_gfx940, rocm_gfx942, r
 | `apple_gpu_value_target_ir` | Apple GPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.gpu.kernel_call value op (rank-3 batched matmul f32/f16/bf16; native sparse attention and PPO policy-loss variants plus EBM quadratic energy/Langevin value kernels when their Metal/MPSGraph executor probes are active) |
 | `apple_value_target_ir` | Apple CPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.cpu.call value op (Value Target IR sprint; CPU cholesky executable) |
 | `cpu_autodiff_paired_llvm_jit` | Compiler-generated paired backward compiled through MLIR/LLVM and invoked through libtessera_jit |
+| `cpu_clifford_llvm_jit` | Geometric-algebra products lowered by the Clifford dialect (GradeFusion + batched ExpandProductTable) inside libtessera_jit and executed through MLIR/LLVM |
 | `jit_cpu_numpy` | JIT CPU fallback via the numpy reference path |
 | `native_cpu` | x86 AMX / native CPU runtime via the C runtime ABI |
 | `nvidia_adafactor_bwd_compiled` | NVIDIA SM120 full/factored Adafactor VJP with deterministic reductions |

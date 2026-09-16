@@ -32838,6 +32838,7 @@ def _executor_table():
         "apple_gpu_matmul_family_compiled": _execute_apple_gpu_compiled_matmul_family,
         "native_cpu": _execute_cpu_native_or_jit,
         "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,
+        "cpu_clifford_llvm_jit": _execute_cpu_clifford_llvm_jit,
         "jit_cpu_numpy": _execute_jit_cpu_artifact,
         "rocm_wmma": _execute_rocm_wmma_artifact,
         "rocm_compiled": _execute_rocm_compiled_gemm,
@@ -33667,6 +33668,31 @@ def _execute_cpu_autodiff_paired(artifact: RuntimeArtifact, args: Any) -> Any:
     finally:
         jb.destroy(handle)
     return tuple(outputs)
+
+
+def _execute_cpu_clifford_llvm_jit(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch a geometric product through the Clifford lane of libtessera_jit.
+
+    Metadata owns the algebra signature, the optional output-grade set and the
+    admitted operand shape; the lane compiles the product itself. No reference
+    fallback is permitted on this executor (W6.4, 2026-09-16).
+    """
+    import numpy as np
+    from . import _jit_boundary as jb
+
+    metadata = artifact.metadata or {}
+    algebra = tuple(int(x) for x in metadata.get("algebra", (3, 0, 0)))
+    grades = metadata.get("grades")
+    shape = tuple(int(d) for d in metadata.get("shape", ()))
+    if len(algebra) != 3 or not shape:
+        raise ValueError("clifford lane artifact requires algebra and shape metadata")
+    if len(args) != 2:
+        raise ValueError("clifford geometric product takes exactly two operands")
+    a, b = (np.ascontiguousarray(np.asarray(value, dtype=np.float32)) for value in args)
+    if a.shape != shape or b.shape != shape:
+        raise ValueError(f"clifford lane artifact admits operands of shape {shape}")
+    return jb.jit_clifford_geo_product(a, b, algebra=algebra,
+                                       grades=None if grades is None else tuple(int(g) for g in grades))
 
 
 def _execute_jit_cpu_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

@@ -69,3 +69,25 @@ def test_out_of_envelope_raises_without_fallback(bad):
     b = np.zeros(bad[1], np.float32)
     with pytest.raises(jb.TesseraJitError):
         jb.jit_clifford_geo_product(a, b)
+
+
+def test_runtime_launch_reports_the_native_cpu_lane():
+    """The execution-matrix row has a consumer: `runtime.launch` on the packaged
+    artifact executes the lane and labels the result native_cpu / mlir_llvm_jit."""
+    from tessera import runtime as rt
+    from tessera.compiler.clifford_jit import package_clifford_geo_product_cpu
+    rng = np.random.default_rng(3)
+    a = rng.standard_normal((5, 8)).astype(np.float32)
+    b = rng.standard_normal((5, 8)).astype(np.float32)
+    artifact = package_clifford_geo_product_cpu((5, 8))
+    before = jb.invocation_count()
+    result = rt.launch(artifact, (a, b))
+    assert result["ok"] and result["execution_kind"] == "native_cpu"
+    assert result["compiler_path"] == "cpu_clifford_geo_product_llvm_jit"
+    assert jb.invocation_count() == before + 1
+    np.testing.assert_allclose(np.asarray(result["output"]), _reference(a, b), rtol=1e-5, atol=1e-5)
+    # A shape outside the packaged envelope is a failed launch, never a fallback.
+    refused = rt.launch(artifact, (a[:2], b[:2]))
+    assert refused["ok"] is False and "shape" in str(refused.get("reason", refused))
+    assert "output" not in refused or refused["output"] is None
+

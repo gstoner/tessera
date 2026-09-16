@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Conversion/Passes.h"  // Phase 4 GPU emission: per-pass register decls
 #include "mlir/InitAllExtensions.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 // Phase 4 GPU emission: BufferizableOpInterface external models — without these,
 // one-shot-bufferize reports "op was not bufferized" for linalg/tensor/etc.
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -545,6 +546,15 @@ int main(int argc, char **argv) {
   // attributes and every loaded dialect's ConvertToLLVM interface must be
   // registered before MlirOptMain creates its context.
   mlir::registerAllExtensions(registry);
+  // The LLVM dialect *promises* a DialectInlinerInterface that
+  // registerAllExtensions does not provide. `--inline` builds its interface
+  // collection over every loaded dialect, and the row-program emitter loads
+  // llvm as a dependent dialect before the inliner runs, so without this
+  // registration an assertions-enabled MLIR aborts with "checking for an
+  // interface ... promised by dialect 'llvm' but never implemented" while an
+  // NDEBUG build silently proceeds (found on Tajasarus 2026-09-16; the
+  // Decision #19 standing lesson, third instance).
+  mlir::LLVM::registerInlinerInterface(registry);
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);

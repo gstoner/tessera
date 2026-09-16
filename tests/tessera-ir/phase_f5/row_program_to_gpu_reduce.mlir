@@ -1,4 +1,5 @@
 // RUN: tessera-opt "--tessera-row-program-to-gpu=backend=rocm entry=row_normalize" %s | FileCheck %s
+// RUN: tessera-opt "--tessera-row-program-to-gpu=backend=nvidia entry=row_normalize" %s | FileCheck %s --check-prefix=NV
 // RUN: not tessera-opt "--tessera-row-program-to-gpu=backend=rocm entry=missing" %s 2>&1 | FileCheck %s --check-prefix=MISSING
 // RUN: not tessera-opt "--tessera-row-program-to-gpu=backend=rocm entry=too_wide" %s 2>&1 | FileCheck %s --check-prefix=WIDE
 //
@@ -71,6 +72,11 @@ module {
 // CHECK: gpu.return
 // CHECK-NOT: linalg.
 // CHECK-NOT: tensor.
+
+// NV: llvm.func @__nv_fsqrt_rn(f32) -> f32
+// NV: gpu.func @row_program(
+// NV: llvm.call @__nv_fsqrt_rn({{.*}}) : (f32) -> f32
+// NV-NOT: math.sqrt
 
 // MISSING: entry
 // WIDE: 1024

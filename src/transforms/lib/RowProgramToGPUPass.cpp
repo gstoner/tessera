@@ -64,16 +64,34 @@ using namespace mlir;
 
 // The emitter's numeric contract is IEEE arithmetic. `math.sqrt` on the NVVM
 // route lowers to libdevice's __nv_sqrtf, which takes the approximate path
-// (MUFU.SQRT, 1 ulp) because MLIR's pipeline leaves the NVVM reflect flag
-// for precise sqrt unset; the LLVM intrinsic lowers to sqrt.rn on NVPTX and
-// to the correctly rounded expansion on AMDGPU (measured 2026-09-16: one
-// row of the row-normalization proof differed by 1 ulp on sm_120 only).
-static void pinSqrt(Operation *root) {
+// (MUFU.SQRT, 1 ulp) because MLIR's pipeline leaves the NVVM reflect flag for
+// precise sqrt unset (measured 2026-09-16: one row of the row-normalization
+// proof differed by 1 ulp on sm_120 only). convert-gpu-to-nvvm marks the LLVM
+// math intrinsics illegal, so on NVIDIA the kernel calls libdevice's
+// rounding-explicit __nv_fsqrt_rn / __nv_dsqrt_rn (correctly rounded whatever
+// the reflect flags say); on ROCm llvm.intr.sqrt lowers to AMDGPU's correctly
+// rounded expansion.
+static void pinSqrt(gpu::GPUFuncOp kernel, StringRef backend) {
   SmallVector<math::SqrtOp> ops;
-  root->walk([&](math::SqrtOp op) { ops.push_back(op); });
+  kernel->walk([&](math::SqrtOp op) { ops.push_back(op); });
+  if (ops.empty()) return;
+  auto gpuModule = kernel->getParentOfType<gpu::GPUModuleOp>();
   for (math::SqrtOp op : ops) {
     OpBuilder b(op);
-    Value r = LLVM::SqrtOp::create(b, op.getLoc(), op.getType(), op.getOperand());
+    Value r;
+    if (backend == "nvidia") {
+      bool f64 = op.getType().isF64();
+      StringRef name = f64 ? "__nv_dsqrt_rn" : "__nv_fsqrt_rn";
+      auto fn = gpuModule.lookupSymbol<LLVM::LLVMFuncOp>(name);
+      if (!fn) {
+        OpBuilder mb(gpuModule.getBodyRegion());
+        fn = LLVM::LLVMFuncOp::create(mb, op.getLoc(), name,
+                                      LLVM::LLVMFunctionType::get(op.getType(), {op.getType()}));
+      }
+      r = LLVM::CallOp::create(b, op.getLoc(), fn, ValueRange{op.getOperand()}).getResult();
+    } else {
+      r = LLVM::SqrtOp::create(b, op.getLoc(), op.getType(), op.getOperand());
+    }
     op.replaceAllUsesWith(r);
     op.erase();
   }
@@ -561,7 +579,7 @@ struct Emitter {
       storeResult(s, pointers[entry.getNumArguments() + r], terminator);
       if (broken) return failure();
     }
-    pinSqrt(kernel);
+    pinSqrt(kernel, backend);
     // Replace the module contents with the kernel module.
     module->setAttrs((*lowered)->getAttrs());
     module.getBody()->clear();

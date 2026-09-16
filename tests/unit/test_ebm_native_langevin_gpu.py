@@ -88,6 +88,10 @@ def test_row_reduction_program_emits_the_ordered_shared_fold():
     assert lanes == 8 and body.count("gpu.barrier") == 3
     assert "llvm.mlir.addressof @row_reduction" in body and body.count("!llvm.ptr<3>") >= 4
     assert "linalg." not in body and "tensor." not in body and "llvm.intr.sqrt" in body and "math.sqrt" not in body
+    # NVIDIA: convert-gpu-to-nvvm outlaws the LLVM math intrinsics, so the
+    # emitter calls libdevice's rounding-explicit __nv_fsqrt_rn instead.
+    nv, _ = row_program_kernel(row_normalize_module(3, 6), entry="row_normalize", backend="nvidia", compiler=tool)
+    assert "llvm.call @__nv_fsqrt_rn" in nv and "math.sqrt" not in nv and "llvm.intr.sqrt" not in nv
 
 
 @pytest.mark.parametrize("shape,message", [((4, 2000), "1024 features"), ((4,), "rows, features")])

@@ -42,7 +42,10 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     # tanh/sigmoid's W5 closed forms, comparison-backed ReLU, and the shared
     # normalization-statistics formulas. Nothing else.
     assert native == {
-            "add", "broadcast", "expand", "flatten", "gelu", "huber_loss",
+            # 2026-09-16 (EBM quadratic energy): `sub` gained its adjoint —
+            # dy to lhs, (0 - dy) to rhs — so an energy or loss written with
+            # a subtraction no longer stops reverse-mode.
+            "add", "sub", "broadcast", "expand", "flatten", "gelu", "huber_loss",
             "mae_loss", "mse_loss", "mul", "matmul", "permute", "reshape",
             "squeeze", "transpose", "unsqueeze", "view", "reduce", "sgd",
             "silu", "smooth_l1_loss",

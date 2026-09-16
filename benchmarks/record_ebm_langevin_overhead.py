@@ -89,6 +89,8 @@ def main():
     python_target = "rocm" if args.backend == "rocm" else None
     rng = np.random.default_rng(20260916)
     rows = []
+    unavailable = None if python_target else (
+        "sm_120 has no Python-emitted EBM Langevin lane")
     for shape, steps in CASES:
         y0 = rng.standard_normal(shape).astype(np.float32)
         x = rng.standard_normal(shape).astype(np.float32)
@@ -104,6 +106,9 @@ def main():
                 raise SystemExit(f"native route refused: {out.get('reason')}")
             return np.asarray(out["output"][0])
 
+        class Unavailable(RuntimeError):
+            """The Python-emitted lane is fail-closed on this chip."""
+
         def python_loop():
             y = y0
             for _ in range(steps):
@@ -111,19 +116,28 @@ def main():
                 grad = (y - x).astype(np.float32)
                 res = rt.launch(step_art, (y, grad))
                 if not res["ok"]:
-                    raise SystemExit(f"python-emitted route refused: {res.get('reason')}")
+                    raise Unavailable(str(res.get("reason")))
                 y = np.asarray(res["output"], np.float32)
             return y
 
         got = native()
         agree = None
         if step_art is not None:
-            want = python_loop()
-            agree = float(np.max(np.abs(got - want)))
-            if not np.allclose(got, want, rtol=1e-5, atol=1e-5):
-                raise SystemExit(f"{shape} K={steps}: the two routes disagree at T=0 (max abs {agree}); "
-                                 "the timing comparison would not be like-for-like")
-        else:
+            try:
+                want = python_loop()
+            except Unavailable as exc:
+                # A chip with no promoted Python-emitted family is a fact about
+                # that chip, not a recorder failure: the native route is then
+                # the only compiled lane, which the packet says outright.
+                unavailable = str(exc)
+                step_art = None
+                want = None
+            if want is not None:
+                agree = float(np.max(np.abs(got - want)))
+                if not np.allclose(got, want, rtol=1e-5, atol=1e-5):
+                    raise SystemExit(f"{shape} K={steps}: the two routes disagree at T=0 (max abs {agree}); "
+                                     "the timing comparison would not be like-for-like")
+        if step_art is None:
             # Still check the native route against the declared policy, so a
             # timing is never kept for a wrong result.
             expect, _ = nl.reference_langevin_loop(y0, x, key, eta=ETA, temperature=0.0, steps=steps)
@@ -145,7 +159,7 @@ def main():
                                  host_bytes_per_loop=steps * 3 * element_bytes,
                                  median_ms=python_ms, min_ms=python_min,
                                  gradient="host, per step") if step_art is not None else
-                            "no Python-emitted EBM Langevin lane exists on this target"),
+                            unavailable or "no Python-emitted EBM Langevin lane exists on this target"),
             speedup_median=(python_ms / native_ms) if (python_ms and native_ms) else None,
             latency_source="host_wall_clock"))
         print(json.dumps({"shape": list(shape), "steps": steps, "native_ms": native_ms,
@@ -173,17 +187,18 @@ def main():
                           "gradient from the caller",
                           "both routes are dispatched through runtime.launch on an artifact, so this "
                           "measures the routes and not a wrapper difference"]
-                  + ([] if python_target else
-                     ["sm_120 has no Python-emitted EBM Langevin lane, so this packet carries the "
-                      "native route alone; pairing it with the x86 CPU lane would compare two "
-                      "devices and call it a route comparison"]),
+                  + ([] if unavailable is None else
+                     ["no Python-emitted EBM Langevin lane is available on this chip (" + unavailable
+                      + "), so this packet carries the native route alone; pairing it with another "
+                      "device's lane would compare two devices and call it a route comparison"]),
                   not_claimed=["no promotion: this packet does not move any lane",
                                "wall clock only — neither WSL2 ROCm box exposes /dev/kfd, so rocprofv3 "
                                "returns no dispatch or counter records and kernel time is unavailable",
                                "WSL2 timings do not promote; bare-metal calibration is owed",
                                "the T > 0 rows are the native route alone: the two routes' Philox "
                                "counter policies differ, so their samples are not comparable"],
-                  comparison_available=python_target is not None,
+                  comparison_available=unavailable is None,
+                  no_comparison_reason=unavailable,
                   promotion_eligible=False, measured_performance=True,
                   rocm_chip_env=os.environ.get("TESSERA_ROCM_CHIP"))
     args.output.parent.mkdir(parents=True, exist_ok=True)

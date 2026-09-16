@@ -7617,3 +7617,9 @@ Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
 Parity validated on owning SM120 (RTX 5070, CUDA 13.4 / driver 610.88): a spawned heap worker is admitted only after its in-process device probe (allocate → one live slot → bitwise pinned readback → empty-graph mark → reclaim) verifies; `replacement()` refuses before confirmed predecessor death and admits a freshly probed worker after it; all nine recorder proofs pass. Prerequisite: the arena replay pipeline is now shared with the packager — on `origin/main` every heap/SSD/ANN/exception/public-result/gradient-sum package was refused on this box as "disagrees with native replay" since 100a2980. Follow-up required: legacy snapshot/import migration; the stall is injected, not a driver hang.
 
 Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.
+
+## Fleet reds follow-through — 2026-09-15
+
+Sync `FLEET-REDS-2026-09-15`.
+
+Owner-directed fleet-red follow-through (PR #761), NVIDIA outcome: parity validated on Super-Bear (RTX 5070) — the heap replay tests now select their lane through `tests/_support/environment.native_storage_target()` (ptxas present → `nvidia`/`sm_120`) and resolve the matched LLVM bin per host; 47 passed with no change in what the sm_120 lane packages. The `tessera-jit` configure guard (libffi / MLIRExecutionEngine) does not fire here (both present; `libtessera_jit.so` still builds in `build/` and `build-nvidia-cuda/`). The ROCm diagnostic and Apple slice changes are not NVIDIA paths. No performance promotion.

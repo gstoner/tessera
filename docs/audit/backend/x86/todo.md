@@ -5284,3 +5284,9 @@ Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.
 Not applicable with a reason: no x86 process-isolated heap worker exists and none is claimed; host-free tests only.
 
 Evidence: [CUDA/HIP replacement packets](../../../../benchmarks/baselines/gated_heap_replacement_20260915/README.md). No performance promotion.
+
+## Fleet reds follow-through — 2026-09-15
+
+Sync `FLEET-REDS-2026-09-15`.
+
+Owner-directed fleet-red follow-through (PR #761), x86 outcome: not applicable with a reason for the packaging selector — `native_storage_target()` chooses a *GPU* storage lane (CUDA or ROCm toolchain); on an x86-only host it returns `None` and the heap replay tests skip honestly, as before. Host CPU JIT build contract: the `tessera-jit` configure guard now skips `libtessera_jit` only when libffi headers or `MLIRExecutionEngine` are missing; on the AVX-512 host (Princess-Luna) both are present and the lane still builds (`ninja -C build` clean, 2026-09-15). `TESSERA_REQUIRE_JIT=ON` makes a missing prerequisite fatal where the CPU JIT lane is claimed. No x86 device evidence is inferred from the Apple or ROCm fixes.

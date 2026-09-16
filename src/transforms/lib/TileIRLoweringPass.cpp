@@ -216,12 +216,19 @@ struct DistributeRank4FlashAttn : public RewritePattern {
          (biasType.getRank() == 4 &&
           biasType.getDimSize(1) != 1 &&
           biasType.getDimSize(1) != qType.getDimSize(1)) ||
-         biasType.getDimSize(biasType.getRank() - 2) !=
-             qType.getDimSize(2) ||
-         biasType.getDimSize(biasType.getRank() - 1) !=
-             kType.getDimSize(2) ||
+         (biasType.getDimSize(biasType.getRank() - 2) != 1 &&
+          biasType.getDimSize(biasType.getRank() - 2) != qType.getDimSize(2)) ||
+         (biasType.getDimSize(biasType.getRank() - 1) != 1 &&
+          biasType.getDimSize(biasType.getRank() - 1) != kType.getDimSize(2)) ||
          !biasType.getElementType().isF32()))
       return failure();
+    // A bias axis of extent 1 broadcasts (query/key since 2026-09-15, batch/
+    // head before); the per-(batch, head) tile keeps the PHYSICAL extent on
+    // those axes so no storage is expanded and the consumer indexes what exists.
+    const int64_t biasQueryRows =
+        bias && biasType.getDimSize(biasType.getRank() - 2) == 1 ? 1 : -1;
+    const int64_t biasKeyRows =
+        bias && biasType.getDimSize(biasType.getRank() - 1) == 1 ? 1 : -1;
 
     int64_t batch = qType.getDimSize(0);
     int64_t queryHeads = qType.getDimSize(1);
@@ -320,8 +327,10 @@ struct DistributeRank4FlashAttn : public RewritePattern {
             rewriter, loc, vTileType, v, kvOffsets, vSizes, strides);
         Value biasTile;
         if (bias) {
+          const int64_t biasRows = biasQueryRows == 1 ? 1 : queryRows;
+          const int64_t biasCols = biasKeyRows == 1 ? 1 : keyRows;
           auto biasTileType = RankedTensorType::get(
-              {queryRows, keyRows}, biasType.getElementType());
+              {biasRows, biasCols}, biasType.getElementType());
           OpFoldResult biasBatch =
               biasType.getDimSize(0) == 1 ? OpFoldResult(rewriter.getIndexAttr(0))
                                           : OpFoldResult(batchIndex);
@@ -337,8 +346,8 @@ struct DistributeRank4FlashAttn : public RewritePattern {
                     rewriter.getIndexAttr(0)},
                 SmallVector<OpFoldResult>{
                     rewriter.getIndexAttr(1), rewriter.getIndexAttr(1),
-                    rewriter.getIndexAttr(queryRows),
-                    rewriter.getIndexAttr(keyRows)},
+                    rewriter.getIndexAttr(biasRows),
+                    rewriter.getIndexAttr(biasCols)},
                 SmallVector<OpFoldResult>(4, rewriter.getIndexAttr(1)));
           } else {
             biasTile = tensor::ExtractSliceOp::create(
@@ -346,8 +355,8 @@ struct DistributeRank4FlashAttn : public RewritePattern {
                 SmallVector<OpFoldResult>{biasBatch, rewriter.getIndexAttr(0),
                                           rewriter.getIndexAttr(0)},
                 SmallVector<OpFoldResult>{
-                    rewriter.getIndexAttr(1), rewriter.getIndexAttr(queryRows),
-                    rewriter.getIndexAttr(keyRows)},
+                    rewriter.getIndexAttr(1), rewriter.getIndexAttr(biasRows),
+                    rewriter.getIndexAttr(biasCols)},
                 SmallVector<OpFoldResult>(3, rewriter.getIndexAttr(1)));
           }
         }
@@ -420,10 +429,16 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
       return failure();
     if (bias &&
         (!biasType || !biasType.hasStaticShape() || biasType.getRank() != 2 ||
-         biasType.getDimSize(0) != qType.getDimSize(0) ||
-         biasType.getDimSize(1) != kType.getDimSize(0) ||
+         (biasType.getDimSize(0) != 1 &&
+          biasType.getDimSize(0) != qType.getDimSize(0)) ||
+         (biasType.getDimSize(1) != 1 &&
+          biasType.getDimSize(1) != kType.getDimSize(0)) ||
          !biasType.getElementType().isF32()))
       return failure();
+    // Physical bias extents: an axis of extent 1 broadcasts and is sliced at
+    // offset 0 with size 1; the padded copy and the per-block slice keep it.
+    const bool biasRowsBroadcast = bias && biasType.getDimSize(0) == 1;
+    const bool biasColsBroadcast = bias && biasType.getDimSize(1) == 1;
     int64_t qRows = qType.getDimSize(0);
     int64_t sk = kType.getDimSize(0);
     int64_t d = qType.getDimSize(1);
@@ -492,15 +507,16 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
           SmallVector<OpFoldResult>{rewriter.getIndexAttr(sk),
                                     rewriter.getIndexAttr(dv)},
           strides);
-      if (bias) {
+      if (bias && !biasColsBroadcast) {
+        const int64_t biasRows = biasRowsBroadcast ? 1 : qRows;
         auto paddedBiasType =
-            RankedTensorType::get({qRows, paddedSk}, biasType.getElementType());
+            RankedTensorType::get({biasRows, paddedSk}, biasType.getElementType());
         Value biasZero = arith::ConstantOp::create(
             rewriter, loc, paddedBiasType,
             rewriter.getZeroAttr(paddedBiasType));
         paddedBias = tensor::InsertSliceOp::create(
             rewriter, loc, bias, biasZero, offsets,
-            SmallVector<OpFoldResult>{rewriter.getIndexAttr(qRows),
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(biasRows),
                                       rewriter.getIndexAttr(sk)},
             strides);
       }
@@ -633,13 +649,16 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
       Value scores = sdp->getResult(0);
 
       if (bias) {
+        const int64_t biasRows = biasRowsBroadcast ? 1 : qRows;
+        const int64_t biasCols = biasColsBroadcast ? 1 : tkv;
         auto biasBlockType =
-            RankedTensorType::get({qRows, tkv}, biasType.getElementType());
+            RankedTensorType::get({biasRows, biasCols}, biasType.getElementType());
         Value biasSlice = tensor::ExtractSliceOp::create(
             rewriter, loc, biasBlockType, paddedBias,
-            SmallVector<OpFoldResult>{rewriter.getIndexAttr(0), kv},
-            SmallVector<OpFoldResult>{rewriter.getIndexAttr(qRows),
-                                      rewriter.getIndexAttr(tkv)},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(0),
+                                      biasColsBroadcast ? OpFoldResult(rewriter.getIndexAttr(0)) : OpFoldResult(kv)},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(biasRows),
+                                      rewriter.getIndexAttr(biasCols)},
             strides);
         Operation *addBias = emitAttnOp(
             rewriter, loc, "tessera_attn.score_bias", {scores, biasSlice},

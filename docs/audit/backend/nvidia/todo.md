@@ -7601,6 +7601,15 @@ Sync `MATMUL-EPILOGUE-MARKERS-2026-09-15`; owner E2E-REAL-6.
 Shared frontend + tiling change assessed: the tiled inner K step is unchanged (markers and `activation` no longer ride on it); a traced biased/activated matmul now carries explicit broadcast + add + activation ops after the nest instead of failing the Graph IR verifier. Not applicable to nvidia execution; no ABI, dtype or proof change.
 See [Apple follow-through](../apple/todo.md#matmul-epilogue-markers-and-activation-order--2026-09-15).
 
+## Attention broadcast masks on every axis — 2026-09-15
+
+Sync `ATTN-QK-BROADCAST-2026-09-15`; owner FRONTEND-IR-MEDIUM-1.
+
+Parity validated on owning SM120 (RTX 5070, CUDA 13.4.1, driver 610.88): six B=2 ragged causal/GQA/window attention buckets — batch/head `[1,1,Q,K]`, key-padding `[1,1,1,K]` and per-query `[B,Hq,Q,1]` bias at Q/K = 3/5 and 5/3 — execute without host expansion and match the oracle within 6e-8. The v3 f32 host ABI carries `BiasB`/`BiasH`/`BiasQ`/`BiasK`, validates each against 1 or the logical extent and copies only the physical storage; the kernel reads index 0 with stride 1 on every broadcast axis and the seven logical kernel extents are unchanged. Empty-row refusal judges the logical broadcast view. `check-tessera-nvidia` 61/61 in the rebuilt `build-nvidia-cuda/` tree. Follow-up required: Boolean/padding masks as an operand, f16/bf16 broadcast storage, and any performance admission (none claimed).
+
+Operational note: the NVIDIA native runtime resolves `tessera-nvidia-opt` and `libtessera_nvidia_ptx_launch.so` from `build-nvidia-cuda/`, not `build/`. A `build/`-only rebuild left a two-week-old compiler in place that ignored `bias_shape` and a launcher that rejected the v3 dims (`rc=5`); rebuild `build-nvidia-cuda/` before any sm_120 device claim.
+
+Evidence: [attention broadcast packets](../../../../benchmarks/baselines/attention_broadcast_20260915/README.md). No performance promotion.
 ## Probed admission and health-checked heap replacement — 2026-09-15
 
 Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.

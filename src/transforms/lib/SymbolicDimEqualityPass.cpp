@@ -1120,8 +1120,10 @@ struct SymbolicDimEquality
           if (bias == names.end() || bias->second.size() != 4 ||
               (bias->second[0] != "1" && bias->second[0] != q->second[0]) ||
               (bias->second[1] != "1" && bias->second[1] != q->second[1]) ||
-              bias->second[2] != q->second[2] || bias->second[3] != k->second[2])
-            return op.emitError("SYMDIM_BINDING_MALFORMED: attention bias requires batch/head broadcast and exact query/key names");
+              (bias->second[2] != "1" && bias->second[2] != q->second[2]) ||
+              (bias->second[3] != "1" && bias->second[3] != k->second[2]))
+            return op.emitError("SYMDIM_BINDING_MALFORMED: attention bias axes must each be 1 or the "
+                                "matching batch/head/query/key name");
         }
         auto headExtent = [&](const std::string &name) -> int64_t {
           int64_t extent;

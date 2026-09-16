@@ -821,7 +821,11 @@ int invokeMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
 
 int invokeAttention(CUfunction fn, const char* name, void** buffers,
                     size_t nbuf, const int64_t* dims, size_t ndim) {
-    if ((ndim != 7 && ndim != 9) || !name) return 5;
+    // 7 dims: full-shape bias (or none); 9: batch/head-broadcast bias (BiasB,
+    // BiasH); 11: every bias axis physical (BiasB, BiasH, BiasQ, BiasK). The
+    // kernel bakes the physical extents in; these scalars size and validate
+    // the host copy only.
+    if ((ndim != 7 && ndim != 9 && ndim != 11) || !name) return 5;
     const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
     if ((!hasSavedLse && nbuf != 4 && nbuf != 5) ||
         (hasSavedLse && nbuf != 5 && nbuf != 6)) return 5;
@@ -834,10 +838,13 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
     const size_t Hkv = (size_t)dims[2], Sq = (size_t)dims[3];
     const size_t Sk = (size_t)dims[4], D = (size_t)dims[5], Dv = (size_t)dims[6];
     if (Hq % Hkv) return 5;
-    const size_t BiasB = ndim == 9 ? (size_t)dims[7] : B;
-    const size_t BiasH = ndim == 9 ? (size_t)dims[8] : Hq;
-    if (ndim == 9 && (!hasBias || hasSavedLse ||
-        (BiasB != 1 && BiasB != B) || (BiasH != 1 && BiasH != Hq))) return 5;
+    const size_t BiasB = ndim >= 9 ? (size_t)dims[7] : B;
+    const size_t BiasH = ndim >= 9 ? (size_t)dims[8] : Hq;
+    const size_t BiasQ = ndim == 11 ? (size_t)dims[9] : Sq;
+    const size_t BiasK = ndim == 11 ? (size_t)dims[10] : Sk;
+    if (ndim >= 9 && (!hasBias || hasSavedLse ||
+        (BiasB != 1 && BiasB != B) || (BiasH != 1 && BiasH != Hq) ||
+        (BiasQ != 1 && BiasQ != Sq) || (BiasK != 1 && BiasK != Sk))) return 5;
     auto product = [](std::initializer_list<size_t> values, size_t& out) {
         out = 1;
         for (size_t value : values) {
@@ -852,7 +859,7 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         !product({B, Hkv, Sk, Dv}, vElements) ||
         !product({B, Hq, Sq, Dv}, oElements) ||
         (hasSavedLse && !product({B, Hq, Sq}, rowElements)) ||
-        (hasBias && !product({BiasB, BiasH, Sq, Sk}, biasElements))) return 5;
+        (hasBias && !product({BiasB, BiasH, BiasQ, BiasK}, biasElements))) return 5;
     const bool narrow =
         std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
         std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;

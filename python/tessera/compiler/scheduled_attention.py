@@ -77,7 +77,9 @@ class ScheduledAttentionArtifact:
             raise ValueError('attention bias requires four physical arguments')
         shape = tuple(map(int, types[3]))
         b, h, _, sq, sk, _, _ = self.dims
-        if shape not in [(bb, hh, sq, sk) for bb in (1, b) for hh in (1, h)]:
+        # Each axis is the attention extent or 1 (batch/head since 2026-09-12,
+        # query/key since 2026-09-15); the physical shape is what the kernel indexes.
+        if any(actual not in (1, full) for actual, full in zip(shape, (b, h, sq, sk))):
             raise ValueError('attention physical bias shape is unsupported')
         return shape
 

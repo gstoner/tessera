@@ -3316,12 +3316,13 @@ def _submit_nvidia_sm120_native(
     elif descriptor.abi_id in attention_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
-        bias_b, bias_h = b, hq
+        bias_b, bias_h, bias_q, bias_k = b, hq, sq, sk
         if descriptor.abi_id == SM120_ATTN_BCAST_F32_ABI:
-            bias_b, bias_h = (int(cast(int, scalars[name])) for name in ("BiasB", "BiasH"))
-            if bias_b not in (1, b) or bias_h not in (1, hq):
+            bias_b, bias_h, bias_q, bias_k = (
+                int(cast(int, scalars[name])) for name in ("BiasB", "BiasH", "BiasQ", "BiasK"))
+            if bias_b not in (1, b) or bias_h not in (1, hq) or bias_q not in (1, sq) or bias_k not in (1, sk):
                 raise RuntimeError("SM120 broadcast bias dimensions disagree")
-            dimensions += (bias_b, bias_h)
+            dimensions += (bias_b, bias_h, bias_q, bias_k)
         if descriptor.abi_id == SM120_ATTN_LSE_F32_ABI:
             q, key, value, output, row_lse = raw
             if (
@@ -3348,7 +3349,7 @@ def _submit_nvidia_sm120_native(
                 or tuple(key.shape) != (b, hkv, sk, d)
                 or tuple(value.shape) != (b, hkv, sk, dv)
                 or tuple(output.shape) != (b, hq, sq, dv)
-                or (bias is not None and tuple(bias.shape) != (bias_b, bias_h, sq, sk))
+                or (bias is not None and tuple(bias.shape) != (bias_b, bias_h, bias_q, bias_k))
             ):
                 raise RuntimeError("SM120 attention shapes disagree with descriptor scalars")
     elif descriptor.abi_id in SM120_MOE_ABIS and descriptor.provenance.get("route") == "dispatch":

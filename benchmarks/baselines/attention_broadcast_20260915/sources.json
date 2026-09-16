@@ -1,0 +1,20 @@
+{
+  "parent": "78c73e6cb6527e106c27b2cf3e6ceb4a7b9d986a",
+  "sha256": {
+    "python/tessera/compiler/loop_idioms.py": "54c627b002447c6379ca4711b0416824f61b8ef4ab01425eda49fad8347db7ee",
+    "python/tessera/compiler/nvidia_native.py": "55b92ce404dff8c15f8ae899740f99577c66f8b271e500d8c66ae0eac6661b63",
+    "python/tessera/compiler/raised_attention.py": "fb221dd1aea097bee874b2e10506653c6f340eba6ef3dc2eb999886715d9bd4f",
+    "python/tessera/compiler/scheduled_attention.py": "4bf2068761882535ba422028f6319fb621eeca08eb3780d1683c123ee803f83f",
+    "python/tessera/runtime.py": "d2644a0ed2a24783d56fbb51c85150aebe203c7fc04c9934c8456e19d8ec5edc",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "1e392a909172ff1ac6b262df5a41b9306a65fa5876490c914c8e9c6d0343dc8d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "d407e47a9875dbd955b2d516968dd157183ca4847af8b3fbc454094521aec57f",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "b5c70d53290c0bcda68079498ee3311ac6e0f745140fbd0d2af5a8a16c9c35de",
+    "src/compiler/ir/TesseraOps.cpp": "b6f9c12a9819f9ce850f2fde3305370ef609ae53d60e8f542d06799430b33784",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "17f65f41eba3ae544ec0eee72a8c0900b8b4b12f9b4b282e8160e9835dd11c13",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "8d73dff39fc290e259a742e8cd6bb3b35f4203aeff842fc6a5131bd1cb7e9c09",
+    "src/transforms/lib/SymbolicDimEqualityPass.cpp": "8c4da4c0a419703bf5d659f939cd3b526eabc7d01a4f16799acf4a143e63e565",
+    "src/transforms/lib/TileIRLoweringPass.cpp": "f473636ecb84792dfd6ab3ac547425e2a7403927cefeb706c6217537339cacc6",
+    "tests/tessera-ir/phase3/flash_attn_broadcast_bias_tile_lowering.mlir": "4a3a9c82a8e5205f82c26d7df76fe7e382d0c4a878797bc488dac62faecd11e4",
+    "tests/unit/test_attention_broadcast.py": "a346bd4e34a790ca864131e0da6a30fca733b8fe7d669be9f65af3845aecd832"
+  }
+}

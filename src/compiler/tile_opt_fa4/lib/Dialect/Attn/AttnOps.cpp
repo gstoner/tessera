@@ -223,9 +223,17 @@ mlir::LogicalResult ScoreBiasOp::verify() {
   if (!scoresType.getElementType().isF32() ||
       !biasType.getElementType().isF32())
     return emitOpError("scores and bias must use f32");
-  if (failed(verifySameRankedTensor(getOperation(), scoresType, biasType,
-                                    "scores/bias")) ||
-      failed(verifySameRankedTensor(getOperation(), scoresType, resultType,
+  // The bias broadcasts along an axis of extent 1 (a key-padding row is
+  // [1, tkv], a per-query column [tq, 1]); every other axis matches scores.
+  // The physical block is what the producer sliced, so no consumer may assume
+  // the bias is stored at the scores' shape (2026-09-15).
+  for (int64_t axis = 0; axis < 2; ++axis) {
+    if (biasType.getDimSize(axis) != 1 &&
+        biasType.getDimSize(axis) != scoresType.getDimSize(axis))
+      return emitOpError("bias extent on axis ") << axis << " (" << biasType.getDimSize(axis)
+             << ") must be 1 or the scores extent (" << scoresType.getDimSize(axis) << ")";
+  }
+  if (failed(verifySameRankedTensor(getOperation(), scoresType, resultType,
                                     "scores/result")))
     return mlir::failure();
   return mlir::success();

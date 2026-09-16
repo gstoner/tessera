@@ -9026,6 +9026,13 @@ Follow-up required: this CUDA/HIP HVP binding does not emit Metal; no Apple devi
 No performance promotion. Effectful CFG, dynamic outputs and higher derivative
 orders remain with the scoped AD execution plan.
 
+## Attention broadcast masks on every axis — 2026-09-15
+
+Sync `ATTN-QK-BROADCAST-2026-09-15`; owner FRONTEND-IR-MEDIUM-1.
+
+Follow-up required: the raised attention recognizer, symbolic binding, Schedule `bias_shape` carriage and the FA-4 Tile lowering now accept a bias broadcast on any axis, and the shared `ScoreBiasOp` verifier admits `[1,tkv]` / `[tq,1]` blocks. The Apple raised-attention projection has no broadcast consumer and no M1 Max proof; the SM120 rows do not transfer. Host-free lit (Mac, 445 passed / 40 unsupported) covers the shared Tile lowering only.
+
+Evidence: [attention broadcast packets](../../../../benchmarks/baselines/attention_broadcast_20260915/README.md). No performance promotion.
 ## Probed admission and health-checked heap replacement — 2026-09-15
 
 Sync `HEAP-REPLACEMENT-HEALTH-2026-09-15`; owner W4-PRODUCT-1.

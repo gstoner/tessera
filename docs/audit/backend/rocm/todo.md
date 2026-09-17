@@ -7999,6 +7999,56 @@ Parity validated on both owning devices for what did land: the admitted set meas
 
 **A hollow green signal found while collecting that evidence, and open:** on Tajasarus `ninja -C build check-ebm` and `check-clifford` print *nothing* and exit 0 in both trees. It is the documented `check-tessera-rocm` trap again — `lit` is venv-only on these boxes, a non-interactive configure does not see it, and the target degrades to a silent skip — and it means the assertions-enabled host's domain fixture coverage looked green while running zero fixtures. Running lit directly with `BUILD_DIR` set and the toolchain's `FileCheck` on PATH gives the real result (EBM 18/18, Clifford 22/22 and tests/tessera-ir 491/491 in **both** trees, assertions included). Owed: pass `-DTESSERA_LIT=$PWD/.venv/bin/lit` when configuring these trees, so the target either runs or fails instead of skipping.
 
+## Two red zones nobody had swept — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1.
+
+Clearing Princess-Luna prompted the first **full** `pytest tests/unit/ -m "not
+slow"` sweep ever run on the other two Linux boxes. Both have large red zones, and
+neither is a regression — they are what has always been there, unobserved because
+only targeted subsets were ever run.
+
+**Tajasarus (gfx1201): ~1578 failures, and they are one defect.** They are
+concentrated in the `test_rocm_*_compiled.py` families — 302 in
+`test_rocm_unary_compiled.py`, 109 in norms, 79 in binary, 78 in losses, 73 in
+compare, and so on down. Every one of those files documents itself as a **gfx1151**
+family ("Compiler-generated elementwise unary math … on gfx1151"), and gfx1201 has
+no promoted family plugins at all — this queue and the EBM overhead packet both
+record that ("no promoted family plugins for gfx1201; gfx1200/gfx1250 remain
+fail-closed pending exact-device evidence"). So ~1500 tests assert a gfx1151 proof
+on a host that cannot have one.
+
+Their guard is the defect: `_unary_or_skip` and its siblings check
+`tessera-opt` is built and that there is *a usable AMD GPU* — never **which**
+chip. A gfx1201 host passes that guard and then fails, which is a host reporting
+"this proof does not exist here" as "this proof is broken". By the standing rule a
+host that cannot evaluate a lane must **skip with a reason**.
+
+It is deliberately **not** fixed here, because the obvious fix is the wrong one.
+The guard is shared by 119 test files, and making `_rocm_wmma_runtime_available`
+chip-aware would skip everything on gfx1201 — including lanes that genuinely do
+work there (the replay-verified scheduled packages, the WMMA datatype audit, the
+2:4 sparse stack, the cooperative EBM kernel). That trades ~1500 false failures
+for an unknown number of false skips, which is the worse error and exactly the
+hollow-green pattern. What it needs is a per-family answer to "does gfx1201 have
+this plugin", each one gated on that answer — roughly twenty families, with
+owning-device confirmation for each.
+
+**Super-Bear (sm_120): 49 failures**, concentrated in `test_scheduled_cumsum.py`,
+`test_native_persistent_tape.py`, `test_native_next_admission.py` and
+`test_apple_lowp_native_contract.py` (an Apple contract test running on a Linux
+box). Confirmed pre-existing: the same files on `4898812c`, built from its own
+sources in a worktree on that box, give 50. Three of the original 52 **were**
+fixed here and are a class worth naming: **49 untracked AppleDouble resource forks**
+(`._name.py`) left by an old macOS-to-Linux copy match `*.py` / `*.json` globs, and
+their binary contents made three source-registry gates die with
+`UnicodeDecodeError: … 0xa3` — a registry gate failing because of unrelated
+filesystem debris. `iter_repo_files` now skips them, `read_source` decodes
+tolerantly, and the two gates that globbed directly were routed through both. Note
+for anyone bisecting on that box: a fresh worktree has no debris, so comparing
+`~/programming/tessera` against a clean checkout compares two *trees*, not two code
+states — that mistake cost a cycle here.
+
 ## The Princess-Luna red zone, cleared — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

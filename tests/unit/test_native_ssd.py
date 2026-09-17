@@ -5,6 +5,7 @@ import pytest
 from tessera.compiler.scheduled_ssd import lower_scheduled_ssd
 from tessera.compiler.native_ssd import materialize_ssd
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.environment import require_native_storage_lane
 
 
 @pytest.mark.parametrize('cooperative',[False,True])
@@ -14,8 +15,10 @@ def test_ssd_gpu_package_replays_schedule_and_abi(backend,chip,cooperative):
     llvm = Path('/usr/lib/llvm-23/bin')
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('native GPU toolchain required')
-    if backend == 'rocm' and not (Path(os.environ.get('ROCM_PATH','/opt/rocm'))/'llvm/bin/ld.lld').exists():
-        pytest.skip('ROCm toolkit linker required; validate on owning ROCm host')
+    # Both lanes, not just ROCm. This guarded `rocm` and left `nvidia` bare, so
+    # on either ROCm box the nvidia rows failed inside `mlir-opt`'s NVVM
+    # serialization — a missing CUDA toolchain reported as a broken compiler.
+    require_native_storage_lane(backend)
     logical = lower_scheduled_ssd(5,2,3,2,2,compiler=tool)
     native = materialize_ssd(logical,compiler=tool,llvm_bin=llvm,backend=backend,chip=chip,cooperative=cooperative)
     specs = native.validate()
@@ -60,6 +63,7 @@ def test_ssd_native_gpu_adjoint_projects_all_roles():
     llvm = Path('/usr/lib/llvm-23/bin')
     if tool is None or not (llvm/'mlir-opt').exists():
         pytest.skip('native GPU toolchain required')
+    require_native_storage_lane('nvidia')  # this test packages for sm_120 only
     logical = lower_scheduled_ssd(3,2,2,2,2,compiler=tool)
     native = materialize_ssd(logical,compiler=tool,llvm_bin=llvm,backend='nvidia',chip='sm_120',adjoint=True)
     specs = native.validate()

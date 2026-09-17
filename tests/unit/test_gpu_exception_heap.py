@@ -4,6 +4,7 @@ import pytest
 from tessera.compiler.source_exception_heap import pack_exception_table
 from tessera.compiler.gpu_exception_heap import emit_gpu_exception_heap, materialize_gpu_exception_heap
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tests._support.environment import require_native_storage_lane
 
 
 def source():
@@ -17,6 +18,7 @@ def test_gpu_heap_checked_transaction_and_source_replay():
     tool = find_tessera_opt()
     if tool is None or not Path('/usr/lib/llvm-23/bin/mlir-opt').exists():
         pytest.skip('native GPU compiler required')
+    require_native_storage_lane('nvidia')  # packages for sm_120 only
     program = materialize_gpu_exception_heap(source(),capacity=8,compiler=tool,llvm_bin='/usr/lib/llvm-23/bin',backend='nvidia',chip='sm_120')
     assert program.validate()[3].shape == (2,3)
     altered = replace(program.package,arena_ir=program.package.arena_ir.replace('arith.addi','arith.subi'))

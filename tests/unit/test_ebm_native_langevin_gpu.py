@@ -418,7 +418,14 @@ def test_the_annealed_chain_matches_the_declared_policy_on_device(anneal):
 
 def test_the_annealed_device_chain_agrees_with_the_cpu_lane():
     """Same schedule, two lanes: the device kernel and the CPU JIT must compute
-    the same cooling chain, since both claim the same declared policy."""
+    the same cooling chain, since both claim the same declared policy.
+
+    Needs *both* lanes on one host, which is not every box: Tajasarus has no
+    `libtessera_jit` at all (no libffi-dev at configure time), so the CPU lane is
+    absent there and this comparison cannot be made rather than being made wrongly.
+    """
+    if not nl.has_native_langevin():
+        pytest.skip("this host has no CPU EBM JIT lane to compare the device against")
     backend, chip, tool, llvm = _device_lane()
     rng = np.random.default_rng(88)
     y0 = rng.standard_normal((4, 32)).astype(np.float32)

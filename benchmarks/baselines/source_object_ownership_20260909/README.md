@@ -48,3 +48,6 @@ All 30 generated-document checks and 25 audit/governance tests passed;
 Ruff passed and package mypy reported no errors. NVIDIA device validation used
 LLVM 23.1.1, optimized with assertions enabled. These are correctness and
 contract checks; none establishes performance promotion.
+
+Recorded by `benchmarks/record_owned_source_state_gpu.py` (`nvidia.json`, `rocm.json`)
+and `benchmarks/record_status_fanin.py` (`nvidia_eight_status.json`).

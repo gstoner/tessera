@@ -50,3 +50,6 @@ product-aware checked forward dependency exists.
 
 Full Python tracebacks are not claimed. Native source notes preserve logical
 raise locations; actual Python traceback frames belong to the host bridge.
+
+Recorded by `benchmarks/record_source_exception_gpu.py` (`nvidia.json`, `rocm.json`)
+and `benchmarks/rocm/benchmark_block_attnres_gfx1151.py` (`depth_default.json`, `depth_cooperative.json`).

@@ -3,14 +3,19 @@
 An evidence file nobody names is a claim nobody can check: it cannot be read
 back through a dashboard, a log entry or a test, so it is either a stale
 artifact or evidence for a record that no longer says where it came from. The
-2026-09-17 review found 31 top-level baseline files (four more are read by a
-derived name) and four packet directories
+2026-09-17 review found 31 top-level baseline files and four packet directories
 in that state, some dating to July, and ten packet directories with no manifest
 or README at all.
 
-This is a ratchet, not a claim of cleanliness: the orphans found then are frozen
-below and may only shrink. A new baseline that lands uncited fails here, on the
-CPU-only unit lane, before it becomes the next one.
+Those orphans were pruned on 2026-09-17 (owner-approved): 22 of the 31 files
+turned out to be read or cited by a *derived* name (a glob reader, a brace
+expansion or a family glob in a record) and moved to `CITED_BY_DERIVED_NAME`;
+the other nine files and all four directories were deleted; the ten
+manifestless directories received a README naming their recorder and citer.
+The ratchet now holds at an empty floor: a new baseline that lands uncited, a
+new packet directory nothing cites, or one with no manifest/README fails here,
+on the CPU-only unit lane. Never add an entry to the frozen sets to make a new
+orphan pass; cite it from a record or do not seal it.
 """
 from __future__ import annotations
 
@@ -21,16 +26,29 @@ ROOT = Path(__file__).resolve().parents[2]
 BASELINES = ROOT / "benchmarks" / "baselines"
 CITING_ROOTS = ("tests", "docs", "python", "scripts", "benchmarks", "tools")
 
-#: Orphans as of 2026-09-17. Remove an entry once its file is cited (or gone);
-#: never add one to make a new orphan pass.
-KNOWN_UNCITED_FILES = frozenset({
-    "core_compiler_rocm_dynamic_execution_gfx1151.json",
-    "core_compiler_rocm_int4_terminal_gfx1151.json",
-    "core_compiler_rocm_lds_arena_occupancy_gfx1151.json",
-    "core_compiler_rocm_packed_consumers_gfx1151.json",
-    "core_compiler_training_backward_gfx1151_avx512.json",
-    "core_compiler_training_step_fusion_gfx1151_avx512.json",
-    "core_compiler_x86_layout_materialization_avx512.json",
+#: Orphans as of 2026-09-17, pruned the same day — empty by construction.
+#: Never add an entry here to make a new orphan pass.
+KNOWN_UNCITED_FILES: frozenset[str] = frozenset()
+#: Baselines a textual whole-token search misses although a reader or a record
+#: names them by a *derived* name. Each group names its reader.
+CITED_BY_DERIVED_NAME = frozenset({
+    # `apple_route_selector.legacy_route_ledger_inventory` rewrites
+    # `*_route_ledger.json` to `*_strict_v2_route_ledger.json`.
+    "apple7_attention_strict_v2_route_ledger.json",
+    "apple7_epilogue_strict_v2_route_ledger.json",
+    "apple7_gemm_strict_v2_route_ledger.json",
+    "apple7_package_subgraph_strict_v2_route_ledger.json",
+    # `benchmarks/nvidia/record_autotune_reproducibility.py::_resource_fingerprints`
+    # loads every `benchmarks/baselines/nvidia*resource*.json` by glob.
+    "nvidia_sm120_emitted_gemm_resources.json",
+    "nvidia_sm120_replay_resources.json",
+    "nvidia_sm120_test5_resources.json",
+    "nvidia_sm120_transport_serving_resources.json",
+    # `benchmarks/NATIVE_STORAGE_FOLLOWUP.md` cites these by brace expansion:
+    # `native_storage_pair_{nvidia,rocm,apple}.json`,
+    # `native_storage_pending_ring{3,4,8}_nvidia.json`,
+    # `native_storage_reduction_vjp_{nvidia,rocm,apple}.json`,
+    # `native_storage_ring{3,4,8}_nvidia.json`.
     "native_storage_pair_apple.json",
     "native_storage_pair_nvidia.json",
     "native_storage_pair_rocm.json",
@@ -43,39 +61,24 @@ KNOWN_UNCITED_FILES = frozenset({
     "native_storage_ring3_nvidia.json",
     "native_storage_ring4_nvidia.json",
     "native_storage_ring8_nvidia.json",
-    "nvidia_sm120_emitted_gemm_resources.json",
-    "nvidia_sm120_replay_resources.json",
-    "nvidia_sm120_test5_resources.json",
-    "nvidia_sm120_transport_serving_resources.json",
-    "ring_protocol_nvidia.json",  # read as a whole token: its siblings' names only *contain* it
+    # `docs/audit/compiler/INTEGRATED_COMPILER_LOG.md` (native ring protocol
+    # entry) cites these by brace expansion: `ring_protocol_{nvidia,rocm}.json`,
+    # `ring_protocol_nvidia_ncu_{direct,depth2}.csv`,
+    # `ring_protocol_nvidia_nsys_{kernels,api}.csv`.
+    "ring_protocol_nvidia.json",
     "ring_protocol_nvidia_ncu_depth2.csv",
     "ring_protocol_nvidia_ncu_direct.csv",
     "ring_protocol_nvidia_nsys_api.csv",
     "ring_protocol_nvidia_nsys_kernels.csv",
     "ring_protocol_rocm.json",
-    "rocm_gfx1151_lse_checkpoint_revalidation_wsl.json",
-    "rocm_gfx1151_training_backward.json",
+    # `docs/audit/backend/x86/todo.md` cites the committed x86 baselines as the
+    # `core_compiler_*_avx512.json` family (its route-ledger assessment).
+    "core_compiler_training_backward_gfx1151_avx512.json",
+    "core_compiler_training_step_fusion_gfx1151_avx512.json",
+    "core_compiler_x86_layout_materialization_avx512.json",
 })
-#: The strict-v2 Apple ledgers are cited by a *derived* name
-#: (`apple_route_selector.legacy_route_ledger_inventory` rewrites
-#: `*_route_ledger.json` to `*_strict_v2_route_ledger.json`), so a textual
-#: search misses them although a reader exists.
-CITED_BY_DERIVED_NAME = frozenset({
-    "apple7_attention_strict_v2_route_ledger.json",
-    "apple7_epilogue_strict_v2_route_ledger.json",
-    "apple7_gemm_strict_v2_route_ledger.json",
-    "apple7_package_subgraph_strict_v2_route_ledger.json",
-})
-KNOWN_UNCITED_DIRS = frozenset({
-    "auto_sparse_20260914", "native_sparse_graph_ad_20260914",
-    "sparse_int4_20260914", "ssd_retry_completion_20260910",
-})
-KNOWN_MANIFESTLESS_DIRS = frozenset({
-    "apple7_cross_run_policy_20260904", "apple_backward_20260907",
-    "apple_backward_mixed_runtime_20260907", "apple_native_backward_package_20260907",
-    "native_storage_loop6", "native_storage_loop7", "native_storage_loop8",
-    "native_storage_loop9", "native_storage_loop10", "native_storage_loop11",
-})
+KNOWN_UNCITED_DIRS: frozenset[str] = frozenset()
+KNOWN_MANIFESTLESS_DIRS: frozenset[str] = frozenset()
 
 
 def _cited_names(names: list[str]) -> set[str]:

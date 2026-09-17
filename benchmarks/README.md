@@ -79,6 +79,51 @@ six-layer compiler-correctness coverage for each category.
 | `baselines/` | Checked-in ratchet baselines — `cpu_smoke.json` (telemetry gate) and `apple_gpu_hot_paths.json` (`tessera.benchmark.ratchet.v1` median/max-latency rows; recorded by `apple_gpu/record_hot_path_baseline.py`). |
 | `compiler_support.py` | Back-compat shim re-exporting the shared compiler contract (`CompilerRun`, `compiler_matmul_relu`, `compiler_*_ir`) from `common/compiler_contract.py`. |
 
+## Recorders and their outputs
+
+Every recorder under `benchmarks/` must be named by some other tracked file
+(`tests/unit/test_benchmark_recorders_are_named.py`), and every sealed baseline
+must be cited from outside `benchmarks/baselines/`
+(`tests/unit/test_benchmark_baselines_are_cited.py`). Packet *directories* name
+their recorder in their own `README.md`; the top-level baseline files below are
+named here. Paths are relative to `benchmarks/`; outputs are under
+`benchmarks/baselines/` unless stated.
+
+| Recorder | Output |
+|---|---|
+| `nvidia/record_attention_forward_schedule_matrix.py` | `nvidia_sm120_attention_forward_schedules.json` |
+| `nvidia/record_autotune_reproducibility.py` | `nvidia_sm120_autotune_reproducibility.json` (reads `autotune_corpus.json` and every `nvidia*resource*.json`) |
+| `nvidia/record_bf16_reduction_breadth.py` | `nvidia_sm120_bf16_reduction_breadth.json` |
+| `nvidia/record_canonical_k_loop.py` | `nvidia_sm120_canonical_k_loop.json` |
+| `nvidia/record_deltanet_backward_packet.py` | `nvidia_sm120_deltanet_backward_2026_07_31.json` |
+| `nvidia/record_e2e_spine_attention.py` | `nvidia_sm120_e2e_spine_attention.json` |
+| `nvidia/record_e2e_spine_comparative.py` | `nvidia_sm120_e2e_spine_comparative.json` |
+| `nvidia/record_e2e_spine_epilogue.py` | `nvidia_sm120_e2e_spine_epilogue.json` |
+| `nvidia/record_e2e_spine_paged_kv.py` | `nvidia_sm120_e2e_spine_paged_kv.json` |
+| `nvidia/record_e2e_spine_reduction.py` | `nvidia_sm120_e2e_spine_reduction.json` |
+| `nvidia/record_low_precision_native_resources.py` | `nvidia_sm120_low_precision_native_resources.json` |
+| `nvidia/record_packed_storage_foundation.py` | `nvidia_sm120_packed_storage_foundation.json` |
+| `nvidia/record_remaining_dtype_reduction.py` | `nvidia_sm120_remaining_dtype_reduction.json` (reads `nvidia_sm120_test5_route_resources.json`) |
+| `nvidia/record_replay_parity.py` | `nvidia_sm120_replay_parity.json` (reads `nvidia_sm120_test5_route_resources.json`) |
+| `nvidia/record_training_memory_foundation.py` | `nvidia_sm120_training_memory_foundation.json` |
+| `nvidia/record_transport_parity.py` | `nvidia_sm120_transport_parity.json` (reads `nvidia_sm120_test5_route_resources.json`) |
+| `nvidia/benchmark_scheduled_macro_matmul.py` | `nvidia_sm120_macro_cta_2026_08_24.json` (`tessera.nvidia.scheduled-macro-matmul.v3`) |
+| `nvidia/profile_test5_routes.py` | Nsight launch target for the TEST-5 production-route capture; `nvidia/parse_ncu_resources.py` normalises the export into `nvidia_sm120_test5_resources.json` |
+| `nvidia/profile_test5_emitted_gemm.py` | Nsight launch target for the `tessera_mma_gemm_f16` capture behind `nvidia_sm120_emitted_gemm_resources.json` |
+| `nvidia/profile_gemm_schedule_candidates.py` | Nsight launch target for the `nvidia_generic_cuda` / `nvidia_mma_fused` rows of `nvidia_sm120_test5_route_resources.json` |
+| `nvidia/prepare_test5_profile_artifacts.py` | Precompiles the MoE / resident-ops artifacts for `nvidia/profile_test5_transport_serving.py`, the launch target behind `nvidia_sm120_transport_serving_resources.json` |
+| `record_native_nonlinear_ad.py` | `native_storage_nonlinear_nvidia.json`, `native_storage_nonlinear_rocm.json` |
+| `rocm/benchmark_block_attnres_gfx1151.py` | `rocm_gfx1151_block_attnres_phase5.json`; also `runtime_source_maps_20260909/depth_{default,cooperative}.json` |
+| `rocm/benchmark_rocm_es_low_rank.py` | `rocm_gfx1151_es_low_rank.json` |
+| `rocm/benchmark_rocm_raster.py` | `rocm_gfx1151_raster_2026_07_29.json` |
+| `rocm/record_deltanet_backward_selectors.py` | `rocm_gfx1151_deltanet_backward_selectors.json` |
+| `spectral/benchmark_rocm_fft_plan_cache.py` | The per-N `results` rows of `rocm_fft_plan_cache_gfx1151_2026_08_05.json` (printed to stdout as `tessera.rocm_fft_plan_cache.v1`) |
+| `x86/benchmark_x86_attention_lse.py` | `x86_avx512_attention_lse_2026_07_30.json` (printed to stdout; work item X86-LSE-1) |
+| `x86/benchmark_x86_es_low_rank.py` | `x86_zen5_es_low_rank_2026_08_09.json` |
+| `x86/benchmark_x86_fft_codelets.py` | `x86_zen5_fft_mixed_codelets_2026_08_09.json` |
+| `x86/benchmark_x86_t1_cache_model.py` | `x86_zen5_t1_cache_model_2026_08_09.json` |
+| `x86/record_deltanet_backward_selectors.py` | `x86_avx512_deltanet_backward_selectors.json` |
+
 ## Refactor Direction
 
 - Promote compiler-backed benchmark kernels into small Python modules that expose

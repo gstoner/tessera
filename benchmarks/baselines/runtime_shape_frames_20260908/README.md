@@ -29,3 +29,5 @@ Princess-Luna (2,231 skipped); 299 focused compiler/audit checks passed with
 Super-Bear's assertions-enabled Tessera build. Four isolated descriptor checks
 also passed with the compiler deliberately unavailable. Ruff, the zero-error
 mypy ratchet and the 30-document generated drift check passed.
+
+Recorded by `benchmarks/record_runtime_shape_frames.py` (`nvidia.json`, `rocm.json`).

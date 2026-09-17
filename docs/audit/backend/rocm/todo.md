@@ -8032,6 +8032,61 @@ what the failures said.**
   a skip, and nothing else does. No per-family table, no over-skip: the refusal
   text the pipeline already emits is the gate, and it must name the host's own
   arch. The spectral composite refusal now names its arch for the same reason.
+* **Two more assertions-only aborts, both the 2026-09-16 class.** The paired
+  pass's `emit-storage-child` creates tile ops without declaring the tile
+  dialect ("Loading a dialect (tile) while in a multi-threaded execution
+  context", `test_native_storage_generation`), and this backend's
+  `KernelABIPass` called `loadDialect<LLVM::LLVMDialect>()` from inside
+  `runOnOperation` — `kernel_abi_addrspace.mlir` aborted the ROCm lit suite on
+  the assertions driver while the NDEBUG suite stayed 68/68. Both declare their
+  dialects now. That makes four such passes found in two days on the one
+  assertions host; every pass that creates ops of a dialect it did not parse
+  should be read with that in mind.
+* **Refusals reach a test by every route there is.** Routing the runtime wrapper
+  into 80 files caught the refusal only when it came back as `res["reason"]`.
+  It also arrives raised (`ValueError`, `_RocmCompiledUnavailable`), wrapped by
+  `@jit` in a `TesseraJitError`, as an LLVM backend abort one layer below the
+  runtime's own check ("Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16"
+  — a gfx11 kernel handed to a gfx12 target), and in half a dozen wordings that
+  name the owner but not the host ("exact gfx1151 spectral reverse package is
+  unavailable", "gfx1151 native HSACO module load failed", "verified for
+  gfx1151, not gfx1201", "requires its exact owning ROCm device").
+  `tests/conftest.py` now converts the outcome at the one place every form
+  arrives — the report hook — and only when the text names, or is conditioned
+  on, the host's own arch (`rocm_build.refused_for_host_arch`), so a negative
+  test pinning another arch on purpose stays a failure. Two refusal sites that
+  named nothing now name their arch (`spectral_candidates`,
+  `native_spectral_vjp`).
+
+**Owed on gfx1201, real and not gating — found because the gating noise is
+gone.** Each is what the failure says, verified on the box, none diagnosed
+past the reason:
+  1. `test_rocm_fused_epilogue_launch_execute.py`: 8 rows fail with "matmul
+     requires exactly two operands" — a lowering error, not an arch one — and
+     6 rows produce **wrong numbers** (atol 0.05) rather than a refusal. The
+     runtime's WMMA arch guard refuses the 16x16x16 fragment layout on gfx12;
+     this launch/execute path does not consult it and runs the gfx11 kernel.
+     A silent wrong answer on a promoted-looking lane is the worst class here.
+  2. `test_rocm_compiled_launch_execute.py`: 9 rows route `int8 @ int8` to the
+     WMMA f16/bf16 executor ("rocm_wmma executor handles f16/bf16 storage") —
+     the int8 family selects a different path on gfx1201 than on gfx1151.
+  3. `test_rocm_gemm_ku_reference.py`: 7 rows "kernel rc=2" — a HIP launch
+     failure of the KU reference kernel on RDNA4.
+  4. `test_rocm_state_machine_exec.py` (5) and
+     `test_rocm_ebm_geo_langevin_compiled.py` (4: the reference fallback
+     returns float64 where the native lane returns float32, and "native ROCm
+     affine lane must fire every chain step" — the affine family is not
+     promoted here, so the fallback fires and its dtype policy differs).
+  5. `test_rocm_wmma_execute_compare.py`: the test's inline HIP source fails to
+     compile under HIP 7.15 (`hipFree` line).
+  6. `test_scheduled_attention_backward_consumers.py` (3):
+     "X86 native packaging requires tessera-opt and the x86_64_avx512 shared
+     image" — Tajasarus is a Zen 5 AVX-512 host and builds the x86 backend, so
+     the shared image is missing from its tree, not from its silicon.
+  7. `test_automatic_ad_public_results.py`: one remaining case runs the
+     assertions `mlir-opt` pipeline that fails (`CalledProcessError`) — possibly
+     a fifth assertion; not captured.
+
 * **Super-Bear's 48:** 39 were `test_apple_lowp_native_contract.py` running on a
   Linux `tessera-opt` built without the Apple backend (it asked only whether
   `tessera-opt` existed; it now asks `registered_passes`); 5 packaged a gfx1151

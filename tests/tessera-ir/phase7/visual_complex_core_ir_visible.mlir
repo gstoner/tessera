@@ -46,7 +46,7 @@ func.func @visual_complex_block(
       (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4xf32>
 
   // EBM lane: one annealed Langevin step.
-  %y, %key_next = "tessera_ebm.langevin_step"(%sandwiched, %key, %target) {
+  %y, %key_next = "tessera_ebm.langevin_step"(%sandwiched, %key, %target) { operandSegmentSizes = array<i32: 1, 1, 0, 1>,
       energy_fn = @quadratic_energy,
       eta = 5.000000e-02 : f64,
       temperature = 1.000000e-01 : f64,

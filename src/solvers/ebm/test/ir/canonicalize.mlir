@@ -9,7 +9,7 @@ module {
       %x : tensor<3xf32>,
       %key : tensor<2xi64>) -> tensor<3xf32> {
     %step:2 = "tessera_ebm.langevin_step"(%x, %key)
-        { energy_fn = @user_energy_fn,
+        { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @user_energy_fn,
           eta = 0.005 : f64,
           temperature = 1.0 : f64,
           manifold = "sphere" }

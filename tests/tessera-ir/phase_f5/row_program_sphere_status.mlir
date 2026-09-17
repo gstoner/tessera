@@ -30,7 +30,7 @@ module {
     %r:3 = scf.for %t = %c0 to %steps step %c1 iter_args(%y = %y0, %key = %key0, %status = %ok)
         -> (tensor<3x6xf32>, tensor<2xi64>, tensor<3xi32>) {
       %n:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
-          { energy_fn = @energy, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "sphere" }
+          { operandSegmentSizes = array<i32: 1, 1, 0, 1>, energy_fn = @energy, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "sphere" }
           : (tensor<3x6xf32>, tensor<2xi64>, tensor<3x6xf32>) -> (tensor<3x6xf32>, tensor<2xi64>, tensor<3xi32>)
       %acc = arith.ori %status, %n#2 : tensor<3xi32>
       scf.yield %n#0, %n#1, %acc : tensor<3x6xf32>, tensor<2xi64>, tensor<3xi32>

@@ -37,7 +37,7 @@ func.func @energy_core_block(
       (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4xf32>
 
   // One Langevin step at the coldest temperature of the anneal.
-  %y_next, %key_next = "tessera_ebm.langevin_step"(%x_init, %key, %target) {
+  %y_next, %key_next = "tessera_ebm.langevin_step"(%x_init, %key, %target) { operandSegmentSizes = array<i32: 1, 1, 0, 1>,
       energy_fn = @quadratic_energy,
       eta = 5.000000e-02 : f64,
       temperature = 1.000000e-01 : f64,

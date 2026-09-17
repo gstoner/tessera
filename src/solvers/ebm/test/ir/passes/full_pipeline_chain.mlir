@@ -25,7 +25,7 @@ module {
       %e = "tessera_ebm.energy"(%x, %y) { energy_fn = @user_E }
           : (tensor<2x16xf32>, tensor<2x4x16xf32>) -> tensor<2x4xf32>
       %step:2 = "tessera_ebm.langevin_step"(%y, %k)
-          { energy_fn = @user_E,
+          { operandSegmentSizes = array<i32: 1, 1, 0, 0>, energy_fn = @user_E,
             eta = 0.05 : f64,
             temperature = 1.0 : f64,
             manifold = "euclidean" }

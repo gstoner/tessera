@@ -375,3 +375,57 @@ def test_device_bivector_launch_row():
     expect = nl.reference_langevin_loop(y, x, [8, 9], eta=0.05, temperature=0.3, steps=5,
                                         manifold="bivector", energy="huber")
     np.testing.assert_allclose(np.asarray(result["output"][0]), expect[0], rtol=1e-5, atol=1e-5)
+
+
+# --- the annealing schedule on the device ----------------------------------
+
+def test_the_annealed_kernel_carries_its_temperature_in_registers():
+    """Host-free: the cooling schedule must ride in the kernel, not force a
+    launch per step. The loop's iter_args gain one f32 beside the state and the
+    two key words, and no transcendental is needed — the temperature is cooled by
+    a multiply, so the row-program emitter's math admission table (which refuses
+    `math.powf`) is not in the way."""
+    tool = _compiler()
+    source, _ = nl.langevin_device_source((4, 8), eta=0.1, temperature=0.7, steps=3,
+                                          backend="rocm", compiler=tool, anneal=0.5)
+    assert source.count("gpu.func ") == 1
+    body = source.split("gpu.func @row_program(", 1)[1]
+    assert "linalg." not in body and "tensor." not in body and "math.powf" not in body
+    carried = re.findall(r"iter_args\([^)]*\) -> \(([^)]*)\)", body)
+    assert carried and carried[0].count("f32") == 2, carried   # state + temperature
+    # The per-step noise scale's sqrt: the emitter pins it to the correctly
+    # rounded realization for the route, so on ROCm it is the LLVM intrinsic and
+    # `math.sqrt` is gone by here.
+    assert "llvm.intr.sqrt" in body and "math.sqrt" not in body
+
+
+@pytest.mark.parametrize("anneal", [1.0, 0.5])
+def test_the_annealed_chain_matches_the_declared_policy_on_device(anneal):
+    backend, chip, tool, llvm = _device_lane()
+    rng = np.random.default_rng(int(anneal * 10) + 4)
+    shape = (5, 16)
+    y0 = rng.standard_normal(shape).astype(np.float32)
+    x = rng.standard_normal(shape).astype(np.float32)
+    key = [0x5150ABC, 11]
+    got = nl.native_langevin_loop_device(y0, x, key, eta=0.1, temperature=0.6, steps=6,
+                                         backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                         anneal=anneal)
+    want, want_key = nl.reference_langevin_loop(y0, x, key, eta=0.1, temperature=0.6, steps=6,
+                                                anneal=anneal)
+    np.testing.assert_allclose(np.asarray(got[0]), want, rtol=1e-5, atol=1e-6)
+    assert list(np.asarray(got[1])) == list(want_key)
+
+
+def test_the_annealed_device_chain_agrees_with_the_cpu_lane():
+    """Same schedule, two lanes: the device kernel and the CPU JIT must compute
+    the same cooling chain, since both claim the same declared policy."""
+    backend, chip, tool, llvm = _device_lane()
+    rng = np.random.default_rng(88)
+    y0 = rng.standard_normal((4, 32)).astype(np.float32)
+    x = rng.standard_normal((4, 32)).astype(np.float32)
+    key = [7, 2]
+    device = nl.native_langevin_loop_device(y0, x, key, eta=0.05, temperature=0.5, steps=8,
+                                            backend=backend, chip=chip, compiler=tool, llvm_bin=llvm,
+                                            anneal=0.7)
+    host = nl.native_langevin_loop(y0, x, key, eta=0.05, temperature=0.5, steps=8, anneal=0.7)
+    np.testing.assert_allclose(np.asarray(device[0]), np.asarray(host[0]), rtol=1e-5, atol=1e-6)

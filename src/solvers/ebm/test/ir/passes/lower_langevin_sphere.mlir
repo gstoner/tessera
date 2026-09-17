@@ -42,7 +42,7 @@ module {
   // CHECK-NOT: tessera_ebm.
   func.func @sphere(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>) -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>) {
     %r:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "sphere" }
+        { operandSegmentSizes = array<i32: 1, 1, 0, 1>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.5 : f64, manifold = "sphere" }
         : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>)
     return %r#0, %r#1, %r#2 : tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>
   }
@@ -55,7 +55,7 @@ module {
   // CHECK-NOT: arith.mului_extended
   func.func @sphere_descent(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>) -> (tensor<4x8xf32>, tensor<4xi32>) {
     %r:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.0 : f64, manifold = "sphere" }
+        { operandSegmentSizes = array<i32: 1, 1, 0, 1>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.0 : f64, manifold = "sphere" }
         : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>)
     return %r#0, %r#2 : tensor<4x8xf32>, tensor<4xi32>
   }

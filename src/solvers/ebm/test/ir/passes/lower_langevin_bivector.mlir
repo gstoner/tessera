@@ -40,7 +40,7 @@ module {
   func.func @bivector(%y: tensor<4x8xf32>, %x: tensor<4x8xf32>, %key: tensor<2xi64>)
       -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>) {
     %r:3 = "tessera_ebm.langevin_step"(%y, %key, %x)
-        { energy_fn = @E, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "bivector",
+        { operandSegmentSizes = array<i32: 1, 1, 0, 1>, energy_fn = @E, eta = 0.1 : f64, temperature = 0.4 : f64, manifold = "bivector",
           grade = 2 : i64, algebra = [3, 0, 0] }
         : (tensor<4x8xf32>, tensor<2xi64>, tensor<4x8xf32>) -> (tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>)
     return %r#0, %r#1, %r#2 : tensor<4x8xf32>, tensor<2xi64>, tensor<4xi32>

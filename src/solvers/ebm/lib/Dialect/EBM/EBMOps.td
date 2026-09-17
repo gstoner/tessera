@@ -123,7 +123,7 @@ def EBM_InnerStepOp : EBMOp<"inner_step", [Pure]> {
   }];
 }
 
-def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
+def EBM_LangevinStepOp : EBMOp<"langevin_step", [AttrSizedOperandSegments]> {
   let summary =
     "One Langevin step on a (possibly non-flat) manifold.";
   let description = [{
@@ -140,17 +140,31 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
     Returns (new_state, next_key) and, for a manifold integrator, a per-row
     `i32` status word (0 ok; 1 entry precondition violated; 2 retraction
     underflow, previous state kept).
+
+    The temperature is given **either** as the `temperature` attribute or as the
+    `temperature_value` operand, never both and never neither (the verifier
+    enforces it; Decision #21a -- it selects which distribution is sampled, so it
+    is a semantic key and cannot default). The operand form is what an *annealing
+    schedule* needs: with a constant attribute a K-step loop samples one
+    temperature, and a schedule would have to be unrolled into K differently
+    attributed steps. As a scalar operand the schedule is computed in IR inside
+    the loop, so an annealed chain is one loop and, on the device route, one
+    kernel. The attribute form keeps its compile-time advantage: at T = 0 it emits
+    no noise at all, which a runtime temperature cannot know.
   }];
   let arguments = (ins
     AnyType:$state,
     AnyType:$rng_key,
+    // A runtime temperature (scalar f32/f64) for an annealed chain; mutually
+    // exclusive with the `temperature` attribute.
+    Optional<AnyType>:$temperature_value,
     // Captured context the energy closes over (2026-09-16): `energy_fn` is
     // E(state, captures...) -> energies, so a quadratic energy's target `x`
     // rides here instead of being baked into the module.
     Variadic<AnyType>:$captures,
     FlatSymbolRefAttr:$energy_fn,
     F64Attr:$eta,
-    F64Attr:$temperature,
+    OptionalAttr<F64Attr>:$temperature,
     EBM_ManifoldAttr:$manifold,
     OptionalAttr<I64Attr>:$grade,
     // The Clifford signature [p, q, r] the bivector integrator projects in.
@@ -164,10 +178,12 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
   // silently); "euclidean" has none.
   let results = (outs AnyType:$new_state, AnyType:$next_key, Optional<AnyType>:$status);
   let assemblyFormat = [{
-    $state `,` $rng_key (`captures` $captures^)? `energy_fn` $energy_fn `eta` $eta
-    `temperature` $temperature `manifold` $manifold (`grade` $grade^)?
+    $state `,` $rng_key (`temperature_value` $temperature_value^)?
+    (`captures` $captures^)? `energy_fn` $energy_fn `eta` $eta
+    (`temperature` $temperature^)? `manifold` $manifold (`grade` $grade^)?
     attr-dict `:` functional-type(operands, results)
   }];
+  let hasVerifier = 1;
 }
 
 def EBM_SelfVerifyOp : EBMOp<"self_verify", [Pure]> {

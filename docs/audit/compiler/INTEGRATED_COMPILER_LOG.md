@@ -4312,7 +4312,7 @@ Outcome: **Every item the previous entry left owed is closed, promoted, reduced 
 | Host | Result |
 |---|---|
 | Princess-Luna (gfx1151) | **19491 passed, 0 failed**; `check-tessera-rocm` 68/68; lit 493/493; shape-frames recorder 11/11 |
-| Tajasarus (gfx1201, assertions LLVM) | targeted list: 73 passed, 33 skipped (all naming the arch), 1 upstream assertion now a reasoned skip; `check-tessera-nvidia` **62/62** on the assertions driver; full sweep recorded in the ROCm queue |
+| Tajasarus (gfx1201, assertions LLVM) | **17538 passed, 0 failed** (was 50); lit 493/493 in both trees; `check-tessera-rocm` 68/68 on the assertions driver; `check-tessera-nvidia` **62/62** on the new assertions NVIDIA driver; the last failure was the thread-sticky `hipGetLastError` read (ROCm queue item 8), found by ordered bisect |
 | Super-Bear (sm_120) | **16093 passed, 0 failed** (was 1: Lion); NVIDIA lit both trees after the driver change, see the NVIDIA queue |
 | Mac (M1 Max) | **18402 passed, 0 failed** (four sweep artifacts re-run clean: three `inspect.getsource` reads of a file being edited, one Apple ledger hashed under the lit PATH's clang); ruff, mypy, doc and plan gates clean |
 

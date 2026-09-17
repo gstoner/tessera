@@ -191,13 +191,19 @@ static void emitDistribution(OpBuilder &builder, Location loc,
         builder.create<arith::ConstantOp>(
             loc, f32, builder.getF32FloatAttr(6.283185307179586f)),
         uniform2);
+    // Each operand is created in its own statement: C++ leaves the order of
+    // evaluation of call arguments unspecified, so `create<SelectOp>(...,
+    // create<SinOp>, create<CosOp>)` emitted sin-then-cos under one compiler
+    // and cos-then-sin under another. The generated IR must not depend on
+    // which compiler built the generator (philox_distributions.mlir read the
+    // difference as a failure on the assertions-ON driver, 2026-09-17).
+    Value parity = builder.create<arith::RemUIOp>(loc, index, two);
+    Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
     Value odd = builder.create<arith::CmpIOp>(
-        loc, arith::CmpIPredicate::eq,
-        builder.create<arith::RemUIOp>(loc, index, two),
-        builder.create<arith::ConstantIndexOp>(loc, 1));
-    Value trig = builder.create<arith::SelectOp>(
-        loc, odd, builder.create<math::SinOp>(loc, theta),
-        builder.create<math::CosOp>(loc, theta));
+        loc, arith::CmpIPredicate::eq, parity, one);
+    Value sine = builder.create<math::SinOp>(loc, theta);
+    Value cosine = builder.create<math::CosOp>(loc, theta);
+    Value trig = builder.create<arith::SelectOp>(loc, odd, sine, cosine);
     result = builder.create<arith::AddFOp>(
         loc, parameter0,
         builder.create<arith::MulFOp>(

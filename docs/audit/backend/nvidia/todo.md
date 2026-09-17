@@ -7753,6 +7753,29 @@ build with the NVIDIA backend configured, which none currently is. Owed: build
 one, or run the Philox lowering through the ROCm-style single-invocation fixture
 pattern (`rocm_generated_kernel_stamps_gpu_kernel_once.mlir`) with NVVM.
 
+**Built, and it found three more (2026-09-17, later the same day).** Tajasarus now
+holds `build-assertions-nvidia/` — the assertions-ON LLVM 23.1.1 with
+`TESSERA_BUILD_NVIDIA_BACKEND=ON`, CUDA off, the same `-fno-rtti -UNDEBUG`
+flags as its ROCm assertions tree — the first assertions-enabled NVIDIA driver
+in the fleet. Its first `check-tessera-nvidia` run aborted three fixtures:
+`GenerateNVIDIAPhiloxKernel` creates `math` ops without declaring the dialect
+("Loading a dialect (math) while in a multi-threaded execution context"),
+`LowerTileToNVIDIAPass` loads `tile` from inside `runOnOperation`
+(`sm120_macro_cta_matmul`), and `philox_distributions.mlir` expected `math.sin`
+before `math.cos` while the driver emitted them the other way round: the
+generator passed two nested `builder.create` calls as arguments to a third, and
+C++ leaves that evaluation order unspecified — the fixture's order held under
+the compiler that built Super-Bear's driver and not under the one that built
+this tree. That is a determinism defect in the generator, fixed by creating each
+operand in its own statement; the same shape may exist in other generators and
+should be read for. The driver also registers `convert-gpu-to-nvvm`,
+`convert-scf-to-cf`, `reconcile-unrealized-casts` and the ConvertToLLVM
+extensions the NVVM lowering promises (arith, cf, func, index, math, memref,
+ub, gpu, nvvm), so the single-invocation stamp fixture
+(`philox_stamps_gpu_kernel_once.mlir`) runs there: **62/62**, and
+`llvm.func @philox_uniform ... attributes {gpu.kernel, nvvm.kernel}` — once.
+Both NVIDIA lit trees on Super-Bear re-run after these edits (below).
+
 ## Princess-Luna red zone: the shared fixes that touch this backend — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

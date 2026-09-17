@@ -4293,3 +4293,31 @@ Evidence: `tests/unit/test_rocm_compiled_family_gate.py`, `tests/tessera-ir/phas
 
 <!-- entry-fields:end -->
 
+### 2026-09-17 — the engineering loops: every owed item from the gfx1201 tail worked to its disposition
+
+Owner: [COMPILER-DEVEX-1](INTEGRATED_COMPILER_PLAN.md#compiler-devex-1)
+
+PRs: ROCm-host red zone engineering loops (sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`); co-owner [W4-PRODUCT-1](INTEGRATED_COMPILER_PLAN.md#w4-product-1).
+
+Outcome: **Every item the previous entry left owed is closed, promoted, reduced to an upstream reproducer, or retired — and none of the seven gfx1201 defects was what its failure said.** The fused-epilogue "wrong numbers" were the bare matmul: the compiled 16x16x16 lane refuses on RDNA4 (correctly) and the launch path fell back to the hand-written oracle, which drops the activation kwarg and knows two operands. A fallback now runs only when it computes the same program, and the oracle refuses what it does not implement; those rows skip on gfx1201 naming the arch. The KU reference rung was missing the RDNA4 fragment specialization its rung-1 sibling had (8/8 pass on gfx1201 now). Two scalar families — the state machine and the affine Langevin core — are promoted on gfx1201 on the evidence their tests produced (9/9), and the samplers' numpy fallback no longer promotes a float32 state to float64. The WMMA compare harness selects its fragment layout per device pass. Tajasarus's `build/` now builds the x86 backend, so its Zen 5 lanes have their shared image.
+
+**The sm_120 Lion `rc=3` was the toolchain pin, and the launcher now says so.** Every CUDA driver call in the PTX bridge records its name and `CUresult` (`tessera_nvidia_ptx_last_error`); the first instrumented run read `cuModuleLoadDataEx: CUDA_ERROR_UNSUPPORTED_PTX_VERSION ... Unsupported .version 9.4; current version is '9.3'`. The 2026-09-15 bump pinned nvcc 13.4's PTX ISA as *the* ISA while driver 610.88 implements the CUDA 13.3 driver API (`cuDriverGetVersion` 13030) and JIT-compiles at most 9.3. The driver is now pinned and derived separately (`gpu_target.driver_jit_ptx_isa`), the emitter stamps it, and the runtime's one registration point re-stamps nvcc's PTX to it. The lane passes; Super-Bear's full sweep is **0 failed**.
+
+**The first assertions-ON NVIDIA driver in the fleet (`build-assertions-nvidia` on Tajasarus) found three more defects no NDEBUG driver could:** the Philox generator creating `math` ops without declaring the dialect, the Tile→NVIDIA lowering loading `tile` from inside `runOnOperation`, and — a new class — the Philox normal kernel emitting `sin`/`cos` in whichever order the *host C++ compiler* evaluated two nested `create` calls (unspecified in C++; the fixture's order held under one compiler and not the other). All three fixed; the driver now registers the NVVM lowering and the ConvertToLLVM extensions so the single-invocation stamp fixture can run there: **62/62**, and the Philox kernel carries `gpu.kernel` exactly once through `convert-gpu-to-nvvm`.
+
+**The upstream SCEV assertion is reduced to 31 lines.** An assertions-ON `opt`/`llvm-reduce` built from LLVM 23.1.1 sources on Tajasarus reproduces `SCEVDivision::divide` inside `LoopInterchangePass` on the rank-2 dynamic backward's `product` kernel and shrinks it to a two-loop nest storing through a generic pointer cast from address space 5 (`tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`); `-enable-loopinterchange=0` passes, an NDEBUG `opt` compiles it in silence, and the real kernel executes correctly on gfx1151 (`runtime_shape_frames_20260908/rocm_gfx1151_revalidation_20260917.json`). The rank-2 case skips on an assertions host with that reason; it is LLVM's, not ours.
+
+**`power_retention` is retired** to `archive/examples/advanced/` (op already canonical, kernel never compiled, torch stub), and **the two benchmark orphan ratchets hold at an empty floor**: 6 baselines, 4 packet directories and 11 recorders removed, 25 baselines shown to be read by a derived name, 10 packets given a README naming their recorder and citing record, 41 recorders named.
+
+| Host | Result |
+|---|---|
+| Princess-Luna (gfx1151) | **19491 passed, 0 failed**; `check-tessera-rocm` 68/68; lit 493/493; shape-frames recorder 11/11 |
+| Tajasarus (gfx1201, assertions LLVM) | targeted list: 73 passed, 33 skipped (all naming the arch), 1 upstream assertion now a reasoned skip; `check-tessera-nvidia` **62/62** on the assertions driver; full sweep recorded in the ROCm queue |
+| Super-Bear (sm_120) | **16093 passed, 0 failed** (was 1: Lion); NVIDIA lit both trees after the driver change, see the NVIDIA queue |
+| Mac (M1 Max) | **18402 passed, 0 failed** (four sweep artifacts re-run clean: three `inspect.getsource` reads of a file being edited, one Apple ledger hashed under the lit PATH's clang); ruff, mypy, doc and plan gates clean |
+
+Remaining: the fused epilogue and integer storage on RDNA4 need the compiled lane's 16x16x32 layout (owed under the gfx1201 scheduled-package program, now a skip rather than a wrong answer); the LLVM issue for the SCEV reproducer is unfiled (owner's call); the `gfx1151`-pinned attention-backward test skips on gfx1201 by design.
+
+Evidence: `tests/unit/test_rocm_compiled_family_gate.py`, `tests/unit/test_target_toolchain_pins.py`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/philox_stamps_gpu_kernel_once.mlir`, `tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`, `benchmarks/baselines/runtime_shape_frames_20260908/rocm_gfx1151_revalidation_20260917.json`; the two backend queues under `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`.
+
+<!-- entry-fields:end -->

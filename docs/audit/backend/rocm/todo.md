@@ -8156,7 +8156,24 @@ Princess-Luna (gfx1151) for the shared code:**
      backend, and `x86_native._library_path` looks in `build/`). Reconfigured
      ON, matching the canonical primary configure; **3/3 Zen 5 attention
      backward tests pass there**.
-  7. **Upstream SCEV assertion:** see the reproducer note below.
+  7. **Upstream SCEV assertion: reduced to 31 lines, and the kernel it comes
+     from is verified correct.** An assertions-ON `opt` and `llvm-reduce`
+     built from the LLVM 23.1.1 sources on Tajasarus
+     (`~/toolchains/llvm-tools-build/bin`, kept) reproduce
+     `SCEVDivision::divide`'s type assertion inside `LoopInterchangePass` on
+     the `product` kernel of the rank-2 dynamic backward and shrink it to a
+     two-deep loop nest storing through a generic pointer cast from address
+     space 5 (`tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`).
+     `-enable-loopinterchange=0` passes; ROCm 10.0's NDEBUG `opt` compiles it
+     in silence. The NDEBUG check that was owed:
+     `benchmarks/record_runtime_shape_frames.py` executes exactly this kernel
+     and compares against `2*x` — re-run on Princess-Luna, 11/11 cases incl.
+     `dynamic_matrix_backward` at (2,2), (1,4), (0,4)
+     (`runtime_shape_frames_20260908/rocm_gfx1151_revalidation_20260917.json`).
+     `test_dynamic_backward_input_capacity_is_native_guarded[2]` now skips on a
+     host whose LLVM has assertions, with the reason and the reproducer path
+     (`tests/_support/environment.llvm_tool_has_assertions`). Filing it
+     upstream is the owner's call; the reproducer is ready.
 
 ## Two red zones nobody had swept — 2026-09-17
 

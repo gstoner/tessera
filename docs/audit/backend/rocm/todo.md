@@ -7999,6 +7999,74 @@ Parity validated on both owning devices for what did land: the admitted set meas
 
 **A hollow green signal found while collecting that evidence, and open:** on Tajasarus `ninja -C build check-ebm` and `check-clifford` print *nothing* and exit 0 in both trees. It is the documented `check-tessera-rocm` trap again — `lit` is venv-only on these boxes, a non-interactive configure does not see it, and the target degrades to a silent skip — and it means the assertions-enabled host's domain fixture coverage looked green while running zero fixtures. Running lit directly with `BUILD_DIR` set and the toolchain's `FileCheck` on PATH gives the real result (EBM 18/18, Clifford 22/22 and tests/tessera-ir 491/491 in **both** trees, assertions included). Owed: pass `-DTESSERA_LIT=$PWD/.venv/bin/lit` when configuring these trees, so the target either runs or fails instead of skipping.
 
+## gfx1201 parity with gfx1151, and what only gfx1201 can do — the next loop, scoped 2026-09-17
+
+Sync `GFX1201-PARITY-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1 (opens after `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17` lands).
+
+**Measured starting state (2026-09-17, end of the follow-ups loop).**
+`rocm_pipeline.FAMILY_PLUGINS` has 63 families; `promoted_families("gfx1201")`
+names 7 (softmax, reduction, matmul, attention, attention_backward,
+control_state_machine, ebm_affine_langevin). A full `-m "not slow"` sweep skips
+~4500 tests on Tajasarus against ~2570 on Princess-Luna; the ~1900 difference
+is gfx1151 lanes with no gfx1201 proof, every one now skipping with the arch
+named rather than failing. Routes that already run on both chips through
+arch-neutral kernels: the Clifford native GPU route, the EBM cooperative
+Langevin kernel, the hand-written HIPRTC WMMA GEMM (all rungs), the generic
+dynamic HIP lane. gfx1201-only capability that is declared and device-verified
+but consumed by no promoted family: FP8/BF8 OCP WMMA (`gfx1201_wmma_dtypes_20260913`)
+and the 2:4 `tessera_rocm.swmmac` sparse stack (public admission closed). No
+counters on either WSL2 box (`/dev/kfd` absent), so this program is correctness
+promotion only; performance promotion needs a counter-capable host.
+
+**The structural fact that sets the order.** The runtime's generic compiled
+GEMM lane (`rocm_compiled`: `_build_compiled_gemm_hsaco` → the
+`tessera_rocm.wmma_gemm` directive → `generate-wmma-gemm-kernel`) is gfx11-only
+in both its Python gate and its C++ generator (`GenerateWMMAGemmKernel.cpp:1271`
+refuses a non-gfx11 `schedule_arch`), and it is the lane that carries the fused
+epilogue, int8 and int4 storage for the matmul family and everything fused on
+top of it. The *typed* Tile route (`TileToROCM.cpp`) already has the RDNA4
+fragment family (`FragmentFamily::RDNA4WMMA`: 8-element A/B fragments, output
+rows spread over registers and half-waves, k=16 int8 / k=32 fp8 on gfx12, OCP
+FP8), and the scheduled matmul artifact (`scheduled_matmul.py`) already carries
+`bias`, `residual` and `activation` in its Tile IR — but `package_scheduled_matmul`
+admits only the `fp16/fp16/fp32` contract and the gfx1201 package is packaged
+through `_compile_native_tile_ir(family="matmul", staging="register")`. So
+parity for the matmul family is a *routing* slice, not a second generator
+(Decision #31): send `rocm_compiled` on gfx12 through the typed route and widen
+that route's admitted contracts, rather than teaching the legacy generator a
+second layout.
+
+**Slices, in order of leverage; each is device-verified on Tajasarus and
+re-run on Princess-Luna before it is recorded, per family:**
+
+1. **Matmul family on the typed route for gfx1201:** fused epilogue
+   (bias/relu/gelu/silu) and int8/int4 storage through `package_scheduled_matmul`
+   + `TileToROCM`'s RDNA4 family; `_execute_rocm_compiled_gemm` selects that
+   route on gfx12 instead of refusing. Turns today's 23 fused-epilogue/int
+   skips into passes or named defects. Then the legacy generator's gfx11 gate
+   becomes the documented boundary, not the lane's ceiling.
+2. **Scalar and row-program families:** scalar_{unary,binary,compare,logical,
+   bitwise,predicate,where,activation}, loss_*, normalization, rng_philox,
+   indexing_*, position_*, quant_*, reduction_arg, scan, optimizer, fused_silu_mul.
+   No WMMA fragment in any of them; promote the way state machine and affine
+   Langevin promoted today — add to both profiles, run the family's test files
+   on the box, keep what passes, record what does not as a named defect.
+3. **Attention tail:** attention_mla_decode, depth_attention, paged_kv,
+   sparse_block_attention/topk, and the WMMA flash-attention backward
+   generator (has gfx12 mentions, no gfx1201 proof); moe_dispatch and the
+   sequence_* families behind them.
+4. **Spectral and solver families**, gfx1151-only by construction in their
+   generators; and the batched/f32 matmul variants.
+5. **gfx1201-only consumers:** an FP8 matmul family on the OCP WMMA audit and
+   public Graph admission for the 2:4 sparse stack — the first promoted
+   families that gfx1151 cannot have (Decision #29: the declarations exist;
+   they need consumers).
+
+Rule for every slice: `promoted_families` (Python) and the C++ profile in
+`Passes.cpp` move together, the family's tests are the evidence, and a family
+that does not pass on the device is recorded as owed with its failure, never
+promoted to make a count move.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

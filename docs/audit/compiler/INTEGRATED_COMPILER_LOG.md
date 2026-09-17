@@ -4316,7 +4316,7 @@ Outcome: **Every item the previous entry left owed is closed, promoted, reduced 
 | Super-Bear (sm_120) | **16093 passed, 0 failed** (was 1: Lion); NVIDIA lit both trees after the driver change, see the NVIDIA queue |
 | Mac (M1 Max) | **18402 passed, 0 failed** (four sweep artifacts re-run clean: three `inspect.getsource` reads of a file being edited, one Apple ledger hashed under the lit PATH's clang); ruff, mypy, doc and plan gates clean |
 
-Remaining: the fused epilogue and integer storage on RDNA4 need the compiled lane's 16x16x32 layout (owed under the gfx1201 scheduled-package program, now a skip rather than a wrong answer); the LLVM issue for the SCEV reproducer is unfiled (owner's call); the `gfx1151`-pinned attention-backward test skips on gfx1201 by design.
+Remaining: gfx1201 parity is now a scoped program (`GFX1201-PARITY-2026-09-17` in the ROCm queue: 7 of 63 families promoted; the matmul family's fused epilogue and integer storage go through the typed Tile route, which already has the RDNA4 fragment family, not a second generator); the LLVM issue for the SCEV reproducer is unfiled (owner's call); the `gfx1151`-pinned attention-backward test skips on gfx1201 by design.
 
 Evidence: `tests/unit/test_rocm_compiled_family_gate.py`, `tests/unit/test_target_toolchain_pins.py`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/philox_stamps_gpu_kernel_once.mlir`, `tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`, `benchmarks/baselines/runtime_shape_frames_20260908/rocm_gfx1151_revalidation_20260917.json`; the two backend queues under `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`.
 

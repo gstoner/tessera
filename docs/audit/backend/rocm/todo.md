@@ -8255,9 +8255,11 @@ Princess-Luna (gfx1151) for the shared code:**
      entry now also naming its failing call and stage (2 argument/alloc, 3
      H2D, 4 launch, 5 sync, 6 D2H). Two pieces of hygiene landed on the way
      and stay: the spectral source candidate compiles for the resolved chip
-     (it defaulted to gfx1151), and the prebuilt gfx1151 spectral image is not
-     dlopened on another chip at all. The ROCm emitter's offload arch also no
-     longer falls back to gfx1151 on an exception (Decision #21a).
+     (it defaulted to gfx1151), and the ROCm emitter's offload arch no longer
+     falls back to gfx1151 on an exception (Decision #21a). A gate that refused
+     to dlopen the prebuilt gfx1151 image on another chip was tried, shown to
+     be neither the cause nor the fix, and removed (the loader is what the
+     fake-package tests exercise).
   7. **Upstream SCEV assertion: reduced to 31 lines, and the kernel it comes
      from is verified correct.** An assertions-ON `opt` and `llvm-reduce`
      built from the LLVM 23.1.1 sources on Tajasarus

@@ -29,7 +29,7 @@ module {
 // CHECK-NOT: tile.store
 // CHECK: gpu.func @fused(%{{.*}}: memref<?xf16>, %{{.*}}: memref<?xf16>, %[[BIAS:.*]]: memref<?xf32>, %{{.*}}: memref<?xf32>
 // GFX12: fragment_family = "rdna4_wmma"
-// GFX11: fragment_family = "gfx11_wmma"
+// GFX11: fragment_family = "rdna3_wmma"
 // CHECK: memref.load %[[BIAS]][
 // CHECK: arith.addf
 // CHECK: arith.maximumf

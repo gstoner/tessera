@@ -370,8 +370,16 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   // vocabulary is portable, but gfx1200/gfx1250 must supply their own exact-
   // device schedule and instruction-family profile rather than inheriting it.
   bool rocm = schedule.arch.contains("gfx1151");
+  // The fused bias/activation epilogue is admitted on both ROCm chips since
+  // 2026-09-17 (GFX1201-PARITY slice 1): Schedule->Tile carries it onto
+  // tile.matmul_kernel and the typed Tile->ROCm consumer applies it at the
+  // fragment store on each chip's own layout. The residual add stays
+  // NVIDIA-owned.
+  const bool rocmFusedEpilogue =
+      (schedule.arch.contains("gfx1151") || schedule.arch.contains("gfx1201")) &&
+      !schedule.residual;
   if ((schedule.bias || schedule.residual || schedule.activation != "none") &&
-      !nvidia_sm120)
+      !nvidia_sm120 && !rocmFusedEpilogue)
     return failure();
   // Apple GPU has no rank-2 f32 cooperative-matrix GEMM: the shared launch
   // contract is consumed as a batch-1 MPS BMM (apple_gpu_bmm_f32_batch1).  The

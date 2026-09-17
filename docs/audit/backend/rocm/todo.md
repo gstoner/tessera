@@ -7999,6 +7999,47 @@ Parity validated on both owning devices for what did land: the admitted set meas
 
 **A hollow green signal found while collecting that evidence, and open:** on Tajasarus `ninja -C build check-ebm` and `check-clifford` print *nothing* and exit 0 in both trees. It is the documented `check-tessera-rocm` trap again — `lit` is venv-only on these boxes, a non-interactive configure does not see it, and the target degrades to a silent skip — and it means the assertions-enabled host's domain fixture coverage looked green while running zero fixtures. Running lit directly with `BUILD_DIR` set and the toolchain's `FileCheck` on PATH gives the real result (EBM 18/18, Clifford 22/22 and tests/tessera-ir 491/491 in **both** trees, assertions included). Owed: pass `-DTESSERA_LIT=$PWD/.venv/bin/lit` when configuring these trees, so the target either runs or fails instead of skipping.
 
+## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**Follow-up required (the numbers are recorded in the log entry once each host's
+sweep lands). Three compiler defects and one gating class, none of which were
+what the failures said.**
+
+* **Every ROCm kernel generator stamped `gpu.kernel` twice — an assertions-only
+  abort.** LLVM 23's `gpu.func` owns `kernel` as an inherent property; 81 sites in
+  72 generators (and the NVIDIA Philox generator) additionally
+  `setAttr(getKernelFuncAttrName(), unit)` by raw name, so the in-memory op held
+  the attribute twice and `GPUFuncOpLowering` copied both onto the `llvm.func` —
+  visible on the NDEBUG build as `attributes {gpu.kernel, gpu.kernel,
+  rocdl.kernel}`, and on the assertions-ON driver as `DictionaryAttr element
+  names must be unique` (SIGABRT) in the unary, binary and loss families: 50 red
+  tests on Tajasarus, green everywhere else. A text round-trip collapses the pair,
+  which is why upstream `mlir-opt` on the *printed* IR never saw it and why the
+  runtime's single-invocation pipelines are where it bit. Now `setKernelAttr`;
+  `tests/tessera-ir/phase3/rocm_generated_kernel_stamps_gpu_kernel_once.mlir`
+  runs the single invocation and refuses a printed pair, so NDEBUG hosts catch a
+  recurrence too. Third instance of the Decision #19 standing lesson in two days.
+* **The exported forward product was still a request** — the shape-varying
+  `scf.while` crash, corrected above under `AUTODIFF-SHAPE-WHILE-FORWARD`.
+* **~1500 gfx1151-family tests on gfx1201, gated without a table.**
+  `rocm_pipeline.promoted_families(arch)` is now the one place the executable
+  pipeline's fail-closed rule lives; `tests/_support/rocm_build.runtime_for_host`
+  wraps the runtime the compiled-family guards return so that a launch refused
+  *for lack of proof on this host's arch* — the family rule, or an ISA contract
+  such as the 16x16x16 WMMA fragment layout naming `target 'gfx1201'` — becomes
+  a skip, and nothing else does. No per-family table, no over-skip: the refusal
+  text the pipeline already emits is the gate, and it must name the host's own
+  arch. The spectral composite refusal now names its arch for the same reason.
+* **Super-Bear's 48:** 39 were `test_apple_lowp_native_contract.py` running on a
+  Linux `tessera-opt` built without the Apple backend (it asked only whether
+  `tessera-opt` existed; it now asks `registered_passes`); 5 packaged a gfx1151
+  HSACO on a CUDA host (`require_native_storage_lane("rocm")`); 3 were
+  `test_scheduled_cumsum.py` launching an `x86_64_avx512` image on Zen 2 — the
+  runtime refused correctly, as a launch result, and the test read it as a
+  numerical failure (it skips without AVX-512 now).
+
 ## Two red zones nobody had swept — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1.
@@ -8120,24 +8161,33 @@ tensor<2x1xi64>)`), so it is neither an ABI nor a harness mismatch. The residual
 tape's 2 slots for a 3-iteration loop are *intentional* (the entry state is the
 loop input, so only iterations 1..n-1 are saved), so the sizing is not it either.
 
-**Mechanism, from the emitted forward.** The normalizer rewrites the
-data-dependent `scf.while` into an `scf.for` that carries the primal state as a
-`tensor<?xf32>` iter_arg, and the body replaces it with a *smaller* slice each
-iteration (`extract_slice %state[0][dim-1][1]`). A loop-carried tensor whose
-extent changes between iterations type-checks — the iter_arg is `tensor<?xf32>` —
-and does not survive bufferization: the carried buffer is allocated once and the
-loop then yields a differently sized one. That is the crash, and it is in the
-*primal carry*, not in the tape.
+**Mechanism — corrected 2026-09-17, the recorded one was wrong.** The first
+record said the primal state, carried as a `tensor<?xf32>` iter_arg whose extent
+shrinks each iteration, "does not survive bufferization". It does: a hand-written
+module with exactly that carry executes correctly through the JIT (probe M14),
+as do the envelope-packed carry, the 2-D residual slot inserts, the index tapes
+and `tessera.mul` on dynamic operands (probes M1–M10). What faults is the
+**exported forward product with its function attributes intact, and only
+those**: strip `tessera.autodiff = "reverse"` from the product and it runs
+(probe M13). The cause is that the export stamped the backward with
+`tessera.autodiff.role = "backward"` — which is what the paired pass keys on to
+leave a function it produced alone — and left the forward product carrying only
+the *request* marker. The JIT runs the paired pass unconditionally, so it
+differentiated the exported forward a second time, re-materialized its residual
+tapes on top of the first materialization, and returned a function whose ABI no
+longer matched the product contract the caller had just read. Out-of-bounds
+write on the first invoke; a segfault on every host with the native x86 JIT.
+`exportTypedProduct` now stamps the selected product with its role;
+`tests/tessera-ir/phase2_autodiff/autodiff_paired_export_product_is_not_a_request.mlir`
+runs the pass twice over an export and requires no second pairing. The
+envelope-carry normalizer change written against the wrong mechanism was
+reverted before it landed anywhere.
 
-The shape of the fix is already in the same function, one value over: the residual
-tape carries its shape-varying state as `tensor<2x16xf32>` **plus** an explicit
-`tensor<2x1xindex>` of lengths, inside a declared envelope
-(`saved_slot_shape_envelope_bounds = 16`), with a `cf.assert` that the length fits.
-The primal carry needs the same treatment — an envelope-sized buffer and a carried
-length, with every use inside the body reading the envelope through that length.
-That is a capability change to the normalizer with a design (carry envelopes for
-shape-varying loop state), not a patch, which is why it is recorded here rather
-than attempted alongside the rest of this sweep.
+Recorded because the wrong mechanism was *plausible and specific*, and was
+written into this queue and a PR before a minimal reproduction had confirmed it.
+The reproduction took ten hand-written modules and under an hour; the wrong
+record cost a compiler change and most of a day. Verify the mechanism, then
+write it down.
 
 Repro:
 

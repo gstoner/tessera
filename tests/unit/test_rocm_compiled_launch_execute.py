@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 import tessera
+from tests._support.rocm_build import runtime_for_host
 
 
 # A file-defined jit fn so AST lowering works (decoration needs no GPU; the
@@ -52,7 +53,7 @@ def _compiled_or_skip():
         pytest.skip("tessera-opt not built (ninja -C build tessera-opt)")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no AMD GPU / libtessera_rocm_gemm.so")
-    return rt
+    return runtime_for_host(rt)  # refusals for lack of proof on this arch skip
 
 
 def _artifact(rt, compiler_path):

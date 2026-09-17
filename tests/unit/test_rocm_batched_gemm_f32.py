@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from tests._support.rocm_build import runtime_for_host
 
 
 def _rocm_or_skip():
@@ -23,7 +24,7 @@ def _rocm_or_skip():
         pytest.skip("tessera-opt not built")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
-    return rt
+    return runtime_for_host(rt)  # refusals for lack of proof on this arch skip
 
 
 _RNG = np.random.default_rng(11)

@@ -13,6 +13,7 @@ Skip-clean: tessera-opt not built, or no usable AMD GPU.
 from __future__ import annotations
 
 import pytest
+from tests._support.rocm_build import runtime_for_host
 
 np = pytest.importorskip("numpy")
 
@@ -23,7 +24,7 @@ def _compiled_or_skip():
         pytest.skip("tessera-opt not built (ninja -C build tessera-opt)")
     if not rt._rocm_wmma_runtime_available():
         pytest.skip("no usable AMD GPU")
-    return rt
+    return runtime_for_host(rt)  # refusals for lack of proof on this arch skip
 
 
 def _artifact(rt, with_bias, activation, op_name="tessera.matmul"):

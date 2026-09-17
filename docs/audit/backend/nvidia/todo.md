@@ -7648,6 +7648,21 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Duplicate `gpu.kernel` stamp: the Philox generator had it too — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.
+
+**Parity change, unverified on the owning device.** `GenerateNVIDIAPhiloxKernel.cpp`
+stamped `gpu.kernel` by raw attribute name on a `gpu.func` whose `kernel` is an
+inherent property in LLVM 23, exactly as 72 ROCm generators did; the ROCm queue
+records the mechanism and the assertions-only abort it produced there. The
+NVIDIA site is fixed the same way (`setKernelAttr`). Super-Bear runs an NDEBUG
+driver, so the duplicate was silent there and the fix changes no observable
+result on that box; the only host that could falsify it is an assertions-ON
+build with the NVIDIA backend configured, which none currently is. Owed: build
+one, or run the Philox lowering through the ROCm-style single-invocation fixture
+pattern (`rocm_generated_kernel_stamps_gpu_kernel_once.mlir`) with NVVM.
+
 ## Princess-Luna red zone: the shared fixes that touch this backend — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.

@@ -2724,6 +2724,65 @@ private:
     if (mlir::isa<mlir::tensor::EmptyOp>(op))
       return mlir::success();
 
+    // The same reasoning, generalised: an op that neither consumes nor produces
+    // a floating-point value is not a differentiable variable, so there is no
+    // cotangent to propagate through it and nothing to refuse. Index and integer
+    // arithmetic is how a shape-varying program carries its extents, and
+    // demanding an adjoint for it rejected exactly those programs —
+    // `arith.index_cast` on the extent of a dynamically shaped tape stopped
+    // reverse mode with AUTODIFF_OP_NOT_DIFFERENTIABLE on every host that runs
+    // the native x86 JIT (three tests, red on both Zen 5 boxes, and invisible to
+    // CI, which has no such lane).
+    //
+    // Deliberately a property of the *types*, not a list of op names: a list
+    // would have to grow every time a shape computation used one more integer
+    // op, and each omission reads as "this op is not differentiable" when the
+    // truth is that no gradient was ever flowing there.
+    {
+      // Complex counts. A first cut asked only `isa<FloatType>` and silently
+      // skipped every `tensor<Nxcomplex<f32>>` FFT transpose — six oracle
+      // comparisons, and the gradient was dropped rather than refused, which is
+      // the failure this rule exists to avoid making.
+      std::function<bool(mlir::Type)> carriesFloat = [&](mlir::Type type) -> bool {
+        if (auto shaped = mlir::dyn_cast<mlir::ShapedType>(type))
+          return carriesFloat(shaped.getElementType());
+        if (auto complexTy = mlir::dyn_cast<mlir::ComplexType>(type))
+          return carriesFloat(complexTy.getElementType());
+        return mlir::isa<mlir::FloatType>(type);
+      };
+      const bool anyFloat =
+          llvm::any_of(op->getOperandTypes(), carriesFloat) ||
+          llvm::any_of(op->getResultTypes(), carriesFloat);
+      if (!anyFloat) return mlir::success();
+    }
+
+    // `arith.select` is linear in its two value operands for a fixed condition,
+    // which makes its transpose exact: the branch that was taken receives the
+    // whole cotangent and the other receives zero. The condition is a predicate,
+    // not a differentiable variable, so it receives none.
+    //
+    // This is a real gap rather than a missing declaration: `select` is how a
+    // lowered program spells every branch — a recovered switch edge, a clamped
+    // Huber kink, a masked manifold step — so reverse mode over any of them
+    // stopped here. Implemented in this pass and not on the op, because the op
+    // is upstream `arith` and there is no external-model registration in this
+    // tree to hang an interface on.
+    if (auto select = mlir::dyn_cast<mlir::arith::SelectOp>(op)) {
+      if (outputCotangents.size() != 1 || !outputCotangents.front())
+        return mlir::success();
+      mlir::Value cotangent = outputCotangents.front();
+      mlir::Value zero = buildZeroLike(builder, select.getTrueValue());
+      mlir::Value trueCotangent = mlir::arith::SelectOp::create(
+          builder, op->getLoc(), select.getCondition(), cotangent, zero);
+      mlir::Value falseCotangent = mlir::arith::SelectOp::create(
+          builder, op->getLoc(), select.getCondition(), zero, cotangent);
+      accumulateCotangent(builder, cotangents, select.getTrueValue(),
+                          trueCotangent);
+      accumulateCotangent(builder, cotangents, select.getFalseValue(),
+                          falseCotangent);
+      return mlir::success();
+    }
+
     llvm::SmallVector<mlir::Value> inputCotangents;
     auto savedAttention = explicitRegionResiduals.find(op);
     if (op->getName().getStringRef() == "tessera.flash_attn" &&

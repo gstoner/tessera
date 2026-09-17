@@ -9071,6 +9071,25 @@ Follow-up required: the arena pipeline route is NVVM/ROCDL only; the Apple arena
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Princess-Luna red zone: nothing reaches an Apple device — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**Not applicable to the Apple backend, with a reason.** The 26 failures were on the
+gfx1151 box and every fix is either ROCm-specific (a legality routing bug, a HIP
+link requirement, a lit data file) or target-independent AD (`arith.select`'s
+transpose; index arithmetic no longer refused as non-differentiable). No Apple
+runtime, dialect, ledger or packet is touched, and the Mac cannot evaluate any of
+the affected tests — they skip there as "native x86 JIT required" or "ROCm
+compiler unavailable", which is why a Mac sweep never showed them.
+
+One transferable observation rather than an action: the biggest cluster looked like
+a missing complex-storage capability and was a *target-naming* bug — the legality
+gate asked the registry about the generic backend name for a request the rest of
+the stack had already resolved to a specific chip. The Apple entries are
+`apple_gpu` / `apple_cpu` with no chip split today, so the same shape cannot arise
+here yet; it would the moment an Apple capability is scoped per generation.
+
 ## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
 
 Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

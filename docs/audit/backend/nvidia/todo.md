@@ -7648,6 +7648,24 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Princess-Luna red zone: the shared fixes that touch this backend — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**Follow-up required, one item.** Clearing 23 pre-existing failures on the gfx1151
+box changed three things this backend shares. (a) `libtessera_runtime.a` now
+publishes its out-of-CMake link requirements beside the archive, and the CUDA half
+is symmetric with the HIP half: a build with `TESSERA_ENABLE_CUDA=ON` contributes
+`libcudart` to the sidecar, so the runtime C-ABI harnesses link on a CUDA host too.
+**Unverified here** — Super-Bear builds the runtime without CUDA, so its sidecar is
+empty and the CUDA path of that sidecar has no owning-device proof yet; that is the
+follow-up. (b) `arith.select` gained its transpose and index/integer ops are no
+longer refused as non-differentiable, which is target-independent and applies to
+the sm_120 AD lanes unchanged. (c) Five tests that hard-coded `nvidia`/`sm_120`
+now skip where no CUDA toolchain exists instead of failing inside NVVM
+serialization — that was the *other* boxes reporting a missing CUDA toolchain as a
+broken compiler, and it changes nothing on a host that has one.
+
 ## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
 
 Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

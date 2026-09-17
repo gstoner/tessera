@@ -36,9 +36,55 @@ _NON_SOURCE_DIRS = frozenset({
 })
 
 
+def read_source(path: Path) -> str:
+    """Read a source file for substring scanning, tolerating undecodable bytes.
+
+    A gate that asks "does any source mention X" does not care whether every byte
+    is valid UTF-8, and it must not fail because something in the tree is not a
+    text file. Strict decoding turned unrelated filesystem debris into a
+    `UnicodeDecodeError` from a registry gate (Super-Bear, 2026-09-17), which is
+    both a false failure and an unreadable one.
+    """
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def _is_nested_checkout(path: Path) -> bool:
     """True if `path` is a git worktree or clone nested inside the tree."""
     return (path / ".git").exists()
+
+
+def find_apple_double_forks(root: Path) -> list[Path]:
+    """Every AppleDouble resource fork (`._name`) under `root`, outside the
+    non-source trees.
+
+    These are what a macOS-to-Linux copy leaves beside each file. They are
+    already in `.gitignore`, which is the trap: `git status` reads *clean* over
+    a tree full of them, so a working tree and a fresh worktree of the same
+    commit look identical to git and behave differently under every scanner
+    that globs by suffix. Super-Bear had 49 (2026-09-17); a bisect that compared
+    that tree against a clean worktree compared two trees, not two code states.
+    `iter_repo_files` skips them, but 37 test files glob directly, so the honest
+    thing is to make them visible at session start rather than trust that every
+    scanner was routed.
+    """
+    forks: list[Path] = []
+    stack = [Path(root)]
+    while stack:
+        directory = stack.pop()
+        try:
+            entries = list(directory.iterdir())
+        except (PermissionError, FileNotFoundError):  # pragma: no cover
+            continue
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                if entry.name in _NON_SOURCE_DIRS or entry.name.startswith("build"):
+                    continue
+                stack.append(entry)
+            elif entry.name.startswith("._"):
+                forks.append(entry)
+    return sorted(forks)
 
 
 def iter_repo_files(
@@ -69,5 +115,16 @@ def iter_repo_files(
                 if skip_nested_checkouts and _is_nested_checkout(entry):
                     continue
                 stack.append(entry)
+            elif entry.name.startswith("._"):
+                # AppleDouble resource forks. A macOS-to-Linux copy leaves a
+                # `._name.py` beside every file, and its name carries the real
+                # suffix, so a `*.py` / `*.mlir` scan picks it up and then dies
+                # decoding its binary header — `UnicodeDecodeError: ... 0xa3`
+                # from a registry gate that has nothing to do with encodings.
+                # Measured on Super-Bear (2026-09-17): 49 of them, untracked
+                # debris, failing two source-registry gates on that host only.
+                # Skipping them by name keeps the gates a property of the repo
+                # rather than of whatever is lying around in the tree.
+                continue
             elif wanted is None or entry.suffix in wanted:
                 yield entry

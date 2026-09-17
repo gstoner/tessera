@@ -70,3 +70,25 @@ def test_lit_keywords_only_appear_as_directives():
 def test_directive_classifier(line, ok):
     hits = [k for k in KEYWORDS if k in line]
     assert (not hits or bool(_DIRECTIVE.match(line))) is ok
+
+
+def test_every_discovered_fixture_has_a_run_line():
+    """A `.mlir` inside a lit suite with no `RUN:` line is Unresolved, and one
+    Unresolved test fails the whole suite.
+
+    Data files driven by a Python test are the recurring cause, and the marker
+    that looks like it should suppress them does not: on LLVM 23's lit a test
+    with no RUN line is Unresolved *before* its `UNSUPPORTED:` is consulted. The
+    remedy is to keep such a file outside lit discovery — `tests/fixtures/` is
+    where the x86 and ROCm composed-layout inputs live for exactly this reason.
+
+    The ROCm instance sat on main behind an `UNSUPPORTED: true` marker, failing
+    `check-tessera-rocm`, which is that backend's only automated fixture coverage
+    and which no PR check runs.
+    """
+    missing = [f.relative_to(ROOT) for f in _fixtures()
+               if not any(_DIRECTIVE.match(line) and "RUN" in line.split(":")[0]
+                          for line in f.read_text(encoding="utf-8", errors="replace").splitlines())]
+    assert not missing, (
+        "lit fixtures with no RUN: line (each one makes its whole suite fail as "
+        f"Unresolved). Move Python-driven data to tests/fixtures/: {missing}")

@@ -7999,6 +7999,156 @@ Parity validated on both owning devices for what did land: the admitted set meas
 
 **A hollow green signal found while collecting that evidence, and open:** on Tajasarus `ninja -C build check-ebm` and `check-clifford` print *nothing* and exit 0 in both trees. It is the documented `check-tessera-rocm` trap again — `lit` is venv-only on these boxes, a non-interactive configure does not see it, and the target degrades to a silent skip — and it means the assertions-enabled host's domain fixture coverage looked green while running zero fixtures. Running lit directly with `BUILD_DIR` set and the toolchain's `FileCheck` on PATH gives the real result (EBM 18/18, Clifford 22/22 and tests/tessera-ir 491/491 in **both** trees, assertions included). Owed: pass `-DTESSERA_LIT=$PWD/.venv/bin/lit` when configuring these trees, so the target either runs or fails instead of skipping.
 
+## Two red zones nobody had swept — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1.
+
+Clearing Princess-Luna prompted the first **full** `pytest tests/unit/ -m "not
+slow"` sweep ever run on the other two Linux boxes. Both have large red zones, and
+neither is a regression — they are what has always been there, unobserved because
+only targeted subsets were ever run.
+
+**Tajasarus (gfx1201): ~1578 failures, and they are one defect.** They are
+concentrated in the `test_rocm_*_compiled.py` families — 302 in
+`test_rocm_unary_compiled.py`, 109 in norms, 79 in binary, 78 in losses, 73 in
+compare, and so on down. Every one of those files documents itself as a **gfx1151**
+family ("Compiler-generated elementwise unary math … on gfx1151"), and gfx1201 has
+no promoted family plugins at all — this queue and the EBM overhead packet both
+record that ("no promoted family plugins for gfx1201; gfx1200/gfx1250 remain
+fail-closed pending exact-device evidence"). So ~1500 tests assert a gfx1151 proof
+on a host that cannot have one.
+
+Their guard is the defect: `_unary_or_skip` and its siblings check
+`tessera-opt` is built and that there is *a usable AMD GPU* — never **which**
+chip. A gfx1201 host passes that guard and then fails, which is a host reporting
+"this proof does not exist here" as "this proof is broken". By the standing rule a
+host that cannot evaluate a lane must **skip with a reason**.
+
+It is deliberately **not** fixed here, because the obvious fix is the wrong one.
+The guard is shared by 119 test files, and making `_rocm_wmma_runtime_available`
+chip-aware would skip everything on gfx1201 — including lanes that genuinely do
+work there (the replay-verified scheduled packages, the WMMA datatype audit, the
+2:4 sparse stack, the cooperative EBM kernel). That trades ~1500 false failures
+for an unknown number of false skips, which is the worse error and exactly the
+hollow-green pattern. What it needs is a per-family answer to "does gfx1201 have
+this plugin", each one gated on that answer — roughly twenty families, with
+owning-device confirmation for each.
+
+**Super-Bear (sm_120): 48 failures, none of them this branch's.** Measured the
+only way that is valid — main and the branch each built from its own sources in a
+**fresh worktree**, same configure, same box: main **50**, branch **48**, nothing
+failing only on the branch, and the two that fail only on main are the
+shape-varying-tape tests that now skip with their reason. The 48 concentrate in
+`test_scheduled_cumsum.py`, `test_native_persistent_tape.py`,
+`test_native_next_admission.py` and `test_apple_lowp_native_contract.py` (an Apple
+contract test running on a Linux box).
+
+The first attempt at that comparison was wrong and is recorded because the error
+is easy to repeat: it compared `~/programming/tessera` (the branch, lived in) against
+a fresh worktree of main, and reported four branch regressions. All four were
+`UnicodeDecodeError` from **49 untracked AppleDouble resource forks** (`._name.py`)
+that an old macOS-to-Linux copy had left in the lived-in tree only. `._*` is
+gitignored, so `git status` was clean in both trees — git cannot tell them apart,
+and a bisect that varies the tree as well as the commit attributes tree noise to
+the commit. Three gates were bitten and are now debris-proof (`iter_repo_files`
+skips the forks, `read_source` decodes tolerantly, the two direct globbers were
+routed through both); 37 test files still glob by suffix directly, so
+`tests/conftest.py` now warns at session start with the fork count and the remedy
+(`find_apple_double_forks`), because a sweep must say what it is running over when
+git will not. Rule: bisect with both sides in fresh worktrees, never one of each.
+
+## The Princess-Luna red zone, cleared — 2026-09-17
+
+Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
+
+**Follow-up required (one item, below). 23 of the 26 failures are fixed and
+verified on the owning box; none of the causes were what the error messages
+suggested.**
+
+* **12, the spectral cluster — ours, a routing bug, not a capability gap.** Every
+  one failed with "dtype 'complex64' is not supported for tessera.istft on rocm",
+  which reads as a missing capability. It is not: `rocm_gfx1151` declares
+  `tessera.stft`/`tessera.istft` and no other ROCm entry does, correctly, because
+  `GenerateROCMSpectralBackwardKernel.cpp` is gfx1151-only and says so in its own
+  diagnostics. But the *rest* of the stack already treats a `rocm` request as a
+  gfx1151 compilation — `native_vjp_plugins` registers its ROCm consumers under
+  the family name and resolves them to gfx1151 internally, and `jit.py` emits its
+  Graph IR for `rocm_gfx1151` when the request said `rocm`. Only the legality gate
+  asked the registry about the generic name, so it refused at trace time a
+  capability the lane would then have provided. `legality._capability_target`
+  routes the question to the chip the request compiles for. It **routes, it does
+  not widen**: `supports_op("rocm", "tessera.istft")` is still False, so the
+  generic name still inherits no proof in any dashboard or audit row.
+* **6, the runtime C-ABI and profiler harnesses — a published link requirement.**
+  `libtessera_runtime.a` carries the HIP backend objects whenever the build enabled
+  them, and a harness compiled with its own command line gets none of the target's
+  usage requirements, so it linked with a page of `undefined reference to
+  hipMalloc` and read as a broken ABI. The build now writes
+  `tessera_runtime.consumer-link.txt` beside the archive and
+  `tests/_support/runtime_link.py` reads it;
+  `tests/unit/test_runtime_link_requirements.py` holds writer and readers together
+  and caught one link line I had missed while writing it.
+* **1, `check-tessera-rocm` — one data file discovered as a test.**
+  `gfx1151_composed_layout_fragment_store.mlir` is fixture DATA driven by
+  `test_rocm_wmma_gemm_generated.py`; inside the suite it was Unresolved ("Test has
+  no RUN line") and failed the whole suite — this backend's only automated fixture
+  coverage, which no PR check runs. It carried `UNSUPPORTED: true` meant to prevent
+  exactly that; on LLVM 23's lit a test with no RUN line is Unresolved *before* the
+  marker is consulted. Moved to `tests/fixtures/`, where the x86 twin already lives
+  for the same reason, and `test_lit_fixture_keywords.py` now fails any lit fixture
+  with no RUN line. **68/68.**
+* **4, the AD gate refusing what carries no gradient.** `arith.select` had no
+  transpose, so reverse mode over any lowered branch — a recovered switch edge, a
+  Huber kink, a masked manifold step — stopped dead; it is linear in its two value
+  operands, so the branch taken receives the cotangent and the other receives zero.
+  And `arith.index_cast` was refused as non-differentiable when index arithmetic is
+  simply not a differentiable variable; that is now a property of the *types*
+  (nothing float, including complex-of-float, means nothing to propagate) rather
+  than a list of op names that would need extending every time a shape computation
+  used one more integer op. A first cut of that predicate omitted `complex<f32>`
+  and silently dropped six FFT transposes — recorded because it is the failure mode
+  the rule exists to avoid.
+
+**Owed: `AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17`.** With the AD gate no longer
+refusing them, three shape-varying-`while` tests now *compile* and then **crash
+inside JIT-compiled code** on the forward invoke — the second defect, which the
+gate had been masking. It is pre-existing and independent: main's own
+`tessera-opt` emits a byte-identical forward and it faults identically, and the
+declared product ABI matches the emitted signature exactly
+(`shrink(tensor<?xf32>) -> (tensor<?xf32>, tensor<2xi64>, tensor<2x16xf32>,
+tensor<2x1xi64>)`), so it is neither an ABI nor a harness mismatch. The residual
+tape's 2 slots for a 3-iteration loop are *intentional* (the entry state is the
+loop input, so only iterations 1..n-1 are saved), so the sizing is not it either.
+
+**Mechanism, from the emitted forward.** The normalizer rewrites the
+data-dependent `scf.while` into an `scf.for` that carries the primal state as a
+`tensor<?xf32>` iter_arg, and the body replaces it with a *smaller* slice each
+iteration (`extract_slice %state[0][dim-1][1]`). A loop-carried tensor whose
+extent changes between iterations type-checks — the iter_arg is `tensor<?xf32>` —
+and does not survive bufferization: the carried buffer is allocated once and the
+loop then yields a differently sized one. That is the crash, and it is in the
+*primal carry*, not in the tape.
+
+The shape of the fix is already in the same function, one value over: the residual
+tape carries its shape-varying state as `tensor<2x16xf32>` **plus** an explicit
+`tensor<2x1xindex>` of lengths, inside a declared envelope
+(`saved_slot_shape_envelope_bounds = 16`), with a `cf.assert` that the length fits.
+The primal carry needs the same treatment — an envelope-sized buffer and a carried
+length, with every use inside the body reading the envelope through that length.
+That is a capability change to the normalizer with a design (carry envelopes for
+shape-varying loop state), not a patch, which is why it is recorded here rather
+than attempted alongside the rest of this sweep.
+
+Repro:
+
+```bash
+PYTHONPATH=python:. python -m pytest tests/unit/test_native_loop_next.py::test_shape_varying_while_native_host_products
+```
+
+The three are skipped with that reason rather than left to segfault, because a
+crash takes the whole pytest process down and loses every later result. That is a
+deferral of a newly visible defect, not a fix.
+
 **A red zone on Princess-Luna, pre-existing and spun out.** A full `pytest tests/unit/ -m "not slow"` sweep on that box reports **31** failures, all present on main (bisected by building `4898812c` from its own sources in a worktree there) and none visible to CI, whose unit lane has neither toolchain. Five were test-gating bugs — tests hard-coding `nvidia`/`sm_120` that failed inside NVVM serialization instead of skipping — and are fixed via `require_native_storage_lane`. The other **26** are real and are at least four separate problems: **12** in `test_autodiff_spectral_target_binding.py`, every one `dtype 'complex64' is not supported for tessera.istft on rocm`, so either this backend's capability table is missing an entry whose kernels exist or the tests assert a capability that does not; **3** in `test_runtime_profiler_trace.py`; **3** across `test_runtime_artifact_abi{,_g6}.py`; **1** in `test_rocm_lit_suite.py` — this backend's only automated fixture coverage, which no PR check runs, so weight it above its single-test count; and **7** across `test_native_jvp_compiled.py`, `test_native_dynamic_cfg_storage.py`, `test_native_ann_gpu_arbiter.py` and `test_native_loop_next.py`, several of which are gfx1151-named tests failing *on* gfx1151 and therefore not gating bugs. Do not resolve the legality cluster by loosening the check: failing closed is correct if the capability is absent.
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps) and the [device packets](../../../../benchmarks/baselines/row_program_math_precision_20260916/README.md).

@@ -502,7 +502,16 @@ def _amd_source_lib() -> ctypes.CDLL | None:
         return _configure_amd_lib(cached) if cached is not None else None
     if not shutil.which("hipcc") or not _AMD_SRC.exists():
         return _libs.get("amd_source")
-    arch = os.environ.get("TESSERA_ROCM_ARCH", "gfx1151")
+    # The one resolver every HIPRTC/hipcc compile in this package uses
+    # (TESSERA_ROCM_ARCH, then the runtime's chip; fails closed). This used to
+    # default to gfx1151 whatever the host was, and the gfx1151-only fat binary
+    # it then dlopened poisoned the process on a gfx1201 box: HIP's runtime
+    # walks every registered fat binary at the next launch, finds one with no
+    # code object for the device, and fails that launch -- any launch, of any
+    # other module -- with hipErrorNoBinaryForGpu (209). A test file later in
+    # the sweep read it as its own kernel failing (Tajasarus, 2026-09-17).
+    from tessera.compiler.emit.rocm_hip import _rocm_arch
+    arch = _rocm_arch()
     d = _build_dir("tessera_spectral_amd_")
     so = os.path.join(d, "libspectral_amd.so")
     lib = _compile("amd_source", ["hipcc", f"--offload-arch={arch}", "-O3",

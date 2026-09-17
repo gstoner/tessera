@@ -260,14 +260,17 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if report.when != "call" or report.outcome != "failed" or call.excinfo is None:
         return
-    from tests._support.rocm_build import refused_for_host_arch, rocm_host_arch
+    from tests._support.rocm_build import (
+        refused_by_type_for_host_arch, refused_for_host_arch, rocm_host_arch)
 
     text = str(call.excinfo.value)
     arch = rocm_host_arch()
-    if not arch or not refused_for_host_arch(text, arch):
+    if not arch or not (refused_for_host_arch(text, arch)
+                        or refused_by_type_for_host_arch(call.excinfo.value, arch)):
         return
     report.outcome = "skipped"
-    report.wasxfail = None
+    # Never touch `wasxfail`: pytest keys xfail on the attribute's *presence*, so
+    # even `wasxfail = None` reported these as xfailed (153 of them on Tajasarus).
     first = text.strip().splitlines()[0][:200] if text.strip() else "fail-closed refusal"
     report.longrepr = (str(item.fspath), item.location[1] or 0,
                        f"Skipped: refused for this host's arch ({arch}): {first}")

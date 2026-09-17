@@ -171,7 +171,30 @@ def refused_for_host_arch(text: str, arch: "str | None" = None) -> bool:
     if ("Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16" in text
             and not arch.startswith("gfx11")):
         return True
+    # 4. A gfx1151-owned artifact or lane refusing on a host that is not gfx1151.
+    #    These refusals name the owner but not the host: "exact gfx1151 spectral
+    #    reverse package is unavailable", "gfx1151 native HSACO module load
+    #    failed", "gfx1151 streaming STFT physical package is unavailable",
+    #    "solver IFT package is verified for gfx1151, not gfx1201", "attention
+    #    backward requires its exact owning ROCm device". On gfx1151 every one of
+    #    them is a real failure and stays one; on any other arch it is the proof
+    #    not existing here.
+    if arch != "gfx1151":
+        if "gfx1151" in text and any(k in text for k in (
+                "unavailable", "not loadable", "load failed", "verified for gfx1151")):
+            return True
+        if "requires its exact owning ROCm device" in text:
+            return True
     return False
+
+
+def refused_by_type_for_host_arch(exc: BaseException, arch: "str | None" = None) -> bool:
+    """`_RocmCompiledUnavailable` is the runtime's fail-closed class for its
+    compiled lanes, which are gfx11-verified; raised on a non-gfx11 host it is
+    "no proof here" whatever its message says ("rocm f32 GEMM lane unavailable —
+    no chunked SSD"). On gfx11 it is a failure."""
+    arch = arch or rocm_host_arch()
+    return bool(arch) and not arch.startswith("gfx11") and type(exc).__name__ == "_RocmCompiledUnavailable"
 
 
 class _RuntimeForHost:

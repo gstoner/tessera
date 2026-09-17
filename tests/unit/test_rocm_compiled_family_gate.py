@@ -106,3 +106,25 @@ def test_runtime_for_host_skips_an_isa_contract_refusal_naming_this_host(monkeyp
     # On the host the contract IS verified for, the same text would be a real failure.
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1151")
     assert rocm_build.runtime_for_host(_FakeRuntime({"ok": False, "reason": wmma})).launch()["ok"] is False
+
+
+@pytest.mark.parametrize("text", [
+    "exact gfx1151 spectral reverse package is unavailable",
+    "gfx1151 native HSACO module load failed",
+    "gfx1151 streaming STFT physical package is unavailable",
+    "solver IFT package is verified for gfx1151, not gfx1201",
+    "attention backward requires its exact owning ROCm device",
+])
+def test_gfx1151_owned_refusals_are_skips_only_off_gfx1151(text):
+    assert rocm_build.refused_for_host_arch(text, "gfx1201")
+    assert not rocm_build.refused_for_host_arch(text, "gfx1151")
+
+
+def test_compiled_unavailable_by_type_is_a_skip_only_off_gfx11():
+    class _RocmCompiledUnavailable(Exception):
+        pass
+
+    exc = _RocmCompiledUnavailable("rocm f32 GEMM lane unavailable — no chunked SSD")
+    assert rocm_build.refused_by_type_for_host_arch(exc, "gfx1201")
+    assert not rocm_build.refused_by_type_for_host_arch(exc, "gfx1151")
+    assert not rocm_build.refused_by_type_for_host_arch(ValueError("x"), "gfx1201")

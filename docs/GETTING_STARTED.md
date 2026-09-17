@@ -18,7 +18,7 @@ in five minutes.
 - Python 3.10+
 - pip
 
-GPU artifact validation is pinned to **CUDA 13.4** (PTX ISA 9.4) for NVIDIA and
+GPU artifact validation is pinned to **CUDA 13.4** (PTX ISA 9.4; the fleet's driver 610.88 JIT-compiles PTX ≤ 9.3, so driver-JIT'd kernels are stamped for the driver) for NVIDIA and
 **ROCm 10.0 / HIP 7.15** for AMD (measured on the fleet 2026-09-15). Native GPU
 execution is hardware-gated by target; all examples here run on CPU so no
 accelerator is needed to start.

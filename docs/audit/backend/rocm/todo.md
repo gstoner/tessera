@@ -8101,6 +8101,63 @@ past the reason:
   runtime refused correctly, as a launch result, and the test read it as a
   numerical failure (it skips without AVX-512 now).
 
+**Worked 2026-09-17 (later the same day), each item to its real disposition,
+verified on Tajasarus (gfx1201, RX 9070 XT, ROCm 10.0) and re-run on
+Princess-Luna (gfx1151) for the shared code:**
+
+  1. **Fused epilogue: the "wrong numbers" were the bare matmul.** The compiled
+     16x16x16 lane refuses on gfx1201 (correctly), and
+     `_execute_rocm_compiled_gemm` fell back to the hand-written `rocm_wmma`
+     oracle — which is RDNA4-aware (it specializes the fragment layout at
+     HIPRTC time) but implements the *plain* two-operand f16/bf16 matmul and
+     nothing else. It ignored the `activation` kwarg (relu/gelu/silu rows: the
+     raw product, atol-0.05 mismatches), rejected the bias operand ("matmul
+     requires exactly two operands") and rejected int8 with its own wording.
+     Not a gfx11 kernel on gfx12; a fallback that computes a different program.
+     Fixed in two layers: the oracle now refuses any op with an activation or a
+     third operand (fail closed), and the compiled lane falls back only when
+     the oracle computes the same thing (`_rocm_wmma_oracle_can_stand_in`:
+     plain matmul, two operands, no activation, f16/bf16 storage); otherwise
+     the compiled lane's own refusal propagates, naming `target 'gfx1201'`, and
+     the report hook reads it as a skip. gfx1201: 14 fused-epilogue rows and
+     9 int8/int4 rows now **skip with that reason**; gfx1151 unchanged. The
+     fused epilogue and integer storage on RDNA4 are the compiled lane's
+     16x16x32-layout work, owed under the gfx1201 scheduled-package program,
+     not a launch-path defect.
+  2. **int8 routing:** the same mechanism as 1 (the oracle has no int8);
+     same fix, same skip.
+  3. **KU reference `rc=2`:** `compileVariantKU` lacked the RDNA4
+     specialization the rung-1 variant already had, so HIPRTC refused the
+     gfx11 builtin ("needs target feature wmma-256b-insts") and every KU test
+     read the compile failure as `rc=2`. The KU template now gets the same
+     substitution (8-element fragments, `_gfx12` builtin, per-half-wave K and
+     contiguous output rows). **8/8 KU tests pass on gfx1201**, 8/8 on gfx1151.
+  4. **State machine (5) and EBM affine Langevin (4): promoted on gfx1201.**
+     Both are scalar per-thread families with no WMMA fragment; the refusal
+     was the fail-closed rule, not a defect. `control_state_machine` and
+     `ebm_affine_langevin` are now in the gfx1201 profile of both the C++ pass
+     (`Passes.cpp`) and `rocm_pipeline.promoted_families`, on the evidence the
+     tests then produced: forward + generated backward of the irreducible and
+     data-dependent machines, and the affine core under the bivector and sphere
+     samplers spied to fire on all 8 chain steps, **9/9 on gfx1201** and 9/9
+     on gfx1151. The C++ refusal text ("architecture '<arch>' has no promoted
+     family-plugin profile") is now a recognised host-arch refusal, so a test
+     that drives `tessera-rocm-executable` itself skips on an unpromoted arch.
+     A real defect found beside it and fixed: the numpy fallback of both
+     samplers returned float64 for a float32 state (the gradient helpers work
+     in float64); a step now hands back the caller's dtype whichever lane ran.
+  5. **WMMA compare harness:** the record's "hipFree line" was wrong; the
+     inline kernel used the gfx11 builtin and 16-element fragments. The harness
+     now selects the fragment layout per device pass (`__gfx1201__` → 8-element
+     fragments, `_gfx12` builtin, contiguous output rows) and names the host
+     chip in its compile target. **Passes on gfx1201** and on gfx1151.
+  6. **x86 shared image:** Tajasarus's `build/` was configured with
+     `TESSERA_BUILD_X86_BACKEND=OFF` (only its `build-assertions/` built the
+     backend, and `x86_native._library_path` looks in `build/`). Reconfigured
+     ON, matching the canonical primary configure; **3/3 Zen 5 attention
+     backward tests pass there**.
+  7. **Upstream SCEV assertion:** see the reproducer note below.
+
 ## Two red zones nobody had swept — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-2026-09-17`; owner COMPILER-DEVEX-1.

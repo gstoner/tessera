@@ -4853,10 +4853,14 @@ struct LowerTileToNVIDIAPass
   }
 
   void getDependentDialects(DialectRegistry &registry) const final {
+    // The tile dialect was loaded from inside runOnOperation (getOrLoadDialect
+    // below), which an assertions-ON driver refuses: sm120_macro_cta_matmul
+    // aborted on Tajasarus 2026-09-17 with "Loading a dialect (tile) while in
+    // a multi-threaded execution context". Declared here instead.
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
                     func::FuncDialect, memref::MemRefDialect, nvgpu::NVGPUDialect,
                     LLVM::LLVMDialect, math::MathDialect, NVVM::NVVMDialect,
-                    scf::SCFDialect,
+                    scf::SCFDialect, tessera::tile::TesseraTileDialect,
                     tessera::nvidia::TesseraNVIDIADialect>();
   }
 

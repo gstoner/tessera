@@ -324,7 +324,11 @@ struct GenerateNVIDIAPhiloxKernelPass
            "Philox4x32-10 uniform GPU kernel";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
-    registry.insert<arith::ArithDialect, gpu::GPUDialect,
+    // `math` was missing: the kernel body creates math ops, so the first
+    // assertions-ON NVIDIA driver (Tajasarus, 2026-09-17) aborted every Philox
+    // fixture with "Loading a dialect (math) while in a multi-threaded
+    // execution context" -- the 2026-09-16 class, invisible on NDEBUG.
+    registry.insert<arith::ArithDialect, gpu::GPUDialect, math::MathDialect,
                     memref::MemRefDialect, scf::SCFDialect>();
   }
 

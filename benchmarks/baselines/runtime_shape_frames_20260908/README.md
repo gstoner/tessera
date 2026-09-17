@@ -31,3 +31,12 @@ also passed with the compiler deliberately unavailable. Ruff, the zero-error
 mypy ratchet and the 30-document generated drift check passed.
 
 Recorded by `benchmarks/record_runtime_shape_frames.py` (`nvidia.json`, `rocm.json`).
+
+`rocm_gfx1151_revalidation_20260917.json`: the same recorder re-run on
+Princess-Luna (gfx1151, ROCm 10.0, NDEBUG LLVM 23) on 2026-09-17 as the
+numeric check owed for the rank-2 dynamic backward kernel — the one whose
+`gpu-module-to-binary` serialization aborts an assertions-ON LLVM 23.1.1 inside
+LoopInterchange (reduced reproducer:
+`tests/fixtures/llvm23_loop_interchange_scev_division_gfx1151.ll`). All eleven
+cases pass, including `dynamic_matrix_backward` at shapes (2,2), (1,4) and
+(0,4) against `2*x`.

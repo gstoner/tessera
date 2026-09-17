@@ -7691,6 +7691,53 @@ repository had succeeded in some time — the lived-in trees on Super-Bear had
 never built the example library (no `libTesseraPowerDialect.a` in `build/`), and
 so never saw it.
 
+**Root-caused and fixed 2026-09-17 (later the same day), verified on
+Super-Bear.** The first step above was taken first: every CUDA driver call in
+`tessera_nvidia_ptx_launch.cpp` (218 sites) now records its name and `CUresult`
+on failure, the JIT log rides along, and `tessera_nvidia_ptx_last_error()`
+hands it to Python, which appends it to the rc. The next run said what a week
+of `rc=3` had not:
+
+    cuModuleLoadDataEx: CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222) -- JIT log:
+    ptxas application ptx input, line 9; fatal: Unsupported .version 9.4;
+    current version is '9.3'
+
+**The 2026-09-15 toolchain bump conflated the toolkit with the driver.** nvcc
+13.4.59 emits `.version 9.4`, and `gpu_target.py` pinned that as *the* PTX
+ISA — but driver 610.88 answers `cuDriverGetVersion` = **13030 (CUDA 13.3)**,
+and a driver's ptxas refuses any `.version` newer than its own before reading
+an instruction. Every kernel this lane hands to `cuModuleLoadDataEx` is
+JIT-compiled by the driver: the Lion VJP's PTX comes from `nvcc --ptx`
+(`nvidia_training.py`), so it carried 9.4 and could not load; the hand-emitted
+`ptx_emit.py` kernels copied the same pin. The lane was not a memory failure
+and not a descriptor-sizing one — the launcher's rc table simply had one number
+for "any device op", which is what the instrumentation exists to end.
+
+Fix, in the compiler where the claim belongs: `gpu_target` now pins the driver
+separately (`TESSERA_TARGET_CUDA_DRIVER_API = "13.3"`,
+`TESSERA_TARGET_DRIVER_JIT_PTX_ISA = "9.3"`, measured) and derives
+`driver_jit_ptx_isa()` from the loaded driver when there is one (Decision #30),
+capped at the toolkit ISA; `ptx_emit.py` stamps that; and the runtime's one
+registration point (`_register_nvidia_ptx`) re-stamps any PTX handed to the
+JIT — nvcc's included — down to it (`ptx_for_driver_jit`, the Triton
+precedent), recording the version it lowered from. A body that truly needs a
+newer instruction still fails, on that instruction's name. The toolkit pins in
+`cmake/` and `AdapterVersionPin.h` are untouched (they describe the toolkit).
+`test_nvidia_lion_backward_runs_sm120_stop_sign_package` **passes on Super-Bear**;
+the training-series file is 47 passed / 14 skipped. CLAUDE.md's toolchain
+paragraph carries the correction.
+
+**`power_retention`: retired to `archive/examples/advanced/power_retention/`
+(2026-09-17).** The decision the previous paragraph left open. Its op already
+lives in the canonical dialect (`tessera.power_attn` / `tessera.retention`,
+LA-4, with the Python surface and `test_linear_attn.py`), the CUDA kernel was
+a scaffold that never compiled, and `src/extension` was a torch pybind stub
+(Decision #23). The manifest row, the CMake subproject, and every active
+reference (`examples/README.md`, `examples/advanced/README.md`,
+`PROJECT_STRUCTURE.md`, the porting guide, the API spec, three code comments)
+now say where it went; `surface_status.{md,csv}` regenerated. Nothing under
+`examples/advanced/` is built by CMake any more.
+
 ## Duplicate `gpu.kernel` stamp: the Philox generator had it too — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1.

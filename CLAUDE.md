@@ -188,7 +188,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/op_catalog.py` | Canonical op-name catalog — "what we accept today" across all IR layers. |
 | `compiler/primitive_coverage.py` | **Audit truth** (Decision #24) — standalone primitive contract registry over 12 axes; consults `autodiff.vjp._VJPS`/`jvp._JVPS` so registered (V/J)VPs auto-flip to complete. Renders `docs/audit/standalone_primitive_coverage.md`. |
 | `compiler/backend_manifest.py` | Per-op × per-target × per-dtype kernel manifest synthesizer; `BackendKernelEntry` + statuses `fused`/`reference`/`compileable`/`artifact_only`/`planned`. |
-| `compiler/gpu_target.py` / `rocm_target.py` | Target profiles + feature matrices. **Toolchain pins (measured on the fleet, bumped 2026-09-15): NVIDIA CUDA 13.4 / PTX ISA 9.4 / driver 610.88; AMD ROCm 10.0 / HIP 7.15.** The same values live in `cmake/TesseraToolchainPins.cmake` and `src/collectives/.../AdapterVersionPin.h`, drift-gated together by `runtime_abi_audit.py`. The per-SM / per-arch *feature matrices* were evaluated under CUDA 13.3 / ROCm 7.2.x and not re-evaluated; the `cuda_13_3` / `rocm_7_2_3` capability markers record that evaluation baseline, not the pin. |
+| `compiler/gpu_target.py` / `rocm_target.py` | Target profiles + feature matrices. **Toolchain pins (measured on the fleet, bumped 2026-09-15): NVIDIA CUDA 13.4 / PTX ISA 9.4 / driver 610.88; AMD ROCm 10.0 / HIP 7.15.** The same values live in `cmake/TesseraToolchainPins.cmake` and `src/collectives/.../AdapterVersionPin.h`, drift-gated together by `runtime_abi_audit.py`. **The driver is pinned separately (corrected 2026-09-17):** driver 610.88 implements the CUDA **13.3** driver API (`cuDriverGetVersion` 13030) and its JIT accepts PTX **≤ 9.3**, so every kernel handed to `cuModuleLoadDataEx` is stamped `driver_jit_ptx_isa()` (derived from the loaded driver, capped at the toolkit ISA) and nvcc-emitted PTX is re-stamped at registration; the 9.4 pin is the *toolkit's* number and reading it as the driver's cost the sm_120 Lion lane a week of opaque `rc=3`. The per-SM / per-arch *feature matrices* were evaluated under CUDA 13.3 / ROCm 7.2.x and not re-evaluated; the `cuda_13_3` / `rocm_7_2_3` capability markers record that evaluation baseline, not the pin. |
 | `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`, derived from registered traced Graph IR since W2.2 — see Decision #5), Python→Graph IR emission. |
 | `compiler/{autotune_v2,attn_lower,matmul_pipeline,checkpoint,solver_config,distributed_planner,pipeline_planner}.py` | Bayesian autotuner; FA-4 lowering config; multi-target matmul dispatch; checkpoint extension; solver/ZeRO/resilience config; dp/tp/pp + 1F1B planners. |
 | `compiler/evaluator.py` + `conformance_evaluator.py` + `ptx_emit.py` + `flywheel{,_autotune}.py` + `compiler_grader.py` + `attention_tasks.py` + `magellan.py` + `alphaevolve.py` | **Evaluator program** — execution-derived, rung-aware scoring engine; four oracles (vertical/horizontal/metamorphic/DESIL cross-path), conformance re-derivation, NVIDIA WGMMA PTX emission, device-keyed autotuning records, anti-cheat scored-environment search. See `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5. |
@@ -877,7 +877,11 @@ JIT lane) is skipped at configure time there. Commissioned 2026-09-13
 under `benchmarks/baselines/gfx1201_*`). Reached as
 `ssh angstorms@192.168.1.166` (default port 22; mDNS name `tajasarus.local`).
 `source ~/.config/tessera/env.sh`
-and `scripts/_rocm_env.sh` before pytest; `TESSERA_ROCM_CHIP=gfx1201`.
+and `scripts/_rocm_env.sh` before pytest; `TESSERA_ROCM_CHIP=gfx1201`. Its
+`build/` configures `TESSERA_BUILD_X86_BACKEND=ON` (since 2026-09-17; before
+that only `build-assertions/` built the x86 backend, and `x86_native` looks in
+`build/`, so its Zen 5 lanes reported a missing shared image). A third tree,
+`build-assertions-nvidia/`, holds the assertions-ON `tessera-nvidia-opt`.
 `docs/audit/backend/rocm/NATIVE_RDNA4_COMMISSIONING.md` still describes this
 box as ordered / native-Linux planned — it landed as WSL2; treat that doc as
 stale. RDNA4 ISA sections to cite before touching a schedule: §7.12.2 fragment
@@ -892,7 +896,10 @@ MSI Ventus 3X OC, 2557 MHz boost; sm_120)** — owner-recorded 2026-09-16 —
 WSL2 CUDA (toolkit only, `/dev/dxg`, no driver package), reached as `ssh -p 5023 angstorms@192.168.1.39` (alias `ssh
 super-bear`). Fleet is on **CUDA 13.4.1 / nvcc
 13.4.59 / driver 610.88**, and `compiler/gpu_target.py` pins **13.4 / PTX ISA
-9.4** to match (bumped 2026-09-15); older 13.3 packets are historical.
+9.4** to match (bumped 2026-09-15); older 13.3 packets are historical. **The
+driver's JIT is one release behind the toolkit** (610.88 = CUDA 13.3 driver API,
+PTX ≤ 9.3, measured 2026-09-17): PTX that will be driver-JIT'd is stamped
+`driver_jit_ptx_isa()`, never the toolkit's 9.4 — see `gpu_target.py`.
 Source `scripts/_nvidia_env.sh` before pytest (see Testing). WSL timings do not
 promote: bare-metal calibration is owed on every NVIDIA perf row.
 

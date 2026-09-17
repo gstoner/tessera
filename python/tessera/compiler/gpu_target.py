@@ -127,6 +127,77 @@ _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
 TESSERA_TARGET_CUDA_TOOLKIT: str = "13.4"
 TESSERA_TARGET_CUDA_DRIVER_MIN: str = "610.88"     # measured working driver for CUDA 13.4 (2026-09-15)
 TESSERA_TARGET_PTX_ISA: str = "9.4"                # PTX ISA emitted by nvcc 13.4.59
+
+#: The CUDA release the *driver* on the CUDA box implements, and the PTX ISA its
+#: JIT accepts. These are not the toolkit's numbers, and the 2026-09-15 bump
+#: above conflated them: driver 610.88 answers `cuDriverGetVersion` = 13030
+#: (CUDA 13.3), so its ptxas JIT rejects `.version 9.4` ("Unsupported .version
+#: 9.4; current version is '9.3'", CUDA_ERROR_UNSUPPORTED_PTX_VERSION) while nvcc
+#: 13.4.59 next to it emits 9.4 offline. Every kernel `ptx_emit.py` hands to
+#: `cuModuleLoadDataEx` is JIT-compiled by the driver, so its `.version` must
+#: follow the driver, not the toolkit -- that was the sm_120 Lion lane's opaque
+#: rc=3 (docs/audit/backend/nvidia/todo.md, 2026-09-17). Measured on
+#: The-Super-Bear 2026-09-17.
+TESSERA_TARGET_CUDA_DRIVER_API: str = "13.3"        # cuDriverGetVersion 13030 on driver 610.88
+TESSERA_TARGET_DRIVER_JIT_PTX_ISA: str = "9.3"     # the newest `.version` that driver JIT-compiles
+
+#: CUDA driver API release -> the PTX ISA its JIT accepts (PTX ISA release
+#: notes, 13.x series). Only the releases this fleet has met are listed; an
+#: unlisted driver falls back to the pinned driver ISA above rather than to a
+#: guess.
+_DRIVER_JIT_PTX_ISA_BY_CUDA: dict[str, str] = {
+    "12.8": "8.7", "12.9": "8.8",
+    "13.0": "9.0", "13.1": "9.1", "13.2": "9.2", "13.3": "9.3", "13.4": "9.4",
+}
+
+
+def cuda_driver_api_version() -> "str | None":
+    """``major.minor`` of the CUDA driver API this host's libcuda implements
+    (`cuDriverGetVersion`), or None when no driver is loadable here. Never
+    raises: a host without a GPU is a normal case, not an error."""
+    import ctypes
+    import os
+
+    candidates = ["libcuda.so.1", "libcuda.so"]
+    for directory in ("/usr/lib/wsl/lib",
+                      os.path.join(os.environ.get("CUDA_PATH", "/usr/local/cuda"), "lib64")):
+        candidates.extend(os.path.join(directory, name) for name in ("libcuda.so.1", "libcuda.so"))
+    for candidate in candidates:
+        try:
+            lib = ctypes.CDLL(candidate)
+        except OSError:
+            continue
+        try:
+            if lib.cuInit(0) != 0:
+                return None
+            version = ctypes.c_int(0)
+            if lib.cuDriverGetVersion(ctypes.byref(version)) != 0 or version.value <= 0:
+                return None
+        except (AttributeError, OSError):
+            return None
+        return f"{version.value // 1000}.{(version.value % 1000) // 10}"
+    return None
+
+
+def driver_jit_ptx_isa() -> str:
+    """The PTX ISA version a kernel handed to this host's driver JIT must stamp.
+
+    Derived from the loaded driver when there is one (Decision #30), capped at
+    the toolkit's own ISA; the pinned driver ISA when there is no driver or the
+    driver's release is not in the table. Cached: the driver does not change
+    under a running process.
+    """
+    cached = globals().get("_DRIVER_JIT_PTX_ISA_CACHE")
+    if cached is not None:
+        return cached
+    isa = TESSERA_TARGET_DRIVER_JIT_PTX_ISA
+    release = cuda_driver_api_version()
+    if release is not None and release in _DRIVER_JIT_PTX_ISA_BY_CUDA:
+        isa = _DRIVER_JIT_PTX_ISA_BY_CUDA[release]
+    if tuple(int(p) for p in isa.split(".")) > tuple(int(p) for p in TESSERA_TARGET_PTX_ISA.split(".")):
+        isa = TESSERA_TARGET_PTX_ISA
+    globals()["_DRIVER_JIT_PTX_ISA_CACHE"] = isa
+    return isa
 # NCCL_MIN is a *minimum* floor, not the bundled version.  CUDA 13.3 bundles NCCL
 # 2.30.7, but NCCL is backward-compatible so the required floor stays 2.22 (kept in
 # sync with RCCL 2.22 on the ROCm track); raising the collective minimum is a

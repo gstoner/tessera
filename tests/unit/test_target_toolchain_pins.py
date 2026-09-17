@@ -40,6 +40,25 @@ class TestCUDA13ToolchainPin:
         assert TESSERA_TARGET_PTX_ISA == "9.4"        # `.version 9.4` from nvcc 13.4.59
         assert TESSERA_TARGET_NCCL_MIN == "2.22"   # floor stays 2.22 (13.3 bundles 2.30.7)
 
+    def test_driver_jit_isa_is_pinned_separately_and_never_above_the_toolkit(self):
+        from tessera.compiler.gpu_target import (
+            TESSERA_TARGET_CUDA_DRIVER_API,
+            TESSERA_TARGET_DRIVER_JIT_PTX_ISA,
+            TESSERA_TARGET_PTX_ISA,
+            _DRIVER_JIT_PTX_ISA_BY_CUDA,
+            driver_jit_ptx_isa,
+        )
+        from tessera.compiler import ptx_emit
+        # Driver 610.88 answers cuDriverGetVersion 13030 and JITs at most 9.3
+        # (measured, The-Super-Bear 2026-09-17); the toolkit next to it is 13.4.
+        assert TESSERA_TARGET_CUDA_DRIVER_API == "13.3"
+        assert TESSERA_TARGET_DRIVER_JIT_PTX_ISA == "9.3"
+        assert _DRIVER_JIT_PTX_ISA_BY_CUDA[TESSERA_TARGET_CUDA_DRIVER_API] == TESSERA_TARGET_DRIVER_JIT_PTX_ISA
+        version = tuple(int(p) for p in driver_jit_ptx_isa().split("."))
+        assert version <= tuple(int(p) for p in TESSERA_TARGET_PTX_ISA.split("."))
+        # The emitter stamps exactly what the driver rule says, on every host.
+        assert ptx_emit.PTX_ISA_VERSION == driver_jit_ptx_isa()
+
     def test_nvcc_arch_strings(self):
         from tessera.compiler.gpu_target import GPUTargetProfile, ISA
         assert GPUTargetProfile(isa=ISA.SM_80).nvcc_arch == "sm_80"

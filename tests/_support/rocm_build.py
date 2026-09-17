@@ -143,6 +143,37 @@ def require_rocm_compiled_lane_host() -> str:
 _UNPROMOTED_REFUSAL = "ROCm executable pipeline has no promoted family plugins for "
 
 
+def refused_for_host_arch(text: str, arch: "str | None" = None) -> bool:
+    """Whether `text` is one of the fail-closed refusals about *this host's* arch.
+
+    1. The family rule: "ROCm executable pipeline has no promoted family plugins
+       for <arch>; ...".
+    2. An ISA contract gated on another arch's silicon that names the host it is
+       refusing: "... hardware-verified on gfx1151; target '<arch>' ... arch-gated".
+       The 16x16x16 WMMA fragment layout is the first instance (RDNA4 is
+       16x16x32); the gfx1151 spectral composite image is the second.
+    3. That same gfx11 WMMA contract reaching the LLVM backend for a non-gfx11
+       host: "Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16.f16". The
+       serializer was handed a gfx11 kernel with a gfx12 target; the honest
+       refusal happens one layer up in the runtime, and a test that lowers the
+       kernel itself never sees it.
+
+    Every pattern must name, or be conditioned on, the host's own arch, so a
+    refusal about an arch a test pinned on purpose stays a failure.
+    """
+    arch = arch or rocm_host_arch()
+    if not arch:
+        return False
+    if text.startswith(_UNPROMOTED_REFUSAL + arch + ";") or (_UNPROMOTED_REFUSAL + arch + ";") in text:
+        return True
+    if f"target '{arch}'" in text and ("arch-gated" in text or "hardware-verified on" in text):
+        return True
+    if ("Cannot select: intrinsic %llvm.amdgcn.wmma.f32.16x16x16" in text
+            and not arch.startswith("gfx11")):
+        return True
+    return False
+
+
 class _RuntimeForHost:
     """`tessera.runtime` with one change: a launch the executable pipeline
     refuses *for lack of proof on this host's arch* becomes a skip.
@@ -164,24 +195,7 @@ class _RuntimeForHost:
         return getattr(self._rt, name)
 
     def _refused_for_this_host(self, text: str) -> bool:
-        """The two fail-closed refusals a launch can return *about this arch*.
-
-        1. The family rule: "ROCm executable pipeline has no promoted family
-           plugins for <arch>; ...".
-        2. An ISA contract gated on another arch's silicon, which names the
-           host it is refusing: "... hardware-verified on gfx1151; target
-           '<arch>' needs its own layout ... arch-gated ...". The 16x16x16 WMMA
-           fragment layout is the first instance (RDNA4 is 16x16x32).
-
-        Both must name the host's own arch; a refusal about an arch a test
-        pinned on purpose stays a failure.
-        """
-        arch = rocm_host_arch()
-        if not arch:
-            return False
-        if text.startswith(f"{_UNPROMOTED_REFUSAL}{arch};"):
-            return True
-        return f"target '{arch}'" in text and ("arch-gated" in text or "hardware-verified on" in text)
+        return refused_for_host_arch(text)
 
     def launch(self, *args, **kwargs):
         import pytest

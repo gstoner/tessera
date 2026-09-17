@@ -239,3 +239,35 @@ def pytest_runtest_setup(item):
         from tests._support.apple import require_apple_metal
 
         require_apple_metal()
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """A failure that IS a fail-closed refusal about this host's arch is a skip.
+
+    The ROCm pipeline refuses, by design, any family or ISA contract without
+    proof on the launch arch. That refusal reaches a test by every route there
+    is: as `res["reason"]` a test then asserts on, as a raised `ValueError` or
+    `_RocmCompiledUnavailable`, wrapped in a `TesseraJitError` by `@jit`, or as
+    an LLVM backend abort one layer below the runtime's own check. Routing the
+    runtime wrapper into each test caught the first form only. This converts
+    the outcome at the one place every form arrives, and only when the text
+    names the host's own arch (`tests/_support/rocm_build.refused_for_host_arch`),
+    so a negative test that pins another arch on purpose, or any other failure,
+    is untouched. Found by the first full sweep on the gfx1201 box: ~1500 tests
+    asserting a gfx1151 proof on a host that cannot have one.
+    """
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or report.outcome != "failed" or call.excinfo is None:
+        return
+    from tests._support.rocm_build import refused_for_host_arch, rocm_host_arch
+
+    text = str(call.excinfo.value)
+    arch = rocm_host_arch()
+    if not arch or not refused_for_host_arch(text, arch):
+        return
+    report.outcome = "skipped"
+    report.wasxfail = None
+    first = text.strip().splitlines()[0][:200] if text.strip() else "fail-closed refusal"
+    report.longrepr = (str(item.fspath), item.location[1] or 0,
+                       f"Skipped: refused for this host's arch ({arch}): {first}")

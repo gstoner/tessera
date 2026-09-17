@@ -349,6 +349,31 @@ struct LowerLangevin : public RewritePattern {
              "tessera.autodiff = \"reverse\" before this pass";
       return failure();
     }
+    // The gradient has to be the compiler's all the way down. An energy built
+    // from an op whose adjoint is a placeholder leaves
+    // `tessera.custom_adjoint_call` in @E__bwd -- a host callback -- and a chain
+    // that calls back to the host once per step is not this lane, on the CPU or
+    // on the device. This was documented as refused and was not checked: on the
+    // CPU the JIT failed later with a pipeline error naming nothing, and on the
+    // device route the row-program emitter refused an op it could not place.
+    // Refuse here instead, where the energy and the op can both be named.
+    {
+      Operation *opaque = nullptr;
+      backward.walk([&](Operation *inner) {
+        if (inner->getName().getStringRef() == "tessera.custom_adjoint_call" && !opaque)
+          opaque = inner;
+      });
+      if (opaque) {
+        auto name = opaque->getAttrOfType<StringAttr>("name");
+        op->emitError("EBM lowering: the gradient of @") << fn.getValue()
+            << " is not the compiler's: @" << fn.getValue() << "__bwd calls out to the host ("
+            << (name ? name.getValue() : StringRef("custom_adjoint_call"))
+            << "). An opaque adjoint means a host round trip per step, which this lane does not "
+               "have; give every op in the energy a native adjoint, or keep the energy on the "
+               "reference path";
+        return failure();
+      }
+    }
     // @E__bwd(state, captures..., cotangent) -> (dstate, dcaptures...)
     SmallVector<Value> captures(stepOp.getCaptures().begin(), stepOp.getCaptures().end());
     if (backward.getNumArguments() != captures.size() + 2 || backward.getNumResults() < 1 ||

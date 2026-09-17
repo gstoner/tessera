@@ -84,6 +84,7 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
     return (
         "#include <hip/hip_runtime.h>\n"
         "#include <math.h>\n"
+        "#include <stdio.h>\n"         # snprintf for the last-error text
         "#include <chrono>\n"          # the wall clock the bench entry needs
         # `span` is the ON-DEVICE clock, and is nullable so the production entry
         # pays only an untaken branch. `wall_clock64()` runs at a constant rate
@@ -135,6 +136,16 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         # — either way a wrong result carrying the rocm_hip tag. A non-sticky
         # copy error is not resurfaced by hipDeviceSynchronize, so the sync
         # check alone cannot stand in for these.
+        # A failed call names itself: `rc` alone said "3" for every step from the
+        # first H2D copy to the D2H copy, which is what a sweep on Tajasarus
+        # reported for one shape after 17k tests and nothing could explain.
+        f"static char {_ENTRY}_err[256];\n"
+        f"static void {_ENTRY}_note(const char* what, hipError_t st) {{\n"
+        f"    snprintf({_ENTRY}_err, sizeof {_ENTRY}_err, \"%s: %s (%d)\", what,\n"
+        "             hipGetErrorString(st), (int)st);\n"
+        "}\n"
+        f'extern "C" const char* {_ENTRY}_last_error(void) {{ return {_ENTRY}_err; }}\n'
+        f"#define TSR_HIP(call) do {{ hipError_t st_ = (call); if (st_ != hipSuccess) {{ {_ENTRY}_note(#call, st_); goto cleanup; }} }} while (0)\n"
         f'extern "C" int {_ENTRY}(const float* hA, const float* hB,\n'
         "        const float* hbias, const float* hresidual, float* hout,\n"
         "        int M, int N, int K) {\n"
@@ -142,25 +153,27 @@ def _synthesize_fused_hip(region: FusedRegion) -> str:
         "           szO=(size_t)M*N*sizeof(float), szBias=(size_t)N*sizeof(float);\n"
         "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
         "    int t=64, b=0, rc=2;\n"
-        "    if (!hA||!hB||!hout) goto cleanup;\n"
-        "    if (hipMalloc(&dA,szA)!=hipSuccess) goto cleanup;\n"
-        "    if (hipMalloc(&dB,szB)!=hipSuccess) goto cleanup;\n"
-        "    if (hipMalloc(&dO,szO)!=hipSuccess) goto cleanup;\n"
-        "    if (hbias && hipMalloc(&dbias,szBias)!=hipSuccess) goto cleanup;\n"
-        "    if (hresidual && hipMalloc(&dres,szO)!=hipSuccess) goto cleanup;\n"
+        f"    {_ENTRY}_err[0]=0;\n"
+        f"    if (!hA||!hB||!hout) {{ {_ENTRY}_note(\"arguments\", hipErrorInvalidValue); goto cleanup; }}\n"
+        "    TSR_HIP(hipMalloc(&dA,szA));\n"
+        "    TSR_HIP(hipMalloc(&dB,szB));\n"
+        "    TSR_HIP(hipMalloc(&dO,szO));\n"
+        "    if (hbias) TSR_HIP(hipMalloc(&dbias,szBias));\n"
+        "    if (hresidual) TSR_HIP(hipMalloc(&dres,szO));\n"
         "    rc=3;\n"
-        "    if (hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
-        "    if (hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
-        "    if (hbias && hipMemcpy(dbias,hbias,szBias,\n"
-        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
-        "    if (hresidual && hipMemcpy(dres,hresidual,szO,\n"
-        "            hipMemcpyHostToDevice)!=hipSuccess) goto cleanup;\n"
+        "    TSR_HIP(hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice));\n"
+        "    TSR_HIP(hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice));\n"
+        "    if (hbias) TSR_HIP(hipMemcpy(dbias,hbias,szBias,hipMemcpyHostToDevice));\n"
+        "    if (hresidual) TSR_HIP(hipMemcpy(dres,hresidual,szO,hipMemcpyHostToDevice));\n"
+        "    rc=4;\n"
         "    b=(M+t-1)/t;\n"
         f"    hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
         "        dA,dB,dbias,dres,dO,M,N,K,(unsigned long long*)0);\n"
-        "    if (hipGetLastError()!=hipSuccess) goto cleanup;\n"
-        "    if (hipDeviceSynchronize()!=hipSuccess) goto cleanup;\n"
-        "    if (hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost)!=hipSuccess) goto cleanup;\n"
+        "    TSR_HIP(hipGetLastError());\n"
+        "    rc=5;\n"
+        "    TSR_HIP(hipDeviceSynchronize());\n"
+        "    rc=6;\n"
+        "    TSR_HIP(hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost));\n"
         "    rc=1;\n"
         "cleanup:\n"
         "    if (dA) hipFree(dA);\n"
@@ -374,6 +387,23 @@ def _load_entry(artifact: str):
     fn.restype = ctypes.c_int
     fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 3
     return fn
+
+
+def last_entry_error(artifact: str) -> str:
+    """The HIP call the entry in ``artifact`` last failed on, and its error
+    text (``<call>: <hipGetErrorString> (<code>)``); empty after success or
+    for an artifact built before the entry recorded it."""
+    lib = _LIB_CACHE.get(artifact)
+    if lib is None:
+        lib = ctypes.CDLL(artifact)
+        _LIB_CACHE[artifact] = lib
+    ask = getattr(lib, f"{_ENTRY}_last_error", None)
+    if ask is None:
+        return ""
+    ask.restype = ctypes.c_char_p
+    ask.argtypes = []
+    raw = ask()
+    return raw.decode("utf-8", "replace") if raw else ""
 
 
 def _load_bench_entry(artifact: str):

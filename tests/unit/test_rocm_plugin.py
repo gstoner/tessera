@@ -410,8 +410,13 @@ def test_fused_hip_wrapper_checks_every_transfer_and_allocation():
              if "hipMalloc(" in stmt or "hipMemcpy(" in stmt]
     # 5 allocations (A, B, O, bias, residual) + 4 H2D copies + 1 D2H.
     assert len(calls) == 10, calls
+    # Every one goes through TSR_HIP, the one macro that checks the status,
+    # records the failing call's name and text, and jumps to cleanup.
     for call in calls:
-        assert "!=hipSuccess) goto cleanup" in call, call
+        assert "TSR_HIP(" in call, call
+    source = _fused_hip_source()
+    macro = source[source.index("#define TSR_HIP(call)"):].split("\n", 1)[0]
+    assert "!= hipSuccess" in macro and "goto cleanup" in macro and "_note(#call" in macro, macro
 
 
 def test_fused_hip_bench_entry_checks_its_transfers_too():
@@ -478,5 +483,6 @@ def test_fused_hip_wrapper_frees_every_allocation_on_every_path():
 
 def test_fused_hip_wrapper_rejects_null_buffers_before_allocating():
     wrapper = _fused_hip_source()
-    assert wrapper.index("if (!hA||!hB||!hout) goto cleanup;") < \
-        wrapper.index("hipMalloc(&dA")
+    assert wrapper.index("if (!hA||!hB||!hout)") < wrapper.index("hipMalloc(&dA")
+    null_check = wrapper[wrapper.index("if (!hA||!hB||!hout)"):].split("\n", 1)[0]
+    assert "goto cleanup" in null_check, null_check

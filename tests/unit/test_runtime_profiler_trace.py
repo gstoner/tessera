@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.runtime_link import runtime_consumer_link_args
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LIB = REPO_ROOT / "build" / "src" / "runtime" / "libtessera_runtime.a"
@@ -336,7 +338,8 @@ def test_runtime_profile_callback_hardening(tmp_path: Path) -> None:
     src_path.write_text(_HARDENING_HARNESS)
     compile_cmd = [
         _CXX, "-std=c++17", "-O2", "-I", str(RUNTIME_INCLUDE),
-        str(src_path), str(RUNTIME_LIB), "-lpthread", "-o", str(bin_path),
+        str(src_path), str(RUNTIME_LIB), *runtime_consumer_link_args(RUNTIME_LIB),
+        "-lpthread", "-o", str(bin_path),
     ]
     result = subprocess.run(compile_cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr[:4000]
@@ -364,6 +367,7 @@ def test_runtime_profile_callback_functional_trace_spine(tmp_path: Path) -> None
         str(RUNTIME_INCLUDE),
         str(src_path),
         str(RUNTIME_LIB),
+        *runtime_consumer_link_args(RUNTIME_LIB),
         "-lpthread",
         "-o",
         str(bin_path),
@@ -399,6 +403,7 @@ def test_tprof_adapter_maps_runtime_callback_to_trace_categories(tmp_path: Path)
         str(src_path),
         *(str(path) for path in TPROF_SOURCES),
         str(RUNTIME_LIB),
+        *runtime_consumer_link_args(RUNTIME_LIB),
         "-lpthread",
         "-o",
         str(bin_path),

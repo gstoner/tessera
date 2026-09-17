@@ -54,20 +54,23 @@ target_compile_definitions(tessera_runtime PRIVATE
 # the runtime lib), and fall back to a ROCm-prefix include so a bare
 # -DTESSERA_ENABLE_HIP=ON without the package still finds hip/hip_runtime.h.
 if(TESSERA_ENABLE_HIP)
+    if(DEFINED ENV{ROCM_PATH})
+        set(_tessera_rocm_prefix "$ENV{ROCM_PATH}")
+    else()
+        set(_tessera_rocm_prefix "/opt/rocm")
+    endif()
     if(NOT TARGET hip::host)
         find_package(hip QUIET CONFIG)
     endif()
     if(TARGET hip::host)
         target_link_libraries(tessera_runtime PUBLIC hip::host)
     else()
-        if(DEFINED ENV{ROCM_PATH})
-            set(_tessera_rocm_prefix "$ENV{ROCM_PATH}")
-        else()
-            set(_tessera_rocm_prefix "/opt/rocm")
-        endif()
         target_include_directories(tessera_runtime PUBLIC "${_tessera_rocm_prefix}/include")
         message(STATUS "tessera_runtime: HIP enabled, using ROCm include ${_tessera_rocm_prefix}/include (hip::host target not found)")
     endif()
+    find_library(TESSERA_RUNTIME_HIP_LIBRARY amdhip64
+                 HINTS "${_tessera_rocm_prefix}/lib" "${_tessera_rocm_prefix}/lib64"
+                       /opt/rocm/lib /opt/rocm/core/lib)
 endif()
 
 # Mirror of the HIP block for CUDA: when cuda_backend.cpp is compiled
@@ -79,20 +82,47 @@ if(TESSERA_ENABLE_CUDA)
     if(NOT TARGET CUDA::cudart)
         find_package(CUDAToolkit QUIET)
     endif()
+    if(DEFINED ENV{CUDA_PATH})
+        set(_tessera_cuda_prefix "$ENV{CUDA_PATH}")
+    elseif(DEFINED CUDAToolkit_ROOT)
+        set(_tessera_cuda_prefix "${CUDAToolkit_ROOT}")
+    else()
+        set(_tessera_cuda_prefix "/usr/local/cuda")
+    endif()
     if(TARGET CUDA::cudart)
         target_link_libraries(tessera_runtime PUBLIC CUDA::cudart)
     else()
-        if(DEFINED ENV{CUDA_PATH})
-            set(_tessera_cuda_prefix "$ENV{CUDA_PATH}")
-        elseif(DEFINED CUDAToolkit_ROOT)
-            set(_tessera_cuda_prefix "${CUDAToolkit_ROOT}")
-        else()
-            set(_tessera_cuda_prefix "/usr/local/cuda")
-        endif()
         target_include_directories(tessera_runtime PUBLIC "${_tessera_cuda_prefix}/include")
         message(STATUS "tessera_runtime: CUDA enabled, using include ${_tessera_cuda_prefix}/include (CUDA::cudart target not found)")
     endif()
+    find_library(TESSERA_RUNTIME_CUDA_LIBRARY cudart
+                 HINTS "${_tessera_cuda_prefix}/lib64" "${_tessera_cuda_prefix}/lib"
+                       /usr/local/cuda/lib64)
 endif()
+
+# `libtessera_runtime.a` carries the device-backend objects whenever the build
+# enabled them, and those objects need `libamdhip64` / `libcudart` at link time.
+# A consumer inside this build gets that from the target's usage requirements; a
+# consumer *outside* it does not -- and the runtime C-ABI tests compile a harness
+# against the archive directly with their own command line. On a host that built
+# with HIP enabled they got a page of `undefined reference to hipMalloc` and read
+# as a broken ABI (six tests, red on both ROCm boxes and invisible to CI, whose
+# runtime is built without either backend).
+#
+# Publish what such a consumer must add, beside the archive it must add it to.
+# One path per line, empty when no device backend is compiled in. The consumer is
+# `tests/unit/test_runtime_artifact_abi*.py`; `tests/unit/test_runtime_link_requirements.py`
+# holds the file and the CMake that writes it together.
+set(_tessera_runtime_consumer_link "")
+if(TESSERA_ENABLE_HIP AND TESSERA_RUNTIME_HIP_LIBRARY)
+    string(APPEND _tessera_runtime_consumer_link "${TESSERA_RUNTIME_HIP_LIBRARY}\n")
+endif()
+if(TESSERA_ENABLE_CUDA AND TESSERA_RUNTIME_CUDA_LIBRARY)
+    string(APPEND _tessera_runtime_consumer_link "${TESSERA_RUNTIME_CUDA_LIBRARY}\n")
+endif()
+file(GENERATE
+     OUTPUT "$<TARGET_FILE_DIR:tessera_runtime>/tessera_runtime.consumer-link.txt"
+     CONTENT "${_tessera_runtime_consumer_link}")
 
 # ------------------------------------------------------------------
 # Unit tests (standalone build or if explicitly requested)

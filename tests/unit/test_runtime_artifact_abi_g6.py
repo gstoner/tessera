@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.runtime_link import runtime_consumer_link_args
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LIB = REPO_ROOT / "build" / "src" / "runtime" / "libtessera_runtime.a"
 RUNTIME_INCLUDE = REPO_ROOT / "src" / "runtime" / "include"
@@ -122,8 +124,12 @@ def _build_and_run(tmp_path: Path, src: str, name: str) -> tuple[int, str, str]:
     src_path = tmp_path / f"{name}.cpp"
     bin_path = tmp_path / name
     src_path.write_text(src)
+    # The archive carries the device backends this build enabled, and they need
+    # their vendor runtime at link time — which CMake supplies to consumers
+    # inside the build and cannot supply to this command line.
     cmd = [_CXX, "-std=c++17", "-O2", "-I", str(RUNTIME_INCLUDE),
-           str(src_path), str(RUNTIME_LIB), "-lpthread", "-o", str(bin_path)]
+           str(src_path), str(RUNTIME_LIB), *runtime_consumer_link_args(RUNTIME_LIB),
+           "-lpthread", "-o", str(bin_path)]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         pytest.fail(f"compile failed:\n{r.stderr[:4000]}")

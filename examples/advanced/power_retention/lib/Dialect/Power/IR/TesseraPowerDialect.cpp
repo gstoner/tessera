@@ -2,9 +2,15 @@
 // `initialize()`. It used to hand-write a second `PowerDialect` beside the
 // generated declaration and could not compile in any clean tree
 // (2026-09-17).
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+
+using namespace mlir;
 
 #include "tessera/power/TesseraPowerDialect.h.inc"
 #define GET_OP_CLASSES

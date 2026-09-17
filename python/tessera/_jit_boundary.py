@@ -737,6 +737,7 @@ def jit_clifford_op(
         if angle is None:
             raise TesseraJitError("rotor_from_axis requires the angle; a runtime angle is a scaled "
                                   "bivector through exp")
+        rotor_angle = float(angle)
         if (p, q, r) != (3, 0, 0):
             raise TesseraJitError("rotor_from_axis is defined for Cl(3, 0) only")
         bivector = [m for m in range(dim) if bin(m).count("1") == 2]
@@ -784,7 +785,7 @@ def jit_clifford_op(
         mlir = (
             f"func.func @{sym}({args}) -> {t_out} {{\n"
             f"  %0 = \"tessera_clifford.rotor_from_axis\"({names}) "
-            f"{{{attrs}, angle = {float(angle):.17e} : f64}} : ({types}) -> {t_out}\n"
+            f"{{{attrs}, angle = {rotor_angle:.17e} : f64}} : ({types}) -> {t_out}\n"
             f"  return %0 : {t_out}\n"
             f"}}\n"
         )

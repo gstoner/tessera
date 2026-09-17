@@ -169,7 +169,7 @@ def langevin_loop_module(shape, *, eta: float, temperature: float, steps: int,
     # the row-program emitter admits no `math.powf` (its accuracy on the device
     # routes is unmeasured), and a carried multiply needs no transcendental at
     # all, so the same schedule reaches the GPU lane.
-    cool = "" if not annealed else (
+    cool = "" if anneal is None else (
         f"      %ratio = arith.constant {float(anneal)!r} : f32\n"
         f"      %cooled = arith.mulf %temp, %ratio : f32\n")
     tv = "%temp, " if annealed else ""
@@ -189,7 +189,7 @@ def langevin_loop_module(shape, *, eta: float, temperature: float, steps: int,
                 + f"          : ({st}, tensor<2xi64>, {tvt}{st}) -> ({st}, tensor<2xi64>, {stt})\n"
                 + f"      %acc = arith.ori %status, %n#2 : {stt}\n"
                 + cool
-                + f"      scf.yield %n#0, %n#1, %acc" + (", %cooled" if annealed else "")
+                + "      scf.yield %n#0, %n#1, %acc" + (", %cooled" if annealed else "")
                 + f" : {st}, tensor<2xi64>, {stt}" + (", f32" if annealed else "") + "\n"
                 "    }\n"
                 f"    return %r#0, %r#1, %r#2 : {st}, tensor<2xi64>, {stt}\n"
@@ -204,7 +204,7 @@ def langevin_loop_module(shape, *, eta: float, temperature: float, steps: int,
                 + f'      %n:2 = "tessera_ebm.langevin_step"(%y, %key, {tv}%x) {{ {attrs} }}\n'
                 + f"          : ({st}, tensor<2xi64>, {tvt}{st}) -> ({st}, tensor<2xi64>)\n"
                 + cool
-                + f"      scf.yield %n#0, %n#1" + (", %cooled" if annealed else "")
+                + "      scf.yield %n#0, %n#1" + (", %cooled" if annealed else "")
                 + f" : {st}, tensor<2xi64>" + (", f32" if annealed else "") + "\n"
                 "    }\n"
                 f"    return %r#0, %r#1 : {st}, tensor<2xi64>\n"

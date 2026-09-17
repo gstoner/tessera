@@ -5315,6 +5315,16 @@ Not applicable with a reason: the GPU storage route has no CPU package; x86's na
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
+
+Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+**Not applicable to the x86 backend, with a reason.** Everything in this slice is either CPU-lane work that runs through `libtessera_jit` (Clifford `exp`/`log`/`rotor_from_axis`, ragged batches, the annealed Langevin chain) or a device-route guard (the emitter's math admission table, the packager's refusal of an image whose kernel stores nothing) that applies to the `nvidia`/`rocm` serialization paths only. No x86 Target IR op, no AVX-512 kernel and no x86 lowering is touched.
+
+The CPU-lane half was validated on both Zen 5 hosts as part of the broader unit sweeps (302 unit on Princess-Luna), which is the x86-relevant evidence: these are `libtessera_jit` results on an AVX-512 host, not a claim about the x86 Target backend. One transferable lesson rather than an action: the `math.tanh` defect was a *vendor-library call whose body the binary serialization dropped*, and the emitter's answer was to close the admitted set rather than widen it. Any future x86 lane that reaches libm through a serialized artifact inherits the same question.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps) and the [device packets](../../../../benchmarks/baselines/row_program_math_precision_20260916/README.md).
+
 ## EBM bivector integrator and the overhead measurement — 2026-09-16
 
 Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

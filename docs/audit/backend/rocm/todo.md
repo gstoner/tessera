@@ -7989,6 +7989,18 @@ Parity validated on both owning devices: gfx1151 (Princess-Luna) and gfx1201 (Ta
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
+
+Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+**Follow-up required, and one defect found on this backend.** The row-program emitter's math sweep found that `math.tanh` returns **zero for every input on gfx1151**: it lowers to `__ocml_tanh_f32`, and the packaged image's kernel body was one `s_endpgm` — the launch succeeded and wrote nothing, so the caller read an answer-shaped result out of an untouched buffer. The identical module serialized with `format=isa` contains the correct 40-instruction implementation, so the body is lost in the *binary* serialization, not in the lowering. Not root-caused past that point: it is a ROCm-side serialization defect and it is open. Two guards landed instead of a root cause — `build_native_gpu_storage` disassembles the image it is about to ship and refuses one whose kernel stores nothing, and the emitter refuses any `math.*` op outside its measured admission table. `math.log1p` also left the table: the device computes `log(1 + x)`, so the accuracy near zero that log1p exists for is not there.
+
+Parity validated on both owning devices for what did land: the admitted set measured at 16384 points per input domain — `sqrt` and `absf` exact, `cos` 1 ulp, `exp` 2 ulp, `log` 3 ulp, identical on gfx1151 and gfx1201 (same ROCm 10.0 / HIP 7.15) — the annealed Langevin chain (temperature carried in registers, a 1.0 ratio reproducing the constant chain bit for bit), Clifford `exp`/`log`/`rotor_from_axis`, and ragged Clifford batches. EBM lit 18/18 and Clifford lit 22/22 on Princess-Luna and on both of Tajasarus's trees, including the assertions-enabled one; 302 unit on Princess-Luna. gfx1201 cannot run the device-vs-CPU annealing comparison at all — that box has no `libtessera_jit` (no libffi-dev at configure time), so the test skips there rather than reporting a wrong answer.
+
+**A hollow green signal found while collecting that evidence, and open:** on Tajasarus `ninja -C build check-ebm` and `check-clifford` print *nothing* and exit 0 in both trees. It is the documented `check-tessera-rocm` trap again — `lit` is venv-only on these boxes, a non-interactive configure does not see it, and the target degrades to a silent skip — and it means the assertions-enabled host's domain fixture coverage looked green while running zero fixtures. Running lit directly with `BUILD_DIR` set and the toolchain's `FileCheck` on PATH gives the real result (EBM 18/18, Clifford 22/22 and tests/tessera-ir 491/491 in **both** trees, assertions included). Owed: pass `-DTESSERA_LIT=$PWD/.venv/bin/lit` when configuring these trees, so the target either runs or fails instead of skipping.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps) and the [device packets](../../../../benchmarks/baselines/row_program_math_precision_20260916/README.md).
+
 ## EBM bivector integrator and the overhead measurement — 2026-09-16
 
 Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

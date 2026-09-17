@@ -7648,6 +7648,16 @@ Parity validated on owning sm_120 (RTX 5070, CUDA 13.4 / driver 610.88): ten Cli
 
 See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline) and the [device packets](../../../../benchmarks/baselines/clifford_native_gpu_20260916/README.md).
 
+## Row-program math admission, rotor sampling, ragged batches, annealing — 2026-09-16
+
+Sync `EBM-GA-GAPCLOSE-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.
+
+**Follow-up required: this backend has an uncovered instance of the defect that drove the slice.** The row-program emitter now refuses any `math.*` op whose accuracy on the device route has not been measured, and `build_native_gpu_storage` refuses an image whose kernel contains no store — the guard that catches a device-library call whose body the binary serialization silently drops (found on gfx1151 with `math.tanh`: the launch succeeded and wrote nothing). **That guard covers the AMDGPU image only.** The NVIDIA cubin needs `nvdisasm`, which is not a matched-LLVM tool, so an equivalent silent body loss on the NVVM route would still ship unnoticed. Owed here: either a cubin-side equivalent of the store check, or a documented argument that the NVVM serializer fails loudly where ROCDL's does not — the second is plausible (libdevice is linked explicitly) and is exactly the kind of plausible claim this stream keeps disproving by measuring.
+
+Parity validated on sm_120 for what landed: the admitted math set at 16384 points per input domain — `sqrt` and `absf` exact, `cos` 1 ulp, `exp` **3** ulp (one looser than both RDNA parts), `log` 3 ulp. `sqrt` at 0 ulp is the `__nv_fsqrt_rn` pin working; the same sweep against the unpinned `__nv_sqrtf` is what produced the original 1-ulp row. The annealed Langevin chain and the Clifford closed forms run here too: 149 unit on Super-Bear, EBM lit 18/18.
+
+See the [plan log entry](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps) and the [device packets](../../../../benchmarks/baselines/row_program_math_precision_20260916/README.md).
+
 ## EBM bivector integrator and the overhead measurement — 2026-09-16
 
 Sync `EBM-BIVECTOR-OVERHEAD-2026-09-16`; owner W4-PRODUCT-1 / AD-SOLVER-IFT-1.

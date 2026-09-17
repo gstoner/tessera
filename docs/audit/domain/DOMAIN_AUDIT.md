@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-15
+last_updated: 2026-09-16
 audit_role: theme
 ---
 
@@ -155,6 +155,49 @@ Next in this stream: measure the native route against the Python-emitted
 device kernels (dispatch/allocation/kernel time separately) before any lane
 change, an Apple package route (the ladder's `rocm`/`apple_gpu` GA rows are still the
 Python-emitted kernels), then the traceable quadratic energy loop (EBM).
+
+## Rotor sampling, ragged batches, annealing, and what a kernel may compute — 2026-09-16
+
+Eighth slice, sync `EBM-GA-GAPCLOSE-2026-09-16` (W4-PRODUCT-1 /
+AD-SOLVER-IFT-1). Four carried gaps closed, and one silent wrong answer found
+by measuring an assumption.
+
+* **Rotor sampling happens on the group.** Clifford `exp` and `log` lower to
+  their closed forms on Cl(3, 0), and `rotor_from_axis` lands with them — the
+  op the phase7 fixture had recorded as "genuinely absent from the dialect",
+  which is why the fixture took its rotor as an argument. It builds one now.
+  `exp` admits only an operand it can *prove* is a pure bivector, because the
+  reference switches to a power series based on the *value* and a compiler
+  cannot read values; guessing would make the two disagree on one input.
+* **Ragged batches lower.** Dynamic leading extents take their loop bound from
+  `tensor.dim`, so one cached module serves every batch length. The
+  shape agreement every bilinear op requires is *emitted* as an assertion
+  rather than assumed, since dynamic types cannot establish it.
+* **An annealing schedule is one kernel.** The Langevin temperature may be a
+  runtime value, so a cooling chain stays one loop with the temperature carried
+  in registers instead of being unrolled into K attributed steps. A cooling
+  ratio of 1.0 reproduces the constant chain bit for bit — the check that this
+  is a generalization and not a second integrator.
+* **An opaque energy adjoint is refused by name**, which the lowering had
+  claimed to do since the first slice without checking.
+
+**What measuring found.** The row-program emitter accepted any `math.*` op that
+reached it, and only `sqrt` had ever been measured against the host. Sweeping
+the rest on all three devices produced the real bounds — and found that
+`math.tanh` returned **zero for every input** on gfx1151, because the packaged
+image's kernel body was a single `s_endpgm`: the launch succeeded and wrote
+nothing. The packager now refuses an image whose kernel stores nothing, and the
+emitter's math table is closed so an unmeasured op refuses rather than passing
+through. This is the third time this stream has found a *fail-open* defect by
+driving a domain capability through the compiler rather than around it.
+
+Still open in the domain stream: the Clifford **field ops** (`ext_deriv`,
+`codiff`, `vec_deriv`, `integral`) have no lowering; no Apple package route for
+the Langevin loop or the GA products; the row-program emitter's 1024-feature
+ceiling needs a second reduction level, which changes the declared reduction
+order and so requires re-deriving the reference rather than loosening a
+tolerance; promotion of either native lane still waits on kernel-time
+attribution that no WSL2 ROCm box can produce.
 
 ## EBM bivector integrator and the overhead measurement — 2026-09-16
 

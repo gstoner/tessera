@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-15
+last_updated: 2026-09-16
 audit_role: reference
 scope: GA/EBM frontend, native lowering, differentiation and workload residency
 ---
@@ -31,7 +31,7 @@ read from the generated [domain proof ladder](../generated/domain_proof_ladder.m
 |---|---|
 | §1.1 invalid/missing manifold accepted | **Fixed at the semantic boundary.** `EBMOps.td::EBM_ManifoldAttr` admits euclidean/sphere/bivector; `Canonicalize.cpp` rejects omission/unknown values. `canonicalize_rejects_bad_manifold.mlir` is the negative fixture. This does not establish a device consumer for arbitrary manifold metadata. |
 | §1.2 host energy/gradient boundary | **Still material.** Native arithmetic on precomputed gradients does not lower a callable energy. `geo_sampling.py::_tape_grad` and `_tape_grad_mv` reduce host differentiation cost for traceable functions, but do not compile the energy loop to the device. |
-| §1.3 disconnected GA producers and unbatched native expansion | **Batched expansion closed 2026-09-16 (`GA-NATIVE-BATCHED-2026-09-16`).** `ExpandProductTable.cpp` lowers any static `[..., dim]` rank to an scf.for nest over the compile-time table, and the product executes through MLIR/LLVM inside `libtessera_jit` (`cpu` / `cpu_clifford_llvm_jit`; M1 Max, Zen 5, Zen 2 parity with the GA reference). Still open: `RotorSandwichFold` and the other Clifford ops (reverse, wedge, contractions) have no native lowering behind the JIT, the GPU route (arena pipeline) is not built, and the specialized Python/runtime kernels remain a second implementation until the native package displaces them; recognizing a pattern is not execution proof. |
+| §1.3 disconnected GA producers and unbatched native expansion | **Batched expansion closed 2026-09-16 (`GA-NATIVE-BATCHED-2026-09-16`).** `ExpandProductTable.cpp` lowers any static `[..., dim]` rank to an scf.for nest over the compile-time table, and the product executes through MLIR/LLVM inside `libtessera_jit` (`cpu` / `cpu_clifford_llvm_jit`; M1 Max, Zen 5, Zen 2 parity with the GA reference). Still open when this row was written, and **corrected 2026-09-16 the same day**: reverse, wedge and the contractions *do* have native lowering (`ExpandProductTable` registers the whole linear/bilinear family), and the GPU route was built (`GA-NATIVE-GPU-2026-09-16`). The sentence outlived its facts by hours and was read back as current a session later, which is exactly the failure mode this file's dated-banner protocol exists to prevent. What remains open: the **field ops** (`ext_deriv`, `codiff`, `vec_deriv`, `integral`) have no lowering, an Apple package route does not exist, and the specialized Python/runtime kernels remain a second implementation until measured evidence displaces them; recognizing a pattern is not execution proof. |
 | §1.4 pass-description drift | **Partially repaired, still inconsistent.** `CliffordPasses.td` now says annotation-only, yet `GradeFusion.cpp` and `ExpandProductTable.cpp` perform real rewrites. Some EBM headers still say stub while the bodies annotate. Reconcile each description with the registered body; do not copy either blanket label. |
 | §1.5 EBM checkpoint policy | **Removed from the default pipeline; standalone marker remains.** `CheckpointInnerLoop.cpp` still sets syntactic recompute/budget attributes. Do not restore it as production rematerialization without a shared demand/effect analysis and native policy consumer. |
 | §2.1 grade information discarded | **Fixed for bounded consumers.** `ga/ops.py::_product_grade_contract`, native `InputGradeFusionPattern`, and `ExpandProductTable` consume operand grades. The latter prunes emitted terms; this is more than an unused annotation. |
@@ -144,6 +144,72 @@ memory/kernel-time measurements the acceptance asks for — no performance
 claim is made, and the Python `x86_clifford_compiled` / `rocm_clifford_compiled`
 kernels are unchanged and remain the device lanes until displaced by measured
 evidence.
+
+## exp/log on the group, ragged batches, an annealing schedule — 2026-09-16
+
+Sync `EBM-GA-GAPCLOSE-2026-09-16` (W4-PRODUCT-1 / AD-SOLVER-IFT-1). Four of the
+gaps this review has been carrying are closed, and one new one was found by
+measuring something that had been assumed.
+
+**`exp`/`log` of multivectors — rotor sampling on the group.** Both were declared
+with no lowering, so the group step had to happen in the numpy reference. Both now
+lower to their closed forms on Cl(3, 0), and `rotor_from_axis` lands with them —
+its angle is an attribute, so `cos` and `sin` fold at compile time and the emitted
+kernel is one reciprocal and a scale per multivector. The reference's 24-term power
+series is deliberately **not** emitted: it is ~1500 unrolled mul-adds per
+multivector, and the reference only takes that branch when the operand is not a
+pure bivector, which is a property of the *value*. So `exp` admits an operand it
+can **prove** is one — the result of `grade` keeping grade 2, which is the shape
+rotor sampling already has — and refuses otherwise rather than silently taking a
+different branch than the reference would. `log` needs no proof: on Cl(3, 0) the
+reference takes the closed form for every input. Agreement is a few ulp, not
+bit-exact, and the cause is recorded rather than tuned away — the reference reduces
+the full 8x8 table with numpy's own summation while the lowering emits an ordered
+fold. The checks that do not depend on that are the ones to read:
+`log(exp(B)) == B`, `|exp(B)| == 1`, and a rotor turning a vector by exactly its
+angle.
+
+**Ragged batches.** Leading axes may now be dynamic: the loop bound is a
+`tensor.dim` and one cached module serves every batch length, which is the whole
+point of admitting them. The coefficient axis stays static because it indexes the
+compile-time Cayley table. "The operands have the same shape" — which every
+bilinear op here requires — cannot be read off dynamic types, so it is emitted as
+a `cf.assert` per dynamic axis instead of assumed; without it a mismatched pair
+would read past the shorter operand and return a plausible answer. The geometric
+product had its own static-only copy of the batched loop nest; it is now the shared
+one, so this landed in one place.
+
+**An annealing schedule.** `tessera_ebm.langevin_step` takes its temperature
+either as the constant attribute or as a runtime operand, exactly one of the two
+(Decision #21a: it selects which distribution is sampled). With the attribute a
+K-step loop samples one temperature and a schedule had to be unrolled into K
+differently attributed steps or driven from the host; as a runtime value the
+annealed chain is one loop and one cooperative kernel, with the temperature
+carried in registers beside the state and both key words. The schedule is a
+carried multiply rather than `powf` of the loop index — numerically cleaner, and
+the only form the row-program emitter admits. A ratio of 1.0 reproduces the
+constant chain **bit for bit** on both lanes, which is the check that the runtime
+path is a generalization of the attribute path and not a second integrator.
+
+**Opaque-callback energies** are now refused *by name*. This was documented as
+refused from the first slice and never checked: an energy whose `@E__bwd` still
+contains `tessera.custom_adjoint_call` surfaced as a JIT pipeline error naming
+nothing, or as the row-program emitter refusing an op it could not place. The
+refusal happens in the EBM lowering now, naming the energy and the callback, and
+saying that the fix is a native adjoint or the reference path.
+
+**What measuring found.** The row-program emitter admitted every `math.*` op that
+reached it; only `sqrt` had been measured. Sweeping the rest at 16384 points per
+domain on all three devices established the real bounds (`cos` 1 ulp, `exp` 2–3,
+`log` 3, `sqrt`/`absf` exact) — and found that **`math.tanh` returned zero for
+every input on gfx1151**, because the packaged image's kernel body was one
+`s_endpgm`. The launch succeeded and wrote nothing. The packager now refuses an
+image whose kernel stores nothing, and the emitter's admission table is closed, so
+an unmeasured op refuses instead of passing through.
+
+Still open here: the **field ops** (`ext_deriv`, `codiff`, `vec_deriv`,
+`integral`) have no lowering; no Apple package route for either the loop or the
+products; promotion still waits on kernel-time attribution.
 
 ## The bivector integrator and the overhead measurement — 2026-09-16
 

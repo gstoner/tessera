@@ -254,6 +254,38 @@ def CL_LogOp : CliffordOp<"log", [Pure]> {
   }];
 }
 
+def CL_RotorFromAxisOp : CliffordOp<"rotor_from_axis", [Pure]> {
+  let summary = "The rotor R = exp(-angle/2 * Bhat) about a bivector axis.";
+  let description = [{
+    The canonical rotor constructor: `axis` need not be normalized, and only
+    its grade-2 part is used. Lowered to the closed form
+    `cos(angle/2) - sin(angle/2) * axis_2 / |axis_2|`, in which the two
+    transcendentals are compile-time constants because `angle` is an attribute
+    — so the emitted code is one reciprocal and a scale per multivector, not an
+    exponential.
+
+    A zero-magnitude axis has no rotor, and this op does not invent one: the
+    frontend refuses such an input (matching the GA reference, which raises),
+    and the lowering divides by the magnitude without a guard rather than
+    silently returning the identity rotor for a degenerate axis.
+
+    A *runtime* angle is not this op — scale the bivector and use
+    `tessera_clifford.exp`, which is the same closed form with the angle folded
+    into the operand.
+  }];
+  let arguments = (ins
+    AnyType:$axis,
+    I64ArrayAttr:$algebra,
+    StrAttr:$dtype,
+    F64Attr:$angle
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = [{
+    $axis `algebra` $algebra `dtype` $dtype `angle` $angle
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def CL_RotorSandwichOp : CliffordOp<"rotor_sandwich", [Pure]> {
   let summary = "Apply R x R† — rotor conjugation rotation of x.";
   let description = [{

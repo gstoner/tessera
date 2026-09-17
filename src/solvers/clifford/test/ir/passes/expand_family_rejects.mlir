@@ -1,4 +1,7 @@
-// RUN: ts-clifford-opt --tessera-clifford-expand-product-table %s 2>&1 | FileCheck %s
+// RUN: not ts-clifford-opt --tessera-clifford-expand-product-table %s 2>&1 | FileCheck %s
+//
+// `not`: since 2026-09-16 the pass fails when it refuses an op, instead of
+// printing the diagnostic and exiting 0.
 //
 // Scalar forms must be typed [..., 1]; a mistyped result is refused, never
 // silently reshaped. The op stays in place.

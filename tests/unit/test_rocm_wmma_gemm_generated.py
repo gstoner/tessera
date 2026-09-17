@@ -49,9 +49,14 @@ CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 TYPED_FRAGMENT_FIXTURE = (
     REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm" / "gfx1151_tile_fragment_store.mlir"
 )
+# Driven by this test, not by lit, so it lives outside lit discovery — the same
+# place and for the same reason as `x86_composed_layout_exec.mlir`. Inside the
+# ROCm suite it was discovered as a test, reported Unresolved ("Test has no RUN
+# line") and failed `check-tessera-rocm` for the whole repository. It carried an
+# `UNSUPPORTED: true` marker meant to prevent exactly that; on LLVM 23's lit a
+# test with no RUN line is Unresolved before that marker is consulted.
 COMPOSED_LAYOUT_FRAGMENT_FIXTURE = (
-    REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm"
-    / "gfx1151_composed_layout_fragment_store.mlir"
+    REPO / "tests/fixtures" / "gfx1151_composed_layout_fragment_store.mlir"
 )
 
 

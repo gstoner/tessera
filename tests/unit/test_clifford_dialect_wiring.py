@@ -370,10 +370,15 @@ def test_expand_product_table_emits_arith_and_tensor_ops() -> None:
     # Reads the optional output_grades attribute (grade-fusion savings).
     assert "tessera.clifford.output_grades" in body
     # W6.4 (2026-09-16): batched operands lower to an scf.for nest carrying the
-    # result tensor; dynamic extents fail closed with a diagnostic.
+    # result tensor. Since the ragged slice later the same day, a dynamic leading
+    # extent takes its loop bound from `tensor.dim` and the operands' agreement is
+    # asserted at runtime; only a dynamic *coefficient* axis fails closed, since
+    # that axis indexes the compile-time Cayley table.
     assert "rewriter.create<scf::ForOp>" in body
     assert "rewriter.create<tensor::InsertOp>" in body
-    assert "dynamic or unranked operands are not lowered" in body
+    assert "rewriter.create<tensor::DimOp>" in body
+    assert "rewriter.create<cf::AssertOp>" in body
+    assert "coefficient axis must be static" in body
 
 
 def test_expand_product_table_uses_cayley_helper() -> None:
@@ -474,13 +479,27 @@ def test_expand_batched_fixture_lowers_to_loops() -> None:
     assert "tessera.clifford.output_grades = [2]" in fixture
 
 
-def test_expand_rejects_dynamic_fixture() -> None:
+def test_expand_rejects_dynamic_coefficient_axis_fixture() -> None:
+    """A dynamic coefficient axis stays refused: it indexes the algebra's
+    compile-time table, so a runtime extent has no meaning there."""
     fixture = (REPO_ROOT
         / "src/solvers/clifford/test/ir/passes/expand_rejects_dynamic.mlir").read_text()
-    assert "tensor<?x8xf32>" in fixture
-    assert "dynamic or unranked operands are not lowered" in fixture
+    assert "tensor<4x?xf32>" in fixture
+    assert "coefficient axis is static" in fixture
     # The op stays in the IR after the refused lowering.
     assert "CHECK: tessera_clifford.geo_product" in fixture
+
+
+def test_ragged_batch_fixture_takes_its_bound_from_the_operand() -> None:
+    """Dynamic *leading* extents are a ragged batch and are lowered: the bound is
+    a `tensor.dim`, and the shape agreement the op requires is asserted rather
+    than assumed, since dynamic types cannot establish it."""
+    fixture = (REPO_ROOT
+        / "src/solvers/clifford/test/ir/passes/expand_ragged_batch.mlir").read_text()
+    assert "tensor<?x8xf32>" in fixture and "tensor<?x?x8xf32>" in fixture
+    assert "CHECK-DAG:     tensor.dim" in fixture
+    assert "CHECK-DAG:     cf.assert" in fixture
+    assert "CHECK-NOT:     tessera_clifford" in fixture
 
 
 def test_grade_fusion_basic_fixture_targets_bivector_slice() -> None:

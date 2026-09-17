@@ -26,6 +26,15 @@ from tests._support.compiler_tool import require_tessera_opt, run_tessera_opt
 np = pytest.importorskip("numpy")
 
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+# The 16x16x16 f16/bf16 WMMA fragment layout this file lowers and launches is a
+# gfx11 (RDNA3/RDNA3.5) ISA contract; on a gfx12 host the LLVM backend cannot
+# select the intrinsic and `mlir-opt` crashes in the CallGraph pass manager
+# rather than refusing (Tajasarus, 2026-09-17). The whole file is that contract,
+# so it skips as a unit off gfx11 -- the same fail-closed answer the runtime's
+# WMMA arch guard gives one layer up.
+pytestmark = pytest.mark.skipif(
+    not CHIP.startswith("gfx11"),
+    reason=f"16x16x16 WMMA fragment ISA is gfx11-only; this host launches on {CHIP}")
 TILE = 16
 WAVE = 32
 

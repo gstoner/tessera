@@ -45,6 +45,15 @@ np = pytest.importorskip("numpy")
 _ROCM_PASSES = ("--generate-wmma-gemm-kernel",
                 "--lower-tessera-target-to-rocdl")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+# The 16x16x16 f16/bf16 WMMA fragment layout this file lowers and launches is a
+# gfx11 (RDNA3/RDNA3.5) ISA contract; on a gfx12 host the LLVM backend cannot
+# select the intrinsic and `mlir-opt` crashes in the CallGraph pass manager
+# rather than refusing (Tajasarus, 2026-09-17). The whole file is that contract,
+# so it skips as a unit off gfx11 -- the same fail-closed answer the runtime's
+# WMMA arch guard gives one layer up.
+pytestmark = pytest.mark.skipif(
+    not CHIP.startswith("gfx11"),
+    reason=f"16x16x16 WMMA fragment ISA is gfx11-only; this host launches on {CHIP}")
 
 def _directive(mt=1, nt=1):
     return (

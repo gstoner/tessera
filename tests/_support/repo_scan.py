@@ -53,6 +53,40 @@ def _is_nested_checkout(path: Path) -> bool:
     return (path / ".git").exists()
 
 
+def find_apple_double_forks(root: Path) -> list[Path]:
+    """Every AppleDouble resource fork (`._name`) under `root`, outside the
+    non-source trees.
+
+    These are what a macOS-to-Linux copy leaves beside each file. They are
+    already in `.gitignore`, which is the trap: `git status` reads *clean* over
+    a tree full of them, so a working tree and a fresh worktree of the same
+    commit look identical to git and behave differently under every scanner
+    that globs by suffix. Super-Bear had 49 (2026-09-17); a bisect that compared
+    that tree against a clean worktree compared two trees, not two code states.
+    `iter_repo_files` skips them, but 37 test files glob directly, so the honest
+    thing is to make them visible at session start rather than trust that every
+    scanner was routed.
+    """
+    forks: list[Path] = []
+    stack = [Path(root)]
+    while stack:
+        directory = stack.pop()
+        try:
+            entries = list(directory.iterdir())
+        except (PermissionError, FileNotFoundError):  # pragma: no cover
+            continue
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.is_dir():
+                if entry.name in _NON_SOURCE_DIRS or entry.name.startswith("build"):
+                    continue
+                stack.append(entry)
+            elif entry.name.startswith("._"):
+                forks.append(entry)
+    return sorted(forks)
+
+
 def iter_repo_files(
     root: Path,
     *,

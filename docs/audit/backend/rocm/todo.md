@@ -8034,20 +8034,28 @@ hollow-green pattern. What it needs is a per-family answer to "does gfx1201 have
 this plugin", each one gated on that answer — roughly twenty families, with
 owning-device confirmation for each.
 
-**Super-Bear (sm_120): 49 failures**, concentrated in `test_scheduled_cumsum.py`,
-`test_native_persistent_tape.py`, `test_native_next_admission.py` and
-`test_apple_lowp_native_contract.py` (an Apple contract test running on a Linux
-box). Confirmed pre-existing: the same files on `4898812c`, built from its own
-sources in a worktree on that box, give 50. Three of the original 52 **were**
-fixed here and are a class worth naming: **49 untracked AppleDouble resource forks**
-(`._name.py`) left by an old macOS-to-Linux copy match `*.py` / `*.json` globs, and
-their binary contents made three source-registry gates die with
-`UnicodeDecodeError: … 0xa3` — a registry gate failing because of unrelated
-filesystem debris. `iter_repo_files` now skips them, `read_source` decodes
-tolerantly, and the two gates that globbed directly were routed through both. Note
-for anyone bisecting on that box: a fresh worktree has no debris, so comparing
-`~/programming/tessera` against a clean checkout compares two *trees*, not two code
-states — that mistake cost a cycle here.
+**Super-Bear (sm_120): 48 failures, none of them this branch's.** Measured the
+only way that is valid — main and the branch each built from its own sources in a
+**fresh worktree**, same configure, same box: main **50**, branch **48**, nothing
+failing only on the branch, and the two that fail only on main are the
+shape-varying-tape tests that now skip with their reason. The 48 concentrate in
+`test_scheduled_cumsum.py`, `test_native_persistent_tape.py`,
+`test_native_next_admission.py` and `test_apple_lowp_native_contract.py` (an Apple
+contract test running on a Linux box).
+
+The first attempt at that comparison was wrong and is recorded because the error
+is easy to repeat: it compared `~/programming/tessera` (the branch, lived in) against
+a fresh worktree of main, and reported four branch regressions. All four were
+`UnicodeDecodeError` from **49 untracked AppleDouble resource forks** (`._name.py`)
+that an old macOS-to-Linux copy had left in the lived-in tree only. `._*` is
+gitignored, so `git status` was clean in both trees — git cannot tell them apart,
+and a bisect that varies the tree as well as the commit attributes tree noise to
+the commit. Three gates were bitten and are now debris-proof (`iter_repo_files`
+skips the forks, `read_source` decodes tolerantly, the two direct globbers were
+routed through both); 37 test files still glob by suffix directly, so
+`tests/conftest.py` now warns at session start with the fork count and the remedy
+(`find_apple_double_forks`), because a sweep must say what it is running over when
+git will not. Rule: bisect with both sides in fresh worktrees, never one of each.
 
 ## The Princess-Luna red zone, cleared — 2026-09-17
 

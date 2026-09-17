@@ -30,10 +30,40 @@ _ACTIVE_LEDGER: DeviceLedger | None = None
 def pytest_configure(config):
     global _ACTIVE_LEDGER
     ensure_cuda_bin_on_path()
+    _warn_about_apple_double_forks(config)
     for name, description in MARKERS.items():
         config.addinivalue_line("markers", f"{name}: {description}")
     _ACTIVE_LEDGER = DeviceLedger()
     setattr(config, _DEVICE_LEDGER_KEY, _ACTIVE_LEDGER)
+
+
+def _warn_about_apple_double_forks(config) -> None:
+    """Say so when the tree holds AppleDouble debris, because git will not.
+
+    `._*` is gitignored, so a tree with 49 resource forks in it reports a clean
+    status — and then fails source-registry gates with UnicodeDecodeError, or
+    differs from a fresh worktree of the same commit in ways a bisect reads as a
+    code change. This is a warning and not a failure on purpose: the debris is a
+    host property, and the scanners that were bitten are now debris-proof. It
+    exists so the next sweep on such a host says what it is running over.
+    """
+    from tests._support.repo_scan import find_apple_double_forks
+
+    root = Path(__file__).resolve().parents[1]
+    forks = find_apple_double_forks(root)
+    if not forks:
+        return
+    shown = ", ".join(str(f.relative_to(root)) for f in forks[:3])
+    more = f", … ({len(forks)} total)" if len(forks) > 3 else ""
+    config.issue_config_time_warning(
+        pytest.PytestConfigWarning(
+            f"{len(forks)} AppleDouble resource fork(s) (`._*`) in the tree: {shown}{more}. "
+            "They are gitignored, so `git status` is clean over them, and any test that "
+            "globs by suffix will read them as source. Remove with "
+            "`find . -name '._*' -not -path './.git/*' -delete` before trusting a "
+            "sweep or a bisect on this host."),
+        stacklevel=2,
+    )
 
 
 @pytest.fixture(scope="session")

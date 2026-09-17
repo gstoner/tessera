@@ -91,3 +91,4 @@ def test_this_host_agrees_with_its_own_build_tree():
             pytest.fail(f"this build enabled {backend} but the sidecar names no {library}: {args}")
         if named and not enabled:
             pytest.fail(f"the sidecar names {library} but this build did not enable {backend}")
+

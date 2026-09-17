@@ -40,24 +40,31 @@ def _rocm_flash_live() -> bool:
 
 
 def _rocm_hip_live() -> bool:
-    """A live ROCm device whose arch has the lane these tests assert.
-
-    The `rocm_wmma_gemm` candidate is the compiled 16x16x16 WMMA GEMM with its
-    fused epilogue -- a gfx11 (RDNA3/3.5) contract, hardware-verified on
-    gfx1151. On gfx1201 the lane refuses and the candidate correctly declines
-    to the reference, so a test asserting the `rocm_wmma` tag there asserts a
-    gfx1151 proof on a host that cannot have one (these are `slow`, outside the
-    default sweep, and were first run on the RDNA4 box on 2026-09-17).
-    """
+    """A live AMD device with hipcc: the generic HIP lane runs on any arch."""
     if not (shutil.which("hipcc") or os.path.exists("/opt/rocm/bin/hipcc")):
         return False
     try:
         from tessera import runtime as rt
-        from tests._support.rocm_build import rocm_host_arch
-        arch = rocm_host_arch() or ""
-        return rt._rocm_wmma_runtime_available() and arch.startswith("gfx11")
+        return rt._rocm_wmma_runtime_available()
     except Exception:
         return False
+
+
+def _rocm_wmma_lane_live() -> bool:
+    """A live device whose arch has the `rocm_wmma_gemm` candidate's lane.
+
+    That candidate is the compiled 16x16x16 WMMA GEMM with its fused epilogue
+    -- a gfx11 (RDNA3/3.5) contract, hardware-verified on gfx1151. On gfx1201
+    the lane refuses and the candidate correctly declines to the reference, so
+    a test asserting the `rocm_wmma` tag there asserts a gfx1151 proof on a
+    host that cannot have one (these are `slow`, outside the default sweep,
+    and were first run on the RDNA4 box on 2026-09-17). The generic-lane tests
+    keep the wider gate above: that lane runs on gfx1201.
+    """
+    if not _rocm_hip_live():
+        return False
+    from tests._support.rocm_build import rocm_host_arch
+    return (rocm_host_arch() or "").startswith("gfx11")
 
 
 # ── 1. Registration + emit + decline paths (host-free) ────────────────────────
@@ -317,7 +324,7 @@ def test_wmma_candidate_forwards_shared_raster_contract(monkeypatch):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_hip_live(),
+@pytest.mark.skipif(not _rocm_wmma_lane_live(),
                     reason="live gfx11 (gfx1151) WMMA GEMM lane required; the compiled fused-epilogue lane is gfx11-only")
 @pytest.mark.parametrize("region", _WMMA_CHAINS,
                          ids=lambda r: f"{r.epilogue}")
@@ -339,7 +346,7 @@ def test_live_wmma_candidate_gated(region):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_hip_live(),
+@pytest.mark.skipif(not _rocm_wmma_lane_live(),
                     reason="live gfx11 (gfx1151) WMMA GEMM lane required; the compiled fused-epilogue lane is gfx11-only")
 def test_live_arbiter_prefers_wmma_but_falls_to_generic():
     # Default (tier-priority) arbitration: the crown-jewel WMMA wins where it
@@ -363,7 +370,7 @@ def test_live_arbiter_prefers_wmma_but_falls_to_generic():
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_hip_live(),
+@pytest.mark.skipif(not _rocm_wmma_lane_live(),
                     reason="live gfx11 (gfx1151) WMMA GEMM lane required; the compiled fused-epilogue lane is gfx11-only")
 def test_live_escape_hatch_forces_generic_over_crown_jewel():
     # E3: a hand-tuned candidate is never orphaned AND a lower tier can be forced.

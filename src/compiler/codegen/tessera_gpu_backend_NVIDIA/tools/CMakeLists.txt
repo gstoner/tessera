@@ -29,5 +29,7 @@ target_link_libraries(tessera-nvidia-opt PRIVATE
   MLIRMathToLLVM
   MLIRMemRefToLLVM
   MLIRUBToLLVM
+  MLIRNVVMToLLVM
+  MLIRGPUToGPURuntimeTransforms
   MLIROptLib
 )

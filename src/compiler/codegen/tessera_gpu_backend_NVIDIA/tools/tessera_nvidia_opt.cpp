@@ -3,9 +3,12 @@
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/GPUCommon/GPUToLLVM.h"
+#include "mlir/Conversion/GPUToNVVM/GPUToNVVM.h"
 #include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
+#include "mlir/Conversion/NVVMToLLVM/NVVMToLLVM.h"
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Conversion/UBToLLVM/UBToLLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -38,5 +41,8 @@ int main(int argc, char **argv) {
   mlir::registerConvertMathToLLVMInterface(registry);
   mlir::registerConvertMemRefToLLVMInterface(registry);
   mlir::ub::registerConvertUBToLLVMInterface(registry);
+  mlir::gpu::registerConvertGpuToLLVMInterface(registry);
+  mlir::NVVM::registerConvertGpuToNVVMInterface(registry);
+  mlir::registerConvertNVVMToLLVMInterface(registry);
   return failed(mlir::MlirOptMain(argc, argv, "tessera-nvidia-opt\n", registry));
 }

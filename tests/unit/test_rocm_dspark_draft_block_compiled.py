@@ -44,7 +44,7 @@ def test_rocm_dspark_draft_block_runtime_matches_reference_oracle():
     anchors = np.array([0, 3], dtype=np.int64)
 
     ref = dspark.draft_block_forward(target_hidden, prev_tokens, anchors, weights, cfg)
-    res = rt.launch(_artifact(cfg), (target_hidden, prev_tokens, anchors, weights))
+    res = runtime_for_host(rt).launch(_artifact(cfg), (target_hidden, prev_tokens, anchors, weights))
 
     assert res["ok"]
     assert res["compiler_path"] == "rocm_dspark_draft_block_compiled"
@@ -81,7 +81,7 @@ def test_rocm_dspark_draft_block_accepts_weight_mapping_and_infers_static_shape(
         "ops": [{"op_name": "tessera.dspark.draft_block"}],
     })
 
-    res = rt.launch(art, {
+    res = runtime_for_host(rt).launch(art, {
         "target_hidden": target_hidden,
         "prev_tokens": prev_tokens,
         "anchors": anchors,
@@ -97,7 +97,7 @@ def test_rocm_dspark_draft_block_requires_executable_metadata():
     cfg = dspark.DSparkConfig(num_anchors=1, block_size=2, vocab_size=8)
     art = _artifact(cfg)
     art.metadata["executable"] = False
-    res = rt.launch(art, ())
+    res = runtime_for_host(rt).launch(art, ())
     assert not res["ok"]
     assert res["runtime_status"] in {"unimplemented", "missing_backend"}
 

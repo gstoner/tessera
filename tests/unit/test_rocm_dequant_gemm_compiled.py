@@ -38,7 +38,7 @@ def test_rocm_dequant_matmul_runtime_matches_packed_oracle_int4():
     w = rng.standard_normal((16, 9)).astype(np.float32)
     packed = quant.quantize_weight(w, "int4", group_size=4)
 
-    res = rt.launch(_artifact("tessera.dequant_matmul", ["x", "packed_w"]), (x, packed))
+    res = runtime_for_host(rt).launch(_artifact("tessera.dequant_matmul", ["x", "packed_w"]), (x, packed))
 
     assert res["ok"]
     assert res["compiler_path"] == "rocm_dequant_gemm_compiled"
@@ -71,7 +71,7 @@ def test_rocm_dequant_grouped_gemm_runtime_matches_per_expert_oracle():
         ["x", "packed_experts", "group_sizes"],
     )
 
-    res = rt.launch(art, {
+    res = runtime_for_host(rt).launch(art, {
         "x": x,
         "packed_experts": experts,
         "group_sizes": group_sizes,
@@ -96,7 +96,7 @@ def test_dk4_rocm_dequant_gemm_perf_baseline_is_bounded():
     art = _artifact("tessera.dequant_matmul", ["x", "packed_w"])
 
     direct_ms = _median_ms(lambda: quant.dequant_matmul(x, packed), reps=9)
-    launch_ms = _median_ms(lambda: rt.launch(art, (x, packed)), reps=9)
+    launch_ms = _median_ms(lambda: runtime_for_host(rt).launch(art, (x, packed)), reps=9)
 
     # Hardware-free runs fall back to the oracle; native ROCm runs still need
     # bounded launch overhead for small packed-GEMM shapes.
@@ -118,7 +118,7 @@ def test_dk4_rocm_dequant_gemm_perf_baseline_is_bounded():
     assert_launch_overhead_bounded(
         launch_ms=launch_ms,
         direct_ms=direct_ms,
-        execution_kind=launch_execution_kind(rt.launch(art, (x, packed))),
+        execution_kind=launch_execution_kind(runtime_for_host(rt).launch(art, (x, packed))),
         what="dk4 dequant gemm",
     )
 

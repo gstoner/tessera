@@ -6,6 +6,7 @@ import tessera as ts
 
 from tessera import runtime as rt
 from tessera.stdlib import moe
+from tests._support.rocm_build import runtime_for_host
 
 from tests._support.launch_overhead import (
     assert_launch_overhead_bounded,
@@ -52,7 +53,7 @@ def test_rocm_moe_dispatch_runtime_matches_dispatch_plan_oracle():
     x = rng.standard_normal((12, 8)).astype(np.float32)
     plan = _plan()
 
-    res = rt.launch(
+    res = runtime_for_host(rt).launch(
         _artifact("tessera.moe_dispatch", ["x", "plan"]),
         {"x": x, "plan": plan},
     )
@@ -73,7 +74,7 @@ def test_rocm_moe_combine_runtime_matches_weighted_combine_oracle():
     packed = moe.dispatch(x, plan)
     partials = packed * rng.normal(1.0, 0.05, size=packed.shape).astype(np.float32)
 
-    res = rt.launch(
+    res = runtime_for_host(rt).launch(
         _artifact("tessera.moe_combine", ["partials", "plan"]),
         (partials, plan),
     )
@@ -99,7 +100,7 @@ def test_rocm_grouped_swiglu_runtime_matches_grouped_gemm_oracle():
     w_up = (rng.standard_normal((experts, hidden, ffn)) * scale_h).astype(np.float32)
     w_down = (rng.standard_normal((experts, ffn, hidden)) * scale_f).astype(np.float32)
 
-    res = rt.launch(
+    res = runtime_for_host(rt).launch(
         _artifact(
             "tessera.grouped_swiglu",
             ["x_packed", "w_gate", "w_up", "w_down", "group_sizes"],
@@ -134,7 +135,7 @@ def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     art = _artifact("tessera.moe_dispatch", ["x", "plan"])
 
     direct_ms = _median_ms(lambda: moe.dispatch(x, plan), reps=9)
-    launch_ms = _median_ms(lambda: rt.launch(art, (x, plan)), reps=9)
+    launch_ms = _median_ms(lambda: runtime_for_host(rt).launch(art, (x, plan)), reps=9)
 
     # Floor 2.0 ms, not 75.0. The old constant made this assertion dead: the
     # oracle arm is ~0.4 ms here, so `max()` always selected 75.0 and the
@@ -185,7 +186,7 @@ def test_dk3_rocm_moe_transport_perf_baseline_is_bounded():
     assert_launch_overhead_bounded(
         launch_ms=launch_ms,
         direct_ms=direct_ms,
-        execution_kind=launch_execution_kind(rt.launch(art, (x, plan))),
+        execution_kind=launch_execution_kind(runtime_for_host(rt).launch(art, (x, plan))),
         what="dk3 moe dispatch",
     )
 
@@ -197,7 +198,7 @@ def test_rocm_grouped_gemm_uses_one_native_offsets_argument():
     sizes = np.array([2, 0, 3], dtype=np.int64)
     x = rng.standard_normal((5, 7)).astype(np.float32)
     weights = rng.standard_normal((3, 7, 6)).astype(np.float32)
-    res = rt.launch(
+    res = runtime_for_host(rt).launch(
         _artifact("tessera.grouped_gemm", ["x", "weights", "group_sizes"]),
         {"x": x, "weights": weights, "group_sizes": sizes},
     )

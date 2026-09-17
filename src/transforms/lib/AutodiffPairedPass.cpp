@@ -43,6 +43,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1771,6 +1772,12 @@ public:
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<tessera::attn::TesseraAttnDialect>();
+    // `emit-storage-child` creates tile ops for the native storage child. Not
+    // declaring the dialect here was the third instance of the 2026-09-16
+    // class: green on every NDEBUG driver, and on the assertions-ON driver
+    // "Loading a dialect (tile) while in a multi-threaded execution context"
+    // (Tajasarus, `test_native_storage_generation`, 2026-09-17).
+    registry.insert<tessera::tile::TesseraTileDialect>();
     registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
                     mlir::func::FuncDialect, mlir::linalg::LinalgDialect,
                     mlir::scf::SCFDialect, mlir::tensor::TensorDialect, mlir::gpu::GPUDialect,

@@ -37,6 +37,7 @@ import numpy as np
 import pytest
 
 from tessera import rng_device as R
+from tests._support.rocm_build import runtime_for_host
 from tessera.compiler.recorded_product import (
     RecordedProduct,
     verify_confinement,
@@ -107,7 +108,7 @@ def _artifact(rt, target: str, recorded: RecordedProduct):
 
 
 def _run(rt, target: str, recorded: RecordedProduct) -> np.ndarray:
-    result = rt.launch(_artifact(rt, target, recorded), _operands(recorded))
+    result = runtime_for_host(rt).launch(_artifact(rt, target, recorded), _operands(recorded))
     assert result["ok"] is True, result.get("reason")
     expected_path = "rocm_rng_compiled" if target == "rocm" else "x86_rng_compiled"
     assert result["compiler_path"] == expected_path, (
@@ -186,7 +187,7 @@ def test_the_device_draw_writes_only_its_declared_result():
     recorded = _product()
     artifact = _artifact(rt, "rocm", recorded)
 
-    result = rt.launch(artifact, _operands(recorded))
+    result = runtime_for_host(rt).launch(artifact, _operands(recorded))
     assert result["ok"] is True
 
     # the keyed_rng class declares no write-set; the launch produced exactly

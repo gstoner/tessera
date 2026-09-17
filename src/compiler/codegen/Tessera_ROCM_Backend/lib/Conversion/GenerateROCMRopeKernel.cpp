@@ -145,8 +145,7 @@ struct GenerateROCMRopeKernelPass
       // (X, Theta, O : memref<?xstore>, M, D : index)
       auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitRopeBody(body, loc, gpuFunc, storeTy);
       op->erase();

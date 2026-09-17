@@ -1152,24 +1152,19 @@ struct GenerateROCMDeltaNetKernelPass
         auto reverseTy = b.getFunctionType(reverseArgs, {});
         auto checkpoint = b.create<gpu::GPUFuncOp>(
             loc, kname + "_checkpoint", checkpointTy);
-        checkpoint->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                            b.getUnitAttr());
+        checkpoint.setKernelAttr(b.getUnitAttr());
         auto chunkSummary = b.create<gpu::GPUFuncOp>(
             loc, kname + "_chunk_summary", chunkSummaryTy);
-        chunkSummary->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                              b.getUnitAttr());
+        chunkSummary.setKernelAttr(b.getUnitAttr());
         auto chunkPrefix = b.create<gpu::GPUFuncOp>(
             loc, kname + "_chunk_prefix", chunkPrefixTy);
-        chunkPrefix->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                             b.getUnitAttr());
+        chunkPrefix.setKernelAttr(b.getUnitAttr());
         auto chunkFill = b.create<gpu::GPUFuncOp>(
             loc, kname + "_chunk_fill", chunkFillTy);
-        chunkFill->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                           b.getUnitAttr());
+        chunkFill.setKernelAttr(b.getUnitAttr());
         auto reverse =
             b.create<gpu::GPUFuncOp>(loc, kname + "_reverse", reverseTy);
-        reverse->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                         b.getUnitAttr());
+        reverse.setKernelAttr(b.getUnitAttr());
         OpBuilder checkpointBody(checkpoint.getContext());
         emitDeltaNetCheckpointBody(checkpointBody, loc, checkpoint, Dqk, Dv, fl);
         OpBuilder chunkSummaryBody(chunkSummary.getContext());
@@ -1191,8 +1186,7 @@ struct GenerateROCMDeltaNetKernelPass
       auto fnTy = b.getFunctionType(
           {store, store, store, store, store, f32mr, f32mr, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitDeltaNetBody(body, loc, gpuFunc, storeTy, Dqk, Dv, fl);
       op->erase();

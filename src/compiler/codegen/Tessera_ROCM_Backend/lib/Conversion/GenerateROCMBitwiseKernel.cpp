@@ -149,8 +149,7 @@ struct GenerateROCMBitwiseKernelPass
           unary ? b.getFunctionType({memTy, memTy, idxTy}, {})
                 : b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitBitwiseBody(body, loc, gpuFunc, bw);
       op->erase();

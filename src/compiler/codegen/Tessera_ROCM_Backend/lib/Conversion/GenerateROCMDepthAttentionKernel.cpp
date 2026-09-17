@@ -345,8 +345,7 @@ struct GenerateROCMDepthAttentionKernelPass
       auto functionType = builder.getFunctionType({memref, memref, memref}, {});
       auto function =
           builder.create<gpu::GPUFuncOp>(loc, kernelName, functionType);
-      function->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                        builder.getUnitAttr());
+      function.setKernelAttr(builder.getUnitAttr());
       function->setAttr("tessera.schedule_hash", hash);
       function->setAttr("tessera.block_size",
                         builder.getI64IntegerAttr(WorkgroupSize));

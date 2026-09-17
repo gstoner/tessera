@@ -116,7 +116,7 @@ struct GenerateROCMSpecAcceptSampleKernelPass
     //  OUT i32)
     auto fnTy = b.getFunctionType({iMem, fMem, fMem, fMem, fMem, iMem}, {});
     auto f = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    f->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    f.setKernelAttr(b.getUnitAttr());
 
     OpBuilder kb(f.getContext());
     kb.setInsertionPointToStart(&f.getBody().front());

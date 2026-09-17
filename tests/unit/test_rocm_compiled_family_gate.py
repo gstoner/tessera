@@ -85,3 +85,24 @@ def test_runtime_for_host_skips_only_this_hosts_unpromoted_refusal(monkeypatch):
     # No resolvable arch: nothing is rewritten.
     monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: None)
     assert rocm_build.runtime_for_host(_FakeRuntime({"ok": False, "reason": refusal})).launch()["ok"] is False
+
+
+def test_runtime_for_host_skips_an_isa_contract_refusal_naming_this_host(monkeypatch):
+    wmma = ("compiled WMMA GEMM: the 16x16x16 f16/bf16 WMMA fragment layout is a gfx11 "
+            "(RDNA3/RDNA3.5) contract, hardware-verified on gfx1151; target 'gfx1201' needs "
+            "its own layout (RDNA4 gfx12xx: 16x16x32 WMMA; CDNA: MFMA 32x32x8) which is "
+            "arch-gated on that fragment ISA + silicon")
+    monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1201")
+    with pytest.raises(pytest.skip.Exception, match="16x16x16"):
+        rocm_build.runtime_for_host(_FakeRuntime({"ok": False, "reason": wmma})).launch()
+
+    class Unavailable(Exception):
+        pass
+
+    rt = _FakeRuntime(exc=Unavailable(wmma))
+    rt._RocmCompiledUnavailable = Unavailable
+    with pytest.raises(pytest.skip.Exception):
+        rocm_build.runtime_for_host(rt).launch()
+    # On the host the contract IS verified for, the same text would be a real failure.
+    monkeypatch.setattr(rocm_build, "rocm_host_arch", lambda: "gfx1151")
+    assert rocm_build.runtime_for_host(_FakeRuntime({"ok": False, "reason": wmma})).launch()["ok"] is False

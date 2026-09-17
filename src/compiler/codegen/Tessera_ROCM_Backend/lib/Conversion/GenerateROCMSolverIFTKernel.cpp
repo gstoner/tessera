@@ -108,8 +108,7 @@ struct GenerateROCMSolverIFTKernelPass
           {buffer, buffer, buffer, buffer, buffer, buffer, index}, {});
       auto function = builder.create<gpu::GPUFuncOp>(
           loc, name.getValue(), functionType);
-      function->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                        builder.getUnitAttr());
+      function.setKernelAttr(builder.getUnitAttr());
       OpBuilder body(function.getContext());
       emitBody(body, loc, function);
       op->erase();

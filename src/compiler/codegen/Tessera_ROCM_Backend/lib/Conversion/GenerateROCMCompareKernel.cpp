@@ -176,8 +176,7 @@ struct GenerateROCMCompareKernelPass
       // (A, B : memref<?xstore>, O : memref<?xi8>, N : index)
       auto fnTy = b.getFunctionType({inTy, inTy, outTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitCompareBody(body, loc, gpuFunc, storeTy, cmp, isUnsignedInteger);
       op->erase();

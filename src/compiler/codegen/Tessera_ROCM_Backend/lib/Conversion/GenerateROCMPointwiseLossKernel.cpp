@@ -562,8 +562,7 @@ struct GenerateROCMPointwiseLossKernelPass
         inputs = {memTy, memTy, memTy, idxTy};
       auto fnTy = b.getFunctionType(inputs, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       if (!distribution.empty())
         emitDistributionBackwardBody(body, loc, gpuFunc, distribution,

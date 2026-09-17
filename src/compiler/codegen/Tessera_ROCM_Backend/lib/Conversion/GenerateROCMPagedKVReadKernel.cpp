@@ -118,8 +118,7 @@ struct GenerateROCMPagedKVReadKernelPass
                                   index, index, index, index};
       auto gpuFunction = b.create<gpu::GPUFuncOp>(
           loc, kernelName, b.getFunctionType(arguments, {}));
-      gpuFunction->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                           b.getUnitAttr());
+      gpuFunction.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunction.getContext());
       emitBody(body, loc, gpuFunction);
       op->erase();

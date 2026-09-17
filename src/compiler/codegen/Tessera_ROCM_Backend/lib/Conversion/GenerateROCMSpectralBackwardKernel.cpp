@@ -808,7 +808,7 @@ struct GenerateROCMSpectralBackwardKernelPass
       auto fn = b.create<gpu::GPUFuncOp>(
           loc, name.getValue(),
           b.getFunctionType(buffers, {}));
-      fn->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+      fn.setKernelAttr(b.getUnitAttr());
       OpBuilder body(fn.getContext());
       if (filter)
         emitFilterBody(body, loc, fn, elements);

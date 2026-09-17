@@ -380,8 +380,7 @@ struct GenerateWMMALinearAttnKernelPass
         argTys.push_back(f32); // per-head log λ (RetNet/lightning decay)
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
-                       b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitLinearAttnBody(body, loc, gpuFunc, D, storeTy, featureMap, decay,
                          viaTile);

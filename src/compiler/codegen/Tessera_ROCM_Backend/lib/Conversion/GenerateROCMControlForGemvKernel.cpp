@@ -139,7 +139,7 @@ struct GenerateROCMControlForGemvKernelPass
     // (CARRY, W, OUT : memref<?xf32>, K : index)
     auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
     auto f = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
-    f->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+    f.setKernelAttr(b.getUnitAttr());
 
     // LDS carry buffer (BD elements; K ≤ BD active).
     auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);

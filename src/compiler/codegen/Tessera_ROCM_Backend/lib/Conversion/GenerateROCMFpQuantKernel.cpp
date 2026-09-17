@@ -140,7 +140,7 @@ struct GenerateROCMFpQuantKernelPass
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto fnTy = b.getFunctionType({memTy, memTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
-      gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+      gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
       emitFpQuantBody(body, loc, gpuFunc, storeTy, maxNormal, mantissaBits,
                       minExp);

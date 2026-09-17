@@ -163,19 +163,41 @@ class _RuntimeForHost:
     def __getattr__(self, name):
         return getattr(self._rt, name)
 
+    def _refused_for_this_host(self, text: str) -> bool:
+        """The two fail-closed refusals a launch can return *about this arch*.
+
+        1. The family rule: "ROCm executable pipeline has no promoted family
+           plugins for <arch>; ...".
+        2. An ISA contract gated on another arch's silicon, which names the
+           host it is refusing: "... hardware-verified on gfx1151; target
+           '<arch>' needs its own layout ... arch-gated ...". The 16x16x16 WMMA
+           fragment layout is the first instance (RDNA4 is 16x16x32).
+
+        Both must name the host's own arch; a refusal about an arch a test
+        pinned on purpose stays a failure.
+        """
+        arch = rocm_host_arch()
+        if not arch:
+            return False
+        if text.startswith(f"{_UNPROMOTED_REFUSAL}{arch};"):
+            return True
+        return f"target '{arch}'" in text and ("arch-gated" in text or "hardware-verified on" in text)
+
     def launch(self, *args, **kwargs):
         import pytest
 
-        arch = rocm_host_arch()
-        marker = f"{_UNPROMOTED_REFUSAL}{arch};" if arch else None
+        unavailable = getattr(self._rt, "_RocmCompiledUnavailable", None)
+        caught: tuple[type[BaseException], ...] = (ValueError,)
+        if isinstance(unavailable, type) and issubclass(unavailable, BaseException):
+            caught = caught + (unavailable,)
         try:
             result = self._rt.launch(*args, **kwargs)
-        except ValueError as exc:
-            if marker and str(exc).startswith(marker):
+        except caught as exc:
+            if self._refused_for_this_host(str(exc)):
                 pytest.skip(str(exc))
             raise
-        if (marker and isinstance(result, dict) and result.get("ok") is False
-                and str(result.get("reason", "")).startswith(marker)):
+        if (isinstance(result, dict) and result.get("ok") is False
+                and self._refused_for_this_host(str(result.get("reason", "")))):
             pytest.skip(str(result["reason"]))
         return result
 

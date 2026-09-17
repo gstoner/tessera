@@ -66,6 +66,12 @@ GFX1151_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
 GFX1151_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
 GFX1151_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
 GFX1151_MATMUL_F16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.f16_f32.v1"
+#: The same f16/f32 matmul with the fused epilogue: an optional per-column f32
+#: bias buffer between B and the output (the portable Tile ABI order
+#: A, B, [bias], D, M, N, K) and/or a pointwise activation named in the
+#: descriptor's provenance. One ABI for both chips; the architecture consumer
+#: applies the epilogue at the fragment store on each chip's own layout.
+GFX1151_MATMUL_F16_F32_FUSED_ABI = "tessera.rocm.matmul.a_b_bias_o_m_n_k.f16_f32.fused.v1"
 GFX1151_DEPTH_ATTN_F32_ABI = (
     "tessera.rocm.depth_attention.query_sources_o.f32.v1"
 )
@@ -1453,6 +1459,10 @@ def package_scheduled_matmul(
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
                                  family="matmul", architecture=arch, staging="register"))
     entry = artifact.function_name
+    if artifact.residual_name is not None:
+        raise ValueError("ROCm scheduled matmul does not carry a residual epilogue")
+    fused = artifact.bias_name is not None or artifact.activation != "none"
+    abi_id = GFX1151_MATMUL_F16_F32_FUSED_ABI if fused else GFX1151_MATMUL_F16_F32_ABI
     image = NativeImageArtifact(
         target=f"rocm_{arch}",
         architecture=arch,
@@ -1462,24 +1472,28 @@ def package_scheduled_matmul(
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX1151_MATMUL_F16_F32_ABI),),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
     dynamic = artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
+    bindings = [
+        BufferBinding(0, artifact.a_name, "input", "fp16", 2, "row_major", 2),
+        BufferBinding(1, artifact.b_name, "input", "fp16", 2, "row_major", 2),
+    ]
+    if artifact.bias_name is not None:
+        bindings.append(BufferBinding(2, artifact.bias_name, "input", "fp32", 1, "row_major", 4))
+    output_ordinal = len(bindings)
+    bindings.append(BufferBinding(output_ordinal, artifact.output_name, "output", "fp32", 2, "row_major", 4))
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=GFX1151_MATMUL_F16_F32_ABI,
-        buffers=(
-            BufferBinding(0, artifact.a_name, "input", "fp16", 2, "row_major", 2),
-            BufferBinding(1, artifact.b_name, "input", "fp16", 2, "row_major", 2),
-            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
-        ),
+        abi_id=abi_id,
+        buffers=tuple(bindings),
         scalars=(
-            ScalarArgument(3, "M", "int64"),
-            ScalarArgument(4, "N", "int64"),
-            ScalarArgument(5, "K", "int64"),
+            ScalarArgument(output_ordinal + 1, "M", "int64"),
+            ScalarArgument(output_ordinal + 2, "N", "int64"),
+            ScalarArgument(output_ordinal + 3, "K", "int64"),
         ),
         shape_guards=(
             ShapeGuard(artifact.a_name, 0, "max" if artifact.dynamic_m else "eq", artifact.m),
@@ -1502,6 +1516,8 @@ def package_scheduled_matmul(
             "physical_route": "gfx1151_multiwave_lds_wmma_2x4" if arch == "gfx1151" else "gfx1201_register_wmma_1x1",
             "shape_policy": "bounded_dynamic" if dynamic else "static",
             "shape": [artifact.m, artifact.n, artifact.k],
+            "bias": artifact.bias_name is not None,
+            "activation": artifact.activation,
             "a_storage": artifact.storage,
             "b_storage": artifact.storage,
             "output_storage": artifact.accum,
@@ -2874,6 +2890,7 @@ __all__ = [
     "GFX1151_DEPTH_ATTN_F32_ABI",
     "GFX1151_MOE_DISPATCH_F32_ABI",
     "GFX1151_MATMUL_F16_F32_ABI",
+    "GFX1151_MATMUL_F16_F32_FUSED_ABI",
     "GFX1151_PAGED_KV_F32_ABI",
     "GFX1151_REDUCE_BF16_ABI",
     "GFX1151_REDUCE_F16_ABI",

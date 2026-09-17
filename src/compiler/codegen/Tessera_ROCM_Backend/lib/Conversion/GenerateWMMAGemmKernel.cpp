@@ -715,6 +715,22 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // M/N edge (stores run once, so the guard cost is negligible). Bias is
   // invariant across all eight accumulator elements and every M tile for one
   // output column, so load it once per N tile and reuse it.
+  // The typed path hands the fused epilogue to the architecture consumer on
+  // the store (`tile.epilogue` + trailing bias operand): TileToROCM resolves
+  // each element's row/column per fragment family (gfx11, RDNA4, CDNA) and
+  // applies the bias add and activation there, so one epilogue implementation
+  // is correct on every layout. The untyped body below keeps its own gfx11
+  // element loop.
+  const bool typedEpilogue = viaTile && (hasBias || activation != "none");
+  Attribute typedEpilogueAttr;
+  if (typedEpilogue) {
+    StringRef outputName = outputType.isF16()   ? "f16"
+                           : outputType.isBF16() ? "bf16"
+                           : outputType.isF32()  ? "f32"
+                                                 : "i32";
+    typedEpilogueAttr = tessera::tile::TileEpilogueAttr::get(
+        b.getContext(), hasBias, activation, outputName);
+  }
   auto emitStore = [&](OpBuilder &sb, ValueRange accs, bool masked) {
     if (viaTile) {
       for (int64_t ni = 0; ni < nt; ++ni)
@@ -730,6 +746,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                 {tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
           else
             store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], N});
+          if (typedEpilogue) {
+            if (hasBias)
+              store.addOperands({bias});
+            store.addAttribute("tile.epilogue", typedEpilogueAttr);
+          }
           store.addAttribute("tile.layout", tileLayout);
           store.addAttribute("tile.memory", dynamicRowMajor);
           sb.create(store);
@@ -1559,12 +1580,13 @@ struct GenerateWMMAGemmKernelPass
       }
 
       OpBuilder bodyB(gpuFunc.getContext());
-      if (viaTile &&
-          (hasBias || activation != "none" || T.pack == 2 ||
-           outputTy != T.accElem)) {
+      // The typed via-tile path carries the fused bias/activation epilogue
+      // since 2026-09-17 (applied by the architecture consumer at the store);
+      // int4 nibble packing and a reduced output type remain untyped-only.
+      if (viaTile && (T.pack == 2 || outputTy != T.accElem)) {
         op->emitError(
             "generate-wmma-gemm-kernel: typed via-tile pilot requires an "
-            "unfused f16/bf16/int8 GEMM stored in its accumulator type");
+            "f16/bf16/int8 GEMM stored in its accumulator type");
         return signalPassFailure();
       }
       if (request.canonicalKLoop && canonicalStaging == "lds") {

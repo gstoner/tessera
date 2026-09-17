@@ -315,11 +315,19 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             or residual.ir_type.dtype != "fp32"
         ):
             raise ValueError("scheduled matmul residual must be an fp32 [M,N] argument")
-    if (
-        target != "nvidia_sm120"
-        and (bias_name is not None or residual_name is not None or activation != "none")
+    # The fused bias/activation epilogue is a launch-contract field on NVIDIA
+    # and, since 2026-09-17, on both ROCm chips: the ROCm Schedule->Tile branch
+    # carries it onto tile.matmul_kernel and the typed Tile->ROCm consumer
+    # applies it per element at the fragment store, so gfx1151 and gfx1201 get
+    # one implementation across their two accumulator layouts. The residual
+    # add is still NVIDIA-owned.
+    fused_targets = {"nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"}
+    if target not in fused_targets and (
+        bias_name is not None or residual_name is not None or activation != "none"
     ):
-        raise ValueError("scheduled fused matmul is currently NVIDIA-owned")
+        raise ValueError("scheduled fused matmul is currently NVIDIA/ROCm-owned")
+    if target != "nvidia_sm120" and residual_name is not None:
+        raise ValueError("scheduled matmul residual epilogue is currently NVIDIA-owned")
     output_name = op.result
     if not output_name:
         if len(function.return_values) != 1:

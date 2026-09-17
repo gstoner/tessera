@@ -4099,6 +4099,7 @@ def _submit_rocm_gfx1151_native(
         GFX1151_ATTN_F16_ABI,
         GFX1151_DEPTH_ATTN_F32_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
+        GFX1151_MATMUL_F16_F32_FUSED_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
         GFX1151_REDUCE_BF16_ABI,
@@ -4110,7 +4111,7 @@ def _submit_rocm_gfx1151_native(
 
     if image.target == "rocm_gfx1201" and (
         image.architecture != "gfx1201"
-        or descriptor.abi_id not in {GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI, GFX1151_MATMUL_F16_F32_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}
+        or descriptor.abi_id not in {GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI, GFX1151_MATMUL_F16_F32_ABI, GFX1151_MATMUL_F16_F32_FUSED_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}
     ):
         raise ValueError("gfx1201 scheduled launch requires a proved unary, matmul or attention ABI")
 
@@ -4125,6 +4126,7 @@ def _submit_rocm_gfx1151_native(
         GFX1151_ATTN_F16_ABI,
         GFX1151_ATTN_BF16_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
+        GFX1151_MATMUL_F16_F32_FUSED_ABI,
         GFX1151_DEPTH_ATTN_F32_ABI,
     }:
         raise RuntimeError(f"unsupported gfx1151 descriptor ABI {descriptor.abi_id!r}")
@@ -4135,14 +4137,15 @@ def _submit_rocm_gfx1151_native(
         GFX1151_ATTN_F16_ABI,
         GFX1151_ATTN_BF16_ABI,
     }
-    matmul = descriptor.abi_id == GFX1151_MATMUL_F16_F32_ABI
+    matmul = descriptor.abi_id in {GFX1151_MATMUL_F16_F32_ABI, GFX1151_MATMUL_F16_F32_FUSED_ABI}
+    matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
     depth_attention = descriptor.abi_id == GFX1151_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
         5
         if attention_bias
         else 4
-        if attention
+        if attention or matmul_bias
         else 3
         if paged_kv or moe_dispatch or matmul or depth_attention
         else 2
@@ -4181,7 +4184,8 @@ def _submit_rocm_gfx1151_native(
     elif matmul:
         a = buffers[ordered[0].name]
         b_matrix = buffers[ordered[1].name]
-        output = buffers[ordered[2].name]
+        bias = buffers[ordered[2].name] if matmul_bias else None
+        output = buffers[ordered[-1].name]
         m = int(cast(int, scalars["M"]))
         n = int(cast(int, scalars["N"]))
         k = int(cast(int, scalars["K"]))
@@ -4194,7 +4198,11 @@ def _submit_rocm_gfx1151_native(
             or output.dtype != np.float32
         ):
             raise RuntimeError("gfx1151 matmul arrays disagree with M/N/K or descriptor dtype")
+        if bias is not None and (tuple(bias.shape) != (n,) or bias.dtype != np.float32):
+            raise RuntimeError("gfx1151 matmul bias disagrees with N or is not f32")
         input_arrays = [np.ascontiguousarray(a), np.ascontiguousarray(b_matrix)]
+        if bias is not None:
+            input_arrays.append(np.ascontiguousarray(bias))
         dimensions = (m, n, k)
         macro_tile = descriptor.provenance.get("macro_tile")
         if (
@@ -5259,6 +5267,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX1151_ATTN_BF16_ABI,
         GFX1151_DEPTH_ATTN_F32_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
+        GFX1151_MATMUL_F16_F32_FUSED_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
         GFX1151_REDUCE_BF16_ABI,
@@ -5271,7 +5280,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     if (
         (target == "rocm_gfx1151" or (target == "rocm_gfx1201" and abi_id in {
             GFX1151_SOFTMAX_F32_ABI, GFX1151_REDUCE_F32_ABI,
-            GFX1151_MATMUL_F16_F32_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}))
+            GFX1151_MATMUL_F16_F32_ABI, GFX1151_MATMUL_F16_F32_FUSED_ABI, GFX1151_ATTN_F16_ABI, GFX1151_ATTN_BF16_ABI}))
         and abi_id
         in {
             GFX1151_SOFTMAX_F16_ABI,
@@ -5282,6 +5291,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX1151_PAGED_KV_F32_ABI,
             GFX1151_MOE_DISPATCH_F32_ABI,
             GFX1151_MATMUL_F16_F32_ABI,
+            GFX1151_MATMUL_F16_F32_FUSED_ABI,
             GFX1151_DEPTH_ATTN_F32_ABI,
             GFX1151_ATTN_F16_ABI,
             GFX1151_ATTN_BF16_ABI,
@@ -7397,6 +7407,61 @@ def _rocm_wmma_oracle_can_stand_in(artifact: RuntimeArtifact, args: Any) -> bool
     return a.dtype in floats and b.dtype in floats
 
 
+_rocm_scheduled_gemm_packages: dict[tuple[Any, ...], Any] = {}
+
+
+def _rocm_compiled_gemm_via_scheduled_package(
+    a: Any, b: Any, bias: Any, activation: str, m: int, n: int, k: int, chip: str,
+) -> Any:
+    """The compiled f16 GEMM (optionally bias + activation) on a gfx12 chip,
+    through the scheduled matmul package: Graph -> Schedule -> Tile ->
+    tessera_rocm -> HSACO, with the typed Tile->ROCm consumer applying the
+    epilogue on this chip's fragment layout. The Graph module is built the
+    way the frontend builds it (one `tessera.matmul` with the A/B/bias ABI
+    order), so the package is the same product a traced program yields."""
+    import numpy as np
+    from .compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
+    from .compiler.rocm_native import package_scheduled_matmul
+    from .compiler.scheduled_matmul import lower_scheduled_matmul
+
+    has_bias = bias is not None
+    key = (chip, int(m), int(n), int(k), has_bias, activation)
+    package = _rocm_scheduled_gemm_packages.get(key)
+    if package is None:
+        a_type = IRType(f"tensor<{m}x{k}xf16>", (str(m), str(k)), "fp16")
+        b_type = IRType(f"tensor<{k}x{n}xf16>", (str(k), str(n)), "fp16")
+        out_type = IRType(f"tensor<{m}x{n}xf32>", (str(m), str(n)), "fp32")
+        ir_args = [IRArg("a", a_type), IRArg("b", b_type)]
+        operands, operand_types = ["%a", "%b"], [str(a_type), str(b_type)]
+        kwargs: dict[str, object] = {"activation": activation}
+        if has_bias:
+            bias_type = IRType(f"tensor<{n}xf32>", (str(n),), "fp32")
+            ir_args.append(IRArg("bias", bias_type))
+            kwargs["bias"] = "%bias"
+            operands.append("%bias")
+            operand_types.append(str(bias_type))
+        module = GraphIRModule(functions=[GraphIRFunction(
+            name="rocm_compiled_gemm", args=ir_args, result_types=[out_type],
+            body=[IROp(result="o", op_name="tessera.matmul", operands=operands,
+                       operand_types=operand_types, result_type=str(out_type), kwargs=kwargs)],
+            return_values=["%o"])])
+        artifact = lower_scheduled_matmul(module, target=f"rocm_{chip}")
+        package = package_scheduled_matmul(artifact, pipeline_name="tessera-lower-to-rocm")
+        _rocm_scheduled_gemm_packages[key] = package
+    out = np.zeros((m, n), np.float32)
+    buffers: dict[str, Any] = {"a": np.ascontiguousarray(a, np.float16),
+                               "b": np.ascontiguousarray(b, np.float16), "o": out}
+    if has_bias:
+        buffers["bias"] = np.ascontiguousarray(bias, np.float32)
+    runtime_artifact = RuntimeArtifact(
+        metadata={"target": package.image.target}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = launch(runtime_artifact, {"buffers": buffers, "scalars": {"M": m, "N": n, "K": k}})
+    if not result.get("ok"):
+        raise RuntimeError(f"rocm_compiled ({chip}, scheduled package) launch failed: {result.get('reason')}")
+    return out
+
+
 def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     """Generate + serialize the kernel in-process (tessera-opt, no mlir-opt), then
     load + launch the hsaco via HIP. f16/bf16 storage, f32 accumulate. Returns the
@@ -7490,7 +7555,19 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
             raise ValueError(f"rocm_compiled bias must have shape ({n},) (one per output column); got {bias_arr.shape}")
     from .compiler.rocm_schedule import select_rocm_gemm_schedule
 
-    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag, arch=_rocm_chip())
+    chip = _rocm_chip()
+    if not chip.startswith("gfx11") and dtype_tag == "f16" and not packed_inputs:
+        # RDNA4 (gfx12): the directive lane's generator emits the gfx11 16x16x16
+        # fragment layout and refuses here by design. The typed Tile route --
+        # the same route the gfx1201 scheduled packages take -- carries the
+        # fused epilogue since 2026-09-17 and lets TileToROCM resolve this
+        # chip's own fragment layout, so the compiled lane goes through it
+        # (Decision #31: one lowering per boundary; the scheduled package IS
+        # the compiled route on gfx12). Static per (m, n, k); cached.
+        return _rocm_compiled_gemm_via_scheduled_package(
+            a, b, bias_arr, activation, m, n, k, chip)
+
+    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag, arch=chip)
     mt, nt = schedule.macro_tile
     hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, bias=has_bias, activation=activation, schedule=schedule)
 

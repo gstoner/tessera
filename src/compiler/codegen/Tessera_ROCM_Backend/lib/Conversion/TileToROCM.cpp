@@ -388,6 +388,29 @@ static LogicalResult materializeFragmentStore(
   Value base = store.getInputs()[1];
   auto memrefTy = dyn_cast<MemRefType>(base.getType());
   bool integer = desc.getAType() == "int8" || desc.getAType() == "int4";
+  // The fused epilogue (per-column bias, pointwise activation) is applied
+  // here, per element, after this routine has resolved the element's row and
+  // column for the architecture's own accumulator map -- the one place that
+  // knowledge exists for gfx11, RDNA4 and CDNA alike. The bias, when declared,
+  // is the store's trailing operand (see tile.store's verifier).
+  auto epilogue =
+      store->getAttrOfType<tessera::tile::TileEpilogueAttr>("tile.epilogue");
+  const bool epilogueBias = epilogue && epilogue.getBias();
+  StringRef activation = epilogue ? epilogue.getActivation() : StringRef("none");
+  if (epilogue && (integer || !tessera::tile::isSupportedActivation(activation))) {
+    op->emitError("ROCM_FRAGMENT_STORE_EPILOGUE: the fused epilogue is "
+                  "float-only with activation none/relu/gelu/silu");
+    return failure();
+  }
+  Value biasBase = epilogueBias ? store.getInputs().back() : Value();
+  if (epilogueBias) {
+    auto biasTy = dyn_cast<MemRefType>(biasBase.getType());
+    if (!biasTy || biasTy.getRank() != 1 || !biasTy.getElementType().isF32()) {
+      op->emitError("ROCM_FRAGMENT_STORE_EPILOGUE: the bias operand must be a "
+                    "rank-1 f32 memref");
+      return failure();
+    }
+  }
   Type outputTy = integer ? Type(builder.getIntegerType(32))
                           : desc.getAccType() == "f16" ? Type(builder.getF16Type())
                           : desc.getAccType() == "bf16" ? Type(builder.getBF16Type())
@@ -402,12 +425,12 @@ static LogicalResult materializeFragmentStore(
   Location loc = op->getLoc();
   Value rowOrigin = toIndex(builder, loc, store.getInputs()[2]);
   Value colOrigin = toIndex(builder, loc, store.getInputs()[3]);
-  const size_t storeInputs = store.getInputs().size();
+  const size_t storeInputs = store.getInputs().size() - (epilogueBias ? 1 : 0);
   const bool dynamicLeadingDim = memory.getLeadingDim() == 0;
   const bool haveBounds = dynamicLeadingDim ? storeInputs == 7
                                             : storeInputs == 6;
   Value leadingDim = dynamicLeadingDim
-                         ? toIndex(builder, loc, store.getInputs().back())
+                         ? toIndex(builder, loc, store.getInputs()[storeInputs - 1])
                          : Value(arith::ConstantIndexOp::create(
                                builder, loc, memory.getLeadingDim()));
   Value rowBound, colBound;
@@ -448,8 +471,20 @@ static LogicalResult materializeFragmentStore(
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
     Value scalar = vector::ExtractOp::create(builder, loc, accumulator,
                                              ArrayRef<int64_t>{i});
+    auto applyEpilogue = [&](OpBuilder &eb, Value value) -> Value {
+      if (epilogueBias) {
+        Value bias =
+            memref::LoadOp::create(eb, loc, biasBase, ValueRange{col});
+        value = arith::AddFOp::create(eb, loc, value, bias);
+      }
+      if (activation != "none")
+        value = tessera::tile::emitScalarFloatActivation(eb, loc, value,
+                                                         activation);
+      return value;
+    };
     if (!haveBounds) {
-      memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
+      memref::StoreOp::create(builder, loc, applyEpilogue(builder, scalar),
+                              base, ValueRange{linear});
       continue;
     }
     Value rowOk = arith::CmpIOp::create(
@@ -461,7 +496,10 @@ static LogicalResult materializeFragmentStore(
                                      /*withElseRegion=*/false);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(guarded.thenBlock());
-    memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
+    // The bias load sits inside the guard: an out-of-range column must not
+    // read past the bias buffer even though its store is skipped.
+    memref::StoreOp::create(builder, loc, applyEpilogue(builder, scalar), base,
+                            ValueRange{linear});
   }
   return success();
 }

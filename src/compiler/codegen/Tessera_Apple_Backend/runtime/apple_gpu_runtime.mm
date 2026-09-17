@@ -18544,10 +18544,21 @@ static MPSGraphTensor *mpsg_build_branch(
     const int32_t *iattr, const float *fattr, int out_id) {
   int n_extra = extra ? (int)extra.count : 0;
   int total = n_args + n_extra + n_ops;
+  // Internal compute is f32 whatever the boundary dtype is -- the ABI's
+  // f32-accumulate policy, which the authored-package path below already follows
+  // and this lane did not. Measured on macOS 27 (2026-09-16): with f16
+  // internals, `silu(x @ w)` in a cond branch came back **34% off** its f32
+  // reference, while the individual ops were each accurate (matmul 2e-3,
+  // sigmoid 3e-4) -- the loss was in the composition, and writing the same
+  // expression as an explicit `mul(m, sigmoid(m))` reproduced it exactly, so it
+  // is not the silu node. The identical graph through the bf16 boundary, which
+  // already upcast, stayed within its boundary rounding. Cast once at the edges
+  // rather than per op, so every branch op sees f32 and only the boundary
+  // rounds.
   NSMutableArray *t = [NSMutableArray arrayWithCapacity:total];
   for (int i = 0; i < total; ++i) [t addObject:[NSNull null]];
-  for (int i = 0; i < n_args; ++i) t[i] = phs[i];
-  for (int i = 0; i < n_extra; ++i) t[n_args + i] = extra[i];
+  for (int i = 0; i < n_args; ++i) t[i] = mpsg_up(g, phs[i], dt);
+  for (int i = 0; i < n_extra; ++i) t[n_args + i] = mpsg_up(g, extra[i], dt);
   const int base = n_args + n_extra;
   auto get = [&](int tid) -> MPSGraphTensor * {
     if (tid < 0 || tid >= total) return nil;
@@ -18560,11 +18571,15 @@ static MPSGraphTensor *mpsg_build_branch(
     MPSGraphTensor *b = nil;
     if (code == 0 || (code >= 1 && code <= 4)) b = get(in1 ? in1[j] : -1);
     MPSGraphTensor *y = mpsg_build_graph_op(g, code, a, b, iattr ? iattr[j] : 0,
-                                            fattr ? fattr[j] : 1e-5f, dt);
+                                            fattr ? fattr[j] : 1e-5f,
+                                            MPSDataTypeFloat32);
     if (!y) return nil;
     t[base + j] = y;
   }
-  return get(out_id);
+  // Back to the boundary dtype: a cond's select and a loop's carry are typed by
+  // the lane, not by the branch's internal precision.
+  MPSGraphTensor *result = get(out_id);
+  return result ? mpsg_down(g, result, dt) : nil;
 }
 
 // PK8c — author an ARBITRARY straight-line op graph into ONE serialized

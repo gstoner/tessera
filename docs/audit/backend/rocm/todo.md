@@ -8067,6 +8067,57 @@ Rule for every slice: `promoted_families` (Python) and the C++ profile in
 that does not pass on the device is recorded as owed with its failure, never
 promoted to make a count move.
 
+**Slice 1 — the matmul family's fused epilogue on the typed route, both chips
+(2026-09-17, branch `claude/gfx1201-parity-slice1`).** Routing, not a second
+generator: the epilogue now rides the typed Tile IR and is applied where the
+fragment layout is known.
+
+* **`tile.store` carries the epilogue.** A `tile.epilogue` attribute (bias /
+  activation / output dtype) plus a trailing rank-1 f32 bias operand; the
+  verifier discounts that operand in the store's arity check. The typed
+  generator (`generate-wmma-gemm-kernel via-tile=true`) puts the epilogue on
+  the store instead of refusing it, and refuses the typed route only for int4
+  packing or an output dtype that is not the accumulator's (slice 1b).
+* **One epilogue implementation for every fragment layout.**
+  `TileToROCM::materializeFragmentStore` loads `bias[col]`, adds, and applies
+  the scalar activation per element inside both the unmasked and the guarded
+  stores — after the family has resolved each element's row and column, so
+  gfx1151's replicated rows (`rdna3_wmma`) and RDNA4's half-wave rows
+  (`rdna4_wmma`) get the same arithmetic. Fixture:
+  `test/rocm/typed_matmul_fused_epilogue_store.mlir`, one RUN per arch.
+* **The boundaries above admit it.** Graph->Schedule accepted bias/activation
+  only on sm_120 and refused every one of the 39 slice rows on both boxes
+  before the new consumer was reached; it now admits them on gfx1151 and
+  gfx1201 (the residual add stays NVIDIA-owned). Schedule->Tile's ROCm branch
+  passes the bias pointer and the epilogue attribute; `scheduled_matmul`'s
+  fused contract names both ROCm targets; `package_scheduled_matmul` binds the
+  fused ABI (`GFX1151_MATMUL_F16_F32_FUSED_ABI`, now shared by both chips) and
+  `runtime.launch` places the bias buffer at operand 2.
+* **`rocm_compiled` on gfx12 is a compiled route, not a refusal.**
+  `_rocm_compiled_gemm_impl` sends a non-gfx11 f16 GEMM through
+  `_rocm_compiled_gemm_via_scheduled_package` — Graph IR -> `--tessera-graph-to-schedule`
+  -> Tile -> native package -> `launch` — so the fused-epilogue launch/execute
+  lane runs the RDNA4 kernel rather than the gfx11 one. That closes owed item 1
+  of the red-zone section below (8 lowering errors + 6 wrong answers): 14/14
+  rows pass on Tajasarus.
+
+Evidence, both boxes at `aef83fc1`: Tajasarus (gfx1201, assertions driver)
+`test_rocm_gfx1201_scheduled.py::test_gfx1201_scheduled_matmul_package_executes_fused_epilogue`
+15/15 (relu/gelu/silu/none x bias x three shapes incl. ragged 17x19x23) and
+`test_rocm_fused_epilogue_launch_execute.py` 14/14, the five slice files 151
+passed / 0 failed / 50 skipped, `check-tessera-rocm` 69/69 in `build` and
+`build-assertions`, `tests/tessera-ir` 493/493 in both trees. Princess-Luna
+(gfx1151) `test_scheduled_matmul_consumers.py::test_gfx1151_scheduled_matmul_executes_fused_epilogue`
+10/10, the five files 140 passed / 0 failed / 61 skipped, `check-tessera-rocm`
+69/69, `tests/tessera-ir` 493/493. Full sweeps are in the log entry.
+
+Not in this slice, by name: **1b** int8/int4 storage on the typed route
+(`test_rocm_compiled_launch_execute.py`'s int4 rows still skip on gfx1201 as
+unpromoted); the `rocm_wmma_gemm` arbiter candidate (`_rocm_wmma_fused_2d`)
+still builds the legacy gfx11 directive kernel and declines on gfx12 — that
+generator's gfx11 gate is now the documented boundary, and the three `slow`
+`test_rocm_plugin.py` lane tests keep their gfx11 predicate for that reason.
+
 ## The Tajasarus and Super-Bear red zones, worked — 2026-09-17
 
 Sync `ROCM-HOST-RED-ZONE-FOLLOWUPS-2026-09-17`; owner COMPILER-DEVEX-1 with W4-PRODUCT-1.
@@ -8135,6 +8186,9 @@ past the reason:
      runtime's WMMA arch guard refuses the 16x16x16 fragment layout on gfx12;
      this launch/execute path does not consult it and runs the gfx11 kernel.
      A silent wrong answer on a promoted-looking lane is the worst class here.
+     **Closed by `GFX1201-PARITY-2026-09-17` slice 1:** the gfx12 compiled lane
+     now routes through the scheduled package and the typed store epilogue;
+     14/14 rows pass on Tajasarus.
   2. `test_rocm_compiled_launch_execute.py`: 9 rows route `int8 @ int8` to the
      WMMA f16/bf16 executor ("rocm_wmma executor handles f16/bf16 storage") —
      the int8 family selects a different path on gfx1201 than on gfx1151.
